@@ -1,0 +1,113 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+
+namespace Poly.Script.Libraries {
+    using Data;
+    using Node;
+
+    public class Global : Library {
+        public Global() {
+            Library.Global = this;
+
+            Add(Load);
+            Add(Save);
+            Add(Template);
+            Add(ToNum);
+            Add(ToObject);
+            Add(ToString);
+        }
+
+        public static SystemFunction Load = new SystemFunction("Load", (Args) => {
+            var FileName = Args.getString("0");
+
+            if (System.IO.File.Exists(FileName)) {
+                if (Args.ContainsKey("this")) {
+                    jsObject.FromFile(FileName).CopyTo(Args.getObject("this"));
+                }
+                else {
+                    return jsObject.FromFile(FileName);
+                }
+            }
+
+            return null;
+        });
+
+        public static SystemFunction Save = new SystemFunction("Save", (Args) => {
+            var FileName = Args.getString("0");
+
+            if (Args.ContainsKey("this")) {
+                System.IO.File.WriteAllText(FileName, Args.getObject("this").ToString());
+            }
+
+            return false;
+        });
+
+        public static SystemFunction Template = new SystemFunction("Template", (Args) => {
+            var This = Args.getObject("this");
+            var Regex = Args.getString("0");
+
+            if (This != null && !string.IsNullOrEmpty(Regex)) {
+                return This.Template(Regex);
+            }
+
+            return string.Empty;
+        });
+
+        public static SystemFunction ToNum = new SystemFunction("ToNum", (Args) => {
+            var This = Args.Get<object>("this");
+
+            if (This == null)
+                return null;
+
+            if (This is string) {
+                var Int = 0;
+                if (int.TryParse(This as string, out Int)) {
+                    return Int;
+                }
+
+                var Flt = 0d;
+                if (double.TryParse(This as string, out Flt)) {
+                    return Flt;
+                }
+            }
+            else if (This is bool) {
+                return Convert.ToBoolean(This) ? 1 : 0;
+            }
+            else if (This is double) {
+                return (double)This;
+            }
+            else if (This is int) {
+                return (int)This;
+            }
+
+            return null;
+        });
+
+        public static SystemFunction ToObject = new SystemFunction("ToObject", (Args) => {
+            var This = Args.Get<object>("this");
+
+            if (This == null)
+                return null;
+
+            if (This is string) {
+                return (This as string).ToJsObject();
+            }
+            else if (This is jsObject) {
+                return This;
+            }
+            return null;
+        });
+
+        public new static SystemFunction ToString = new SystemFunction("ToString", (Args) => {
+            var This = Args.Get<object>("this");
+
+            if (This != null) {
+                return This.ToString();
+            }
+
+            return string.Empty;
+        });
+    }
+}

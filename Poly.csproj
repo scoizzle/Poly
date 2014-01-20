@@ -1,0 +1,147 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A96DCAEF-F18A-4EA4-9AEA-1596A8E1DACF}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Poly</RootNamespace>
+    <AssemblyName>Poly</AssemblyName>
+    <FileAlignment>512</FileAlignment>
+    <ProductVersion>12.0.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Application.cs" />
+    <Compile Include="Application.Logging.cs" />
+    <Compile Include="Data\DynamicObject.cs" />
+    <Compile Include="Data\Hash.cs" />
+    <Compile Include="Data\jsFile.cs" />
+    <Compile Include="Data\jsObject.Accessors.cs" />
+    <Compile Include="Data\jsObject.cs" />
+    <Compile Include="Data\jsObject.Parser.cs" />
+    <Compile Include="Data\Template.cs" />
+    <Compile Include="Event.cs" />
+    <Compile Include="Mime.cs" />
+    <Compile Include="Net\Http\Host.cs" />
+    <Compile Include="Net\Http\Http.cs" />
+    <Compile Include="Net\Http\FileCache.cs" />
+    <Compile Include="Net\Http\Packet.cs" />
+    <Compile Include="Net\Http\Result.cs" />
+    <Compile Include="Net\Http\MimeTypes.cs" />
+    <Compile Include="Net\Http\Request.cs" />
+    <Compile Include="Net\Http\ScriptCache.cs" />
+    <Compile Include="Net\Http\Server.cs" />
+    <Compile Include="Net\Http\Server.Dispatch.cs" />
+    <Compile Include="Net\Http\Server.Routing.cs" />
+    <Compile Include="Net\Irc\Client.cs" />
+    <Compile Include="Net\Irc\Client.Events.cs" />
+    <Compile Include="Net\Irc\Client.Functions.cs" />
+    <Compile Include="Net\Irc\Client.Threads.cs" />
+    <Compile Include="Net\Irc\Conversation.cs" />
+    <Compile Include="Net\Irc\Packet.cs" />
+    <Compile Include="Net\Irc\Server.cs" />
+    <Compile Include="Net\Irc\Server.Functions.cs" />
+    <Compile Include="Net\Irc\Server.User.cs" />
+    <Compile Include="Net\Irc\User.cs" />
+    <Compile Include="Net\Tcp\Client.cs" />
+    <Compile Include="Net\Tcp\Server.cs" />
+    <Compile Include="Net\Url.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Script\Engine.cs" />
+    <Compile Include="Script\Expressions\Async.cs" />
+    <Compile Include="Script\Expressions\Call.cs" />
+    <Compile Include="Script\Expressions\Case.cs" />
+    <Compile Include="Script\Expressions\Comment.cs" />
+    <Compile Include="Script\Expressions\Try.cs" />
+    <Compile Include="Script\Expressions\Switch.cs" />
+    <Compile Include="Script\Expressions\Include.cs" />
+    <Compile Include="Script\Expressions\Unary\And.cs" />
+    <Compile Include="Script\Expressions\Unary\Between.cs" />
+    <Compile Include="Script\Expressions\Unary\Or.cs" />
+    <Compile Include="Script\Expressions\Unary\Match.cs" />
+    <Compile Include="Script\Expressions\Using.cs" />
+    <Compile Include="Script\Expressions\Unary\Add.cs" />
+    <Compile Include="Script\Expressions\Unary\Assign.cs" />
+    <Compile Include="Script\Expressions\Unary\LessThanEqual.cs" />
+    <Compile Include="Script\Expressions\Unary\GreaterThanEqual.cs" />
+    <Compile Include="Script\Expressions\Unary\GreaterThan.cs" />
+    <Compile Include="Script\Expressions\Unary\LessThan.cs" />
+    <Compile Include="Script\Expressions\Unary\Equal.cs" />
+    <Compile Include="Script\Expressions\Unary\NotEqual.cs" />
+    <Compile Include="Script\Expressions\Unary\Devide.cs" />
+    <Compile Include="Script\Expressions\Unary\Multiply.cs" />
+    <Compile Include="Script\Expressions\Unary\Subtract.cs" />
+    <Compile Include="Script\Expressions\Unary\Parser.cs" />
+    <Compile Include="Script\Expressions\While.cs" />
+    <Compile Include="Script\Expressions\Do.cs" />
+    <Compile Include="Script\Expressions\Foreach.cs" />
+    <Compile Include="Script\Expressions\For.cs" />
+    <Compile Include="Script\Helpers\Extension.cs" />
+    <Compile Include="Script\Helpers\Library.cs" />
+    <Compile Include="Script\Libraries\Console.cs" />
+    <Compile Include="Script\Libraries\Tcp.cs" />
+    <Compile Include="Script\Libraries\Sockets.cs" />
+    <Compile Include="Script\Libraries\Debug.cs" />
+    <Compile Include="Script\Libraries\Global.cs" />
+    <Compile Include="Script\Libraries\Http.cs" />
+    <Compile Include="Script\Libraries\Standard.cs" />
+    <Compile Include="Script\Nodes\Function.cs" />
+    <Compile Include="Script\Expressions\If.cs" />
+    <Compile Include="Script\Expressions\Return.cs" />
+    <Compile Include="Script\Nodes\SystemFunction.cs" />
+    <Compile Include="Script\Helpers\ArgumentList.cs" />
+    <Compile Include="Script\Helpers\Interface.cs" />
+    <Compile Include="Script\Nodes\DataType.cs" />
+    <Compile Include="Script\Nodes\Expression.cs" />
+    <Compile Include="Script\Nodes\Node.cs" />
+    <Compile Include="Script\Nodes\Operator.cs" />
+    <Compile Include="Script\Nodes\Value.cs" />
+    <Compile Include="Script\Nodes\Variable.cs" />
+    <Compile Include="Script\Parser\Parser.cs" />
+    <Compile Include="Script\Types\Bool.cs" />
+    <Compile Include="Script\Types\Float.cs" />
+    <Compile Include="Script\Types\Integer.cs" />
+    <Compile Include="Script\Types\Object.cs" />
+    <Compile Include="Script\Types\String.cs" />
+    <Compile Include="Script\Types\SystemObject.cs" />
+    <Compile Include="StringExtensions.cs" />
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

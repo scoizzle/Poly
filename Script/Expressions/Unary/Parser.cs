@@ -5,8 +5,8 @@ using System.Text;
 
 namespace Poly.Script.Node.Unary {
     public class Parser {
-        private delegate Operator Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
-        private static List<Handler> UnaryParsers = new List<Handler>() {
+        public delegate Operator Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
+        public static List<Handler> UnaryParsers = new List<Handler>() {
             Equal.Parse,
             LessThanEqual.Parse,
             LessThan.Parse,

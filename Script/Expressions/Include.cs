@@ -26,12 +26,21 @@ namespace Poly.Script.Node {
 
                 if (Str != null) {
                     if (File.Exists(Str)) {
-                        var Obj = Engine.Parse(File.ReadAllText(Str), 0, new Expression());
+                        var Obj = new Expression();
+                        
+                        Obj = Engine.Parse(File.ReadAllText(Str), 0, Obj) as Expression;
 
                         if (Obj != null) {
                             Engine.Includes.Add(Str);
-                            Index = Delta;
-                            return Obj;
+
+                            if (Obj.Count == 1) {
+                                Index = Delta;
+                                return Obj.ElementAt(0);
+                            }
+                            else {
+                                Index = Delta;
+                                return Obj;
+                            }
                         }
                     }
                 }

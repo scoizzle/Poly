@@ -93,7 +93,7 @@ namespace Poly.Net.Http {
             }
         }
 
-        public virtual void OnClientConnect(Client Client) {
+        public override void OnClientConnect(Client Client) {
             Client.autoFlush = true;
             Client.ReceiveTimeout = 15000;
 

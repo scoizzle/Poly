@@ -52,12 +52,21 @@ namespace Poly.Net.Irc {
             }
         }
 
+        public string Password {
+            get {
+                return Get<string>("Password", string.Empty);
+            }
+            set {
+                Set("Password", value);
+            }
+        }
+
         public jsObject Modes {
             get {
                 if (!ContainsKey("Modes")){ 
                     Modes = new jsObject(){ IsArray = true };
                 }
-                return Get<jsObject>("Modes", (jsObject)null);
+                return Get<jsObject>("Modes", jsObject.NewArray);
             }
             set {
                 Set("Modes", value);

@@ -9,6 +9,7 @@ using Poly.Script.Node;
 namespace Poly.Script {
     public partial class Engine : Expression {
         public Library Functions = new Library();
+        public jsObject StaticObjects = new jsObject();
         public List<Library> Using = new List<Library>();
         public List<string> Includes = new List<string>();
         public jsObject<SystemFunction.Raw> RawFunctionCache = new jsObject<SystemFunction.Raw>();

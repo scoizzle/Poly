@@ -68,11 +68,15 @@
     <Compile Include="Net\Irc\Client.Threads.cs" />
     <Compile Include="Net\Irc\Conversation.cs" />
     <Compile Include="Net\Irc\Packet.cs" />
+    <Compile Include="Net\Irc\Server.Channel.cs" />
     <Compile Include="Net\Irc\Server.cs" />
+    <Compile Include="Net\Irc\Server.Events.cs" />
     <Compile Include="Net\Irc\Server.Functions.cs" />
+    <Compile Include="Net\Irc\Server.Threads.cs" />
     <Compile Include="Net\Irc\Server.User.cs" />
     <Compile Include="Net\Irc\User.cs" />
     <Compile Include="Net\Tcp\Client.cs" />
+    <Compile Include="Net\Tcp\MultiPortServer.cs" />
     <Compile Include="Net\Tcp\Server.cs" />
     <Compile Include="Net\Url.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -108,6 +112,7 @@
     <Compile Include="Script\Helpers\Extension.cs" />
     <Compile Include="Script\Helpers\Library.cs" />
     <Compile Include="Script\Libraries\Console.cs" />
+    <Compile Include="Script\Libraries\Logging.cs" />
     <Compile Include="Script\Libraries\Tcp.cs" />
     <Compile Include="Script\Libraries\Sockets.cs" />
     <Compile Include="Script\Libraries\Debug.cs" />
@@ -135,7 +140,6 @@
     <Compile Include="Script\Types\SystemObject.cs" />
     <Compile Include="StringExtensions.cs" />
   </ItemGroup>
-  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

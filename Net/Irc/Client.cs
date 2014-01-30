@@ -46,24 +46,6 @@ namespace Poly.Net.Irc {
             }
         }
 
-        public string Password {
-            get {
-                return Get<string>("Password", string.Empty);
-            }
-            set {
-                Set("Password", value);
-            }
-        }
-
-        public string Realname {
-            get {
-                return Get<string>("Realname", string.Empty);
-            }
-            set {
-                Set("Realname", value);
-            }
-        }
-
         public string Server {
             get {
                 return Get<string>("Server", string.Empty);

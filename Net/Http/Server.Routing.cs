@@ -43,7 +43,6 @@ namespace Poly.Net.Http {
             var ClientPort = ClientEP.Substring(":");
 
             var ServerEP = Client.Client.LocalEndPoint.ToString();
-            var ServerIP = ServerEP.Substring("", ":");
             var ServerPort = ServerEP.Substring(":");
 
             var ScriptName = FileName;

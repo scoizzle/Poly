@@ -13,10 +13,9 @@ namespace Poly.Net.Http {
     using Net.Tcp;
     using Script;
 
-    public partial class Server {
+    public partial class Server : MultiPortServer {
         public jsObject<Host> Hosts = new jsObject<Host>();
 
-        public Dictionary<int, Tcp.Server> Listeners = new Dictionary<int, Tcp.Server>();
         public FileCache FileCache = new FileCache();
         public ScriptCache ScriptCache = new ScriptCache();
 
@@ -27,16 +26,6 @@ namespace Poly.Net.Http {
                 return Mime;
 
             return "text/html";
-        }
-
-        public void Listen(int Port) {
-            if (!Listeners.ContainsKey(Port))
-                Listeners.Add(Port, new Tcp.Server(Port));
-        }
-
-        public void ListenSsl(int Port, string CertificateFile) {
-            if (!Listeners.ContainsKey(Port))
-                Listeners.Add(Port, new Tcp.Server(IPAddress.Any, Port, CertificateFile));
         }
 
         public void Configure(string FileName) {
@@ -65,21 +54,6 @@ namespace Poly.Net.Http {
 
         public void Mime(string Ext, string Mime) {
             Poly.Mime.List[Ext] = Mime;
-        }
-
-        public void Start() {
-            foreach (var Listener in Listeners.Values) {
-                if (!Listener.Active) {
-                    Listener.ClientConnect += OnClientConnect;
-                    Listener.Start();
-                }
-            }
-        }
-
-        public void Stop() {
-            foreach (var Listen in Listeners.Values) {
-                Listen.Stop();
-            }
         }
     }
 }

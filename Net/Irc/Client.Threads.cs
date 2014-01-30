@@ -15,7 +15,10 @@ namespace Poly.Net.Irc {
                 var Packet = new Packet();
 
                 if (Packet.Receive(Connection)) {
-                    (new Thread(HandlePacket)).Start(Packet);
+                    ThreadPool.QueueUserWorkItem(
+                        new WaitCallback(HandlePacket), 
+                        Packet
+                    );
                 }
             } while (Connected);
 

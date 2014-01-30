@@ -76,7 +76,7 @@ namespace Poly.Net.Irc {
                 new Packet("User") { 
                     { "Ident", Name },
                     { "Visible", Hidden ? "8" : "0" },
-                    { "Message", Realname }
+                    { "Message", RealName }
                 }
             );
         }
@@ -237,7 +237,7 @@ namespace Poly.Net.Irc {
                 SendPass(Password);
 
             SendNick(Nick);
-            SendUser(Ident, Realname);
+            SendUser(Ident, RealName);
         }
     }
 }

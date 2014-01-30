@@ -53,7 +53,6 @@ namespace Poly.Script.Node {
 
             if (Name.Contains('.')) {
                 var ObjName = Name.Substring("", ".", 0, false, true);
-                var FunName = Name.Substring(ObjName.Length + 1);
 
                 Args["this"] = Variable.Eval(Engine, ObjName, Context);
             }

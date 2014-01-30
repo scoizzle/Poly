@@ -454,6 +454,10 @@ namespace System {
                 X = This.Length,
                 Y = Wild.Length;
 
+            if (X == 1 && Y > 1) {
+                return null;
+            }
+
             while (x < X && y < Y) {
                 if (Wild[y] == '\\') {
                     y++;

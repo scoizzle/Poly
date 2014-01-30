@@ -45,8 +45,6 @@ namespace Poly.Script {
                 return NoOp;
             }
 
-            int Start = Index;
-
             while (Index < LastIndex) {
                 object Node = null;
 

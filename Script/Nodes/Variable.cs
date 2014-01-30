@@ -7,6 +7,7 @@ using Poly.Data;
 
 namespace Poly.Script.Node {
     public class Variable : Value {
+        public bool IsStatic = false;
         public Engine Engine = null;
 
         public Variable(Engine Engine, params Node[] Name) {
@@ -22,11 +23,15 @@ namespace Poly.Script.Node {
         }
 
         public override object Evaluate(jsObject Context) {
-            object Current = Context;
+            object Current = IsStatic ? 
+                Engine.StaticObjects : 
+                Context;
+
             var List = this.ToList();
 
             for (int i = 0; i < List.Count; i++) {
                 var Obj = List[i].Value;
+
                 var V = Obj is Node ?
                     GetValue(Obj, Current as jsObject) :
                     Get(Obj as string, Current as jsObject);
@@ -63,7 +68,10 @@ namespace Poly.Script.Node {
         }
 
         public object Assign(jsObject Context, object Value) {
-            jsObject CurrentObj = Context;
+            jsObject CurrentObj = IsStatic ?
+                Engine.StaticObjects :
+                Context;
+
             var List = this.ToList();
 
             for (int i = 0; i < List.Count; i++) {
@@ -86,7 +94,7 @@ namespace Poly.Script.Node {
 
                     if (V == null && (List.Count - i) > 1) {
                         V = new jsObject();
-                        Set(N, Context, V);
+                        Set(N, CurrentObj, V);
                     }
 
                     if (V is jsObject)
@@ -127,7 +135,14 @@ namespace Poly.Script.Node {
                     if (Open == Delta)
                         return null;
 
-                    Var.Add(Text.Substring(Open, Delta - Open));
+                    var Name = Text.Substring(Open, Delta - Open);
+
+                    if (Name == "Static") {
+                        Var.IsStatic = true;
+                    }
+                    else {
+                        Var.Add(Name);
+                    }
                     Open = ++Delta;
                 }
                 else if (IsValidChar(Text[Delta])) {

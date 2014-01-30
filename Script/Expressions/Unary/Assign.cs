@@ -22,8 +22,6 @@ namespace Poly.Script.Node {
                 Index += 1;
                 ConsumeWhitespace(Text, ref Index);
 
-                var Debug = Text.Substring(Index);
-
                 return new Assign(
                     Variable.Parse(Engine, Left, 0),
                     Engine.Parse(

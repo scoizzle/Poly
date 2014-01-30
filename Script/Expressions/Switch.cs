@@ -9,7 +9,6 @@ namespace Poly.Script.Node {
         public object Object = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            var Value = GetValue(Object, Context);
             var Options = this.ToArray();
 
             for (int i = 0; i < Options.Length; i++) {

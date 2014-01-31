@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Poly.Script.Node {
     public class Expression : Node {
-        public static readonly Expression NoOp = null;
+        public static readonly Expression NoOp = new Expression();
         public static readonly Expression Break = new Expression();
         public static readonly Expression Continue = new Expression();
 

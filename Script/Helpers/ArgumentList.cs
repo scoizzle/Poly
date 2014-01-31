@@ -4,7 +4,9 @@ using System.Linq;
 using System.Text;
 
 namespace Poly.Script.Helper {
-    public class ArgumentList : Dictionary<string, object> {
+    using Data;
+
+    public class ArgumentList : jsObject {
         public override string ToString() {
             return string.Join(", ", Values);
         }

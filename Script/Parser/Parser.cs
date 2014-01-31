@@ -66,7 +66,7 @@ namespace Poly.Script {
                     if (Storage == null) {
                         return Node;
                     }
-                    else if (Node is Function && Storage == this) {
+                    else if (Node == NoOp) {
                         break;
                     }
                     else {

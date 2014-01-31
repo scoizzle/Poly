@@ -44,9 +44,6 @@ namespace Poly.Script.Node {
             else if (Val is double) {
                 return !double.IsNaN((double)Val);
             }
-            else if (Val is jsObject) {
-                return  !(Val as jsObject).IsEmpty;
-            }
 
             return true;
         }

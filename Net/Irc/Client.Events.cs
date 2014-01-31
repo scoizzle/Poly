@@ -11,7 +11,7 @@ namespace Poly.Net.Irc {
         public Poly.Event.Engine Events = new Event.Engine();
 
         public void InvokeEvent(string Name, jsObject Args) {
-            Events.MatchAndInvoke(Name, Args);
+            Events.MatchAndInvoke(Name, Args, true);
         }
 
         public void AddEvent(string Name, Poly.Event.Handler Ev) {

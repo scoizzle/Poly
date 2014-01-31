@@ -6,12 +6,57 @@ using System.Text;
 using Poly.Data;
 
 namespace Poly.Script {
+    using Node;
+
     public class Function : Node.Expression {
-        public string Name = "";
+        public string ObjectName, Name = "";
         public string[] Arguments = new string[0];
+
+        public Function() { }
+        public Function(string Name) {
+            this.Name = Name;
+
+            if (this.Name.Contains('.'))
+                this.ObjectName = Name.Substring("", ".", 0, false, true);
+        }
 
         public override object Evaluate(jsObject Context) {
             return base.Evaluate(Context);
+        }
+
+        public object Call(jsObject Context, jsObject ArgList, Engine Engine = null) {
+            var Args = new jsObject();
+            var Index = 0;
+
+            ArgList.ForEach((Key, Value) => {
+                var Name = Arguments.Length == 0 || Index >= Arguments.Length ?
+                    Key :
+                    Arguments[Index];
+
+                if (Value is Function) {
+                    GetHandlerArguments(Value as Function, Context, Args);
+                }
+                else if (Value is Node.Node) {
+                    Value = (Value as Node.Node).Evaluate(Context);
+                }
+
+                Variable.Set(Name, Args, Value);
+                Index++;
+            });
+
+            if (!string.IsNullOrEmpty(ObjectName)) {
+                var This = Engine == null ?
+                    Variable.Get(ObjectName, Context) :
+                    Variable.Eval(Engine, ObjectName, Context);
+
+                Variable.Set(
+                    "this", 
+                    Args, 
+                    This
+                );
+            }
+
+            return this.Evaluate(Args);
         }
 
         public Poly.Event.Handler GetSystemHandler() {
@@ -29,6 +74,17 @@ namespace Poly.Script {
 
             if (Library.TypeLibsByName.ContainsKey(Name)) {
                 return Library.TypeLibsByName[Name].Get<Function>(Name);
+            }
+
+            var ObjName = Name.Substring("", ".", 0, false, true);
+            var FunName = Name.Substring(ObjName.Length + 1);
+            
+            if (Library.StaticObjects.ContainsKey(ObjName)) {
+                var Lib = Library.StaticObjects[ObjName];
+
+                if (Lib.ContainsKey(FunName)) {
+                    return Lib[FunName];
+                }
             }
 
             foreach (var Lib in Engine.Using) {
@@ -74,36 +130,25 @@ namespace Poly.Script {
                     if (Engine.RawFunctionCache.ContainsKey(RawName)) {
                         return Engine.RawFunctionCache[RawName];
                     }
-                    else if (SystemFunction.Raw.Exists(Type, FunName)) {
-                        var Handler = new SystemFunction.Raw() {
-                            Type = Type,
-                            Name = FunName
-                        };
+                    else {
+                        var Func = new Helper.MemberFunction(Type, FunName);
 
-                        Engine.RawFunctionCache[RawName] = Handler;
+                        Engine.RawFunctionCache[RawName] = Func;
 
-                        return Handler;
-                    }
-                }
-                else if (Library.StaticObjects.ContainsKey(ObjName)) {
-                    var Lib = Library.StaticObjects[ObjName];
-
-                    if (Lib.ContainsKey(FunName)) {
-                        return Lib[FunName];
+                        return Func;
                     }
                 }
                 else if (Engine.RawInitializerCache.ContainsKey(Name)) {
                     return Engine.RawInitializerCache[Name];
                 }
-                else if (SystemFunction.Initializer.Exists(Name)) {
-                    var Handler = new SystemFunction.Initializer() {
-                        Type = SystemFunction.Initializer.SearchForType(Name),
-                        Name = Name
-                    };
+                else {
+                    var Init = Helper.Initializer.TryCreate(Name);
 
-                    Engine.RawInitializerCache[Name] = Handler;
+                    if (Init != null) {
+                        Engine.RawInitializerCache[Name] = Init;
 
-                    return Handler;
+                        return Init;
+                    }
                 }
             }
 
@@ -137,15 +182,19 @@ namespace Poly.Script {
                 ConsumeWhitespace(Text, ref Delta);
             }
 
-            Function Func = new Function();
+            Function Func = null;
 
             var NameStart = Delta;
             while (Delta < Text.Length && IsValidChar(Text[Delta])) 
                 Delta++;
 
             if (NameStart < Delta) {
-                Func.Name = Text.Substring(NameStart, Delta - NameStart);
+                Func = new Function(Text.Substring(NameStart, Delta - NameStart));
+
                 ConsumeWhitespace(Text, ref Delta);
+            }
+            else {
+                Func = new Function("");
             }
                         
             if (Text.Compare("(", Delta)) {
@@ -176,6 +225,7 @@ namespace Poly.Script {
 
                         if (!string.IsNullOrEmpty(Func.Name)) {
                             Engine.Functions[Func.Name] = Func;
+                            return NoOp;
                         }
 
                         return Func;

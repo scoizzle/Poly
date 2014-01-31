@@ -115,6 +115,10 @@ namespace Poly.Net.Irc {
             );
         }
 
+        public void JoinChannel(string Channel) {
+            JoinChannel(Channel, "");
+        }
+
         public void JoinChannel(string Channel, string Key = "") {
             Send(
                 new Packet("Join") {

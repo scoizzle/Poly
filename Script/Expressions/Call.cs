@@ -19,45 +19,7 @@ namespace Poly.Script.Node {
                     return null;
             }
 
-            var Args = new Data.jsObject();
-            var ArgList = Arguments.ToArray();
-
-            for (int i = 0; i < ArgList.Length; i++) {
-                var Item = ArgList[i];
-                var Key = Function.Arguments.Length == 0 ?
-                    Item.Key :
-                    Function.Arguments.ElementAt(i);
-
-                if (Item.Value is Function) {
-                    Args[Key] = Item.Value;
-
-                    Function.GetHandlerArguments(
-                        Item.Value as Function,
-                        Context,
-                        Args
-                    );
-                }
-                else {
-
-                    var Value = Item.Value is Node ?
-                        (Item.Value as Node).Evaluate(Context) :
-                        Item.Value;
-
-                    Variable.Set(
-                        Key,
-                        Args,
-                        Value
-                    );
-                }
-            }
-
-            if (Name.Contains('.')) {
-                var ObjName = Name.Substring("", ".", 0, false, true);
-
-                Args["this"] = Variable.Eval(Engine, ObjName, Context);
-            }
-
-            return Function.Evaluate(Args);
+            return Function.Call(Context, Arguments, Engine);
         }
 
         public override string ToString() {

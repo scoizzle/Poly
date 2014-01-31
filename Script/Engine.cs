@@ -12,8 +12,8 @@ namespace Poly.Script {
         public jsObject StaticObjects = new jsObject();
         public List<Library> Using = new List<Library>();
         public List<string> Includes = new List<string>();
-        public jsObject<SystemFunction.Raw> RawFunctionCache = new jsObject<SystemFunction.Raw>();
-        public jsObject<SystemFunction.Initializer> RawInitializerCache = new jsObject<SystemFunction.Initializer>();
+        public jsObject<Helper.MemberFunction> RawFunctionCache = new jsObject<Helper.MemberFunction>();
+        public jsObject<Helper.Initializer> RawInitializerCache = new jsObject<Helper.Initializer>();
 
         public Engine() {
             Using.Add(Library.Defined["Standard"]);

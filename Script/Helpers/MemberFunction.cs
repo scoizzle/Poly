@@ -66,6 +66,10 @@ namespace Poly.Script.Helper {
             var Index = 0;
 
             Context.ForEach((Key, Value) => {
+                if (Value is Function) {
+                    Value = (Value as Function).GetSystemHandler();
+                }
+
                 Args[Index++] = Value;
             });
 

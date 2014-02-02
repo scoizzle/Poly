@@ -17,10 +17,12 @@ namespace Poly.Net.Irc {
                     }
                     break;
 
-                case "User":
-                    User.Ident = Packet.getString("Ident");
-                    User.IsHidden = (User.getInt("Visible") == 8);
-                    User.RealName = Packet.Message;
+				case "User":
+					if (User.IsAuthenticated) {
+						User.Ident = Packet.getString ("Ident");
+						User.IsHidden = (User.getInt ("Visible") == 8);
+						User.RealName = Packet.Message;
+					}
                     break;
 
                 case "Pass":

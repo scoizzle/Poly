@@ -27,24 +27,31 @@ namespace Poly.Event {
             }
         }
 
+		public IEnumerable<object> Execute(string EventName, jsObject Args) {
+			var List = getObject (EventName);
+
+			for (int i = 0; i < List.Count; i++) {
+				yield return (List.ElementAt(i).Value as Handler)(Args);
+			}
+		}
+
         public bool MatchAndInvoke(string Data, jsObject Args) {
             return MatchAndInvoke(Data, Args, false);
         }
 
         public bool MatchAndInvoke(string Data, jsObject Args, bool KeyIsWild) {
-            foreach (var Pair in this) {
-                var Key = KeyIsWild ? Data : Pair.Key;
-                var Wild = KeyIsWild ? Pair.Key : Data;
+			ForEach ((K, V) => {
+				var Key = KeyIsWild ? Data : K;
+				var Wild = KeyIsWild ? K : Data;
 
-                var Matches = Key.Match(Wild);
+				var Matches = Key.Match (Wild);
 
-                if (Matches != null) {
-                    Args.CopyTo(Matches);
-                    Invoke(Pair.Key, Matches);
-                    return true;
-                }
-            }
-            return false;
+				if (Matches != null) {
+					Args.CopyTo (Matches);
+					Invoke (K, Matches);
+				}
+			});
+			return true;
         }
     }
 }

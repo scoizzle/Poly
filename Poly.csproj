@@ -62,18 +62,8 @@
     <Compile Include="Net\Http\Server.cs" />
     <Compile Include="Net\Http\Server.Dispatch.cs" />
     <Compile Include="Net\Http\Server.Routing.cs" />
-    <Compile Include="Net\Irc\Client.cs" />
-    <Compile Include="Net\Irc\Client.Events.cs" />
-    <Compile Include="Net\Irc\Client.Functions.cs" />
-    <Compile Include="Net\Irc\Client.Threads.cs" />
     <Compile Include="Net\Irc\Conversation.cs" />
     <Compile Include="Net\Irc\Packet.cs" />
-    <Compile Include="Net\Irc\Server.Channel.cs" />
-    <Compile Include="Net\Irc\Server.cs" />
-    <Compile Include="Net\Irc\Server.Events.cs" />
-    <Compile Include="Net\Irc\Server.Functions.cs" />
-    <Compile Include="Net\Irc\Server.Threads.cs" />
-    <Compile Include="Net\Irc\Server.User.cs" />
     <Compile Include="Net\Irc\User.cs" />
     <Compile Include="Net\Tcp\Client.cs" />
     <Compile Include="Net\Tcp\MultiPortServer.cs" />
@@ -141,6 +131,16 @@
     <Compile Include="Script\Types\String.cs" />
     <Compile Include="Script\Types\SystemObject.cs" />
     <Compile Include="StringExtensions.cs" />
+    <Compile Include="Net\Irc\Client\Client.cs" />
+    <Compile Include="Net\Irc\Client\Events.cs" />
+    <Compile Include="Net\Irc\Client\Functions.cs" />
+    <Compile Include="Net\Irc\Client\Threads.cs" />
+    <Compile Include="Net\Irc\Server\Channel.cs" />
+    <Compile Include="Net\Irc\Server\Events.cs" />
+    <Compile Include="Net\Irc\Server\Functions.cs" />
+    <Compile Include="Net\Irc\Server\Server.cs" />
+    <Compile Include="Net\Irc\Server\Threads.cs" />
+    <Compile Include="Net\Irc\Server\User.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
@@ -150,4 +150,8 @@
   <Target Name="AfterBuild">
   </Target>
   -->
+  <ItemGroup>
+    <Folder Include="Net\Irc\Client\" />
+    <Folder Include="Net\Irc\Server\" />
+  </ItemGroup>
 </Project>

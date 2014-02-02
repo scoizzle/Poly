@@ -280,9 +280,9 @@ namespace Poly.Data {
         }
 
         public void ForEach(Action<string, T> Action) {
-            foreach (var Pair in this.ToArray().AsParallel()) {
-                Action(Pair.Key, this[Pair.Key]);
-            }
+			base.ForEach ((K, V) => {
+				Action(K, V as T);
+			});
         }
     }
 }

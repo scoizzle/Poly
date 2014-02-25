@@ -113,6 +113,9 @@ namespace Poly.Data {
                 if (string.IsNullOrEmpty(Key))
                     continue;
 
+                if (Current == null)
+                    return false;
+
                 if (Index == KeyList.Length - 1) {
                     Current.Storage[Key] = Value;
                     return true;
@@ -143,6 +146,10 @@ namespace Poly.Data {
 
         public double getDouble(params string[] Key) {
             return Convert.ToDouble(Get<object>(Key));
+        }
+
+        public long getLong(params string[] Key) {
+            return Convert.ToInt64(Get<object>(Key));
         }
 
         public bool getBool(params string[] Key) {

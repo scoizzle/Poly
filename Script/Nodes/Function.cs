@@ -24,7 +24,7 @@ namespace Poly.Script {
             return base.Evaluate(Context);
         }
 
-        public object Call(jsObject Context, jsObject ArgList, Engine Engine = null) {
+        public object Call(jsObject Context, jsObject ArgList, object This = null, Engine Engine = null) {
             var Args = new jsObject();
             var Index = 0;
 
@@ -44,8 +44,15 @@ namespace Poly.Script {
                 Index++;
             });
 
-            if (!string.IsNullOrEmpty(ObjectName)) {
-                var This = Engine == null ?
+            if (This != null) {
+                Variable.Set(
+                    "this", 
+                    Args, 
+                    This
+                );
+            }
+            else if (!string.IsNullOrEmpty(ObjectName)) {
+                This = Engine == null ?
                     Variable.Get(ObjectName, Context) :
                     Variable.Eval(Engine, ObjectName, Context);
 

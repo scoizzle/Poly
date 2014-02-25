@@ -9,6 +9,14 @@ namespace Poly.Event {
     public delegate object Handler(jsObject Args);
 
     public class Engine : jsObject<Handler> {
+        public void Add(Handler Handler) {
+            Register(Handler.Method.Name, Handler);
+        }
+
+        public new void Add(string Name, Handler Handler) {
+            Register(Name, Handler);
+        }
+
         public void Register(string EventName, Handler Handler) {
             this[EventName, Handler.Method.MetadataToken.ToString()] = Handler;
         }
@@ -40,18 +48,21 @@ namespace Poly.Event {
         }
 
         public bool MatchAndInvoke(string Data, jsObject Args, bool KeyIsWild) {
-			ForEach ((K, V) => {
-				var Key = KeyIsWild ? Data : K;
-				var Wild = KeyIsWild ? K : Data;
+            var List = this.ToList();
 
-				var Matches = Key.Match (Wild);
+            for (int i = 0; i < List.Count; i++) {
+                var Key = KeyIsWild ? Data : List[i].Key;
+                var Wild = KeyIsWild ? List[i].Key : Data;
 
-				if (Matches != null) {
-					Args.CopyTo (Matches);
-					Invoke (K, Matches);
-				}
-			});
-			return true;
+                var Matches = Key.Match(Wild);
+
+                if (Matches != null) {
+                    Args.CopyTo(Matches);
+                    Invoke(List[i].Key, Matches);
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

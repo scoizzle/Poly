@@ -3,29 +3,29 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
+using Poly.Data;
+
 namespace Poly.Net.Irc {
     public partial class Server {
-        public class User : Irc.User {
-            public Net.Tcp.Client Client;
+        public partial class User : Irc.User {
+            public Server Server = null;
+            public Tcp.Client Client = null;
+
             public DateTime LastPongTime = DateTime.MinValue;
             public string LastPingMessage = "";
 
-            public bool IsHidden {
-                get {
-                    return Get<bool>("IsHidden", false);
-                }
-                set {
-                    Set("IsHidden", value);
-                }
+            public jsObject<Channel> Channels = new jsObject<Channel>();
+
+            public User(Server Server, Tcp.Client Client) {
+                this.Server = Server;
+                this.Client = Client;
             }
 
-            public bool IsAuthenticated {
-                get {
-                    return Get<bool>("IsAuthenticated", false);
+            public override string ToString(bool HumanFormat) {
+                if (string.IsNullOrEmpty(Nick)) {
+                    return Ident + "@" + Host;
                 }
-                set {
-                    Set("IsAuthenticated", value);
-                }
+                return Nick + "!" + Ident + "@" + Host;
             }
         }
     }

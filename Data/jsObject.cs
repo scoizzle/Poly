@@ -279,6 +279,10 @@ namespace Poly.Data {
             }
         }
 
+        public void Add(string Key, T Obj) {
+            this[Key] = Obj;
+        }
+
         public void ForEach(Action<string, T> Action) {
 			base.ForEach ((K, V) => {
 				Action(K, V as T);

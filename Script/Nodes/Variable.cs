@@ -201,6 +201,21 @@ namespace Poly.Script.Node {
             return null;
         }
 
+        public bool SetProperty(object Obj, string Name, object Value) {
+            var Type = Obj.GetType();
+
+            try {
+                var PropInfo = Type.GetProperty(Name);
+
+                if (PropInfo != null) {
+                    PropInfo.SetValue(Obj, Value, null);
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
         public static object Eval(Engine Engine, string Key, jsObject Context) {
             var Var = Parse(Engine, Key, 0);
 

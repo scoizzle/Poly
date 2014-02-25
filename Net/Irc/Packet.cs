@@ -11,13 +11,13 @@ namespace Poly.Net.Irc {
         public static Dictionary<string, string> Formats = new Dictionary<string, string>() {
             { "Pong", "PONG :{Message}" },
             { "User", "USER {Ident} {Visible} * :{Message}" },
-            { "Nick", "NICK :{Message}" },
+            { "Nick", "NICK {Message}" },
             { "Pass", "PASS :{Message}" },
             { "CTCP", "PRIVMSG {Receiver} :\x0001{Message}\x0001" },
-            { "Msg", "PRIVMSG {Receiver} :{Message}" },
             { "CTCPReply", "NOTICE {Receiver} :\x0001{Message}\x0001" },
+            { "Msg", "PRIVMSG {Receiver} :{Message}" },
             { "Notice", "NOTICE {Receiver} :{Message}" },
-            { "Join", "JOIN {Receiver} {Message}" },
+            { "Join", "JOIN {Receiver}| {Message}" },
             { "Part", "PART {Receiver} :{Message}" },
             { "Error", "ERROR :{Message}" },
             { "Quit", "QUIT :{Message}" },
@@ -95,7 +95,7 @@ namespace Poly.Net.Irc {
             { "OnFileError", ":{Sender} 424 {Receiver} :{Message}" },
             { "OnNoNickGiven", ":{Sender} 431 {Receiver} :{Message}" },
             { "OnInvalidNick", ":{Sender} 432 {Receiver} :{Message}" },
-            { "OnNickInUse", ":{Sender} 433 {Receiver} :{Message}" },
+            { "OnNickInUse", ":{Sender} 433 {Receiver} {Nick} :{Message}" },
             { "OnNickCollision", ":{Sender} 436 {Receiver} :{Message}" },
             { "OnUserNotInChannel", ":{Sender} 441 {Receiver} :{Message}" },
             { "OnNotOnChannel", ":{Sender} 442 {Receiver} :{Message}" },
@@ -189,7 +189,13 @@ namespace Poly.Net.Irc {
 
             this.Message = Data;
 
+            App.Log.Info(Data);
+
             return false;
+        }
+
+        public static implicit operator Packet(string Name) {
+            return new Packet(Name);
         }
 
         public override string ToString(bool humanformat) {

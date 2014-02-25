@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Poly.Data {
     public static class jsObjectExtension {
-        public static string Template(this jsObject This, string Template) {
+        public static string Template_(this jsObject This, string Template) {
             string Output = Template;
 
             if (This == null)
@@ -56,6 +56,50 @@ namespace Poly.Data {
             }
 
             return Output;
+        }
+
+        public static string Template(this jsObject This, string Template) {
+            if (string.IsNullOrEmpty(Template) || This.IsEmpty)
+                return string.Empty;
+
+            StringBuilder Output = new StringBuilder();
+            for (int Index = 0; Index < Template.Length; Index++) {
+                if (Template.Compare("{", Index)) {
+                    var Name = Template.FindMatchingBrackets("{", "}", Index, false);
+                    var Close = Template.IndexOf("{/" + Name + "}");
+                    var Obj = This.Get<object>(Name);
+
+                    if (Obj == null) {
+                        Index += Name.Length + 1;
+                        continue;
+                    }
+
+                    if (Obj is jsObject && Close != -1) {
+                        var SubSectionOffset = Index + Name.Length + 2;
+                        var SubSection = Template.Substring(SubSectionOffset, Close - SubSectionOffset);
+
+                        (Obj as jsObject).ForEach<jsObject>((Key, Sub) => {
+                            Output.Append(Sub.Template(SubSection));
+                        });
+
+                        Index = Close + Name.Length + 2;
+                    }
+                    else {
+                        Output.Append(Obj);
+                        Index += Name.Length + 1;
+                    }
+                }
+                else if (Template.Compare("\\", Index)) {
+                    Output.Append(Template[++Index]);
+                }
+                else if (Template.Compare("|", Index)) {
+                    continue;
+                }
+                else {
+                    Output.Append(Template[Index]);
+                }
+            }
+            return Output.ToString();
         }
 
         public static bool Extract(this jsObject This, string Template, string Data, bool IgnoreCase = false) {

@@ -7,10 +7,6 @@ using Poly.Data;
 
 namespace System {
     public static class StringExtensions {
-        private static readonly string[] WildChars = new string[] {
-            "{", "*", "?", "^"
-        };
-
         public static int CountOf(this String This, String ToFind) {
             int Count = 0, X = 0;
 
@@ -45,89 +41,6 @@ namespace System {
             }
 
             return X == Possible.Length;
-        }
-
-        public static bool Compare(this String This, String Wild, bool IgnoreCase = true, int Index = 0) {
-            if (string.IsNullOrEmpty(This) || string.IsNullOrEmpty(Wild)) {
-                return false;
-            }
-
-            if (IgnoreCase) {
-                This = This.ToLower();
-                Wild = Wild.ToLower();
-            }
-
-            int x = Index, y = 0,
-                X = This.Length,
-                Y = Wild.Length;
-
-            if (Wild == "*")
-                return true;
-
-            while (x < X && y < Y) {
-                if (Wild[y] == This[x] || Wild[y] == '?') {
-                    x++;
-                    y++;
-                }
-                else if (Wild[y] == '*') {
-                    y++;
-
-                    if (y == Y) {
-                        break;
-                    }
-                    else if (y + 1 == Y) {
-                        if (This[X - 1] == Wild[y]) {
-                            return true;
-                        }
-                        return false;
-                    }
-
-                    var rawValue = string.Empty;
-                    int tmp = -1, z = -1;
-
-                    rawValue = Wild.FirstPossible(y, WildChars);
-
-                    if (string.IsNullOrEmpty(rawValue)) {
-                        rawValue = Wild.Substring(y, Wild.Length - y);
-                        z = This.IndexOf(rawValue, x);
-                    }
-                    else {
-                        tmp = Wild.IndexOf(rawValue, y);
-                        if (tmp - y > 0) {
-                            rawValue = Wild.Substring(y, tmp - y);
-                        }
-                        z = This.IndexOf(rawValue, x);
-                    }
-
-                    if (z == -1)
-                        return false;
-
-                    y = Wild.IndexOf(rawValue, y);
-                    x = z;
-                }
-                else if (Wild[y] == '^') {
-                    while (x < X && char.IsWhiteSpace(This[x])) {
-                        x++;
-                    }
-                    if (Wild[y + 1] == '\\') {
-                        y++;
-                    }
-                    if (This[x] != Wild[y + 1]) {
-                        return false;
-                    }
-                    y++;
-                }
-                else {
-                    return false;
-                }
-            }
-
-            if (x == X && (Y - y ) < 3) {
-                if (Wild[Y - 1] == '*')
-                    return true;
-            }
-
-            return x == X && y == Y;
         }
 
         public static bool ToBool(this String This) {
@@ -325,6 +238,29 @@ namespace System {
             return Possible[Index];
         }
 
+        public static int FirstPossibleIndex(this String This, int Start = 0, params String[] Possible) {
+            int Location = This.Length;
+
+            if (Start > 0 && This[Start - 1] == '\\')
+                Start++;
+
+            for (int i = 0; i < Possible.Length; i++) {
+                int Maybe = This.IndexOf(Possible[i], Start);
+
+                if (Maybe == -1)
+                    continue;
+
+                if (Maybe < Location) {
+                    Location = Maybe;
+                }
+            }
+
+            if (Location == This.Length)
+                return -1;
+
+            return Location;
+        }
+
         public static string Substring(this String This, String Start, String Stop = "", int Index = 0, bool includeStartStop = false, bool LastStop = false) {
             int X = -1, Y = -1;
             StringBuilder Output = new StringBuilder();
@@ -428,156 +364,6 @@ namespace System {
 
         public static jsObject ToJsObject(this String This) {
             return (jsObject)(This);
-        }
-
-        public static jsObject Match(this String Data, String MatchString, bool IgnoreCase = false, jsObject Storage = null, int ThisIndex = 0, int WildIndex = 0) {
-            if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(MatchString)) {
-                return null;
-            }
-
-            String This = null, Wild = null;
-
-            if (IgnoreCase) {
-                This = Data.ToLower();
-                Wild = MatchString.ToLower();
-            }
-            else {
-                This = Data;
-                Wild = MatchString;
-            }
-
-            jsObject Value = Storage == null ?
-                new jsObject() :
-                Storage;
-
-            int x = ThisIndex, y = WildIndex,
-                X = This.Length,
-                Y = Wild.Length;
-
-            if (X == 1 && Y > 1) {
-                return null;
-            }
-
-            while (x < X && y < Y) {
-                if (Wild[y] == '\\') {
-                    y++;
-                }
-
-                if (Wild[y] == '{' && (y > 0 ? Wild[y - 1] != '\\' : true)) {
-                    string rawName, rawValue = "";
-
-                    rawName = MatchString.FindMatchingBrackets("{", "}", y);
-
-                    if (string.IsNullOrEmpty(rawName))
-                        break;
-
-                    y += rawName.Length + 2;
-
-                    int tmp = -1, z = -1;
-
-                    if (y == Y) {
-                        z = This.Length;
-                    }
-                    else {
-                        if (Wild[y] == '\\')
-                            y++;
-
-                        rawValue = Wild.FirstPossible(y, WildChars);
-
-                        if (string.IsNullOrEmpty(rawValue)) {
-                            rawValue = Wild.Substring(y, Wild.Length - y);
-                            z = This.IndexOf(rawValue, x);
-                        }
-                        else {
-                            tmp = Wild.IndexOf(rawValue, y);
-                            if (tmp - y > 0) {
-                                rawValue = Wild.Substring(y, tmp - y);
-                            }
-                            z = This.IndexOf(rawValue, x);
-                        }
-                    }
-
-                    if (z == -1)
-                        return null;
-
-                    y = Wild.IndexOf(rawValue, y);
-
-                    rawValue = Data.Substring(x, z - x);
-                    Value[rawName] = rawValue;
-
-                    x = z;
-                }
-                else if (Wild[y] == '(' && This[x] == '(') {
-                    var SubThis = Data.FindMatchingBrackets("(", ")", x);
-                    var SubWild = MatchString.FindMatchingBrackets("(", ")", y);
-
-                    if (SubThis.Match(SubWild, IgnoreCase, Value, 0, 0) == null)
-                        return null;
-
-                    x += SubThis.Length + 2;
-                    y += SubWild.Length + 2;
-                }
-                else if (Wild[y] == This[x] || Wild[y] == '?') {
-                    x++;
-                    y++;
-                }
-                else if (Wild[y] == '*') {
-                    y++;
-
-                    if (y == Y) {
-                        break;
-                    }
-                    else if (y + 1 == Y) {
-                        if (This[X - 1] == Wild[y]) {
-                            break;
-                        }
-                        return null;
-                    }
-                    else if (Wild[y] == '\\') {
-                        y++;
-                    }
-
-                    var rawValue = string.Empty;
-                    int tmp = -1, z = -1;
-
-                    rawValue = Wild.FirstPossible(y, WildChars);
-
-                    if (string.IsNullOrEmpty(rawValue)) {
-                        rawValue = Wild.Substring(y, Wild.Length - y);
-                        z = This.IndexOf(rawValue, x);
-                    }
-                    else {
-                        tmp = Wild.IndexOf(rawValue, y);
-                        if (tmp - y > 0) {
-                            rawValue = Wild.Substring(y, tmp - y);
-                        }
-                        z = This.IndexOf(rawValue, x);
-                    }
-
-                    if (z == -1)
-                        return null;
-
-                    y = Wild.IndexOf(rawValue, y);
-                    x = z;
-                }
-                else if (Wild[y] == '^') {
-                    while (x < X && char.IsWhiteSpace(This[x])) {
-                        x++;
-                    }
-                    if (Wild[y + 1] == '\\') {
-                        y++;
-                    }
-                    if (This[x] != Wild[y + 1]) {
-                        return null;
-                    }
-                    y++;
-                }
-                else {
-                    return null;
-                }
-            }
-
-            return Value;
         }
 
         public static string[] ParseCParams(this String This, String Open = "(", String Close = ")") {

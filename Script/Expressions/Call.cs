@@ -19,7 +19,17 @@ namespace Poly.Script.Node {
                     return null;
             }
 
-            return Function.Call(Context, Arguments, Engine);
+            if (Name.Contains('.')) {
+                var ObjectName = Name.Substring("", ".", 0, false, true);
+
+                var This = Engine == null ?
+                    Variable.Get(ObjectName, Context) :
+                    Variable.Eval(Engine, ObjectName, Context);
+
+                return Function.Call(Context, Arguments, This, Engine);
+            }
+
+            return Function.Call(Context, Arguments, null, Engine);
         }
 
         public override string ToString() {

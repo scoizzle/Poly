@@ -64,6 +64,12 @@
     <Compile Include="Net\Http\Server.Routing.cs" />
     <Compile Include="Net\Irc\Conversation.cs" />
     <Compile Include="Net\Irc\Packet.cs" />
+    <Compile Include="Net\Irc\Server\Channel.Events.cs" />
+    <Compile Include="Net\Irc\Server\Channel.Accesors.cs" />
+    <Compile Include="Net\Irc\Server\User.Events.cs" />
+    <Compile Include="Net\Irc\Server\User.Functions.cs" />
+    <Compile Include="Net\Irc\Server\Server.Accesors.cs" />
+    <Compile Include="Net\Irc\Server\User.Accesors.cs" />
     <Compile Include="Net\Irc\User.cs" />
     <Compile Include="Net\Tcp\Client.cs" />
     <Compile Include="Net\Tcp\MultiPortServer.cs" />
@@ -136,11 +142,11 @@
     <Compile Include="Net\Irc\Client\Functions.cs" />
     <Compile Include="Net\Irc\Client\Threads.cs" />
     <Compile Include="Net\Irc\Server\Channel.cs" />
-    <Compile Include="Net\Irc\Server\Events.cs" />
-    <Compile Include="Net\Irc\Server\Functions.cs" />
+    <Compile Include="Net\Irc\Server\Server.Events.cs" />
     <Compile Include="Net\Irc\Server\Server.cs" />
-    <Compile Include="Net\Irc\Server\Threads.cs" />
+    <Compile Include="Net\Irc\Server\Server.Threads.cs" />
     <Compile Include="Net\Irc\Server\User.cs" />
+    <Compile Include="StringMatching.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
@@ -150,8 +156,5 @@
   <Target Name="AfterBuild">
   </Target>
   -->
-  <ItemGroup>
-    <Folder Include="Net\Irc\Client\" />
-    <Folder Include="Net\Irc\Server\" />
-  </ItemGroup>
+  <ItemGroup />
 </Project>

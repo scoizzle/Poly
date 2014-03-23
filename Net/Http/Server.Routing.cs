@@ -38,11 +38,11 @@ namespace Poly.Net.Http {
             var Packet = Request.Packet;
 
             var Client = Request.Client;
-            var ClientEP = Client.Client.RemoteEndPoint.ToString();
+            var ClientEP = Client.Socket.RemoteEndPoint.ToString();
             var ClientIP = ClientEP.Substring("", ":");
             var ClientPort = ClientEP.Substring(":");
 
-            var ServerEP = Client.Client.LocalEndPoint.ToString();
+            var ServerEP = Client.Socket.LocalEndPoint.ToString();
             var ServerPort = ServerEP.Substring(":");
 
             var ScriptName = FileName;
@@ -75,14 +75,14 @@ namespace Poly.Net.Http {
             Info.EnvironmentVariables.Add("SCRIPT_NAME", ScriptName);
             Info.EnvironmentVariables.Add("SCRIPT_FILENAME", FileName);
             Info.EnvironmentVariables.Add("HTTP_HOST", Packet.Host);
-            Info.EnvironmentVariables.Add("HTTP_USER_AGENT", Packet.getString("User-Agent"));
-            Info.EnvironmentVariables.Add("HTTP_ACCEPT", Packet.getString("Accept"));
-            Info.EnvironmentVariables.Add("HTTP_ACCEPT_ENCODING", Packet.getString("Accept-Encoding"));
-            Info.EnvironmentVariables.Add("HTTP_ACCEPT_LANGUAGE", Packet.getString("Accept-Language"));
-            Info.EnvironmentVariables.Add("HTTP_ACCEPT_CHARSET", Packet.getString("Accept-Charset"));
+            Info.EnvironmentVariables.Add("HTTP_USER_AGENT", Packet.Get<string>("User-Agent"));
+            Info.EnvironmentVariables.Add("HTTP_ACCEPT", Packet.Get<string>("Accept"));
+            Info.EnvironmentVariables.Add("HTTP_ACCEPT_ENCODING", Packet.Get<string>("Accept-Encoding"));
+            Info.EnvironmentVariables.Add("HTTP_ACCEPT_LANGUAGE", Packet.Get<string>("Accept-Language"));
+            Info.EnvironmentVariables.Add("HTTP_ACCEPT_CHARSET", Packet.Get<string>("Accept-Charset"));
             Info.EnvironmentVariables.Add("HTTP_CONNECTION", Packet.Connection);
-            Info.EnvironmentVariables.Add("HTTP_REFERER", Packet.getString("Referer"));
-            Info.EnvironmentVariables.Add("HTTP_COOKIE", Packet.Headers.getString("Cookie"));
+            Info.EnvironmentVariables.Add("HTTP_REFERER", Packet.Get<string>("Referer"));
+            Info.EnvironmentVariables.Add("HTTP_COOKIE", Packet.Headers.Get<string>("Cookie"));
             Info.EnvironmentVariables.Add("REDIRECT_STATUS", "");
 
             if (POST) {
@@ -116,7 +116,7 @@ namespace Poly.Net.Http {
             );
 
             if (Result.Headers.ContainsKey("Status")) {
-                Result.Status = Result.Headers.getString("Status");
+                Result.Status = Result.Headers.Get<string>("Status");
                 Result.Headers.Remove("Status");
             }
         }

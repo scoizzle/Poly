@@ -7,6 +7,7 @@ using System.Threading;
 namespace Poly.Script.Node {
     public class Switch : Expression {
         public object Object = null;
+        public Case Default = null;
 
         public override object Evaluate(Data.jsObject Context) {
             var Options = this.ToArray();
@@ -17,6 +18,10 @@ namespace Poly.Script.Node {
                 if (Case != null && Bool.EvaluateNode(Case.Object, Context)) {
                     return Case.Evaluate(Context);
                 }
+            }
+
+            if (Default != null) {
+                return Default.Evaluate(Context);
             }
 
             return null;
@@ -58,7 +63,10 @@ namespace Poly.Script.Node {
                         var Option = Engine.Parse(Text, ref Open, Close) as Case;
 
                         if (Option != null) {
-                            if (Option.Object is Operator) {
+                            if (Option.IsDefault) {
+                                Switch.Default = Option;
+                            }
+                            else if (Option.Object is Operator) {
                                 (Option.Object as Operator).Left = Switch.Object;
                             }
                             else {

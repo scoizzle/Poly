@@ -16,8 +16,10 @@ namespace Poly.Script {
         public Function(string Name) {
             this.Name = Name;
 
-            if (this.Name.Contains('.'))
+            if (this.Name.Contains('.')) {
                 this.ObjectName = Name.Substring("", ".", 0, false, true);
+                this.Name = Name.Substring(this.ObjectName.Length + 1);
+            }
         }
 
         public override object Evaluate(jsObject Context) {
@@ -34,7 +36,12 @@ namespace Poly.Script {
                     Arguments[Index];
 
                 if (Value is Function) {
-                    GetHandlerArguments(Value as Function, Context, Args);
+                    if ((Value as Function).Arguments.Length > 0) {
+                        Value = GetFunctionHandler(Value as Function, Context);
+                    }
+                    else {
+                        Value = (Value as Function).GetSystemHandler();
+                    }
                 }
                 else if (Value is Node.Node) {
                     Value = (Value as Node.Node).Evaluate(Context);
@@ -66,97 +73,106 @@ namespace Poly.Script {
             return this.Evaluate(Args);
         }
 
-        public Poly.Event.Handler GetSystemHandler() {
-            return Evaluate;
-        }
-
         public override string ToString() {
             return "function " + Name + "(" + string.Join(", ", Arguments) + ")";
         }
 
-        public static Function Get(Engine Engine, string Name) {
-            if (Engine.Functions.ContainsKey(Name)) {
-                return Engine.Functions[Name];
-            } 
+        public static Function GetTypeConstructor(Engine Engine, string Name) {
+            CustomType Type;
 
-            if (Library.TypeLibsByName.ContainsKey(Name)) {
-                return Library.TypeLibsByName[Name].Get<Function>(Name);
-            }
-
-            var ObjName = Name.Substring("", ".", 0, false, true);
-            var FunName = Name.Substring(ObjName.Length + 1);
-            
-            if (Library.StaticObjects.ContainsKey(ObjName)) {
-                var Lib = Library.StaticObjects[ObjName];
-
-                if (Lib.ContainsKey(FunName)) {
-                    return Lib[FunName];
-                }
-            }
-
-            foreach (var Lib in Engine.Using) {
-                if (Lib.ContainsKey(Name))
-                    return Lib[Name];
+            if (Engine.Types.TryGetValue(Name, out Type)) {
+                return Type.Construct;
             }
 
             return null;
         }
 
-        public static Function Get(Engine Engine, jsObject Context, string Name) {
-            var Possible = Node.Variable.Eval(Engine, Name, Context);
+        public static Function GetConstructor(Engine Engine, string Name) {
+            Function Func;
 
-            if (Possible is Function)
-                return Possible as Function;
+            if ((Func = GetTypeConstructor(Engine, Name)) != null) {
+                return Func;
+            }
 
-            if (Name.Contains('.')) {
-                var ObjName = Name.Substring("", ".", 0, false, true);
-                var FunName = Name.Substring(ObjName.Length + 1);
+            if (Library.Constructors.TryGetValue(Name, out Func)) {
+                return Func;
+            }
 
-                var This = Context[ObjName];
+            if (Engine.RawInitializerCache.TryGetValue(Name, out Func)) {
+                return Func;
+            }
 
-                if (This == null) {
-                    This = Node.Variable.Eval(Engine, ObjName, Context);
+            var Init = Helper.Initializer.TryCreate(Name);
+
+            if (Init != null) {
+                Engine.RawInitializerCache[Name] = Init;
+
+                return Init;
+            }
+
+            return null;
+        }
+
+        public static Function Get(Engine Engine, string Name, object This = null) {
+            Function Func = (This as Function);
+
+            if (Func != null)
+                return Func;
+
+            if (This == null) {
+                if (Engine.Functions.TryGetValue(Name, out Func)) {
+                    return Func;
                 }
 
-                if (This != null) {
-                    var Type = This.GetType();
+                if ((Func = GetConstructor(Engine, Name)) != null) {
+                    return Func;
+                }
 
-                    if (Library.TypeLibs.ContainsKey(Type)) {
-                        var Lib = Library.TypeLibs[Type];
-
-                        if (Lib.ContainsKey(FunName))
-                            return Lib[FunName];
-                    }
-
-                    if (Library.Global.ContainsKey(FunName)) {
-                        return Library.Global[FunName]; 
-                    }
-
-                    var RawName = string.Join(".", Type.FullName, FunName);
-
-                    if (Engine.RawFunctionCache.ContainsKey(RawName)) {
-                        return Engine.RawFunctionCache[RawName];
-                    }
-                    else {
-                        var Func = new Helper.MemberFunction(Type, FunName);
-
-                        Engine.RawFunctionCache[RawName] = Func;
-
+                foreach (var Lib in Engine.Using) {
+                    if (Lib.TryGetValue(Name, out Func)) {
                         return Func;
                     }
                 }
-                else if (Engine.RawInitializerCache.ContainsKey(Name)) {
-                    return Engine.RawInitializerCache[Name];
-                }
-                else {
-                    var Init = Helper.Initializer.TryCreate(Name);
 
-                    if (Init != null) {
-                        Engine.RawInitializerCache[Name] = Init;
+                if (Name.IndexOf('.') > -1) {
+                    Library Lib;
+                    var ObjectName = Name.Substring(0, Name.LastIndexOf('.'));
+                    var FunctionName = Name.Substring(ObjectName.Length + 1);
 
-                        return Init;
+                    if (Library.StaticObjects.TryGetValue(ObjectName, out Lib)) {
+                        if (Lib.TryGetValue(FunctionName, out Func)) {
+                            return Func;
+                        }
                     }
                 }
+            }
+            else {
+                Library Lib;
+                Type Type = This.GetType();
+
+                if (Type == typeof(CustomTypeInstance)) {
+                    var CustomType = (This as CustomTypeInstance).Type;
+
+                    if ((Func = CustomType.GetFunction(Name)) != null) {
+                        return Func;
+                    }
+                }
+
+                if (Library.TypeLibs.TryGetValue(Type, out Lib)) {
+                    if (Lib.TryGetValue(Name, out Func)) {
+                        return Func;
+                    }
+                }
+
+                if (Library.Global.TryGetValue(Name, out Func)) {
+                    return Func;
+                }
+
+                if (Engine.RawFunctionCache.TryGetValue(Type.Name + Name, out Func)) {
+                    return Func;
+                }
+
+                return (Engine.RawFunctionCache[Type.Name + Name] = new Helper.MemberFunction(Type, Name));
             }
 
             return null;
@@ -178,8 +194,20 @@ namespace Poly.Script {
 
             return Storage;
         }
+        
+        public static Event.Handler GetFunctionHandler(Function Func, jsObject Context) {
+            return (Args) => {
+                Function.GetHandlerArguments(Func, Context, Args);
 
-        public static new Node.Expression Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+                return Func.Evaluate(Args);
+            };
+        }
+
+        public static new Expression Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+            return Parse(Engine, Text, ref Index, LastIndex, true);
+        }
+
+        public static Expression Parse(Engine Engine, string Text, ref int Index, int LastIndex, bool IsEngineWide = true) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
@@ -191,22 +219,18 @@ namespace Poly.Script {
 
             Function Func = null;
 
-            var NameStart = Delta;
-            while (Delta < Text.Length && IsValidChar(Text[Delta])) 
-                Delta++;
+            var Open = Delta;
+            var Close = Delta;
 
-            if (NameStart < Delta) {
-                Func = new Function(Text.Substring(NameStart, Delta - NameStart));
+            ConsumeValidName(Text, ref Close);
+            Delta = Close;
+            ConsumeWhitespace(Text, ref Delta);
 
-                ConsumeWhitespace(Text, ref Delta);
-            }
-            else {
-                Func = new Function("");
-            }
-                        
             if (Text.Compare("(", Delta)) {
-                var Open = Delta + 1;
-                var Close = Delta;
+                Func = new Function(Text.Substring(Open, Close - Open));
+
+                Open = Delta + 1;
+                Close = Delta;
 
                 ConsumeEval(Text, ref Close);
                 Delta = Close;
@@ -230,7 +254,7 @@ namespace Poly.Script {
                         ConsumeWhitespace(Text, ref Delta);
                         Index = Delta;
 
-                        if (!string.IsNullOrEmpty(Func.Name)) {
+                        if (!string.IsNullOrEmpty(Func.Name) && IsEngineWide) {
                             Engine.Functions[Func.Name] = Func;
                             return NoOp;
                         }
@@ -239,7 +263,6 @@ namespace Poly.Script {
                     }
                 }
             }
-
             return null;
         }
     }

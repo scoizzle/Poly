@@ -41,6 +41,15 @@ namespace Poly.Data {
             }
         }
 
+        public new object this[string Key] {
+            get {
+                return OnGet(Key);
+            }
+            set {
+                OnSet(Key, value);
+            }
+        }
+
         public object this[params string[] Key] {
             get {
                 return OnGet(Key);
@@ -93,27 +102,36 @@ namespace Poly.Data {
         }
 
         public void ForEach(Action<string, object> Action) {
-            var Array = this.ToArray();
-
-            for (int Index = 0; Index < Array.Length; Index++) {
-                Action(Array[Index].Key, Array[Index].Value);
-            }
+            ForEach<object>(Action);
         }
 
         public void ForEach<T>(Action<string, T> Action) where T : class {
-            var Array = this.ToArray();
+            foreach (var Pair in this) {
+                var Temp = Pair.Value as T;
 
-            for (int Index = 0; Index < Array.Length; Index++) {
-                if ((Array[Index].Value as T) != null) {
-                    Action(Array[Index].Key, (T)Array[Index].Value);
-                }
+                if (Temp != null)
+                    Action(Pair.Key, Temp);
+            }
+        }
+
+        public virtual object OnGet(string Key) {
+            if (Key.Contains(KeySeperator)) {
+                return Get<object>(Key);
+            }
+            else {
+                object Obj = null;
+
+                if (TryGetValue(Key, out Obj))
+                    return Obj;
+
+                return null;
             }
         }
 
         public virtual object OnGet(string[] Key) {
             if (Key.Length == 1) {
                 if (Key[0].Contains(KeySeperator)) {
-                    return Get(Key[0].Split(KeySeperator));
+                    return Get<object>(Key[0]);
                 }
                 else if (base.ContainsKey(Key[0])) {
                     return base[Key[0]];
@@ -121,7 +139,19 @@ namespace Poly.Data {
                 else return null;
             }
 
-            return Get(Key);
+            return Get<object>(Key);
+        }
+
+        public virtual void OnSet(string Key, object Value) {
+            if (Key.Contains(KeySeperator)) {
+                Set(Key, Value);
+            }
+            else if (Value == null) {
+                Remove(Key);
+            }
+            else {
+                Storage[Key] = Value;
+            }
         }
 
         public virtual void OnSet(string[] Key, object Value) {
@@ -268,6 +298,15 @@ namespace Poly.Data {
 
         public jsObject(string Json = "", string KeySeperator = ".") : base(Json) {
             this.KeySeperator = KeySeperator;
+        }
+
+        public new T this[string Key] {
+            get {
+                return (T)base[Key];
+            }
+            set {
+                base[Key] = value;
+            }
         }
 
         public new T this[params string[] Key] {

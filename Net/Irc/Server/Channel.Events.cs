@@ -7,15 +7,18 @@ namespace Poly.Net.Irc {
     public partial class Server {
         public partial class Channel : Irc.Conversation {
             public void OnJoin(User User) {
-                Users.Add(User.Nick, User);
+                if (!Users.ContainsKey(User.Nick)) {
+                    Users.Add(User.Nick, User);
+
+                    var Packet = new Packet("OnJoin") {
+                        Sender = User.Nick,
+                        Receiver = Name
+                    };
+
+                    Broadcast(Packet);
+                }
+
                 User.OnJoin(this);
-
-                var Packet = new Packet("OnJoin") {
-                    Sender = User.Nick,
-                    Receiver = Name
-                };
-
-                Broadcast(Packet);
             }
 
             public void OnPart(User User) {

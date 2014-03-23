@@ -23,7 +23,7 @@ namespace Poly.Script.Libraries {
         }
 
         public static SystemFunction Socket = new SystemFunction("Socket", (Args) => {
-            var Type = Args.getString("Type");
+            var Type = Args.Get<string>("Type");
 
             if (!string.IsNullOrEmpty(Type)) {
                 switch (Type.ToUpper()) {
@@ -41,8 +41,8 @@ namespace Poly.Script.Libraries {
             var This = Args.Get<Socket>("this");
 
             if (This != null) {
-                var IP = Args.getString("IP");
-                var Port = Args.getInt("Port");
+                var IP = Args.Get<string>("IP");
+                var Port = Args.Get<int>("Port");
 
                 This.Bind(
                     new IPEndPoint(
@@ -59,7 +59,7 @@ namespace Poly.Script.Libraries {
             var This = Args.Get<Socket>("this");
 
             if (This != null) {
-                var Data = Args.getString("Data");
+                var Data = Args.Get<string>("Data");
                 var Buffer = Encoding.Default.GetBytes(Data);
 
                 for (var Sent = 0;
@@ -77,7 +77,7 @@ namespace Poly.Script.Libraries {
             var This = Args.Get<Socket>("this");
 
             if (This != null) {
-                var Data = Args.getString("Data") + Environment.NewLine;
+                var Data = Args.Get<string>("Data") + Environment.NewLine;
                 var Buffer = Encoding.Default.GetBytes(Data);
 
                 for (var Sent = 0;
@@ -97,7 +97,7 @@ namespace Poly.Script.Libraries {
             if (This == null)
                 return false;
 
-            var Length = Args.getInt("Length");
+            var Length = Args.Get<int>("Length");
             var Buffer = new byte[Length];
 
             for (var Read = 0;

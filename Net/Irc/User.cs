@@ -63,9 +63,6 @@ namespace Poly.Net.Irc {
 
         public jsObject Modes {
             get {
-                if (!ContainsKey("Modes")){ 
-                    Modes = new jsObject(){ IsArray = true };
-                }
                 return Get<jsObject>("Modes", jsObject.NewArray);
             }
             set {

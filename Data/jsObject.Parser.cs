@@ -14,14 +14,19 @@ namespace Poly.Data {
                 return ntVal;
             }
 
-            double dbVal;
-            if (double.TryParse(val, out dbVal)) {
-                return dbVal;
-            }
-
             bool blVal;
             if (bool.TryParse(val, out blVal)) {
                 return blVal;
+            }
+
+            float fVal;
+            if (float.TryParse(val, out fVal)) {
+                return fVal;
+            }
+
+            double dbVal;
+            if (double.TryParse(val, out dbVal)) {
+                return dbVal;
             }
 
             long lnVal;
@@ -50,18 +55,18 @@ namespace Poly.Data {
 
         private bool _String(string Text, ref int Index, params string[] Key) {
             if (Text[Index] == '"') {
-                var Sub = Text.FindMatchingBrackets("\"", "\"", Index, true);
+                var Sub = Text.FindMatchingBrackets("\"", "\"", Index);
 
-                Index += Sub.Length;
+                Index += Sub.Length + 2;
 
-                Set(Key, Sub.Substring(1, Sub.Length - 2).Descape());
+                Set(Key, Sub.Descape());
             }
             else if (Text[Index] == '\'') {
-                var Sub = Text.FindMatchingBrackets("'", "'", Index, true);
+                var Sub = Text.FindMatchingBrackets("'", "'", Index);
 
-                Index += Sub.Length;
+                Index += Sub.Length + 2;
 
-                Set(Key, Sub.Substring(1, Sub.Length - 2).Descape());
+                Set(Key, Sub.Descape());
             }
             else {
                 return false;
@@ -106,11 +111,7 @@ namespace Poly.Data {
                 var X = Text[SubIndex];
                 var Name = This.Count.ToString();
 
-                if (X == '"') {
-                    if (!This._String(Text, ref SubIndex, Name))
-                        return false;
-                }
-                else if (X == '\'') {
+                if (X == '"' || X == '\'') {
                     if (!This._String(Text, ref SubIndex, Name))
                         return false;
                 }
@@ -217,6 +218,10 @@ namespace Poly.Data {
             else {
                 return _Raw(Text, ref Index, Name);
             }
+        }
+
+        public virtual void OnParseObject(jsObject Object, string Key) {
+            this[Key] = Object;
         }
 
         public virtual void OnParseObject(jsObject Object, params string[] Key) {

@@ -42,7 +42,7 @@ namespace Poly.Net.Irc {
 
         public string WelcomeMesage {
             get {
-                return Config.getString("Message", "Welcome");
+                return Config.Get<string>("Message", "Welcome");
             }
         }
     }

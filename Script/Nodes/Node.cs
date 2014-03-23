@@ -7,13 +7,19 @@ using Poly.Data;
 
 namespace Poly.Script.Node {
     public class Node : jsObject<Node> {
+        public Poly.Event.Handler GetSystemHandler() {
+            return Evaluate;
+        }
+
         public object GetValue(object Obj, jsObject Context) {
-            if (Context == null)
+            if (Context == null || Obj == null)
                 return null;
 
-            if (Obj is Node) {
-                return (Obj as Node).Evaluate(Context);
+            var Node = Obj as Node;
+            if (Node != null) {
+                return Node.Evaluate(Context);
             }
+
             return Obj;
         }
 
@@ -151,7 +157,13 @@ namespace Poly.Script.Node {
         public static void ConsumeValidName(string Text, ref int Index) {
             var Delta = Index;
 
-            for (; Delta < Text.Length && IsValidChar(Text[Delta]); Delta++) ;
+            for (; Delta < Text.Length; Delta++) {
+                if (IsValidChar(Text[Delta]))
+                    continue;
+                else if (Text[Delta] == '[')
+                    ConsumeBlock(Text, ref Delta);
+                else break;
+            }
 
             Index = Delta;
         }

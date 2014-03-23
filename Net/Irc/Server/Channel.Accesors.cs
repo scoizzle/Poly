@@ -8,7 +8,7 @@ namespace Poly.Net.Irc {
         public partial class Channel : Irc.Conversation {
             public string Password {
                 get {
-                    return getString("Password");
+                    return Get<string>("Password");
                 }
                 set {
                     Set("Password", value);
@@ -28,7 +28,7 @@ namespace Poly.Net.Irc {
             public DateTime TopicSetTime {
                 get {
                     return DateTime.FromBinary(
-                        getLong("TopicSetTime")
+                        Get<long>("TopicSetTime")
                     );
                 }
                 set {

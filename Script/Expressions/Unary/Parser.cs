@@ -8,6 +8,8 @@ namespace Poly.Script.Node.Unary {
         public delegate Operator Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
         public static List<Handler> UnaryParsers = new List<Handler>() {
             Equal.Parse,
+            NotEqual.Parse,
+            NotNull.Parse,
             LessThanEqual.Parse,
             LessThan.Parse,
             GreaterThanEqual.Parse,

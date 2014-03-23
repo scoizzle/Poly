@@ -20,9 +20,7 @@ namespace Poly.Net.Http {
 
         public string Name {
             get {
-                if (!this.ContainsKey("Name"))
-                    return "localhost";
-                return this.getString("Name");
+                return this.Get<string>("Name", "localhost");
             }
             set {
                 this["Name"] = value;
@@ -31,9 +29,7 @@ namespace Poly.Net.Http {
 
         public string Path {
             get {
-                if (!this.ContainsKey("Path"))
-                    return "WWW/";
-                return this.getString("Path");
+                return this.Get<string>("Path", "WWW/");
             }
             set {
                 this["Path"] = value;
@@ -42,9 +38,7 @@ namespace Poly.Net.Http {
 
         public string DefaultDocument {
             get {
-                if (!this.ContainsKey("DefaultDocument"))
-                    return "index.htm";
-                return this.getString("DefaultDocument");
+                return this.Get<string>("DefaultDocument", "index.html");
             }
             set {
                 this["DefaultDocument"] = value;
@@ -53,9 +47,7 @@ namespace Poly.Net.Http {
 
         public string DefaultExtension {
             get {
-                if (!this.ContainsKey("DefaultExtension"))
-                    return "htm";
-                return this.getString("DefaultExtension");
+                return this.Get<string>("DefaultExtension", "htm");
             }
             set {
                 this["DefaultExtension"] = value;
@@ -64,12 +56,19 @@ namespace Poly.Net.Http {
 
         public jsObject PathOverrides {
             get {
-                return Get<jsObject>("PathOverrides", () => { 
-                    return new jsObject(); 
-                });
+                return Get<jsObject>("PathOverrides", jsObject.NewObject);
             }
             set {
                 Set("PathOverrides", value);
+            }
+        }
+
+        public jsObject Ports {
+            get {
+                return Get<jsObject>("Ports", jsObject.NewArray);
+            }
+            set {
+                Set("Ports", value);
             }
         }
 
@@ -88,18 +87,22 @@ namespace Poly.Net.Http {
                     break;
                 }
             }
-
-            FileName = IO.Path.GetFullPath(
-                Request.Host.Path + IO.Path.DirectorySeparatorChar + FileName
-            );
-
-            if (GetExtension(FileName) == string.Empty) {
+            try {
                 FileName = IO.Path.GetFullPath(
-                    FileName + IO.Path.DirectorySeparatorChar + DefaultDocument
+                    Request.Host.Path + IO.Path.DirectorySeparatorChar + FileName
                 );
+
+                if (GetExtension(FileName) == string.Empty) {
+                    FileName = IO.Path.GetFullPath(
+                        FileName + IO.Path.DirectorySeparatorChar + DefaultDocument
+                    );
+                }
+
+                return FileName;
             }
-            
-            return FileName;
+            catch { 
+                return Req; 
+            }
         }
 
         public string GetExtension(string FileName) {

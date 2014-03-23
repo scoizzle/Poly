@@ -14,13 +14,14 @@ namespace Poly.Script.Libraries {
             Add(Load);
             Add(Save);
             Add(Template);
+			Add(TypeName);
             Add(ToNum);
             Add(ToObject);
             Add(ToString);
         }
 
         public static SystemFunction Load = new SystemFunction("Load", (Args) => {
-            var FileName = Args.getString("0");
+            var FileName = Args.Get<string>("0");
 
             if (System.IO.File.Exists(FileName)) {
                 if (Args.ContainsKey("this")) {
@@ -35,7 +36,7 @@ namespace Poly.Script.Libraries {
         });
 
         public static SystemFunction Save = new SystemFunction("Save", (Args) => {
-            var FileName = Args.getString("0");
+            var FileName = Args.Get<string>("0");
 
             if (Args.ContainsKey("this")) {
                 System.IO.File.WriteAllText(FileName, Args.getObject("this").ToString());
@@ -46,7 +47,7 @@ namespace Poly.Script.Libraries {
 
         public static SystemFunction Template = new SystemFunction("Template", (Args) => {
             var This = Args.getObject("this");
-            var Regex = Args.getString("0");
+            var Regex = Args.Get<string>("0");
 
             if (This != null && !string.IsNullOrEmpty(Regex)) {
                 return This.Template(Regex);
@@ -85,6 +86,15 @@ namespace Poly.Script.Libraries {
             return null;
         });
 
+		public static SystemFunction TypeName = new SystemFunction ("TypeName", (Args) => {
+			var This = Args.Get<object>("this");
+
+			if (This == null)
+				return "";
+
+			return This.GetType().FullName;
+		});
+
         public static SystemFunction ToObject = new SystemFunction("ToObject", (Args) => {
             var This = Args.Get<object>("this");
 
@@ -104,6 +114,9 @@ namespace Poly.Script.Libraries {
             var This = Args.Get<object>("this");
 
             if (This != null) {
+                if (Args.Count > 1 && This is jsObject && Args.Get<bool>("0")) {
+                    return (This as jsObject).ToString(true);
+                } 
                 return This.ToString();
             }
 

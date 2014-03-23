@@ -20,7 +20,7 @@ namespace Poly.Script.Libraries {
         }
 
         public static SystemFunction Get = new SystemFunction("Get", (Args) => {
-            var Url = Args.getString("Url");
+            var Url = Args.Get<string>("Url");
 
             if (!string.IsNullOrEmpty(Url)) {
                 WebClient Client = new WebClient();
@@ -40,8 +40,8 @@ namespace Poly.Script.Libraries {
         }, "Url", "Headers");
 
         public static SystemFunction Post = new SystemFunction("Post", (Args) => {
-            var Url = Args.getString("Url");
-            var Data = Args.getString("Data");
+            var Url = Args.Get<string>("Url");
+            var Data = Args.Get<string>("Data");
 
             if (!string.IsNullOrEmpty(Url)) {
                 WebClient Client = new WebClient();
@@ -65,12 +65,16 @@ namespace Poly.Script.Libraries {
         });
 
         public static SystemFunction Escape = new SystemFunction("Escape", (Args) => {
-            var Str = Args.getString("Str");
+            var Str = Args.Get<string>("Str");
             return System.Uri.EscapeUriString(Str);
         }, "Str");
 
         public static SystemFunction Descape = new SystemFunction("Descape", (Args) => {
-            var Str = Args.getString("Str");
+            var Str = Args.Get<string>("Str");
+
+            if (string.IsNullOrEmpty(Str))
+                return "";
+
             return System.Uri.UnescapeDataString(Str);
         }, "Str");
     }

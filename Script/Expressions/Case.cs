@@ -7,6 +7,7 @@ using System.Threading;
 namespace Poly.Script.Node {
     public class Case : Expression {
         public object Object = null;
+        public bool IsDefault = false;
 
         public override string ToString() {
             return "case " + Convert.ToString(Object) + ":" + base.ToString();
@@ -33,6 +34,25 @@ namespace Poly.Script.Node {
                     ConsumeWhitespace(Text, ref Delta);
 
                     Index = Delta;
+                    return Case;
+                }
+            }
+            else if (Text.Compare("default", Index)) {
+                var Delta = Index + 7;
+                ConsumeWhitespace(Text, ref Delta);
+
+                var Case = new Case();
+
+                if (Text[Delta] == ':') {
+                    Delta++;
+                    ConsumeWhitespace(Text, ref Delta);
+
+                    Engine.Parse(Text, ref Delta, LastIndex, Case);
+                    ConsumeWhitespace(Text, ref Delta);
+
+                    Index = Delta;
+
+                    Case.IsDefault = true;
                     return Case;
                 }
             }

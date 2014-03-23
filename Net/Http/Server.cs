@@ -47,9 +47,17 @@ namespace Poly.Net.Http {
         }
 
         public void Host(string Name, jsObject Info) {
-            Hosts[Name] = new Host(Info) {
+            var Host = new Host(Info) {
                 Name = Name
             };
+
+            foreach (int Port in Host.Ports.Values) {
+                if (!Listeners.ContainsKey(Port)) {
+                    Listen(Port);
+                }
+            }
+
+            Hosts[Name] = Host;
         }
 
         public void Mime(string Ext, string Mime) {

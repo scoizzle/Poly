@@ -19,9 +19,7 @@ namespace Poly.Net.Http {
 
         public string MIME {
             get {
-                if (!this.ContainsKey("MIME"))
-                    return "text/html";
-                return getString("MIME");
+                return Get<string>("MIME", "text/html");
             }
             set {
                 this["MIME"] = value;
@@ -30,9 +28,7 @@ namespace Poly.Net.Http {
 
         public Data.jsObject Cookies {
             get {
-                if (!this.ContainsKey("Cookies"))
-                    this["Cookies"] = new Data.jsObject();
-                return getObject("Cookies");
+                return Get<jsObject>("Cookies", jsObject.NewObject);
             }
             set {
                 this["Cookies"] = value;
@@ -41,9 +37,7 @@ namespace Poly.Net.Http {
 
         public Data.jsObject Headers {
             get {
-                if (!this.ContainsKey("Headers"))
-                    this["Headers"] = new Data.jsObject();
-                return getObject("Headers");
+                return Get<jsObject>("Headers", jsObject.NewObject);
             }
             set {
                 this["Headers"] = value;
@@ -52,10 +46,7 @@ namespace Poly.Net.Http {
 
         public byte[] Data {
             get {
-                if (!ContainsKey("Data")) {
-                    this["Data"] = new byte[0];
-                }
-                return Get<byte[]>("Data");
+                return Get<byte[]>("Data", () => { return new byte[0]; });
             }
             set {
                 this["Data"] = value;

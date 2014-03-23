@@ -9,10 +9,10 @@ namespace Poly.Net.Irc {
         public partial class User : Irc.User {
             public bool IsHidden {
                 get {
-                    return Get<bool>("IsHidden", false);
+                    return Modes.Get<bool>("i", false);
                 }
                 set {
-                    Set("IsHidden", value);
+                    Modes.Set("i", value);
                 }
             }
 

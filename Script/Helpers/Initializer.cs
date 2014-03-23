@@ -13,6 +13,7 @@ namespace Poly.Script.Helper {
         public Initializer(Type Type) {
             if (Type != null) {
                 this.Name = Type.Name;
+                this.Type = Type;
             }
         }
 

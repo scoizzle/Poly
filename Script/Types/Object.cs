@@ -23,26 +23,27 @@ namespace Poly.Script.Node {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
-            if (Text.Compare("js", Index)) {
-                var Delta = Index + 2;
-                ConsumeWhitespace(Text, ref Delta);
+            var Delta = Index;
 
-                if (Text[Delta] == '{') {
-                    var String = Text.FindMatchingBrackets("{", "}", Delta, false);
-                    Index = Delta + String.Length + 2;
+            if (Text[Delta] == '{') {
+                var String = Text.FindMatchingBrackets("{", "}", Delta, false);
+                Delta += String.Length + 2;
 
-                    return new jsObject(
-                        String
-                    );
-                }
-                else if (Text[Delta] == '[') {
-                    var String = Text.FindMatchingBrackets("[", "]", Delta, true);
-                    Index = Delta + String.Length;
+                var Obj = new jsObject();
 
-                    return new jsObject(
-                        String
-                    ) { IsArray = true };
-                }
+                if (Obj.Parse(String))
+                    return Obj;
+            }
+            else if (Text[Delta] == '[') {
+                var String = Text.FindMatchingBrackets("[", "]", Delta, false);
+                Delta += String.Length + 2;
+
+                var Obj = new jsObject() {
+                    IsArray = true
+                };
+
+                if (Obj.Parse(String))
+                    return Obj;
             }
 
             return null;

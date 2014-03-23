@@ -53,7 +53,9 @@ namespace Poly.Net.Irc {
             }
 
             public void OnJoin(Channel Channel) {
-                this.Channels.Add(Channel.Name, Channel);
+                if (!this.Channels.ContainsKey(Channel.Name)) {
+                    this.Channels.Add(Channel.Name, Channel);
+                }
                 
                 Send(new Packet("OnJoin") {
                     Sender = ToString(),
@@ -70,7 +72,7 @@ namespace Poly.Net.Irc {
                     new Packet("OnNAMESEnd") {
                         Sender = Server.Name,
                         Receiver = Nick,
-                        Message = Server.Config.getString("Message", "NameListEnd")
+                        Message = Server.Config.Get<string>("Message", "NameListEnd")
                     }
                 );
             }

@@ -43,6 +43,21 @@ namespace System {
             return X == Possible.Length;
         }
 
+        public static bool Compare(this String This, String ContainsSub, int Index, int ContainsIndex, int ContainsLength, bool IgnoreCase = false) {
+            int X = 0;
+            for (; Index + X < This.Length && X < ContainsLength; X++) {
+                if (IgnoreCase) {
+                    if (char.ToLower(This[Index + X]) != char.ToLower(ContainsSub[ContainsIndex + X])) {
+                        return false;
+                    }
+                }
+                else if (This[Index + X] != ContainsSub[ContainsIndex + X])
+                    return false;
+            }
+
+            return X == ContainsLength;
+        }
+
         public static bool ToBool(this String This) {
             bool Out = false;
 
@@ -52,6 +67,50 @@ namespace System {
             return false;
         }
 
+        public static bool FindMatchingBrackets(this String This, String Open, String Close, int Index, ref int End, bool IncludeBrackets = false) {
+            int X, Y, Z = 1;
+
+            X = This.IndexOf(Open, Index);
+
+            for (Y = X + Open.Length; Y < This.Length; Y++) {
+                if (This[Y] == '\\') {
+                    Y++;
+                    continue;
+                }
+
+                if (This.Compare(Open, Y)) {
+                    if (Open == Close) {
+                        break;
+                    }
+                    else {
+                        Z++;
+                        continue;
+                    }
+                }
+
+                if (This.Compare(Close, Y)) {
+                    Z--;
+
+                    if (Z == 0) {
+                        break;
+                    }
+                }
+            }
+
+            if (X == -1 || Y == -1)
+                return false;
+
+            if (IncludeBrackets) {
+                Y += Close.Length;
+            }
+            else {
+                X += Open.Length;
+            }
+
+            End = Y;
+            return true;
+        }
+
         public static int ToInt(this String This) {
             int Out = 0;
 
@@ -59,6 +118,50 @@ namespace System {
                 return Out;
 
             return 0;
+        }
+
+        public static int FirstPossibleIndex(this String This, int Start = 0, params String[] Possible) {
+            int Location = This.Length;
+
+            if ((Location - Start) <= 1)
+                return -1;
+
+            if (Start > 0 && This[Start - 1] == '\\')
+                Start++;
+
+            for (int i = 0; i < Possible.Length; i++) {
+                int Maybe = This.IndexOf(Possible[i], Start);
+
+                if (Maybe == -1)
+                    continue;
+
+                if (Maybe < Location) {
+                    Location = Maybe;
+                }
+            }
+
+            if (Location == This.Length)
+                return -1;
+
+            return Location;
+        }
+
+        public static int FindSubString(this String This, String ContainsSub, int Index, int ContainsIndex, int ContainsLenght, bool IgnoreCase = false) {
+            while (true) {
+                var C = ContainsSub[ContainsIndex];
+
+                Index = This.IndexOf(C, Index);
+
+                if (Index == -1)
+                    return -1;
+
+                if (This.Compare(ContainsSub, Index, ContainsIndex, ContainsLenght, IgnoreCase)) {
+                    var Debug = This.Substring(Index);
+                    return Index;
+                }
+
+                Index++;
+            }
         }
 
         public static double ToDouble(this String This) {
@@ -121,7 +224,7 @@ namespace System {
                     break;
                 }
 
-                switch (This.Substring(Index, 2)) {
+                switch (This.SubString(Index, 2)) {
                     default:
                         Output.Append(This[Index]);
                         Index++;
@@ -154,9 +257,9 @@ namespace System {
                         Output.Append(".");
                         break;
                     case "\\u":
-                        string Code = This.Substring(Index + 2, 4);
+                        string Code = This.SubString(Index + 2, 4);
 
-                        char Character = Convert.ToChar(Int16.Parse(Code));
+                        char Character = Convert.ToChar(Int32.Parse(Code, Globalization.NumberStyles.HexNumber));
 
                         Output.Append(Character);
 
@@ -238,32 +341,27 @@ namespace System {
             return Possible[Index];
         }
 
-        public static int FirstPossibleIndex(this String This, int Start = 0, params String[] Possible) {
-            int Location = This.Length;
+        public static string SubString(this String This, int Start, int Length) {
+            if (Start > -1 && (Start + Length) <= This.Length && Length > -1) {
+                var Array = new char[Length];
 
-            if (Start > 0 && This[Start - 1] == '\\')
-                Start++;
+                try {
+                    for (int Index = Start; Index < Start + Length; Index++) {
+                        Array[Index - Start] = This[Index];
+                    }
 
-            for (int i = 0; i < Possible.Length; i++) {
-                int Maybe = This.IndexOf(Possible[i], Start);
-
-                if (Maybe == -1)
-                    continue;
-
-                if (Maybe < Location) {
-                    Location = Maybe;
+                    return new string(Array);
+                }
+                catch { }
+                finally {
+                    Array = null;
                 }
             }
-
-            if (Location == This.Length)
-                return -1;
-
-            return Location;
+            return null;
         }
 
         public static string Substring(this String This, String Start, String Stop = "", int Index = 0, bool includeStartStop = false, bool LastStop = false) {
             int X = -1, Y = -1;
-            StringBuilder Output = new StringBuilder();
 
             if (Start == "") {
                 X = Index;
@@ -301,16 +399,11 @@ namespace System {
                 X += Start.Length;
             }
 
-            for (; X < Y && X < This.Length; X++) {
-                Output.Append(This[X]);
-            }
-
-            return Output.ToString();
+            return This.SubString(X, Y - X);
         }
 
         public static string FindMatchingBrackets(this String This, String Open, String Close, int Index = 0, bool includeBrackets = false) {
             int X, Y, Z = 1;
-            StringBuilder Output = new StringBuilder();
 
             X = This.IndexOf(Open, Index);
 
@@ -349,11 +442,7 @@ namespace System {
                 X += Open.Length;
             }
 
-            for (; X < Y && X < This.Length; X++) {
-                Output.Append(This[X]);
-            }
-
-            return Output.ToString();
+            return This.SubString(X, Y - X);
         }
 
         public static string ToString(this String This, params object[] Arguments) {
@@ -408,6 +497,12 @@ namespace System {
                         Arg.Append(Sub);
                         X += Sub.Length;
                     }
+                    else if (This.Compare("[", X)) {
+                        string Sub = This.FindMatchingBrackets("[", "]", X, true);
+
+                        Arg.Append(Sub);
+                        X += Sub.Length;
+                    }
                     else {
                         Arg.Append(Next);
                         X++;
@@ -432,11 +527,11 @@ namespace System {
                     if ((X = This.IndexOf(Seperator, Index)) == -1) {
                         X = This.Length;
                     }
-                    else if (This.IndexOf('\\', X - 1) == 0) {
+                    else if (This.IndexOf('\\', X - 1) < X) {
                         X++;
                     }
 
-                    Output.Add(This.Substring(Index, X - Index));
+                    Output.Add(This.SubString(Index, X - Index));
                     Index = X;
                 }
             }

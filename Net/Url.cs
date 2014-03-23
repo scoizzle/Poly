@@ -11,7 +11,7 @@ namespace Poly.Net {
     public class Url : jsObject {
         public string Protocol {
             get {
-                return getString("Protocol");
+                return Get<string>("Protocol");
             }
             set {
                 Set("Protocol", value);
@@ -20,7 +20,7 @@ namespace Poly.Net {
 
         public string Host {
             get {
-                return getString("Host");
+                return Get<string>("Host");
             }
             set {
                 Set("Host", value);
@@ -29,7 +29,7 @@ namespace Poly.Net {
 
         public string Path {
             get {
-                return getString("Path");
+                return Get<string>("Path");
             }
             set {
                 Set("Path", value);
@@ -59,9 +59,9 @@ namespace Poly.Net {
             if (Matches == null)
                 return false;
 
-            this.Set("Protocol", Matches.getString("Protocol"));
+            this.Set("Protocol", Matches.Get<string>("Protocol"));
 
-            var Route = Matches.getString("Routing");
+            var Route = Matches.Get<string>("Routing");
             var Host = Route;
 
             if (Route.Contains("@")) {
@@ -94,7 +94,7 @@ namespace Poly.Net {
 
             this.Set("Host", Host);
 
-            Route = Matches.getString("Path");
+            Route = Matches.Get<string>("Path");
 
             if (Route == null)
                 Route = "";
@@ -148,13 +148,13 @@ namespace Poly.Net {
 
             if (ContainsKey("Username")) {
                 Output.Append(
-                    getString("Username")
+                    Get<string>("Username")
                 );
 
                 if (ContainsKey("Password")) {
                     Output.Append(":");
                     Output.Append(
-                        getString("Password")
+                        Get<string>("Password")
                     );
                 }
 
@@ -181,7 +181,7 @@ namespace Poly.Net {
             if (ContainsKey("Fragment")) {
                 Output.Append('#');
                 Output.Append(
-                    getString("Fragment")
+                    Get<string>("Fragment")
                 );
             }
 

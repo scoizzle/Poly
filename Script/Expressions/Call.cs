@@ -5,31 +5,39 @@ using System.Text;
 
 namespace Poly.Script.Node {
     public class Call : Expression {
+        public Variable Object = null;
         public string Name = string.Empty;
 
         public Engine Engine = null;
         public Function Function = null;
         public Helper.ArgumentList Arguments = new Helper.ArgumentList();
 
+        public Call(Engine Engine, string Name) {
+            if (Name.IndexOf('.') != -1) {
+                this.Name = Name.Substring(Name.LastIndexOf('.') + 1);
+                this.Object = Variable.Parse(Engine, Name, 0, Name.Length - this.Name.Length - 1);
+            }
+            else {
+                this.Name = Name;
+            }
+            this.Engine = Engine;
+        }
+
         public override object Evaluate(Data.jsObject Context) {
+            object This = null;
+
+            if (Object != null) {
+                This = GetValue(Object, Context);
+            }
+            
             if (Function == null) {
-                Function = Function.Get(Engine, Context, Name);
+                Function = Function.Get(Engine, Name, This);
 
                 if (Function == null)
                     return null;
             }
 
-            if (Name.Contains('.')) {
-                var ObjectName = Name.Substring("", ".", 0, false, true);
-
-                var This = Engine == null ?
-                    Variable.Get(ObjectName, Context) :
-                    Variable.Eval(Engine, ObjectName, Context);
-
-                return Function.Call(Context, Arguments, This, Engine);
-            }
-
-            return Function.Call(Context, Arguments, null, Engine);
+            return Function.Call(Context, Arguments, This, Engine);
         }
 
         public override string ToString() {
@@ -37,19 +45,24 @@ namespace Poly.Script.Node {
         }
 
         public static new Call Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+            return Parse(Engine, Text, ref Index, LastIndex, false);
+        }
+
+        public static Call Parse(Engine Engine, string Text, ref int Index, int LastIndex, bool Constructor = false) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
             var Delta = Index;
-            var Call = new Call() { Engine = Engine };
             ConsumeValidName(Text, ref Delta);
 
             if (Index != Delta) {
-                Call.Name = Text.Substring(Index, Delta - Index);
+                var Name = Text.Substring(Index, Delta - Index);
+
+                var Call = new Call(Engine, Name);
                 ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
-                    Call.Function = Function.Get(Engine, Call.Name);
+                    Call.Function = Function.Get(Engine, Name);
 
                     var Open = Delta + 1;
                     var Close = Delta;

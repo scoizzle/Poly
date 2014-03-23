@@ -8,90 +8,161 @@ using Poly.Data;
 namespace Poly {
     public static class StringMatching {
         private static readonly string[] WildChars = new string[] {
-            "{", "*", "?", "^", "|"
+            "{", "*", "?", "^", "|", "\\"
         };
 
-        public static bool Compare(this String This, String Wild, bool IgnoreCase = true, int Index = 0) {
-            if (string.IsNullOrEmpty(This) || string.IsNullOrEmpty(Wild)) {
+        public static bool Compare(this String DataString, String WildString, bool IgnoreCase = false, int DataIndex = 0, int WildIndex = 0) {
+            if (string.IsNullOrEmpty(DataString) || string.IsNullOrEmpty(WildString) || (DataString.Length == 1 && WildString.Length > 1)) {
                 return false;
             }
 
-            if (IgnoreCase) {
-                This = This.ToLower();
-                Wild = Wild.ToLower();
-            }
+            String Data, Wild;
 
-            int x = Index, y = 0,
-                X = This.Length,
-                Y = Wild.Length;
-
-            if (Wild == "*")
+            if (WildString == "*")
                 return true;
 
-            while (x < X && y < Y) {
-                if (Wild[y] == This[x] || Wild[y] == '?') {
-                    x++;
-                    y++;
+            if (IgnoreCase) {
+                Data = DataString.ToLower();
+                Wild = WildString.ToLower();
+            }
+            else {
+                Data = DataString;
+                Wild = WildString;
+            }
+            
+            bool Optional = false;
+            while (DataIndex < Data.Length && WildIndex < Wild.Length) {
+                if (Wild[WildIndex] == '\\') {
+                    WildIndex++;
                 }
-                else if (Wild[y] == '*') {
-                    y++;
 
-                    if (y == Y) {
-                        break;
-                    }
-                    else if (y + 1 == Y) {
-                        if (This[X - 1] == Wild[y]) {
-                            return true;
-                        }
+                if (Wild[WildIndex] == '{' && (WildIndex > 0 ? Wild[WildIndex - 1] != '\\' : true)) {
+                    string Name, Value;
+                    int NameStart = WildIndex + 1, NameEnd = WildIndex;
+
+                    if (!WildString.FindMatchingBrackets("{", "}", WildIndex, ref NameEnd))
                         return false;
+
+                    WildIndex = NameEnd + 1;
+
+                    if (Wild.Compare("\\", WildIndex))
+                        WildIndex++;
+
+                    int SubIndex = Wild.FirstPossibleIndex(WildIndex, WildChars);
+
+                    if (SubIndex == -1) {
+                        SubIndex = Wild.Length;
                     }
 
-                    var rawValue = string.Empty;
-                    int tmp = -1, z = -1;
-
-                    rawValue = Wild.FirstPossible(y, WildChars);
-
-                    if (string.IsNullOrEmpty(rawValue)) {
-                        rawValue = Wild.Substring(y, Wild.Length - y);
-                        z = This.IndexOf(rawValue, x);
+                    if (SubIndex == WildIndex || WildIndex == Wild.Length) {
+                        SubIndex = Data.Length;
                     }
                     else {
-                        tmp = Wild.IndexOf(rawValue, y);
-                        if (tmp - y > 0) {
-                            rawValue = Wild.Substring(y, tmp - y);
-                        }
-                        z = This.IndexOf(rawValue, x);
+                        SubIndex = Data.FindSubString(Wild, DataIndex, WildIndex, SubIndex - WildIndex);
                     }
 
-                    if (z == -1)
-                        return false;
+                    if (SubIndex == -1) {
+                        if (Optional)
+                            break;
 
-                    y = Wild.IndexOf(rawValue, y);
-                    x = z;
+                        return false;
+                    }
+
+                    Name = WildString.SubString(NameStart, NameEnd - NameStart);
+                    Value = Data.SubString(DataIndex, SubIndex - DataIndex);
+
+                    DataIndex = SubIndex;
                 }
-                else if (Wild[y] == '^') {
-                    while (x < X && char.IsWhiteSpace(This[x])) {
-                        x++;
+                else if (Wild[WildIndex] == '(' && Data[DataIndex] == '(') {
+                    var SubData = Data.FindMatchingBrackets("(", ")", DataIndex);
+                    var SubWild = Wild.FindMatchingBrackets("(", ")", WildIndex);
+
+                    if (SubData.Match(SubWild, IgnoreCase) == null) {
+                        if (Optional) {
+                            WildIndex += SubWild.Length + 2;
+                            DataIndex += SubData.Length + 2;
+                        }
+                        else {
+                            return false;
+                        }
                     }
-                    if (Wild[y + 1] == '\\') {
-                        y++;
+
+                    DataIndex += SubData.Length + 2;
+                    WildIndex += SubWild.Length + 2;
+                }
+                else if (Wild[WildIndex] == Data[DataIndex] || Wild[WildIndex] == '?') {
+                    DataIndex++;
+                    WildIndex++;
+                }
+                else if (Wild[WildIndex] == '|') {
+                    Optional = !Optional;
+                    WildIndex++;
+                }
+                else if (Wild[WildIndex] == '*') {
+                    WildIndex++;
+
+                    if (WildIndex == Wild.Length) {
+                        break;
                     }
-                    if (This[x] != Wild[y + 1]) {
+                    else if (WildIndex + 1 == Wild.Length) {
+                        if (Data[Data.Length - 1] == Wild[WildIndex] || Optional) {
+                            break;
+                        }
                         return false;
                     }
-                    y++;
+                    else if (Wild[WildIndex] == '\\') {
+                        WildIndex++;
+                    }
+
+                    var SubIndex = Wild.FirstPossibleIndex(WildIndex, WildChars);
+
+                    if (SubIndex == -1)
+                        SubIndex = Wild.Length;
+
+                    var Value = Wild.SubString(WildIndex, SubIndex - WildIndex);
+
+                    if (SubIndex == WildIndex || WildIndex == Wild.Length) {
+                        SubIndex = Data.Length;
+                    }
+                    else {
+                        SubIndex = Data.IndexOf(Value, DataIndex);
+                    }
+
+                    if (SubIndex == -1) {
+                        if (Optional)
+                            break;
+
+                        return false;
+                    }
+
+                    DataIndex = SubIndex;
+                }
+                else if (Wild[WildIndex] == '^') {
+                    while (DataIndex < Data.Length && char.IsWhiteSpace(Data[DataIndex])) {
+                        DataIndex++;
+                    }
+                    if (Wild[WildIndex + 1] == '\\') {
+                        WildIndex++;
+                    }
+                    if (Data[DataIndex] != Wild[WildIndex + 1]) {
+                        if (Optional)
+                            break;
+
+                        return false;
+                    }
+                    WildIndex++;
                 }
                 else {
                     return false;
                 }
             }
 
-            if (x == X && (Y - y) < 3) {
-                if (Wild[Y - 1] == '*')
+            if (DataIndex == Data.Length && (Wild.Length - WildIndex) < 3) {
+                if (Wild[Wild.Length - 1] == '*')
                     return true;
             }
 
-            return x == X && y == Y;
+            return DataIndex == Data.Length && WildIndex == Wild.Length;
         }
 
         public static jsObject Match(this String DataString, String WildString, bool IgnoreCase = false, jsObject Storage = null, int DataIndex = 0, int WildIndex = 0) {
@@ -121,13 +192,12 @@ namespace Poly {
 
                 if (Wild[WildIndex] == '{' && (WildIndex > 0 ? Wild[WildIndex - 1] != '\\' : true)) {
                     string Name, Value;
+                    int NameStart = WildIndex + 1, NameEnd = WildIndex;
 
-                    Name = WildString.FindMatchingBrackets("{", "}", WildIndex);
+                    if (!WildString.FindMatchingBrackets("{", "}", WildIndex, ref NameEnd))
+                        return null;
 
-                    if (string.IsNullOrEmpty(Name))
-                        break;
-
-                    WildIndex += Name.Length + 2;
+                    WildIndex = NameEnd + 1;
 
                     if (Wild.Compare("\\", WildIndex))
                         WildIndex++;
@@ -137,14 +207,12 @@ namespace Poly {
                     if (SubIndex == -1) {
                         SubIndex = Wild.Length;
                     }
-
-                    Value = Wild.Substring(WildIndex, SubIndex - WildIndex);
-
+                    
                     if (SubIndex == WildIndex || WildIndex == Wild.Length) {
                         SubIndex = Data.Length;
                     }
                     else {
-                        SubIndex = Data.IndexOf(Value, DataIndex);
+                        SubIndex = Data.FindSubString(Wild, DataIndex, WildIndex, SubIndex - WildIndex);
                     }
 
                     if (SubIndex == -1) {
@@ -154,7 +222,32 @@ namespace Poly {
                         return null;
                     }
 
-                    Value = Data.Substring(DataIndex, SubIndex - DataIndex);
+                    Name = WildString.SubString(NameStart, NameEnd - NameStart);
+                    Value = Data.SubString(DataIndex, SubIndex - DataIndex);
+
+                    if ((NameEnd = Name.IndexOf(':')) > -1) {
+                        var Mod = Name.Substring(NameEnd + 1);
+                        Name = Name.Substring(0, NameEnd);
+
+                        switch (Mod) {
+                            case "escape":
+                                Value = Value.Escape();
+                                break;
+
+                            case "descape":
+                                Value = Value.Descape();
+                                break;
+
+                            case "uriescape":
+                                Value = Uri.EscapeDataString(Value);
+                                break;
+
+                            case "uridescape":
+                                Value = Uri.UnescapeDataString(Value);
+                                break;
+                        }
+                    }
+
                     Storage[Name] = Value;
 
                     DataIndex = SubIndex;
@@ -179,6 +272,7 @@ namespace Poly {
                 }
                 else if (Wild[WildIndex] == '|') {
                     Optional = !Optional;
+                    WildIndex++;
                 }
                 else if (Wild[WildIndex] == '*') {
                     WildIndex++;
@@ -201,7 +295,7 @@ namespace Poly {
                     if (SubIndex == -1)
                         SubIndex = Wild.Length;
 
-                    var Value = Wild.Substring(WildIndex, SubIndex - WildIndex);
+                    var Value = Wild.SubString(WildIndex, SubIndex - WildIndex);
 
                     if (SubIndex == WildIndex || WildIndex == Wild.Length) {
                         SubIndex = Data.Length;

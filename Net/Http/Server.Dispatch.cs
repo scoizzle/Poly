@@ -13,26 +13,6 @@ namespace Poly.Net.Http {
     using Script;
 
     public partial class Server {
-        public virtual void SendReply(Client Client, Request Request) {
-            if (!Request.Handled)
-                Request.Finish();
-
-            if (Request.Packet.Connection == "keep-alive") {
-                Request.Result.Headers["Connection"] = "Keep-Alive";
-                Request.Result.Headers["Keep-Alive"] = "timeout=15, max=99";
-            }
-
-            SendReply(Client, Request.Result);
-        }
-
-        public virtual void SendReply(Client Client, Result Result) {
-            if (!Client.Connected)
-                return;
-
-            Client.Send(Result.BuildReply());
-            Client.Send(Result.Data);
-        }
-
         public void StaticFileHandler(string FileName, Request Request) {
             Request.Result.Data = File.ReadAllBytes(FileName);
 
@@ -63,75 +43,72 @@ namespace Poly.Net.Http {
         }
 
         public virtual void OnClientRequest(Request Request) {
-            var WWW = Request.Host.GetWWW(Request);
-            var Ext = Request.Host.GetExtension(WWW);
-
-            var MIME = GetMime(
-                Ext
-            );
-
             var Args = new jsObject(
                 "Server", this,
                 "Request", Request,
-                "FileName", WWW
+                "FileName", Request.Packet.Target
             );
 
-            if (Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) {
-                return;
-            }
+            if (!Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) {
+                var WWW = Request.Host.GetWWW(Request);
 
-            if (!File.Exists(WWW)) {
-                Request.Result = Result.NotFound;
+                Args["FileName"] = WWW;
+
+                var Ext = Request.Host.GetExtension(WWW);
+
+                var MIME = GetMime(
+                    Ext
+                );
+
+                if (!File.Exists(WWW)) {
+                    Request.Result = Result.NotFound;
+                }
+                else if (Request.Packet.Headers.Get<string>("If-Modified-Since") == File.GetLastWriteTimeUtc(WWW).HttpTimeString()) {
+                    Request.Result = Result.NotModified;
+                }
+                else if (!Handlers.MatchAndInvoke(MIME, Args)) {
+                    DefaultFileHandler(WWW, Request);
+                }
             }
-            else if (Request.Packet.Headers.getString("If-Modified-Since") == File.GetLastWriteTimeUtc(WWW).HttpTimeString()) {
-                Request.Result = Result.NotModified;
-            }
-            else if (Handlers.MatchAndInvoke(MIME, Args)) {
-            }
-            else{
-                DefaultFileHandler(WWW, Request);
-            }
+            Request.Finish();
         }
 
         public override void OnClientConnect(Client Client) {
-            Client.autoFlush = true;
-            Client.ReceiveTimeout = 15000;
+            Client.AutoFlush = true;
+            Client.Socket.ReceiveTimeout = 15000;
 
             while (Client.Connected) {
                 Packet Packet = new Net.Http.Packet();
+                Request Request = new Request(Client, Packet);
 
-                try {
-                    if (!Packet.Receive(Client)) {
-                        SendReply(Client, Result.InternalError);
-                        return;
-                    }
-                }
-                catch (Exception Error) {
-                    App.Log.Error(Error.ToString());
+                if (!Packet.Receive(Client)) {
+                    Client.Close();
+                    break;
                 }
 
-                Host Host = Hosts.Search<Host>(Packet.Host);
+                Request.Host = Hosts.Search<Host>(Packet.Host, true);
 
-                if (Host == null) {
-                    try {
-                        SendReply(Client, Result.InternalError);
+                if (Request.Host == null) {
+                    Request.Result = Result.BadRequest;
+                    Request.Finish();
+                    continue;
+                }
+                else if (!Request.Host.Ports.IsEmpty) {
+                    IPEndPoint Point = Client.Socket.LocalEndPoint as IPEndPoint;
+
+                    if (!Request.Host.Ports.ContainsValue(Point.Port)) {
+                        Request.Result = Result.BadRequest;
+                        Request.Finish();
                         continue;
                     }
-                    catch { }
                 }
-
-                Request Request = new Request(Client, Packet) {
-                    Host = Host
-                };
 
                 try {
                     OnClientRequest(Request);
-
-                    SendReply(Client, Request);
                 }
-                catch (Exception Error) {
-                    App.Log.Error(Error.ToString());
+                catch {
                     Client.Close();
+                    break;
                 }
             }
         }

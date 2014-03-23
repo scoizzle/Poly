@@ -42,7 +42,7 @@ namespace Poly.Net.Http {
 
         public string ContentType {
             get {
-                return Headers.getString("Content-Type");
+                return Headers.Get<string>("Content-Type");
             }
             set {
                 Headers.Set("Content-Type", value);
@@ -51,7 +51,7 @@ namespace Poly.Net.Http {
 
         public string Host {
             get {
-                return Headers.getString("Host");
+                return Headers.Get<string>("Host");
             }
             set {
                 this.Headers["Host"] = value;
@@ -60,7 +60,7 @@ namespace Poly.Net.Http {
 
         public string RawTarget {
             get {
-                return getString("RawTarget");
+                return Get<string>("RawTarget");
             }
             set {
                 this["RawTarget"] = value;
@@ -69,7 +69,7 @@ namespace Poly.Net.Http {
 
         public string Connection {
             get {
-                return Headers.getString("Connection");
+                return Headers.Get<string>("Connection");
             }
             set {
                 Headers["Connection"] = value;
@@ -78,7 +78,7 @@ namespace Poly.Net.Http {
 
         public string Type {
             get {
-                return getString("Type");
+                return Get<string>("Type");
             }
             set {
                 this["Type"] = value;
@@ -87,7 +87,7 @@ namespace Poly.Net.Http {
 
         public string Target {
             get {
-                return getString("Target");
+                return Get<string>("Target");
             }
             set {
                 this["Target"] = value;
@@ -96,7 +96,7 @@ namespace Poly.Net.Http {
 
         public string Version {
             get {
-                return getString("Version");
+                return Get<string>("Version");
             }
             set {
                 this["Version"] = value;
@@ -105,7 +105,7 @@ namespace Poly.Net.Http {
 
         public string Value {
             get {
-                return getString("Value");
+                return Get<string>("Value");
             }
             set {
                 this["Value"] = value;
@@ -114,7 +114,7 @@ namespace Poly.Net.Http {
 
         public string Query {
             get {
-                return getString("Query");
+                return Get<string>("Query");
             }
             set {
                 Set("Query", value);
@@ -125,7 +125,7 @@ namespace Poly.Net.Http {
             if (!Client.Connected)
                 return false;
 
-            var Line = Client.Receive();
+            var Line = Client.ReadLine();
 
             if (string.IsNullOrEmpty(Line))
                 return false;
@@ -176,7 +176,7 @@ namespace Poly.Net.Http {
             }
 
             if (Headers.ContainsKey("Cookie")) {
-                var RawCookie = Headers.getString("Cookie");
+                var RawCookie = Headers.Get<string>("Cookie");
                 Split = RawCookie.Split(';');
 
                 for (int n = 0; n < Split.Length; n++) {

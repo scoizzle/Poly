@@ -11,6 +11,7 @@ namespace Poly.Script.Helper {
     public class MemberFunction : Function {
         public Type Type = null;
         public MethodInfo MethodInfo = null;
+        private int ArgCount = 0;
 
         public MemberFunction(Type Type, string Name) {
             this.Name = Name;
@@ -34,8 +35,9 @@ namespace Poly.Script.Helper {
 
             var Args = GetArguments(Context);
 
-            if (MethodInfo == null) {
+            if (MethodInfo == null || Args.Length != ArgCount) {
                 MethodInfo = FindMethod(Args);
+                ArgCount = Args.Length;
             }
 
             return Invoke(This, Args);
@@ -58,7 +60,10 @@ namespace Poly.Script.Helper {
             if (MethodInfo == null)
                 return null;
 
-            return MethodInfo.Invoke(This, Args);
+            try {
+                return MethodInfo.Invoke(This, Args);
+            }
+            catch { return null; }
         }
 
         public static object[] GetArguments(jsObject Context) {
@@ -66,8 +71,10 @@ namespace Poly.Script.Helper {
             var Index = 0;
 
             Context.ForEach((Key, Value) => {
-                if (Value is Function) {
-                    Value = (Value as Function).GetSystemHandler();
+                Node Node = Value as Node;
+
+                if (Node != null) {
+                    Value = Node.GetSystemHandler();
                 }
 
                 Args[Index++] = Value;

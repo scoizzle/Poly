@@ -91,7 +91,7 @@ namespace Poly.Script.Node {
             else if (Left is jsObject) {
                 return Object.Equal((jsObject)Left, Right);
             }
-            return null;
+            return Right == null;
         }
 
         public static object LessThan(object Left, object Right) {

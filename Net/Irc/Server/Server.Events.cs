@@ -8,7 +8,7 @@ namespace Poly.Net.Irc {
     public partial class Server {
         public override void OnClientConnect(Tcp.Client Client) {
             var User = new User(this, Client) {
-                Host = Client.Client.RemoteEndPoint.ToString().MD5()
+                Host = Client.Socket.RemoteEndPoint.ToString().MD5()
             };
 
             while (Client.Connected) {
@@ -31,9 +31,9 @@ namespace Poly.Net.Irc {
 
                 case "User":
                     if (!User.IsAuthenticated) {
-                        User.Nick = Packet.getString("Ident");
-                        User.Ident = Packet.getString("Ident");
-                        User.IsHidden = (User.getInt("Visible") == 8);
+                        User.Nick = Packet.Get<string>("Ident");
+                        User.Ident = Packet.Get<string>("Ident");
+                        User.IsHidden = (User.Get<int>("Visible") == 8);
                         User.RealName = Packet.Message;
 
                         User.Ping();
@@ -125,6 +125,22 @@ namespace Poly.Net.Irc {
                         Receiver = User.ToString(),
                         Message = "No such nick/channel."
                     });
+                    break;
+                }
+
+                case "Mode": {
+                    var Chan = Channels.Search<Channel>(Packet.Receiver);
+                    if (Chan != null) {
+                        if (string.IsNullOrEmpty(Packet.Message)) { // GET
+                            User.Send(new Packet("OnMode") {
+                                Sender = Name,
+                                Receiver = Packet.Receiver,
+                                Message = string.Join("", Chan.Modes.Keys)
+                            });
+                        }
+                        else { // SET
+                        }
+                    }
                     break;
                 }
             }

@@ -20,7 +20,7 @@ namespace Poly.Net.Irc {
             Connection.Connect(Server, Port);
 
             if (Connection.Connected) {
-                Connection.autoFlush = true;
+                Connection.AutoFlush = true;
                 return true;
             }
             return false;

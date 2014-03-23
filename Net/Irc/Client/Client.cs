@@ -21,28 +21,24 @@ namespace Poly.Net.Irc {
 
         public jsObject<Conversation> Conversations {
             get {
-                if (!ContainsKey("Conversations")) {
-                    Set("Conversations", new jsObject<Conversation>() { IsArray = true });
-                }
-                return Get<jsObject<Conversation>>("Conversations", (jsObject<Conversation>)null);
+                return Get<jsObject<Conversation>>("Conversations", jsObject<Conversation>.NewTypedObject);
             }
         }
 
         public jsObject<User> Users {
             get {
-                if (!ContainsKey("Users")) {
-                    Set("Users", new jsObject<User>() { IsArray = true });
-                }
-                return Get<jsObject<User>>("Users", (jsObject<User>)null);
+                return Get<jsObject<User>>("Users", jsObject<User>.NewTypedObject);
             }
         }
 
         public jsObject CharModes {
             get {
-                if (!ContainsKey("CharModes")) {
-                    Set("CharModes", new jsObject() { IsArray = true });
-                }
-                return getObject("CharModes");
+                return Get<jsObject>("CharModes", () => { 
+                    return new jsObject(
+                        "@", "o",
+                        "+", "v"
+                    ); 
+                });
             }
         }
 

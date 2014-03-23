@@ -23,7 +23,7 @@ namespace Poly.Script.Libraries {
         });
 
         public static SystemFunction Server = new SystemFunction("Server", (Args) => {
-            return new Net.Tcp.Server(Args.getInt("Port"));
+            return new Net.Tcp.Server(Args.Get<int>("Port"));
         }, "Port");
     }
 }

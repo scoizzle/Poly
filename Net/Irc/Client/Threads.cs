@@ -44,7 +44,7 @@ namespace Poly.Net.Irc {
                 else {
                     Convo = Conversations.Get<Conversation>(Sender.Nick, Convo);
                 }
-            } 
+            }
             else {
                 Convo = Conversations.Get<Conversation>(Packet.Receiver, Convo);
             }
@@ -103,7 +103,7 @@ namespace Poly.Net.Irc {
 
                 case "OnChannelUserList":{
                     var Nicks = Packet.Message.Split(' ');
-                    var Channel = Packet.getString("Channel");
+                    var Channel = Packet.Get<string>("Channel");
 
                     foreach (var N in Nicks) {
                         var Target = N;
@@ -115,40 +115,30 @@ namespace Poly.Net.Irc {
                             Target = Target.Substring(1);
                         }
 
-                        var Usr = default(User);
+                        var Usr = Users.Get<User>(Target, () => { return new User(Target); });
 
-                        if (!Users.ContainsKey(Target)) {
-                            Usr = new User(Target);
-                            Users[Target] = Usr;
-                        }
-                        else {
-                            Usr = Users.Get<User>(Target);
-                        }
-
-                        if (!char.IsLetterOrDigit(N[0])) {
+                        if (!char.IsLetter(N[0])) {
                             Usr.Modes[
-                                Channel, CharModes.getString(N.Substring(0, 1))
+                                Channel, CharModes.Get<char>(N[0].ToString()).ToString()
                             ] = true;
                         }
 
-                        if (!Conversations.ContainsKey(Channel)) {
-                            Conversations.Add(Channel, new Conversation(Channel));
+                        var Conver = Conversations.Get<Conversation>(Channel, () => { return new Conversation(Channel); });
+
+                        if (!Conver.Users.ContainsKey(Target)) {
+                            Conver.Users.Add(Target, Usr);
                         }
-
-
-                        if (!Conversations[Channel].Users.ContainsKey(Target)) {
-                            Conversations[Channel].Users.Add(Target, Usr);
-                        }
-
-                        SendWho(Target);
                     }
+
+                    SendWho(Channel);
                 } break;
 
                 case "OnWho": {
-                    var TargetNick = Packet.getString("Nick");
-                    var TargetIdent = Packet.getString("Ident");
-                    var TargetHost = Packet.getString("Host");
-                    var TargetName = Packet.getString("RealName");
+                    var TargetNick = Packet.Get<string>("Nick");
+                    var TargetIdent = Packet.Get<string>("Ident");
+                    var TargetHost = Packet.Get<string>("Host");
+                    var TargetName = Packet.Get<string>("RealName");
+                    var TargetChannel = Packet.Get<string>("Channel");
 
                     var Target = Users.ContainsKey(TargetNick) ?
                         Users.Get<User>(TargetNick) :
@@ -159,28 +149,32 @@ namespace Poly.Net.Irc {
                     Target.Host = TargetHost;
                     Target.RealName = TargetName;
 
-                    var TargetModes = Packet.getString("Modes").ToCharArray();
+                    var TargetModes = Packet.Get<string>("Modes").ToCharArray();
 
                     foreach (var M in TargetModes) {
                         var Mode = M.ToString();
 
                         if (!char.IsLetter(M)) {
-                            continue;
+                            if (CharModes.ContainsKey(Mode)) {
+                                Target.Modes[TargetChannel, CharModes.Get<string>(Mode)] = true;
+                                continue;
+                            }
+                            break;
                         }
 
-                        Target.Modes.Set(Mode, true);
+                        Target.Modes[TargetChannel, Mode] = true;
                     }
                 } break;
 
                 case "OnServerFeatures": {
-                    var Features = Packet.getString("Features");
+                    var Features = Packet.Get<string>("Features");
                     var Data = Features.Match("*PREFIX=({Modes}){Chars} *");
 
                     if (Data == null)
                         break;
 
-                    var Modes = Data.getString("Modes").ToCharArray();
-                    var Chars = Data.getString("Chars").ToCharArray();
+                    var Modes = Data.Get<string>("Modes").ToCharArray();
+                    var Chars = Data.Get<string>("Chars").ToCharArray();
 
                     for (int Index = 0; Index < Modes.Length; Index++) {
                         CharModes[Chars[Index].ToString()] = Modes[Index];
@@ -192,7 +186,7 @@ namespace Poly.Net.Irc {
                     var Nicks = Packet.Receiver.Split(',');
 
                     var Operator = '+';
-                    var Channel = Packet.getString("Channel");
+                    var Channel = Packet.Get<string>("Channel");
 
                     for (int Index = 0, Offset = 0; Index < Nicks.Length && (Index + Offset) < Modes.Length; ) {
                         var Target = Nicks[Index];

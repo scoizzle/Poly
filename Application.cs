@@ -5,8 +5,6 @@ using System.Threading;
 
 
 namespace Poly {
-    public delegate object Handler(Data.jsObject Args);
-
     public partial class App {
 		public static bool Running = false;
         public static Logging Log = new Logging();

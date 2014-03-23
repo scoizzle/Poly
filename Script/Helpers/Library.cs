@@ -8,18 +8,20 @@ using Poly.Data;
 
 namespace Poly.Script {
     public class Library : jsObject<Function> {
-        public static Dictionary<string, Library> Defined = null;
-        public static Dictionary<string, Library> TypeLibsByName = null;
-        public static Dictionary<string, Library> StaticObjects = null;
+        public static jsObject<Library> Defined = null;
+        public static jsObject<Library> TypeLibsByName = null;
+        public static jsObject<Library> StaticObjects = null;
         public static Dictionary<Type, Library> TypeLibs = null;
 
+        public static Library Constructors = null;
         public static Library Global = null;
 
         static Library() {
-            Defined = new Dictionary<string, Library>();
-            TypeLibsByName = new Dictionary<string, Library>();
+            Defined = new jsObject<Library>();
+            TypeLibsByName = new jsObject<Library>();
+            StaticObjects = new jsObject<Library>();
             TypeLibs = new Dictionary<Type, Library>();
-            StaticObjects = new Dictionary<string, Library>();
+            Constructors = new Library();
 
             var LType = typeof(Library);
             var Assemblies = new Assembly[] {

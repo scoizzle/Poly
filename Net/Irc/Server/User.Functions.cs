@@ -8,8 +8,10 @@ using Poly.Data;
 namespace Poly.Net.Irc {
     public partial class Server {
         public partial class User : Irc.User {
-            public void Send(params Packet[] Packet) {
-                Client.SendLine(string.Join(Environment.NewLine, Packet.ToString()));
+            public void Send(params Packet[] Packets) {
+                for (int i = 0; i < Packets.Length; i++) {
+                    Packets[i].Send(Client);
+                }
             }
 
             public void Disconnect(string Message) {

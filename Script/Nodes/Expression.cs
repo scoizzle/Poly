@@ -19,7 +19,8 @@ namespace Poly.Script.Node {
 
                 ConsumeExpression(Text, ref Close);
 
-                Engine.Parse(Text, ref Open, Close - 1, Storage);
+                if (Engine.Parse(Text, ref Open, Close - 1, Storage) == null)
+                    return false;
 
                 Index = Close;
                 return true;
@@ -43,7 +44,8 @@ namespace Poly.Script.Node {
 
                 ConsumeExpression(Text, ref Close);
 
-                Engine.Parse(Text, ref Open, Close - 1, Exp);
+                if (Engine.Parse(Text, ref Open, Close - 1, Exp) == null)
+                    return null;
 
                 Index = Close;
                 return Exp;

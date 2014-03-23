@@ -48,7 +48,7 @@ namespace Poly.Net.Http {
 
         public Host Host = null;
 
-        public List<byte> Output = new List<byte>();
+        public StringBuilder Output = new StringBuilder();
 
         public Request(Client Client, Packet Packet) {
             this.Client = Client;
@@ -75,15 +75,23 @@ namespace Poly.Net.Http {
 
         public void Print(string txt) {
             if (!string.IsNullOrEmpty(txt)) {
-                Output.AddRange(Client.Writer.Encoding.GetBytes(txt));
+                Output.Append(txt);
             }
         }
 
         public void Finish() {
-            if (Output.Count > 0) {
-                Result.Data = Output.ToArray();
-                Output.Clear();
+            if (Packet.Connection == "keep-alive") {
+                Result.Headers["Connection"] = "Keep-Alive";
+                Result.Headers["Keep-Alive"] = "timeout=15, max=99";
             }
+
+            if (Output.Length > 0) {
+                Result.Data = Client.Encoding.GetBytes(Output.ToString());
+            }
+
+            Client.SendLine(Result.BuildReply());
+            Client.Send(Result.Data);
+
             Handled = true;
         }
 

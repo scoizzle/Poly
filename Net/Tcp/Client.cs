@@ -14,15 +14,18 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Tcp {
-	public class Client : TcpClient {
+	public class Client {
+		private static byte[] conTestBuf = new byte[1];
         private StreamReader p_sRead = null;
         private StreamWriter p_sWrite = null;
         private Stream p_Stream = null;
         private bool p_bAutoFlush = true;
+
+        public Socket Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         
         public bool Secure = false;
 
-        public bool autoFlush {
+        public bool AutoFlush {
             get {
                 if (Writer == null)
                     return p_bAutoFlush;
@@ -37,13 +40,34 @@ namespace Poly.Net.Tcp {
                 }
             }
         }
+
+        public bool Connected {
+            get {
+				if (!Socket.Connected)
+					return false;
+
+				lock (Socket) {
+					bool BlockStatus = Socket.Blocking;
+					Socket.Blocking = false;
+
+					try {
+						Socket.Send(conTestBuf, 0, 0);
+					}
+					catch { }
+					finally {
+						Socket.Blocking = BlockStatus;
+					}
+
+					return Socket.Connected;
+				}
+            }
+        }
 		
-        public Client()
-            : base() {
+        public Client() {
         }
 
         public Client(Socket Base) {
-            this.Client = Base;
+            this.Socket = Base;
         }
 
         public StreamReader Reader {
@@ -65,9 +89,18 @@ namespace Poly.Net.Tcp {
             }
         }
 
-        public new Stream GetStream() {
+        public Encoding Encoding {
+            get {
+                if (Writer != null) {
+                    return Writer.Encoding;
+                }
+                return Encoding.Default;
+            }
+        }
+
+        public Stream GetStream() {
             if (p_Stream == null) {
-                Stream Stream = base.GetStream();
+                Stream Stream = new NetworkStream(Socket);
 
                 if (Secure) {
                     Stream = new SslStream(
@@ -81,15 +114,24 @@ namespace Poly.Net.Tcp {
             return p_Stream;
         }
 
+        public bool Connect(string ServerName, int Port) {
+            try {
+                Socket.Connect(ServerName, Port);
+                return Socket.Connected;
+            }
+            catch {
+                return false;
+            }
+        }
+
         public bool Connect(string SecureServerName, int Port, bool Secure) {
             this.Secure = Secure;
-            base.Connect(SecureServerName, Port);
+            Socket.Connect(SecureServerName, Port);
 
             try {
                 if (Secure) {
-                    var SStream = new SslStream(base.GetStream(), false, new RemoteCertificateValidationCallback(ValidateServerCertificate), null);
+                    var SStream = GetStream() as SslStream;
                     SStream.AuthenticateAsClient(SecureServerName);
-                    p_Stream = SStream;
                 }
             }
             catch (Exception Error) {
@@ -99,12 +141,12 @@ namespace Poly.Net.Tcp {
             return Connected;
         }
 
-        public new void Close() {
-            if (Client.Connected) {
+        public void Close() {
+            if (Connected) {
                 p_sRead = null;
                 p_sWrite = null;
             }
-            base.Close();
+            Socket.Close();
 		}
 
         public bool SendLine(string Packet) {
@@ -124,20 +166,22 @@ namespace Poly.Net.Tcp {
         }
 
         public string ReadLine() {
-            if (!Connected) {
+			if (!Connected) {
                 return null;
             }
 
             try {
                 return Reader.ReadLine();
             }
-            catch { 
-                return null;
-            }
+            catch { }
+            return null;
         }
 
         public virtual bool Send(string Packet) {
-            return SendLine(Packet);
+            if (!Connected || string.IsNullOrEmpty(Packet))
+                return false;
+
+            return Send(Encoding.GetBytes(Packet));
         }
 
         public virtual bool Send(byte[] Bytes) {
@@ -190,4 +234,5 @@ namespace Poly.Net.Tcp {
         }
 	}
 }
+
 

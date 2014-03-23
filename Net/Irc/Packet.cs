@@ -13,6 +13,7 @@ namespace Poly.Net.Irc {
             { "User", "USER {Ident} {Visible} * :{Message}" },
             { "Nick", "NICK {Message}" },
             { "Pass", "PASS :{Message}" },
+            { "Mode", "MODE {Receiver}| {Message}" },
             { "CTCP", "PRIVMSG {Receiver} :\x0001{Message}\x0001" },
             { "CTCPReply", "NOTICE {Receiver} :\x0001{Message}\x0001" },
             { "Msg", "PRIVMSG {Receiver} :{Message}" },
@@ -67,7 +68,12 @@ namespace Poly.Net.Irc {
             { "OnServerClientsInfo", ":{Sender} 255 {Receiver} :{Message}" },
             { "OnServerUsersCount", ":{Sender} 265 {Receiver} :{Message}" },
             { "OnNetworkUsersCount", ":{Sender} 266 {Receiver} :{Message}" },
-            { "OnWhoEnd", ":{Sender} 315 {Receiver} :{Message}" },
+            { "OnWhoEnd", ":{Sender} 315 {Receiver} {Nick} :{Message}" },
+            { "OnListStart", ":{Sender} 321 {Receiver} :{Message}" },
+            { "OnList", ":{Sender} 322 {Receiver} :{Message}" },
+            { "OnListEnd", ":{Sender} 323 {Receiver} :{Message}" },
+            { "OnChannelModeIs", ":{Sender} 342 {Receiver} {Message}" },
+            { "OnTopicEmpty", ":{Sender} 331 {Nick} {Receiver} :{Message}" },
             { "OnTopicInit", ":{Sender} 332 {Nick} {Receiver} :{Message}" },
             { "OnTopicInfo", ":{Sender} 333 {Nick} {Receiver} {Author} {Message}" },
             { "OnWho", ":{Sender} 352 {Receiver} {Channel} {Ident} {Host} {Server} {Nick} {Modes} :{HopCount} {RealName}" },
@@ -169,7 +175,7 @@ namespace Poly.Net.Irc {
 
         public void Send(Poly.Net.Tcp.Client Client) {
 			if (Client != null) {
-            	Client.Send(this.Template(Format));
+            	Client.SendLine(this.Template(Format));
 			}
         }
 

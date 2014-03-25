@@ -10,8 +10,11 @@ namespace Poly.Script.Helper {
 
     public class MemberFunction : Function {
         public Type Type = null;
+
+        private string InfoId = string.Empty;
         public MethodInfo MethodInfo = null;
-        private int ArgCount = 0;
+
+        private Dictionary<string, MethodInfo> InfoCache = new Dictionary<string, MethodInfo>();
 
         public MemberFunction(Type Type, string Name) {
             this.Name = Name;
@@ -34,22 +37,41 @@ namespace Poly.Script.Helper {
             }
 
             var Args = GetArguments(Context);
+            var Types = GetArgTypes(Args);
+            var InfoId = GetInfoString(Types);
 
-            if (MethodInfo == null || Args.Length != ArgCount) {
-                MethodInfo = FindMethod(Args);
-                ArgCount = Args.Length;
+            if (MethodInfo == null || this.InfoId != InfoId) {
+                MethodInfo Info;
+
+                if (InfoCache.TryGetValue(InfoId, out Info)) {
+                    MethodInfo = Info;
+                }
+                else {
+                    MethodInfo = FindMethod(Types);
+                    InfoCache[InfoId] = MethodInfo;
+                }
+
+                this.InfoId = InfoId;
             }
 
             return Invoke(This, Args);
         }
 
-        private MethodInfo FindMethod(object[] Args) {
+        private string GetInfoString(Type[] ArgTypes) {
+            return string.Join<Type>(", ", ArgTypes);
+        }
+
+        private Type[] GetArgTypes(object[] Args) {
             var Types = new Type[Args.Length];
 
             for (int Index = 0; Index < Args.Length; Index++) {
                 Types[Index] = Args[Index].GetType();
             }
 
+            return Types;
+        }
+
+        private MethodInfo FindMethod(Type[] Types) {
             try {
                 return Type.GetMethod(Name, Types);
             }

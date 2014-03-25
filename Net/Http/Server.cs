@@ -19,7 +19,7 @@ namespace Poly.Net.Http {
         public FileCache FileCache = new FileCache();
         public ScriptCache ScriptCache = new ScriptCache();
 
-        public string GetMime(string Ext) {
+        public static string GetMime(string Ext) {
             var Mime = Poly.Mime.GetMime(Ext);
 
             if (!string.IsNullOrEmpty(Mime))
@@ -51,6 +51,10 @@ namespace Poly.Net.Http {
                 Name = Name
             };
 
+            this.Host(Name, Host);
+        }
+
+        public void Host(string Name, Host Host) {
             foreach (int Port in Host.Ports.Values) {
                 if (!Listeners.ContainsKey(Port)) {
                     Listen(Port);

@@ -165,11 +165,15 @@ namespace Poly {
             return DataIndex == Data.Length && WildIndex == Wild.Length;
         }
 
-        public static jsObject Match(this String DataString, String WildString, bool IgnoreCase = false, jsObject Storage = null, int DataIndex = 0, int WildIndex = 0) {
+        public static jsObject Match(this String DataString, String WildString, bool IgnoreCase = false, jsObject Storage = null, int DataIndex = 0, int WildIndex = 0, bool Store = true) {
             if (string.IsNullOrEmpty(DataString) || string.IsNullOrEmpty(WildString) || (DataString.Length == 1 && WildString.Length > 1)) {
                 return null;
             }
 
+            if (WildString.Length == 1 && DataString.Length > 1 && WildString != "*")
+                return null;
+
+            bool Optional = false;
             String Data, Wild;
 
             if (IgnoreCase) {
@@ -184,7 +188,6 @@ namespace Poly {
             if (Storage == null)
                 Storage = new jsObject();
 
-            bool Optional = false;
             while (DataIndex < Data.Length && WildIndex < Wild.Length) {
                 if (Wild[WildIndex] == '\\') {
                     WildIndex++;
@@ -222,33 +225,35 @@ namespace Poly {
                         return null;
                     }
 
-                    Name = WildString.SubString(NameStart, NameEnd - NameStart);
-                    Value = Data.SubString(DataIndex, SubIndex - DataIndex);
+                    if (Store) {
+                        Name = WildString.SubString(NameStart, NameEnd - NameStart);
+                        Value = Data.SubString(DataIndex, SubIndex - DataIndex);
 
-                    if ((NameEnd = Name.IndexOf(':')) > -1) {
-                        var Mod = Name.Substring(NameEnd + 1);
-                        Name = Name.Substring(0, NameEnd);
+                        if ((NameEnd = Name.IndexOf(':')) > -1) {
+                            var Mod = Name.Substring(NameEnd + 1);
+                            Name = Name.Substring(0, NameEnd);
 
-                        switch (Mod) {
-                            case "escape":
-                                Value = Value.Escape();
-                                break;
+                            switch (Mod) {
+                                case "escape":
+                                    Value = Value.Escape();
+                                    break;
 
-                            case "descape":
-                                Value = Value.Descape();
-                                break;
+                                case "descape":
+                                    Value = Value.Descape();
+                                    break;
 
-                            case "uriescape":
-                                Value = Uri.EscapeDataString(Value);
-                                break;
+                                case "uriescape":
+                                    Value = Uri.EscapeDataString(Value);
+                                    break;
 
-                            case "uridescape":
-                                Value = Uri.UnescapeDataString(Value);
-                                break;
+                                case "uridescape":
+                                    Value = Uri.UnescapeDataString(Value);
+                                    break;
+                            }
                         }
-                    }
 
-                    Storage[Name] = Value;
+                        Storage[Name] = Value;
+                    }
 
                     DataIndex = SubIndex;
                 }

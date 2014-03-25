@@ -13,10 +13,10 @@ namespace Poly.Net.Http {
     using Script;
 
     public partial class Server {
-        public void StaticFileHandler(string FileName, Request Request) {
+        public static void StaticFileHandler(string FileName, Request Request) {
             Request.Result.Data = File.ReadAllBytes(FileName);
 
-            Request.Result.MIME = GetMime(
+            Request.Result.MIME = Server.GetMime(
                 Request.Host.GetExtension(FileName)
             );
         }
@@ -49,25 +49,27 @@ namespace Poly.Net.Http {
                 "FileName", Request.Packet.Target
             );
 
-            if (!Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) {
-                var WWW = Request.Host.GetWWW(Request);
+            if (!Request.Host.Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) {
+                if (!Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) {
+                    var WWW = Request.Host.GetWWW(Request);
 
-                Args["FileName"] = WWW;
+                    Args["FileName"] = WWW;
 
-                var Ext = Request.Host.GetExtension(WWW);
+                    var Ext = Request.Host.GetExtension(WWW);
 
-                var MIME = GetMime(
-                    Ext
-                );
+                    var MIME = GetMime(
+                        Ext
+                    );
 
-                if (!File.Exists(WWW)) {
-                    Request.Result = Result.NotFound;
-                }
-                else if (Request.Packet.Headers.Get<string>("If-Modified-Since") == File.GetLastWriteTimeUtc(WWW).HttpTimeString()) {
-                    Request.Result = Result.NotModified;
-                }
-                else if (!Handlers.MatchAndInvoke(MIME, Args)) {
-                    DefaultFileHandler(WWW, Request);
+                    if (!File.Exists(WWW)) {
+                        Request.Result = Result.NotFound;
+                    }
+                    else if (Request.Packet.Headers.Get<string>("If-Modified-Since") == File.GetLastWriteTimeUtc(WWW).HttpTimeString()) {
+                        Request.Result = Result.NotModified;
+                    }
+                    else if (!Handlers.MatchAndInvoke(MIME, Args)) {
+                        DefaultFileHandler(WWW, Request);
+                    }
                 }
             }
             Request.Finish();

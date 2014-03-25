@@ -9,6 +9,8 @@ using Poly.Data;
 
 namespace Poly.Net.Http {
     public class Host : jsObject {
+        public Event.Engine Handlers = new Event.Engine();
+
         public Host() {
         }
 
@@ -70,6 +72,10 @@ namespace Poly.Net.Http {
             set {
                 Set("Ports", value);
             }
+        }
+
+        public void On(string Path, Event.Handler Handler) {
+            Handlers.Register(Path, Handler);
         }
 
         public string GetWWW(Request Request) {

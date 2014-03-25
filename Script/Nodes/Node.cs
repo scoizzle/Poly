@@ -48,7 +48,10 @@ namespace Poly.Script.Node {
                     continue;
                 }
 
-                if (Result == Expression.Break || Result == Expression.Continue) {
+                if (Result == null)
+                    continue;
+
+                if (!(Result is Node) || Result == Expression.Break || Result == Expression.Continue) {
                     return Result;
                 }
             }

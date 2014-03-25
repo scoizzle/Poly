@@ -50,7 +50,14 @@ namespace Poly.Script.Node {
                     Value = GetProperty(Current, Obj.ToString());
 
                     if (Value == null) {
-                        break;
+                        if (Current is CustomTypeInstance) {
+                            Value = Function.Get(Engine, Obj.ToString(), Current);
+
+                            if (Value == null) {
+                                break;
+                            }
+                        }
+                        else break;
                     }
                 }
 

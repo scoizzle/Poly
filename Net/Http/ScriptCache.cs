@@ -13,9 +13,8 @@ namespace Poly.Net.Http {
         public Dictionary<string, Script.Engine> CachedScripts = new Dictionary<string, Script.Engine>();
 
         public bool IsCurrent(string Name) {
-            if (CachedScripts.ContainsKey(Name)) {
-                var Engine = CachedScripts[Name];
-
+            Script.Engine Engine;
+            if (CachedScripts.TryGetValue(Name, out Engine)) {
                 for (int i = 0; i < Engine.Includes.Count; i++) {
                     var Include = Engine.Includes[i];
 
@@ -24,8 +23,9 @@ namespace Poly.Net.Http {
                 }
             }
 
-            if (LastWriteTimes.ContainsKey(Name)) {
-                if (LastWriteTimes[Name] != File.GetLastAccessTime(Name)) {
+            DateTime Time;
+            if (LastWriteTimes.TryGetValue(Name, out Time)) {
+                if (Time != File.GetLastAccessTime(Name)) {
                     return false;
                 }
 

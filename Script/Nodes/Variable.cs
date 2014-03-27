@@ -44,6 +44,11 @@ namespace Poly.Script.Node {
                     if (jObj != null) {
                         Value = jObj.Get<object>(Obj.ToString());
                     }
+
+                    var cObj = Value as CustomType;
+                    if (cObj != null) {
+                        Value = cObj.Construct;
+                    }
                 }
 
                 if (Value == null) {
@@ -57,7 +62,13 @@ namespace Poly.Script.Node {
                                 break;
                             }
                         }
-                        else break;
+                        else {
+                            jsObject Collection;
+                            if (Engine.Types.TryGetValue(Obj.ToString(), out Collection)) {
+                                Value = Collection;
+                            }
+                            else break;
+                        }
                     }
                 }
 
@@ -175,6 +186,9 @@ namespace Poly.Script.Node {
         }
 
         public object GetProperty(object Obj, string Name) {
+            if (Obj == null)
+                return null;
+
             var Type = Obj.GetType();
 
             try {
@@ -190,6 +204,9 @@ namespace Poly.Script.Node {
         }
 
         public bool SetProperty(object Obj, string Name, object Value) {
+            if (Obj == null)
+                return false;
+
             var Type = Obj.GetType();
 
             try {

@@ -160,9 +160,9 @@ namespace Poly.Script.Node {
         public static void ConsumeValidName(string Text, ref int Index) {
             var Delta = Index;
 
-            for (; Delta < Text.Length; Delta++) {
+            for (; Delta < Text.Length;) {
                 if (IsValidChar(Text[Delta]))
-                    continue;
+                    Delta++;
                 else if (Text[Delta] == '[')
                     ConsumeBlock(Text, ref Delta);
                 else break;

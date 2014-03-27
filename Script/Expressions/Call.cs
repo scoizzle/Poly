@@ -14,7 +14,9 @@ namespace Poly.Script.Node {
 
         public Call(Engine Engine, string Name) {
             if (Name.IndexOf('.') != -1) {
-                this.Name = Name.Substring(Name.LastIndexOf('.') + 1);
+                if (Name[Name.LastIndexOf('.') + 1] != '[') {
+                    this.Name = Name.Substring(Name.LastIndexOf('.') + 1);
+                }
                 this.Object = Variable.Parse(Engine, Name, 0, Name.Length - this.Name.Length - 1);
             }
             else {
@@ -31,7 +33,14 @@ namespace Poly.Script.Node {
             }
             
             if (Function == null) {
-                Function = Function.Get(Engine, Name, This);
+                if (string.IsNullOrEmpty(Name)) {
+                    if (This is Function) {
+                        Function = This as Function;
+                    }
+                }
+                else {
+                    Function = Function.Get(Engine, Name, This);
+                }
 
                 if (Function == null)
                     return null;

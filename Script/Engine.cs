@@ -25,8 +25,9 @@ namespace Poly.Script {
         public object Evaluate(string Script, params object[] Args) {
             var Context = new jsObject(Args);
 
-            if (Parse(Script))
-                return Evaluate(Context);
+			if (Parse (Script)) {
+				return Evaluate (Context);
+			}
 
             return null;
         }

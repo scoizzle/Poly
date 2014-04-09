@@ -31,8 +31,10 @@ namespace Poly.Script.Node {
 
                 var Obj = new jsObject();
 
-                if (Obj.Parse(String))
+                if (Obj.Parse(String)) {
+                    Index = Delta;
                     return Obj;
+                }
             }
             else if (Text[Delta] == '[') {
                 var String = Text.FindMatchingBrackets("[", "]", Delta, false);
@@ -42,8 +44,10 @@ namespace Poly.Script.Node {
                     IsArray = true
                 };
 
-                if (Obj.Parse(String))
+                if (Obj.Parse(String)) {
+                    Index = Delta;
                     return Obj;
+                }
             }
 
             return null;

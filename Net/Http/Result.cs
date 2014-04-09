@@ -53,32 +53,35 @@ namespace Poly.Net.Http {
             }
         }
 
-        public string BuildReply(bool Chunked = false) {
-            StringBuilder Output = new StringBuilder();
+        public void SendReply(Client Client) {
+            if (!Client.Connected)
+                return;
 
-            Output.Append("HTTP/1.1 ").AppendLine(this.Status);
-            Output.Append("Date: ").AppendLine(DateTime.UtcNow.HttpTimeString());
+            Client.SendLine("HTTP/1.1 ", this.Status);
+            Client.SendLine("Date: ", DateTime.UtcNow.HttpTimeString());
 
             if (this.Data != null && this.Data.Length > 0) {
                 if (Headers.Search<string>("content-type") == null) {
-                    Output.Append("Content-Type: ").AppendLine(this.MIME);
+                    Client.SendLine("Content-Type: ", this.MIME);
                 }
-                Output.Append("Content-Length: ").AppendLine(this.Data.Length.ToString());
+                Client.SendLine("Content-Length: ", this.Data.Length.ToString());
             }
 
-            foreach (var Head in this.Headers) {
-                Output.Append(Head.Key).Append(": ").AppendLine(Head.Value.ToString());
-            }
+            this.Headers.ForEach((K, V) => {
+                Client.SendLine(K, ": ", V.ToString());
+            });
 
-            foreach (jsObject Cookie in this.Cookies.Values) {
-                foreach (var Option in Cookie) {
-                    Output.Append(Option.Key).Append("=").Append(Option.Value).Append("; ");
-                }
+            this.Cookies.ForEach<jsObject>((K, V) => {
+                Client.Send("Set-Cookie: ");
 
-                Output.AppendLine();
-            }
+                V.ForEach((OK, OV) => {
+                    Client.Send(OK, "=", OV.ToString());
+                });
 
-            return Output.ToString();
+                Client.SendLine();
+            });
+
+            Client.SendLine();
         }
 
         public static implicit operator Result(string Status) {

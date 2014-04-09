@@ -9,21 +9,14 @@ namespace Poly.Script {
     using Node;
 
     public class Function : Node.Expression {
-        public string ObjectName, Name = "";
+        public Variable Object = null;
+
+        public string Name = "";
         public string[] Arguments = new string[0];
 
         public Function() { }
         public Function(string Name) {
             this.Name = Name;
-
-            if (this.Name.Contains('.')) {
-                this.ObjectName = Name.Substring("", ".", 0, false, true);
-                this.Name = Name.Substring(this.ObjectName.Length + 1);
-            }
-        }
-
-        public override object Evaluate(jsObject Context) {
-            return base.Evaluate(Context);
         }
 
         public object Call(jsObject Context, jsObject ArgList, object This = null, Engine Engine = null) {
@@ -35,40 +28,28 @@ namespace Poly.Script {
                     Key :
                     Arguments[Index];
 
-                if (Value is Function) {
-                    if ((Value as Function).Arguments.Length > 0) {
-                        Value = GetFunctionHandler(Value as Function, Context);
+                var VFunc = Value as Function;
+
+                if (VFunc != null) {
+                    if (VFunc.Arguments.Length > 0) {
+                        Value = GetFunctionHandler(VFunc, Context);
                     }
                     else {
-                        Value = (Value as Function).GetSystemHandler();
+                        Value = VFunc.GetSystemHandler();
                     }
                 }
-                else if (Value is Node.Node) {
-                    Value = (Value as Node.Node).Evaluate(Context);
-                }
 
-                Variable.Set(Name, Args, Value);
+                Variable.Set(Name, Args, GetValue(Value, Context));
                 Index++;
             });
 
-            if (This != null) {
-                Variable.Set(
-                    "this", 
-                    Args, 
+            Variable.Set(
+                "this",
+                Args,
+                This == null && Object != null ?
+                    Object.Evaluate(Context) :
                     This
-                );
-            }
-            else if (!string.IsNullOrEmpty(ObjectName)) {
-                This = Engine == null ?
-                    Variable.Get(ObjectName, Context) :
-                    Variable.Eval(Engine, ObjectName, Context);
-
-                Variable.Set(
-                    "this", 
-                    Args, 
-                    This
-                );
-            }
+            );
 
             return this.Evaluate(Args);
         }
@@ -95,6 +76,11 @@ namespace Poly.Script {
             }
 
             if (Library.Constructors.TryGetValue(Name, out Func)) {
+                return Func;
+            }
+
+            if (Library.TypeLibsByName.ContainsKey(Name)) {
+                Func = Library.TypeLibsByName[Name].Get<Function>(Name);
                 return Func;
             }
 
@@ -149,9 +135,10 @@ namespace Poly.Script {
             else {
                 Library Lib;
                 Type Type = This.GetType();
+                CustomTypeInstance CustomThis = This as CustomTypeInstance;
 
-                if (Type == typeof(CustomTypeInstance)) {
-                    var CustomType = (This as CustomTypeInstance).Type;
+                if (CustomThis != null) {
+                    var CustomType = CustomThis.Type;
 
                     if ((Func = CustomType.GetFunction(Name)) != null) {
                         return Func;
@@ -228,6 +215,14 @@ namespace Poly.Script {
 
             if (Text.Compare("(", Delta)) {
                 Func = new Function(Text.Substring(Open, Close - Open));
+
+                if (Func.Name.IndexOf('.') > -1) {
+                    Open = 0;
+                    Close = Func.Name.LastIndexOf('.');
+
+                    Func.Object = Variable.Parse(Engine, Func.Name, ref Open, Close);
+                    Func.Name = Func.Name.Substring(Close + 1);
+                }
 
                 Open = Delta + 1;
                 Close = Delta;

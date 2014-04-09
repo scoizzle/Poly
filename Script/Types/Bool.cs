@@ -24,10 +24,7 @@ namespace Poly.Script.Node {
         }
 
         public static bool EvaluateNode(object Node, jsObject Context) {
-            var Val = Node;
-            if (Node is Node) {
-                Val = ((Node)Node).Evaluate(Context);
-            }
+            var Val = GetValue(Node, Context);
 
             if (Val == null)
                 return false;

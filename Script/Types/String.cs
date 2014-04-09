@@ -22,25 +22,7 @@ namespace Poly.Script.Node {
         }
 
         public new static object Equal(string Left, object Right) {
-            return string.Equals(Left, Right.ToString());
-        }
-
-        public static object Parse(string Text, ref int Index) {
-            if (Text[Index] == '"') {
-                var String = Text.FindMatchingBrackets("\"", "\"", Index, false);
-
-                Index += String.Length + 2;
-
-                return String;
-            }
-            else if (Text[Index] == '\'') {
-                var String = Text.FindMatchingBrackets("'", "'", Index, false);
-
-                Index += String.Length + 2;
-
-                return String;
-            }
-            return null;
+            return string.Compare(Left, Right.ToString(), StringComparison.Ordinal);
         }
 
         public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {

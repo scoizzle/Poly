@@ -56,6 +56,26 @@ namespace Poly.Net.Http {
             }
         }
 
+        public string SessionCookieName {
+            get {
+                return this.Get<string>("SessionCookieName", "SessionId");
+            }
+            set {
+                this["SessionCookieName"] = value;
+            }
+        }
+
+        public bool SessionsEnabled {
+            get {
+                if (!this.ContainsKey("SessionsEnabled"))
+                    return true;
+                return this.Get<bool>("SessionsEnabled");
+            }
+            set {
+                this.Set("SessionsEnabled", value);
+            }
+        }
+
         public jsObject PathOverrides {
             get {
                 return Get<jsObject>("PathOverrides", jsObject.NewObject);

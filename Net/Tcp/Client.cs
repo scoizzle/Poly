@@ -165,6 +165,22 @@ namespace Poly.Net.Tcp {
             return true;
         }
 
+        public virtual bool SendLine(params string[] Parts) {
+            if (!Writer.BaseStream.CanWrite)
+                return false;
+
+            try {
+                for (int i = 0; Connected && i < Parts.Length; i++) {
+                    Writer.Write(Parts[i]);
+                }
+                Writer.WriteLine();
+            }
+            catch {
+                return false;
+            }
+            return true;
+        }
+
         public string ReadLine() {
 			if (!Connected) {
                 return null;
@@ -182,6 +198,12 @@ namespace Poly.Net.Tcp {
                 return false;
 
             return Send(Encoding.GetBytes(Packet));
+        }
+
+        public virtual void Send(params string[] Parts) {
+            for (int i = 0; Connected && i < Parts.Length; i++) {
+                Send(Encoding.GetBytes(Parts[i]));
+            }
         }
 
         public virtual bool Send(byte[] Bytes) {

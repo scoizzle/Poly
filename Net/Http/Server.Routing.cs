@@ -9,14 +9,13 @@ using System.Diagnostics;
 
 namespace Poly.Net.Http {
     using Data;
-    using Event;
     using Net.Tcp;
     using Script;
 
     public partial class Server {
         public Event.Engine Handlers = new Event.Engine();
 
-        public void RegisterRoute(string Path, Handler Handler) {
+        public void RegisterRoute(string Path, Event.Handler Handler) {
             Handlers.Register(Path, Handler);
         }
 

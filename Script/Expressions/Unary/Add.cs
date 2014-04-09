@@ -41,6 +41,7 @@ namespace Poly.Script.Node {
                 );
             }
             else if (Text.Compare("++", Index)) {
+                Index += 2;
                 var Var = Variable.Parse(Engine, Left, 0);
 
                 return new Assign(

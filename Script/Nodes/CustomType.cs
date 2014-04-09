@@ -12,6 +12,10 @@ namespace Poly.Script.Node {
         public CustomTypeInstance(CustomType Type) {
             this.Type = Type;
         }
+
+        public override string ToString() {
+            return Type.Name;
+        }
     }
 
     public class CustomType : Expression {

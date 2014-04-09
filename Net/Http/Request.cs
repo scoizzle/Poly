@@ -48,6 +48,15 @@ namespace Poly.Net.Http {
 
         public Host Host = null;
 
+        public Session Session {
+            get {
+                return Get<Session>("Session");
+            }
+            set {
+                Set("Session", value);
+            }
+        }
+
         public StringBuilder Output = new StringBuilder();
 
         public Request(Client Client, Packet Packet) {
@@ -89,14 +98,17 @@ namespace Poly.Net.Http {
                 Result.Data = Client.Encoding.GetBytes(Output.ToString());
             }
 
-            Client.SendLine(Result.BuildReply());
-            Client.Send(Result.Data);
+            Result.SendReply(Client);
+
+            if (Result.Data != null && Result.Data.Length > 0) {
+                Client.Send(Result.Data);
+            }
 
             Handled = true;
         }
 
         public void SetCookie(string name, string value) {
-            Result.Cookies[name, name] = value;
+            SetCookie(name, value, 0);
         }
 
         public void SetCookie(string name, string value, long expire = 0, string path = "", string domain = "", bool secure = false) {

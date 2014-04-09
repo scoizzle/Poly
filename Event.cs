@@ -5,64 +5,80 @@ using System.Text;
 
 using Poly.Data;
 
-namespace Poly.Event {
-    public delegate object Handler(jsObject Args);
+namespace Poly {
+    public class Event {
+        public delegate object Handler(jsObject Args);
 
-    public class Engine : jsObject<Handler> {
-        public void Add(Handler Handler) {
-            Register(Handler.Method.Name, Handler);
-        }
+		public static object Invoke(Handler Func, jsObject Args) {
+			if (Func == null)
+				return null;
 
-        public new void Add(string Name, Handler Handler) {
-            Register(Name, Handler);
-        }
-
-        public void Register(string EventName, Handler Handler) {
-            this[EventName, Handler.Method.MetadataToken.ToString()] = Handler;
-        }
-
-        public void Unregister(string EventName, Handler Handler) {
-            this[EventName, Handler.Method.MetadataToken.ToString()] = null;
-        }
-
-        public void Invoke(string EventName, jsObject Args) {
-            var List = getObject(EventName);
-
-            if (List != null) {
-                List.ForEach((K, V) => {
-                    (V as Handler)(Args);
-                });
-            }
-        }
-
-		public IEnumerable<object> Execute(string EventName, jsObject Args) {
-			var List = getObject (EventName);
-
-			for (int i = 0; i < List.Count; i++) {
-				yield return (List.ElementAt(i).Value as Handler)(Args);
-			}
+			return Func (Args);
 		}
 
-        public bool MatchAndInvoke(string Data, jsObject Args) {
-            return MatchAndInvoke(Data, Args, false);
+        public static object Invoke(Handler Func, params object[] ArgPairs) {
+            if (Func == null)
+                return null;
+
+			return Func(new jsObject(ArgPairs));
         }
 
-        public bool MatchAndInvoke(string Data, jsObject Args, bool KeyIsWild) {
-            var List = this.ToList();
+        public class Engine : jsObject<Handler> {
+            public void Add(Handler Handler) {
+                Register(Handler.Method.Name, Handler);
+            }
 
-            for (int i = 0; i < List.Count; i++) {
-                var Key = KeyIsWild ? Data : List[i].Key;
-                var Wild = KeyIsWild ? List[i].Key : Data;
+            public new void Add(string Name, Handler Handler) {
+                Register(Name, Handler);
+            }
 
-                var Matches = Key.Match(Wild);
+            public void Register(string EventName, Handler Handler) {
+                this[EventName, Handler.Method.MetadataToken.ToString()] = Handler;
+            }
 
-                if (Matches != null) {
-                    Args.CopyTo(Matches);
-                    Invoke(List[i].Key, Matches);
-                    return true;
+            public void Unregister(string EventName, Handler Handler) {
+                this[EventName, Handler.Method.MetadataToken.ToString()] = null;
+            }
+
+            public void Invoke(string EventName, jsObject Args) {
+                var List = getObject(EventName);
+
+                if (List != null) {
+                    List.ForEach((K, V) => {
+                        (V as Handler)(Args);
+                    });
                 }
             }
-            return false;
+
+            public IEnumerable<object> Execute(string EventName, jsObject Args) {
+                var List = getObject(EventName);
+
+                for (int i = 0; i < List.Count; i++) {
+                    yield return (List.ElementAt(i).Value as Handler)(Args);
+                }
+            }
+
+            public bool MatchAndInvoke(string Data, jsObject Args) {
+                return MatchAndInvoke(Data, Args, false);
+            }
+
+            public bool MatchAndInvoke(string Data, jsObject Args, bool KeyIsWild) {
+                var List = this.ToList();
+
+                for (int i = 0; i < List.Count; i++) {
+                    var Key = KeyIsWild ? Data : List[i].Key;
+                    var Wild = KeyIsWild ? List[i].Key : Data;
+
+                    var Matches = Key.Match(Wild);
+
+                    if (Matches != null) {
+                        Args.CopyTo(Matches);
+                        Invoke(List[i].Key, Matches);
+                        return true;
+                    }
+                }
+                return false;
+            }
         }
     }
 }

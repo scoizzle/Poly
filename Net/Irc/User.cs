@@ -12,7 +12,7 @@ namespace Poly.Net.Irc {
         public User() { }
 
         public User(string Raw) {
-            if (!Base.Extract(TemplateFormat, Raw))
+            if (!this.Extract(TemplateFormat, Raw))
                 Nick = Raw;
         }
 
@@ -71,7 +71,7 @@ namespace Poly.Net.Irc {
         }
 
         public override string ToString() {
-            return Base.Template(TemplateFormat);
+            return this.Template(TemplateFormat);
         }
     }
 }

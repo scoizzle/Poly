@@ -26,6 +26,10 @@ namespace Poly {
             App.Log.Info("Application running...");
 		}
 
+        public static void Wait() {
+            Console.ReadKey();
+        }
+
 		public static void Exit(int Status = 0) {
             Log.Info("Applcation Exiting...");
 

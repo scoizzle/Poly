@@ -9,12 +9,12 @@ using System.Net.Sockets;
 
 namespace Poly.Net.Http {
     using Data;
-    using Event;
     using Net.Tcp;
     using Script;
 
     public partial class Server : MultiPortServer {
         public jsObject<Host> Hosts = new jsObject<Host>();
+        public jsObject<Session> Sessions = new jsObject<Session>();
 
         public FileCache FileCache = new FileCache();
         public ScriptCache ScriptCache = new ScriptCache();
@@ -42,7 +42,7 @@ namespace Poly.Net.Http {
             Eng.Evaluate(Args);
         }
 
-        public void On(string Key, Handler Handler) {
+        public void On(string Key, Event.Handler Handler) {
             RegisterRoute(Key, Handler);
         }
 

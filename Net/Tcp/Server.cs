@@ -97,11 +97,7 @@ namespace Poly.Net.Tcp {
 
         public void OnConnect(Event.Handler Handler) {
             this.ClientConnect = (C) => {
-                var Args = new Data.jsObject {
-                    { "Client", C }
-                };
-
-                Handler(Args);
+                Event.Invoke(Handler, "Client", C);
             };
         }
     }

@@ -49,10 +49,6 @@ namespace Poly.Script {
             while (Index < LastIndex) {
                 object Node = null;
 
-                if (Text[Index] == ';') {
-                    Index++;
-                }
-
                 ConsumeWhitespace(Text, ref Index);
 
                 if (Index >= LastIndex)

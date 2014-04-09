@@ -20,6 +20,10 @@ namespace Poly.Data {
             __storage = Storage;
         }
 
+        public Dynamic(params object[] KeyValuePairs) {
+            __storage = new jsObject(KeyValuePairs);
+        }
+
         public override bool TryGetMember(GetMemberBinder binder, out object result) {
             result = __storage[binder.Name];
             return result != null;

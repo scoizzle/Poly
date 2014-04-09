@@ -25,7 +25,7 @@ namespace Poly.Net.Http {
 
             DateTime Time;
             if (LastWriteTimes.TryGetValue(Name, out Time)) {
-                if (Time != File.GetLastAccessTime(Name)) {
+                if (Time != File.GetLastWriteTime(Name)) {
                     return false;
                 }
 

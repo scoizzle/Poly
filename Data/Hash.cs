@@ -9,7 +9,14 @@ namespace Poly.Data {
 
 		private static string getHash(HashAlgorithm alg, byte[] toHash) {
 			string szHash = string.Empty;
-			byte[] btHash = alg.ComputeHash(toHash);
+            byte[] btHash = null;
+
+            do {
+                try {
+                    btHash = alg.ComputeHash(toHash);
+                }
+                catch { }
+            } while (btHash == null);
 			
 			for (int Index=0;Index<btHash.Length;Index++){
                 szHash += btHash[Index].ToString("x2");

@@ -11,50 +11,19 @@ namespace Poly.Script.Node {
             return Evaluate;
         }
 
-        public object GetValue(object Obj, jsObject Context) {
-            if (Context == null || Obj == null)
-                return null;
-
-            var Node = Obj as Node;
-            if (Node != null) {
-                return Node.Evaluate(Context);
-            }
-
-            return Obj;
-        }
-
         public virtual object Evaluate(jsObject Context) {
-            var List = this.ToList();
+			foreach (var Obj in this.Values) {
+				var Result = GetValue (Obj, Context);
 
-            for (int i = 0; i < List.Count; i++) {
-                var Node = (List[i].Value as Node);
+				if (Obj is Return || (Result == Obj && Count == 1))
+					return Result;
 
-                if (Node == null)
-                    return List[i].Value;
+				if (Obj == Expression.Break || Obj == Expression.Continue)
+					return Obj;
 
-                var Result = Node.Evaluate(Context);
-
-                if (Node is Return) {
-                    return Result;
-                }
-
-                if (Node is Operator) {
-                    if (this.Count == 1)
-                        return Result;
-
-                    if (Node == Expression.Break || Node == Expression.Continue) {
-                        return Node;
-                    }
-                    continue;
-                }
-
-                if (Result == null)
-                    continue;
-
-                if (!(Result is Node) || Result == Expression.Break || Result == Expression.Continue) {
-                    return Result;
-                }
-            }
+				if (Result == Expression.Break || Result == Expression.Continue)
+					return Result;
+			}
 
             return null;
         }
@@ -65,6 +34,18 @@ namespace Poly.Script.Node {
 
         public override string ToString(bool HumanFormat) {
             return this.ToString();
+        }
+
+        public static object GetValue(object Obj, jsObject Context) {
+            if (Context == null || Obj == null)
+                return null;
+
+            var Node = Obj as Node;
+            if (Node != null) {
+                return Node.Evaluate(Context);
+            }
+
+            return Obj;
         }
 
         public static bool IsValidChar(char c) {
@@ -153,7 +134,7 @@ namespace Poly.Script.Node {
         }
 
         public static void ConsumeWhitespace(string Text, ref int Index) {
-            while (Index < Text.Length && char.IsWhiteSpace(Text[Index]))
+            while (Index < Text.Length && (char.IsWhiteSpace(Text[Index]) || Text[Index] == ';'))
                 Index++;
         }
 
@@ -197,6 +178,10 @@ namespace Poly.Script.Node {
 
         public static Node Parse(Engine Engine, string Text, ref int Index, int Length) {
             return null;
+        }
+
+        public static jsObject AsJsObject(object Obj) {
+            return Obj as jsObject;
         }
     }
 }

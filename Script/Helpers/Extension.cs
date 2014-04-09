@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Reflection;
+using System.IO;
 
 namespace Poly.Script.Helper {
     public class ExtensionManager {
@@ -14,6 +15,25 @@ namespace Poly.Script.Helper {
                     Activator.CreateInstance(Type);
                 }
             }
+        }
+
+        public static object Include(Engine Engine, string FileName) {
+            if (File.Exists(FileName)) {
+                var Expression = Engine.Parse(File.ReadAllText(FileName), 0, new Node.Expression()) as Node.Expression;
+
+                if (Expression != null) {
+                    Engine.Includes.Add(FileName);
+
+                    if (Expression.Count == 1) {
+						return Expression.First().Value;
+                    }
+                    else {
+                        return Expression;
+                    }
+                }
+            }
+
+            return null;
         }
     }
 }

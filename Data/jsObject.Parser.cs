@@ -142,6 +142,7 @@ namespace Poly.Data {
             }
             else {
                 This = new jsObject();
+                Set(Key, This);
             }
 
             Text = Text.FindMatchingBrackets("{", "}", Index, true);
@@ -168,9 +169,6 @@ namespace Poly.Data {
                 }
                 while (SubIndex < Text.Length);
             }
-
-            OnParseObject(This, Key);
-
             return true;
         }
 
@@ -218,14 +216,6 @@ namespace Poly.Data {
             else {
                 return _Raw(Text, ref Index, Name);
             }
-        }
-
-        public virtual void OnParseObject(jsObject Object, string Key) {
-            this[Key] = Object;
-        }
-
-        public virtual void OnParseObject(jsObject Object, params string[] Key) {
-            this[Key] = Object;
         }
 
         public bool Parse(string Text) {

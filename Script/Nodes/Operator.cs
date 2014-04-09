@@ -8,23 +8,11 @@ namespace Poly.Script.Node {
         public object Left = null, Right = null;
 
         public object GetLeft(Data.jsObject Context) {
-            var N = Left as Node;
-
-            if (N != null) {
-                return N.Evaluate(Context);
-            }
-
-            return Left;
+            return GetValue(Left, Context);
         }
 
         public object GetRight(Data.jsObject Context) {
-            var N = Right as Node;
-
-            if (N != null) {
-                return N.Evaluate(Context);
-            }
-
-            return Right;
+            return GetValue(Right, Context);
         }
     }
 }

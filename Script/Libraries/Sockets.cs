@@ -32,6 +32,9 @@ namespace Poly.Script.Libraries {
 
                     case "UDP":
                         return new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+
+                    case "ICMP":
+                        return new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Icmp);
                 }
             }
             return null;

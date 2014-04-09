@@ -8,10 +8,23 @@ using Poly.Data;
 
 namespace Poly.Script.Node {
     public class Include : Expression {
-        public string Name = string.Empty;
+        public Engine Engine = null;
+        public object Name = null;
+
+        public Include(Engine Engine, object Name) {
+            this.Engine = Engine;
+            this.Name = Name;
+        }
+
+        public override object Evaluate(jsObject Context) {
+            var FileName = GetValue(Name, Context).ToString();
+            var Obj = Helper.ExtensionManager.Include(Engine, FileName);
+
+            return GetValue(Obj, Context);
+        }
 
         public override string ToString() {
-            return "include '" + Name + "'";
+            return "include '" + Name.ToString() + "'";
         }
 
         public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
@@ -22,29 +35,15 @@ namespace Poly.Script.Node {
                 var Delta = Index += 7;
                 ConsumeWhitespace(Text, ref Delta);
 
-                var Str = String.Parse(Engine, Text, ref Delta, LastIndex) as string;
+                var Inc = Engine.Parse(Text, ref Delta, LastIndex);
 
-                if (Str != null) {
-                    if (File.Exists(Str)) {
-                        var Obj = new Expression();
-                        
-                        Obj = Engine.Parse(File.ReadAllText(Str), 0, Obj) as Expression;
-
-                        if (Obj != null) {
-                            Engine.Includes.Add(Str);
-
-                            if (Obj.Count == 1) {
-                                Index = Delta;
-                                return Obj.ElementAt(0);
-                            }
-                            else {
-                                Index = Delta;
-                                return Obj;
-                            }
-                        }
-                    }
+                Index = Delta;
+                if (Inc is string) {
+                    return Helper.ExtensionManager.Include(Engine, Inc as string);
                 }
-                  
+                else {
+                    return new Include(Engine, Inc);
+                }                  
             }
 
             return null;

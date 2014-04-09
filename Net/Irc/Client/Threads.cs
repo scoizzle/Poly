@@ -156,7 +156,7 @@ namespace Poly.Net.Irc {
 
                         if (!char.IsLetter(M)) {
                             if (CharModes.ContainsKey(Mode)) {
-                                Target.Modes[TargetChannel, CharModes.Get<string>(Mode)] = true;
+                                Target.Modes[TargetChannel, CharModes.Get<char>(Mode).ToString()] = true;
                                 continue;
                             }
                             break;
@@ -219,7 +219,7 @@ namespace Poly.Net.Irc {
 
                     var Operator = '+';
 
-                    for (int Index = 0; Index < Nicks.Length; Index++) {
+                    for (int Index = 0; Index < Nicks.Length && Index < Modes.Length; Index++) {
                         var Target = Nicks[Index];
                         var TargetMode = Modes[Index];
 

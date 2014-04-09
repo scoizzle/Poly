@@ -9,26 +9,6 @@ namespace Poly.Script.Node {
         public static readonly Expression Break = new Expression();
         public static readonly Expression Continue = new Expression();
 
-        public static bool Parse(Engine Engine, string Text, ref int Index, int LastIndex, Node Storage) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return false;
-
-            if (Text.Compare("{", Index)) {
-                var Open = Index + 1;
-                var Close = Index;
-
-                ConsumeExpression(Text, ref Close);
-
-                if (Engine.Parse(Text, ref Open, Close - 1, Storage) == null)
-                    return false;
-
-                Index = Close;
-                return true;
-            }
-
-            return false;
-        }
-
         public override string ToString() {
             return "{" + string.Join("; ", Values) + "}";
         }

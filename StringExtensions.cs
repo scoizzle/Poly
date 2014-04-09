@@ -120,6 +120,53 @@ namespace System {
             return 0;
         }
 
+        public static int Find(this String This, char C, int Index = 0, int Last = int.MaxValue) {
+            if (Index > -1) {
+                for (int i = Index; i < This.Length && i < Last; i++) {
+                    if (i > 0 && This[i - 1] == '\\')
+                        continue;
+
+                    if (This[i] == C) {
+                        return i;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        public static int Find(this String This, string C, int Index = 0, int Last = int.MaxValue) {
+            if (Index > -1) {
+                for (int i = 0; i < This.Length && i < Last; i++) {
+                    if (Compare(This, C, i, 0, C.Length)) {
+                        return i;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        public static bool Contains(this String This, char C, int Index = 0) {
+            if (Index > -1) {
+                for (int i = Index; i < This.Length; i++) {
+                    if (This[i] == C) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        public static bool Contains(this String This, string C, int Index = 0) {
+            if (Index > -1) {
+                for (int i = Index; i < This.Length; i++) {
+                    if (Compare(This, C, i, 0, C.Length)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         public static int FirstPossibleIndex(this String This, int Start = 0, params String[] Possible) {
             int Location = This.Length;
 
@@ -147,16 +194,21 @@ namespace System {
         }
 
         public static int FindSubString(this String This, String ContainsSub, int Index, int ContainsIndex, int ContainsLenght, bool IgnoreCase = false) {
+            if (ContainsLenght == 0)
+                return -1;
+
             while (true) {
                 var C = ContainsSub[ContainsIndex];
 
-                Index = This.IndexOf(C, Index);
+                Index = This.Find(C, Index);
 
                 if (Index == -1)
                     return -1;
 
+                if (ContainsLenght == 1)
+                    return Index;
+
                 if (This.Compare(ContainsSub, Index, ContainsIndex, ContainsLenght, IgnoreCase)) {
-                    var Debug = This.Substring(Index);
                     return Index;
                 }
 

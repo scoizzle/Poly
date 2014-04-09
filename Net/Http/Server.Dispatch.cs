@@ -8,7 +8,6 @@ using System.Net.Sockets;
 
 namespace Poly.Net.Http {
     using Data;
-    using Event;
     using Net.Tcp;
     using Script;
 
@@ -49,26 +48,28 @@ namespace Poly.Net.Http {
                 "FileName", Request.Packet.Target
             );
 
-            if (!Request.Host.Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) {
-                if (!Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) {
-                    var WWW = Request.Host.GetWWW(Request);
+            if (Request.Host.Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) { }                
+            else if (Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) { }
+            else {
+                var WWW = Request.Host.GetWWW(Request);
 
-                    Args["FileName"] = WWW;
+                Args["FileName"] = WWW;
 
-                    var Ext = Request.Host.GetExtension(WWW);
+                var Ext = Request.Host.GetExtension(WWW);
 
-                    var MIME = GetMime(
-                        Ext
-                    );
+                var MIME = GetMime(
+                    Ext
+                );
 
-                    if (!File.Exists(WWW)) {
-                        Request.Result = Result.NotFound;
-                    }
-                    else if (Request.Packet.Headers.Get<string>("If-Modified-Since") == File.GetLastWriteTimeUtc(WWW).HttpTimeString()) {
+                if (!Handlers.MatchAndInvoke(MIME, Args)) { 
+                    if (Request.Packet.Headers.Get<string>("If-Modified-Since") == File.GetLastWriteTimeUtc(WWW).HttpTimeString()) {
                         Request.Result = Result.NotModified;
                     }
-                    else if (!Handlers.MatchAndInvoke(MIME, Args)) {
+                    else if (File.Exists(WWW)) {
                         DefaultFileHandler(WWW, Request);
+                    }
+                    else {
+                        Request.Result = Result.NotFound;
                     }
                 }
             }
@@ -88,7 +89,7 @@ namespace Poly.Net.Http {
                     break;
                 }
 
-                Request.Host = Hosts.Search<Host>(Packet.Host, true);
+                Request.Host = Hosts.Search<Host>(Packet.Host, true, true);
 
                 if (Request.Host == null) {
                     Request.Result = Result.BadRequest;
@@ -103,6 +104,10 @@ namespace Poly.Net.Http {
                         Request.Finish();
                         continue;
                     }
+                }
+
+                if (Request.Host.SessionsEnabled) {
+                    Request.Session = Session.GetSession(this, Request, Request.Host.SessionCookieName);
                 }
 
                 try {

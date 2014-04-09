@@ -7,7 +7,7 @@ using Poly.Data;
 
 namespace Poly.Script.Node {
     public class Variable : Value {
-        public bool IsStatic = false;
+        public bool IsStatic = false, IsSimple = false;
         public Engine Engine = null;
 
         public Variable(Engine Engine, params Node[] Name) {
@@ -18,71 +18,80 @@ namespace Poly.Script.Node {
             }
         }
 
-        public string GetName() {
-            return string.Join(".", this.Values);
-        }
+		public override object Evaluate(jsObject Context) {
+            if (IsSimple) {
+                return Get(string.Join(".", this.Values), Context);
+			}
 
-        public override object Evaluate(jsObject Context) {
-            object Current = IsStatic ? 
-                Engine.StaticObjects : 
-                Context;
+            bool CurrentIsJsObject = true;
+            jsObject CurrentAsJs;
 
-            int Count = this.Count, i = 0;
-            foreach (var rObj in this.Values) {
-                var Obj = rObj;
-                var Node = Obj as Node;
+            object Current = IsStatic ?
+                (CurrentAsJs = Engine.StaticObjects) :
+                (CurrentAsJs = Context);
 
-                if (Node != null) {
-                    Obj = Node.Evaluate(Context);
-                }
+            int Index = 0;
+            foreach (var Raw in this.Values) {
+                var Obj = Raw is Node ?
+                    GetValue(Raw, Context) :
+                    Raw;
 
-                var Value = GetValue(Obj, Current as jsObject);
+                if (Obj == null)
+                    return null;
 
-                if (Obj == Value) {
-                    var jObj = Current as jsObject;
+                object Value = CurrentIsJsObject ?
+                    Value = GetValue(Obj, CurrentAsJs) :
+                    Obj;
 
-                    if (jObj != null) {
-                        Value = jObj.Get<object>(Obj.ToString());
+                if (Value == Obj) {
+					if (CurrentIsJsObject) {
+						Value = CurrentAsJs[Obj.ToString()];
                     }
-
-                    var cObj = Value as CustomType;
-                    if (cObj != null) {
-                        Value = cObj.Construct;
+                    else {
+                        Value = Value is CustomType ?
+                            (Value as CustomType).Construct :
+                            null;
                     }
-                }
-
+                } 
+                
                 if (Value == null) {
-                    Value = GetProperty(Current, Obj.ToString());
+                    Value = GetProperty(Current, Obj as string);
 
                     if (Value == null) {
                         if (Current is CustomTypeInstance) {
-                            Value = Function.Get(Engine, Obj.ToString(), Current);
-
-                            if (Value == null) {
-                                break;
-                            }
+                            Value = Function.Get(Engine, Obj as string, Current);
                         }
                         else {
                             jsObject Collection;
-                            if (Engine.Types.TryGetValue(Obj.ToString(), out Collection)) {
+                            if (Engine.Types.TryGetValue(Obj as string, out Collection)) {
                                 Value = Collection;
                             }
-                            else break;
+                        }
+
+                        if (Value == null) {
+                            break;
                         }
                     }
                 }
 
-                if ((Count - i) == 1) {
+                if ((Count - Index) == 1)
                     return Value;
-                }
+
+                Index++;
                 Current = Value;
-                i++;
+                CurrentAsJs = AsJsObject(Current);
+                CurrentIsJsObject = CurrentAsJs != null;
             }
 
             return null;
         }
 
         public object Assign(jsObject Context, object Val) {
+            if (IsSimple) {
+                Set(string.Join(".", this.Values), Context, Val);
+                return Val;
+            }
+
             object Current = IsStatic ? 
                 Engine.StaticObjects : 
                 Context;
@@ -149,8 +158,11 @@ namespace Poly.Script.Node {
 
                     var Name = Text.Substring(Open, Delta - Open);
 
-                    if (Name == "Static") {
+                    if (Name.Compare("Static")) {
                         Var.IsStatic = true;
+                    }
+                    else if (Name.Compare("Simple")) {
+                        Var.IsSimple = true;
                     }
                     else {
                         Var.Add(Name);
@@ -182,10 +194,10 @@ namespace Poly.Script.Node {
         }
 
         public override string ToString() {
-            return GetName();
+            return string.Join(".", Values);
         }
 
-        public object GetProperty(object Obj, string Name) {
+        public static object GetProperty(object Obj, string Name) {
             if (Obj == null)
                 return null;
 
@@ -203,7 +215,7 @@ namespace Poly.Script.Node {
             return null;
         }
 
-        public bool SetProperty(object Obj, string Name, object Value) {
+        public static bool SetProperty(object Obj, string Name, object Value) {
             if (Obj == null)
                 return false;
 

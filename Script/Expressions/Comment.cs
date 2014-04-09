@@ -20,6 +20,7 @@ namespace Poly.Script.Node {
                 }
 
                 Index = Delta;
+                return NoOp;
             }
             else if (Text.Compare("/*", Index)) {
                 var Delta = Index + 2;
@@ -32,6 +33,7 @@ namespace Poly.Script.Node {
                 }
 
                 Index = Delta;
+                return NoOp;
             }
 
             return null;

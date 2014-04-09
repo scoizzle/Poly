@@ -19,7 +19,6 @@ namespace Poly.Script.Helper {
         public MemberFunction(Type Type, string Name) {
             this.Name = Name;
             this.Type = Type;
-            this.ObjectName = Type.Name;
         }
 
         public override object Evaluate(jsObject Context) {

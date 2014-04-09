@@ -48,5 +48,15 @@ namespace Poly {
 
             Console.WriteLine(Message);
         }
+
+        public void Benchmark(string Name, int Iterations, Action<int> Todo) {
+            int Start = Environment.TickCount;
+            for (int i = 0; i < Iterations; i++) {
+                Todo(i);
+            }
+            int Stop = Environment.TickCount;
+
+            Info(Name + ": " + (Stop - Start).ToString());
+        }
     }
 }

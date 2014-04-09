@@ -59,7 +59,6 @@ namespace Poly.Script.Node {
                             ConsumeWhitespace(Text, ref Delta);
                             If.Else = Engine.Parse(Text, ref Delta, LastIndex) as Node;
                         }
-
                         Index = Delta;
                         return If;
                     }

@@ -59,7 +59,10 @@ namespace Poly.Script.Node {
 
                     if (Value == null) {
                         if (Current is CustomTypeInstance) {
-                            Value = Function.Get(Engine, Obj as string, Current);
+                            Value = Function.GetFunctionHandler(
+                                Function.Get(Engine, Obj as string, Current), 
+                                Context
+                            );
                         }
                         else {
                             jsObject Collection;
@@ -92,15 +95,22 @@ namespace Poly.Script.Node {
                 return Val;
             }
 
-            object Current = IsStatic ? 
-                Engine.StaticObjects : 
-                Context;
+            bool CurrentIsJsObject = true;
+            jsObject CurrentAsJs;
 
-            int Count = this.Count, i = 0;
-            foreach (var Obj in this.Values) {
-                if ((Count - i) == 1) {
-                    if (Current is jsObject) {
-                        Set(GetValue(Obj, Context).ToString(), Current as jsObject, Val);
+            object Current = IsStatic ?
+                (CurrentAsJs = Engine.StaticObjects) :
+                (CurrentAsJs = Context);
+
+            int Index = 0;
+            foreach (var Raw in this.Values) {
+                var Obj = Raw is Node ?
+                    GetValue(Raw, Context) :
+                    Raw;
+
+                if ((Count - Index) == 1) {
+                    if (CurrentIsJsObject) {
+                        CurrentAsJs[Obj.ToString()] = Val;
                         return Val;
                     }
                     else {
@@ -108,35 +118,36 @@ namespace Poly.Script.Node {
                         return Val;
                     }
                 }
-                else {
-                    var Value = GetValue(Obj, Current as jsObject);
 
-                    if (Obj == Value) {
-                        Value = Context.Get<object>(Obj.ToString());
+                if (Obj == Raw) {
+                    if (CurrentIsJsObject) {
+                        Obj = CurrentAsJs.Get<object>(Obj.ToString());
                     }
-
-                    if (Value == null) {
-                        Value = GetProperty(Current, Obj.ToString());
-
-                        if (Value == null) {
-                            Value = new jsObject();
-
-                            if (Current is jsObject) {
-                                Set(Obj.ToString(), Current as jsObject, Value);
-                            }
-                            else {
-                                SetProperty(Current, Obj.ToString(), Val);
-                            }
-                        }
-                    }
-
-                    Current = Value;
                 }
 
-                i++;
+                if (Obj == null) {
+                    Obj = GetProperty(Current, Raw.ToString());
+
+                    if (Obj == null) {
+                        Obj = new jsObject();
+
+                        if (CurrentIsJsObject) {
+                            CurrentAsJs[Raw.ToString()] = Obj;
+                        }
+                        else {
+                            SetProperty(Current, Raw.ToString(), Val);
+                        }
+                    }
+                }
+
+                Index++;
+                Current = Obj;
+                CurrentAsJs = AsJsObject(Current);
+                CurrentIsJsObject = CurrentAsJs != null;
             }
 
             return null;
+
         }
 
         public static Variable Parse(Engine Engine, string Text, int Index, int LastIndex = -1) {
@@ -173,6 +184,10 @@ namespace Poly.Script.Node {
                     continue;
                 }
                 else if (Text[Delta] == '[') {
+                    if ((Delta - Open) != 0) {
+                        Var.Add(Text.SubString(Open, Delta - Open));
+                    }
+
                     var x = Delta + 1;
                     ConsumeBlock(Text, ref Delta);
 

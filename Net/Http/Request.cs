@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.IO;
 
 using Poly;
 using Poly.Data;
@@ -86,6 +87,25 @@ namespace Poly.Net.Http {
             if (!string.IsNullOrEmpty(txt)) {
                 Output.Append(txt);
             }
+        }
+
+        public void Print(string FileName, jsObject Data) {
+            if (File.Exists(FileName)) {
+                Print(
+                    Data.Template(
+                        File.ReadAllText(FileName)
+                    )
+                );
+            }
+        }
+
+        public void Load(string FileName) {
+            if (File.Exists(FileName)) {
+                Print(
+                    File.ReadAllText(FileName)
+                );
+            }
+
         }
 
         public void Finish() {

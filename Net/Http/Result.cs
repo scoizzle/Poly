@@ -66,6 +66,9 @@ namespace Poly.Net.Http {
                 }
                 Client.SendLine("Content-Length: ", this.Data.Length.ToString());
             }
+            else {
+                Client.SendLine("Content-Length: 0");
+            }
 
             this.Headers.ForEach((K, V) => {
                 Client.SendLine(K, ": ", V.ToString());
@@ -75,7 +78,7 @@ namespace Poly.Net.Http {
                 Client.Send("Set-Cookie: ");
 
                 V.ForEach((OK, OV) => {
-                    Client.Send(OK, "=", OV.ToString());
+                    Client.Send(OK, "=", OV.ToString(), ";");
                 });
 
                 Client.SendLine();

@@ -64,6 +64,22 @@ namespace Poly.Net.Http {
                 this["SessionCookieName"] = value;
             }
         }
+        public string SessionDomain {
+            get {
+                return this.Get<string>("SessionDomain", () => { return Name; });
+            }
+            set {
+                this["SessionDomain"] = value;
+            }
+        }
+        public string SessionPath {
+            get {
+                return this.Get<string>("SessionPath", () => { return "/"; });
+            }
+            set {
+                this["SessionPath"] = value;
+            }
+        }
 
         public bool SessionsEnabled {
             get {

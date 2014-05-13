@@ -7,7 +7,7 @@ using System.IO;
 using Poly.Data;
 
 namespace Poly.Script.Node {
-    public class Include : Expression {
+    public class Include : Node {
         public Engine Engine = null;
         public object Name = null;
 
@@ -33,12 +33,18 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("include", Index)) {
                 var Delta = Index += 7;
+                bool Live = false;
+
+                if (Text.Compare("_live", Delta)) {
+                    Delta += 5;
+                    Live = true;
+                }
                 ConsumeWhitespace(Text, ref Delta);
 
                 var Inc = Engine.Parse(Text, ref Delta, LastIndex);
 
                 Index = Delta;
-                if (Inc is string) {
+                if (Inc is string && !Live) {
                     return Helper.ExtensionManager.Include(Engine, Inc as string);
                 }
                 else {

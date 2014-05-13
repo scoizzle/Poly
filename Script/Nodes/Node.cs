@@ -14,12 +14,19 @@ namespace Poly.Script.Node {
         public virtual object Evaluate(jsObject Context) {
 			foreach (var Obj in this.Values) {
 				var Result = GetValue (Obj, Context);
-
-				if (Obj is Return || (Result == Obj && Count == 1))
+                
+				if (Obj is Return)
 					return Result;
 
-				if (Obj == Expression.Break || Obj == Expression.Continue)
-					return Obj;
+                if (Obj is Operator)
+                    continue;
+
+                if (Obj is Expression) {
+                    if (!(Obj is Call)) {
+                        if (Result != null)
+                            return Result;
+                    }
+                }
 
 				if (Result == Expression.Break || Result == Expression.Continue)
 					return Result;
@@ -42,6 +49,9 @@ namespace Poly.Script.Node {
 
             var Node = Obj as Node;
             if (Node != null) {
+                if (Node is Function) {
+                    return Function.GetFunctionHandler(Node as Function, Context);
+                }
                 return Node.Evaluate(Context);
             }
 

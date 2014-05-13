@@ -45,7 +45,7 @@ namespace Poly.Script.Node {
                 if (Function == null)
                     return null;
             }
-
+            
             return Function.Call(Context, Arguments, This, Engine);
         }
 

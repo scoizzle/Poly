@@ -6,7 +6,7 @@ using System.Text;
 namespace Poly.Data {
     public static class jsObjectExtension {
         public static string Template(this jsObject This, string Template) {
-            if (string.IsNullOrEmpty(Template) || This.IsEmpty)
+            if (string.IsNullOrEmpty(Template))
                 return string.Empty;
 
             Template = Template.Descape();

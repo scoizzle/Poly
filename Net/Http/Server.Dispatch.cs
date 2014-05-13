@@ -107,7 +107,7 @@ namespace Poly.Net.Http {
                 }
 
                 if (Request.Host.SessionsEnabled) {
-                    Request.Session = Session.GetSession(this, Request, Request.Host.SessionCookieName);
+                    Request.Session = Session.GetSession(this, Request, Request.Host);
                 }
 
                 try {

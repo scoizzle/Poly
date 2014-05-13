@@ -22,7 +22,12 @@ namespace Poly.Script.Node {
         }
 
         public new static object Equal(string Left, object Right) {
-            return string.Compare(Left, Right.ToString(), StringComparison.Ordinal);
+            var RightStr = Right.ToString();
+
+            if (Left.Length != RightStr.Length)
+                return false;
+
+            return StringExtensions.Compare(Left, Right.ToString(), 0);
         }
 
         public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
@@ -34,14 +39,14 @@ namespace Poly.Script.Node {
 
                 Index += String.Length + 2;
 
-                return String;
+                return String.Descape();
             }
             else if (Text[Index] == '\'') {
                 var String = Text.FindMatchingBrackets("'", "'", Index, false);
 
                 Index += String.Length + 2;
 
-                return String;
+                return String.Descape();
             }
 
             return null;

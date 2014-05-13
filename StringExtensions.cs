@@ -11,8 +11,12 @@ namespace System {
             int Count = 0, X = 0;
 
             while ((X = This.IndexOf(ToFind, X)) != -1) {
+                if ((X > 0) && (This[X - 1] == '\\'))
+                    continue;
+
                 Count++;
                 X += ToFind.Length;
+
             }
 
             return Count;
@@ -30,6 +34,7 @@ namespace System {
 
         public static bool Compare(this String This, String Possible, int Index, bool IgnoreCase = false) {
             int X = 0;
+
             for (; Index + X < This.Length && X < Possible.Length; X++) {
                 if (IgnoreCase) {
                     if (char.ToLower(This[Index + X]) != char.ToLower(Possible[X])) {
@@ -122,6 +127,9 @@ namespace System {
 
         public static int Find(this String This, char C, int Index = 0, int Last = int.MaxValue) {
             if (Index > -1) {
+                if (Last == int.MaxValue)
+                    Last = This.Length;
+
                 for (int i = Index; i < This.Length && i < Last; i++) {
                     if (i > 0 && This[i - 1] == '\\')
                         continue;
@@ -136,11 +144,52 @@ namespace System {
 
         public static int Find(this String This, string C, int Index = 0, int Last = int.MaxValue) {
             if (Index > -1) {
-                for (int i = 0; i < This.Length && i < Last; i++) {
-                    if (Compare(This, C, i, 0, C.Length)) {
+                if (C.Length == 1)
+                    return Find(This, C[0], Index, Last);
+
+                if (Last == int.MaxValue)
+                    Last = This.Length;
+
+                for (int i = Index; i < This.Length && i < Last; i++) {
+                    if (This.Compare(C, i, 0, C.Length)) {
                         return i;
                     }
                 }
+            }
+            return -1;
+        }
+
+        public static int FindLast(this String This, char C, int Index = 0) {
+            if (Index > -1) {
+                int Last = -1;
+                for (int i = Index; i < This.Length; i++) {
+                    if (i > 0 && This[i - 1] == '\\')
+                        continue;
+
+                    if (This[i] == C) {
+                        Last = i;
+                    }
+                }
+                return Last;
+            }
+            return -1;
+        }
+
+        public static int FindLast(this String This, string C, int Index = 0) {
+            if (Index > -1) {
+                if (C.Length == 1)
+                    return FindLast(This, C[0], Index);
+
+                int Last = -1;
+                for (int i = Index; i < This.Length; i++) {
+                    if (i > 0 && This[i - 1] == '\\')
+                        continue;
+
+                    if (Compare(This, C, i, 0, C.Length)) {
+                        Last = i;
+                    }
+                }
+                return Last;
             }
             return -1;
         }
@@ -177,7 +226,7 @@ namespace System {
                 Start++;
 
             for (int i = 0; i < Possible.Length; i++) {
-                int Maybe = This.IndexOf(Possible[i], Start);
+                int Maybe = This.Find(Possible[i], Start);
 
                 if (Maybe == -1)
                     continue;
@@ -268,6 +317,9 @@ namespace System {
         }
 
         public static string Descape(this String This) {
+            if (This.Find('\\') == -1)
+                return This;
+
             StringBuilder Output = new StringBuilder();
 
             for (int Index = 0; Index < This.Length; ) {
@@ -332,6 +384,14 @@ namespace System {
             );
         }
 
+        public static string SHA1(this String This) {
+            return Hash.SHA1(
+                Encoding.Default.GetBytes(
+                    This
+                )
+            );
+        }
+
         public static string SHA256(this String This) {
             return Hash.SHA256(
                 Encoding.Default.GetBytes(
@@ -378,7 +438,7 @@ namespace System {
 
             if (This != null && This != "") {
                 for (int X = 0, Y = int.MaxValue; X < Possible.Length; X++) {
-                    if ((Y = This.IndexOf(Possible[X], Start)) != -1) {
+                    if ((Y = This.Find(Possible[X], Start)) != -1) {
                         if (Y < Old) {
                             Index = X;
                             Old = Y;
@@ -397,17 +457,10 @@ namespace System {
             if (Start > -1 && (Start + Length) <= This.Length && Length > -1) {
                 var Array = new char[Length];
 
-                try {
-                    for (int Index = Start; Index < Start + Length; Index++) {
-                        Array[Index - Start] = This[Index];
-                    }
-
-                    return new string(Array);
+                for (int Index = 0; Index < Length; Index++) {
+                    Array[Index] = This[Index + Start];
                 }
-                catch { }
-                finally {
-                    Array = null;
-                }
+                return new string(Array);
             }
             return null;
         }
@@ -419,7 +472,7 @@ namespace System {
                 X = Index;
             }
             else {
-                X = This.IndexOf(Start, Index);
+                X = This.Find(Start, Index);
             }
 
             if (X == -1) {
@@ -427,7 +480,7 @@ namespace System {
             }
             else {
                 while (X > 0 && This[X - 1] == '\\') {
-                    X = This.IndexOf(Start, X + Start.Length);
+                    X = This.Find(Start, X + Start.Length);
                 }
             }
 
@@ -435,10 +488,10 @@ namespace System {
                 Y = This.Length;
             }
             else if (LastStop) {
-                Y = This.LastIndexOf(Stop);
+                Y = This.FindLast(Stop);
             }
             else {
-                Y = This.IndexOf(Stop, X + Start.Length);
+                Y = This.Find(Stop, X + Start.Length);
             }
 
             if (X == -1 || Y == -1)
@@ -457,7 +510,7 @@ namespace System {
         public static string FindMatchingBrackets(this String This, String Open, String Close, int Index = 0, bool includeBrackets = false) {
             int X, Y, Z = 1;
 
-            X = This.IndexOf(Open, Index);
+            X = This.Find(Open, Index);
 
             for (Y = X + Open.Length; Y < This.Length; Y++) {
                 if (This[Y] == '\\') {
@@ -568,27 +621,29 @@ namespace System {
         }
 
         public static string[] Split(this String This, String Seperator) {
-            List<string> Output = new List<string>();
+            int Count = CountOf(This, Seperator);
 
-            if (This.IndexOf(Seperator) == -1) {
-                Output.Add(This);
+            if (Count == 0) {
+                return new string[] { This };
             }
             else {
-                int Index, X;
-                for (Index = 0; Index < This.Length; Index += Seperator.Length) {
-                    if ((X = This.IndexOf(Seperator, Index)) == -1) {
-                        X = This.Length;
-                    }
-                    else if (This.IndexOf('\\', X - 1) < X) {
-                        X++;
-                    }
+                int Open = 0, 
+                    Close = This.Find(Seperator);
 
-                    Output.Add(This.SubString(Index, X - Index));
-                    Index = X;
+                string[] List = new string[Count + 1];
+
+                for (int Index = 0; Index < List.Length && Open != -1 && Close != -1; Index ++) {
+                    List[Index] = This.SubString(Open, Close - Open);
+
+                    Open = Close + Seperator.Length;
+                    Close = This.Find(Seperator, Open);
+
+                    if (Close == -1) {
+                        Close = This.Length;
+                    }
                 }
+                return List;
             }
-
-            return Output.ToArray();
         }
     }
 }

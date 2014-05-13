@@ -63,6 +63,9 @@ namespace Poly.Data {
 
         public void ForEach<T>(Action<string, T> Action) {
             foreach (var Pair in this) {
+                if (!(Pair.Value is T))
+                    continue;
+
                 Action(Pair.Key, (T)Pair.Value);
             }
         }

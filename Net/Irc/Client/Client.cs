@@ -13,6 +13,10 @@ namespace Poly.Net.Irc {
         public Poly.Net.Tcp.Client Connection = new Poly.Net.Tcp.Client();
         private Thread ConnectionHandlerThread = null;
 
+        public Client() {
+
+        }
+
         public bool Connected {
             get {
                 return Connection.Connected;

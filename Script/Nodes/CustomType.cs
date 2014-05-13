@@ -28,6 +28,7 @@ namespace Poly.Script.Node {
         public CustomType BaseType = null;
 
         private jsObject<Assign> Properties = new jsObject<Assign>();
+        public jsObject<Node> DynamicProperties = new jsObject<Node>();
 
         public CustomType(string Name, CustomType Base = null) {
             this.Name = Name;
@@ -51,7 +52,7 @@ namespace Poly.Script.Node {
                 return CreateInstance(Args);
             }, ArgNames);
 
-            Engine.Types.Add(Name, this);
+            Engine.Types[Name] = this;
         }
 
         public Function GetFunction(string Name) {

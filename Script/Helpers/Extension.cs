@@ -19,7 +19,7 @@ namespace Poly.Script.Helper {
 
         public static object Include(Engine Engine, string FileName) {
             if (File.Exists(FileName)) {
-                var Expression = Engine.Parse(File.ReadAllText(FileName), 0, new Node.Expression()) as Node.Expression;
+                var Expression = Engine.Parse(File.ReadAllText(FileName), 0, new Node.Node()) as Node.Node;
 
                 if (Expression != null) {
                     Engine.Includes.Add(FileName);

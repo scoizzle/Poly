@@ -12,6 +12,7 @@
     <FileAlignment>512</FileAlignment>
     <ProductVersion>12.0.0</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -29,6 +30,9 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Externalconsole>true</Externalconsole>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>idea.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -48,6 +52,7 @@
     <Compile Include="Data\jsObject.cs" />
     <Compile Include="Data\jsObject.Parser.cs" />
     <Compile Include="Data\Template.cs" />
+    <Compile Include="Event.Wrappers.cs" />
     <Compile Include="Event.cs" />
     <Compile Include="Mime.cs" />
     <Compile Include="Net\Http\Host.cs" />
@@ -75,6 +80,7 @@
     <Compile Include="Script\Expressions\Call.cs" />
     <Compile Include="Script\Expressions\Case.cs" />
     <Compile Include="Script\Expressions\Comment.cs" />
+    <Compile Include="Script\Expressions\Property.cs" />
     <Compile Include="Script\Expressions\Try.cs" />
     <Compile Include="Script\Expressions\Switch.cs" />
     <Compile Include="Script\Expressions\Include.cs" />
@@ -105,6 +111,8 @@
     <Compile Include="Script\Helpers\Library.cs" />
     <Compile Include="Script\Helpers\MemberFunction.cs" />
     <Compile Include="Script\Libraries\Console.cs" />
+    <Compile Include="Script\Libraries\Hash.cs" />
+    <Compile Include="Script\Libraries\Time.cs" />
     <Compile Include="Script\Libraries\File.cs" />
     <Compile Include="Script\Libraries\Logging.cs" />
     <Compile Include="Script\Libraries\Tcp.cs" />
@@ -146,5 +154,7 @@
   <Target Name="AfterBuild">
   </Target>
   -->
-  <ItemGroup />
+  <ItemGroup>
+    <Content Include="idea.ico" />
+  </ItemGroup>
 </Project>

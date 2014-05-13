@@ -13,6 +13,21 @@ namespace Poly.Script.Node {
             return "{" + string.Join("; ", Values) + "}";
         }
 
+        public static bool Parse(Engine Engine, string Text, ref int Index, int LastIndex, Node Storage) {
+            if (Text.Compare("{", Index)) {
+                var Open = Index + 1;
+                var Close = Index;
+
+                ConsumeExpression(Text, ref Close);
+
+                if (Engine.Parse(Text, ref Open, Close - 1, Storage) != null) {
+                    Index = Close;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public static new Expression Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;

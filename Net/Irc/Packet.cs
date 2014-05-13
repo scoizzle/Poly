@@ -186,7 +186,6 @@ namespace Poly.Net.Irc {
                 return false;
 
             foreach (var Pair in Formats) {
-
                 if (Data.Match(Pair.Value, false, this) != null) {
                     this.Format = Pair.Value;
                     this.Action = Pair.Key;

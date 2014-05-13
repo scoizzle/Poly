@@ -37,15 +37,14 @@ namespace Poly.Script.Node {
                 }
             }
             else if (Text[Delta] == '[') {
-                var String = Text.FindMatchingBrackets("[", "]", Delta, false);
-                Delta += String.Length + 2;
+                var String = Text.FindMatchingBrackets("[", "]", Delta, true);
 
                 var Obj = new jsObject() {
                     IsArray = true
                 };
 
                 if (Obj.Parse(String)) {
-                    Index = Delta;
+                    Index = Delta + String.Length;
                     return Obj;
                 }
             }

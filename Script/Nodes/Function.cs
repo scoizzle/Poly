@@ -59,12 +59,11 @@ namespace Poly.Script {
         }
 
         public static Function GetTypeConstructor(Engine Engine, string Name) {
-            CustomType Type;
+            CustomType Type = Engine.Types.Get<CustomType>(Name);
 
-            if (Engine.Types.TryGetValue(Name, out Type)) {
+            if (Type != null) {
                 return Type.Construct;
             }
-
             return null;
         }
 
@@ -240,12 +239,9 @@ namespace Poly.Script {
                 }
 
                 if (Text.Compare("{", Delta)) {
-                    Func.Arguments = Text.Substring(Open, Close - Open - 1).ParseCParams();
+                    if (Node.Expression.Parse(Engine, Text, ref Delta, LastIndex, Func)) {
+                        Func.Arguments = Text.Substring(Open, Close - Open - 1).ParseCParams();
 
-                    var Exp = Node.Expression.Parse(Engine, Text, ref Delta, LastIndex);
-
-                    if (Exp != null) {
-                        Func.Add(Exp);
                         ConsumeWhitespace(Text, ref Delta);
                         Index = Delta;
 

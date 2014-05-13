@@ -8,7 +8,15 @@ using Poly.Data;
 
 namespace Poly.Net.Irc {
     public partial class Client : User {
-        public Poly.Event.Engine Events = new Event.Engine();
+        public Poly.Event.Engine Events {
+            get {
+                return Get<Poly.Event.Engine>("Events", () => { return new Event.Engine(); });
+            }
+
+            set {
+                Set("Events", value);
+            }
+        }
 
         public void InvokeEvent(string Name, jsObject Args) {
             Events.MatchAndInvoke(Name, Args, true);

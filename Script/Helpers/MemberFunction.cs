@@ -70,11 +70,13 @@ namespace Poly.Script.Helper {
             return Types;
         }
 
-        private MethodInfo FindMethod(Type[] Types) {
+        private MethodInfo FindMethod(Type[] Types) { 
             try {
                 return Type.GetMethod(Name, Types);
             }
-            catch { return null; }
+            catch { 
+                return null; 
+            }
         }
 
         public object Invoke(object This, object[] Args) {
@@ -84,7 +86,9 @@ namespace Poly.Script.Helper {
             try {
                 return MethodInfo.Invoke(This, Args);
             }
-            catch { return null; }
+            catch { 
+                return null; 
+            }
         }
 
         public static object[] GetArguments(jsObject Context) {

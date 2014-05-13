@@ -1,14 +1,16 @@
 using System;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace Poly.Data {
     public class Hash {
         private static HashAlgorithm md5 = HashAlgorithm.Create("MD5");
         private static HashAlgorithm sha256 = HashAlgorithm.Create("SHA256");
         private static HashAlgorithm sha512 = HashAlgorithm.Create("SHA512");
+        private static HashAlgorithm sha1 = HashAlgorithm.Create("SHA1");
 
 		private static string getHash(HashAlgorithm alg, byte[] toHash) {
-			string szHash = string.Empty;
+            StringBuilder szHash = new StringBuilder();
             byte[] btHash = null;
 
             do {
@@ -19,15 +21,19 @@ namespace Poly.Data {
             } while (btHash == null);
 			
 			for (int Index=0;Index<btHash.Length;Index++){
-                szHash += btHash[Index].ToString("x2");
+                szHash.Append(btHash[Index].ToString("x2"));
 			}
-			
-			return szHash;
+
+            return szHash.ToString();
 		}
 		
 		public static string MD5(byte[] toHash) {
                 return getHash(md5, toHash);
 		}
+
+        public static string SHA1(byte[] toHash) {
+            return getHash(sha1, toHash);
+        }
 
         public static string SHA256(byte[] toHash) {
                 return getHash(sha256, toHash);

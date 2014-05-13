@@ -10,7 +10,7 @@ namespace Poly.Script.Node {
         }
 
         public override object Evaluate(Data.jsObject Context) {
-            return GetRight(Context) == null;
+            return !Bool.EvaluateNode(Right, Context);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

@@ -18,7 +18,10 @@ namespace Poly.Script.Helper {
         }
 
         public override object Evaluate(jsObject Context) {
-            return Activator.CreateInstance(Type, MemberFunction.GetArguments(Context));
+            try {
+                return Activator.CreateInstance(Type, MemberFunction.GetArguments(Context));
+            }
+            catch { return null; }
         }
 
         public static Initializer TryCreate(string TypeName) {

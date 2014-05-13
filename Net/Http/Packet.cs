@@ -148,6 +148,10 @@ namespace Poly.Net.Http {
                 for (int n = 0; n < Split.Length; n++) {
                     var Pair = Split[n].Split('=');
 
+                    if (Pair.Length != 2) {
+                        return false;
+                    }
+
                     GET[Pair[0]] = Pair[1];
                 }
             }

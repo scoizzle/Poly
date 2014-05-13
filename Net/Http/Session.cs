@@ -19,25 +19,25 @@ namespace Poly.Net.Http {
             if (Req.Client == null || !Req.Client.Connected)
                 return string.Empty;
 
-            return Req.Client.Socket.RemoteEndPoint.ToString().MD5().SHA256();
+            return Req.Client.Socket.RemoteEndPoint.ToString().MD5().SHA1();
         }
 
-        public static Session CreateSession(Server Serv, Request Req, string CookieName) {
+        public static Session CreateSession(Server Serv, Request Req, Host Info) {
             var S = new Session(Req);
             Serv.Sessions.Set(S.Id, S);
-            Req.SetCookie(CookieName, S.Id);
+            Req.SetCookie(Info.SessionCookieName, S.Id, 0, Info.SessionPath, Info.SessionDomain);
             return S;
         }
 
-        public static Session GetSession(Server Serv, Request Req, string CookieName) {
-            if (Req.Cookies.ContainsKey(CookieName)) {
-                var Id = Req.Cookies.Get<string>(CookieName);
+        public static Session GetSession(Server Serv, Request Req, Host Info) {
+            if (Req.Cookies.ContainsKey(Info.SessionCookieName)) {
+                var Id = Req.Cookies.Get<string>(Info.SessionCookieName);
 
                 if (!string.IsNullOrEmpty(Id) && Serv.Sessions.ContainsKey(Id)) {
                     return Serv.Sessions.Get<Session>(Id);
                 }
             }
-            return CreateSession(Serv, Req, CookieName);
+            return CreateSession(Serv, Req, Info);
         }
     }
 }

@@ -140,6 +140,10 @@ namespace Poly.Net {
             return true;
         }
 
+        public override string ToString() {
+            return ToString(false);
+        }
+
         public override string ToString(bool HumanFormat = false) {
             StringBuilder Output = new StringBuilder();
 

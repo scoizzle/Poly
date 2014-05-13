@@ -14,10 +14,7 @@ namespace Poly.Net.Irc {
 
         public jsObject Users {
             get {
-                if (!ContainsKey("Users"))
-                    Set("Users", new jsObject() { IsArray = true });
-
-                return Get<jsObject>("Users", (jsObject)null);
+                return Get("Users", jsObject.NewArray);
             }
         }
 
@@ -41,11 +38,7 @@ namespace Poly.Net.Irc {
 
         public jsObject Modes {
             get {
-                if (!ContainsKey("Modes")) {
-                    Set("Modes", new jsObject() { IsArray = true });
-                }
-
-                return Get<jsObject>("Modes", (jsObject)null);
+                return Get<jsObject>("Modes", jsObject.NewArray);
             }
         }
 

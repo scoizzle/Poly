@@ -61,7 +61,7 @@ namespace Poly.Net.Http {
                 }
             }
 
-            Hosts[Name] = Host;
+            Hosts[Name.Escape()] = Host;
         }
 
         public void Mime(string Ext, string Mime) {

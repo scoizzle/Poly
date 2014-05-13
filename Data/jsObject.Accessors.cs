@@ -80,22 +80,14 @@ namespace Poly.Data {
                     }
                     Current = Next;
 
-                    Open = Key.Find('.', Close + 1) + 1;
 
-                    if (Open > 0) {
-                        Close = Key.Find('.', Open);
+                    Open = Close + 1;
+                    Close = Key.Find('.', Open);
 
-                        if (Close == -1) {
-                            Close = Key.Length;
-                        }
-                    }
-                    else {
-                        Open = Close + 1;
+                    if (Close == -1) {
                         Close = Key.Length;
                     }
                 }
-
-                Key = Key.Descape();
             }
 
             return SearchForItem<T>(Key);
@@ -147,7 +139,7 @@ namespace Poly.Data {
             var Enum = GetEnumerator();
 
             while (Enum.MoveNext()) {
-                if (!typeof(T).IsAssignableFrom(Enum.Current.Value.GetType()))
+                if (!(Enum.Current.Value is T))
                     continue;
 
                 if (KeyIsWild ?
@@ -178,8 +170,8 @@ namespace Poly.Data {
 
         public void Set<T>(string Key, T Value) {
             if (StringExtensions.Contains(Key, '.')) {
-                int Open = 0, Close = Key.Find('.');
                 jsObject Current = this;
+                int Open = 0, Close = Key.Find('.');
 
                 while (Current != null && Open != -1 && Close != -1) {
                     var Sub = Key.Substring(Open, Close - Open);
@@ -202,29 +194,20 @@ namespace Poly.Data {
                     }
                     Current = Next;
 
-                    Open = Key.Find('.', Close + 1) + 1;
+                    Open = Close + 1;
+                    Close = Key.Find('.', Open);
 
-                    if (Open > 0) {
-                        Close = Key.Find('.', Open);
-
-                        if (Close == -1) {
-                            Close = Key.Length;
-                        }
-                    }
-                    else {
-                        Open = Close + 1;
+                    if (Close == -1) {
                         Close = Key.Length;
                     }
                 }
-
-                Key = Key.Descape();
             }
 
             if (Value == null) {
-                Remove(Key);
+                this.Remove(Key);
             }
             else {
-                AssignValue(Key, Value);
+                this.AssignValue(Key, Value);
             }
         }
 
@@ -250,30 +233,32 @@ namespace Poly.Data {
             }
         }
 
-        private void AssignValue<T>(string Key, T Value) {
+        public virtual void AssignValue<T>(string Key, T Value) {
             base[Key] = Value;
         }
 
-        private T SearchForItem<T>(string Key) {
+        public T SearchForItem<T>(string Key) {
             object Item;
             if (base.TryGetValue(Key, out Item)) {
-                if (Item is T) {
-                    return (T)Item;
-                }
-                else if (typeof(T).IsAssignableFrom(Item.GetType())) {
-                    return (T)Item;
-                }
+                if (Item != null) {
+                    if (Item is T) {
+                        return (T)Item;
+                    }
+                    else if (typeof(T).IsAssignableFrom(Item.GetType())) {
+                        return (T)Item;
+                    }
 
-                if (Item is string) {
-                    Func<string, object> Parser;
+                    if (Item is string) {
+                        Func<string, object> Parser;
 
-                    if (jsObject.ParserCache.TryGetValue(typeof(T), out Parser)) {
-                        object Obj = Parser((string)Item);
+                        if (jsObject.ParserCache.TryGetValue(typeof(T), out Parser)) {
+                            object Obj = Parser((string)Item);
 
-                        if (Obj != null) {
-                            AssignValue(Key, Obj);
+                            if (Obj != null) {
+                                AssignValue(Key, Obj);
 
-                            return (T)Obj;
+                                return (T)Obj;
+                            }
                         }
                     }
                 }

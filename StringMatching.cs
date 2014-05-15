@@ -6,176 +6,142 @@ using System.Text;
 using Poly.Data;
 
 namespace Poly {
-    public partial class App {
-        public static jsObject<Func<string, string>> MatchModifiers = new jsObject<Func<string, string>>() {
-            { "escape", (V) => { return V.Escape(); } },
-            { "descape", (V) => { return V.Descape(); } },
-            { "uriescape", (V) => { return Uri.EscapeDataString(V); } },
-            { "uridescape", (V) => { return Uri.UnescapeDataString(V); } },
-        };
-    }
-
     public static class StringMatching {
         private static readonly string[] WildChars = new string[] {
             "{", "*", "?", "^", "|", "\\"
         };
 
-        public static bool Compare(this String DataString, String WildString, bool IgnoreCase = false, int DataIndex = 0, int WildIndex = 0) {
-            if (string.IsNullOrEmpty(DataString) || string.IsNullOrEmpty(WildString) || (DataString.Length == 1 && WildString.Length > 1)) {
-                return false;
-            }
+        public static jsObject<Func<string, string>> Modifiers = new jsObject<Func<string, string>>() {
+            { "escape", (V) => { return V.Escape(); }},
+            { "descape", (V) => { return V.Descape(); }},
+            { "uriEscape", (V) => { return Uri.EscapeDataString(V); }},
+            { "uriDescape", (V) => { return Uri.UnescapeDataString(V); }},
+            { "toUpper", (V) => { return V.ToUpper(); }},
+            { "toLower", (V) => { return V.ToLower(); }},
+        };
 
-            String Data, Wild;
+        public static Dictionary<char, Func<char, bool>> MatchValidityCheckers = new Dictionary<char, Func<char, bool>>() {
+            { 'a', (c) => { return char.IsLetter(c); }},
+            { 'n', (c) => { return char.IsNumber(c); }},
+            { 'p', (c) => { return char.IsPunctuation(c); }},
+            { 'w', (c) => { return char.IsWhiteSpace(c); }}
+        };
+        
+        public static bool Compare(this String This, String Wild, bool IgnoreCase = false, int Index = 0) {
+            return Match(This, Wild, IgnoreCase, null, 0, false) != null;
+        }
 
-            if (WildString == "*")
-                return true;
+        public static jsObject Match(this String Data, String Wild, bool IgnoreCase = false, jsObject Storage = null, int Index = 0, bool Store = true) {
+            int Offset = 0, DataLen = Data.Length, Wildlen = Wild.Length;
+            return Match(Data, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, DataLen, Wildlen);
+        }
 
-            if (IgnoreCase) {
-                Data = DataString.ToLower();
-                Wild = WildString.ToLower();
-            }
-            else {
-                Data = DataString;
-                Wild = WildString;
-            }
-            
-            bool Optional = false;
-            while (DataIndex < Data.Length && WildIndex < Wild.Length) {
-                if (Wild[WildIndex] == '\\') {
-                    WildIndex++;
+        private static jsObject Match(this String DataString, String WildString, ref int Index, ref int Offset, bool IgnoreCase = false, jsObject Storage = null, bool Store = true, int DataLen = 0, int WildLen = 0) {
+            if (string.IsNullOrEmpty(DataString) || string.IsNullOrEmpty(WildString))
+                return null;
+
+            if (WildString.Length == 1 && DataString.Length > 1 && WildString != "*")
+                return null;
+
+            if (Storage == null)
+                Storage = new jsObject();
+
+            string This = IgnoreCase ?
+                DataString.ToLower() :
+                DataString;
+
+            string Wild = IgnoreCase ?
+                WildString.ToLower() :
+                WildString;
+
+            while (Index < DataLen && Offset < WildLen) {
+                if (Wild[Offset] == '\\')
+                    Offset++;
+
+                if (This[Index] == Wild[Offset] || Wild[Offset] == '?') {
+                    Index++;
+                    Offset++;
                 }
+                else if (Wild[Offset] == '*') {
+                    Offset++;
 
-                if (Wild[WildIndex] == '{' && (WildIndex > 0 ? Wild[WildIndex - 1] != '\\' : true)) {
-                    string Name, Value;
-                    int NameStart = WildIndex + 1, NameEnd = WildIndex;
-
-                    if (!WildString.FindMatchingBrackets("{", "}", WildIndex, ref NameEnd))
-                        return false;
-
-                    WildIndex = NameEnd + 1;
-
-                    if (Wild.Compare("\\", WildIndex))
-                        WildIndex++;
-
-                    int SubIndex = Wild.FirstPossibleIndex(WildIndex, WildChars);
-
-                    if (SubIndex == -1) {
-                        SubIndex = Wild.Length;
-                    }
-
-                    if (SubIndex == WildIndex || WildIndex == Wild.Length) {
-                        SubIndex = Data.Length;
-                    }
-                    else {
-                        SubIndex = Data.FindSubString(Wild, DataIndex, WildIndex, SubIndex - WildIndex);
-                    }
-
-                    if (SubIndex == -1) {
-                        if (Optional)
-                            break;
-
-                        return false;
-                    }
-
-                    Name = WildString.SubString(NameStart, NameEnd - NameStart);
-                    Value = Data.SubString(DataIndex, SubIndex - DataIndex);
-
-                    DataIndex = SubIndex;
-                }
-                else if (Wild[WildIndex] == '(' && Data[DataIndex] == '(') {
-                    var SubData = Data.FindMatchingBrackets("(", ")", DataIndex);
-                    var SubWild = Wild.FindMatchingBrackets("(", ")", WildIndex);
-
-                    if (SubData.Match(SubWild, IgnoreCase) == null) {
-                        if (Optional) {
-                            WildIndex += SubWild.Length + 2;
-                            DataIndex += SubData.Length + 2;
-                        }
-                        else {
-                            return false;
-                        }
-                    }
-
-                    DataIndex += SubData.Length + 2;
-                    WildIndex += SubWild.Length + 2;
-                }
-                else if (Wild[WildIndex] == Data[DataIndex] || Wild[WildIndex] == '?') {
-                    DataIndex++;
-                    WildIndex++;
-                }
-                else if (Wild[WildIndex] == '|') {
-                    Optional = !Optional;
-                    WildIndex++;
-                }
-                else if (Wild[WildIndex] == '*') {
-                    WildIndex++;
-
-                    if (WildIndex == Wild.Length) {
+                    if (Offset == WildLen)
                         break;
-                    }
-                    else if (WildIndex + 1 == Wild.Length) {
-                        if (Data[Data.Length - 1] == Wild[WildIndex] || Optional) {
-                            break;
+
+                    if (Wild[Offset] == '\\')
+                        Offset++;
+
+                    int Sub = Index, SubW = Offset;
+
+                    if (!FindNextSection(This, Wild, ref Sub, ref SubW))
+                        break;
+
+                    Index = Sub;
+                    Offset = SubW;
+                }
+                else if (Wild[Offset] == '{') {
+                    int NameEnd = Offset;
+
+                    if (Wild.FindMatchingBrackets("{", "}", ref Offset, ref NameEnd)) {
+                        int Sub = Index, SubW = NameEnd + 1;
+
+                        if (FindNextSection(This, Wild, ref Sub, ref SubW)) {
+                            int Mod = Wild.Find(':', Offset, NameEnd);
+                            int ModLen = -1;
+
+                            if (Mod == -1)
+                                Mod = NameEnd;
+                            else
+                                ModLen = Wild.Find(':', Mod + 1, NameEnd);
+
+                            if (ModLen == -1)
+                                ModLen = NameEnd;
+
+                            var Name = WildString.SubString(Offset, Mod - Offset);
+                            var Value = DataString.SubString(Index, Sub - Index);
+
+                            if (Mod != NameEnd) {
+                                if (ModLen != NameEnd) {
+                                    Value = ModifyMatch(WildString, ModLen + 1, Value);
+                                }
+
+                                if (!IsValidMatch(Value, Wild.SubString(Mod + 1, ModLen - Mod))) {
+                                    break;
+                                }
+                            }
+
+                            if (Store) {
+                                Storage.Set<string>(Name, Value);
+                            }
+                            Offset = SubW;
+                            Index = Sub;
                         }
-                        return false;
                     }
-                    else if (Wild[WildIndex] == '\\') {
-                        WildIndex++;
-                    }
-
-                    var SubIndex = Wild.FirstPossibleIndex(WildIndex, WildChars);
-
-                    if (SubIndex == -1)
-                        SubIndex = Wild.Length;
-
-                    var Value = Wild.SubString(WildIndex, SubIndex - WildIndex);
-
-                    if (SubIndex == WildIndex || WildIndex == Wild.Length) {
-                        SubIndex = Data.Length;
-                    }
-                    else {
-                        SubIndex = Data.IndexOf(Value, DataIndex);
-                    }
-
-                    if (SubIndex == -1) {
-                        if (Optional)
-                            break;
-
-                        return false;
-                    }
-
-                    DataIndex = SubIndex;
                 }
-                else if (Wild[WildIndex] == '^') {
-                    while (DataIndex < Data.Length && char.IsWhiteSpace(Data[DataIndex])) {
-                        DataIndex++;
-                    }
-                    if (Wild[WildIndex + 1] == '\\') {
-                        WildIndex++;
-                    }
-                    if (Data[DataIndex] != Wild[WildIndex + 1]) {
-                        if (Optional)
-                            break;
+                else if (Wild[Offset] == '[') {
+                    int NameEnd = Offset;
 
-                        return false;
+                    if (Wild.FindMatchingBrackets("[", "]", ref Offset, ref NameEnd)) {
+                        Match(This, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, DataLen - Index, NameEnd);
+                        Offset = NameEnd + 1;
                     }
-                    WildIndex++;
                 }
-                else {
-                    return false;
+                else if (Wild[Offset] == '^') {
+                    while (Index < This.Length && char.IsWhiteSpace(This[Index]))
+                        Index++;
+                    Offset++;
                 }
+                else break;
             }
 
-            if (DataIndex == Data.Length && (Wild.Length - WildIndex) < 3) {
-                if (Wild[Wild.Length - 1] == '*')
-                    return true;
-            }
+            if (Offset != WildLen)
+                return null;
 
-            return DataIndex == Data.Length && WildIndex == Wild.Length;
+            return Storage;
         }
 
         private static bool FindNextSection(String This, String Wild, ref int Index, ref int WildIndex) {
-            int NextToken = Wild.FirstPossibleIndex(WildIndex, WildChars); 
+            int NextToken = Wild.FirstPossibleIndex(WildIndex, WildChars);
 
             if (NextToken == -1) {
                 NextToken = Wild.Length;
@@ -198,111 +164,42 @@ namespace Poly {
             return true;
         }
 
-        public static jsObject Match(this String DataString, String WildString, bool IgnoreCase = false, jsObject Storage = null, int Index = 0, int WildIndex = 0, bool Store = true) {
-            if (string.IsNullOrEmpty(DataString) || string.IsNullOrEmpty(WildString)) {
-                return null;
+        private static bool IsValidMatch(String Data, String Limitations) {
+            var LimitLength = Limitations.Find('{');
+
+            if (LimitLength != -1) {
+                var LenStr = Limitations.FindMatchingBrackets("{", "}", LimitLength, false);
+                if (LenStr.Contains(',')) {
+                    var MinLen = LenStr.Substring("", ",").ToInt();
+                    var MaxLen = LenStr.Substring(",").ToInt();
+
+                    if (Data.Length < MinLen || Data.Length > MaxLen)
+                        return false;
+                }
+                else {
+                    if (LenStr.ToInt() != Data.Length)
+                        return false;
+                }
+            }
+            else {
+                LimitLength = Limitations.Length;
             }
 
-            if (WildString.Length == 1 && DataString.Length > 1 && WildString != "*")
-                return null;
-
-            if (Storage == null)
-                Storage = new jsObject();
-
-            string This = IgnoreCase ?
-                DataString.ToLower() :
-                DataString;
-
-            string Wild = IgnoreCase ?
-                WildString.ToLower() :
-                WildString;
-
-            bool Optional = false;
-
-            for (; Index < This.Length && WildIndex < Wild.Length;) {
-                if (Wild[WildIndex] == '\\')
-                    WildIndex ++;
-
-                if (Wild[WildIndex] == '|') {
-                    Optional = true;
-                    WildIndex++;
-                    continue;
-                }
-
-                if (This[Index] == Wild[WildIndex] || Wild[WildIndex] == '?') {
-                    Index++;
-                    WildIndex++;
-                    continue;
-                }
-                else
-                if (Wild[WildIndex] == '*') {
-                    WildIndex++;
-
-                    if (WildIndex == Wild.Length)
-                        break;
-
-                    if (Wild[WildIndex] == '\\')
-                        WildIndex++;
-
-                    int Sub = Index, SubW = WildIndex;
-
-                    if (FindNextSection(This, Wild, ref Sub, ref SubW)) {
-                        Index = Sub;
-                        WildIndex = SubW;
-                        continue;
+            for (int i = 0; i < Data.Length; i++) {
+                for (int y = 0; y < LimitLength; y++) {
+                    if (MatchValidityCheckers.ContainsKey(Limitations[y])) {
+                        if (!MatchValidityCheckers[Limitations[y]](Data[i]))
+                            return false;
                     }
                 }
-                else
-                if (Wild[WildIndex] == '{') {
-                    int NameEnd = WildIndex;
-
-                    if (Wild.FindMatchingBrackets("{", "}", WildIndex, ref NameEnd)) {
-
-                        WildIndex++;
-
-                        int Sub = Index, SubW = NameEnd + 1;
-
-                        if (FindNextSection(This, Wild, ref Sub, ref SubW)) {
-                            int Mod = Wild.Find(':', WildIndex, NameEnd);
-
-                            if (Mod == -1)
-                                Mod = NameEnd;
-
-                            if (Store) {
-                                var Name = WildString.SubString(WildIndex, Mod - WildIndex);
-                                var Value = DataString.SubString(Index, Sub - Index);
-
-                                if (Mod != NameEnd) {
-                                    Value = ModifyMatch(Wild, Mod + 1, Value);
-                                }
-
-                                Storage.Set<string>(Name, Value);
-                            }
-                            WildIndex = SubW;
-                            Index = Sub;
-                            continue;
-                        }
-                    }
-                }
-                else
-                if (Wild[WildIndex] == '^') {
-                    while (Index < This.Length && char.IsWhiteSpace(This[Index]))
-                        Index++;
-
-                    continue;
-                }
-
-                if (Optional)
-                    break;
-
-                return null;
             }
 
-            return Storage;
-        }
+            return true;
         
+        }
+
         private static string ModifyMatch(string Key, int Index, string Value) {
-            App.MatchModifiers.ForEach((K, V) =>{
+            Modifiers.ForEach((K, V) => {
                 if (Key.Compare(K, Index)) {
                     Value = V(Value);
                 }

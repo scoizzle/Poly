@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 
 namespace Poly.Script.Libraries {
-    class Logging : Library {
+    public class Logging : Library {
         public Logging() {
             RegisterStaticObject("Log", this);
 

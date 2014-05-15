@@ -153,7 +153,7 @@ namespace Poly.Script.Node {
         public static Variable Parse(Engine Engine, string Text, int Index, int LastIndex = -1) {
             return Parse(Engine, Text, ref Index, LastIndex == -1 ? Text.Length - 1 : LastIndex);
         }
-
+        
         public static new Variable Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
@@ -167,7 +167,7 @@ namespace Poly.Script.Node {
                     if (Open >= Delta)
                         return null;
 
-                    var Name = Text.Substring(Open, Delta - Open);
+                    var Name = Text.SubString(Open, Delta - Open);
 
                     if (Name.Compare("Static")) {
                         Var.IsStatic = true;

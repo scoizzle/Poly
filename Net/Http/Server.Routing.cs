@@ -110,9 +110,9 @@ namespace Poly.Net.Http {
                 Result.Headers.Set(Name, Value);
             }
 
-            Result.Data = Encoding.Default.GetBytes(
+            Request.Print(Request.Client.Encoding.GetBytes(
                 Proc.StandardOutput.ReadToEnd()
-            );
+            ));
 
             if (Result.Headers.ContainsKey("Status")) {
                 Result.Status = Result.Headers.Get<string>("Status");

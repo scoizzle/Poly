@@ -20,6 +20,7 @@ namespace Poly.Net.Irc {
                         Packet
                     );
                 }
+                Thread.Sleep(10);
             } while (Connected);
 
             App.Log.Warning("Connection lost.");

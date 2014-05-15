@@ -136,20 +136,17 @@ namespace Poly.Data {
         }
 
         public T Search<T>(string Key, bool IgnoreCase = true, bool KeyIsWild = false) {
-            var Enum = GetEnumerator();
+            T Value = default(T);
 
-            while (Enum.MoveNext()) {
-                if (!(Enum.Current.Value is T))
-                    continue;
-
-                if (KeyIsWild ?
-                    Key.Compare(Enum.Current.Key, IgnoreCase) :
-                    Enum.Current.Key.Compare(Key, IgnoreCase)) {
-                    return (T)Enum.Current.Value;
+            ForEach<T>((K, V) => {
+                if (KeyIsWild ? Key.Compare(K, IgnoreCase) : K.Compare(Key, IgnoreCase)) {
+                    Value = V;
+                    return true;
                 }
-            }           
+                return false;
+            });
 
-            return default(T);
+            return Value;
         }
 
         public jsObject getObject(string Key) {

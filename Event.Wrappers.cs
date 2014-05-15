@@ -8,8 +8,14 @@ using Poly.Data;
 namespace Poly {
     public partial class Event {
         public static Handler Wrapper(Handler Func, params object[] ArgPairs) {
+            if (Func == null)
+                return null;
+
             return (Args) => {
                 for (int i = 0; i < ArgPairs.Length / 2; i += 2) {
+			if(Func == null)
+				return null;
+
                     Args[ArgPairs[i].ToString()] = ArgPairs[i + 1];
                 }
 
@@ -18,18 +24,27 @@ namespace Poly {
         }
 
         public static Handler Wrapper(Action Func) {
+            if (Func == null)
+                return null;
+
             return (Args) => {
                 Func();
                 return null;
             };
         }
         public static Handler Wrapper(Func<object> Func) {
+            if (Func == null)
+                return null;
+
             return (Args) => {
                 return Func();
             };
         }
 
         public static Handler Wrapper<T1>(Action<T1> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[1];
 
@@ -40,6 +55,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1>(Func<T1, object> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[1];
 
@@ -50,6 +68,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2>(Action<T1, T2> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[2];
 
@@ -61,6 +82,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2>(Func<T1, T2, object> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[2];
 
@@ -72,6 +96,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3>(Action<T1, T2, T3> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[3];
 
@@ -84,6 +111,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3>(Func<T1, T2, T3, object> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[3];
 
@@ -96,6 +126,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3, T4>(Action<T1, T2, T3, T4> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[4];
 
@@ -109,6 +142,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3, T4>(Func<T1, T2, T3, T4, object> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[4];
 
@@ -122,6 +158,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3, T4, T5>(Action<T1, T2, T3, T4, T5> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[5];
 
@@ -136,6 +175,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3, T4, T5>(Func<T1, T2, T3, T4, T5, object> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[5];
 
@@ -150,6 +192,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3, T4, T5, T6>(Action<T1, T2, T3, T4, T5, T6> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[6];
 
@@ -165,6 +210,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3, T4, T5, T6>(Func<T1, T2, T3, T4, T5, T6, object> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[6];
 
@@ -180,6 +228,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3, T4, T5, T6, T7>(Action<T1, T2, T3, T4, T5, T6, T7> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[7];
 
@@ -196,6 +247,9 @@ namespace Poly {
         }
 
         public static Handler Wrapper<T1, T2, T3, T4, T5, T6, T7>(Func<T1, T2, T3, T4, T5, T6, T7, object> Func, params string[] ArgNames) {
+			if(Func == null)
+				return null;
+
             return (Args) => {
                 object[] Arguments = new object[7];
 

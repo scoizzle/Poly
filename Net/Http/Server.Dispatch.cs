@@ -13,7 +13,7 @@ namespace Poly.Net.Http {
 
     public partial class Server {
         public static void StaticFileHandler(string FileName, Request Request) {
-            Request.Result.Data = File.ReadAllBytes(FileName);
+            Request.Print(File.ReadAllBytes(FileName));
 
             Request.Result.MIME = Server.GetMime(
                 Request.Host.GetExtension(FileName)
@@ -36,8 +36,8 @@ namespace Poly.Net.Http {
                 }
             }
 
+            Request.Print(Cache.Data);
             Request.Result.MIME = Cache.MIME;
-            Request.Result.Data = Cache.Data;
             Request.Result.Headers["Last-Modified"] = Cache.LastWriteTime.HttpTimeString();
         }
 

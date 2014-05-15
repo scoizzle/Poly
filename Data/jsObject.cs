@@ -7,6 +7,8 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject : Dictionary<string, object> {
+        public static jsObject Null = null;
+
         public new object this[string Key] {
             get {
                 return Get<object>(Key);
@@ -68,6 +70,17 @@ namespace Poly.Data {
 
                 Action(Pair.Key, (T)Pair.Value);
             }
+        }
+
+        public bool ForEach<T>(Func<string, T, bool> Action) {
+            foreach (var Pair in this) {
+                if (!(Pair.Value is T))
+                    continue;
+
+                if (Action(Pair.Key, (T)Pair.Value))
+                    return true;
+            }
+            return false;
         }
 
         public override string ToString() {

@@ -11,6 +11,8 @@ using Poly.Script;
 
 namespace Poly.Net.Http {
     public partial class Request : jsObject {
+        private int PrintedCount = 0;
+
         public bool Handled {
             get {
                 return Get<bool>("Handled", false);
@@ -46,7 +48,7 @@ namespace Poly.Net.Http {
                 Set("Result", value);
             }
         }
-
+        
         public Host Host = null;
 
         public Session Session {
@@ -58,11 +60,13 @@ namespace Poly.Net.Http {
             }
         }
 
-        public StringBuilder Output = new StringBuilder();
+        public MemoryStream Data { get; private set; }
 
         public Request(Client Client, Packet Packet) {
             this.Client = Client;
             this.Packet = Packet;
+
+            Data = new MemoryStream();
         }
 
         public Data.jsObject Get {
@@ -83,10 +87,18 @@ namespace Poly.Net.Http {
             }
         }
 
+        public void Print(byte[] Bytes) {
+            if (Bytes == null)
+                return;
+
+            PrintedCount += Bytes.Length;
+            Data.Write(Bytes, 0, Bytes.Length);
+        }
+
         public void Print(string txt) {
-            if (!string.IsNullOrEmpty(txt)) {
-                Output.Append(txt);
-            }
+            var Bytes = Client.Encoding.GetBytes(txt);
+
+            Print(Bytes);
         }
 
         public void Print(string FileName, jsObject Data) {
@@ -108,21 +120,54 @@ namespace Poly.Net.Http {
 
         }
 
+        public void SendReply() {
+            if (!Client.Connected || Handled)
+                return;
+
+            Client.SendLine("HTTP/1.1 ", Result.Status);
+            Client.SendLine("Date: ", DateTime.UtcNow.HttpTimeString());
+
+            if (this.Data != null && Data.Length > 0) {
+                if (Result.Headers.Search<string>("content-type") == null) {
+                    Client.SendLine("Content-Type: ", Result.MIME);
+                }
+                Client.SendLine("Content-Length: ", Data.Length.ToString());
+            }
+            else {
+                Client.SendLine("Content-Length: 0");
+            }
+
+            Result.Headers.ForEach((K, V) => {
+                Client.SendLine(K, ": ", V.ToString());
+            });
+
+            Result.Cookies.ForEach<jsObject>((K, V) => {
+                Client.Send("Set-Cookie: ");
+
+                V.ForEach((OK, OV) => {
+                    Client.Send(OK, "=", OV.ToString(), ";");
+                });
+
+                Client.SendLine();
+            });
+
+            Client.SendLine();
+        }
+
         public void Finish() {
+            if (Handled)
+                return;
+
             if (Packet.Connection == "keep-alive") {
                 Result.Headers["Connection"] = "Keep-Alive";
                 Result.Headers["Keep-Alive"] = "timeout=15, max=99";
             }
 
-            if (Output.Length > 0) {
-                Result.Data = Client.Encoding.GetBytes(Output.ToString());
-            }
+            SendReply();
 
-            Result.SendReply(Client);
-
-            if (Result.Data != null && Result.Data.Length > 0) {
-                Client.Send(Result.Data);
-            }
+            Data.Position = 0;
+            Data.WriteTo(Client.GetStream());
+            Data.Close();
 
             Handled = true;
         }

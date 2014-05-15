@@ -26,13 +26,11 @@ namespace Poly.Script.Node {
             var Delta = Index;
 
             if (Text[Delta] == '{') {
-                var String = Text.FindMatchingBrackets("{", "}", Delta, false);
-                Delta += String.Length + 2;
-
+                var String = Text.FindMatchingBrackets("{", "}", Delta, true);
                 var Obj = new jsObject();
 
-                if (Obj.Parse(String)) {
-                    Index = Delta;
+                if (jsObject.Parse(String, 0, Obj)) {
+                    Index = Delta + String.Length;
                     return Obj;
                 }
             }
@@ -43,7 +41,7 @@ namespace Poly.Script.Node {
                     IsArray = true
                 };
 
-                if (Obj.Parse(String)) {
+                if (jsObject.Parse(String, 0, Obj)) {
                     Index = Delta + String.Length;
                     return Obj;
                 }

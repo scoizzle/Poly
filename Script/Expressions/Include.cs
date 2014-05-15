@@ -41,7 +41,7 @@ namespace Poly.Script.Node {
                 }
                 ConsumeWhitespace(Text, ref Delta);
 
-                var Inc = Engine.Parse(Text, ref Delta, LastIndex);
+                var Inc = Script.Node.String.Parse(Engine, Text, ref Delta, LastIndex);
 
                 Index = Delta;
                 if (Inc is string && !Live) {

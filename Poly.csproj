@@ -46,7 +46,6 @@
   <ItemGroup>
     <Compile Include="Application.cs" />
     <Compile Include="Application.Logging.cs" />
-    <Compile Include="Data\DynamicObject.cs" />
     <Compile Include="Data\Hash.cs" />
     <Compile Include="Data\jsObject.Accessors.cs" />
     <Compile Include="Data\jsObject.cs" />
@@ -80,7 +79,6 @@
     <Compile Include="Script\Expressions\Call.cs" />
     <Compile Include="Script\Expressions\Case.cs" />
     <Compile Include="Script\Expressions\Comment.cs" />
-    <Compile Include="Script\Expressions\Property.cs" />
     <Compile Include="Script\Expressions\Try.cs" />
     <Compile Include="Script\Expressions\Switch.cs" />
     <Compile Include="Script\Expressions\Include.cs" />
@@ -139,7 +137,8 @@
     <Compile Include="Script\Types\Integer.cs" />
     <Compile Include="Script\Types\Object.cs" />
     <Compile Include="Script\Types\String.cs" />
-    <Compile Include="StringExtensions.cs" />
+    <Compile Include="String.Conversions.cs" />
+    <Compile Include="String.Extensions.cs" />
     <Compile Include="Net\Irc\Client\Client.cs" />
     <Compile Include="Net\Irc\Client\Events.cs" />
     <Compile Include="Net\Irc\Client\Functions.cs" />

@@ -22,16 +22,6 @@ namespace System {
             return Count;
         }
 
-        public static bool IsBoolean(this String This) {
-            bool Value = false;
-            return bool.TryParse(This, out Value);
-        }
-
-        public static bool IsNumeric(this String This) {
-            double Value = 0;
-            return double.TryParse(This, out Value);
-        }
-
         public static bool Compare(this String This, String Possible, int Index, bool IgnoreCase = false) {
             int X = 0;
 
@@ -63,16 +53,7 @@ namespace System {
             return X == ContainsLength;
         }
 
-        public static bool ToBool(this String This) {
-            bool Out = false;
-
-            if (Boolean.TryParse(This, out Out))
-                return Out;
-
-            return false;
-        }
-
-        public static bool FindMatchingBrackets(this String This, String Open, String Close, int Index, ref int End, bool IncludeBrackets = false) {
+        public static bool FindMatchingBrackets(this String This, String Open, String Close, ref int Index, ref int End, bool IncludeBrackets = false) {
             int X, Y, Z = 1;
 
             X = This.IndexOf(Open, Index);
@@ -83,23 +64,15 @@ namespace System {
                     continue;
                 }
 
-                if (This.Compare(Open, Y)) {
-                    if (Open == Close) {
-                        break;
-                    }
-                    else {
-                        Z++;
-                        continue;
-                    }
-                }
-
                 if (This.Compare(Close, Y)) {
                     Z--;
-
-                    if (Z == 0) {
-                        break;
-                    }
                 }
+                else if (This.Compare(Open, Y)) {
+                    Z++;
+                }
+
+                if (Z == 0)
+                    break;
             }
 
             if (X == -1 || Y == -1)
@@ -112,17 +85,9 @@ namespace System {
                 X += Open.Length;
             }
 
+            Index = X;
             End = Y;
             return true;
-        }
-
-        public static int ToInt(this String This) {
-            int Out = 0;
-
-            if (Int32.TryParse(This, out Out))
-                return Out;
-
-            return 0;
         }
 
         public static int Find(this String This, char C, int Index = 0, int Last = int.MaxValue) {
@@ -265,174 +230,6 @@ namespace System {
             }
         }
 
-        public static double ToDouble(this String This) {
-            double Out = double.NaN;
-
-            if (double.TryParse(This, out Out))
-                return Out;
-
-            return double.NaN;
-        }
-
-        public static string Escape(this String This) {
-            StringBuilder Output = new StringBuilder();
-
-            for (int Index = 0; Index < This.Length; Index++) {
-                switch (This[Index]) {
-                    default:
-                        Output.Append(This[Index]);
-                        continue;
-
-                    case '\r':
-                        Output.Append("\\r");
-                        break;
-                    case '\n':
-                        Output.Append("\\n");
-                        break;
-                    case '\t':
-                        Output.Append("\\t");
-                        break;
-                    case '\f':
-                        Output.Append("\\f");
-                        break;
-                    case '"':
-                        Output.Append("\\\"");
-                        break;
-                    case '\'':
-                        Output.Append("\\'");
-                        break;
-                    case '\\':
-                        Output.Append("\\\\");
-                        break;
-                    case '/':
-                        Output.Append("\\/");
-                        break;
-                    case '.':
-                        Output.Append("\\.");
-                        break;
-                }
-            }
-
-            return Output.ToString();
-        }
-
-        public static string Descape(this String This) {
-            if (This.Find('\\') == -1)
-                return This;
-
-            StringBuilder Output = new StringBuilder();
-
-            for (int Index = 0; Index < This.Length; ) {
-                if (This.Length - (Index + 2) < 0) {
-                    Output.Append(This[Index]);
-                    break;
-                }
-
-                switch (This.SubString(Index, 2)) {
-                    default:
-                        Output.Append(This[Index]);
-                        Index++;
-                        continue;
-                    case "\\r":
-                        Output.Append('\r');
-                        break;
-                    case "\\n":
-                        Output.Append('\n');
-                        break;
-                    case "\\t":
-                        Output.Append("\t");
-                        break;
-                    case "\\f":
-                        Output.Append("\f");
-                        break;
-                    case "\\\"":
-                        Output.Append("\"");
-                        break;
-                    case "\\\'":
-                        Output.Append("\'");
-                        break;
-                    case "\\\\":
-                        Output.Append("\\");
-                        break;
-                    case "\\/":
-                        Output.Append("/");
-                        break;
-                    case "\\.":
-                        Output.Append(".");
-                        break;
-                    case "\\u":
-                        string Code = This.SubString(Index + 2, 4);
-
-                        char Character = Convert.ToChar(Int32.Parse(Code, Globalization.NumberStyles.HexNumber));
-
-                        Output.Append(Character);
-
-                        Index += 5;
-                        continue;
-                }
-                Index += 2;
-            }
-
-            return Output.ToString();
-        }
-
-        public static string MD5(this String This) {
-            return Hash.MD5(
-                Encoding.Default.GetBytes(
-                    This
-                )
-            );
-        }
-
-        public static string SHA1(this String This) {
-            return Hash.SHA1(
-                Encoding.Default.GetBytes(
-                    This
-                )
-            );
-        }
-
-        public static string SHA256(this String This) {
-            return Hash.SHA256(
-                Encoding.Default.GetBytes(
-                    This
-                )
-            );
-        }
-
-        public static string SHA512(this String This) {
-            return Hash.SHA512(
-                Encoding.Default.GetBytes(
-                    This
-                )
-            );
-        }
-
-        public static string Base64Encode(this String This) {
-            return Convert.ToBase64String(
-                Encoding.Default.GetBytes(
-                    This
-                )
-            );
-        }
-
-        public static string Base64Decode(this String This) {
-            return Encoding.Default.GetString(
-                Convert.FromBase64String(
-                    This
-                )
-            );
-        }
-
-        public static string x(this String This, int Count) {
-            var Output = new StringBuilder();
-
-            for (; Count > 0; Count--)
-                Output.Append(This);
-
-            return Output.ToString();
-        }
-
         public static string FirstPossible(this String This, int Start = 0, params String[] Possible) {
             int Index = int.MaxValue, Old = int.MaxValue;
 
@@ -508,58 +305,15 @@ namespace System {
         }
 
         public static string FindMatchingBrackets(this String This, String Open, String Close, int Index = 0, bool includeBrackets = false) {
-            int X, Y, Z = 1;
+            int Offset = 0;
 
-            X = This.Find(Open, Index);
-
-            for (Y = X + Open.Length; Y < This.Length; Y++) {
-                if (This[Y] == '\\') {
-                    Y++;
-                    continue;
-                }
-
-                if (This.Compare(Open, Y)) {
-                    if (Open == Close) {
-                        break;
-                    }
-                    else {
-                        Z++;
-                        continue;
-                    }
-                }
-
-                if (This.Compare(Close, Y)) {
-                    Z--;
-
-                    if (Z == 0) {
-                        break;
-                    }
-                }
+            if (FindMatchingBrackets(This, Open, Close, ref Index, ref Offset, includeBrackets)) {
+                return SubString(This, Index, Offset - Index);
             }
 
-            if (X == -1 || Y == -1)
-                return "";
-
-            if (includeBrackets) {
-                Y += Close.Length;
-            }
-            else {
-                X += Open.Length;
-            }
-
-            return This.SubString(X, Y - X);
+            return "";
         }
-
-        public static string ToString(this String This, params object[] Arguments) {
-            if (string.IsNullOrEmpty(This))
-                return "";
-            return string.Format(This, Arguments);
-        }
-
-        public static jsObject ToJsObject(this String This) {
-            return (jsObject)(This);
-        }
-
+        
         public static string[] ParseCParams(this String This, String Open = "(", String Close = ")") {
             int X;
             List<string> Output = new List<string>();
@@ -568,7 +322,7 @@ namespace System {
                 while (X < This.Length && char.IsWhiteSpace(This[X]))
                     X++;
 
-                char Next = '\x00';
+                char Next;
                 StringBuilder Arg = new StringBuilder();
 
                 while (X < This.Length && (Next = This[X]) != ',') {

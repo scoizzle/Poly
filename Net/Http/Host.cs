@@ -74,7 +74,7 @@ namespace Poly.Net.Http {
         }
         public string SessionPath {
             get {
-                return this.Get<string>("SessionPath", () => { return "/"; });
+                return this.Get<string>("SessionPath", () => { return ""; });
             }
             set {
                 this["SessionPath"] = value;

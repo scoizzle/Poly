@@ -8,7 +8,7 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject : Dictionary<string, object> {
-        private object getObjectValue(string val) {
+        private static object getObjectValue(string val) {
             int ntVal;
             if (int.TryParse(val, out ntVal)) {
                 return ntVal;
@@ -37,142 +37,110 @@ namespace Poly.Data {
             return val;
         }
 
-        private bool _Raw(string Text, ref int Index, params string[] Key) {
+        private static object _Raw(string Text, ref int Index, int LastIndex) {
             var Token = Text.FirstPossible(Index, ",", "}", "]");
             var SubIndex = Text.IndexOf(Token, Index);
 
             if (SubIndex == -1 || SubIndex == Index)
-                SubIndex = Text.Length;
+                SubIndex = LastIndex;
 
             var Sub = Text.Substring(Index, SubIndex - Index);
 
-            Set(Key, getObjectValue(Sub.Trim()));
-
             Index += Sub.Length;
 
-            return true;
+            return getObjectValue(Sub.Trim());
         }
 
-        private bool _String(string Text, ref int Index, params string[] Key) {
-            if (Text[Index] == '"') {
-                var Sub = Text.FindMatchingBrackets("\"", "\"", Index);
+        private static string _String(string Text, ref int Index, int LastIndex) {
+            if (Text.Compare("'", Index)) {
+                var Value = Text.FindMatchingBrackets("'", "'", Index);
 
-                Index += Sub.Length + 2;
+                Index += Value.Length + 2;
 
-                Set(Key, Sub.Descape());
-            }
-            else if (Text[Index] == '\'') {
-                var Sub = Text.FindMatchingBrackets("'", "'", Index);
-
-                Index += Sub.Length + 2;
-
-                Set(Key, Sub.Descape());
-            }
-            else {
-                return false;
+                return Value.Descape();
             }
 
-            return true;
+            if (Text.Compare("\"", Index)) {
+                var Value = Text.FindMatchingBrackets("\"", "\"", Index);
+
+                Index += Value.Length + 2;
+
+                return Value.Descape();
+            }
+
+            return null;
         }
 
-        private bool _Array(string Text, ref int Index, params string[] Key) {
-            var SubIndex = 0;
-            var This = default(jsObject);
+        private static jsObject _Array(string Text, ref int Index, int LastIndex, jsObject Storage) {
+            int Open = Index, Close = Index;
 
-            if (Key.Length == 0) {
-                This = this;
-            }
-            else {
-                This = new jsObject() {
-                    IsArray = true
-                };
-
-                Set(Key, This);
-            }
-
-            Text = Text.FindMatchingBrackets("[", "]", Index, true);
-
-            Index += Text.Length;
-
-            Text = Text.Substring(1, Text.Length - 2);
-
-            do {
-                if (Text[SubIndex] == ',') {
-                    SubIndex++;
-                }
-
-                while (SubIndex < Text.Length && char.IsWhiteSpace(Text[SubIndex]))
-                    SubIndex++;
-
-                if (SubIndex == Text.Length)
-                    break;
-
-
-                var X = Text[SubIndex];
-                var Name = This.Count.ToString();
-
-                if (X == '"' || X == '\'') {
-                    if (!This._String(Text, ref SubIndex, Name))
-                        return false;
-                }
-                else if (X == '{') {
-                    if (!This._Object(Text, ref SubIndex, Name))
-                        return false;
-                }
-                else if (X == '[') {
-                    if (!This._Array(Text, ref SubIndex, Name))
-                        return false;
-                }
-                else {
-                    if (!This._Raw(Text, ref SubIndex, Name))
-                        return false;
-                }
-            }
-            while (SubIndex < Text.Length);
-
-            return true;
-        }
-
-        private bool _Object(string Text, ref int Index, params string[] Key) {
-            var SubIndex = 0;
-            var This = default(jsObject);
-
-            if (Key.Length == 0) {
-                This = this;
-            }
-            else {
-                This = new jsObject();
-                Set(Key, This);
-            }
-
-            Text = Text.FindMatchingBrackets("{", "}", Index, true);
-
-            Index += Text.Length;
-
-            Text = Text.Substring(1, Text.Length - 2);
-
-            if (Text.Length != 0) {
+            if (Text.FindMatchingBrackets("[", "]", ref Open, ref Close)) {
                 do {
-                    if (Text[SubIndex] == ',') {
-                        SubIndex++;
+                    if (Text[Open] == ',') {
+                        Open++;
                     }
 
-                    while (SubIndex < Text.Length && char.IsWhiteSpace(Text[SubIndex]))
-                        SubIndex++;
+                    while (Open < Close && char.IsWhiteSpace(Text[Open]))
+                        Open++;
 
-                    if (SubIndex == Text.Length)
+                    if (Open == Close)
                         break;
 
-                    if (!This._NamedValue(Text, ref SubIndex)) {
-                        return false;
+
+                    var X = Text[Open];
+                    var Name = Storage.Count.ToString();
+
+                    if (X == '"' || X == '\'') {
+                        Storage.Set(Name, _String(Text, ref Open, Close));
+                    }
+                    else if (X == '{') {
+                        Storage.Set(Name, _Object(Text, ref Open, Close, jsObject.NewObject()));
+                    }
+                    else if (X == '[') {
+                        Storage.Set(Name, _Array(Text, ref Open, Close, jsObject.NewArray()));
+                    }
+                    else {
+                        Storage.Set(Name, _Raw(Text, ref Open, Close));
                     }
                 }
-                while (SubIndex < Text.Length);
+                while (Open < Close);
+
+                Index = Close + 1;
+                return Storage;
             }
-            return true;
+            return null;
         }
 
-        private bool _NamedValue(string Text, ref int Index) {
+        private static jsObject _Object(string Text, ref int Index, int LastIndex, jsObject Storage) {
+            int Open = Index, Close = Index;
+
+            if (Text.FindMatchingBrackets("{", "}", ref Open, ref Close)) {
+                do {
+                    if (Text[Open] == ',') {
+                        Open++;
+                    }
+
+                    while (Open < Close && char.IsWhiteSpace(Text[Open]))
+                        Open++;
+
+                    if (Open == Close)
+                        break;
+
+                    var Obj = _NamedValue(Text, ref Open, Close, Storage);
+
+                    if (Obj == null) {
+                        return null;
+                    }
+                }
+                while (Open < Close);
+
+                Index = Close + 1;
+                return Storage;
+            }
+            return null;
+        }
+
+        private static jsObject _NamedValue(string Text, ref int Index, int LastIndex, jsObject Storage) {
             var Name = "";
             var X = Text[Index];
 
@@ -192,54 +160,55 @@ namespace Poly.Data {
 
             Index = Text.IndexOf(':', Index);
 
-            if (Index == -1)
-                return false;
-            else {
+            if (Index != -1) {
                 Index++;
 
                 while (char.IsWhiteSpace(Text[Index]))
                     Index++;
+
+                X = Text[Index];
+
+                if (X == '"' || X == '\'') {
+                    Storage.Set(Name, _String(Text, ref Index, LastIndex));
+                }
+                else if (X == '{') {
+                    Storage.Set(Name, _Object(Text, ref Index, LastIndex, jsObject.NewObject()));
+                }
+                else if (X == '[') {
+                    Storage.Set(Name, _Array(Text, ref Index, LastIndex, jsObject.NewArray()));
+                }
+                else {
+                    Storage.Set(Name, _Raw(Text, ref Index, LastIndex));
+                }
+
+                return Storage;
             }
 
+            return null;
+        }
 
-            X = Text[Index];
+        public static bool Parse(string Text, int Index, jsObject Storage = null) {
+            if (string.IsNullOrEmpty(Text))
+                return false;
 
-            if (X == '"' || X == '\'') {
-                return _String(Text, ref Index, Name);
-            }
-            else if (X == '{') {
-                return _Object(Text, ref Index, Name);
+            if (Index < 0 || Index >= Text.Length)
+                return false;
+
+            var X = Text[Index];
+                
+            if (X == '{') {
+                return _Object(Text, ref Index, Text.Length, Storage) != null;
             }
             else if (X == '[') {
-                return _Array(Text, ref Index, Name);
+                return _Array(Text, ref Index, Text.Length, Storage) != null;
             }
             else {
-                return _Raw(Text, ref Index, Name);
+                return _Object("{" + Text + "}", ref Index, Text.Length + 2, Storage) != null;
             }
         }
 
         public bool Parse(string Text) {
-            int Index = 0;
-
-            if (Text == null) {
-                return false;
-            }
-            else {
-                Text = Text.Trim();
-            }
-            if (Text == string.Empty) {
-                return true;
-            }
-
-            if (Text.StartsWith("{") && Text.EndsWith("}")) {
-                return _Object(Text, ref Index);
-            }
-            else if (Text.StartsWith("[") && Text.EndsWith("]")) {
-                return _Array(Text, ref Index);
-            }
-            else {
-                return _Object("{ " + Text + " }", ref Index);
-            }
+            return Parse(Text, 0, this);
         }
     }
 }

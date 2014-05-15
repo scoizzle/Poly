@@ -24,6 +24,9 @@ namespace Poly {
         }
 
         public static object Invoke(Handler Func, jsObject Args, params object[] ArgPairs) {
+            if (Func == null)
+                return null;
+
             for (int i = 0; i < ArgPairs.Length / 2; i++) {
                 Args[ArgPairs[i].ToString()] = ArgPairs[i + 1];
                 i++;
@@ -81,29 +84,26 @@ namespace Poly {
             }
 
             public bool MatchAndInvoke(string Data, jsObject Args, bool KeyIsWild) {
-                var List = this.ToList();
+                return ForEach<jsObject>((Name, Handlers) => {
+                    var Key = KeyIsWild ? Data : Name;
+                    var Wild = KeyIsWild ? Name : Data;
+                    var Matches = jsObject.Null;
 
-                for (int i = 0; i < List.Count; i++) {
-                    var Key = KeyIsWild ? Data : List[i].Key;
-                    var Wild = KeyIsWild ? List[i].Key : Data;
-
-                    var Matches = Key.Match(Wild);
-
-                    if (Matches != null) {
-                        if (Matches.Count == 0) {
+                    if ((Matches = Key.Match(Wild)) != null) {
+                        if (Matches.Count == 0)
                             Matches = Args;
-                        }
-                        else {
+                        else
                             Args.CopyTo(Matches);
-                        }
 
-                        (List[i].Value as jsObject).ForEach<Handler>((K, H) => {
-                            H(Matches);
+                        Handlers.ForEach<Handler>((Id, Func) => {
+                            Func(Matches);
                         });
+
                         return true;
                     }
-                }
-                return false;
+
+                    return false;
+                });
             }
         }
     }

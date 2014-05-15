@@ -16,7 +16,7 @@ namespace Poly.Net.Irc {
         public Client() {
 
         }
-
+        
         public bool Connected {
             get {
                 return Connection.Connected;

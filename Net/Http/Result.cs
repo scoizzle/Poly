@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.IO;
 
 using Poly.Data;
 using Poly.Net.Tcp;
@@ -42,49 +43,6 @@ namespace Poly.Net.Http {
             set {
                 this["Headers"] = value;
             }
-        }
-
-        public byte[] Data {
-            get {
-                return Get<byte[]>("Data", () => { return new byte[0]; });
-            }
-            set {
-                this["Data"] = value;
-            }
-        }
-
-        public void SendReply(Client Client) {
-            if (!Client.Connected)
-                return;
-
-            Client.SendLine("HTTP/1.1 ", this.Status);
-            Client.SendLine("Date: ", DateTime.UtcNow.HttpTimeString());
-
-            if (this.Data != null && this.Data.Length > 0) {
-                if (Headers.Search<string>("content-type") == null) {
-                    Client.SendLine("Content-Type: ", this.MIME);
-                }
-                Client.SendLine("Content-Length: ", this.Data.Length.ToString());
-            }
-            else {
-                Client.SendLine("Content-Length: 0");
-            }
-
-            this.Headers.ForEach((K, V) => {
-                Client.SendLine(K, ": ", V.ToString());
-            });
-
-            this.Cookies.ForEach<jsObject>((K, V) => {
-                Client.Send("Set-Cookie: ");
-
-                V.ForEach((OK, OV) => {
-                    Client.Send(OK, "=", OV.ToString(), ";");
-                });
-
-                Client.SendLine();
-            });
-
-            Client.SendLine();
         }
 
         public static implicit operator Result(string Status) {

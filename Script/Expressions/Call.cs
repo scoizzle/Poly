@@ -65,6 +65,26 @@ namespace Poly.Script.Node {
             return Function.Call(Context, Arguments, This, Engine);
         }
 
+        public bool ParseArguments(Engine Engine, string Text, int Open, int Close) {
+            int i = 0;
+
+            foreach (var Raw in Text.SubString(Open, Close - Open).ParseCParams()) {
+                var Arg = Engine.Parse(Raw, 0);
+
+                if (Arg == null)
+                    return false;
+
+                if (Function != null && i < Function.Arguments.Length) {
+                    Arguments[Function.Arguments[i]] = Arg;
+                }
+                else {
+                    Arguments.Add(Arguments.Count.ToString(), Arg);
+                }
+            }
+
+            return true;
+        }
+
         public override string ToString() {
             return Name + "(" + Arguments.ToString() + ")";
         }

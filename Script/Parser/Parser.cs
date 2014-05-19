@@ -27,6 +27,7 @@ namespace Poly.Script {
             Expression.Parse,
             Call.Parse,
             Node.Unary.Parser.Parse,
+            Node.Eval.Parse,
             Node.String.Parse,
             Integer.Parse,
             Float.Parse,

@@ -72,7 +72,8 @@ namespace Poly.Data {
             var List = this.ToList();
 
             for (int i = 0; i < List.Count; i++) {
-                Action(List[i].Key, (T)List[i].Value);
+                if (List[i].Value is T) 
+                    Action(List[i].Key, (T)List[i].Value);
             }
 
             List = null;

@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Poly.Script.Node {
     public class Call : Expression {
-        public Variable Object = null;
+        public object Object = null;
         public string Name = string.Empty;
 
         public Engine Engine = null;
@@ -13,16 +13,32 @@ namespace Poly.Script.Node {
         public Helper.ArgumentList Arguments = new Helper.ArgumentList();
 
         public Call(Engine Engine, string Name) {
-            if (Name.IndexOf('.') != -1) {
-                if (Name[Name.LastIndexOf('.') + 1] != '[') {
-                    this.Name = Name.Substring(Name.LastIndexOf('.') + 1);
+            this.Engine = Engine;
+
+            var Index = Name.FindLast('.');
+
+            if (Index > -1) {
+                var Obj = Name.SubString(0, Index);
+                var Fun = Name.SubString(Index + 1, Name.Length - Index - 1);
+
+                if (Engine.Shorthands.ContainsKey(Obj)) {
+                    Obj = Engine.Shorthands[Obj];
+
+                    var T = Helper.SystemFunctions.SearchForType(Obj);
+
+                    if (T != null) {
+                        this.Function = Helper.MemberFunction.Get(T, Fun);
+                    }
                 }
-                this.Object = Variable.Parse(Engine, Name, 0, Name.Length - this.Name.Length - 1);
+                else {
+                    this.Object = Variable.Parse(Engine, Obj, 0, Obj.Length);
+                }
+
+                this.Name = Fun;
             }
             else {
                 this.Name = Name;
             }
-            this.Engine = Engine;
         }
 
         public override object Evaluate(Data.jsObject Context) {
@@ -71,7 +87,8 @@ namespace Poly.Script.Node {
                 ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
-                    Call.Function = Function.Get(Engine, Name);
+                    if (Call.Function == null)
+                        Call.Function = Function.GetStatic(Engine, Name);
 
                     var Open = Delta + 1;
                     var Close = Delta;

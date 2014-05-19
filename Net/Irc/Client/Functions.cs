@@ -209,6 +209,15 @@ namespace Poly.Net.Irc {
             SendAction(User.Nick, Message);
         }
 
+        public void SendMode(string Target, string Modes) {
+            Send(
+                new Packet("Mode") {
+                    { "Reciever", Target },
+                    { "Message", Modes }
+                }
+            );
+        }
+
         public void SendWho(string Search) {
             Send(
                 new Packet("Who") {
@@ -241,7 +250,7 @@ namespace Poly.Net.Irc {
                 SendPass(Password);
 
             SendNick(Nick);
-            SendUser(Ident, RealName);
+            SendUser(Ident, Realname);
         }
     }
 }

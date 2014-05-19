@@ -43,12 +43,12 @@ namespace Poly.Net.Irc {
             }
         }
         
-        public string RealName {
+        public string Realname {
             get {
-                return Get<string>("RealName", string.Empty);
+                return Get<string>("Realname", string.Empty);
             }
             set {
-                Set("RealName", value);
+                Set("Realname", value);
             }
         }
 

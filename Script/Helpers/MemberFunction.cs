@@ -8,86 +8,56 @@ namespace Poly.Script.Helper {
     using Data;
     using Node;
 
-    public class MemberFunction : Function {
-        public Type Type = null;
+    public class SystemFunctions {
+        private static jsObject<SystemFunction> Cache = new jsObject<SystemFunction>();
 
-        private string InfoId = string.Empty;
-        public MethodInfo MethodInfo = null;
+        public static Type SearchForType(string Name) {
+            foreach (var Asm in AppDomain.CurrentDomain.GetAssemblies()) {
+                var T = Asm.GetType(Name, false);
 
-        private Dictionary<string, MethodInfo> InfoCache = new Dictionary<string, MethodInfo>();
+                if (T != null)
+                    return T;
+            }
 
-        public MemberFunction(Type Type, string Name) {
-            this.Name = Name;
-            this.Type = Type;
+            return null;
         }
 
-        public override object Evaluate(jsObject Context) {
-            if (!Context.ContainsKey("this")) {
+        public static SystemFunction Get(Type Type, string Name, params Type[] Types) {
+            var TypeString = GetTypeString(Types);
+            var Func = Cache[Type.FullName, Name, TypeString] as SystemFunction;
+
+            if (Func != null)
+                return Func;
+
+            var Info = GetInfo(Type, Name, Types);
+
+            if (Info == null)
                 return null;
-            }
 
-            var This = Context.Get<object>("this");
+            Func = new SystemFunction(Name, (Args) => {
+                var This = Args.Get<object>("this");
 
-            if (This == null) {
-                return null;
-            }
-            else {
-                Context.Remove("this");
-            }
+                if (This != null) 
+                    Args.Remove("this");
 
-            var Args = GetArguments(Context);
-            var Types = GetArgTypes(Args);
-            var InfoId = GetInfoString(Types);
+                return Info.Invoke(This, GetArguments(Args));
+            });
 
-            if (MethodInfo == null || this.InfoId != InfoId) {
-                MethodInfo Info;
+            Cache[Type.FullName, Name, TypeString] = Func;
 
-                if (InfoCache.TryGetValue(InfoId, out Info)) {
-                    MethodInfo = Info;
-                }
-                else {
-                    MethodInfo = FindMethod(Types);
-                    InfoCache[InfoId] = MethodInfo;
-                }
-
-                this.InfoId = InfoId;
-            }
-
-            return Invoke(This, Args);
+            return Func;
         }
 
-        private string GetInfoString(Type[] ArgTypes) {
-            return string.Join<Type>(", ", ArgTypes);
+        private static string GetTypeString(Type[] Types) {
+            return string.Join(",", Types.Select(t => t.FullName));
         }
 
-        private Type[] GetArgTypes(object[] Args) {
-            var Types = new Type[Args.Length];
-
-            for (int Index = 0; Index < Args.Length; Index++) {
-                Types[Index] = Args[Index].GetType();
-            }
-
-            return Types;
-        }
-
-        private MethodInfo FindMethod(Type[] Types) { 
+        private static MethodInfo GetInfo(Type Type, string Name, Type[] Types) {
             try {
-                return Type.GetMethod(Name, Types);
+                return Type.GetMethod(Name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static, null, Types, null);
             }
-            catch { 
-                return null; 
-            }
-        }
-
-        public object Invoke(object This, object[] Args) {
-            if (MethodInfo == null)
+            catch {
                 return null;
-
-            try {
-                return MethodInfo.Invoke(This, Args);
-            }
-            catch { 
-                return null; 
             }
         }
 
@@ -106,6 +76,49 @@ namespace Poly.Script.Helper {
             });
 
             return Args;
+        }
+    }
+
+    public class MemberFunction : Function {
+        private static jsObject<MemberFunction> Cache = new jsObject<MemberFunction>();
+
+        public static MemberFunction Get(Type Type, string Name) {
+            var Func = Cache[Type.FullName, Name];
+
+            if (Func != null)
+                return Func;
+
+            return new MemberFunction(Type, Name);
+        }
+
+        public Type Type = null;
+
+        public MemberFunction(Type Type, string Name) {
+            this.Name = Name;
+            this.Type = Type;
+
+            Cache[Type.FullName, Name] = this;
+        }
+
+        public override object Evaluate(jsObject Context) {
+            var Types = GetArgTypes(Context);
+            var Func = SystemFunctions.Get(Type, Name, Types);
+
+            if (Func != null)
+                return Func.Evaluate(Context);
+
+            return null;
+        }
+
+        private Type[] GetArgTypes(jsObject Args) {
+            List<Type> TypeList = new List<System.Type>();
+            
+            foreach (var Pair in Args) {
+                if (Pair.Key != "this")
+                    TypeList.Add(Pair.Value.GetType());
+            }
+
+            return TypeList.ToArray();
         }
     }
 }

@@ -7,7 +7,7 @@ using Poly.Data;
 
 namespace Poly {
     public static class StringMatching {
-        private static readonly string[] WildChars = new string[] {
+        public static readonly string[] WildChars = new string[] {
             "{", "*", "?", "^", "|", "\\"
         };
 
@@ -58,11 +58,7 @@ namespace Poly {
                 if (Wild[Offset] == '\\')
                     Offset++;
 
-                if (This[Index] == Wild[Offset] || Wild[Offset] == '?') {
-                    Index++;
-                    Offset++;
-                }
-                else if (Wild[Offset] == '*') {
+                if (Wild[Offset] == '*') {
                     Offset++;
 
                     if (Offset == WildLen)
@@ -129,6 +125,10 @@ namespace Poly {
                 else if (Wild[Offset] == '^') {
                     while (Index < This.Length && char.IsWhiteSpace(This[Index]))
                         Index++;
+                    Offset++;
+                }
+                else if (This[Index] == Wild[Offset] || Wild[Offset] == '?') {
+                    Index++;
                     Offset++;
                 }
                 else break;

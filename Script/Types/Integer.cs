@@ -132,7 +132,7 @@ namespace Poly.Script.Node {
                 return null;
 
             var Delta = Index;
-            for (; Delta - Index < LastIndex; Delta++) {
+            for (; Delta - Index < LastIndex && Delta < LastIndex; Delta++) {
                 var C = Text[Delta];
 
                 if (char.IsNumber(C))

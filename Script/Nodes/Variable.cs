@@ -27,7 +27,7 @@ namespace Poly.Script.Node {
             jsObject CurrentAsJs;
 
             object Current = IsStatic ?
-                (CurrentAsJs = Engine.StaticObjects) :
+                (CurrentAsJs = Engine.Static) :
                 (CurrentAsJs = Context);
 
             int Index = 0;
@@ -99,7 +99,7 @@ namespace Poly.Script.Node {
             jsObject CurrentAsJs;
 
             object Current = IsStatic ?
-                (CurrentAsJs = Engine.StaticObjects) :
+                (CurrentAsJs = Engine.Static) :
                 (CurrentAsJs = Context);
 
             int Index = 0;

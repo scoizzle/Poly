@@ -87,78 +87,72 @@ namespace Poly.Script {
                 return Func;
             }
 
-            var Init = Helper.Initializer.TryCreate(Name);
-
-            if (Init != null) {
-                Engine.RawInitializerCache[Name] = Init;
-
-                return Init;
-            }
-
-            return null;
+            return Helper.Initializer.Get(Name);
         }
 
-        public static Function Get(Engine Engine, string Name, object This = null) {
+        public static Function Get(Engine Engine, string Name, object This) {
+            if (This == null)
+                return null;
+
             Function Func = (This as Function);
 
             if (Func != null)
                 return Func;
 
-            if (This == null) {
-                if (Engine.Functions.TryGetValue(Name, out Func)) {
+            CustomTypeInstance CustomThis = This as CustomTypeInstance;
+
+            if (CustomThis != null) {
+                var CustomType = CustomThis.Type;
+
+                if ((Func = CustomType.GetFunction(Name)) != null) {
                     return Func;
-                }
-
-                if ((Func = GetConstructor(Engine, Name)) != null) {
-                    return Func;
-                }
-
-                foreach (var Lib in Engine.Using) {
-                    if (Lib.TryGetValue(Name, out Func)) {
-                        return Func;
-                    }
-                }
-
-                if (Name.IndexOf('.') > -1) {
-                    Library Lib;
-                    var ObjectName = Name.Substring(0, Name.LastIndexOf('.'));
-                    var FunctionName = Name.Substring(ObjectName.Length + 1);
-
-                    if (Library.StaticObjects.TryGetValue(ObjectName, out Lib)) {
-                        if (Lib.TryGetValue(FunctionName, out Func)) {
-                            return Func;
-                        }
-                    }
                 }
             }
-            else {
+
+            if (Library.Global.TryGetValue(Name, out Func)) {
+                return Func;
+            }
+
+            Library Lib;
+            Type Type = This.GetType();
+
+            if (Library.TypeLibs.TryGetValue(Type, out Lib)) {
+                if (Lib.TryGetValue(Name, out Func)) {
+                    return Func;
+                }
+            }
+
+            return Helper.MemberFunction.Get(Type, Name);
+        }
+
+        public static Function GetStatic(Engine Engine, string Name) {
+            Function Func;
+
+            if (Engine.Functions.TryGetValue(Name, out Func)) {
+                return Func;
+            }
+
+            if ((Func = GetConstructor(Engine, Name)) != null) {
+                return Func;
+            }
+
+            foreach (var Lib in Engine.Using) {
+                if (Lib.TryGetValue(Name, out Func)) {
+                    return Func;
+                }
+            }
+
+            int Index = Name.LastIndexOf('.');
+            if (Index > -1) {
                 Library Lib;
-                Type Type = This.GetType();
-                CustomTypeInstance CustomThis = This as CustomTypeInstance;
+                var ObjectName = Name.Substring(0, Index);
+                var FunctionName = Name.Substring(Index + 1);
 
-                if (CustomThis != null) {
-                    var CustomType = CustomThis.Type;
-
-                    if ((Func = CustomType.GetFunction(Name)) != null) {
+                if (Library.StaticLibraries.TryGetValue(ObjectName, out Lib)) {
+                    if (Lib.TryGetValue(FunctionName, out Func)) {
                         return Func;
                     }
                 }
-
-                if (Library.TypeLibs.TryGetValue(Type, out Lib)) {
-                    if (Lib.TryGetValue(Name, out Func)) {
-                        return Func;
-                    }
-                }
-
-                if (Library.Global.TryGetValue(Name, out Func)) {
-                    return Func;
-                }
-
-                if (Engine.RawFunctionCache.TryGetValue(Type.Name + Name, out Func)) {
-                    return Func;
-                }
-
-                return (Engine.RawFunctionCache[Type.Name + Name] = new Helper.MemberFunction(Type, Name));
             }
 
             return null;

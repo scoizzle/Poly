@@ -19,6 +19,9 @@ namespace Poly.Net.Irc {
         
         public bool Connected {
             get {
+                if (Connection == null)
+                    return false;
+
                 return Connection.Connected;
             }
         }

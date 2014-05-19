@@ -16,10 +16,30 @@ namespace Poly.Script.Node {
                 var Delta = Index += 5;
                 ConsumeWhitespace(Text, ref Delta);
 
-                var Close = Delta;
-                ConsumeValidName(Text, ref Close);
+                var End = Delta;
+                ConsumeValidName(Text, ref End);
 
-                if (Text.Compare(";", Close)) {
+                var Close = End;
+                ConsumeWhitespace(Text, ref Close);
+
+                if (Text.Compare("=", Close)) { 
+                    var Name = Text.Substring(Delta, End - Delta);
+
+                    Delta = Close + 1;
+                    ConsumeWhitespace(Text, ref Delta);
+
+                    Close = Delta;
+                    ConsumeValidName(Text, ref Close);
+
+                    var For = Text.SubString(Delta, Close - Delta);
+
+                    if (Text.Compare(";", Close)) {
+                        Engine.Shorthands[Name] = For;
+                        Index = Close + 1;
+                        return NoOp;
+                    }
+                }
+                else if (Text.Compare(";", Close)) {
                     var Name = Text.Substring(Delta, Close - Delta);
 
                     if (Library.Defined.ContainsKey(Name)) {
@@ -36,6 +56,7 @@ namespace Poly.Script.Node {
                     ConsumeWhitespace(Text, ref Close);
 
                     Index = Close;
+                    return NoOp;
                 }
             }
 

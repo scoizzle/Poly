@@ -8,7 +8,9 @@ namespace Poly.Script.Libraries {
     using Node;
 
     public class Standard : Library {
+        public static Standard Instance;
         public Standard() {
+            Instance = this;
             Library.RegisterLibrary("Standard", this);
 
             Add(Sleep);

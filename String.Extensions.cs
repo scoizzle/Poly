@@ -160,6 +160,9 @@ namespace System {
         }
 
         public static bool Contains(this String This, char C, int Index = 0) {
+            if (string.IsNullOrEmpty(This))
+                return false;
+
             if (Index > -1) {
                 for (int i = Index; i < This.Length; i++) {
                     if (This[i] == C) {

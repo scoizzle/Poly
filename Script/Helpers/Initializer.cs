@@ -19,23 +19,18 @@ namespace Poly.Script.Helper {
 
         public override object Evaluate(jsObject Context) {
             try {
-                return Activator.CreateInstance(Type, MemberFunction.GetArguments(Context));
+                return Activator.CreateInstance(Type, SystemFunctions.GetArguments(Context));
             }
             catch { return null; }
         }
 
-        public static Initializer TryCreate(string TypeName) {
-            try {
-                var T = Type.GetType(TypeName);
+        public static Initializer Get(string Name) {
+            var T = Helper.SystemFunctions.SearchForType(Name);
 
-                if (T == null)
-                    return null;
-
+            if (T != null)
                 return new Initializer(T);
-            }
-            catch {
-                return null;
-            }
+
+            return null;
         }
     }
 }

@@ -10,7 +10,7 @@ namespace Poly.Script {
     public class Library : jsObject<Function> {
         public static jsObject<Library> Defined = null;
         public static jsObject<Library> TypeLibsByName = null;
-        public static jsObject<Library> StaticObjects = null;
+        public static jsObject<Library> StaticLibraries = null;
         public static Dictionary<Type, Library> TypeLibs = null;
 
         public static Library Constructors = null;
@@ -19,7 +19,7 @@ namespace Poly.Script {
         static Library() {
             Defined = new jsObject<Library>();
             TypeLibsByName = new jsObject<Library>();
-            StaticObjects = new jsObject<Library>();
+            StaticLibraries = new jsObject<Library>();
             TypeLibs = new Dictionary<Type, Library>();
             Constructors = new Library();
 
@@ -61,8 +61,8 @@ namespace Poly.Script {
         }
 
         public static void RegisterStaticObject(string Name, Library Lib) {
-            if (!StaticObjects.ContainsKey(Name)) {
-                StaticObjects.Add(Name, Lib);
+            if (!StaticLibraries.ContainsKey(Name)) {
+                StaticLibraries.Add(Name, Lib);
             }
         }
 

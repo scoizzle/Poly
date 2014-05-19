@@ -148,7 +148,7 @@ namespace Poly.Net.Irc {
                     Target.Nick = TargetNick;
                     Target.Ident = TargetIdent;
                     Target.Host = TargetHost;
-                    Target.RealName = TargetName;
+                    Target.Realname = TargetName;
 
                     var TargetModes = Packet.Get<string>("Modes").ToCharArray();
 

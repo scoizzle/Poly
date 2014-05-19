@@ -17,8 +17,6 @@ namespace Poly.Script.Libraries {
 			Add(TypeName);
             Add(ToNum);
             Add(ToObject);
-            Add(ToString);
-            Add(CopyTo);
         }
 
         public static SystemFunction Load = new SystemFunction("Load", (Args) => {
@@ -109,31 +107,6 @@ namespace Poly.Script.Libraries {
                 return This;
             }
             return null;
-        });
-
-        public new static SystemFunction ToString = new SystemFunction("ToString", (Args) => {
-            var This = Args.Get<object>("this");
-
-            if (This != null) {
-                if (Args.Count > 1 && This is jsObject && Args.Get<bool>("0")) {
-                    return (This as jsObject).ToString(true);
-                } 
-                return This.ToString();
-            }
-
-            return string.Empty;
-        });
-
-        public new static SystemFunction CopyTo = new SystemFunction("CopyTo", (Args) => {
-            var This = Args.Get<jsObject>("this");
-            var Targ = Args.Get<jsObject>("0");
-
-            if (This != null && Targ != null) {
-                This.CopyTo(Targ);
-                return true;
-            }
-
-            return false;
         });
     }
 }

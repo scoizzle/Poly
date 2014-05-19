@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -58,18 +59,23 @@ namespace Poly.Data {
         }
 
         public void ForEach(Action<string, object> Action) {
-            foreach (var Pair in this) {
-                Action(Pair.Key, Pair.Value);
+            var List = this.ToList();
+
+            for (int i = 0; i < List.Count; i++) {
+                Action(List[i].Key, List[i].Value);
             }
+
+            List = null;
         }
 
         public void ForEach<T>(Action<string, T> Action) {
-            foreach (var Pair in this) {
-                if (!(Pair.Value is T))
-                    continue;
+            var List = this.ToList();
 
-                Action(Pair.Key, (T)Pair.Value);
+            for (int i = 0; i < List.Count; i++) {
+                Action(List[i].Key, (T)List[i].Value);
             }
+
+            List = null;
         }
 
         public bool ForEach<T>(Func<string, T, bool> Action) {

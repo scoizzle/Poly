@@ -215,7 +215,12 @@ namespace Poly.Data {
                 var Sub = Keys[i];
 
                 if ((Keys.Length - i) == 1) {
-                    Current.AssignValue<T>(Sub, Value);
+                    if (Sub.Contains('.')) {
+                        Current.Set(Sub, Value);
+                    }
+                    else {
+                        Current.AssignValue<T>(Sub, Value);
+                    }
                     break;
                 }
 
@@ -223,7 +228,13 @@ namespace Poly.Data {
 
                 if (Next == null) {
                     Next = new jsObject();
-                    Current.AssignValue<jsObject>(Sub, Next);
+
+                    if (Sub.Contains('.')) {
+                        Current.Set(Sub, Next);
+                    }
+                    else {
+                        Current.AssignValue<jsObject>(Sub, Next);
+                    }
                 }
 
                 Current = Next;

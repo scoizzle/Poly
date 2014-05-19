@@ -13,7 +13,7 @@ namespace Poly.Script.Node {
             while (Bool.EvaluateNode(Boolean, Context)) {
                 for (int i = 0; i < List.Count; i++) {
                     var Obj = List[i];
-                    var Result = (Obj.Value as Node).Evaluate(Context);
+                    var Result = GetValue(Obj.Value, Context);
 
                     if (Obj.Value is Return)
                         return Result;

@@ -3,66 +3,55 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
+using Poly.Data;
+
 namespace Poly.Script.Node {
     public class Call : Expression {
-        public object Object = null;
-        public string Name = string.Empty;
+        private bool Cacheable = false;
+
+        private Variable Object = null;
+        private string Name = string.Empty;
 
         public Engine Engine = null;
         public Function Function = null;
         public Helper.ArgumentList Arguments = new Helper.ArgumentList();
 
-        public Call(Engine Engine, string Name) {
+        public Call(Engine Engine, string Name, Function Func = null) {
             this.Engine = Engine;
+            this.Name = Name;
+            this.Function = Func;
 
-            var Index = Name.FindLast('.');
-
-            if (Index > -1) {
-                var Obj = Name.SubString(0, Index);
-                var Fun = Name.SubString(Index + 1, Name.Length - Index - 1);
-
-                if (Engine.Shorthands.ContainsKey(Obj)) {
-                    Obj = Engine.Shorthands[Obj];
-
-                    var T = Helper.SystemFunctions.SearchForType(Obj);
-
-                    if (T != null) {
-                        this.Function = Helper.MemberFunction.Get(T, Fun);
-                    }
+            if (Func == null) {
+                if (Name.Contains('[')) {
+                    this.Object = Variable.Parse(Engine, Name, 0);
+                }
+                else if (Name.Contains('.')) {
+                    this.Name = Name.Substring("", ".", 0, false, true);
+                    this.Object = Variable.Parse(Engine, this.Name, 0);
+                    this.Name = Name.SubString(this.Name.Length + 1);
                 }
                 else {
-                    this.Object = Variable.Parse(Engine, Obj, 0, Obj.Length);
+                    this.Name = Name;
                 }
-
-                this.Name = Fun;
-            }
-            else {
-                this.Name = Name;
             }
         }
 
         public override object Evaluate(Data.jsObject Context) {
-            object This = null;
+            object This = GetValue(Object, Context);
 
-            if (Object != null) {
-                This = GetValue(Object, Context);
+            if (Function != null) {
+                return Function.Call(Context, Arguments, This, Engine);
             }
-            
-            if (Function == null) {
-                if (string.IsNullOrEmpty(Name)) {
-                    if (This is Function) {
-                        Function = This as Function;
-                    }
-                }
-                else {
-                    Function = Function.Get(Engine, Name, This);
-                }
 
-                if (Function == null)
-                    return null;
-            }
-            
-            return Function.Call(Context, Arguments, This, Engine);
+            Function Func;
+
+            if ((Func = Function.Get(Engine, Name, This, ref Cacheable)) == null)
+                return null;
+
+            if (Cacheable)
+                Function = Func;
+
+            return Func.Call(Context, Arguments, This, Engine);
         }
 
         public bool ParseArguments(Engine Engine, string Text, int Open, int Close) {
@@ -86,7 +75,7 @@ namespace Poly.Script.Node {
         }
 
         public override string ToString() {
-            return Name + "(" + Arguments.ToString() + ")";
+            return (Object != null ? Object.ToString() : "" ) + Name + "(" + Arguments.ToString() + ")";
         }
 
         public static new Call Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
@@ -102,13 +91,10 @@ namespace Poly.Script.Node {
 
             if (Index != Delta) {
                 var Name = Text.Substring(Index, Delta - Index);
-
-                var Call = new Call(Engine, Name);
                 ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
-                    if (Call.Function == null)
-                        Call.Function = Function.GetStatic(Engine, Name);
+                    var Call = new Call(Engine, Name, Function.GetStatic(Engine, Name));
 
                     var Open = Delta + 1;
                     var Close = Delta;

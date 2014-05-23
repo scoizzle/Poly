@@ -6,73 +6,89 @@ using Poly.Data;
 
 namespace Poly.Script.Node {
     public class Foreach : Expression {
-        public string VarName = "";
-        public object List = null;
+        public Variable Variable = null;
+        public Variable List = null;
 
-        public override object Evaluate(Data.jsObject Context) {
-            var Values = GetValue(this.List, Context);
+        private object LoopNodes<K, V>(jsObject Context, K Key, V Value) {
+            var Var = new jsObject();
+            Variable.Assign(Context, Var);
 
-            if (Values == null)
-                return null;
+            Var.Set("Key", Key);
+            Var.Set("Value", Value);
 
-            var List = this.ToList();
-            var Len = 0;
+            foreach (var Node in this.Values) {
+                if (Node is Return)
+                    return Node;
 
-            if (Values is string)
-                Len = (Values as string).Length;
-            else if (Values is Data.jsObject)
-                Len = (Values as Data.jsObject).Count;
-            else if (Values is Node) {
-                Len = (Values as Node).Count;
-            }
-            else return null;
+                var Ret = GetValue(Node, Context);
 
-            for (int i = 0; i < Len; i++) {
-                var Key = "";
-                var Value = (object)null;
-
-                if (Values is string) {
-                    Key = i.ToString();
-                    Value = (string)Values;
-                }
-                else if (Values is jsObject) {
-                    var Element = (Values as jsObject).ElementAt(i);
-                    Key = Element.Key;
-                    Value = Element.Value;
-                }
-                else if (Values is Node) {
-                    var Element = (Values as Node).ElementAt(i);
-                    Key = Element.Key;
-                    Value = Element.Value;
-                }
-
-                Context[VarName, "Key"] = Key;
-                Context[VarName, "Value"] = Value;
-
-                for (int x = 0; x < List.Count; x++) {
-                    var Node = (List[x].Value as Node);
-                    var Result = Node.Evaluate(Context);
-
-                    if (Node is Return)
-                        return Result;
-
-                    if (Result == Break) {
-                        Context[VarName] = null;
-                        return NoOp;
-                    }
-
-                    if (Result == Continue)
-                        break;
-                }
-
-                Context[VarName] = null;
+                if (Ret == Break || Ret == Continue)
+                    return Ret;
             }
 
             return null;
         }
 
+        private object LoopString(jsObject Context, string String) {
+            if (string.IsNullOrEmpty(String))
+                return null;
+
+            for (int i = 0 ; i < String.Length; i ++) {
+                var Result = LoopNodes<int, char>(Context, i, String[i]);
+
+                if (Result is Return)
+                    return GetValue(Result, Context);
+
+                if (Result == Break)
+                    break;
+            }
+            return null;
+        }
+
+        private object LoopObject(jsObject Context, jsObject Object) {
+            if (Object == null || Object.IsEmpty)
+                return null;
+
+            foreach (var Pair in Object) {
+                var Result = LoopNodes<string, object>(Context, Pair.Key, Pair.Value);
+
+                if (Result is Return)
+                    return GetValue(Result, Context);
+
+                if (Result == Break)
+                    break;
+            }
+
+            return null;
+        }
+
+        public override object Evaluate(Data.jsObject Context) {
+            if (Variable == null || List == null) {
+                return null;
+            }
+
+            var Array = GetValue(List, Context);
+
+            if (Array == null)
+                return null;
+
+            object Value = null;
+
+            var String = Array as string;
+            if (!string.IsNullOrEmpty(String)) {
+                Value = LoopString(Context, String);
+            }
+            else {
+                Value = LoopObject(Context, Array as jsObject);
+            }
+
+            Variable.Assign(Context, null);
+
+            return Value;
+        }
+
         public override string ToString() {
-            return "foreach (" + VarName + " in " + List.ToString() + ")" +
+            return "foreach (" + Variable.ToString() + " in " + List.ToString() + ")" +
                 base.ToString();
         }
 
@@ -94,14 +110,14 @@ namespace Poly.Script.Node {
                     if (Delta == Close)
                         return null;
 
-                    For.VarName = ExtractValidName(Text, ref Open);
+                    For.Variable = Variable.Parse(Engine, Text, ref Open, Close);
                     ConsumeWhitespace(Text, ref Open);
 
                     if (Text.Compare("in", Open)) {
                         Open += 2;
                         ConsumeWhitespace(Text, ref Open);
 
-                        For.List = Engine.Parse(Text, ref Open, Close);
+                        For.List = Variable.Parse(Engine, Text, ref Open, Close);
                         Open = Close;
                         ConsumeWhitespace(Text, ref Open);
 

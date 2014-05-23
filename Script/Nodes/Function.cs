@@ -91,37 +91,47 @@ namespace Poly.Script {
         }
 
         public static Function Get(Engine Engine, string Name, object This) {
+            bool ignore = false;
+
+            return Get(Engine, Name, This, ref ignore);
+        }
+
+        public static Function Get(Engine Engine, string Name, object This, ref bool Cacheable) {
             if (This == null)
                 return null;
 
-            Function Func = (This as Function);
+            Cacheable = false;
 
-            if (Func != null)
-                return Func;
-
-            CustomTypeInstance CustomThis = This as CustomTypeInstance;
-
-            if (CustomThis != null) {
-                var CustomType = CustomThis.Type;
-
-                if ((Func = CustomType.GetFunction(Name)) != null) {
+            Function Func;
+            CustomTypeInstance CTypeInst;
+            if ((CTypeInst = This as CustomTypeInstance) != null) {
+                if ((Func = CTypeInst.Type.GetFunction(Name)) != null)
                     return Func;
-                }
+            }
+
+            if ((Func = This as Function) != null) {
+                return Func;
+            }
+
+            CustomType CType;
+            if ((CType = This as CustomType) != null) {
+                return CType.Construct;
             }
 
             if (Library.Global.TryGetValue(Name, out Func)) {
+                Cacheable = true;
                 return Func;
             }
 
-            Library Lib;
             Type Type = This.GetType();
-
-            if (Library.TypeLibs.TryGetValue(Type, out Lib)) {
-                if (Lib.TryGetValue(Name, out Func)) {
+            if (Library.TypeLibs.ContainsKey(Type)) {
+                if ((Func = Library.TypeLibs[Type][Name]) != null) {
+                    Cacheable = true;
                     return Func;
                 }
             }
 
+            Cacheable = true;
             return Helper.MemberFunction.Get(Type, Name);
         }
 
@@ -176,6 +186,9 @@ namespace Poly.Script {
         }
         
         public static Event.Handler GetFunctionHandler(Function Func, jsObject Context) {
+            if (Func == null)
+                return null;
+
             return (Args) => {
                 Function.GetHandlerArguments(Func, Context, Args);
 
@@ -209,14 +222,6 @@ namespace Poly.Script {
             if (Text.Compare("(", Delta)) {
                 Func = new Function(Text.Substring(Open, Close - Open));
 
-                if (Func.Name.IndexOf('.') > -1) {
-                    Open = 0;
-                    Close = Func.Name.LastIndexOf('.');
-
-                    Func.Object = Variable.Parse(Engine, Func.Name, ref Open, Close);
-                    Func.Name = Func.Name.Substring(Close + 1);
-                }
-
                 Open = Delta + 1;
                 Close = Delta;
 
@@ -244,6 +249,18 @@ namespace Poly.Script {
                             return NoOp;
                         }
 
+                        if (Func.Name.IndexOf('.') > 1) {
+                            if (Func.Name.IndexOf('[') > 1) {
+                                Func.Object = Variable.Parse(Engine, Func.Name, 0);
+                            }
+                            else {
+                                Open = 0;
+                                Close = Func.Name.LastIndexOf('.');
+
+                                Func.Object = Variable.Parse(Engine, Func.Name, ref Open, Close);
+                                Func.Name = Func.Name.Substring(Close + 1);
+                            }
+                        }
                         return Func;
                     }
                 }

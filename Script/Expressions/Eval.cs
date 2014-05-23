@@ -26,23 +26,22 @@ namespace Poly.Script.Node {
                 Delta += Statement.Length + 2;
                 ConsumeWhitespace(Text, ref Delta);
 
-                var Debug = Text.Substring(Delta);
+                if (Text.Compare("(", Delta)) {
+                    if (Eval.Node is Function) {
+                        var Call = new Call(Engine, "") {
+                            Function = Eval.Node as Function
+                        };
+                        var Open = Delta;
+                        var Close = Delta;
 
-                if (Text.Compare("(", Delta) && Eval.Node is Function) {
-                    var Call = new Call(Engine, "") {
-                        Function = Eval.Node as Function
-                    };
-                    var Open = Delta;
-                    var Close = Delta;
+                        if (Text.FindMatchingBrackets("(", ")", ref Open, ref Close)) {
+                            Call.ParseArguments(Engine, Text, Open, Close);
+                        }
 
-                    if (Text.FindMatchingBrackets("(", ")", ref Open, ref Close)) {
-                        Call.ParseArguments(Engine, Text, Open, Close);
+                        Eval.Node = Call;
+                        Delta = Close + 1;
                     }
-
-                    Eval.Node = Call;
-                    Delta = Close + 1;
                 }
-
                 Index = Delta;
                 return Eval;
             }

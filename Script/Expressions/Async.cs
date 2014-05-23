@@ -9,13 +9,13 @@ namespace Poly.Script.Node {
         public Node Node = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            ThreadPool.QueueUserWorkItem(new WaitCallback(
-                (NUL) => {
-                    Node.Evaluate(Context);
-                }
-            ));
+            var Thread = new Thread((C) => {
+                GetValue(Node, C as Data.jsObject);
+            });
 
-            return null;
+            Thread.Start(Context);
+
+            return Thread;
         }
 
         public override string ToString() {

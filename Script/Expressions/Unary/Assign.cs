@@ -11,8 +11,9 @@ namespace Poly.Script.Node {
         }
 
         public override object Evaluate(Data.jsObject Context) {
-            if (Left is Variable) {
-                return (Left as Variable).Assign(Context, GetRight(Context));
+            Variable Var;
+            if ((Var = Left as Variable) != null) {
+                return Var.Assign(Context, GetRight(Context));
             }
             return null;
         }

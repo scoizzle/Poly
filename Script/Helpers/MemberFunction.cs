@@ -100,7 +100,7 @@ namespace Poly.Script.Helper {
             Cache[Type.FullName, Name] = this;
         }
 
-        public override object Evaluate(jsObject Context) {
+        public override object Evaluate(jsObject Context ) {
             var Types = GetArgTypes(Context);
             var Func = SystemFunctions.Get(Type, Name, Types);
 

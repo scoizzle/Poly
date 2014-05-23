@@ -130,6 +130,7 @@
     <Compile Include="Script\Nodes\Expression.cs" />
     <Compile Include="Script\Nodes\Node.cs" />
     <Compile Include="Script\Nodes\Operator.cs" />
+    <Compile Include="Script\Nodes\StaticValue.cs" />
     <Compile Include="Script\Nodes\Value.cs" />
     <Compile Include="Script\Nodes\Variable.cs" />
     <Compile Include="Script\Parser\Parser.cs" />

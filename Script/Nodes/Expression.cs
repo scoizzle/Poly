@@ -8,6 +8,7 @@ namespace Poly.Script.Node {
         public static readonly Expression NoOp = new Expression();
         public static readonly Expression Break = new Expression();
         public static readonly Expression Continue = new Expression();
+        new public static readonly Value Null = StaticValue.New(null);
 
         public override string ToString() {
             return "{" + string.Join("; ", Values) + "}";
@@ -28,7 +29,7 @@ namespace Poly.Script.Node {
             return false;
         }
 
-        public static new Expression Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
@@ -52,6 +53,10 @@ namespace Poly.Script.Node {
             else if (Text.Compare("continue", Index)) {
                 Index += 8;
                 return Continue;
+            }
+            else if (Text.Compare("null", Index)) {
+                Index += 4;
+                return Null;
             }
 
             return null;

@@ -253,7 +253,10 @@ namespace System {
             return Possible[Index];
         }
 
-        public static string SubString(this String This, int Start, int Length) {
+        public static string SubString(this String This, int Start, int Length = int.MaxValue) {
+            if (Length == int.MaxValue)
+                Length = This.Length - Start;
+
             if (Start > -1 && (Start + Length) <= This.Length && Length > -1) {
                 var Array = new char[Length];
 

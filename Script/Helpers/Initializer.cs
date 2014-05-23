@@ -19,6 +19,9 @@ namespace Poly.Script.Helper {
 
         public override object Evaluate(jsObject Context) {
             try {
+                if (Context.ContainsKey("this"))
+                    Context.Remove("this");
+
                 return Activator.CreateInstance(Type, SystemFunctions.GetArguments(Context));
             }
             catch { return null; }

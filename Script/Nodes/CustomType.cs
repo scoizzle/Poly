@@ -115,7 +115,7 @@ namespace Poly.Script.Node {
                             var BaseName = Text.Substring(Open, Delta - Open);
                             ConsumeWhitespace(Text, ref Delta);
 
-                            if (Engine.Types.TryGetValue(BaseName, out BaseType)) {
+                            if ((BaseType = Engine.Types[BaseName] as CustomType) != null) {
                                 Type = new CustomType(Name, BaseType);
                             }
                         }

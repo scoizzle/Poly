@@ -7,211 +7,163 @@ using Poly.Data;
 
 namespace Poly.Script.Node {
     public class Variable : Value {
-        public bool IsStatic = false, IsSimple = false;
-        public Engine Engine = null;
+        private class Node {
+            public bool IsVariable;
+            public object Obj;
 
-        public Variable(Engine Engine, params Node[] Name) {
-            this.Engine = Engine;
+            public Node(bool isVar, object Obj) {
+                this.IsVariable = isVar;
+                this.Obj = Obj;
+            }
 
-            foreach (var Part in Name) {
-                Add(Part);
+            public override string ToString() {
+                if (Obj == null)
+                    return "";
+
+                if (IsVariable) {
+                    return "[" + Obj.ToString() + "]";
+                }
+                else {
+                    return Obj.ToString();
+                }
             }
         }
 
-		public override object Evaluate(jsObject Context) {
-            if (IsSimple) {
-                return Get(string.Join(".", this.Values), Context);
-			}
+        private Node[] List = null;
 
-            bool CurrentIsJsObject = true;
-            jsObject CurrentAsJs;
+        public Engine Engine = null;
+        public bool IsStatic = false;
 
-            object Current = IsStatic ?
-                (CurrentAsJs = Engine.Static) :
-                (CurrentAsJs = Context);
+        new public int Count {
+            get {
+                if (List != null)
+                    return List.Length;
+                return 0;
+            }
+        }
 
-            int Index = 0;
-            foreach (var Raw in this.Values) {
-                var Obj = Raw is Node ?
-                    GetValue(Raw, Context) :
-                    Raw;
+        public Variable(Engine Engine) {
+            this.Engine = Engine;
+        }
 
-                if (Obj == null)
-                    return null;
+        public override object Evaluate(jsObject Context) {
+            object Current;
+            
+            if (this.IsStatic)
+                Current = Engine.Static;
+            else
+                Current = Context;
 
-                object Value = CurrentIsJsObject ?
-                    Value = GetValue(Obj, CurrentAsJs) :
-                    Obj;
+            for (int Index = 0; Index < List.Length; Index++) {
+                var Node = List[Index];
+                var Key = "";
 
-                if (Value == Obj) {
-					if (CurrentIsJsObject) {
-						Value = CurrentAsJs[Obj.ToString()];
-                    }
-                    else {
-                        Value = Value is CustomType ?
-                            (Value as CustomType).Construct :
-                            null;
-                    }
-                } 
-                
-                if (Value == null) {
-                    Value = GetProperty(Current, Obj as string);
+                if (Node.IsVariable) {
+                    var Val = GetValue(Node.Obj, Context);
 
-                    if (Value == null) {
-                        if (Current is CustomTypeInstance) {
-                            Value = Function.GetFunctionHandler(
-                                Function.Get(Engine, Obj as string, Current), 
-                                Context
-                            );
-                        }
-                        else {
-                            jsObject Collection;
-                            if (Engine.Types.TryGetValue(Obj as string, out Collection)) {
-                                Value = Collection;
-                            }
-                        }
+                    if (Val == null)
+                        return null;
 
-                        if (Value == null) {
-                            break;
-                        }
-                    }
+                    Key = Val.ToString();
+                }
+                else {
+                    Key = Node.Obj as string;
                 }
 
-                if ((Count - Index) == 1)
-                    return Value;
+                object Value = null;
+                jsObject Object;
 
-                Index++;
-                Current = Value;
-                CurrentAsJs = AsJsObject(Current);
-                CurrentIsJsObject = CurrentAsJs != null;
+                if ((Object = Current as jsObject) != null) {
+                    Value = Object[Key];
+                }
+
+                if (Value == null) {
+                    if ((Value = GetProperty(Current, Key)) == null) { 
+                        CustomTypeInstance Instance;
+                        if ((Instance = Current as CustomTypeInstance) != null) {
+                            Value = Function.GetFunctionHandler(Instance.Type.GetFunction(Key), Context);
+                        }
+                        else if (!this.IsStatic && Engine.Types.ContainsKey(Key)) {
+                            Value = Engine.Types.Get<object>(Key);
+                        }
+                        else break;
+                    }                    
+                }
+
+                if (List.Length - Index == 1) {
+                    if (Value == null) {
+                        CustomType Type;
+                        if ((Type = Current as CustomType) != null) {
+                            return Function.GetHandlerArguments(Type.Construct, Context);
+                        }
+                    }
+
+                    return Value;
+                }
+                else {
+                    Current = Value;
+                }
             }
 
             return null;
         }
 
         public object Assign(jsObject Context, object Val) {
-            if (IsSimple) {
-                Set(string.Join(".", this.Values), Context, Val);
-                return Val;
-            }
+            object Current;
+            
+            if (this.IsStatic)
+                Current = Engine.Static;
+            else
+                Current = Context;
 
-            bool CurrentIsJsObject = true;
-            jsObject CurrentAsJs;
+            for (int Index = 0; Index < List.Length; Index++) {
+                var Node = List[Index];
+                var Key = "";
 
-            object Current = IsStatic ?
-                (CurrentAsJs = Engine.Static) :
-                (CurrentAsJs = Context);
+                if (Node.IsVariable) {
+                    var V = GetValue(Node.Obj, Context);
 
-            int Index = 0;
-            foreach (var Raw in this.Values) {
-                var Obj = Raw is Node ?
-                    GetValue(Raw, Context) :
-                    Raw;
+                    if (V == null)
+                        return null;
 
-                if ((Count - Index) == 1) {
-                    if (CurrentIsJsObject) {
-                        CurrentAsJs[Obj.ToString()] = Val;
-                        return Val;
-                    }
-                    else {
-                        SetProperty(Current, Obj.ToString(), Val);
-                        return Val;
-                    }
+                    Key = V.ToString();
+                }
+                else {
+                    Key = Node.Obj as string;
                 }
 
-                if (Obj == Raw) {
-                    if (CurrentIsJsObject) {
-                        Obj = CurrentAsJs.Get<object>(Obj.ToString());
+                object Value = null;
+                jsObject Object;
+
+                if (List.Length - Index == 1) {
+                    if ((Object = Current as jsObject) != null) {
+                        Object[Key] = Val;
                     }
+                    else if (SetProperty(Current, Key, Val)) ;
+                    else return null;
+
+                    return Val;
                 }
+                else if ((Object = Current as jsObject) != null) {
+                    Value = Object[Key];
+                }                
 
-                if (Obj == null) {
-                    Obj = GetProperty(Current, Raw.ToString());
-
-                    if (Obj == null) {
-                        Obj = new jsObject();
-
-                        if (CurrentIsJsObject) {
-                            CurrentAsJs[Raw.ToString()] = Obj;
+                if (Value == null || Key == Value) {
+                    if ((Value = GetProperty(Current, Key)) == null) {
+                        if (Object != null) {
+                            Value = new jsObject();
+                            Object[Key] = Value;
                         }
-                        else {
-                            SetProperty(Current, Raw.ToString(), Val);
-                        }
-                    }
+                        else break;
+                    }                    
                 }
 
-                Index++;
-                Current = Obj;
-                CurrentAsJs = AsJsObject(Current);
-                CurrentIsJsObject = CurrentAsJs != null;
+                Current = Value;
             }
 
             return null;
-
-        }
-
-        public static Variable Parse(Engine Engine, string Text, int Index, int LastIndex = -1) {
-            return Parse(Engine, Text, ref Index, LastIndex == -1 ? Text.Length - 1 : LastIndex);
         }
         
-        public static new Variable Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
-
-            var Delta = Index;
-            var Open = Delta;
-            var Var = new Variable(Engine);
-
-            for (; Delta <= LastIndex && Delta < Text.Length; Delta++) {
-                if (Text[Delta] == '.') {
-                    if (Open >= Delta)
-                        return null;
-
-                    var Name = Text.SubString(Open, Delta - Open);
-
-                    if (Name.Compare("Static")) {
-                        Var.IsStatic = true;
-                    }
-                    else if (Name.Compare("Simple")) {
-                        Var.IsSimple = true;
-                    }
-                    else {
-                        Var.Add(Name);
-                    }
-                    Open = Delta + 1;
-                }
-                else if (IsValidChar(Text[Delta])) {
-                    continue;
-                }
-                else if (Text[Delta] == '[') {
-                    if ((Delta - Open) != 0) {
-                        Var.Add(Text.SubString(Open, Delta - Open));
-                    }
-
-                    var x = Delta + 1;
-                    ConsumeBlock(Text, ref Delta);
-
-                    Var.Add(
-                        Engine.Parse(Text, ref x, Delta - 1)
-                    );
-
-                    Open = Delta + 1;
-                }
-                else break;
-            } 
-            
-            if (Open < Delta) {
-                Var.Add(Text.Substring(Open, Delta - Open));
-            }
-
-            Index = Delta;
-            return Var;
-        }
-
-        public override string ToString() {
-            return string.Join(".", Values);
-        }
-
         public static object GetProperty(object Obj, string Name) {
             if (Obj == null)
                 return null;
@@ -270,12 +222,86 @@ namespace Poly.Script.Node {
         public static void Set(string Key, jsObject Context, object Data) {
             if (Context == null || string.IsNullOrEmpty(Key))
                 return;
-            
+
             Context[Key] = Data;
         }
 
         public static void Move(string Key, jsObject Old, jsObject New) {
             Set(Key, New, Get(Key, Old));
+        }
+
+        private static int GetNextTokenIndex(string Text, int Index, int LastIndex) {
+            var Next = Text.FirstPossibleIndex(Index, ".", "[", "]");
+
+            if (Next == -1 || Next > LastIndex)
+                Next = LastIndex;
+
+            for (; Index < Next; Index++) {
+                if (!IsValidChar(Text[Index])) {
+                    break;
+                }
+            }
+
+            return Index;
+        }
+
+        public static Variable Parse(Engine Engine, string Text, int Index, int LastIndex = -1) {
+            return Parse(Engine, Text, ref Index, LastIndex == -1 ? Text.Length : LastIndex);
+        }
+
+        public static new Variable Parse(Engine Engine, string Text, ref int Index, int LastPossibleIndex) {
+            if (!IsParseOk(Engine, Text, ref Index, LastPossibleIndex))
+                return null;
+
+            var Var = new Variable(Engine);
+            var Delta = Index;
+            var LastIndex = Index;
+            var List = new List<Node>();
+
+            ConsumeValidName(Text, ref LastIndex);
+
+            if (LastIndex > LastPossibleIndex)
+                LastIndex = LastPossibleIndex;
+
+            if (Text.Compare("Static", Index)) {
+                Var.IsStatic = true;
+                Delta += 7;
+            }
+
+            while (Delta < LastIndex) {
+                var Next = GetNextTokenIndex(Text, Delta, LastIndex);
+
+                if (Next == -1 || Next >= LastIndex) {
+                    List.Add(
+                        new Node(false, Text.SubString(Delta, LastIndex - Delta))
+                    );
+
+                    Delta = LastIndex;
+                }
+                else if (Text[Next] == ']') {
+                    List.Add(
+                        new Node(true, Engine.Parse(Text, ref Delta, Next))
+                    );
+
+                    Delta = Next + 1;
+                }
+                else if ((Next - Delta) > 0) {
+                    List.Add(
+                        new Node(false, Text.SubString(Delta, Next - Delta))
+                    );
+
+                    Delta = Next + 1;
+                }
+                else break;
+            }
+
+            Var.List = List.ToArray();
+            Index = Delta;
+            return Var;
+        }
+
+        public override string ToString() {
+            return string.Join(".", (IEnumerable<Node>)List);
         }
     }
 }

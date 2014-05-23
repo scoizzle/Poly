@@ -139,8 +139,9 @@ namespace Poly.Script.Node {
                     if ((Object = Current as jsObject) != null) {
                         Object[Key] = Val;
                     }
-                    else if (SetProperty(Current, Key, Val)) ;
-                    else return null;
+                    else if (!SetProperty(Current, Key, Val)) {
+                        return null;
+                    }
 
                     return Val;
                 }
@@ -148,7 +149,7 @@ namespace Poly.Script.Node {
                     Value = Object[Key];
                 }                
 
-                if (Value == null || Key == Value) {
+                if (Value == null) {
                     if ((Value = GetProperty(Current, Key)) == null) {
                         if (Object != null) {
                             Value = new jsObject();

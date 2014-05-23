@@ -45,8 +45,24 @@ namespace Poly.Script.Node {
 
             Function Func;
 
-            if ((Func = Function.Get(Engine, Name, This, ref Cacheable)) == null)
-                return null;
+            if ((Func = Function.Get(Engine, Name, This, ref Cacheable)) == null) {
+                var ObjectName = Object.ToString();
+
+                if (Engine.Shorthands.ContainsKey(ObjectName)) {
+                    var T = Helper.SystemFunctions.SearchForType(Engine.Shorthands[ObjectName]);
+
+                    if (T != null) {
+                        var Args = Function.GetFunctionArguments(null, Context, Arguments);
+                        var Types = Helper.MemberFunction.GetArgTypes(Args);
+
+                        Func = Helper.SystemFunctions.Get(T, Name, Types);
+                        Cacheable = true;
+                    }
+                }
+                else {
+                    return null;
+                }
+            }
 
             if (Cacheable)
                 Function = Func;

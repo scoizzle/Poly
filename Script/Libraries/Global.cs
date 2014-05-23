@@ -14,6 +14,7 @@ namespace Poly.Script.Libraries {
             Add(Load);
             Add(Save);
             Add(Template);
+            Add(Match);
 			Add(TypeName);
             Add(ToNum);
             Add(ToObject);
@@ -53,6 +54,16 @@ namespace Poly.Script.Libraries {
             }
 
             return string.Empty;
+        });
+
+        public static SystemFunction Match = new SystemFunction("Match", (Args) => {
+            var This = Args.Get<string>("this");
+            var Regex = Args.Get<string>("0");
+
+            if (!string.IsNullOrEmpty(This) && !string.IsNullOrEmpty(Regex))
+                return This.Match(Regex);
+
+            return null;
         });
 
         public static SystemFunction ToNum = new SystemFunction("ToNum", (Args) => {

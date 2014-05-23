@@ -41,19 +41,23 @@ namespace Poly.Script.Helper {
         }
 
         public static object Include(Engine Engine, string FileName) {
-            if (File.Exists(FileName) && !Engine.Includes.Contains(FileName)) {
-                var Expression = Engine.Parse(File.ReadAllText(FileName), 0, new Node.Node()) as Node.Node;
+            if (File.Exists(FileName)) {
+                FileName = Path.GetFullPath(FileName);
 
-                if (Expression != null) {
-                    Engine.Includes.Add(FileName);
+                if (!Engine.Includes.Contains(FileName)) {
+                    var Expression = Engine.Parse(File.ReadAllText(FileName), 0, new Node.Node()) as Node.Node;
 
-                    if (Expression.Count == 0)
-                        return Node.Expression.NoOp;
-                    else if (Expression.Count == 1) {
-						return Expression.First().Value;
-                    }
-                    else {
-                        return Expression;
+                    if (Expression != null) {
+                        Engine.Includes.Add(FileName);
+
+                        if (Expression.Count == 0)
+                            return Node.Expression.NoOp;
+                        else if (Expression.Count == 1) {
+                            return Expression.First().Value;
+                        }
+                        else {
+                            return Expression;
+                        }
                     }
                 }
             }

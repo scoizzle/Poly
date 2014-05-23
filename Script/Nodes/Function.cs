@@ -20,13 +20,43 @@ namespace Poly.Script {
         }
 
         public object Call(jsObject Context, jsObject ArgList, object This = null, Engine Engine = null) {
+            var Args = GetFunctionArguments(this, Context, ArgList);
+
+            if (!Args.ContainsKey("this")) {
+                Variable.Set(
+                    "this",
+                    Args,
+                    This == null && Object != null ?
+                        Object.Evaluate(Context) :
+                        This
+                );
+            }
+
+            return this.Evaluate(Args);
+        }
+
+        public override string ToString() {
+            return "function " + Name + "(" + string.Join(", ", Arguments) + ")";
+        }
+
+        public static jsObject GetFunctionArguments(Function This, jsObject Context, jsObject ArgList) {
             var Args = new jsObject();
             var Index = 0;
 
             ArgList.ForEach((Key, Value) => {
-                var Name = Arguments.Length == 0 || Index >= Arguments.Length ?
-                    Key :
-                    Arguments[Index];
+                var Name = "";
+
+                if (This != null) {
+                    if (Index >= This.Arguments.Length){
+                        Name = Key;
+                    }
+                    else {
+                        Name = This.Arguments[Index];
+                    }
+                }
+                else {
+                    Name = Key;
+                }
 
                 var VFunc = Value as Function;
 
@@ -43,19 +73,7 @@ namespace Poly.Script {
                 Index++;
             });
 
-            Variable.Set(
-                "this",
-                Args,
-                This == null && Object != null ?
-                    Object.Evaluate(Context) :
-                    This
-            );
-
-            return this.Evaluate(Args);
-        }
-
-        public override string ToString() {
-            return "function " + Name + "(" + string.Join(", ", Arguments) + ")";
+            return Args;
         }
 
         public static Function GetTypeConstructor(Engine Engine, string Name) {
@@ -157,7 +175,7 @@ namespace Poly.Script {
                 Library Lib;
                 var ObjectName = Name.Substring(0, Index);
                 var FunctionName = Name.Substring(Index + 1);
-
+                
                 if (Library.StaticLibraries.TryGetValue(ObjectName, out Lib)) {
                     if (Lib.TryGetValue(FunctionName, out Func)) {
                         return Func;

@@ -36,6 +36,7 @@ namespace Poly {
         }
 
         public class Engine : jsObject<Handler> {
+            private int uid = 0;
             public override void AssignValue<T>(string Key, T Value) {
                 if (Value is Event.Handler) {
                     this.Add(Key, Value as Event.Handler);
@@ -54,11 +55,7 @@ namespace Poly {
             }
 
             public void Register(string EventName, Handler Handler) {
-                base[EventName, Handler.Method.MetadataToken.ToString()] = Handler;
-            }
-
-            public void Unregister(string EventName, Handler Handler) {
-                base[EventName, Handler.Method.MetadataToken.ToString()] = null;
+                base[EventName, uid++.ToString()] = Handler;
             }
 
             public void Invoke(string EventName, jsObject Args) {

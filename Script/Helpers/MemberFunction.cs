@@ -37,8 +37,10 @@ namespace Poly.Script.Helper {
             Func = new SystemFunction(Name, (Args) => {
                 var This = Args.Get<object>("this");
 
-                if (This != null) 
+                if (This != null)
                     Args.Remove("this");
+                else if (!Info.IsStatic)
+                    return null;
 
                 return Info.Invoke(This, GetArguments(Args));
             });
@@ -110,7 +112,7 @@ namespace Poly.Script.Helper {
             return null;
         }
 
-        private Type[] GetArgTypes(jsObject Args) {
+        public static Type[] GetArgTypes(jsObject Args) {
             List<Type> TypeList = new List<System.Type>();
             
             foreach (var Pair in Args) {

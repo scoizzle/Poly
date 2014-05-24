@@ -9,6 +9,7 @@ namespace Poly.Script.Node {
     public class Variable : Value {
         private class Node {
             public bool IsVariable;
+            public bool IsSystemType;
             public object Obj;
 
             public Node(bool isVar, object Obj) {
@@ -73,7 +74,10 @@ namespace Poly.Script.Node {
                 object Value = null;
                 jsObject Object;
 
-                if ((Object = Current as jsObject) != null) {
+                if (Node.IsSystemType) {
+                     Value = Helper.SystemFunctions.SearchForType(Key);
+                }
+                else if ((Object = Current as jsObject) != null) {
                     Value = Object[Key];
                 }
 
@@ -145,6 +149,10 @@ namespace Poly.Script.Node {
 
                     return Val;
                 }
+                else if (Node.IsSystemType) {
+                    Value = Helper.SystemFunctions.SearchForType(Key);
+                    Object = null;
+                }
                 else if ((Object = Current as jsObject) != null) {
                     Value = Object[Key];
                 }                
@@ -169,14 +177,18 @@ namespace Poly.Script.Node {
             if (Obj == null)
                 return null;
 
-            var Type = Obj.GetType();
+            var Type = Obj is Type ? Obj as Type : Obj.GetType();
 
             try {
                 var PropInfo = Type.GetProperty(Name);
 
-                if (PropInfo != null) {
+                if (PropInfo != null)
                     return PropInfo.GetValue(Obj, null);
-                }
+
+                var FieldInfo = Type.GetField(Name);
+
+                if (FieldInfo != null)
+                    return FieldInfo.GetValue(Obj);
             }
             catch { }
 
@@ -187,13 +199,20 @@ namespace Poly.Script.Node {
             if (Obj == null)
                 return false;
 
-            var Type = Obj.GetType();
+            var Type = Obj is Type ? Obj as Type : Obj.GetType();
 
             try {
                 var PropInfo = Type.GetProperty(Name);
 
                 if (PropInfo != null) {
                     PropInfo.SetValue(Obj, Value, null);
+                    return true;
+                }
+
+                var FieldInfo = Type.GetField(Name);
+
+                if (FieldInfo != null) {
+                    FieldInfo.SetValue(Obj, Value);
                     return true;
                 }
             }
@@ -287,9 +306,20 @@ namespace Poly.Script.Node {
                     Delta = Next + 1;
                 }
                 else if ((Next - Delta) > 0) {
-                    List.Add(
-                        new Node(false, Text.SubString(Delta, Next - Delta))
-                    );
+                    var Key = Text.SubString(Delta, Next - Delta);
+
+                    if (Engine.Shorthands.ContainsKey(Key)) {
+                        List.Add(
+                            new Node(false, Engine.Shorthands[Key]) {
+                                IsSystemType = true
+                            }
+                        );
+                    }
+                    else {
+                        List.Add(
+                            new Node(false, Key)
+                        );
+                    }
 
                     Delta = Next + 1;
                 }

@@ -17,6 +17,7 @@ namespace Poly.Script.Libraries {
             Add(Post);
             Add(Escape);
             Add(Descape);
+            Add(Server);
         }
 
         public static SystemFunction Get = new SystemFunction("Get", (Args) => {

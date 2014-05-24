@@ -13,7 +13,11 @@ namespace Poly.Script {
 
         public List<Library> Using = new List<Library>();
         public List<string> Includes = new List<string>();
-        public Dictionary<string, string> Shorthands = new Dictionary<string, string>();
+        public Dictionary<string, string> Shorthands = new Dictionary<string, string>() {
+            { "App", typeof(App).FullName }, 
+            { "Log", typeof(App.Log).FullName },
+            { "LogLevel", typeof(App.Log.Levels).FullName }
+        };
 
         public jsObject<CustomType> Types = new jsObject<CustomType>();
         public jsObject<Helper.Initializer> RawInitializerCache = new jsObject<Helper.Initializer>();

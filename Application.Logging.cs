@@ -5,58 +5,64 @@ using System.Text;
 using System.IO;
 
 namespace Poly {
-    public class Logging {
-        public bool Active = false;
-        public int Level = 0;
+    public partial class App {
+        public class Log {
+            public static bool Active = false;
+            public static int Level = 0;
 
-        public class Levels {
-            public const int None = -1;
-            public const int Fatal = 0;
-            public const int Error = 1;
-            public const int Warning = 2;
-            public const int Info = 3;
-        };
+            public class Levels {
+                public const int None = -1;
+                public const int Fatal = 0;
+                public const int Error = 1;
+                public const int Warning = 2;
+                public const int Info = 3;
+            };
 
-        public void Info(string Message) {
-            if (Level >= Levels.Info){
-                Log("[INFO] " + Message);
+            public static void Info(string Message) {
+                if (Level >= Levels.Info) {
+                    Print("[INFO] ", Message);
+                }
             }
-        }
 
-        public void Warning(string Message) {
-            if (Level >= Levels.Warning) {
-                Log("[WARNING] " + Message);
+            public static void Warning(string Message) {
+                if (Level >= Levels.Warning) {
+                    Print("[WARNING] ", Message);
+                }
             }
-        }
 
-        public void Error(string Message) {
-            if (Level >= Levels.Error) {
-                Log("[ERROR] " + Message);
+            public static void Error(string Message) {
+                if (Level >= Levels.Error) {
+                    Print("[ERROR] ", Message);
+                }
             }
-        }
 
-        public void Fatal(string Message) {
-            if (Level >= Levels.Fatal) {
-                Log("[FATAL] " + Message);
+            public static void Fatal(string Message) {
+                if (Level >= Levels.Fatal) {
+                    Print("[FATAL] ", Message);
+                }
+                App.Exit(-1);
             }
-            App.Exit(-1);
-        }
 
-        public void Log(string Message) {
-            if (!Active)
-                return;
+            public static void Print(params string[] Message) {
+                if (!Active)
+                    return;
 
-            Console.WriteLine(Message);
-        }
+                foreach (string part in Message) {
+                    Console.Write(part);
+                }
 
-        public void Benchmark(string Name, int Iterations, Action<int> Todo) {
-            int Start = Environment.TickCount;
-            for (int i = 0; i < Iterations; i++) {
-                Todo(i);
+                Console.WriteLine();
             }
-            int Stop = Environment.TickCount;
 
-            Info(Name + ": " + (Stop - Start).ToString());
+            public static void Benchmark(string Name, int Iterations, Action<int> Todo) {
+                int Start = Environment.TickCount;
+                for (int i = 0; i < Iterations; i++) {
+                    Todo(i);
+                }
+                int Stop = Environment.TickCount;
+
+                Info(Name + ": " + (Stop - Start).ToString());
+            }
         }
     }
 }

@@ -7,10 +7,9 @@ using System.Threading;
 namespace Poly {
     public partial class App {
 		public static bool Running = false;
-        public static Logging Log = new Logging();
 
-		public static void Init(int LogLevel = Logging.Levels.None) {
-            if (LogLevel != Logging.Levels.None) {
+		public static void Init(int LogLevel = Log.Levels.None) {
+            if (LogLevel != Log.Levels.None) {
                 App.Log.Active = true;
                 App.Log.Level = LogLevel;
             }

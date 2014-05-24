@@ -109,11 +109,8 @@
     <Compile Include="Script\Helpers\Initializer.cs" />
     <Compile Include="Script\Helpers\Library.cs" />
     <Compile Include="Script\Helpers\MemberFunction.cs" />
-    <Compile Include="Script\Libraries\Console.cs" />
     <Compile Include="Script\Libraries\Hash.cs" />
     <Compile Include="Script\Libraries\Time.cs" />
-    <Compile Include="Script\Libraries\File.cs" />
-    <Compile Include="Script\Libraries\Logging.cs" />
     <Compile Include="Script\Libraries\Tcp.cs" />
     <Compile Include="Script\Libraries\Sockets.cs" />
     <Compile Include="Script\Libraries\Global.cs" />

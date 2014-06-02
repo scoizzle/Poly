@@ -13,7 +13,7 @@ namespace Poly.Script.Node {
                 var Delta = Index + 2;
 
                 while (Delta < LastIndex) {
-                    if (Text.Compare(Environment.NewLine, Delta))
+                    if (Text.Compare("\n", Delta))
                         break;
 
                     Delta++;

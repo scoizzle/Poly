@@ -10,21 +10,17 @@ namespace Poly.Script.Node {
         public Case Default = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            var Options = this.ToArray();
+            foreach (var Node in this.Values) {
+                if (!(Node is Case))
+                    continue;
 
-            for (int i = 0; i < Options.Length; i++) {
-                var Case = (Options[i].Value as Case);
+                var Case = Node as Case;
 
-                if (Case != null && Bool.EvaluateNode(Case.Object, Context)) {
-                    return Case.Evaluate(Context);
-                }
+                if (Bool.EvaluateNode(Case.Object, Context))
+                    return GetValue(Case, Context);
             }
 
-            if (Default != null) {
-                return Default.Evaluate(Context);
-            }
-
-            return null;
+            return GetValue(Default, Context);
         }
 
         public override string ToString() {

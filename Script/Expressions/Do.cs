@@ -9,14 +9,11 @@ namespace Poly.Script.Node {
         public object Boolean = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            var List = this.ToList();
-
             do {
-                for (int i = 0; i < List.Count; i++) {
-                    var Obj = List[i];
-                    var Result = GetValue(Obj.Value, Context);
+                foreach (var Node in this.Values) { 
+                    var Result = GetValue(Node, Context);
 
-                    if (Obj.Value is Return)
+                    if (Node is Return)
                         return Result;
 
                     if (Result == Break)

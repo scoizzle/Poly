@@ -12,16 +12,10 @@ namespace Poly.Script.Node {
 
         public override object Evaluate(Data.jsObject Context) {
             Init.Evaluate(Context);
-            var List = this.ToList();
 
             while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
-                for (int i = 0; i < List.Count; i++) {
-                    var Node = (List[i].Value as Node);
-
-                    if (Node == null)
-                        continue;
-
-                    var Result = Node.Evaluate(Context);
+                foreach (var Node in this.Values) {
+                    var Result = GetValue(Node, Context);
 
                     if (Node is Return) {
                         return Result;

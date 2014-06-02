@@ -35,6 +35,16 @@ namespace Poly.Script {
             return this.Evaluate(Args);
         }
 
+        public override object Evaluate(jsObject Context) {
+            var Value = base.Evaluate(Context);
+
+            if (Value is Return) {
+                return null;
+            }
+
+            return Value;
+        }
+
         public override string ToString() {
             return "function " + Name + "(" + string.Join(", ", Arguments) + ")";
         }

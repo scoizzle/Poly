@@ -11,7 +11,7 @@ namespace System {
             int Count = 0, X = 0;
 
             while ((X = This.IndexOf(ToFind, X)) != -1) {
-                if ((X > 0) && (This[X - 1] == '\\'))
+                if ((X > 0) && (This[X - 1] == '\\') && ToFind != "\\")
                     continue;
 
                 Count++;

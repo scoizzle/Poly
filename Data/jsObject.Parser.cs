@@ -76,16 +76,11 @@ namespace Poly.Data {
 
             if (Text.FindMatchingBrackets("[", "]", ref Open, ref Close)) {
                 do {
-                    if (Text[Open] == ',') {
-                        Open++;
-                    }
-
-                    while (Open < Close && char.IsWhiteSpace(Text[Open]))
+                    while (Open < Close && (char.IsWhiteSpace(Text[Open]) || Text[Open] == ','))
                         Open++;
 
                     if (Open == Close)
                         break;
-
 
                     var X = Text[Open];
                     var Name = Storage.Count.ToString();
@@ -142,6 +137,10 @@ namespace Poly.Data {
 
         private static jsObject _NamedValue(string Text, ref int Index, int LastIndex, jsObject Storage) {
             var Name = "";
+
+            while ((char.IsWhiteSpace(Text[Index]) || Text[Index] == ',') && Index < LastIndex)
+                Index++;
+
             var X = Text[Index];
 
             if (X == '"') {
@@ -190,9 +189,12 @@ namespace Poly.Data {
         public static bool Parse(string Text, int Index, jsObject Storage = null) {
             if (string.IsNullOrEmpty(Text))
                 return false;
-
+            
             if (Index < 0 || Index >= Text.Length)
                 return false;
+
+            while (char.IsWhiteSpace(Text[Index]) && Index < Text.Length - 1)
+                Index++;
 
             var X = Text[Index];
                 

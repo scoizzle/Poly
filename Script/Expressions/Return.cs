@@ -8,6 +8,9 @@ namespace Poly.Script.Node {
         public object Value = null;
 
         public override object Evaluate(Data.jsObject Context) {
+            if (Value == null)
+                return this;
+
             return GetValue(Value, Context);
         }
 

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace Poly.Script.Node {
     public class Do : Expression {
@@ -13,7 +14,7 @@ namespace Poly.Script.Node {
             do {
                 for (int i = 0; i < List.Count; i++) {
                     var Obj = List[i];
-                    var Result = (Obj.Value as Node).Evaluate(Context);
+                    var Result = GetValue(Obj.Value, Context);
 
                     if (Obj.Value is Return)
                         return Result;
@@ -25,7 +26,7 @@ namespace Poly.Script.Node {
                         break;
                 }
             }
-            while (Bool.EvaluateNode(Boolean, Context));
+            while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running);
 
             return null;
         }

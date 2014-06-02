@@ -46,6 +46,9 @@ namespace Poly.Script.Node {
             Function Func;
 
             if ((Func = Function.Get(Engine, Name, This, ref Cacheable)) == null) {
+                if (Object == null)
+                    return null;
+
                 var ObjectName = Object.ToString();
 
                 if (Engine.Shorthands.ContainsKey(ObjectName)) {
@@ -66,6 +69,9 @@ namespace Poly.Script.Node {
 
             if (Cacheable)
                 Function = Func;
+
+            if (Func == null)
+                return null;
 
             return Func.Call(Context, Arguments, This, Engine);
         }

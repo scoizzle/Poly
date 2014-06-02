@@ -7,6 +7,18 @@ using Poly.Data;
 
 namespace System {
     public static class StringConversions {
+        private static Dictionary<char, string> EscapeChars = new Dictionary<char, string>() {
+            { '\r', "\\r" },
+            { '\n', "\\n" },
+            { '\t', "\\t" },
+            { '\f', "\\f" },
+            { '\"', "\\\"" },
+            { '\'', "\\'" },
+            { '\\', "\\\\" },
+            { '/', "\\/" },
+            { '.', "\\." }
+        };
+
         public static bool ToBool(this String This) {
             bool Out = false;
 
@@ -35,105 +47,88 @@ namespace System {
         }
 
         public static string Escape(this String This) {
-            StringBuilder Output = new StringBuilder();
+            int NewLength = This.Length;
 
-            for (int Index = 0; Index < This.Length; Index++) {
-                switch (This[Index]) {
-                    default:
-                        Output.Append(This[Index]);
-                        continue;
-
+            for (int i = 0; i < This.Length; i++) {
+                switch (This[i]) {
                     case '\r':
-                        Output.Append("\\r");
-                        break;
                     case '\n':
-                        Output.Append("\\n");
-                        break;
                     case '\t':
-                        Output.Append("\\t");
-                        break;
                     case '\f':
-                        Output.Append("\\f");
-                        break;
-                    case '"':
-                        Output.Append("\\\"");
-                        break;
+                    case '\"':
                     case '\'':
-                        Output.Append("\\'");
-                        break;
                     case '\\':
-                        Output.Append("\\\\");
-                        break;
                     case '/':
-                        Output.Append("\\/");
-                        break;
                     case '.':
-                        Output.Append("\\.");
+                        NewLength++;
                         break;
                 }
             }
 
-            return Output.ToString();
+            char[] Array = new char[NewLength];
+
+
+            for (int i = 0, o = 0; o < This.Length && i < NewLength; i++, o++) {
+                if (EscapeChars.ContainsKey(This[i])) {
+                    var Esc = EscapeChars[This[i]];
+
+                    Array[o] = Esc[0];
+                    Array[o + 1] = Esc[1];
+                    o++;
+                }
+                else {
+                    Array[o] = This[i];
+                }
+            }
+
+            return new string(Array);
+        }
+
+        private static char FindDescapeChar(string Val) {
+            foreach (var Pair in EscapeChars) {
+                if (Pair.Value == Val)
+                    return Pair.Key;
+            }
+            return '\x00';
         }
 
         public static string Descape(this String This) {
             if (This.Find('\\') == -1)
                 return This;
 
-            StringBuilder Output = new StringBuilder();
+            int NewLength = This.Length;
 
-            for (int Index = 0; Index < This.Length; ) {
-                if (This.Length - (Index + 2) < 0) {
-                    Output.Append(This[Index]);
-                    break;
+            NewLength -= This.CountOf("\\u") * 5;
+            NewLength -= (This.CountOf("\\") - This.CountOf("\\\\"));
+
+            char[] Array = new char[NewLength];
+
+            for (int i = 0, o = 0; o < This.Length && i < NewLength; i++, o++) {
+                if (This[o] == '\\') {
+                    if (This[o + 1] == 'u') {
+                        Array[i] = Convert.ToChar(
+                            Int32.Parse(This.SubString(o + 2, 4), Globalization.NumberStyles.HexNumber)
+                        );
+                    }
+                    else {
+                        var Desc = This.SubString(o, 2);
+                        var C = FindDescapeChar(Desc);
+
+                        if (C != '\x00') {
+                            Array[i] = C;
+                        }
+                        else {
+                            Array[i] = This[o + 1];
+                        }
+                    }
+                    o++;
                 }
-
-                switch (This.SubString(Index, 2)) {
-                    default:
-                        Output.Append(This[Index]);
-                        Index++;
-                        continue;
-                    case "\\r":
-                        Output.Append('\r');
-                        break;
-                    case "\\n":
-                        Output.Append('\n');
-                        break;
-                    case "\\t":
-                        Output.Append("\t");
-                        break;
-                    case "\\f":
-                        Output.Append("\f");
-                        break;
-                    case "\\\"":
-                        Output.Append("\"");
-                        break;
-                    case "\\\'":
-                        Output.Append("\'");
-                        break;
-                    case "\\\\":
-                        Output.Append("\\");
-                        break;
-                    case "\\/":
-                        Output.Append("/");
-                        break;
-                    case "\\.":
-                        Output.Append(".");
-                        break;
-                    case "\\u":
-                        string Code = This.SubString(Index + 2, 4);
-
-                        char Character = Convert.ToChar(Int32.Parse(Code, Globalization.NumberStyles.HexNumber));
-
-                        Output.Append(Character);
-
-                        Index += 5;
-                        continue;
+                else {
+                    Array[i] = This[o];
                 }
-                Index += 2;
             }
 
-            return Output.ToString();
+            return new string(Array);
         }
 
         public static string MD5(this String This) {

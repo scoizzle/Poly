@@ -46,6 +46,7 @@
   <ItemGroup>
     <Compile Include="Application.cs" />
     <Compile Include="Application.Logging.cs" />
+    <Compile Include="Char.Extensions.cs" />
     <Compile Include="Data\Hash.cs" />
     <Compile Include="Data\jsObject.Accessors.cs" />
     <Compile Include="Data\jsObject.cs" />
@@ -110,7 +111,6 @@
     <Compile Include="Script\Helpers\Library.cs" />
     <Compile Include="Script\Helpers\MemberFunction.cs" />
     <Compile Include="Script\Libraries\Hash.cs" />
-    <Compile Include="Script\Libraries\Time.cs" />
     <Compile Include="Script\Libraries\Tcp.cs" />
     <Compile Include="Script\Libraries\Sockets.cs" />
     <Compile Include="Script\Libraries\Global.cs" />
@@ -142,7 +142,7 @@
     <Compile Include="Net\Irc\Client\Events.cs" />
     <Compile Include="Net\Irc\Client\Functions.cs" />
     <Compile Include="Net\Irc\Client\Threads.cs" />
-    <Compile Include="StringMatching.cs" />
+    <Compile Include="String.Matching.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

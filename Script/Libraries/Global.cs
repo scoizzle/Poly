@@ -18,6 +18,7 @@ namespace Poly.Script.Libraries {
 			Add(TypeName);
             Add(ToNum);
             Add(ToObject);
+            Add(ToString);
         }
 
         public static SystemFunction Load = new SystemFunction("Load", (Args) => {
@@ -38,7 +39,7 @@ namespace Poly.Script.Libraries {
         public static SystemFunction Save = new SystemFunction("Save", (Args) => {
             var FileName = Args.Get<string>("0");
 
-            if (Args.ContainsKey("this")) {
+            if (!string.IsNullOrEmpty(FileName) && Args.ContainsKey("this")) {
                 System.IO.File.WriteAllText(FileName, Args.getObject("this").ToString());
             }
 
@@ -116,6 +117,19 @@ namespace Poly.Script.Libraries {
             }
             else if (This is jsObject) {
                 return This;
+            }
+            return null;
+        });
+
+        new public static SystemFunction ToString = new SystemFunction("ToString", (Args) => {
+            var This = Args["this"];
+
+            if (This != null) {
+                if (This is jsObject && Args.ContainsKey("0")) {
+                    bool Arg = Args.Get<bool>("0");
+                    return (This as jsObject).ToString(Arg);
+                }
+                return This.ToString();
             }
             return null;
         });

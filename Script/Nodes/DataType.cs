@@ -108,8 +108,8 @@ namespace Poly.Script.Node {
             if (Left is int) {
                 return Integer.GreaterThan((int)Left, Right);
             }
-            else if (Left is double) {
-                return Float.GreaterThan((double)Left, Right);
+            else if (Left is double || Left is long) {
+                return Float.GreaterThan(Convert.ToDouble(Left), Right);
             }
             return null;
         }

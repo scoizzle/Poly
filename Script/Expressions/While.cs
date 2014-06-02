@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
+using System.Threading;
+
 namespace Poly.Script.Node {
     public class While : Expression {
         public object Boolean = null;
@@ -10,7 +12,7 @@ namespace Poly.Script.Node {
         public override object Evaluate(Data.jsObject Context) {
             var List = this.ToList();
 
-            while (Bool.EvaluateNode(Boolean, Context)) {
+            while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
                 for (int i = 0; i < List.Count; i++) {
                     var Obj = List[i];
                     var Result = GetValue(Obj.Value, Context);

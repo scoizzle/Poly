@@ -131,7 +131,7 @@ namespace Poly.Script.Node {
                 return null;
 
             var Delta = Index;
-            for (; Delta - Index < LastIndex; Delta++) {
+            for (; Delta - Index < LastIndex && Delta < Text.Length; Delta++) {
                 var C = Text[Delta];
 
                 if (char.IsNumber(C))
@@ -145,6 +145,9 @@ namespace Poly.Script.Node {
 
                 if (C == 'e' || C == 'E')
                     continue;
+
+                if (C == 'f' || C == 'd')
+                    break;
 
                 break;
             }

@@ -16,7 +16,9 @@ namespace Poly.Script {
         public Dictionary<string, string> Shorthands = new Dictionary<string, string>() {
             { "App", typeof(App).FullName }, 
             { "Log", typeof(App.Log).FullName },
-            { "LogLevel", typeof(App.Log.Levels).FullName }
+            { "LogLevel", typeof(App.Log.Levels).FullName },
+            { "Console", typeof(System.Console).FullName },
+            { "Time", typeof(System.DateTime).FullName }
         };
 
         public jsObject<CustomType> Types = new jsObject<CustomType>();

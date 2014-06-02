@@ -42,7 +42,11 @@ namespace Poly.Script.Helper {
                 else if (!Info.IsStatic)
                     return null;
 
-                return Info.Invoke(This, GetArguments(Args));
+                try {
+                    return Info.Invoke(This, GetArguments(Args));
+                }
+                catch { }
+                return null;
             });
 
             Cache[Type.FullName, Name, TypeString] = Func;

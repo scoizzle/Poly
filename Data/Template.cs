@@ -38,8 +38,14 @@ namespace Poly.Data {
                             var SubTemplate = Template.SubString(Start, Open - Start);
                             var jsObj = (Obj as jsObject);
 
-                            foreach (jsObject Sub in jsObj.Values) {
-                                List.Add(Sub.Template(SubTemplate));
+
+                            if (jsObj.All(pair => pair.Value is jsObject)) {
+                                foreach (jsObject Sub in jsObj.Values) {
+                                    List.Add(Sub.Template(SubTemplate));
+                                }
+                            }
+                            else {
+                                List.Add(jsObj.Template(SubTemplate));
                             }
                         }
                         else {

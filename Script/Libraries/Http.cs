@@ -26,11 +26,9 @@ namespace Poly.Script.Libraries {
             if (!string.IsNullOrEmpty(Url)) {
                 WebClient Client = new WebClient();
 
-                if (Args.ContainsKey("Headers")) {
-                    Args.getObject("Headers").ForEach((Key, Value) => {
-                        Client.Headers.Add(Key, Value.ToString());
-                    });
-                }
+                Args.ForEach("Headers", (K, V) => {
+                    Client.Headers.Add(K, V.ToString());
+                });
 
                 try {
                     return Client.DownloadString(Url);
@@ -42,16 +40,17 @@ namespace Poly.Script.Libraries {
 
         public static SystemFunction Post = new SystemFunction("Post", (Args) => {
             var Url = Args.Get<string>("Url");
-            var Data = Args.Get<string>("Data");
+
+            var Data = Args["Data"] is jsObject ? 
+                Args.getObject("Data").ToPostString() : 
+                Args.Get<string>("Data");
 
             if (!string.IsNullOrEmpty(Url)) {
                 WebClient Client = new WebClient();
 
-                if (Args.ContainsKey("Headers")) {
-                    Args.getObject("Headers").ForEach((Key, Value) => {
-                        Client.Headers.Add(Key, Value.ToString());
-                    });
-                }
+                Args.ForEach("Headers", (K, V) => {
+                    Client.Headers.Add(K, V.ToString());
+                });
 
                 try {
                     return Client.UploadString(Url, Data);

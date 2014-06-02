@@ -61,17 +61,26 @@ namespace Poly.Script.Node {
 
         public new static object Devide(int Left, object Right) {
             if (Right is int) {
+                if ((int)Right == 0)
+                    return null;
+
                 return Left / (int)Right;
             }
             else if (Right is double) {
+                if ((double)Right == 0)
+                    return null;
                 return Left / (double)Right;
             }
             else if (Right is string) {
                 var Str = (string)Right;
                 var Temp = double.NaN;
 
-                if (double.TryParse(Str, out Temp))
+                if (double.TryParse(Str, out Temp)) {
+                    if ((int)Temp == 0)
+                        return null;
+
                     return Left / Temp;
+                }
             }
             return null;
         }

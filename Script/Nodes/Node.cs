@@ -14,9 +14,9 @@ namespace Poly.Script.Node {
         public virtual object Evaluate(jsObject Context) {
 			foreach (var Obj in this.Values) {
 				var Result = GetValue (Obj, Context);
-                
-				if (Obj is Return)
-					return Result;
+
+                if (Obj is Return)
+                    return Result;
 
                 if (Obj is Operator)
                     continue;

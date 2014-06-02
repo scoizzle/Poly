@@ -134,7 +134,7 @@ namespace Poly {
                 else break;
             }
 
-            if (Offset != WildLen)
+            if (Index != DataLen || Offset != WildLen)
                 return null;
 
             return Storage;

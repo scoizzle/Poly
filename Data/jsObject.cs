@@ -68,6 +68,10 @@ namespace Poly.Data {
             List = null;
         }
 
+        public void ForEach(string Key, Action<string, object> Action) {
+            ForEach<object>(Key, Action);
+        }
+
         public void ForEach<T>(Action<string, T> Action) {
             var List = this.ToList();
 
@@ -90,12 +94,38 @@ namespace Poly.Data {
             return false;
         }
 
+        public void ForEach<T>(string Key, Action<string, T> Action) {
+            var Obj = this[Key] as jsObject;
+
+            if (Obj == null)
+                return;
+
+            foreach (var Pair in Obj) {
+                var Val = Pair.Value;
+
+                if (!(Val is T))
+                    continue;
+
+                Action(Pair.Key, (T)Val);
+            }
+        }
+
         public override string ToString() {
             return Stringify(this, false);
         }
 
         public virtual string ToString(bool HumanFormat) {
             return Stringify(this, HumanFormat);
+        }
+
+        public string ToPostString() {
+            StringBuilder Output = new StringBuilder();
+
+            ForEach((K, V) => {
+                Output.AppendFormat("{0}={1}&", PostEncode(K), PostEncode(V.ToString()));
+            });
+
+            return Output.ToString(0, Output.Length - 1);
         }
 
         public static string Stringify(jsObject This, bool HumanFormat, int Reserved = 1) {
@@ -147,6 +177,42 @@ namespace Poly.Data {
             Output.Append(This.IsArray ? ']' : '}');
 
             return Output.ToString();
+        }
+
+        private static string PostEncode(string Input) {
+            int Len = 0;
+
+            foreach (char c in Input) {
+                if (!char.IsLetterOrDigit(c) && c != ' ') {
+                    Len += 3;
+                }
+                else Len++;
+            }
+
+            if (Input.Length == Len)
+                return Input.Replace(' ', '+');
+
+            char[] Buffer = new char[Len];
+
+            for (int i = 0, offset = 0; offset < Len && i < Input.Length; i++, offset++) {
+                char c = Input[i];
+
+                if (char.IsLetterOrDigit(c))
+                    Buffer[offset] = c;
+                else if (c == ' ')
+                    Buffer[offset] = '+';
+                else {
+                    var str = c.ToHexString();
+
+                    Buffer[offset] = '%';
+                    Buffer[offset + 1] = str[0];
+                    Buffer[offset + 2] = str[1];
+
+                    offset += 2;
+                }
+            }
+
+            return new string(Buffer);
         }
 
         public static jsObject FromUrl(string Url, string Data = "") {

@@ -323,6 +323,9 @@ namespace Poly.Script.Node {
 
                     Delta = Next + 1;
                 }
+                else if ((Next - Delta) == 0){
+                    Delta++;
+                }
                 else break;
             }
 

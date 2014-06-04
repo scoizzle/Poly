@@ -130,6 +130,10 @@ namespace Poly.Net.Irc {
                 Conversations.Set(Channel, new Conversation(Channel));
         }
 
+		public void PartChannel(string Channel) {
+			PartChannel (Channel, "");
+		}
+
         public void PartChannel(string Channel, string Message = "") {
             Send(
                 new Packet("Part") {

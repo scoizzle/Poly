@@ -81,6 +81,7 @@
     <Compile Include="Script\Expressions\Case.cs" />
     <Compile Include="Script\Expressions\Comment.cs" />
     <Compile Include="Script\Expressions\Eval.cs" />
+    <Compile Include="Script\Expressions\Reload.cs" />
     <Compile Include="Script\Expressions\Try.cs" />
     <Compile Include="Script\Expressions\Switch.cs" />
     <Compile Include="Script\Expressions\Include.cs" />

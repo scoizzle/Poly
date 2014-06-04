@@ -15,10 +15,10 @@ namespace Poly.Net.Http {
         public bool IsCurrent(string Name) {
             Script.Engine Engine;
             if (CachedScripts.TryGetValue(Name, out Engine)) {
-                for (int i = 0; i < Engine.Includes.Count; i++) {
-                    var Include = Engine.Includes[i];
+                foreach (var Pair in Engine.Includes) {
+                    var Cached = Pair.Value as Script.Helper.CachedScript;
 
-                    if (!IsCurrent(Include))
+                    if (!Cached.IsCurrent())
                         return false;
                 }
             }
@@ -43,13 +43,7 @@ namespace Poly.Net.Http {
 
             if (!Engine.Parse(File.ReadAllText(Name)))
                 return null;
-
-            for (int i = 0; i < Engine.Includes.Count; i++) {
-                var Include = Engine.Includes[i];
-
-                LastWriteTimes[Include] = File.GetLastWriteTime(Include);
-            }
-
+            
             LastWriteTimes[Name] = File.GetLastWriteTime(Name);
             CachedScripts[Name] = Engine;
             return Engine;

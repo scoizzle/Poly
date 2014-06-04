@@ -12,7 +12,8 @@ namespace Poly.Script {
         public jsObject Static = new jsObject();
 
         public List<Library> Using = new List<Library>();
-        public List<string> Includes = new List<string>();
+
+        public Dictionary<string, Helper.CachedScript> Includes = new Dictionary<string, Helper.CachedScript>();
         public Dictionary<string, string> Shorthands = new Dictionary<string, string>() {
             { "App", typeof(App).FullName }, 
             { "Log", typeof(App.Log).FullName },

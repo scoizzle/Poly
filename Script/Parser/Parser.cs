@@ -20,6 +20,7 @@ namespace Poly.Script {
             Async.Parse,
             Node.Using.Parse,
             Node.Include.Parse,
+            Node.Reload.Parse,
             Return.Parse,
             Function.Parse,
             Node.Object.Parse,

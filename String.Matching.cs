@@ -8,7 +8,7 @@ using Poly.Data;
 namespace Poly {
     public static class StringMatching {
         public static readonly string[] WildChars = new string[] {
-            "{", "*", "?", "^", "|", "\\"
+            "{", "*", "?", "^", "\\", "]"
         };
 
         public static jsObject<Func<string, string>> Modifiers = new jsObject<Func<string, string>>() {
@@ -101,7 +101,7 @@ namespace Poly {
                                     Value = ModifyMatch(WildString, ModLen + 1, Value);
                                 }
 
-                                if (!IsValidMatch(Value, Wild.SubString(Mod + 1, ModLen - Mod))) {
+                                if (!IsValidMatch(Value, Wild.SubString(Mod + 1, ModLen - Mod - 1))) {
                                     break;
                                 }
                             }
@@ -118,7 +118,7 @@ namespace Poly {
                     int NameEnd = Offset;
 
                     if (Wild.FindMatchingBrackets("[", "]", ref Offset, ref NameEnd)) {
-                        Match(This, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, DataLen - Index, NameEnd);
+                        Match(This, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, DataLen - Index, NameEnd - Offset);
                         Offset = NameEnd + 1;
                     }
                 }
@@ -134,8 +134,13 @@ namespace Poly {
                 else break;
             }
 
-            if (Index != DataLen || Offset != WildLen)
+            if (Index != DataLen)
                 return null;
+            
+            if (Offset != WildLen){ 
+                if (!(Wild.Find('[', Offset, WildLen) == Offset && Wild.Find(']', Index, WildLen) == WildLen - 1))
+                    return null;
+            }
 
             return Storage;
         }
@@ -147,8 +152,6 @@ namespace Poly {
                 NextToken = Wild.Length;
             }
 
-            var Debug = Wild.SubString(WildIndex, NextToken - WildIndex);
-
             if ((NextToken - WildIndex) == 0) {
                 WildIndex = Wild.Length;
                 Index = This.Length;
@@ -157,14 +160,22 @@ namespace Poly {
 
             int NextBlock = This.FindSubString(Wild, Index, WildIndex, NextToken - WildIndex);
 
-            if (NextBlock == -1)
+            if (NextBlock == -1) {
+                if (NextToken == Wild.Length && Wild[Wild.Length - 1] == ']') {
+                    Index = This.Length;
+                    return true;
+                }
                 return false;
+            }                
 
             Index = NextBlock;
             return true;
         }
 
         private static bool IsValidMatch(String Data, String Limitations) {
+            if (Limitations.Length == 0)
+                return true;
+
             var LimitLength = Limitations.Find('{');
 
             if (LimitLength != -1) {
@@ -186,12 +197,19 @@ namespace Poly {
             }
 
             for (int i = 0; i < Data.Length; i++) {
+                bool Valid = false;
+
                 for (int y = 0; y < LimitLength; y++) {
                     if (MatchValidityCheckers.ContainsKey(Limitations[y])) {
-                        if (!MatchValidityCheckers[Limitations[y]](Data[i]))
-                            return false;
+                        if (MatchValidityCheckers[Limitations[y]](Data[i])) {
+                            Valid = true;
+                            break;
+                        }
                     }
                 }
+
+                if (!Valid)
+                    return false;
             }
 
             return true;

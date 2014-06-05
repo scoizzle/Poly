@@ -15,11 +15,7 @@ namespace Poly.Script.Node {
             var R = GetRight(Context);
 
             if (L == null || R == null) {
-                if (L != null)
-                    return L;
-                if (R != null)
-                    return R;
-                return null;
+                return L == null && R == null;
             }
 
             return DataType.Equal(L, R);

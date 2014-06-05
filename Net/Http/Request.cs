@@ -11,8 +11,6 @@ using Poly.Script;
 
 namespace Poly.Net.Http {
     public partial class Request : jsObject {
-        private int PrintedCount = 0;
-
         public bool Handled {
             get {
                 return Get<bool>("Handled", false);
@@ -91,7 +89,6 @@ namespace Poly.Net.Http {
             if (Bytes == null)
                 return;
 
-            PrintedCount += Bytes.Length;
             Data.Write(Bytes, 0, Bytes.Length);
         }
 

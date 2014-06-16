@@ -39,7 +39,7 @@ namespace Poly.Script {
             var Value = base.Evaluate(Context);
 
             if (Value is Return) {
-                return null;
+                return GetValue(Value, Context);
             }
 
             return Value;

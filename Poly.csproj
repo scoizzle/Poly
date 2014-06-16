@@ -111,6 +111,7 @@
     <Compile Include="Script\Helpers\Initializer.cs" />
     <Compile Include="Script\Helpers\Library.cs" />
     <Compile Include="Script\Helpers\MemberFunction.cs" />
+    <Compile Include="Script\Libraries\TimeSpan.cs" />
     <Compile Include="Script\Libraries\Hash.cs" />
     <Compile Include="Script\Libraries\Tcp.cs" />
     <Compile Include="Script\Libraries\Sockets.cs" />
@@ -144,6 +145,7 @@
     <Compile Include="Net\Irc\Client\Functions.cs" />
     <Compile Include="Net\Irc\Client\Threads.cs" />
     <Compile Include="String.Matching.cs" />
+    <Compile Include="TimeSpan.Extensions.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

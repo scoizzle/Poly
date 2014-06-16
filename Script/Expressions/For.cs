@@ -15,11 +15,10 @@ namespace Poly.Script.Node {
 
             while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
                 foreach (var Node in this.Values) {
-                    var Result = GetValue(Node, Context);
+                    if (Node is Return)
+                        return Node;
 
-                    if (Node is Return) {
-                        return Result;
-                    }
+                    var Result = GetValue(Node, Context);
 
                     if (Result == Break) 
                         return null;

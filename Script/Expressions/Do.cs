@@ -10,11 +10,11 @@ namespace Poly.Script.Node {
 
         public override object Evaluate(Data.jsObject Context) {
             do {
-                foreach (var Node in this.Values) { 
-                    var Result = GetValue(Node, Context);
-
+                foreach (var Node in this.Values) {
                     if (Node is Return)
-                        return Result;
+                        return Node;
+
+                    var Result = GetValue(Node, Context);
 
                     if (Result == Break)
                         return null;

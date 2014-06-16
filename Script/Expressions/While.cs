@@ -11,11 +11,11 @@ namespace Poly.Script.Node {
 
         public override object Evaluate(Data.jsObject Context) {
             while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
-                foreach (var Node in this.Values) { 
-                    var Result = GetValue(Node, Context);
-
+                foreach (var Node in this.Values) {
                     if (Node is Return)
-                        return Result;
+                        return Node;
+
+                    var Result = GetValue(Node, Context);
 
                     if (Result == Break)
                         return null;

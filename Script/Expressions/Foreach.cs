@@ -82,7 +82,8 @@ namespace Poly.Script.Node {
                 Value = LoopObject(Context, Array as jsObject);
             }
 
-            Variable.Assign(Context, null);
+            if (!(Value is Return))
+                Variable.Assign(Context, null);
 
             return Value;
         }

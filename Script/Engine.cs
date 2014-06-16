@@ -19,7 +19,9 @@ namespace Poly.Script {
             { "Log", typeof(App.Log).FullName },
             { "LogLevel", typeof(App.Log.Levels).FullName },
             { "Console", typeof(System.Console).FullName },
-            { "Time", typeof(System.DateTime).FullName }
+            { "Math", typeof(System.Math).FullName },
+            { "Time", typeof(System.DateTime).FullName },
+            { "TimeSpan", typeof(System.TimeSpan).FullName }
         };
 
         public jsObject<CustomType> Types = new jsObject<CustomType>();

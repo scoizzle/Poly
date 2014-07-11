@@ -190,13 +190,9 @@ namespace Poly.Net.Http {
             }
 
             if (Headers.ContainsKey("Content-Length")) {
-                char[] Buffer = new char[ContentLength];
+                byte[] Buffer = Client.Receive(ContentLength);
 
-                for (int recv = 0; recv < Buffer.Length; ) {
-                    recv += Client.Reader.Read(Buffer, recv, Buffer.Length - recv);
-                }
-
-                Value = new String(Buffer);
+                Value = Client.Encoding.GetString(Buffer);
 
                 if (Type == "POST" && ContentType == "application/x-www-form-urlencoded") {
                     Split = Value.Split('&');

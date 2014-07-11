@@ -37,7 +37,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("reload", Index)) {
                 var Delta = Index += 6;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 var Inc = Engine.Parse(Text, ref Delta, LastIndex);
 

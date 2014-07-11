@@ -24,15 +24,19 @@ namespace System {
 
         public static bool Compare(this String This, String Possible, int Index, bool IgnoreCase = false) {
             int X = 0;
-
-            for (; Index + X < This.Length && X < Possible.Length; X++) {
-                if (IgnoreCase) {
+            
+            if (IgnoreCase) {
+                for (; Index + X < This.Length && X < Possible.Length; X++) {
                     if (char.ToLower(This[Index + X]) != char.ToLower(Possible[X])) {
                         return false;
                     }
                 }
-                else if (This[Index + X] != Possible[X])
-                    return false;
+            }
+            else {
+                for (; Index + X < This.Length && X < Possible.Length; X++) {
+                    if (This[Index + X] != Possible[X])
+                        return false;
+                }
             }
 
             return X == Possible.Length;
@@ -40,14 +44,19 @@ namespace System {
 
         public static bool Compare(this String This, String ContainsSub, int Index, int ContainsIndex, int ContainsLength, bool IgnoreCase = false) {
             int X = 0;
-            for (; Index + X < This.Length && X < ContainsLength; X++) {
-                if (IgnoreCase) {
+
+            if (IgnoreCase) {
+                for (; ; X++) {
                     if (char.ToLower(This[Index + X]) != char.ToLower(ContainsSub[ContainsIndex + X])) {
                         return false;
                     }
                 }
-                else if (This[Index + X] != ContainsSub[ContainsIndex + X])
+            }
+            else {
+                for (;Index + X < This.Length && X < ContainsLength; X++) {
+                    if (This[Index + X] != ContainsSub[ContainsIndex + X])
                     return false;
+                }
             }
 
             return X == ContainsLength;
@@ -210,7 +219,7 @@ namespace System {
             return Location;
         }
 
-        public static int FindSubString(this String This, String ContainsSub, int Index, int ContainsIndex, int ContainsLenght, bool IgnoreCase = false) {
+        public static int FindSubstring(this String This, String ContainsSub, int Index, int ContainsIndex, int ContainsLenght, bool IgnoreCase = false) {
             if (ContainsLenght == 0)
                 return -1;
 
@@ -253,17 +262,16 @@ namespace System {
             return Possible[Index];
         }
 
-        public static string SubString(this String This, int Start, int Length = int.MaxValue) {
+        public static string Substring(this String This, int Start, int Length = int.MaxValue) {
             if (Length == int.MaxValue)
                 Length = This.Length - Start;
 
             if (Start > -1 && (Start + Length) <= This.Length && Length > -1) {
-                var Array = new char[Length];
+                StringBuilder Output = new StringBuilder(Length);
 
-                for (int Index = 0; Index < Length; Index++) {
-                    Array[Index] = This[Index + Start];
-                }
-                return new string(Array);
+                Output.Append(This, Start, Length);
+
+                return Output.ToString();
             }
             return null;
         }
@@ -307,14 +315,14 @@ namespace System {
                 X += Start.Length;
             }
 
-            return This.SubString(X, Y - X);
+            return This.Substring(X, Y - X);
         }
 
         public static string FindMatchingBrackets(this String This, String Open, String Close, int Index = 0, bool includeBrackets = false) {
             int Offset = 0;
 
             if (FindMatchingBrackets(This, Open, Close, ref Index, ref Offset, includeBrackets)) {
-                return SubString(This, Index, Offset - Index);
+                return Substring(This, Index, Offset - Index);
             }
 
             return "";
@@ -393,7 +401,7 @@ namespace System {
                 string[] List = new string[Count + 1];
 
                 for (int Index = 0; Index < List.Length && Open != -1 && Close != -1; Index ++) {
-                    List[Index] = This.SubString(Open, Close - Open);
+                    List[Index] = This.Substring(Open, Close - Open);
 
                     Open = Close + Seperator.Length;
                     Close = This.Find(Seperator, Open);

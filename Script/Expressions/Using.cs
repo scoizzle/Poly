@@ -14,24 +14,24 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("using", Index)) {
                 var Delta = Index += 5;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 var End = Delta;
                 ConsumeValidName(Text, ref End);
 
                 var Close = End;
-                ConsumeWhitespace(Text, ref Close);
+                Text.ConsumeWhitespace(ref Close);
 
                 if (Text.Compare("=", Close)) { 
                     var Name = Text.Substring(Delta, End - Delta);
 
                     Delta = Close + 1;
-                    ConsumeWhitespace(Text, ref Delta);
+                    Text.ConsumeWhitespace(ref Delta);
 
                     Close = Delta;
                     ConsumeValidName(Text, ref Close);
 
-                    var For = Text.SubString(Delta, Close - Delta);
+                    var For = Text.Substring(Delta, Close - Delta);
 
                     if (Text.Compare(";", Close)) {
                         Engine.Shorthands[Name] = For;
@@ -53,7 +53,7 @@ namespace Poly.Script.Node {
                     }
 
                     Close += 1;
-                    ConsumeWhitespace(Text, ref Close);
+                    Text.ConsumeWhitespace(ref Close);
 
                     Index = Close;
                     return NoOp;

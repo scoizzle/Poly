@@ -22,6 +22,10 @@ namespace Poly {
                 Output.AppendFormat("{0}d ", Days);
             }
 
+            if (This.Hours > 0) {
+                Output.AppendFormat("{0}h ", This.Hours);
+            }
+
             Output.AppendFormat("{0}m ", This.Minutes);
             Output.AppendFormat("{0}s", This.Seconds);
 

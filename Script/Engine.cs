@@ -35,7 +35,7 @@ namespace Poly.Script {
             var Context = new jsObject(Args);
 
 			if (Parse (Script)) {
-				return Evaluate (Context);
+				return base.Evaluate (Context);
 			}
 
             return null;

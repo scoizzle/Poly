@@ -43,7 +43,7 @@ namespace Poly.Script.Node {
             if (Text.Compare("async", Index)) {
                 var Delta = Index + 5;
                 var Async = new Async();
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var Close = Delta;
@@ -53,7 +53,7 @@ namespace Poly.Script.Node {
                     Async.MaxExecutionTime = Text.Substring(Delta, Close - Delta - 1).ToInt();
 
                     Delta = Close;
-                    ConsumeWhitespace(Text, ref Delta);
+                    Text.ConsumeWhitespace(ref Delta);
                 }
 
                 Async.Node = Engine.Parse(Text, ref Delta, LastIndex) as Node;

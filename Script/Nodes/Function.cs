@@ -235,7 +235,7 @@ namespace Poly.Script {
             var Delta = Index;
             if (Text.Compare("function", Delta)) {
                 Delta += 8;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
             }
 
             Function Func = null;
@@ -245,7 +245,7 @@ namespace Poly.Script {
 
             ConsumeValidName(Text, ref Close);
             Delta = Close;
-            ConsumeWhitespace(Text, ref Delta);
+            Text.ConsumeWhitespace(ref Delta);
 
             if (Text.Compare("(", Delta)) {
                 Func = new Function(Text.Substring(Open, Close - Open));
@@ -255,21 +255,21 @@ namespace Poly.Script {
 
                 ConsumeEval(Text, ref Close);
                 Delta = Close;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 if (Text.Compare("=>", Delta)) {
                     if (!string.IsNullOrEmpty(Func.Name))
                         return null;
 
                     Delta += 2;
-                    ConsumeWhitespace(Text, ref Delta);
+                    Text.ConsumeWhitespace(ref Delta);
                 }
 
                 if (Text.Compare("{", Delta)) {
                     if (Node.Expression.Parse(Engine, Text, ref Delta, LastIndex, Func)) {
                         Func.Arguments = Text.Substring(Open, Close - Open - 1).ParseCParams();
 
-                        ConsumeWhitespace(Text, ref Delta);
+                        Text.ConsumeWhitespace(ref Delta);
                         Index = Delta;
 
                         if (!string.IsNullOrEmpty(Func.Name) && IsEngineWide) {

@@ -17,9 +17,7 @@ namespace Poly.Net.Irc {
             else if (Connection.Connected)
                 return true;
 
-            Connection.Connect(Server, Port);
-
-            if (Connection.Connected) {
+            if (Connection.Connect(Server, Port)) {
                 Connection.AutoFlush = true;
                 return true;
             }

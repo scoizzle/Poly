@@ -19,8 +19,6 @@ namespace Poly.Script.Node {
 
                 if (double.TryParse(Str, out Temp))
                     return Left + Temp;
-
-                return Left + (string)Right;
             }
             return null;
         }
@@ -140,30 +138,11 @@ namespace Poly.Script.Node {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
-            var Delta = Index;
-            for (; Delta - Index < LastIndex && Delta < LastIndex; Delta++) {
-                var C = Text[Delta];
+            int Value = 0;
+            var Debug = Text.Substring(Index);
 
-                if (char.IsNumber(C))
-                    continue;
-
-                if (C == '+' || C == '-')
-                    continue;
-
-                if (C == ',' || C == '.')
-                    continue;
-
-                if (C == 'e' || C == 'E')
-                    continue;
-
-                break;
-            }
-
-            int Attempt = 0;
-            if (int.TryParse(Text.Substring(Index, Delta - Index), out Attempt)) {
-                Index = Delta;
-                return Attempt;
-            }
+            if (Text.ToInt(ref Index, LastIndex, ref Value))
+                return Value;
 
             return null;
         }

@@ -7,15 +7,14 @@ using Poly.Data;
 
 namespace Poly.Script.Node {
     public class If : Expression {
-        public object Boolean = null;
-        public Node Else = null;
+        public object Boolean = null, Else = null;
 
         public override object Evaluate(jsObject Context) {
             if (Bool.EvaluateNode(Boolean, Context)) {
                 return base.Evaluate(Context);
             }
             else if (Else != null) {
-                return Else.Evaluate(Context);
+                return GetValue(Else, Context);
             }
             return null;
         }
@@ -31,7 +30,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("if", Index)) {
                 var Delta = Index += 2;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var If = new If();
@@ -46,17 +45,17 @@ namespace Poly.Script.Node {
                     If.Boolean = Engine.Parse(Text, ref Open, Close - 1);
 
                     Delta = Close;
-                    ConsumeWhitespace(Text, ref Delta);
+                    Text.ConsumeWhitespace(ref Delta);
 
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex) as Node;
 
                     if (Exp != null) {
                         If.Add(Exp);
-                        ConsumeWhitespace(Text, ref Delta);
+                        Text.ConsumeWhitespace(ref Delta);
 
                         if (Text.Compare("else", Delta)) {
                             Delta += 4;
-                            ConsumeWhitespace(Text, ref Delta);
+                            Text.ConsumeWhitespace(ref Delta);
                             If.Else = Engine.Parse(Text, ref Delta, LastIndex) as Node;
                         }
                         Index = Delta;

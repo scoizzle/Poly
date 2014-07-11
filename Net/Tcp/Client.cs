@@ -43,23 +43,15 @@ namespace Poly.Net.Tcp {
 
         public bool Connected {
             get {
-				if (!Socket.Connected)
-					return false;
+                if (!Socket.Connected)
+                    return false;
 
-				lock (Socket) {
-					bool BlockStatus = Socket.Blocking;
-					Socket.Blocking = false;
-
-					try {
-						Socket.Send(conTestBuf, 0, 0);
-					}
-					catch { }
-					finally {
-						Socket.Blocking = BlockStatus;
-					}
-
-					return Socket.Connected;
-				}
+                try {
+                    return !(Socket.Poll(1, SelectMode.SelectRead) && Socket.Available == 0);
+                }
+                catch { 
+                    return false; 
+                }
             }
         }
 		
@@ -99,6 +91,9 @@ namespace Poly.Net.Tcp {
         }
 
         public Stream GetStream() {
+            if (!Connected)
+                return (p_Stream = null);
+
             if (p_Stream == null) {
                 Stream Stream = new NetworkStream(Socket);
 
@@ -114,9 +109,12 @@ namespace Poly.Net.Tcp {
             return p_Stream;
         }
 
-        public bool Connect(string ServerName, int Port) {
+        public bool Connect(string ServerName, int Port, int Timeout = 1000) {
             try {
-                Socket.Connect(ServerName, Port);
+                Socket.BeginConnect(ServerName, Port, (Obj) => {
+                    Socket.EndConnect(Obj);
+                }, Socket).AsyncWaitHandle.WaitOne(Timeout, false);
+
                 return Socket.Connected;
             }
             catch {
@@ -124,21 +122,20 @@ namespace Poly.Net.Tcp {
             }
         }
 
-        public bool Connect(string SecureServerName, int Port, bool Secure) {
-            this.Secure = Secure;
-            Socket.Connect(SecureServerName, Port);
-
-            try {
-                if (Secure) {
-                    var SStream = GetStream() as SslStream;
-                    SStream.AuthenticateAsClient(SecureServerName);
+        public bool Connect(string SecureServerName, int Port, bool Secure, int Timeout = 1000) {
+            if (Connect(SecureServerName, Port, Timeout)) {
+                if (this.Secure = Secure) {
+                    try {
+                        var SStream = GetStream() as SslStream;
+                        SStream.AuthenticateAsClient(SecureServerName);
+                    }
+                    catch (Exception Error) {
+                        App.Log.Error(Error.Message);
+                        return false;
+                    }
                 }
             }
-            catch (Exception Error) {
-                App.Log.Error(Error.Message);
-                return false;
-            }
-            return Connected;
+            return false;
         }
 
         public void Close() {

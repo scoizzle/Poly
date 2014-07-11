@@ -51,7 +51,7 @@ namespace Poly.Script {
             while (Index < LastIndex) {
                 object Node = null;
 
-                ConsumeWhitespace(Text, ref Index);
+                Text.ConsumeWhitespace(ref Index);
 
                 if (Index >= LastIndex)
                     break;

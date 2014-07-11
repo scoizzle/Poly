@@ -7,7 +7,7 @@ using System.Text;
 namespace Poly.Script.Node {
     public class String : DataType<string> {
         public new static object Add(string Left, object Right) {
-            return Left + Right.ToString();
+            return Left + Right;
         }
 
         public new static object Subtract(string Left, object Right) {
@@ -22,7 +22,7 @@ namespace Poly.Script.Node {
         }
 
         public new static object Equal(string Left, object Right) {
-            var RightStr = Right.ToString();
+            var RightStr = Right == null ? "" : Right.ToString();
 
             if (Left.Length != RightStr.Length)
                 return false;

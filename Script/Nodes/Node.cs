@@ -59,56 +59,23 @@ namespace Poly.Script.Node {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == '_') || (c == '.');
         }
 
-        public static void ConsumeBetween(string Text, ref int Index, string Open, string Close) {
-            int X, Y, Z = 1;
-
-            X = Text.IndexOf(Open, Index);
-
-            for (Y = X + Open.Length; Y < Text.Length; Y++) {
-                if (Text[Y] == '\\') {
-                    Y++;
-                    continue;
-                }
-
-                if (Text.Compare(Open, Y)) {
-                    if (Open == Close) {
-                        break;
-                    }
-                    else {
-                        Z++;
-                        continue;
-                    }
-                }
-
-                if (Text.Compare(Close, Y)) {
-                    Z--;
-
-                    if (Z == 0) {
-                        break;
-                    }
-                }
-            }
-
-            Index = Y + Close.Length;
-        }
-
         public static void ConsumeExpression(string Text, ref int Index) {
-            ConsumeBetween(Text, ref Index, "{", "}");
+            Text.ConsumeBetween(ref Index, "{", "}");
         }
 
         public static void ConsumeEval(string Text, ref int Index) {
-            ConsumeBetween(Text, ref Index, "(", ")");
+            Text.ConsumeBetween(ref Index, "(", ")");
         }
 
         public static void ConsumeBlock(string Text, ref int Index) {
-            ConsumeBetween(Text, ref Index, "[", "]");
+            Text.ConsumeBetween(ref Index, "[", "]");
         }
 
         public static void ConsumeString(string Text, ref int Index) {
             if (Text[Index] == '"')
-                ConsumeBetween(Text, ref Index, "\"", "\"");
+                Text.ConsumeBetween(ref Index, "\"", "\"");
             else
-                ConsumeBetween(Text, ref Index, "'", "'");
+                Text.ConsumeBetween(ref Index, "'", "'");
         }
 
         public static void ConsumeContent(string Text, ref int Index) {
@@ -138,11 +105,6 @@ namespace Poly.Script.Node {
                         break;
                 }
             }
-        }
-
-        public static void ConsumeWhitespace(string Text, ref int Index) {
-            while (Index < Text.Length && (char.IsWhiteSpace(Text[Index]) || Text[Index] == ';'))
-                Index++;
         }
 
         public static void ConsumeValidName(string Text, ref int Index) {
@@ -179,7 +141,7 @@ namespace Poly.Script.Node {
             if (Engine == null || string.IsNullOrEmpty(Text) || Index >= Text.Length || LastIndex > Text.Length)
                 return false;
 
-            ConsumeWhitespace(Text, ref Index);
+            Text.ConsumeWhitespace(ref Index);
             return true;
         }
 

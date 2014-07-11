@@ -23,7 +23,7 @@ namespace Poly.Net.Http {
         }
     }
 
-    public class FileCache : Dictionary<string, CachedFile> {
+    public class FileCache : jsObject<CachedFile> {
         public bool IsCurrent(string ObjectName) {
             if (!this.ContainsKey(ObjectName) || !File.Exists(ObjectName))
                 return false;

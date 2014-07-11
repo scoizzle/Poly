@@ -130,33 +130,11 @@ namespace Poly.Script.Node {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
-            var Delta = Index;
-            for (; Delta - Index < LastIndex && Delta < Text.Length; Delta++) {
-                var C = Text[Delta];
+            double Value = 0;
+            var Debug = Text.Substring(Index);
 
-                if (char.IsNumber(C))
-                    continue;
-
-                if (C == '+' || C == '-')
-                    continue;
-
-                if (C == ',' || C == '.')
-                    continue;
-
-                if (C == 'e' || C == 'E')
-                    continue;
-
-                if (C == 'f' || C == 'd')
-                    break;
-
-                break;
-            }
-
-            double Attempt = 0;
-            if (double.TryParse(Text.Substring(Index, Delta - Index), out Attempt)) {
-                Index = Delta;
-                return Attempt;
-            }
+            if (Text.ToDouble(ref Index, LastIndex, ref Value))
+                return Value;
 
             return null;
         }

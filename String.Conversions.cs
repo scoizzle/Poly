@@ -20,11 +20,26 @@ namespace System {
         };
 
         public static bool ToBool(this String This) {
-            bool Out = false;
+            if (This.Compare("true", 0, true)) {
+                return true;
+            }
+            else if (This.Compare("false", 0, true)) {
+                return false;
+            }
+            return false;
+        }
 
-            if (Boolean.TryParse(This, out Out))
-                return Out;
-
+        public static bool ToBool(this String This, ref int Index, ref bool Value) {
+            if (This.Compare("true", Index, true)) {
+                Index += 4;
+                Value = true;
+                return true;
+            }
+            else if (This.Compare("false", Index, true)) {
+                Index += 5;
+                Value = false;
+                return true;
+            }
             return false;
         }
 
@@ -37,6 +52,125 @@ namespace System {
             return 0;
         }
 
+        public static bool ToInt(this String This, ref int Index, int LastIndex, ref int Value) {
+            if (string.IsNullOrEmpty(This) || Index >= LastIndex)
+                return false;
+
+            int Offset = Index;
+            This.ConsumeWhitespace(ref Offset);
+
+            if (This[Offset] == '-' || This[Offset] == '+')
+                Offset++;
+
+            while (Offset < LastIndex) {
+                if (char.IsDigit(This[Offset]))
+                    Offset++;
+                else if (This[Offset] == '.' || This[Offset] == 'e' || This[Offset] == 'E')
+                    return false;
+                else break;
+            }
+
+            if ((Offset - Index) == 0)
+                return false;
+
+            Value = int.Parse(This.Substring(Index, Offset - Index));
+            Index = Offset;
+            return true;
+        }
+
+        public static long ToLong(this String This) {
+            long Out = 0;
+
+            if (long.TryParse(This, out Out))
+                return Out;
+
+            return 0;
+        }
+
+        public static bool ToLong(this String This, ref int Index, int LastIndex, ref long Value) {
+            if (string.IsNullOrEmpty(This) || Index >= LastIndex)
+                return false;
+
+            int Offset = Index;
+            This.ConsumeWhitespace(ref Offset);
+
+            if (This[Offset] == '-' || This[Offset] == '+')
+                Offset++;
+
+            while (Offset < LastIndex) {
+                if (char.IsDigit(This[Offset]))
+                    Offset++;
+                else if (This[Offset] == '.')
+                    return false;
+            }
+
+            if ((Offset - Index) == 0)
+                return false;
+
+            if (long.TryParse(This.Substring(Index, Offset - Index), out Value)) {
+                Index = Offset;
+                return true;
+            }
+
+            return false;
+        }
+
+        public static float ToFloat(this String This) {
+            float Out = float.NaN;
+
+            if (float.TryParse(This, out Out))
+                return Out;
+
+            return float.NaN;
+        }
+
+        public static bool ToFloat(this String This, ref int Index, int LastIndex, ref float Value) {
+            if (string.IsNullOrEmpty(This) || Index >= LastIndex)
+                return false;
+
+            int Offset = Index;
+            This.ConsumeWhitespace(ref Offset);
+
+            if (This[Offset] == '-' || This[Offset] == '+')
+                Offset++;
+
+            while (Offset < LastIndex) {
+                if (char.IsDigit(This[Offset]) || This[Offset] == ',')
+                    Offset++;
+                else if (This[Offset] == '.') {
+                    Offset++;
+                    break;
+                }
+                else return false;
+            }
+
+            while (Offset < LastIndex) {
+                if (char.IsDigit(This[Offset]))
+                    Offset++;
+                else if (This[Offset] == 'e' || This[Offset] == 'E') {
+                    Offset++;
+                    break;
+                }
+                else return false;
+            }
+
+            if (Offset < LastIndex && (This[Offset] == '-' || This[Offset] == '+'))
+                Offset++;
+
+            while (Offset < LastIndex) {
+                if (char.IsDigit(This[Offset]))
+                    Offset++;
+                else return false;
+            }
+
+            if ((Offset - Index) == 0)
+                return false;
+
+            Value = float.Parse(This.Substring(Index, Offset - Index));
+            Index = Offset;
+            return true;
+        }
+
         public static double ToDouble(this String This) {
             double Out = double.NaN;
 
@@ -44,6 +178,56 @@ namespace System {
                 return Out;
 
             return double.NaN;
+        }
+
+        public static bool ToDouble(this String This, ref int Index, int LastIndex, ref double Value) {
+            if (string.IsNullOrEmpty(This) || Index >= LastIndex)
+                return false;
+
+            int Offset = Index;
+            This.ConsumeWhitespace(ref Offset);
+
+            if (This[Offset] == '-' || This[Offset] == '+')
+                Offset++;
+
+            while (Offset < LastIndex) {
+                if (char.IsDigit(This[Offset]) || This[Offset] == ',')
+                    Offset++;
+                else if (This[Offset] == '.') {
+                    Offset++;
+                    break;
+                }
+                else return false;
+            }
+
+            while (Offset < LastIndex) {
+                if (char.IsDigit(This[Offset]))
+                    Offset++;
+                else if (This[Offset] == 'e' || This[Offset] == 'E') {
+                    Offset++;
+                    break;
+                }
+                else return false;
+            }
+
+            if (Offset < LastIndex && (This[Offset] == '-' || This[Offset] == '+'))
+                Offset++;
+
+            while (Offset < LastIndex) {
+                if (char.IsDigit(This[Offset]))
+                    Offset++;
+                else return false;
+            }
+
+            if ((Offset - Index) == 0)
+                return false;
+
+            if (double.TryParse(This.Substring(Index, Offset - Index), out Value)) {
+                Index = Offset;
+                return true;
+            }
+
+            return false;
         }
 
         public static string Escape(this String This) {
@@ -69,15 +253,15 @@ namespace System {
 
 
             for (int i = 0, o = 0; o < This.Length && i < NewLength; i++, o++) {
-                if (EscapeChars.ContainsKey(This[i])) {
-                    var Esc = EscapeChars[This[i]];
+                if (EscapeChars.ContainsKey(This[o])) {
+                    var Esc = EscapeChars[This[o]];
 
-                    Array[o] = Esc[0];
-                    Array[o + 1] = Esc[1];
-                    o++;
+                    Array[i] = Esc[0];
+                    Array[i + 1] = Esc[1];
+                    i++;
                 }
                 else {
-                    Array[o] = This[i];
+                    Array[i] = This[o];
                 }
             }
 
@@ -107,11 +291,11 @@ namespace System {
                 if (This[o] == '\\') {
                     if (This[o + 1] == 'u') {
                         Array[i] = Convert.ToChar(
-                            Int32.Parse(This.SubString(o + 2, 4), Globalization.NumberStyles.HexNumber)
+                            Int32.Parse(This.Substring(o + 2, 4), Globalization.NumberStyles.HexNumber)
                         );
                     }
                     else {
-                        var Desc = This.SubString(o, 2);
+                        var Desc = This.Substring(o, 2);
                         var C = FindDescapeChar(Desc);
 
                         if (C != '\x00') {

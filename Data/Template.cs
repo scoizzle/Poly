@@ -18,7 +18,7 @@ namespace Poly.Data {
                         var Start = Close + 1;
 
                         if (i != Open) {
-                            List.Add(Template.SubString(i, Open - i));
+                            List.Add(Template.Substring(i, Open - i));
                         }
 
                         var Mod = Template.Find(':', Open, Close);
@@ -27,7 +27,7 @@ namespace Poly.Data {
                             Mod = Close;
                         }
 
-                        var Name = Template.SubString(Open + 1, Mod - Open - 1);
+                        var Name = Template.Substring(Open + 1, Mod - Open - 1);
                         var Obj = This.Get<object>(Name);
 
                         Open = Template.Find("{/" + Name);
@@ -35,7 +35,7 @@ namespace Poly.Data {
                         if (Open != -1 && Obj is jsObject) {
                             Close = Template.Find("}", Open);
 
-                            var SubTemplate = Template.SubString(Start, Open - Start);
+                            var SubTemplate = Template.Substring(Start, Open - Start);
                             var jsObj = (Obj as jsObject);
 
 
@@ -60,27 +60,27 @@ namespace Poly.Data {
                     case "[":
                     case "]": {
                         var Index = Template.Find(Next, i);
-                        List.Add(Template.SubString(i, Index - i));
+                        List.Add(Template.Substring(i, Index - i));
                         i = Index + 1;
                         break;
                     }
 
                     case "\\": {
                         var Index = Template.Find(Next, i);
-                        List.Add(Template.SubString(i, Index - i));
+                        List.Add(Template.Substring(i, Index - i));
                         Close = Template.FirstPossibleIndex(Index, "{", "[", "]", "\\");
 
                         if (Close == -1) {
                             Close = Template.Length;
                         }
 
-                        List.Add(Template.SubString(Index, Close - Index));
+                        List.Add(Template.Substring(Index, Close - Index));
                         i = Close;
                         break;
                     }
 
                     default:
-                        List.Add(Template.SubString(i, Template.Length - i));
+                        List.Add(Template.Substring(i, Template.Length - i));
                         i = Template.Length;
                         break;
                 }

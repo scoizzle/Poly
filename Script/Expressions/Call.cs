@@ -28,7 +28,7 @@ namespace Poly.Script.Node {
                 else if (Name.Contains('.')) {
                     this.Name = Name.Substring("", ".", 0, false, true);
                     this.Object = Variable.Parse(Engine, this.Name, 0);
-                    this.Name = Name.SubString(this.Name.Length + 1);
+                    this.Name = Name.Substring(this.Name.Length + 1);
                 }
                 else {
                     this.Name = Name;
@@ -79,7 +79,7 @@ namespace Poly.Script.Node {
         public bool ParseArguments(Engine Engine, string Text, int Open, int Close) {
             int i = 0;
 
-            foreach (var Raw in Text.SubString(Open, Close - Open).ParseCParams()) {
+            foreach (var Raw in Text.Substring(Open, Close - Open).ParseCParams()) {
                 var Arg = Engine.Parse(Raw, 0);
 
                 if (Arg == null)
@@ -113,7 +113,7 @@ namespace Poly.Script.Node {
 
             if (Index != Delta) {
                 var Name = Text.Substring(Index, Delta - Index);
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var Call = new Call(Engine, Name, Function.GetStatic(Engine, Name));
@@ -143,7 +143,7 @@ namespace Poly.Script.Node {
                     }
 
                     Close++;
-                    ConsumeWhitespace(Text, ref Close);
+                    Text.ConsumeWhitespace(ref Close);
                     
                     Index = Close;
                     return Call;

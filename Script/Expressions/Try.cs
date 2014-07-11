@@ -11,7 +11,7 @@ namespace Poly.Script.Node {
         public override object Evaluate(Data.jsObject Context) {
             if (Node != null) {
                 try {
-                    return Node.Evaluate(Context);
+                    return GetValue(Node, Context);
                 }
                 catch (Exception Error) {
                     return Error;
@@ -31,7 +31,7 @@ namespace Poly.Script.Node {
             if (Text.Compare("try", Index)) {
                 var Delta = Index + 3;
                 var Try = new Try();
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 Try.Node = Engine.Parse(Text, ref Delta, LastIndex) as Node;
 

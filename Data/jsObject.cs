@@ -179,7 +179,7 @@ namespace Poly.Data {
             return Output.ToString();
         }
 
-        private static string PostEncode(string Input) {
+        public static string PostEncode(string Input) {
             int Len = 0;
 
             foreach (char c in Input) {

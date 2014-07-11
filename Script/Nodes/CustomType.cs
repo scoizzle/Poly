@@ -92,7 +92,7 @@ namespace Poly.Script.Node {
             var Delta = Index;
             if (Text.Compare("class", Delta)) {
                 Delta += 5;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 CustomType Type = null;
 
@@ -101,11 +101,11 @@ namespace Poly.Script.Node {
 
                 if (Delta > Open) {
                     var Name = Text.Substring(Open, Delta - Open);
-                    ConsumeWhitespace(Text, ref Delta);
+                    Text.ConsumeWhitespace(ref Delta);
 
                     if (Text.Compare(":", Delta)) {
                         Delta++;
-                        ConsumeWhitespace(Text, ref Delta);
+                        Text.ConsumeWhitespace(ref Delta);
 
                         Open = Delta;
                         ConsumeValidName(Text, ref Delta);
@@ -113,7 +113,7 @@ namespace Poly.Script.Node {
                         if (Delta > Open) {
                             CustomType BaseType;
                             var BaseName = Text.Substring(Open, Delta - Open);
-                            ConsumeWhitespace(Text, ref Delta);
+                            Text.ConsumeWhitespace(ref Delta);
 
                             if ((BaseType = Engine.Types[BaseName] as CustomType) != null) {
                                 Type = new CustomType(Name, BaseType);
@@ -126,7 +126,7 @@ namespace Poly.Script.Node {
 
                     if (Type != null && Text.Compare("{", Delta)) {
                         Open = Delta + 1;
-                        ConsumeWhitespace(Text, ref Open);
+                        Text.ConsumeWhitespace(ref Open);
                         ConsumeExpression(Text, ref Delta);
 
                         while (true) {
@@ -147,10 +147,10 @@ namespace Poly.Script.Node {
                             while (Text.Compare(";", Open)) {
                                 Open++;
                             }
-                            ConsumeWhitespace(Text, ref Open);
+                            Text.ConsumeWhitespace(ref Open);
                         }
 
-                        ConsumeWhitespace(Text, ref Delta);
+                        Text.ConsumeWhitespace(ref Delta);
                         Index = Delta;
 
                         Type.Register(Engine);

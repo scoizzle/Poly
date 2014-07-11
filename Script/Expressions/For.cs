@@ -6,12 +6,10 @@ using System.Threading;
 
 namespace Poly.Script.Node {
     public class For : Expression {
-        public Node Init = null;
-        public Node Boolean = null;
-        public Node Modifier = null;
+        public object Init, Boolean, Modifier;
 
         public override object Evaluate(Data.jsObject Context) {
-            Init.Evaluate(Context);
+            GetValue(Init, Context);
 
             while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
                 foreach (var Node in this.Values) {
@@ -27,7 +25,7 @@ namespace Poly.Script.Node {
                         break;
                 }
 
-                Modifier.Evaluate(Context);
+                GetValue(Modifier, Context);
             }
 
             return null;
@@ -44,7 +42,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("for", Index)) {
                 var Delta = Index + 3;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var For = new For();
@@ -71,13 +69,13 @@ namespace Poly.Script.Node {
                     }
 
                     Delta = Close;
-                    ConsumeWhitespace(Text, ref Delta);
+                    Text.ConsumeWhitespace(ref Delta);
 
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex);
 
                     if (Exp != null) {
                         For.Add(Exp);
-                        ConsumeWhitespace(Text, ref Delta);
+                        Text.ConsumeWhitespace(ref Delta);
 
                         Index = Delta;
                         return For;

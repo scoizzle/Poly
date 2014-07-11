@@ -10,6 +10,8 @@ namespace Poly.Script.Node {
         private class Node {
             public bool IsVariable;
             public bool IsSystemType;
+            public bool IsContext;
+
             public object Obj;
 
             public Node(bool isVar, object Obj) {
@@ -74,7 +76,12 @@ namespace Poly.Script.Node {
                 object Value = null;
                 jsObject Object;
 
-                if (Node.IsSystemType) {
+
+                if (Node.IsContext) {
+                    Current = Context;
+                    Value = Context;
+                }
+                else if (Node.IsSystemType) {
                      Value = Helper.SystemFunctions.SearchForType(Key);
                 }
                 else if ((Object = Current as jsObject) != null) {
@@ -292,9 +299,18 @@ namespace Poly.Script.Node {
                 var Next = GetNextTokenIndex(Text, Delta, LastIndex);
 
                 if (Next == -1 || Next >= LastIndex) {
-                    List.Add(
-                        new Node(false, Text.SubString(Delta, LastIndex - Delta))
-                    );
+                    var Name = Text.Substring(Delta, LastIndex - Delta);
+
+                    if (Name.Length == 1 && List.Count == 0 && Name[0] == '_'){
+                        List.Add(
+                            new Node(false, null) { IsContext = true }
+                        );
+                    }
+                    else {
+                        List.Add(
+                            new Node(false, Name)
+                        );
+                    }
 
                     Delta = LastIndex;
                 }
@@ -306,7 +322,7 @@ namespace Poly.Script.Node {
                     Delta = Next + 1;
                 }
                 else if ((Next - Delta) > 0) {
-                    var Key = Text.SubString(Delta, Next - Delta);
+                    var Key = Text.Substring(Delta, Next - Delta);
 
                     if (Engine.Shorthands.ContainsKey(Key)) {
                         List.Add(

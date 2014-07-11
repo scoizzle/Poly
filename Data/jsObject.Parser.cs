@@ -8,7 +8,7 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject : Dictionary<string, object> {
-        private static object getObjectValue(string val) {
+        public static object getObjectValue(string val) {
             int ntVal;
             if (int.TryParse(val, out ntVal)) {
                 return ntVal;
@@ -38,17 +38,21 @@ namespace Poly.Data {
         }
 
         private static object _Raw(string Text, ref int Index, int LastIndex) {
-            var Token = Text.FirstPossible(Index, ",", "}", "]");
-            var SubIndex = Text.IndexOf(Token, Index);
+            var C = Text[Index];
+
+            if ((C > '9' || C < '0') && (C != 't' || C != 'T') && (C != 'f' || C != 'F'))
+                return null;
+
+            var SubIndex = Text.IndexOf(Text.FirstPossible(Index, ",", "}", "]"), Index);
 
             if (SubIndex == -1 || SubIndex == Index)
                 SubIndex = LastIndex;
 
             var Sub = Text.Substring(Index, SubIndex - Index);
 
-            Index += Sub.Length;
+            Index = SubIndex;
 
-            return getObjectValue(Sub.Trim());
+            return getObjectValue(Sub);
         }
 
         private static string _String(string Text, ref int Index, int LastIndex) {

@@ -36,6 +36,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Web" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -87,6 +88,7 @@
     <Compile Include="Script\Expressions\Include.cs" />
     <Compile Include="Script\Expressions\Unary\And.cs" />
     <Compile Include="Script\Expressions\Unary\Between.cs" />
+    <Compile Include="Script\Expressions\Unary\NamedValue.cs" />
     <Compile Include="Script\Expressions\Unary\NotNull.cs" />
     <Compile Include="Script\Expressions\Unary\Or.cs" />
     <Compile Include="Script\Expressions\Unary\Match.cs" />
@@ -144,6 +146,7 @@
     <Compile Include="Net\Irc\Client\Events.cs" />
     <Compile Include="Net\Irc\Client\Functions.cs" />
     <Compile Include="Net\Irc\Client\Threads.cs" />
+    <Compile Include="String.Iteration.cs" />
     <Compile Include="String.Matching.cs" />
     <Compile Include="TimeSpan.Extensions.cs" />
   </ItemGroup>

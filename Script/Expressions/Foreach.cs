@@ -99,7 +99,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("foreach", Index)) {
                 var Delta = Index + 7;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var For = new Foreach();
@@ -112,15 +112,15 @@ namespace Poly.Script.Node {
                         return null;
 
                     For.Variable = Variable.Parse(Engine, Text, ref Open, Close);
-                    ConsumeWhitespace(Text, ref Open);
+                    Text.ConsumeWhitespace(ref Open);
 
                     if (Text.Compare("in", Open)) {
                         Open += 2;
-                        ConsumeWhitespace(Text, ref Open);
+                        Text.ConsumeWhitespace(ref Open);
 
                         For.List = Variable.Parse(Engine, Text, ref Open, Close);
                         Open = Close;
-                        ConsumeWhitespace(Text, ref Open);
+                        Text.ConsumeWhitespace(ref Open);
 
                         var Exp = Engine.Parse(Text, ref Open, LastIndex);
 
@@ -130,7 +130,7 @@ namespace Poly.Script.Node {
                         else {
                             For.Add(Exp);
                         }
-                        ConsumeWhitespace(Text, ref Open);
+                        Text.ConsumeWhitespace(ref Open);
 
                         Index = Open;
 

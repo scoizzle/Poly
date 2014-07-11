@@ -36,7 +36,7 @@ namespace Poly.Script.Node.Unary {
                 return null;
 
             var Left = Text.Substring(Index, Delta - Index);
-            Expression.ConsumeWhitespace(Text, ref Delta);
+            Text.ConsumeWhitespace(ref Delta);
 
             for (int i = 0; i < UnaryParsers.Count; i++) {
                 var U = UnaryParsers[i](Engine, Text, ref Delta, LastIndex, Left);

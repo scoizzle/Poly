@@ -93,15 +93,15 @@ namespace Poly {
                             if (ModLen == -1)
                                 ModLen = NameEnd;
 
-                            var Name = WildString.SubString(Offset, Mod - Offset);
-                            var Value = DataString.SubString(Index, Sub - Index);
+                            var Name = WildString.Substring(Offset, Mod - Offset);
+                            var Value = DataString.Substring(Index, Sub - Index);
 
                             if (Mod != NameEnd) {
                                 if (ModLen != NameEnd) {
                                     Value = ModifyMatch(WildString, ModLen + 1, Value);
                                 }
 
-                                if (!IsValidMatch(Value, Wild.SubString(Mod + 1, ModLen - Mod - 1))) {
+                                if (!IsValidMatch(Value, Wild.Substring(Mod + 1, ModLen - Mod - 1))) {
                                     break;
                                 }
                             }
@@ -158,7 +158,7 @@ namespace Poly {
                 return true;
             }
 
-            int NextBlock = This.FindSubString(Wild, Index, WildIndex, NextToken - WildIndex);
+            int NextBlock = This.FindSubstring(Wild, Index, WildIndex, NextToken - WildIndex);
 
             if (NextBlock == -1) {
                 if (NextToken == Wild.Length && Wild[Wild.Length - 1] == ']') {

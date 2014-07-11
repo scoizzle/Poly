@@ -12,7 +12,8 @@ namespace Poly.Net.Http {
         public string Id { get; private set; }
 
         public Session(Request Req) {
-            this.Id = CreateId(Req);
+            while (string.IsNullOrEmpty(this.Id))
+                this.Id = CreateId(Req);
         }
 
         public static string CreateId(Request Req) {

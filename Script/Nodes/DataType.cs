@@ -7,12 +7,19 @@ using Poly.Data;
 
 namespace Poly.Script.Node {
     public class DataType<T> : Node {
+
         public static object Add(T Left, object Right) { return null; }
+
         public static object Subtract(T Left, object Right) { return null; }
+
         public static object Multiply(T Left, object Right) { return null; }
+
         public static object Devide(T Left, object Right) { return null; }
+
         public static object Equal(T Left, object Right) { return Object.ReferenceEquals(Left, Right); }
+
         public static object LessThan(T Left, object Right) { return null; }
+
         public static object GreaterThan(T Left, object Right) { return null; }
     }
 

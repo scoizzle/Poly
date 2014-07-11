@@ -22,7 +22,7 @@ namespace Poly.Script.Node {
         public new static object Equal(jsObject Left, object Right) {
             return Object.ReferenceEquals(Left, Right);
         }
-
+        
         public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;

@@ -88,7 +88,6 @@
     <Compile Include="Script\Expressions\Include.cs" />
     <Compile Include="Script\Expressions\Unary\And.cs" />
     <Compile Include="Script\Expressions\Unary\Between.cs" />
-    <Compile Include="Script\Expressions\Unary\NamedValue.cs" />
     <Compile Include="Script\Expressions\Unary\NotNull.cs" />
     <Compile Include="Script\Expressions\Unary\Or.cs" />
     <Compile Include="Script\Expressions\Unary\Match.cs" />

@@ -33,7 +33,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("switch", Index)) {
                 var Delta = Index + 6;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 var Open = Delta + 1;
                 var Close = Delta;
@@ -47,7 +47,7 @@ namespace Poly.Script.Node {
                 Switch.Object = Engine.Parse(Text, ref Open, Close - 1);
 
                 Delta = Close;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text[Delta] == '{') {
                     Open = Delta + 1;

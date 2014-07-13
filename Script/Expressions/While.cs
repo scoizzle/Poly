@@ -38,7 +38,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("while", Index)) {
                 var Delta = Index + 5;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var While = new While();
@@ -53,12 +53,12 @@ namespace Poly.Script.Node {
                     While.Boolean = Engine.Parse(Text, ref Open, Close);
 
                     Delta = Close + 1;
-                    Text.ConsumeWhitespace(ref Delta);
+                    ConsumeWhitespace(Text, ref Delta);
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex);
 
                     if (Exp != null) {
                         While.Add(Exp);
-                        Text.ConsumeWhitespace(ref Delta);
+                        ConsumeWhitespace(Text, ref Delta);
 
                         Index = Delta;
                         return While;

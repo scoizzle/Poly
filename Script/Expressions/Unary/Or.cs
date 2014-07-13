@@ -17,7 +17,7 @@ namespace Poly.Script.Node {
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
             if (Text.Compare("||", Index)) {
                 Index += 2;
-                Text.ConsumeWhitespace(ref Index);
+                ConsumeWhitespace(Text, ref Index);
 
                 return new Or(
                     Engine.Parse(Left, 0),

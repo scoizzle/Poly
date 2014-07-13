@@ -19,19 +19,19 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("case", Index)) {
                 var Delta = Index + 4;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 var Case = new Case();
 
                 Case.Object = Engine.Parse(Text, ref Delta, LastIndex);
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text[Delta] == ':') {
                     Delta++;
-                    Text.ConsumeWhitespace(ref Delta);
+                    ConsumeWhitespace(Text, ref Delta);
 
                     Engine.Parse(Text, ref Delta, LastIndex, Case);
-                    Text.ConsumeWhitespace(ref Delta);
+                    ConsumeWhitespace(Text, ref Delta);
 
                     Index = Delta;
                     return Case;
@@ -39,16 +39,16 @@ namespace Poly.Script.Node {
             }
             else if (Text.Compare("default", Index)) {
                 var Delta = Index + 7;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 var Case = new Case();
 
                 if (Text[Delta] == ':') {
                     Delta++;
-                    Text.ConsumeWhitespace(ref Delta);
+                    ConsumeWhitespace(Text, ref Delta);
 
                     Engine.Parse(Text, ref Delta, LastIndex, Case);
-                    Text.ConsumeWhitespace(ref Delta);
+                    ConsumeWhitespace(Text, ref Delta);
 
                     Index = Delta;
 

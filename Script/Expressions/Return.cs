@@ -20,7 +20,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("return", Index)) {
                 var Delta = Index + 6;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 var Ret = new Return();
 

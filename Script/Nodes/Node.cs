@@ -59,6 +59,16 @@ namespace Poly.Script.Node {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == '_') || (c == '.');
         }
 
+        public static void ConsumeWhitespace(string Text, ref int Index) {
+            while (Index < Text.Length) {
+                StringIteration.ConsumeWhitespace(Text, ref Index);
+
+                if (Text.Compare(";", Index) || Text.Compare(";", Index))
+                    Index++;
+                else break;
+            }
+        }
+
         public static void ConsumeExpression(string Text, ref int Index) {
             Text.ConsumeBetween(ref Index, "{", "}");
         }
@@ -141,7 +151,7 @@ namespace Poly.Script.Node {
             if (Engine == null || string.IsNullOrEmpty(Text) || Index >= Text.Length || LastIndex > Text.Length)
                 return false;
 
-            Text.ConsumeWhitespace(ref Index);
+            ConsumeWhitespace(Text, ref Index);
             return true;
         }
 

@@ -24,7 +24,7 @@ namespace Poly.Script.Node {
                 Eval.Node = Engine.Parse(Statement, 0);
 
                 Delta += Statement.Length + 2;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     if (Eval.Node is Function) {

@@ -6,15 +6,17 @@ using System.Threading;
 
 namespace Poly.Script.Node {
     public class Try : Expression {
-        public Node Node = null;
+        public Node Node = null, Catch = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            if (Node != null) {
-                try {
-                    return GetValue(Node, Context);
-                }
-                catch (Exception Error) {
-                    return Error;
+            try {
+                return GetValue(Node, Context);
+            }
+            catch (Exception Error) {
+                if (Catch != null) {
+                    Context.Set("Error", Error);
+
+                    return GetValue(Catch, Context);
                 }
             }
             return null;
@@ -31,9 +33,16 @@ namespace Poly.Script.Node {
             if (Text.Compare("try", Index)) {
                 var Delta = Index + 3;
                 var Try = new Try();
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 Try.Node = Engine.Parse(Text, ref Delta, LastIndex) as Node;
+
+                if (Text.Compare("catch", Delta)) {
+                    Delta += 5;
+                    ConsumeWhitespace(Text, ref Delta);
+
+                    Try.Catch = Engine.Parse(Text, ref Delta, LastIndex) as Node;
+                }
 
                 Index = Delta;
                 return Try;

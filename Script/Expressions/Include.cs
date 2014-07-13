@@ -39,7 +39,7 @@ namespace Poly.Script.Node {
                     Delta += 5;
                     Live = true;
                 }
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 var Inc = Engine.Parse(Text, ref Delta, LastIndex);
 

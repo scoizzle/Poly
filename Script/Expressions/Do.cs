@@ -38,7 +38,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("do", Index)) {
                 var Delta = Index + 2;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("{", Delta)) {
                     var Do = new Do();
@@ -53,11 +53,11 @@ namespace Poly.Script.Node {
                     Engine.Parse(Text, ref Open, Close, Do);
 
                     Open = Close + 1;
-                    Text.ConsumeWhitespace(ref Open);
+                    ConsumeWhitespace(Text, ref Open);
 
                     if (Text.Compare("while", Open)) {
                         Open += 5;
-                        Text.ConsumeWhitespace(ref Open);
+                        ConsumeWhitespace(Text, ref Open);
 
                         if (Text.Compare("(", Open)) {
                             Close = Open;

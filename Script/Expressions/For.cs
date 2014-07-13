@@ -42,7 +42,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("for", Index)) {
                 var Delta = Index + 3;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var For = new For();
@@ -69,13 +69,13 @@ namespace Poly.Script.Node {
                     }
 
                     Delta = Close;
-                    Text.ConsumeWhitespace(ref Delta);
+                    ConsumeWhitespace(Text, ref Delta);
 
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex);
 
                     if (Exp != null) {
                         For.Add(Exp);
-                        Text.ConsumeWhitespace(ref Delta);
+                        ConsumeWhitespace(Text, ref Delta);
 
                         Index = Delta;
                         return For;

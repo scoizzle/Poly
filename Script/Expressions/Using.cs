@@ -14,19 +14,19 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("using", Index)) {
                 var Delta = Index += 5;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 var End = Delta;
                 ConsumeValidName(Text, ref End);
 
                 var Close = End;
-                Text.ConsumeWhitespace(ref Close);
+                ConsumeWhitespace(Text, ref Close);
 
                 if (Text.Compare("=", Close)) { 
                     var Name = Text.Substring(Delta, End - Delta);
 
                     Delta = Close + 1;
-                    Text.ConsumeWhitespace(ref Delta);
+                    ConsumeWhitespace(Text, ref Delta);
 
                     Close = Delta;
                     ConsumeValidName(Text, ref Close);
@@ -53,7 +53,7 @@ namespace Poly.Script.Node {
                     }
 
                     Close += 1;
-                    Text.ConsumeWhitespace(ref Close);
+                    ConsumeWhitespace(Text, ref Close);
 
                     Index = Close;
                     return NoOp;

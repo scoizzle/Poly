@@ -30,7 +30,7 @@ namespace Poly.Script.Node {
 
             if (Text.Compare("if", Index)) {
                 var Delta = Index += 2;
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var If = new If();
@@ -45,17 +45,17 @@ namespace Poly.Script.Node {
                     If.Boolean = Engine.Parse(Text, ref Open, Close - 1);
 
                     Delta = Close;
-                    Text.ConsumeWhitespace(ref Delta);
+                    ConsumeWhitespace(Text, ref Delta);
 
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex) as Node;
 
                     if (Exp != null) {
                         If.Add(Exp);
-                        Text.ConsumeWhitespace(ref Delta);
+                        ConsumeWhitespace(Text, ref Delta);
 
                         if (Text.Compare("else", Delta)) {
                             Delta += 4;
-                            Text.ConsumeWhitespace(ref Delta);
+                            ConsumeWhitespace(Text, ref Delta);
                             If.Else = Engine.Parse(Text, ref Delta, LastIndex) as Node;
                         }
                         Index = Delta;

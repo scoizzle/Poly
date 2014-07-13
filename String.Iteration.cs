@@ -41,7 +41,10 @@ namespace System {
         }
 
         public static void ConsumeWhitespace(this String Text, ref int Index) {
-            while (Index < Text.Length && (char.IsWhiteSpace(Text[Index]) || Text[Index] == ';' || Text[Index] == ','))
+            if (Index < 0 || string.IsNullOrEmpty(Text))
+                return;
+
+            while (Index < Text.Length && char.IsWhiteSpace(Text[Index]))
                 Index++;
         }
     }

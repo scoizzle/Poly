@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Poly.Script.Node.Unary {
     public class Parser {
-        public delegate Operator Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
+        public delegate object Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
         public static List<Handler> UnaryParsers = new List<Handler>() {
             Equal.Parse,
             NotEqual.Parse,
@@ -36,7 +36,7 @@ namespace Poly.Script.Node.Unary {
                 return null;
 
             var Left = Text.Substring(Index, Delta - Index);
-            Text.ConsumeWhitespace(ref Delta);
+            Node.ConsumeWhitespace(Text, ref Delta);
 
             for (int i = 0; i < UnaryParsers.Count; i++) {
                 var U = UnaryParsers[i](Engine, Text, ref Delta, LastIndex, Left);

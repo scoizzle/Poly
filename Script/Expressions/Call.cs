@@ -113,7 +113,7 @@ namespace Poly.Script.Node {
 
             if (Index != Delta) {
                 var Name = Text.Substring(Index, Delta - Index);
-                Text.ConsumeWhitespace(ref Delta);
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
                     var Call = new Call(Engine, Name, Function.GetStatic(Engine, Name));
@@ -143,7 +143,7 @@ namespace Poly.Script.Node {
                     }
 
                     Close++;
-                    Text.ConsumeWhitespace(ref Close);
+                    ConsumeWhitespace(Text, ref Close);
                     
                     Index = Close;
                     return Call;

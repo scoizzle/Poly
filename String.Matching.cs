@@ -32,6 +32,9 @@ namespace Poly {
         }
 
         public static jsObject Match(this String Data, String Wild, bool IgnoreCase = false, jsObject Storage = null, int Index = 0, bool Store = true) {
+            if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
+                return null;
+
             int Offset = 0, DataLen = Data.Length, Wildlen = Wild.Length;
             return Match(Data, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, DataLen, Wildlen);
         }
@@ -118,7 +121,7 @@ namespace Poly {
                     int NameEnd = Offset;
 
                     if (Wild.FindMatchingBrackets("[", "]", ref Offset, ref NameEnd)) {
-                        Match(This, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, DataLen - Index, NameEnd - Offset);
+                        Match(This, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, DataLen - Index, NameEnd);
                         Offset = NameEnd + 1;
                     }
                 }

@@ -3,35 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Reflection;
+using System.Diagnostics;
 
+using Poly.Data;
 
 namespace Poly {
     public partial class App {
         public static bool Running = false;
-        public static bool SetAllowUnsafeHeaderParsing20() {
-            //Get the assembly that contains the internal class
-            Assembly aNetAssembly = Assembly.GetAssembly(typeof(System.Net.Configuration.SettingsSection));
-            if (aNetAssembly != null) {
-                //Use the assembly in order to get the internal type for the internal class
-                Type aSettingsType = aNetAssembly.GetType("System.Net.Configuration.SettingsSectionInternal");
-                if (aSettingsType != null) {
-                    //Use the internal static property to get an instance of the internal settings class.
-                    //If the static instance isn't created allready the property will create it for us.
-                    object anInstance = aSettingsType.InvokeMember("Section",
-                      BindingFlags.Static | BindingFlags.GetProperty | BindingFlags.NonPublic, null, null, new object[] { });
 
-                    if (anInstance != null) {
-                        //Locate the private bool field that tells the framework is unsafe header parsing should be allowed or not
-                        FieldInfo aUseUnsafeHeaderParsing = aSettingsType.GetField("useUnsafeHeaderParsing", BindingFlags.NonPublic | BindingFlags.Instance);
-                        if (aUseUnsafeHeaderParsing != null) {
-                            aUseUnsafeHeaderParsing.SetValue(anInstance, true);
-                            return true;
-                        }
-                    }
-                }
-            }
-            return false;
-        }
+        public static Event.Engine Commands = new Event.Engine() {
+            { "--fork[-{flag}]", (Args) => {
+                App.Fork("redirect".Compare(Args.Get<string>("flag"), true, 0));
+                return null;
+            }}
+        };
 
 		public static void Init(int LogLevel = Log.Levels.None) {
             if (LogLevel != Log.Levels.None) {
@@ -46,10 +31,57 @@ namespace Poly {
             ThreadPool.GetMaxThreads(out workerThreads, out completionThreads);
             ThreadPool.SetMaxThreads(workerThreads, completionThreads * 16);
 
-            SetAllowUnsafeHeaderParsing20();
 			Running = true;
             App.Log.Info("Application running...");
 		}
+
+        public static void Init(int LogLevel = Log.Levels.None, params string[] Commands) {
+            Init(LogLevel);
+
+            foreach (var Cmd in Commands) {
+                App.Commands.MatchAndInvoke(Cmd, new jsObject(), true);
+            }
+        }
+
+        public static void Fork(bool RedirectOutput = false) {
+            var This = Process.GetCurrentProcess();
+
+            List<string> Args = new List<string>(Environment.GetCommandLineArgs());
+
+            Args.RemoveAt(0);
+            Args.Remove("--fork");
+            Args.Remove("--fork-redirect");
+
+            string FileName = IsRunningOnMono() ? "mono" : This.MainModule.FileName;
+            string Arguments = IsRunningOnMono() ? This.MainModule.FileName + " " + string.Join(" ", Args) : string.Join(" ", Args);
+
+            if (RedirectOutput) {
+                Process Worker = Process.Start(
+                    new ProcessStartInfo(FileName, Arguments) {
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        RedirectStandardOutput = true
+                    }
+                );
+
+                Worker.Start();
+
+                ThreadPool.QueueUserWorkItem((obj) => {
+                    Process P = obj as Process;
+                    while (!P.HasExited && App.Running) {
+                        Console.WriteLine(P.StandardOutput.ReadLine());
+                    }
+                }, Worker);
+            }
+            else {
+                Process.Start(FileName, Arguments);
+                Environment.Exit(0);
+            }
+        }
+        public static bool IsRunningOnMono() {
+            return Type.GetType("Mono.Runtime") != null;
+        }
 
         public static void Wait() {
             Console.ReadKey();

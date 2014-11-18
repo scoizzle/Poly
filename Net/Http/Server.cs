@@ -39,11 +39,9 @@ namespace Poly.Net.Http {
                 File.ReadAllText(FileName)
             );
 
-            Eng.Evaluate(Args);
-        }
+            var Debug = Eng.ToString();
 
-        public void On(string Key, Event.Handler Handler) {
-            RegisterRoute(Key, Handler);
+            Eng.Evaluate(Args);
         }
 
         public void Host(string Name, jsObject Info) {

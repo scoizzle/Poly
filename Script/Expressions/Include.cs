@@ -6,28 +6,42 @@ using System.IO;
 
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Helpers;
+
     public class Include : Node {
         public Engine Engine = null;
-        public object Name = null;
+        public Node Name = null;
 
-        public Include(Engine Engine, object Name) {
+        public Include(Engine Engine, Node Name) {
             this.Engine = Engine;
             this.Name = Name;
         }
 
         public override object Evaluate(jsObject Context) {
-            var FileName = GetValue(Name, Context).ToString();
-            var Obj = Helper.ExtensionManager.Include(Engine, FileName);
+            if (Name == null)
+                return null;
 
-            return GetValue(Obj, Context);
+            var Value = Name.Evaluate(Context);
+
+            if (Value == null)
+                return null;
+
+            var FileName = Value.ToString();
+            var Obj = ExtensionManager.Include(Engine, FileName);
+
+            if (Obj != null)
+                return Obj.Evaluate(Context);
+
+            return null;
         }
 
         public override string ToString() {
             return "include '" + Name.ToString() + "'";
         }
 
-        public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
@@ -44,8 +58,10 @@ namespace Poly.Script.Node {
                 var Inc = Engine.Parse(Text, ref Delta, LastIndex);
 
                 Index = Delta;
-                if (Inc is string && !Live) {
-                    return Helper.ExtensionManager.Include(Engine, Inc as string);
+                if (Inc is Types.String && !Live) {
+                    var Str = Inc.ToString();
+
+                    return ExtensionManager.Include(Engine, Str);
                 }
                 else {
                     return new Include(Engine, Inc);

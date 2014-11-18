@@ -3,38 +3,32 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+
     public class GreaterThanEqual : Operator {
-        public GreaterThanEqual(object Left, object Right) {
+        public GreaterThanEqual(Node Left,  Node Right) {
             this.Left = Left;
             this.Right = Right;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
-            var L = GetLeft(Context);
-            var R = GetRight(Context);
-
-            if (L == null || R == null) {
-                if (L != null)
-                    return L;
-                if (R != null)
-                    return R;
+        public override object Execute(object Left, object Right) {
+            if (Left == null || Right == null) {
+                if (Left != null)
+                    return Left;
+                if (Right != null)
+                    return Right;
                 return null;
             }
 
-            var V = DataType.GreaterThan(L, R);
+            var V = DataType.GreaterThan(Left, Right);
 
-            if (V is bool && (bool)V) {
-                return true;
+            if (!V) {
+                V = DataType.Equal(Left, Right);
             }
 
-            V = DataType.Equal(L, R);
-
-            if (V is bool && (bool)V) {
-                return true;
-            }
-
-            return false;
+            return V;
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

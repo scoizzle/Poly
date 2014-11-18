@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 using Poly;
 using Poly.Data;
@@ -10,7 +11,7 @@ namespace System {
         public static int CountOf(this String This, String ToFind) {
             int Count = 0, X = 0;
 
-            while ((X = This.IndexOf(ToFind, X)) != -1) {
+            while ((X = This.Find(ToFind, X)) != -1) {
                 if ((X > 0) && (This[X - 1] == '\\') && ToFind != "\\")
                     continue;
 
@@ -20,6 +21,17 @@ namespace System {
             }
 
             return Count;
+        }
+
+        public static bool Compare(this String This, char Possible, int Index, bool IgnoreCase = false) {
+            if (Index < 0 || Index >= This.Length)
+                return false;
+
+            if (IgnoreCase) {
+                return char.ToLower(This[Index]) == char.ToLower(Possible);
+            }
+
+            return This[Index] == Possible;
         }
 
         public static bool Compare(this String This, String Possible, int Index, bool IgnoreCase = false) {
@@ -46,7 +58,7 @@ namespace System {
             int X = 0;
 
             if (IgnoreCase) {
-                for (; ; X++) {
+                for (;Index + X < This.Length && X < ContainsLength; X++) {
                     if (char.ToLower(This[Index + X]) != char.ToLower(ContainsSub[ContainsIndex + X])) {
                         return false;
                     }
@@ -65,7 +77,7 @@ namespace System {
         public static bool FindMatchingBrackets(this String This, String Open, String Close, ref int Index, ref int End, bool IncludeBrackets = false) {
             int X, Y, Z = 1;
 
-            X = This.IndexOf(Open, Index);
+            X = This.Find(Open, Index);
 
             for (Y = X + Open.Length; Y < This.Length; Y++) {
                 if (This[Y] == '\\') {
@@ -124,7 +136,7 @@ namespace System {
                 if (Last == int.MaxValue)
                     Last = This.Length;
 
-                for (int i = Index; i < This.Length && i < Last; i++) {
+                for (int i = Index; i < This.Length && i + C.Length < Last; i++) {
                     if (This.Compare(C, i, 0, C.Length)) {
                         return i;
                     }
@@ -182,6 +194,20 @@ namespace System {
             return false;
         }
 
+        public static bool Contains(this String This, char C, int Index, int LastIndex) {
+            if (string.IsNullOrEmpty(This))
+                return false;
+
+            if (Index > -1) {
+                for (int i = Index; i < LastIndex && i < This.Length; i++) {
+                    if (This[i] == C) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         public static bool Contains(this String This, string C, int Index = 0) {
             if (Index > -1) {
                 for (int i = Index; i < This.Length; i++) {
@@ -193,30 +219,15 @@ namespace System {
             return false;
         }
 
-        public static int FirstPossibleIndex(this String This, int Start = 0, params String[] Possible) {
-            int Location = This.Length;
-
-            if ((Location - Start) <= 1)
+        public static int FirstPossibleIndex(this String This, int Start = 0, params char[] Possible) {
+            if (string.IsNullOrEmpty(This) || Start < 0)
                 return -1;
 
-            if (Start > 0 && This[Start - 1] == '\\')
-                Start++;
+            for (int X = Start; X < This.Length; X++)
+                if (Possible.Contains(This[X]))
+                    return X;
 
-            for (int i = 0; i < Possible.Length; i++) {
-                int Maybe = This.Find(Possible[i], Start);
-
-                if (Maybe == -1)
-                    continue;
-
-                if (Maybe < Location) {
-                    Location = Maybe;
-                }
-            }
-
-            if (Location == This.Length)
-                return -1;
-
-            return Location;
+            return -1;
         }
 
         public static int FindSubstring(this String This, String ContainsSub, int Index, int ContainsIndex, int ContainsLenght, bool IgnoreCase = false) {
@@ -242,24 +253,15 @@ namespace System {
             }
         }
 
-        public static string FirstPossible(this String This, int Start = 0, params String[] Possible) {
-            int Index = int.MaxValue, Old = int.MaxValue;
+        public static char FirstPossible(this String This, int Start = 0, params char[] Possible) {
+            if (string.IsNullOrEmpty(This) || Start < 0)
+                return char.MinValue;
 
-            if (This != null && This != "") {
-                for (int X = 0, Y = int.MaxValue; X < Possible.Length; X++) {
-                    if ((Y = This.Find(Possible[X], Start)) != -1) {
-                        if (Y < Old) {
-                            Index = X;
-                            Old = Y;
-                        }
-                    }
-                }
-            }
+            for (int X = Start; X < This.Length; X++)
+                if (Possible.Contains(This[X]))
+                    return This[X];
 
-            if (Index == -1 || Index > Possible.Length)
-                return "";
-
-            return Possible[Index];
+            return char.MinValue;
         }
 
         public static string Substring(this String This, int Start, int Length = int.MaxValue) {
@@ -388,30 +390,35 @@ namespace System {
             return Output.ToArray();
         }
 
-        public static string[] Split(this String This, String Seperator) {
-            int Count = CountOf(This, Seperator);
+        public static string[] Split(this String This, String Seperator, int Start = 0, int Stop = int.MaxValue) {
+            int Close = This.Find(Seperator, Start, Stop);
 
-            if (Count == 0) {
-                return new string[] { This };
-            }
-            else {
-                int Open = 0, 
-                    Close = This.Find(Seperator);
+            if (Stop == int.MaxValue)
+                Stop = This.Length;
 
-                string[] List = new string[Count + 1];
+            if (Close == -1)
+                return new string[] { This.Substring(Start, Stop - Start) };
 
-                for (int Index = 0; Index < List.Length && Open != -1 && Close != -1; Index ++) {
-                    List[Index] = This.Substring(Open, Close - Open);
+            int Open = Close + Seperator.Length;
+            List<string> List = new List<string>() {
+                This.Substring(Start, Close - Start)
+            };
 
-                    Open = Close + Seperator.Length;
-                    Close = This.Find(Seperator, Open);
+            for (; Open > Start && Close < Stop; ) {
+                Close = This.Find(Seperator, Open, Stop);
 
-                    if (Close == -1) {
-                        Close = This.Length;
-                    }
+                if (Close == -1) {
+                    List.Add(This.Substring(Open, Stop - Open));
+                    break;
                 }
-                return List;
+                else {
+                    List.Add(This.Substring(Open, Close - Open));
+                    Open = Close + Seperator.Length;
+                }
+
             }
+
+            return List.ToArray();
         }
     }
 }

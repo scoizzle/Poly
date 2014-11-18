@@ -2,17 +2,30 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Nodes {
     public class Operator : Node {
-        public object Left = null, Right = null;
+        public Node Left = null, Right = null;
 
-        public object GetLeft(Data.jsObject Context) {
-            return GetValue(Left, Context);
+        public override object Evaluate(Data.jsObject Context) {
+            object L, R;
+
+            if (Left != null)
+                L = Left.Evaluate(Context);
+            else
+                L = null;
+
+            if (Right != null)
+                R = Right.Evaluate(Context);
+            else
+                R = null;
+
+            return Execute(L, R);
         }
 
-        public object GetRight(Data.jsObject Context) {
-            return GetValue(Right, Context);
+        public virtual object Execute(object Left, object Right) {
+            return null;
         }
     }
 }

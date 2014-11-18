@@ -1,26 +1,25 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
-namespace Poly.Script.Node {
-    public class Return : Expression {
-        public object Value = null;
+namespace Poly.Script.Expressions {
+    using Nodes;
+
+    class Return : Expression {
+        public Node Value = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            if (Value == null)
-                return this;
+            if (Value != null)
+                return Value.Evaluate(Context);
 
-            return GetValue(Value, Context);
+            return null;
         }
 
-        public static new Expression Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
             if (Text.Compare("return", Index)) {
                 var Delta = Index + 6;
-                ConsumeWhitespace(Text, ref Delta);
+                Text.ConsumeWhitespace(ref Delta);
 
                 var Ret = new Return();
 
@@ -32,6 +31,10 @@ namespace Poly.Script.Node {
                 return Ret;
             }
             return null;
+        }
+
+        public override string ToString() {
+            return string.Join(" ", "return", base.ToString());
         }
     }
 }

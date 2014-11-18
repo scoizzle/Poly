@@ -8,6 +8,8 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Http {
+    using Poly.Script.Helpers;
+
     public class ScriptCache {
         public Dictionary<string, DateTime> LastWriteTimes = new Dictionary<string, DateTime>();
         public Dictionary<string, Script.Engine> CachedScripts = new Dictionary<string, Script.Engine>();
@@ -16,7 +18,7 @@ namespace Poly.Net.Http {
             Script.Engine Engine;
             if (CachedScripts.TryGetValue(Name, out Engine)) {
                 foreach (var Pair in Engine.Includes) {
-                    var Cached = Pair.Value as Script.Helper.CachedScript;
+                    var Cached = Pair.Value as Script.Helpers.CachedScript;
 
                     if (!Cached.IsCurrent())
                         return false;

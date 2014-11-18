@@ -4,11 +4,16 @@ using System.Linq;
 using System.Text;
 
 using Poly.Data;
-using Poly.Script.Node;
+using Poly.Script.Nodes;
 
 namespace Poly.Script {
-    public partial class Engine : Expression {
-        public static List<Helper.Parser> ExpressionParsers = new List<Helper.Parser>() {
+    using Nodes;
+    using Types;
+    using Expressions;
+    using Helpers;
+
+    public partial class Engine {
+        public static List<Parser> ExpressionParsers = new List<Parser>() {
             Comment.Parse,
             If.Parse,
             For.Parse,
@@ -18,38 +23,43 @@ namespace Poly.Script {
             Switch.Parse,
             Case.Parse,
             Async.Parse,
-            Node.Using.Parse,
-            Node.Include.Parse,
-            Node.Reload.Parse,
+            Expressions.Using.Parse,
+            Include.Parse,
+            Reload.Parse,
             Return.Parse,
             Function.Parse,
-            Node.Object.Parse,
-            CustomType.Parse,
+            Object.Parse,
+            Class.Parse,
             Expression.Parse,
             Call.Parse,
-            Node.Unary.Parser.Parse,
-            Node.Eval.Parse,
-            Node.String.Parse,
+            Expressions.Html.Parser.Parse,
+            Expressions.Unary.Parser.Parse,
+            Expressions.Eval.Parse,
+            String.Parse,
             Integer.Parse,
             Float.Parse,
             Bool.Parse,
             Variable.Parse
         };
 
-        public object Parse(string Text, int Index, Node.Node Storage = null) {
+        public Node Parse(string Text, int Index, Node Storage = null) {
             return Parse(Text, ref Index, Text.Length > 1 ? Text.Length : 1, Storage);
         }
 
-        public object Parse(string Text, ref int Index, int LastIndex, Node.Node Storage = null) {
+        public Node Parse(string Text, ref int Index, int LastIndex, Node Storage = null) {
             if (!IsParseOk(this, Text, ref Index, LastIndex))
                 return null;
 
             if (string.IsNullOrEmpty(Text)) {
-                return NoOp;
+                return Expression.NoOperation;
             }
 
+            var List = Storage != null && Storage.Elements != null ?
+                new List<Node>(Storage.Elements) :
+                new List<Node>();
+
             while (Index < LastIndex) {
-                object Node = null;
+                Node Node = null;
 
                 ConsumeWhitespace(Text, ref Index);
 
@@ -65,11 +75,11 @@ namespace Poly.Script {
                     if (Storage == null) {
                         return Node;
                     }
-                    else if (Node == NoOp) {
+                    else if (Node == Expression.NoOperation) {
                         break;
                     }
                     else {
-                        Storage.Add(Node);
+                        List.Add(Node);
                         break;
                     }
                 }
@@ -77,15 +87,18 @@ namespace Poly.Script {
                 if (Node == null) {
                     return null;
                 }
-                else if (Node == Continue || Node == Break) {
+                else if (Node == Expression.Continue || Node == Expression.Break) {
                     break;
                 }
             }
 
+            if (List.Count != 0) {
+                Storage.Elements = List.ToArray();
+            }
             return Storage;
         }
 
-        public new bool Parse(string Text) {
+        public bool Parse(string Text) {
             int Index = 0;
 
             if (string.IsNullOrEmpty(Text)) {

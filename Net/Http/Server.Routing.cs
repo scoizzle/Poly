@@ -15,7 +15,7 @@ namespace Poly.Net.Http {
     public partial class Server {
         public Event.Engine Handlers = new Event.Engine();
 
-        public void RegisterRoute(string Path, Event.Handler Handler) {
+        public void On(string Path, Event.Handler Handler) {
             Handlers.Register(Path, Handler);
         }
 
@@ -25,11 +25,7 @@ namespace Poly.Net.Http {
             if (Eng == null)
                 return null;
 
-            var Args = new jsObject(
-                "Request", Request
-            );
-
-            return Eng.Evaluate(Args);
+            return Eng.Evaluate(Request);
         }
 
         public void Cgi(Request Request, string Exec, string Args, string FileName) {

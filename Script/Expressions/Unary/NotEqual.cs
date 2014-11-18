@@ -3,22 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Types;
+    using Nodes;
+
     public class NotEqual : Operator {
-        public NotEqual(object Left, object Right) {
+        public NotEqual(Node Left,  Node Right) {
             this.Left = Left;
             this.Right = Right;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
-            var L = GetLeft(Context);
-            var R = GetRight(Context);
-
-            var V = DataType.Equal(L, R);
-
-            if (V is bool)
-                return !(bool)V;
-            return false;
+        public override object Execute(object Left, object Right) {
+            return !DataType.Equal(Left, Right);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

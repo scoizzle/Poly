@@ -27,18 +27,35 @@ namespace Poly.Net.Http {
                 Cache = FileCache[FileName];
             }
             else {
-                Cache = new CachedFile(FileName) {
-                    MIME = GetMime(Request.Host.GetExtension(FileName))
-                };
+                var Info = new FileInfo(FileName);
 
-                if (Cache.Data.Length < 15851760 && FileCache != null) {
-                    FileCache[FileName] = Cache;
+                if (Info.Length < 15851760) {
+                    Cache = new CachedFile(FileName) {
+                        MIME = GetMime(Request.Host.GetExtension(FileName))
+                    };
+
+                    if (FileCache != null) {
+                        FileCache[FileName] = Cache;
+                    }
+                }
+                else {
+                    Request.Result.MIME = GetMime(Info.Extension.Substring(1));
+                    Request.Result.Headers["Last-Modified"] = Info.LastWriteTime.HttpTimeString();
+                    Request.Result.Headers["Content-Length"] = Info.Length.ToString();
+                    Request.SendReply();
+                    
+                    using (var Reader = File.Open(FileName, FileMode.Open)) {
+                        Reader.CopyToAsync(Request.Client.GetStream());
+                    }
+
+                    Request.Handled = true;
+                    return;
                 }
             }
 
-            Request.Print(Cache.Data);
             Request.Result.MIME = Cache.MIME;
             Request.Result.Headers["Last-Modified"] = Cache.LastWriteTime.HttpTimeString();
+            Request.Print(Cache.Data);
         }
 
         public virtual void OnClientRequest(Request Request) {
@@ -51,15 +68,10 @@ namespace Poly.Net.Http {
             if (Request.Host.Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) { }                
             else if (Handlers.MatchAndInvoke(Request.Packet.Target, Args, true)) { }
             else {
-                var WWW = Request.Host.GetWWW(Request);
-
-                Args["FileName"] = WWW;
-
-                var Ext = Request.Host.GetExtension(WWW);
-
-                var MIME = GetMime(
-                    Ext
-                );
+                string WWW, Ext, MIME;
+                Args["FileName"] = WWW = Request.Host.GetWWW(Request);
+                Args["FileExtension"] = Ext = Request.Host.GetExtension(WWW);
+                Args["FileMIME"] = MIME = GetMime(Ext);
 
                 if (!Handlers.MatchAndInvoke(MIME, Args)) { 
                     if (Request.Packet.Headers.Get<string>("If-Modified-Since") == File.GetLastWriteTimeUtc(WWW).HttpTimeString()) {
@@ -78,7 +90,7 @@ namespace Poly.Net.Http {
 
         public override void OnClientConnect(Client Client) {
             Client.AutoFlush = true;
-            Client.Socket.ReceiveTimeout = 15000;
+            Client.Socket.ReceiveTimeout = 10000;
 
             while (Client.Connected) {
                 Packet Packet = new Net.Http.Packet();

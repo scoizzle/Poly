@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Poly.Script.Libraries {
     using Data;
-    using Node;
+    using Nodes;
 
     public class Global : Library {
         public Global() {
@@ -20,7 +20,7 @@ namespace Poly.Script.Libraries {
             Add(ToObject);
         }
 
-        public static SystemFunction Load = new SystemFunction("Load", (Args) => {
+        public static Function Load = new Function("Load", (Args) => {
             var FileName = Args.Get<string>("0");
 
             if (System.IO.File.Exists(FileName)) {
@@ -35,17 +35,18 @@ namespace Poly.Script.Libraries {
             return null;
         });
 
-        public static SystemFunction Save = new SystemFunction("Save", (Args) => {
+        public static Function Save = new Function("Save", (Args) => {
             var FileName = Args.Get<string>("0");
 
             if (!string.IsNullOrEmpty(FileName) && Args.ContainsKey("this")) {
                 System.IO.File.WriteAllText(FileName, Args.getObject("this").ToString());
+                return true;
             }
 
             return false;
         });
 
-        public static SystemFunction Template = new SystemFunction("Template", (Args) => {
+        public static Function Template = new Function("Template", (Args) => {
             var This = Args.getObject("this");
             var Regex = Args.Get<string>("0");
 
@@ -56,7 +57,7 @@ namespace Poly.Script.Libraries {
             return string.Empty;
         });
 
-        public static SystemFunction Match = new SystemFunction("Match", (Args) => {
+        public static Function Match = new Function("Match", (Args) => {
             var This = Args.Get<string>("this");
             var Regex = Args.Get<string>("0");
 
@@ -66,7 +67,7 @@ namespace Poly.Script.Libraries {
             return null;
         });
 
-        public static SystemFunction ToNum = new SystemFunction("ToNum", (Args) => {
+        public static Function ToNum = new Function("ToNum", (Args) => {
             var This = Args.Get<object>("this");
 
             if (This == null)
@@ -96,7 +97,7 @@ namespace Poly.Script.Libraries {
             return null;
         });
 
-		public static SystemFunction TypeName = new SystemFunction ("TypeName", (Args) => {
+		public static Function TypeName = new Function ("TypeName", (Args) => {
 			var This = Args.Get<object>("this");
 
 			if (This == null)
@@ -105,7 +106,7 @@ namespace Poly.Script.Libraries {
 			return This.GetType().FullName;
 		});
 
-        public static SystemFunction ToObject = new SystemFunction("ToObject", (Args) => {
+        public static Function ToObject = new Function("ToObject", (Args) => {
             var This = Args.Get<object>("this");
 
             if (This == null)

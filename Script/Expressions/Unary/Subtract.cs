@@ -3,26 +3,26 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
-    public class Subtract : Operator {
-        public Subtract(object Left, object Right) {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+
+    public class Subtract : Operator {        
+        public Subtract(Node Left,  Node Right) {
             this.Left = Left;
             this.Right = Right;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
-            var L = GetLeft(Context);
-            var R = GetRight(Context);
-
-            if (L == null || R == null) {
-                if (L != null)
-                    return L;
-                if (R != null)
-                    return R;
+        public override object Execute(object Left, object Right) {
+            if (Left == null || Right == null) {
+                if (Left != null)
+                    return Left;
+                if (Right != null)
+                    return Right;
                 return null;
             }
 
-            return DataType.Subtract(L, R);
+            return DataType.Subtract(Left, Right);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
@@ -48,7 +48,7 @@ namespace Poly.Script.Node {
                     Var,
                     new Subtract(
                         Var,
-                        1
+                        new Integer(1)
                     )
                 );
             }

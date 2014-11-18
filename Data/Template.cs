@@ -6,87 +6,77 @@ using System.Text;
 namespace Poly.Data {
     public static class jsObjectExtension {
         public static string Template(this jsObject This, string Template) {
-            List<string> List = new List<string>();
+            StringBuilder Output = new StringBuilder();
+            int i = 0;
 
-            for (int i = 0, Last = 0; i < Template.Length; i++) {
-                string Next = Template.FirstPossible(i, "{", "[", "]", "\\");
+            for (; i < Template.Length; i++) {
+                int Next = Template.FirstPossibleIndex(i, '{', '[', '\\');
 
-                switch (Next) {
-                    case "{":
-                        var Open = Template.Find("{", i);
-                        var Close = Template.Find("}", Open);
-                        var Start = Close + 1;
+                if (Next == -1) {
+                    Output.Append(Template, i, Template.Length - i);
+                    break;
+                }
+                else
+                    Output.Append(Template, i, Next - i);
 
-                        if (i != Open) {
-                            List.Add(Template.Substring(i, Open - i));
-                        }
+                char C = Template[Next];
 
-                        var Mod = Template.Find(':', Open, Close);
+                if (C == '\\' && (Template.Length - Next) > 1) {
+                    Output.Append(Template, Next + 1, 1);
+                    i = Next + 1;
+                }
+                else if (C == '{') {
+                    int Close = Next;
 
-                        if (Mod == -1) {
-                            Mod = Close;
-                        }
+                    if (!Template.FindMatchingBrackets("{", "}", ref Next, ref Close))
+                        return "";
 
-                        var Name = Template.Substring(Open + 1, Mod - Open - 1);
-                        var Obj = This.Get<object>(Name);
+                    int Start = Close;
+                    int NameEnd = Template.Find(':', Next, Close);
 
-                        Open = Template.Find("{/" + Name);
+                    if (NameEnd == -1)
+                        NameEnd = Close;
 
-                        if (Open != -1 && Obj is jsObject) {
-                            Close = Template.Find("}", Open);
+                    var Name = Template.Substring(Next, NameEnd - Next);
+                    var Obj = This.Get<object>(Name);
 
-                            var SubTemplate = Template.Substring(Start, Open - Start);
-                            var jsObj = (Obj as jsObject);
+                    int Stop = Template.Find("{/" + Name, Close);
 
+                    if (Stop == -1) {
+                        if (Obj != null)
+                            Output.Append(Obj);
 
-                            if (jsObj.All(pair => pair.Value is jsObject)) {
-                                foreach (jsObject Sub in jsObj.Values) {
-                                    List.Add(Sub.Template(SubTemplate));
+                        i = Start;
+                    }
+                    else {
+                        var JObj = Obj as jsObject;
+                        if (Obj != null && JObj != null) {
+                            var SubTemplate = Template.Substring(Start + 1, Stop - Start - 1);
+
+                            if (JObj.All(p => p.Value is jsObject)) {
+                                foreach (var Pair in JObj) {
+                                    var SObj = Pair.Value as jsObject;
+
+                                    if (SObj != null) {
+                                        Output.Append(SObj.Template(SubTemplate));
+                                    }
                                 }
                             }
                             else {
-                                List.Add(jsObj.Template(SubTemplate));
+                                Output.Append(JObj.Template(SubTemplate));
                             }
                         }
-                        else {
-                            if (Obj != null)
-                                List.Add(Obj.ToString());
-                        }
 
-                        i = Close;
-                        Last = i;
-                        break;
-
-                    case "[":
-                    case "]": {
-                        var Index = Template.Find(Next, i);
-                        List.Add(Template.Substring(i, Index - i));
-                        i = Index + 1;
-                        break;
+                        i = Template.Find('}', Stop);
                     }
-
-                    case "\\": {
-                        var Index = Template.Find(Next, i);
-                        List.Add(Template.Substring(i, Index - i));
-                        Close = Template.FirstPossibleIndex(Index, "{", "[", "]", "\\");
-
-                        if (Close == -1) {
-                            Close = Template.Length;
-                        }
-
-                        List.Add(Template.Substring(Index, Close - Index));
-                        i = Close;
-                        break;
-                    }
-
-                    default:
-                        List.Add(Template.Substring(i, Template.Length - i));
-                        i = Template.Length;
-                        break;
                 }
+                else if (C == '[' || C == ']') {
+                    i++;
+                }
+                else break;
             }
 
-            return string.Join("", List);
+            return Output.ToString();
         }
         
         public static bool Extract(this jsObject This, string Template, string Data, bool IgnoreCase = false) {

@@ -2,33 +2,24 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
     public class Match : Operator {
-        public Match(object Left, object Right) {
+        public Match(Node Left,  Node Right) {
             this.Left = Left;
             this.Right = Right;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
-            var L = GetLeft(Context);
-            var R = GetRight(Context);
-
-            if (L == null || R == null) {
+        public override object Execute(object Left, object Right) {
+            if (Left == null || Right == null)
                 return null;
-            }
 
-            var LS = L.ToString();
-            var RS = R.ToString();
+            var L = Left.ToString();
+            var R = Right.ToString();
 
-            var Data = LS.Match(RS);
-
-            if (Data != null) {
-                Data.CopyTo(Context);
-                return Data;
-            }
-
-            return null;
+            return L.Match(R);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

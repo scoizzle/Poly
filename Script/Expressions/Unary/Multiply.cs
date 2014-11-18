@@ -3,26 +3,25 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
     public class Multiply : Operator {
-        public Multiply(object Left, object Right) {
+        public Multiply(Node Left,  Node Right) {
             this.Left = Left;
             this.Right = Right;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
-            var L = GetLeft(Context);
-            var R = GetRight(Context);
-
-            if (L == null || R == null) {
-                if (L != null)
-                    return L;
-                if (R != null)
-                    return R;
+        public override object Execute(object Left, object Right) {
+            if (Left == null || Right == null) {
+                if (Left != null)
+                    return Left;
+                if (Right != null)
+                    return Right;
                 return null;
             }
 
-            return DataType.Multiply(L, R);
+            return DataType.Multiply(Left, Right);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

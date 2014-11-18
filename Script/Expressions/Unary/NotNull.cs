@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+
     public class NotNull : Operator {
-        public NotNull(object Right) {
+        public NotNull(Node Right) {
             this.Right = Right;
         }
 

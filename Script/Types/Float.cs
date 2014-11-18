@@ -3,8 +3,27 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Types {
+    using Nodes;
+
     public class Float : DataType<double> {
+        double Value;
+
+        public Float(double Val) {
+            this.Value = Val;
+        }
+
+        public override object Evaluate(Data.jsObject Context) {
+            return Value;
+        }
+
+        public override string ToString() {
+            if (Value != null)
+                return Value.ToString();
+
+            return string.Empty;
+        }
+
         public new static object Add(double Left, object Right) {
             if (Right is int) {
                 return Left + (int)Right;
@@ -75,7 +94,7 @@ namespace Poly.Script.Node {
             return null;
         }
 
-        public new static object GreaterThan(double Left, object Right) {
+        public new static bool GreaterThan(double Left, object Right) {
             if (Right is int) {
                 return Left > (int)Right;
             }
@@ -89,10 +108,10 @@ namespace Poly.Script.Node {
                 if (double.TryParse(Str, out Temp))
                     return Left > Temp;
             }
-            return null;
+            return false;
         }
 
-        public new static object LessThan(double Left, object Right) {
+        public new static bool LessThan(double Left, object Right) {
             if (Right is int) {
                 return Left < (int)Right;
             }
@@ -106,10 +125,10 @@ namespace Poly.Script.Node {
                 if (double.TryParse(Str, out Temp))
                     return Left < Temp;
             }
-            return null;
+            return false;
         }
 
-        public new static object Equal(double Left, object Right) {
+        public new static bool Equal(double Left, object Right) {
             if (Right is int) {
                 return Left == (int)Right;
             }
@@ -123,18 +142,17 @@ namespace Poly.Script.Node {
                 if (double.TryParse(Str, out Temp))
                     return Left == Temp;
             }
-            return null;
+            return false;
         }
 
-        public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
             double Value = 0;
-            var Debug = Text.Substring(Index);
 
             if (Text.ToDouble(ref Index, LastIndex, ref Value))
-                return Value;
+                return new Float(Value);
 
             return null;
         }

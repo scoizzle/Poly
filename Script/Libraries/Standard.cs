@@ -5,20 +5,18 @@ using System.Text;
 
 namespace Poly.Script.Libraries {
     using Data;
-    using Node;
+    using Nodes;
 
     public class Standard : Library {
-        public static Standard Instance;
         public Standard() {
-            Instance = this;
-            Library.RegisterLibrary("Standard", this);
+            Library.Standard = this;
 
             Add(Sleep);
             Add(Url);
             Add(Libraries.Global.Load);
         }
 
-        public static SystemFunction Sleep = new SystemFunction("Sleep", (Args) => {
+        public static Function Sleep = new Function("Sleep", (Args) => {
             int Delay = Args.Get<int>("0");
 
             System.Threading.Thread.Sleep(Delay);
@@ -26,7 +24,7 @@ namespace Poly.Script.Libraries {
             return null;
         });
 
-        public static SystemFunction Url = new SystemFunction("Url", (Args) => {
+        public static Function Url = new Function("Url", (Args) => {
             var Raw = Args.Get<string>("0");
 
             if (!string.IsNullOrEmpty(Raw))

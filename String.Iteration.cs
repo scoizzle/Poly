@@ -7,10 +7,19 @@ using Poly.Data;
 
 namespace System {
     public static class StringIteration {
+        public static bool Consume(this String Text, String Part, ref int Index) {
+            if (!Text.Compare(Part, Index)) {
+                return false;
+            }
+
+            Index += Part.Length;
+            return true;
+        }
+
         public static void ConsumeBetween(this String Text, ref int Index, String Open, String Close) {
             int X, Y, Z = 1;
 
-            X = Text.IndexOf(Open, Index);
+            X = Text.Find(Open, Index);
 
             for (Y = X + Open.Length; Y < Text.Length; Y++) {
                 if (Text[Y] == '\\') {

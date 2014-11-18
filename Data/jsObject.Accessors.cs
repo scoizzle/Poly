@@ -63,6 +63,7 @@ namespace Poly.Data {
                                      NewArray = () => { return new jsObject() { IsArray = true }; };
 
         public T Get<T>(string Key) {
+            T Value;
             if (StringExtensions.Contains(Key, '.')) {
                 int Open = 0, Close = Key.Find('.');
                 jsObject Current = this;
@@ -70,16 +71,11 @@ namespace Poly.Data {
                 while (Current != null && Open != -1 && Close != -1) {
                     var Sub = Key.Substring(Open, Close - Open);
 
-                    if (Close == Key.Length)
-                        return Current.SearchForItem<T>(Sub);
+                    if (Close == Key.Length && Current.TryGet<T>(Sub, out Value))
+                        return Value;
 
-                    var Next = Current.SearchForItem<jsObject>(Sub);
-
-                    if (Next == null) {
+                    if (!Current.TryGet<jsObject>(Sub, out Current))
                         return default(T);
-                    }
-                    Current = Next;
-
 
                     Open = Close + 1;
                     Close = Key.Find('.', Open);
@@ -89,8 +85,12 @@ namespace Poly.Data {
                     }
                 }
             }
+            else {
+                if (this.TryGet<T>(Key, out Value))
+                    return Value;
+            }
 
-            return SearchForItem<T>(Key);
+            return default(T);
         }
 
         public T Get<T>(string Key, T Default) {
@@ -108,14 +108,14 @@ namespace Poly.Data {
             T Value = Get<T>(Key);
 
             if (Value == null) {
-                Value = OnMissingHander();
-                Set<T>(Key, Value);
+                Set<T>(Key, Value = OnMissingHander());
             }
 
-            return (T)Value;
+            return Value;
         }
 
         public T Get<T>(string[] Keys) {
+            T Value;
             jsObject Current = this;
 
             for (int i = 0; Current != null && i < Keys.Length; i++) {
@@ -126,25 +126,37 @@ namespace Poly.Data {
                     continue;
                 }
 
-                if ((Keys.Length - i) == 1) {
-                    return Current.SearchForItem<T>(Sub);
+                if ((Keys.Length - i) == 1 && Current.TryGet<T>(Sub, out Value)) {
+                    return Value;
                 }
 
-                Current = Current.SearchForItem<jsObject>(Sub);
+                if (!Current.TryGet<jsObject>(Sub, out Current))
+                    break;
             }
             return default(T);
         }
 
-        public T Search<T>(string Key, bool IgnoreCase = true, bool KeyIsWild = false) {
+        public T Search<T>(string Key, bool IgnoreCase = true, bool KeyIsWild = false) where T : class {
             T Value = default(T);
 
-            ForEach<T>((K, V) => {
-                if (KeyIsWild ? Key.Compare(K, IgnoreCase) : K.Compare(Key, IgnoreCase)) {
-                    Value = V;
-                    return true;
-                }
-                return false;
-            });
+            if (KeyIsWild) {
+                ForEach<T>((K, V) => {
+                    if (Key.Compare(K, IgnoreCase)) {
+                        Value = V;
+                        return true;
+                    }
+                    return false;
+                });
+            }
+            else {
+                ForEach<T>((K, V) => {
+                    if (K.Compare(Key, IgnoreCase)) {
+                        Value = V;
+                        return true;
+                    }
+                    return false;
+                });
+            }
 
             return Value;
         }
@@ -152,13 +164,29 @@ namespace Poly.Data {
         public jsObject getObject(string Key) {
             return Get<jsObject>(Key);
         }
-
-        public bool TryGetValue<T>(string Key, out T Value) {
+        
+        public bool TryGet<T>(string Key, out T Value) {
             object Obj;
 
             if (base.TryGetValue(Key, out Obj)) {
-                Value = (T)Obj;
-                return true;
+				try {
+                    Value = (T)Obj;
+                    return true;
+				}
+				catch {
+                    var str = Obj as string;
+                    if (str != null) {
+                        var Type = typeof(T);
+                        if (ParserCache.ContainsKey(Type)) {
+                            Value = (T)ParserCache[Type](str);
+                            return true;
+                        }
+                    }
+                    else {
+                        Value = default(T);
+                        return false;
+                    }
+				}
             }
 
             Value = default(T);
@@ -183,9 +211,8 @@ namespace Poly.Data {
                         return;
                     }
 
-                    var Next = Current.SearchForItem<jsObject>(Sub);
-
-                    if (Next == null) {
+                    jsObject Next;
+                    if (!Current.TryGet<jsObject>(Sub, out Next)) {
                         Next = new jsObject();
                         Current.AssignValue(Sub, Next);
                     }
@@ -243,35 +270,6 @@ namespace Poly.Data {
 
         public virtual void AssignValue<T>(string Key, T Value) {
             base[Key] = Value;
-        }
-
-        public T SearchForItem<T>(string Key) {
-            object Item;
-            if (base.TryGetValue(Key, out Item)) {
-                if (Item != null) {
-                    if (Item is T) {
-                        return (T)Item;
-                    }
-                    else if (typeof(T).IsAssignableFrom(Item.GetType())) {
-                        return (T)Item;
-                    }
-
-                    if (Item is string) {
-                        Func<string, object> Parser;
-
-                        if (jsObject.ParserCache.TryGetValue(typeof(T), out Parser)) {
-                            object Obj = Parser((string)Item);
-
-                            if (Obj != null) {
-                                AssignValue(Key, Obj);
-
-                                return (T)Obj;
-                            }
-                        }
-                    }
-                }
-            }
-            return default(T);
         }
     }
 }

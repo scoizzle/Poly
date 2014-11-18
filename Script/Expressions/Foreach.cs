@@ -4,7 +4,9 @@ using System.Linq;
 using System.Text;
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+
     public class Foreach : Expression {
         public Variable Variable = null;
         public Variable List = null;
@@ -16,16 +18,23 @@ namespace Poly.Script.Node {
             Var.Set("Key", Key);
             Var.Set("Value", Value);
 
-            foreach (var Node in this.Values) {
-                if (Node is Return)
-                    return Node;
+            foreach (var Node in Elements) {
+                var Ret = Node as Return;
 
-                var Ret = GetValue(Node, Context);
+                if (Ret != null)
+                    return Ret;
+
+                object Val;
+                if (Node != null)
+                    Val = Node.Evaluate(Context);
+                else 
+                    Val = null;                
 
                 if (Ret == Break || Ret == Continue)
                     return Ret;
             }
 
+            Variable.Assign(Context, null);
             return null;
         }
 
@@ -36,8 +45,10 @@ namespace Poly.Script.Node {
             for (int i = 0 ; i < String.Length; i ++) {
                 var Result = LoopNodes<int, char>(Context, i, String[i]);
 
-                if (Result is Return)
-                    return GetValue(Result, Context);
+                var Ret = Result as Return;
+
+                if (Ret != null)
+                    return Ret;
 
                 if (Result == Break)
                     break;
@@ -51,10 +62,11 @@ namespace Poly.Script.Node {
 
             foreach (var Pair in Object) {
                 var Result = LoopNodes<string, object>(Context, Pair.Key, Pair.Value);
+                var Ret = Result as Return;
 
-                if (Result is Return)
-                    return GetValue(Result, Context);
-
+                if (Ret != null)
+                    return Ret;
+                
                 if (Result == Break)
                     break;
             }
@@ -67,7 +79,7 @@ namespace Poly.Script.Node {
                 return null;
             }
 
-            var Array = GetValue(List, Context);
+            var Array = List.Evaluate(Context);
 
             if (Array == null)
                 return null;
@@ -123,18 +135,14 @@ namespace Poly.Script.Node {
                         ConsumeWhitespace(Text, ref Open);
 
                         var Exp = Engine.Parse(Text, ref Open, LastIndex);
+                        if (Exp != null) {
+                            For.Elements = Exp.Elements;
+                            ConsumeWhitespace(Text, ref Open);
 
-                        if (Exp is Node) {
-                            (Exp as Node).CopyTo(For);
+                            Index = Open;
+
+                            return For;
                         }
-                        else {
-                            For.Add(Exp);
-                        }
-                        ConsumeWhitespace(Text, ref Open);
-
-                        Index = Open;
-
-                        return For;
                     }
                 }
             }

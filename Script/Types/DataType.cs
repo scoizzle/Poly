@@ -5,9 +5,9 @@ using System.Text;
 
 using Poly.Data;
 
-namespace Poly.Script.Node {
-    public class DataType<T> : Node {
-
+namespace Poly.Script.Types {
+    using Nodes;
+    public class DataType<T> : Value {
         public static object Add(T Left, object Right) { return null; }
 
         public static object Subtract(T Left, object Right) { return null; }
@@ -16,11 +16,11 @@ namespace Poly.Script.Node {
 
         public static object Devide(T Left, object Right) { return null; }
 
-        public static object Equal(T Left, object Right) { return Object.ReferenceEquals(Left, Right); }
+        public static bool Equal(T Left, object Right) { return Object.ReferenceEquals(Left, Right); }
 
-        public static object LessThan(T Left, object Right) { return null; }
+        public static bool LessThan(T Left, object Right) { return false; }
 
-        public static object GreaterThan(T Left, object Right) { return null; }
+        public static bool GreaterThan(T Left, object Right) { return false; }
     }
 
     public class DataType : Node {
@@ -76,16 +76,13 @@ namespace Poly.Script.Node {
             else if (Left is double) {
                 return Float.Devide((double)Left, Right);
             }
-            else if (Left is string) {
-                return String.Devide((string)Left, Right);
-            }
             else if (Left is jsObject) {
                 return Object.Devide((jsObject)Left, Right);
             }
             return null;
         }
 
-        public static object Equal(object Left, object Right) {
+        public static bool Equal(object Left, object Right) {
             if (Left is int) {
                 return Integer.Equal((int)Left, Right);
             }
@@ -101,24 +98,24 @@ namespace Poly.Script.Node {
             return Right == null;
         }
 
-        public static object LessThan(object Left, object Right) {
+        public static bool LessThan(object Left, object Right) {
             if (Left is int) {
                 return Integer.LessThan((int)Left, Right);
             }
             else if (Left is double) {
                 return Float.LessThan((double)Left, Right);
             }
-            return null;
+            return false;
         }
 
-        public static object GreaterThan(object Left, object Right) {
+        public static bool GreaterThan(object Left, object Right) {
             if (Left is int) {
                 return Integer.GreaterThan((int)Left, Right);
             }
             else if (Left is double || Left is long) {
                 return Float.GreaterThan(Convert.ToDouble(Left), Right);
             }
-            return null;
+            return false;
         }
     }
 }

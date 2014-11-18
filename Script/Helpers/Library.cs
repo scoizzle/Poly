@@ -7,21 +7,21 @@ using System.Reflection;
 using Poly.Data;
 
 namespace Poly.Script {
-    public class Library : jsObject<Function> {
+    using Nodes;
+    public class Library : jsObject<Nodes.Function> {
         public static jsObject<Library> Defined = null;
         public static jsObject<Library> TypeLibsByName = null;
         public static jsObject<Library> StaticLibraries = null;
         public static Dictionary<Type, Library> TypeLibs = null;
 
-        public static Library Constructors = null;
-        public static Library Global = null;
+        public static Library Global = null,
+                              Standard = null;
 
         static Library() {
             Defined = new jsObject<Library>();
             TypeLibsByName = new jsObject<Library>();
             StaticLibraries = new jsObject<Library>();
             TypeLibs = new Dictionary<Type, Library>();
-            Constructors = new Library();
 
             var LType = typeof(Library);
             var Assemblies = new Assembly[] {

@@ -4,17 +4,21 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+    using Expressions;
+
     public class Do : Expression {
-        public object Boolean = null;
+        public Node Boolean = null;
 
         public override object Evaluate(Data.jsObject Context) {
             do {
-                foreach (var Node in this.Values) {
+                foreach (var Node in Elements) {
                     if (Node is Return)
                         return Node;
 
-                    var Result = GetValue(Node, Context);
+                    var Result = Node.Evaluate(Context);
 
                     if (Result == Break)
                         return null;

@@ -5,7 +5,8 @@ using System.Text;
 
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Types {
+    using Nodes;
     public class Bool : DataType<bool> {
         public new static object Equal(bool Left, object Right) {
             if (Right is bool) {
@@ -24,8 +25,14 @@ namespace Poly.Script.Node {
         }
 
         public static bool EvaluateNode(object Node, jsObject Context) {
-            var Val = GetValue(Node, Context);
+            object Val;
+            var N = Node as Node;
 
+            if (N != null)
+                Val = N.Evaluate(Context);
+            else
+                Val = Node;
+            
             if (Val == null)
                 return false;
 
@@ -48,17 +55,17 @@ namespace Poly.Script.Node {
             return false;
         }
 
-        public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
             if (Text.Compare("true", Index, true)) {
                 Index += 4;
-                return true;
+                return Expression.True;
             }
             else if (Text.Compare("false", Index, true)) {
                 Index += 5;
-                return false;
+                return Expression.False;
             }
 
             return null;

@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node.Unary {
+namespace Poly.Script.Expressions.Unary {
+    using Nodes;
+
     public class Parser {
-        public delegate object Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
+        public delegate Node Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
         public static List<Handler> UnaryParsers = new List<Handler>() {
             Equal.Parse,
             NotEqual.Parse,
@@ -25,7 +27,7 @@ namespace Poly.Script.Node.Unary {
             Subtract.Parse,
         };
 
-        public static object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!Expression.IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 

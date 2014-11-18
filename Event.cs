@@ -9,6 +9,10 @@ namespace Poly {
     public partial class Event {
         public delegate object Handler(jsObject Args);
 
+        public static Handler Handle(Handler Handler) {
+            return Handler;
+        }
+
 		public static object Invoke(Handler Func, jsObject Args) {
 			if (Func == null)
 				return null;
@@ -84,7 +88,7 @@ namespace Poly {
                 return ForEach<jsObject>((Name, Handlers) => {
                     var Key = KeyIsWild ? Data : Name;
                     var Wild = KeyIsWild ? Name : Data;
-                    var Matches = jsObject.Null;
+                    var Matches = default(jsObject);
 
                     if ((Matches = Key.Match(Wild)) != null) {
                         if (Matches.Count == 0)

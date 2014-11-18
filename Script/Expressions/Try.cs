@@ -4,19 +4,22 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
     public class Try : Expression {
         public Node Node = null, Catch = null;
 
         public override object Evaluate(Data.jsObject Context) {
             try {
-                return GetValue(Node, Context);
+                if (Node != null)
+                    return Node.Evaluate(Context);
             }
             catch (Exception Error) {
                 if (Catch != null) {
                     Context.Set("Error", Error);
 
-                    return GetValue(Catch, Context);
+                    if (Catch != null)
+                        return Catch.Evaluate(Context);
                 }
             }
             return null;

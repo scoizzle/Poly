@@ -5,16 +5,18 @@ using System.Text;
 
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
     public class If : Expression {
-        public object Boolean = null, Else = null;
+        public Node Boolean = null, Else = null;
 
         public override object Evaluate(jsObject Context) {
             if (Bool.EvaluateNode(Boolean, Context)) {
                 return base.Evaluate(Context);
             }
             else if (Else != null) {
-                return GetValue(Else, Context);
+                return Else.Evaluate(Context);
             }
             return null;
         }
@@ -50,7 +52,11 @@ namespace Poly.Script.Node {
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex) as Node;
 
                     if (Exp != null) {
-                        If.Add(Exp);
+                        if (Exp.Elements == null)
+                            If.Elements = new Node[] { Exp };
+                        else 
+                            If.Elements = Exp.Elements;
+
                         ConsumeWhitespace(Text, ref Delta);
 
                         if (Text.Compare("else", Delta)) {

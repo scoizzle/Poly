@@ -4,23 +4,29 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+
     public class Switch : Expression {
-        public object Object = null;
+        public Node Object = null;
         public Case Default = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            foreach (var Node in this.Values) {
-                if (!(Node is Case))
-                    continue;
-
+            foreach (var Node in Elements) {
                 var Case = Node as Case;
 
+                if (Case == null)
+                    continue;
+
                 if (Bool.EvaluateNode(Case.Object, Context))
-                    return GetValue(Case, Context);
+                    return Case.Evaluate(Context);
             }
 
-            return GetValue(Default, Context);
+            if (Default != null)
+                return Default.Evaluate(Context);
+
+            return null;
         }
 
         public override string ToString() {
@@ -38,7 +44,7 @@ namespace Poly.Script.Node {
                 var Open = Delta + 1;
                 var Close = Delta;
                 var Switch = new Switch();
-
+                var List = new List<Node>();
                 ConsumeEval(Text, ref Close);
 
                 if (Delta == Close)
@@ -69,12 +75,13 @@ namespace Poly.Script.Node {
                                 Option.Object = new Equal(Switch.Object, Option.Object);
                             }
 
-                            Switch.Add(Option);
+                            List.Add(Option);
                         }
                         else break;
                     }
 
                     Index = Close;
+                    Switch.Elements = List.ToArray();
                     return Switch;
                 }
             }

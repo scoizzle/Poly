@@ -5,17 +5,20 @@ using System.Text;
 
 using System.Threading;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+
     public class While : Expression {
-        public object Boolean = null;
+        public Node Boolean = null;
 
         public override object Evaluate(Data.jsObject Context) {
             while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
-                foreach (var Node in this.Values) {
+                foreach (var Node in Elements) {
                     if (Node is Return)
                         return Node;
 
-                    var Result = GetValue(Node, Context);
+                    var Result = Node.Evaluate(Context);
 
                     if (Result == Break)
                         return null;
@@ -57,7 +60,7 @@ namespace Poly.Script.Node {
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex);
 
                     if (Exp != null) {
-                        While.Add(Exp);
+                        While.Elements = Exp.Elements;
                         ConsumeWhitespace(Text, ref Delta);
 
                         Index = Delta;

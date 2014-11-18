@@ -3,12 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.Diagnostics;
 
 namespace Poly {
     public partial class App {
         public class Log {
-            public static bool Active = false;
-            public static int Level = 0;
+            public static bool Active;
+            public static int Level;
+
+			public static Action<string> Handler;
 
             public class Levels {
                 public const int None = -1;
@@ -17,6 +20,13 @@ namespace Poly {
                 public const int Warning = 2;
                 public const int Info = 3;
             };
+
+			static Log() {
+				Active = false;
+				Level = Levels.Fatal;
+
+				Handler = Console.Write;
+			}
 
             public static void Info(string Message) {
                 if (Level >= Levels.Info) {
@@ -48,20 +58,25 @@ namespace Poly {
                     return;
 
                 foreach (string part in Message) {
-                    Console.Write(part);
+					Handler(part);
                 }
 
-                Console.WriteLine();
+				Handler(Environment.NewLine);
             }
 
-            public static void Benchmark(string Name, int Iterations, Action<int> Todo) {
-                int Start = Environment.TickCount;
-                for (int i = 0; i < Iterations; i++) {
-                    Todo(i);
-                }
-                int Stop = Environment.TickCount;
+            public static void Benchmark(string Name, int Iterations, Action Todo) {    
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
 
-                Info(Name + ": " + (Stop - Start).ToString());
+                Todo();
+                
+                var watch = Stopwatch.StartNew();
+                for (int i = 0; i < Iterations; i++) {
+                    Todo();
+                }
+                watch.Stop();
+                Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", Name, watch.Elapsed.TotalMilliseconds,Iterations / watch.Elapsed.TotalSeconds);
             }
         }
     }

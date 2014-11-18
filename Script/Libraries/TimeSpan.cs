@@ -6,7 +6,7 @@ using System.Net;
 
 namespace Poly.Script.Libraries {
     using Data;
-    using Node;
+    using Nodes;
 
     public class TimeSpan : Library {
         public TimeSpan() {
@@ -15,7 +15,7 @@ namespace Poly.Script.Libraries {
             Add(ToDurationString);
         }
 
-        public static SystemFunction ToDurationString = new SystemFunction("ToDurationString", 
+        public static Function ToDurationString = new Function("ToDurationString", 
             Event.Wrapper<System.TimeSpan>(Poly.TimeSpanExtensions.ToDurationString, "this")
         );
     }

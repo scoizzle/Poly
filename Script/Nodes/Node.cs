@@ -1,58 +1,48 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 using Poly.Data;
 
-namespace Poly.Script.Node {
-    public class Node : jsObject<Node> {
-        public Poly.Event.Handler GetSystemHandler() {
-            return Evaluate;
-        }
+namespace Poly.Script.Nodes {
+    public class Node : IDisposable {
+        public Node[] Elements;
+
+        public void Dispose() { Elements = null; }
 
         public virtual object Evaluate(jsObject Context) {
-			foreach (var Obj in this.Values) {
-                if (Obj is Return)
-                    return Obj;
+            if (Elements == null)
+                return null;
 
-                var Result = GetValue(Obj, Context);
+            foreach (Node N in Elements) {
+                var R = N as Expressions.Return;
+                if (R != null)
+                    return R;
 
-                if (Result == Expression.Break || Result == Expression.Continue)
-                    return Result;
+                var Value = N.Evaluate(Context);
 
-                if (Obj is Operator)
+                if (Value == null)
                     continue;
 
-                if (Result != null && Obj is Expression && !(Obj is Call)) {
-                    return Result;
-                }
-			}
+                if ((R = Value as Expressions.Return) != null)
+                    return R;
 
+                if (Value == Expression.Break || Value == Expression.Continue)
+                    return Value;
+            }
             return null;
         }
 
         public override string ToString() {
-            return "";
-        }
+            if (Elements == null) 
+                return string.Empty;
 
-        public override string ToString(bool HumanFormat) {
-            return this.ToString();
-        }
+            StringBuilder Output = new StringBuilder();
 
-        public static object GetValue(object Obj, jsObject Context) {
-            if (Context == null || Obj == null)
-                return null;
-
-            var Node = Obj as Node;
-            if (Node != null) {
-                if (Node is Function) {
-                    return Function.GetFunctionHandler(Node as Function, Context);
-                }
-                return Node.Evaluate(Context);
+            foreach (var Elem in Elements) {
+                Output.Append(Elem.ToString()).AppendLine(";");
             }
 
-            return Obj;
+            return Output.ToString();
         }
 
         public static bool IsValidChar(char c) {
@@ -63,7 +53,7 @@ namespace Poly.Script.Node {
             while (Index < Text.Length) {
                 StringIteration.ConsumeWhitespace(Text, ref Index);
 
-                if (Text.Compare(";", Index) || Text.Compare(";", Index))
+                if (Text.Compare(";", Index) || Text.Compare(",", Index))
                     Index++;
                 else break;
             }
@@ -81,11 +71,13 @@ namespace Poly.Script.Node {
             Text.ConsumeBetween(ref Index, "[", "]");
         }
 
-        public static void ConsumeString(string Text, ref int Index) {
-            if (Text[Index] == '"')
+        public static bool ConsumeString(string Text, ref int Index) {
+            if (Text.Compare('"', Index))
                 Text.ConsumeBetween(ref Index, "\"", "\"");
-            else
+            else if (Text.Compare('\'', Index))
                 Text.ConsumeBetween(ref Index, "'", "'");
+            else return false;
+            return true;
         }
 
         public static void ConsumeContent(string Text, ref int Index) {
@@ -120,8 +112,8 @@ namespace Poly.Script.Node {
         public static void ConsumeValidName(string Text, ref int Index) {
             var Delta = Index;
 
-            for (; Delta < Text.Length;) {
-                if (IsValidChar(Text[Delta]))
+            for (; Delta < Text.Length; ) {
+                if (IsValidChar(Text[Delta]) || Text[Delta] == '@')
                     Delta++;
                 else if (Text[Delta] == '[')
                     ConsumeBlock(Text, ref Delta);
@@ -131,36 +123,12 @@ namespace Poly.Script.Node {
             Index = Delta;
         }
 
-        public static string ExtractValidName(string Text, ref int Index) {
-            var Open = Index;
-
-            ConsumeValidName(Text, ref Index);
-
-            return Text.Substring(Open, Index - Open);
-        }
-
-        public static bool IsValidName(string Text, int Index) {
-            var Delta = Index;
-            
-            ConsumeValidName(Text, ref Delta);
-
-            return Index != Delta;
-        }
-        
         public static bool IsParseOk(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (Engine == null || string.IsNullOrEmpty(Text) || Index >= Text.Length || LastIndex > Text.Length)
+            if (Engine == null || string.IsNullOrEmpty(Text) || LastIndex > Text.Length || Index >= LastIndex)
                 return false;
 
             ConsumeWhitespace(Text, ref Index);
             return true;
-        }
-
-        public static Node Parse(Engine Engine, string Text, ref int Index, int Length) {
-            return null;
-        }
-
-        public static jsObject AsJsObject(object Obj) {
-            return Obj as jsObject;
         }
     }
 }

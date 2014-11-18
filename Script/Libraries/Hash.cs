@@ -6,7 +6,7 @@ using System.Net;
 
 namespace Poly.Script.Libraries {
     using Data;
-    using Node;
+    using Nodes;
 
     public class Hash : Library {
         public Hash() {
@@ -18,7 +18,7 @@ namespace Poly.Script.Libraries {
             Add(SHA512);
         }
 
-        public static SystemFunction MD5 = new SystemFunction("MD5", (Args) => {
+        public static Function MD5 = new Function("MD5", (Args) => {
             var Obj = Args.Get<object>("0");
 
             if (Obj != null)
@@ -27,7 +27,7 @@ namespace Poly.Script.Libraries {
             return null;
         });
 
-        public static SystemFunction SHA1 = new SystemFunction("SHA1", (Args) => {
+        public static Function SHA1 = new Function("SHA1", (Args) => {
             var Obj = Args.Get<object>("0");
 
             if (Obj != null)
@@ -36,7 +36,7 @@ namespace Poly.Script.Libraries {
             return null;
         });
 
-        public static SystemFunction SHA256 = new SystemFunction("SHA256", (Args) => {
+        public static Function SHA256 = new Function("SHA256", (Args) => {
             var Obj = Args.Get<object>("0");
 
             if (Obj != null)
@@ -45,7 +45,7 @@ namespace Poly.Script.Libraries {
             return null;
         });
 
-        public static SystemFunction SHA512 = new SystemFunction("SHA512", (Args) => {
+        public static Function SHA512 = new Function("SHA512", (Args) => {
             var Obj = Args.Get<object>("0");
 
             if (Obj != null)

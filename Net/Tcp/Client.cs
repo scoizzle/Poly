@@ -8,6 +8,7 @@ using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Text;
 
 using Poly;
@@ -15,11 +16,11 @@ using Poly.Data;
 
 namespace Poly.Net.Tcp {
 	public class Client {
-		private static byte[] conTestBuf = new byte[1];
         private StreamReader p_sRead = null;
         private StreamWriter p_sWrite = null;
         private Stream p_Stream = null;
         private bool p_bAutoFlush = true;
+        private int p_recvTimeout = int.MinValue;
 
         public Socket Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         
@@ -43,15 +44,7 @@ namespace Poly.Net.Tcp {
 
         public bool Connected {
             get {
-                if (!Socket.Connected)
-                    return false;
-
-                try {
-                    return !(Socket.Poll(1, SelectMode.SelectRead) && Socket.Available == 0);
-                }
-                catch { 
-                    return false; 
-                }
+                return Socket.Connected;
             }
         }
 		
@@ -60,6 +53,23 @@ namespace Poly.Net.Tcp {
 
         public Client(Socket Base) {
             this.Socket = Base;
+        }
+
+        public int ReceiveTimeout {
+            get {
+                if (p_recvTimeout == int.MinValue) {
+                    if (Socket.ReceiveTimeout == 0) {
+                        return -1;
+                    }
+                    else {
+                        return Socket.ReceiveTimeout;
+                    }
+                }
+                return p_recvTimeout;
+            }
+            set {
+                p_recvTimeout = value;
+            }
         }
 
         public StreamReader Reader {
@@ -74,8 +84,11 @@ namespace Poly.Net.Tcp {
         public StreamWriter Writer {
             get {
                 if (p_sWrite == null) {
-                    p_sWrite = new StreamWriter(this.GetStream());
-                    p_sWrite.AutoFlush = p_bAutoFlush;
+                    try {
+                        p_sWrite = new StreamWriter(this.GetStream());
+                        p_sWrite.AutoFlush = p_bAutoFlush;
+                    }
+                    catch { }
                 }
                 return p_sWrite;
             }
@@ -184,7 +197,12 @@ namespace Poly.Net.Tcp {
             }
 
             try {
-                return Reader.ReadLine();
+                var Task = Reader.ReadLineAsync();
+
+                Task.Wait(ReceiveTimeout);
+
+                if (Task.IsCompleted)
+                    return Task.Result;                
             }
             catch { }
             return null;
@@ -211,7 +229,11 @@ namespace Poly.Net.Tcp {
                 return false;
 
             try {
-                GetStream().Write(Bytes, 0, Bytes.Length);
+                var Stream = GetStream();
+                if (Stream == null)
+                    return false;
+
+                Stream.Write(Bytes, 0, Bytes.Length);
             }
             catch { 
                 return false; 
@@ -222,13 +244,14 @@ namespace Poly.Net.Tcp {
         public virtual string Receive() {
             return ReadLine();
         }
+        
+        public virtual char[] Receive(int Length) {
 
-        public virtual byte[] Receive(int Length) {
-            byte[] Buffer = new byte[Length];
+            char[] Buffer = new char[Length];
 
             try {
                 for (int n = 0; n < Length; ) {
-                    n += GetStream().Read(Buffer, n, Length - n);
+                    n += Reader.Read(Buffer, n, Length - n);
                 }
             }
             catch {

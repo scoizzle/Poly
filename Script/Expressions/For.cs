@@ -4,19 +4,25 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+    using Expressions;
     public class For : Expression {
-        public object Init, Boolean, Modifier;
+        public Node Init = null, 
+                    Boolean = null, 
+                    Modifier = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            GetValue(Init, Context);
+            if (Init != null)
+                Init.Evaluate(Context);
 
             while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
-                foreach (var Node in this.Values) {
+                foreach (var Node in Elements) {
                     if (Node is Return)
                         return Node;
 
-                    var Result = GetValue(Node, Context);
+                    var Result = Node.Evaluate(Context);
 
                     if (Result == Break) 
                         return null;
@@ -25,7 +31,8 @@ namespace Poly.Script.Node {
                         break;
                 }
 
-                GetValue(Modifier, Context);
+                if (Modifier != null)
+                    Modifier.Evaluate(Context);
             }
 
             return null;
@@ -58,11 +65,12 @@ namespace Poly.Script.Node {
                     For.Boolean = Engine.Parse(Text, ref Open, Close) as Node;
 
                     if (For.Boolean is Between) {
-                        var Var = For.Init;
+                        var Var = For.Init as Variable;
+                        var Bol = For.Boolean as Between;
 
-                        For.Modifier = new Assign(Var, new Add(Var, 1));
-                        For.Init = new Assign(Var, (For.Boolean as Between).Left);
-                        (For.Boolean as Between).Left = Var;
+                        For.Modifier = new Assign(Var, new Add(Var, new Integer(1)));
+                        For.Init = new Assign(Var, Bol.Left);
+                        Bol.Left = Var;
                     }
                     else {
                         For.Modifier = Engine.Parse(Text, ref Open, Close) as Node;
@@ -74,7 +82,7 @@ namespace Poly.Script.Node {
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex);
 
                     if (Exp != null) {
-                        For.Add(Exp);
+                        For.Elements = Exp.Elements;
                         ConsumeWhitespace(Text, ref Delta);
 
                         Index = Delta;

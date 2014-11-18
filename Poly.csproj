@@ -10,8 +10,6 @@
     <RootNamespace>Poly</RootNamespace>
     <AssemblyName>Poly</AssemblyName>
     <FileAlignment>512</FileAlignment>
-    <ProductVersion>12.0.0</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -48,6 +46,7 @@
     <Compile Include="Application.cs" />
     <Compile Include="Application.Logging.cs" />
     <Compile Include="Char.Extensions.cs" />
+    <Compile Include="Event.Queue.cs" />
     <Compile Include="Data\Hash.cs" />
     <Compile Include="Data\jsObject.Accessors.cs" />
     <Compile Include="Data\jsObject.cs" />
@@ -76,12 +75,22 @@
     <Compile Include="Net\Tcp\Server.cs" />
     <Compile Include="Net\Url.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Script\Expressions\Html\Generator.cs" />
+    <Compile Include="Script\Expressions\Html\Element.cs" />
+    <Compile Include="Script\Helpers\CachedScript.cs" />
+    <Compile Include="Script\Helpers\ContextGetter.cs" />
+    <Compile Include="Script\Helpers\SystemTypeGetter.cs" />
     <Compile Include="Script\Engine.cs" />
     <Compile Include="Script\Expressions\Async.cs" />
-    <Compile Include="Script\Expressions\Call.cs" />
     <Compile Include="Script\Expressions\Case.cs" />
     <Compile Include="Script\Expressions\Comment.cs" />
     <Compile Include="Script\Expressions\Eval.cs" />
+    <Compile Include="Script\Expressions\Html\Html.cs" />
+    <Compile Include="Script\Expressions\Html\Parser.cs" />
+    <Compile Include="Script\Expressions\Html\ComplexElement.cs" />
+    <Compile Include="Script\Expressions\Html\Attribute.cs" />
+    <Compile Include="Script\Expressions\Html\StringElement.cs" />
+    <Compile Include="Script\Expressions\Html\Variable.cs" />
     <Compile Include="Script\Expressions\Reload.cs" />
     <Compile Include="Script\Expressions\Try.cs" />
     <Compile Include="Script\Expressions\Switch.cs" />
@@ -109,9 +118,7 @@
     <Compile Include="Script\Expressions\Foreach.cs" />
     <Compile Include="Script\Expressions\For.cs" />
     <Compile Include="Script\Helpers\Extension.cs" />
-    <Compile Include="Script\Helpers\Initializer.cs" />
     <Compile Include="Script\Helpers\Library.cs" />
-    <Compile Include="Script\Helpers\MemberFunction.cs" />
     <Compile Include="Script\Libraries\TimeSpan.cs" />
     <Compile Include="Script\Libraries\Hash.cs" />
     <Compile Include="Script\Libraries\Tcp.cs" />
@@ -119,25 +126,26 @@
     <Compile Include="Script\Libraries\Global.cs" />
     <Compile Include="Script\Libraries\Http.cs" />
     <Compile Include="Script\Libraries\Standard.cs" />
-    <Compile Include="Script\Nodes\CustomType.cs" />
-    <Compile Include="Script\Nodes\Function.cs" />
+    <Compile Include="Script\Nodes\Function.Extensions.cs" />
     <Compile Include="Script\Expressions\If.cs" />
-    <Compile Include="Script\Expressions\Return.cs" />
-    <Compile Include="Script\Nodes\SystemFunction.cs" />
-    <Compile Include="Script\Helpers\ArgumentList.cs" />
     <Compile Include="Script\Helpers\Interface.cs" />
-    <Compile Include="Script\Nodes\DataType.cs" />
-    <Compile Include="Script\Nodes\Expression.cs" />
-    <Compile Include="Script\Nodes\Node.cs" />
-    <Compile Include="Script\Nodes\Operator.cs" />
+    <Compile Include="Script\Types\DataType.cs" />
     <Compile Include="Script\Nodes\StaticValue.cs" />
-    <Compile Include="Script\Nodes\Value.cs" />
-    <Compile Include="Script\Nodes\Variable.cs" />
     <Compile Include="Script\Parser\Parser.cs" />
     <Compile Include="Script\Types\Bool.cs" />
     <Compile Include="Script\Types\Float.cs" />
     <Compile Include="Script\Types\Integer.cs" />
     <Compile Include="Script\Types\Object.cs" />
+    <Compile Include="Script\Expressions\Call.cs" />
+    <Compile Include="Script\Expressions\Return.cs" />
+    <Compile Include="Script\Nodes\Class.cs" />
+    <Compile Include="Script\Nodes\Expression.cs" />
+    <Compile Include="Script\Nodes\Function.cs" />
+    <Compile Include="Script\Nodes\Node.cs" />
+    <Compile Include="Script\Nodes\Operator.cs" />
+    <Compile Include="Script\Nodes\Value.cs" />
+    <Compile Include="Script\Nodes\Variable.cs" />
+    <Compile Include="Script\Types\ClassInstance.cs" />
     <Compile Include="Script\Types\String.cs" />
     <Compile Include="String.Conversions.cs" />
     <Compile Include="String.Extensions.cs" />

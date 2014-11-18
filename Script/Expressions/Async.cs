@@ -3,33 +3,31 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+
     public class Async : Expression {
         public Node Node = null;
         public int MaxExecutionTime = -1;
 
-        public override object Evaluate(Data.jsObject Context) {
-            ManualResetEventSlim Event = new ManualResetEventSlim();
-
-            var Worker = new Thread((C) => {
-                GetValue(Node, C as Data.jsObject);
-                Event.Set();
+        private async Task<object> ExecuteAsync(Data.jsObject Context) {
+            return await Task.Run<object>(() => {
+                return Node.Evaluate(Context);
             });
+        }
 
-            Worker.Start(Context);
-
-            if (MaxExecutionTime > -1) {
-                var Manager = new Thread(() => {
-                    if (!Event.Wait(MaxExecutionTime))
-                        Worker.Abort();
+        public override object Evaluate(Data.jsObject Context) {
+            return Task.Run<object>(() => {
+                var Exec = Task.Run<object>(() => {
+                    return Node.Evaluate(Context);
                 });
-
-                Manager.Start();
-            }
-
-            return Worker;
+                Exec.Wait(MaxExecutionTime);
+                return Exec.Result;
+            });
         }
 
         public override string ToString() {
@@ -61,6 +59,7 @@ namespace Poly.Script.Node {
                 Index = Delta;
                 return Async;
             }
+
 
             return null;
         }

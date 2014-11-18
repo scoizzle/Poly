@@ -6,7 +6,9 @@ using System.IO;
 
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Helpers;
     public class Using : Expression {
         public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
@@ -36,7 +38,7 @@ namespace Poly.Script.Node {
                     if (Text.Compare(";", Close)) {
                         Engine.Shorthands[Name] = For;
                         Index = Close + 1;
-                        return NoOp;
+                        return Expression.NoOperation;
                     }
                 }
                 else if (Text.Compare(";", Close)) {
@@ -46,7 +48,7 @@ namespace Poly.Script.Node {
                         Engine.Using.Add(Library.Defined[Name]);
                     }
                     else if (File.Exists(Name + ".dll")) {
-                        Helper.ExtensionManager.Load(Name);
+                        ExtensionManager.Load(Name);
                     }
                     else {
                         App.Log.Error("Couldn't find library: " + Name);
@@ -56,7 +58,7 @@ namespace Poly.Script.Node {
                     ConsumeWhitespace(Text, ref Close);
 
                     Index = Close;
-                    return NoOp;
+                    return Expression.NoOperation;
                 }
             }
 

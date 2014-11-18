@@ -1,103 +1,140 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
     public class Call : Expression {
-        private bool Cacheable = false;
+        string Name;
 
-        private Variable Object = null;
-        private string Name = string.Empty;
+        Node This;
+        Function Function;
+        Func<object, object[], object> SystemFunction;
 
-        public Engine Engine = null;
-        public Function Function = null;
-        public Helper.ArgumentList Arguments = new Helper.ArgumentList();
+        Node[] Arguments;
+        Engine Engine;
 
-        public Call(Engine Engine, string Name, Function Func = null) {
-            this.Engine = Engine;
+        public Call(Engine Engine, Node This, string Name, Node[] Arguments = default(Node[])) {
+			this.Engine = Engine;
+            this.This = This;
             this.Name = Name;
-            this.Function = Func;
-
-            if (Func == null) {
-                if (Name.Contains('[')) {
-                    this.Object = Variable.Parse(Engine, Name, 0);
-                }
-                else if (Name.Contains('.')) {
-                    this.Name = Name.Substring("", ".", 0, false, true);
-                    this.Object = Variable.Parse(Engine, this.Name, 0);
-                    this.Name = Name.Substring(this.Name.Length + 1);
-                }
-                else {
-                    this.Name = Name;
-                }
-            }
+            this.Arguments = Arguments;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
-            object This = GetValue(Object, Context);
+        public override object Evaluate(jsObject Context) {
+            int Index = 0;
+            object Object = null;
+            object[] ArgList = null;
+            var Function = this.Function;
 
-            if (Function != null) {
-                return Function.Call(Context, Arguments, This, Engine);
+            if (this.This != null) {
+                Object = This.Evaluate(Context);
             }
-
-            Function Func;
-
-            if ((Func = Function.Get(Engine, Name, This, ref Cacheable)) == null) {
-                if (Object == null)
-                    return null;
-
-                var ObjectName = Object.ToString();
-
-                if (Engine.Shorthands.ContainsKey(ObjectName)) {
-                    var T = Helper.SystemFunctions.SearchForType(Engine.Shorthands[ObjectName]);
-
-                    if (T != null) {
-                        var Args = Function.GetFunctionArguments(null, Context, Arguments);
-                        var Types = Helper.MemberFunction.GetArgTypes(Args);
-
-                        Func = Helper.SystemFunctions.Get(T, Name, Types);
-                        Cacheable = true;
-                    }
+            
+            if (Function == null) {
+                var Instance = Object as Types.ClassInstance;
+                if (Instance != null) {
+                    Function = Instance.Class.GetFunction(Name);
                 }
                 else {
-                    return null;
+                    var Class = Engine.Types[Name];
+                    if (Class != null)
+                        Function = Class.Instaciator;
+                    else if ((Class = Object as Class) != null)
+                        Function = Class.Instaciator;
+                    else
+                        this.Function = Function = Engine.GetFunction(Name);
+                }
+
+                if (string.IsNullOrEmpty(Name)) {
+                    Function = Object as Function;
+
+                    if (Function == null) {
+                        var C = Object as Class;
+
+                        if (C != null)
+                            Function = C.Instaciator;
+                    }
                 }
             }
 
-            if (Cacheable)
-                Function = Func;
+            if (Arguments != null) {
+                ArgList = new object[Arguments.Length];
+
+                for (; Index < Arguments.Length; Index++) {
+                    var F = Arguments[Index] as Function;
+
+                    if (F != null)
+                        ArgList[Index] = new Event.Handler(F.Evaluate);
+                    else
+                        ArgList[Index] = Arguments[Index].Evaluate(Context);
+
+                }
+            }
+
+            if (SystemFunction != null) {
+                return SystemFunction(Object, ArgList);
+            }
+
+            if (Function == null && This != null) {
+                if (Object == null)
+                    this.Function = Function = Engine.GetFunction(This.ToString(), Name);
+                else
+                    this.Function = Function = Engine.GetFunction(Object.GetType(), Name);
+            }
+
+            if (Function != null) {
+                jsObject Args = new jsObject();
+                for (Index = 0; Index < ArgList.Length; Index++) {
+                    string Key;
+
+                    if (Function.Arguments != null && Index < Function.Arguments.Length)
+                        Key = Function.Arguments[Index];
+                    else
+                        Key = Index.ToString();
+
+                    Args[Key] = ArgList[Index];
+                }     
+                Args["this"] = Object;
+                return Function.Evaluate(Args);
+            }
+
+            if (Object == null)
+                return null;
+
+            var Type = Object as Type;
+            
+            if (Type == null)
+                Type = Object.GetType();
+
+            Type[] ArgTypes = null;
+
+            if (ArgList != null && ArgList.Length > 0) {
+                ArgTypes = new Type[ArgList.Length];
+
+                for (Index = 0; Index < ArgList.Length; Index++) {
+                    if (ArgList[Index] == null) {
+                        ArgTypes = null;
+                        break;
+                    }
+
+                    ArgTypes[Index] = ArgList[Index].GetType();
+                }
+            }
+
+            var Func = Function.GetFunction(Type, Name, ArgTypes);
 
             if (Func == null)
                 return null;
 
-            return Func.Call(Context, Arguments, This, Engine);
-        }
-
-        public bool ParseArguments(Engine Engine, string Text, int Open, int Close) {
-            int i = 0;
-
-            foreach (var Raw in Text.Substring(Open, Close - Open).ParseCParams()) {
-                var Arg = Engine.Parse(Raw, 0);
-
-                if (Arg == null)
-                    return false;
-
-                if (Function != null && i < Function.Arguments.Length) {
-                    Arguments[Function.Arguments[i]] = Arg;
-                }
-                else {
-                    Arguments.Add(Arguments.Count.ToString(), Arg);
-                }
+            SystemFunction = Func;
+            try {
+                return Func(Object, ArgList);
             }
-
-            return true;
-        }
-
-        public override string ToString() {
-            return (Object != null ? Object.ToString() : "" ) + Name + "(" + Arguments.ToString() + ")";
+            catch { 
+                SystemFunction = null;
+                return null;
+            };
         }
 
         public static new Call Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
@@ -116,7 +153,31 @@ namespace Poly.Script.Node {
                 ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
-                    var Call = new Call(Engine, Name, Function.GetStatic(Engine, Name));
+                    Node This;
+                    Type Type;
+
+                    if (Name.Contains('.')) {
+                        var LastPeriod = Name.LastIndexOf('.');
+                        var FirstName = Name.Substring(0, LastPeriod);
+
+                        if (Engine.Shorthands.ContainsKey(FirstName)){
+                            This = new Helpers.SystemTypeGetter(Engine.Shorthands[FirstName]);
+                        }
+                        else if ((Type = Helpers.SystemTypeGetter.GetType(Name)) != null) {
+                            This = new Helpers.SystemTypeGetter(Name) { Cache = Type };
+                        }
+                        else if (Name.Contains('[', LastPeriod + 1)) {
+                            This = new Variable(Engine, Name);
+                            LastPeriod = Name.Length - 1;
+                        }
+                        else {
+                            This = new Variable(Engine, FirstName); 
+                        }
+                        Name = Name.Substring(LastPeriod + 1);
+                    }
+                    else This = null;
+
+                    var Call = new Call(Engine, This, Name);
 
                     var Open = Delta + 1;
                     var Close = Delta;
@@ -127,6 +188,7 @@ namespace Poly.Script.Node {
                         return null;
 
                     var RawArgs = Text.Substring(Open, Close - Open - 1).ParseCParams();
+                    var List = new List<Node>();
 
                     for (int i = 0; i < RawArgs.Length; i++) {
                         var Arg = Engine.Parse(RawArgs[i], 0);
@@ -134,17 +196,13 @@ namespace Poly.Script.Node {
                         if (Arg == null)
                             return null;
 
-                        if (Call.Function != null && i < Call.Function.Arguments.Length) {
-                            Call.Arguments[Call.Function.Arguments[i]] = Arg;
-                        }
-                        else {
-                            Call.Arguments.Add(Call.Arguments.Count.ToString(), Arg);
-                        }
+                        List.Add(Arg);
                     }
 
+                    Call.Arguments = List.ToArray();
                     Close++;
                     ConsumeWhitespace(Text, ref Close);
-                    
+
                     Index = Close;
                     return Call;
                 }
@@ -152,6 +210,9 @@ namespace Poly.Script.Node {
 
             return null;
         }
+
+        public override string ToString() {
+            return string.Join(".", This, string.Format("{0}({1})", Name, string.Join<Node>(",", Arguments)));
+        }
     }
 }
-

@@ -124,7 +124,7 @@ namespace Poly.Net.Irc {
             { "OnNoPermission", ":{Sender} 481 {Receiver} :{Message}" },
             { "OnChannelOpNeeded", ":{Sender} 482 {Receiver} :{Message}" },
             { "OnCantKillServer", ":{Sender} 483 {Receiver} :{Message}" },
-            { "OnNoOperHost", ":{Sender} 491 {Receiver} :{Message}" },
+            { "OnExpression.NoOperationerHost", ":{Sender} 491 {Receiver} :{Message}" },
             { "OnUnknownModeFlag", ":{Sender} 501 {Receiver} :{Message}" },
             { "OnUsersDontMatch", ":{Sender} 502 {Receiver} :{Message}" },
         };

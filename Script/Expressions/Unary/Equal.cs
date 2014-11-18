@@ -3,22 +3,22 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+
     public class Equal : Operator {
-        public Equal(object Left, object Right) {
+        public Equal(Node Left,  Node Right) {
             this.Left = Left;
             this.Right = Right;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
-            var L = GetLeft(Context);
-            var R = GetRight(Context);
-
-            if (L == null || R == null) {
-                return L == null && R == null;
+        public override object Execute(object Left, object Right) {
+            if (Left == null || Right == null) {
+                return Left == null && Right == null;
             }
 
-            return DataType.Equal(L, R);
+            return DataType.Equal(Left, Right);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

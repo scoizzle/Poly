@@ -6,22 +6,30 @@ using System.IO;
 
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
     public class Reload : Node {
         public Engine Engine = null;
-        public object Name = null;
+        public Node Name = null;
 
-        public Reload(Engine Engine, object Name) {
+        public Reload(Engine Engine, Node Name) {
             this.Engine = Engine;
             this.Name = Name;
         }
 
         public override object Evaluate(jsObject Context) {
-            var FileName = GetValue(Name, Context).ToString();
+            if (Name == null)
+                return null;
+
+            var Value = Name.Evaluate(Context);
+            if (Value == null)
+                return null;
+
+            var FileName = Value.ToString();
             FileName = Path.GetFullPath(FileName);
 
             if (this.Engine.Includes.ContainsKey(FileName)) {
-                return this.Engine.Includes[FileName].Reload(this.Engine);
+                return this.Engine.Includes[FileName].Reload();
             }
 
             return null;
@@ -31,7 +39,7 @@ namespace Poly.Script.Node {
             return "reload '" + Name.ToString() + "'";
         }
 
-        public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 

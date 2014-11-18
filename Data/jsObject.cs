@@ -8,8 +8,6 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject : Dictionary<string, object> {
-        public static jsObject Null = null;
-
         public new object this[string Key] {
             get {
                 return Get<object>(Key);
@@ -72,41 +70,36 @@ namespace Poly.Data {
             ForEach<object>(Key, Action);
         }
 
-        public void ForEach<T>(Action<string, T> Action) {
-            var List = this.ToList();
+        public void ForEach<T>(Action<string, T> Action) where T : class {
+            foreach (var Pair in this) {
+                T V = Pair.Value as T;
 
-            for (int i = 0; i < List.Count; i++) {
-                if (List[i].Value is T) 
-                    Action(List[i].Key, (T)List[i].Value);
+                if (V != default(T))
+                    Action(Pair.Key, (T)Pair.Value);
             }
-
-            List = null;
         }
 
-        public bool ForEach<T>(Func<string, T, bool> Action) {
+        public bool ForEach<T>(Func<string, T, bool> Action) where T : class {
             foreach (var Pair in this) {
-                if (!(Pair.Value is T))
-                    continue;
+                var V = Pair.Value as T;
 
-                if (Action(Pair.Key, (T)Pair.Value))
+                if (V != null && Action(Pair.Key, V))
                     return true;
             }
             return false;
         }
 
-        public void ForEach<T>(string Key, Action<string, T> Action) {
-            var Obj = this[Key] as jsObject;
+        public void ForEach<T>(string Key, Action<string, T> Action) where T : class {
+            var Obj = getObject(Key);
 
             if (Obj == null)
                 return;
 
             foreach (var Pair in Obj) {
-                var Val = Pair.Value;
+                var V = Pair.Value as T;
 
-                if (!(Val is T))
-                    continue;
-
-                Action(Pair.Key, (T)Val);
+                if (V != null)
+                    Action(Pair.Key, V);
             }
         }
 
@@ -251,7 +244,7 @@ namespace Poly.Data {
         }
     }
 
-    public class jsObject<T> : jsObject {
+    public class jsObject<T> : jsObject where T : class {
         public static Func<jsObject<T>> NewTypedObject = () => { return new jsObject<T>(); };
 
         public new T this[string Key] {
@@ -277,7 +270,7 @@ namespace Poly.Data {
         }
 
         public void ForEach(Action<string, T> Action) {
-            ForEach<T>(Action);
+            base.ForEach<T>(Action);
         }
     }
 }

@@ -3,18 +3,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
     public class Add : Operator {
-        public Add(object Left, object Right) {
+        public Add(Node Left,  Node Right) {
             this.Left = Left;
             this.Right = Right;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
-            var L = GetLeft(Context);
-            var R = GetRight(Context);
-
-            return DataType.Add(L, R);
+        public override object Execute(object Left, object Right) {
+            return DataType.Add(Left, Right);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
@@ -40,7 +39,7 @@ namespace Poly.Script.Node {
                     Var,
                     new Add(
                         Var,
-                        1
+                        new Integer(1)
                     )
                 );
             }

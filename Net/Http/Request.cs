@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.IO.Compression;
 
 using Poly;
 using Poly.Data;
@@ -121,34 +122,44 @@ namespace Poly.Net.Http {
             if (!Client.Connected || Handled)
                 return;
 
-            Client.SendLine("HTTP/1.1 ", Result.Status);
-            Client.SendLine("Date: ", DateTime.UtcNow.HttpTimeString());
+            var Type = Result.Headers.Search<string>("Content-Type");
 
-            if (this.Data != null && Data.Length > 0) {
-                if (Result.Headers.Search<string>("content-type") == null) {
-                    Client.SendLine("Content-Type: ", Result.MIME);
+            var Length = this.Data == null ?
+                Result.Headers.Search<object>("Content-Length") :
+                this.Data.Length;
+
+            if (string.IsNullOrEmpty(Type))
+                Type = Result.MIME;
+
+            if (Length == null)
+                Length = 0;
+
+            StringBuilder Output = new StringBuilder();
+            Output.AppendFormat("HTTP/1.1 {1}{0}Date: {2}{0}Content-Type: {3}{0}Content-Length: {4}{0}", Environment.NewLine, 
+                Result.Status, 
+                DateTime.UtcNow.HttpTimeString(),
+                Type,
+                Length
+            );
+
+            foreach (var Pair in Result.Headers) {
+                Output.AppendFormat("{1}: {2}{0}", Environment.NewLine,
+                    Pair.Key,
+                    Pair.Value
+                );
+            }
+
+            foreach (jsObject Opt in Cookies.Values) {
+                Output.Append("Set-Cookie: ");
+
+                foreach (var Pair in Opt) {
+                    Output.AppendFormat("{0}={1}; ", Pair.Key, Pair.Value);
                 }
-                Client.SendLine("Content-Length: ", Data.Length.ToString());
-            }
-            else {
-                Client.SendLine("Content-Length: 0");
+
+                Output.AppendLine();
             }
 
-            Result.Headers.ForEach((K, V) => {
-                Client.SendLine(K, ": ", V.ToString());
-            });
-
-            Result.Cookies.ForEach<jsObject>((K, V) => {
-                Client.Send("Set-Cookie: ");
-
-                V.ForEach((OK, OV) => {
-                    Client.Send(OK, "=", OV.ToString(), ";");
-                });
-
-                Client.SendLine();
-            });
-
-            Client.SendLine();
+            Client.SendLine(Output.ToString());
         }
 
         public void Finish() {
@@ -157,14 +168,33 @@ namespace Poly.Net.Http {
 
             if (Packet.Connection == "keep-alive") {
                 Result.Headers["Connection"] = "Keep-Alive";
-                Result.Headers["Keep-Alive"] = "timeout=15, max=99";
+                Result.Headers["Keep-Alive"] = "timeout=10, max=99";
+            }
+
+            var Accept = Packet.Headers["Accept-Encoding"] as string;
+            var Compressed = Accept != null && Accept.Contains("gzip") && Data.Length > 0;
+            var Stream = Client.GetStream();
+
+            if (Stream == null)
+                return;
+            
+            if (Compressed) {
+                var Buffer = new MemoryStream();
+
+                using (var Compress = new GZipStream(Buffer, CompressionMode.Compress, true)) {
+                    Data.Position = 0;
+                    Data.CopyTo(Compress);
+                }
+
+                Result.Headers["Vary"] = "Accept-Encoding";
+                Result.Headers["Content-Encoding"] = "gzip";
+                Data = Buffer;
             }
 
             SendReply();
 
             Data.Position = 0;
-            Data.WriteTo(Client.GetStream());
-            Data.Close();
+            Data.CopyToAsync(Stream);
 
             Handled = true;
         }

@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
+    using Types;
+
     public class Or : Operator {
-        public Or(object Left, object Right) {
+        public Or(Node Left,  Node Right) {
             this.Left = Left;
             this.Right = Right;
         }

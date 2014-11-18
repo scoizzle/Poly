@@ -12,24 +12,24 @@ namespace Poly {
         public static bool Running = false;
 
         public static Event.Engine Commands = new Event.Engine() {
-            { "--fork[-{flag}]", (Args) => {
-                App.Fork("redirect".Compare(Args.Get<string>("flag"), true, 0));
+            { "--fork[-{flag}]", Event.Wrapper((string flag) => {
+                App.Fork("redirect".Compare(flag, true, 0));
                 return null;
-            }}
+            })}
         };
-
+        
 		public static void Init(int LogLevel = Log.Levels.None) {
             if (LogLevel != Log.Levels.None) {
                 App.Log.Active = true;
                 App.Log.Level = LogLevel;
             }
-
+            
             App.Log.Info("Application initializing...");
             
             int workerThreads, completionThreads;
 
             ThreadPool.GetMaxThreads(out workerThreads, out completionThreads);
-            ThreadPool.SetMaxThreads(workerThreads, completionThreads * 16);
+			ThreadPool.SetMaxThreads(workerThreads, completionThreads * Environment.ProcessorCount);
 
 			Running = true;
             App.Log.Info("Application running...");
@@ -79,6 +79,7 @@ namespace Poly {
                 Environment.Exit(0);
             }
         }
+
         public static bool IsRunningOnMono() {
             return Type.GetType("Mono.Runtime") != null;
         }

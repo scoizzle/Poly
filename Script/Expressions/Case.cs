@@ -4,9 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Expressions {
+    using Nodes;
     public class Case : Expression {
-        public object Object = null;
+        public Node Object = null;
         public bool IsDefault = false;
 
         public override string ToString() {

@@ -37,13 +37,13 @@ namespace Poly.Data {
             return val;
         }
 
-        private static object _Raw(string Text, ref int Index, int LastIndex) {
+        public static object _Raw(string Text, ref int Index, int LastIndex) {
             var C = Text[Index];
 
-            if ((C > '9' || C < '0') && (C != 't' || C != 'T') && (C != 'f' || C != 'F'))
+            if ((C > '9' || C < '0') && (C != 't' && C != 'T') && (C != 'f' && C != 'F'))
                 return null;
 
-            var SubIndex = Text.IndexOf(Text.FirstPossible(Index, ",", "}", "]"), Index);
+            var SubIndex = Text.IndexOf(Text.FirstPossible(Index, ',', '}', ']'), Index);
 
             if (SubIndex == -1 || SubIndex == Index)
                 SubIndex = LastIndex;

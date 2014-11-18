@@ -2,16 +2,25 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Nodes {
     public class Expression : Node {
-        public static readonly Expression NoOp = new Expression();
-        public static readonly Expression Break = new Expression();
-        public static readonly Expression Continue = new Expression();
-        new public static readonly Value Null = StaticValue.New(null);
+        public static readonly Node NoOperation,
+                                    Break,
+                                    Continue;
 
-        public override string ToString() {
-            return "{" + string.Join("; ", Values) + "}";
+        public static readonly StaticValue Null,
+                                           True,
+                                           False;
+
+        static Expression() {
+            NoOperation = new Node();
+            Break = new Node();
+            Continue = new Node();
+            Null = new StaticValue(null);
+            True = new StaticValue(true);
+            False = new StaticValue(false);
         }
 
         public static bool Parse(Engine Engine, string Text, ref int Index, int LastIndex, Node Storage) {
@@ -29,7 +38,7 @@ namespace Poly.Script.Node {
             return false;
         }
 
-        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 

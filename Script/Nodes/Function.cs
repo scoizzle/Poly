@@ -1,242 +1,83 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Reflection;
+using System.Reflection.Emit;
 
 using Poly.Data;
 
-namespace Poly.Script {
-    using Node;
+namespace Poly.Script.Nodes {
+    public class Function : Expression {
+        public string Name;
+        public string[] Arguments;
 
-    public class Function : Node.Expression {
-        public Variable Object = null;
+        Event.Handler Method;
 
-        public string Name = "";
-        public string[] Arguments = new string[0];
+        static Type[] EmptyTypeArray;
+        static Dictionary<int, Func<object, object[], object>> Cache;
 
-        public Function() { }
-        public Function(string Name) {
-            this.Name = Name;
+        static Function() {
+            EmptyTypeArray = new Type[0];
+            Cache = new Dictionary<int, Func<object, object[], object>>();
         }
 
-        public object Call(jsObject Context, jsObject ArgList, object This = null, Engine Engine = null) {
-            var Args = GetFunctionArguments(this, Context, ArgList);
+        private Function() {
+            Method = base.Evaluate;
+        }
 
-            if (!Args.ContainsKey("this")) {
-                Variable.Set(
-                    "this",
-                    Args,
-                    This == null && Object != null ?
-                        Object.Evaluate(Context) :
-                        This
-                );
-            }
+        public Function(Event.Handler Handler) {
+            this.Method = Handler;
+            this.Name = string.Concat(Handler.Method.DeclaringType.Name, '.', Handler.Method.Name);
+        }
 
-            return this.Evaluate(Args);
+        public Function(string Name, Event.Handler Handler) {
+            this.Name = Name;
+            this.Method = Handler;
+        }
+
+        public Function(string Name, params string[] ArgumentNames) {
+            this.Name = Name;
+            this.Arguments = ArgumentNames;
+
+            this.Method = base.Evaluate;
+        }
+
+        public Function(string Name, Event.Handler Handler, params string[] ArgumentNames) {
+            this.Name = Name;
+            this.Arguments = ArgumentNames;
+            this.Method = Handler;
         }
 
         public override object Evaluate(jsObject Context) {
-            var Value = base.Evaluate(Context);
+            var Result = Method(Context);
+            var R = Result as Expressions.Return;
 
-            if (Value is Return) {
-                return GetValue(Value, Context);
-            }
+            if (R != null)
+                return R.Evaluate(Context);
 
-            return Value;
+            return Result;
         }
 
         public override string ToString() {
-            return "function " + Name + "(" + string.Join(", ", Arguments) + ")";
+            return string.Format("{0}({1}) {{2}}", Name, string.Join(", ", Arguments), base.ToString());
         }
 
-        public static jsObject GetFunctionArguments(Function This, jsObject Context, jsObject ArgList) {
-            var Args = new jsObject();
-            var Index = 0;
-
-            ArgList.ForEach((Key, Value) => {
-                var Name = "";
-
-                if (This != null) {
-                    if (Index >= This.Arguments.Length){
-                        Name = Key;
-                    }
-                    else {
-                        Name = This.Arguments[Index];
-                    }
-                }
-                else {
-                    Name = Key;
-                }
-
-                var VFunc = Value as Function;
-
-                if (VFunc != null) {
-                    if (VFunc.Arguments.Length > 0) {
-                        Value = GetFunctionHandler(VFunc, Context);
-                    }
-                    else {
-                        Value = VFunc.GetSystemHandler();
-                    }
-                }
-
-                Variable.Set(Name, Args, GetValue(Value, Context));
-                Index++;
-            });
-
-            return Args;
-        }
-
-        public static Function GetTypeConstructor(Engine Engine, string Name) {
-            CustomType Type = Engine.Types.Get<CustomType>(Name);
-
-            if (Type != null) {
-                return Type.Construct;
-            }
-            return null;
-        }
-
-        public static Function GetConstructor(Engine Engine, string Name) {
-            Function Func;
-
-            if ((Func = GetTypeConstructor(Engine, Name)) != null) {
-                return Func;
-            }
-
-            if (Library.Constructors.TryGetValue(Name, out Func)) {
-                return Func;
-            }
-
-            if (Library.TypeLibsByName.ContainsKey(Name)) {
-                Func = Library.TypeLibsByName[Name].Get<Function>(Name);
-                return Func;
-            }
-
-            if (Engine.RawInitializerCache.TryGetValue(Name, out Func)) {
-                return Func;
-            }
-
-            return Helper.Initializer.Get(Name);
-        }
-
-        public static Function Get(Engine Engine, string Name, object This) {
-            bool ignore = false;
-
-            return Get(Engine, Name, This, ref ignore);
-        }
-
-        public static Function Get(Engine Engine, string Name, object This, ref bool Cacheable) {
-            if (This == null)
-                return null;
-
-            Cacheable = false;
-
-            Function Func;
-            CustomTypeInstance CTypeInst;
-            if ((CTypeInst = This as CustomTypeInstance) != null) {
-                if ((Func = CTypeInst.Type.GetFunction(Name)) != null)
-                    return Func;
-            }
-
-            if ((Func = This as Function) != null) {
-                return Func;
-            }
-
-            CustomType CType;
-            if ((CType = This as CustomType) != null) {
-                return CType.Construct;
-            }
-
-            if (Library.Global.TryGetValue(Name, out Func)) {
-                Cacheable = true;
-                return Func;
-            }
-
-            Type Type = This.GetType();
-            if (Library.TypeLibs.ContainsKey(Type)) {
-                if ((Func = Library.TypeLibs[Type][Name]) != null) {
-                    Cacheable = true;
-                    return Func;
-                }
-            }
-
-            Cacheable = true;
-            return Helper.MemberFunction.Get(Type, Name);
-        }
-
-        public static Function GetStatic(Engine Engine, string Name) {
-            Function Func;
-
-            if (Engine.Functions.TryGetValue(Name, out Func)) {
-                return Func;
-            }
-
-            if ((Func = GetConstructor(Engine, Name)) != null) {
-                return Func;
-            }
-
-            foreach (var Lib in Engine.Using) {
-                if (Lib.TryGetValue(Name, out Func)) {
-                    return Func;
-                }
-            }
-
-            int Index = Name.LastIndexOf('.');
-            if (Index > -1) {
-                Library Lib;
-                var ObjectName = Name.Substring(0, Index);
-                var FunctionName = Name.Substring(Index + 1);
-                
-                if (Library.StaticLibraries.TryGetValue(ObjectName, out Lib)) {
-                    if (Lib.TryGetValue(FunctionName, out Func)) {
-                        return Func;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        public static jsObject GetHandlerArguments(Function Func, jsObject Context, jsObject Storage = null) {
-            if (Storage == null)
-                Storage = new jsObject();
-
-            if (Func == null)
-                return null;
-
-            for (int Index = 0; Index < Func.Arguments.Length; Index++) {
-                Node.Variable.Set(Func.Arguments[Index],
-                    Storage,
-                    Node.Variable.Get(Func.Arguments[Index], Context)
-                );
-            }
-
-            return Storage;
-        }
-        
-        public static Event.Handler GetFunctionHandler(Function Func, jsObject Context) {
-            if (Func == null)
-                return null;
-
-            return (Args) => {
-                Function.GetHandlerArguments(Func, Context, Args);
-
-                return Func.Evaluate(Args);
-            };
-        }
-
-        public static new Expression Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             return Parse(Engine, Text, ref Index, LastIndex, true);
         }
 
-        public static Expression Parse(Engine Engine, string Text, ref int Index, int LastIndex, bool IsEngineWide = true) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex, bool IsEngineWide = true) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
             var Delta = Index;
-            if (Text.Compare("function", Delta)) {
-                Delta += 8;
-                ConsumeWhitespace(Text, ref Delta);
+            if (Text.Compare("func", Delta)) {
+                Delta += 4;
+
+                if (Text.Compare("tion", Delta)) {
+                    Delta += 4;
+                }
             }
+            ConsumeWhitespace(Text, ref Delta);
 
             Function Func = null;
 
@@ -266,7 +107,7 @@ namespace Poly.Script {
                 }
 
                 if (Text.Compare("{", Delta)) {
-                    if (Node.Expression.Parse(Engine, Text, ref Delta, LastIndex, Func)) {
+                    if (Expression.Parse(Engine, Text, ref Delta, LastIndex, Func)) {
                         Func.Arguments = Text.Substring(Open, Close - Open - 1).ParseCParams();
 
                         ConsumeWhitespace(Text, ref Delta);
@@ -274,26 +115,185 @@ namespace Poly.Script {
 
                         if (!string.IsNullOrEmpty(Func.Name) && IsEngineWide) {
                             Engine.Functions[Func.Name] = Func;
-                            return NoOp;
+                            return Expression.NoOperation;
                         }
 
-                        if (Func.Name.IndexOf('.') > 1) {
-                            if (Func.Name.IndexOf('[') > 1) {
-                                Func.Object = Variable.Parse(Engine, Func.Name, 0);
-                            }
-                            else {
-                                Open = 0;
-                                Close = Func.Name.LastIndexOf('.');
-
-                                Func.Object = Variable.Parse(Engine, Func.Name, ref Open, Close);
-                                Func.Name = Func.Name.Substring(Close + 1);
-                            }
-                        }
                         return Func;
                     }
                 }
             }
             return null;
+        }
+
+        public static Func<object, object[], object> GetFunction(Type Type, string Name, Type[] ArgTypes) {
+            var Key = GetHashCode(Type.Name) + GetHashCode(Name);
+
+            if (ArgTypes != null)
+                Key -= GetHashCode(ArgTypes);
+            else
+                ArgTypes = EmptyTypeArray;
+
+            Func<object, object[], object> Function;
+
+            if (Cache.TryGetValue(Key, out Function))
+                return Function;
+
+            MethodInfo Info;
+
+            if (Type.Name == Name) {
+                return Cache[Key] = (object This, object[] Args) => {
+                    return Activator.CreateInstance(Type, Args);
+                };
+            }
+            else {
+                try {
+                    Info = Type.GetMethod(Name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static, null, ArgTypes, null);
+
+                    if (Info == null)
+                        Info = Type.GetMethod(Name);
+                }
+                catch { return null; }
+            }
+
+            if (Info == null)
+                return null;
+
+            return Cache[Key] = GetDelegate(Info, ArgTypes);
+        }
+
+        static Func<object, object[], object> GetDelegate(MethodInfo Info, Type[] Types) {
+            var Method = new DynamicMethod(string.Empty, typeof(object), new Type[] { typeof(object), typeof(object) }, Info.DeclaringType.Module);
+            var Params = Info.GetParameters();
+
+            if (Types.Length != Params.Length)
+                return null;
+
+            var IL = Method.GetILGenerator();
+            var Locals = new LocalBuilder[Params.Length];
+
+            for (int i = 0; i < Params.Length; i++) {
+                Locals[i] = IL.DeclareLocal(Types[i]);
+            }
+
+            for (int i = 0; i < Params.Length; i++) {
+                IL.Emit(OpCodes.Ldarg_1);
+
+                EmitFastInt(IL, i);
+                IL.Emit(OpCodes.Ldelem_Ref);
+
+                EmitCastToReference(IL, Types[i]);
+                IL.Emit(OpCodes.Stloc, Locals[i]);
+            }
+
+            if (!Info.IsStatic)
+                IL.Emit(OpCodes.Ldarg_0);
+
+            for (int i = 0; i < Params.Length; i++) {
+                if (Params[i].ParameterType.IsByRef)
+                    IL.Emit(OpCodes.Ldloca_S, Locals[i]);
+                else
+                    IL.Emit(OpCodes.Ldloc, Locals[i]);
+            }
+
+            if (Info.IsStatic)
+                IL.EmitCall(OpCodes.Call, Info, null);
+            else
+                IL.EmitCall(OpCodes.Callvirt, Info, null);
+
+            if (Info.ReturnType == typeof(void))
+                IL.Emit(OpCodes.Ldnull);
+            else
+                EmitBoxIfNeeded(IL, Info.ReturnType);
+
+            for (int i = 0; i < Params.Length; i++) {
+                if (Params[i].ParameterType.IsByRef) {
+                    IL.Emit(OpCodes.Ldarg_1);
+
+                    EmitFastInt(IL, i);
+                    IL.Emit(OpCodes.Ldloc, Locals[i]);
+
+                    if (Locals[i].LocalType.IsValueType)
+                        IL.Emit(OpCodes.Box, Locals[i].LocalType);
+
+                    IL.Emit(OpCodes.Stelem_Ref);
+                }
+            }
+
+            IL.Emit(OpCodes.Ret);
+            return (Func<object, object[], object>)Method.CreateDelegate(typeof(Func<object, object[], object>));
+        }
+
+        static void EmitCastToReference(ILGenerator IL, Type Type) {
+            if (Type.IsValueType)
+                IL.Emit(OpCodes.Unbox_Any, Type);
+            else
+                IL.Emit(OpCodes.Castclass, Type);
+        }
+
+        static void EmitBoxIfNeeded(ILGenerator IL, Type Type) {
+            if (Type.IsValueType)
+                IL.Emit(OpCodes.Box, Type);
+        }
+
+        static void EmitFastInt(ILGenerator IL, int value) {
+            switch (value) {
+                case -1:
+                    IL.Emit(OpCodes.Ldc_I4_M1);
+                    return;
+                case 0:
+                    IL.Emit(OpCodes.Ldc_I4_0);
+                    return;
+                case 1:
+                    IL.Emit(OpCodes.Ldc_I4_1);
+                    return;
+                case 2:
+                    IL.Emit(OpCodes.Ldc_I4_2);
+                    return;
+                case 3:
+                    IL.Emit(OpCodes.Ldc_I4_3);
+                    return;
+                case 4:
+                    IL.Emit(OpCodes.Ldc_I4_4);
+                    return;
+                case 5:
+                    IL.Emit(OpCodes.Ldc_I4_5);
+                    return;
+                case 6:
+                    IL.Emit(OpCodes.Ldc_I4_6);
+                    return;
+                case 7:
+                    IL.Emit(OpCodes.Ldc_I4_7);
+                    return;
+                case 8:
+                    IL.Emit(OpCodes.Ldc_I4_8);
+                    return;
+            }
+
+            if (value > -129 && value < 128)
+                IL.Emit(OpCodes.Ldc_I4_S, (SByte)value);
+            else
+                IL.Emit(OpCodes.Ldc_I4, value);
+        }    
+
+        static int GetHashCode(string Input) {
+            int Result = 0;
+
+            foreach (char c in Input)
+                Result += c;
+
+            return Result;
+        }
+
+        static int GetHashCode(params Type[] Types) {
+            int Result = 17;
+
+            foreach (var T in Types) {
+                foreach (var C in T.Name)
+                    Result -= C;
+                Result *= 31;
+            }
+
+            return Result;
         }
     }
 }

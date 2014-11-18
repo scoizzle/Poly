@@ -8,7 +8,7 @@ using System.Threading;
 
 namespace Poly.Script.Libraries {
     using Data;
-    using Node;
+    using Nodes;
 
     public class Sockets : Library {
         public Sockets() {
@@ -22,7 +22,7 @@ namespace Poly.Script.Libraries {
             Add(ReadLine);
         }
 
-        public static SystemFunction Socket = new SystemFunction("Socket", (Args) => {
+        public static Function Socket = new Function("Socket", (Args) => {
             var Type = Args.Get<string>("Type");
 
             if (!string.IsNullOrEmpty(Type)) {
@@ -40,7 +40,7 @@ namespace Poly.Script.Libraries {
             return null;
         }, "Type");
 
-        public static SystemFunction Bind = new SystemFunction("Bind", (Args) => {
+        public static Function Bind = new Function("Bind", (Args) => {
             var This = Args.Get<Socket>("this");
 
             if (This != null) {
@@ -58,7 +58,7 @@ namespace Poly.Script.Libraries {
             return false;
         }, "IP", "Port");
 
-        public static SystemFunction Send = new SystemFunction("Send", (Args) => {
+        public static Function Send = new Function("Send", (Args) => {
             var This = Args.Get<Socket>("this");
 
             if (This != null) {
@@ -76,7 +76,7 @@ namespace Poly.Script.Libraries {
             return false;
         }, "Data");
 
-        public static SystemFunction SendLine = new SystemFunction("SendLine", (Args) => {
+        public static Function SendLine = new Function("SendLine", (Args) => {
             var This = Args.Get<Socket>("this");
 
             if (This != null) {
@@ -94,7 +94,7 @@ namespace Poly.Script.Libraries {
             return false;
         }, "Data");
 
-        public static SystemFunction Read = new SystemFunction("Read", (Args) => {
+        public static Function Read = new Function("Read", (Args) => {
             var This = Args.Get<Socket>("this");
 
             if (This == null)
@@ -111,7 +111,7 @@ namespace Poly.Script.Libraries {
             return Encoding.Default.GetString(Buffer);
         }, "Length");
 
-        public static SystemFunction ReadLine = new SystemFunction("ReadLine", (Args) => {
+        public static Function ReadLine = new Function("ReadLine", (Args) => {
             var This = Args.Get<Socket>("this");
 
             if (This == null)

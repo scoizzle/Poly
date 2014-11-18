@@ -1,11 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
+namespace Poly.Script.Types {
+    using Nodes;
 
-namespace Poly.Script.Node {
-    public class String : DataType<string> {
+	public class String : DataType<string> {
+        public string Value;
+
+        public String(string Str) { Value = Str; }
+
+        public override object Evaluate(Data.jsObject Context) {
+            return Value;
+        }
+
+        public override string ToString() {
+            return Value;
+        }
+
         public new static object Add(string Left, object Right) {
             return Left + Right;
         }
@@ -21,7 +31,7 @@ namespace Poly.Script.Node {
             return null;
         }
 
-        public new static object Equal(string Left, object Right) {
+        public new static bool Equal(string Left, object Right) {
             var RightStr = Right == null ? "" : Right.ToString();
 
             if (Left.Length != RightStr.Length)
@@ -30,7 +40,7 @@ namespace Poly.Script.Node {
             return StringExtensions.Compare(Left, Right.ToString(), 0);
         }
 
-        public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
@@ -39,14 +49,14 @@ namespace Poly.Script.Node {
 
                 Index += String.Length + 2;
 
-                return String.Descape();
+                return new String(String.Descape());
             }
             else if (Text[Index] == '\'') {
                 var String = Text.FindMatchingBrackets("'", "'", Index, false);
 
                 Index += String.Length + 2;
 
-                return String.Descape();
+                return new String(String.Descape());
             }
 
             return null;

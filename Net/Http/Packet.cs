@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 
 using Poly;
 using Poly.Data;
@@ -124,7 +125,7 @@ namespace Poly.Net.Http {
         public bool Receive(Net.Tcp.Client Client) {
             if (!Client.Connected)
                 return false;
-
+            
             var Line = Client.ReadLine();
 
             if (string.IsNullOrEmpty(Line))
@@ -159,17 +160,16 @@ namespace Poly.Net.Http {
                 Target = Split[1];
             }
 
-            for (; !string.IsNullOrEmpty(Line); Line = Client.Receive()) {
-                if (string.IsNullOrEmpty(Line))
-                    break;
+            while (!string.IsNullOrEmpty(Line = Client.Receive())) {
+                var Match = Line.Match("{Key}: {Value}");
 
-                var Key = Line.Substring("", ":");
-                var Value = Line.Substring(": ");
-
-                if (string.IsNullOrEmpty(Key) || string.IsNullOrEmpty(Value))
+                if (Match == null)
                     continue;
 
-                Headers.Set(Key, Value);
+                Headers.Set(
+                    Match["Key"] as string,
+                    Match["Value"] as string
+                );
             }
 
             if (!Headers.ContainsKey("Host"))
@@ -190,20 +190,25 @@ namespace Poly.Net.Http {
             }
 
             if (Headers.ContainsKey("Content-Length")) {
-                byte[] Buffer = Client.Receive(ContentLength);
-
-                Value = Client.Encoding.GetString(Buffer);
+                Value = new string(Client.Receive(ContentLength));
 
                 if (Type == "POST" && ContentType == "application/x-www-form-urlencoded") {
                     Split = Value.Split('&');
 
                     for (int n = 0; n < Split.Length; n++) {
-                        var Pair = Split[n].Split('=');
+                        var Match = Split[n].Match("{Key::uriDescape}={Value::uriDescape}");
 
-                        POST[Pair[0]] = Pair[1];
+                        if (Match == null)
+                            continue;
+
+                        POST.Set(
+                            Match["Key"] as string,
+                            Match["Value"] as string
+                        );
                     }
                 }
             }
+
             return true;
         }
     }

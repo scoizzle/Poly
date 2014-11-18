@@ -32,6 +32,7 @@ namespace Poly {
                 return null;
             };
         }
+
         public static Handler Wrapper(Func<object> Func) {
             if (Func == null)
                 return null;

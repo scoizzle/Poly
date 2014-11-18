@@ -5,27 +5,29 @@ using System.Text;
 
 using Poly.Data;
 
-namespace Poly.Script.Node {
+namespace Poly.Script.Types {
+    using Nodes;
     public class Object : DataType<jsObject> {
-        public new static object Add(jsObject Left, object Right) {
-            Variable.Set(Left.Count.ToString(), Left, Right);
+        public new static object Add(jsObject Left,  object Right) {
+            Left[Left.Count.ToString()] = Right;
             return Left;
         }
 
         public new static object Subtract(jsObject Left, object Right) {
-            if (Right is string) {
+            if (Right is String) {
                 Left[Right.ToString()] = null;
             }
             return null;
         }
 
-        public new static object Equal(jsObject Left, object Right) {
+        public new static bool Equal(jsObject Left, object Right) {
             return Object.ReferenceEquals(Left, Right);
         }
 
         public class Builder : Value {
             private bool IsArray = false;
             private Dictionary<object, object> List = new Dictionary<object, object>();
+
             public Builder(Engine Eng, jsObject Obj) {
                 this.Prepare(Eng, Obj);
                 this.IsArray = Obj.IsArray;
@@ -56,25 +58,39 @@ namespace Poly.Script.Node {
             }
 
             public override object Evaluate(jsObject Context) {
-                jsObject Object = new jsObject();
+				jsObject Object = new jsObject() { IsArray = this.IsArray };
 
                 foreach (var Pair in List) {
-                    var RawKey = GetValue(Pair.Key, Context);
+                    object K;
 
-                    if (RawKey == null)
-                        continue;
+                    var N = Pair.Key as Node;
 
-                    var Key = RawKey.ToString();
-                    var Value = GetValue(Pair.Value, Context);
+                    if (N != null)
+                        K = N.Evaluate(Context);
+                    else
+                        K = Pair.Key;
 
-                    Variable.Set(Key, Object, Value);
+                    if (K == null)
+                        K = Pair.Key;
+
+                    var Key = K.ToString();
+
+                    object V;
+                    N = Pair.Value as Node;
+
+                    if (N != null)
+                        V = N.Evaluate(Context);
+                    else
+                        V = Pair.Value;
+
+                    Object.Set(Key, V);
                 }
 
                 return Object;
             }
         }
         
-        public static new object Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 

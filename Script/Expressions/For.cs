@@ -17,7 +17,7 @@ namespace Poly.Script.Expressions {
             if (Init != null)
                 Init.Evaluate(Context);
 
-            while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
+            while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState != ThreadState.AbortRequested) {
                 foreach (var Node in Elements) {
                     if (Node is Return)
                         return Node;
@@ -82,7 +82,7 @@ namespace Poly.Script.Expressions {
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex);
 
                     if (Exp != null) {
-                        For.Elements = Exp.Elements;
+                        For.Elements = new Node[] { Exp };
                         ConsumeWhitespace(Text, ref Delta);
 
                         Index = Delta;

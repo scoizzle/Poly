@@ -137,21 +137,19 @@ namespace Poly.Data {
                 var V = Pair.Value;
 
                 if (!This.IsArray)
-                    Output.AppendFormat("'{0}':", K);
+                    Output.AppendFormat("\"{0}\":", K);
 
                 var Obj = V as jsObject;
 
-                if (Obj != null) {
-                    Output.Append(
-                        Stringify(Obj, HumanFormat, Reserved + 1)
-                    );
-                }
-                else if (V is string) {
-                    Output.AppendFormat("'{0}'", V);
-                }
-                else {
-                    Output.Append(V);
-                }
+				if (Obj != null) {
+					Output.Append (
+						Stringify (Obj, HumanFormat, Reserved + 1)
+					);
+				} 
+				else {
+					V = V.ToString ().Escape ();
+					Output.AppendFormat ("\"{0}\"", V);
+				} 
 
                 if (This.Count > 1 && (This.Count - Index) != 1) {
                     Output.Append(',');
@@ -165,7 +163,7 @@ namespace Poly.Data {
                     Output.Append(Environment.NewLine);
                     Output.Append('\t', Reserved);
                 }
-            };
+            }
 
             Output.Append(This.IsArray ? ']' : '}');
 

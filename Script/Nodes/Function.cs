@@ -152,7 +152,9 @@ namespace Poly.Script.Nodes {
                     if (Info == null)
                         Info = Type.GetMethod(Name);
                 }
-                catch { return null; }
+                catch { 
+					return null; 
+				}
             }
 
             if (Info == null)

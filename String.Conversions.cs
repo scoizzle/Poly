@@ -13,10 +13,8 @@ namespace System {
             { '\t', "\\t" },
             { '\f', "\\f" },
             { '\"', "\\\"" },
-            { '\'', "\\'" },
             { '\\', "\\\\" },
-            { '/', "\\/" },
-            { '.', "\\." }
+            { '/', "\\/" }
         };
 
         public static bool ToBool(this String This) {
@@ -240,10 +238,8 @@ namespace System {
                     case '\t':
                     case '\f':
                     case '\"':
-                    case '\'':
                     case '\\':
                     case '/':
-                    case '.':
                         NewLength++;
                         break;
                 }

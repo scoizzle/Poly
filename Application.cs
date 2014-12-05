@@ -15,7 +15,7 @@ namespace Poly {
             { "--fork[-{flag}]", Event.Wrapper((string flag) => {
                 App.Fork("redirect".Compare(flag, true, 0));
                 return null;
-            })}
+            }, "flag" )}
         };
         
 		public static void Init(int LogLevel = Log.Levels.None) {
@@ -72,7 +72,11 @@ namespace Poly {
                     while (!P.HasExited && App.Running) {
                         Console.WriteLine(P.StandardOutput.ReadLine());
                     }
+                    App.Exit();
                 }, Worker);
+
+                while (App.Running)
+                    Thread.Sleep(150);
             }
             else {
                 Process.Start(FileName, Arguments);

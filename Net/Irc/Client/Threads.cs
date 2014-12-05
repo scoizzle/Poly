@@ -186,29 +186,40 @@ namespace Poly.Net.Irc {
                     var Modes = Packet.Message.ToCharArray();
                     var Nicks = Packet.Receiver.Split(',');
 
-                    var Operator = '+';
                     var Channel = Packet.Get<string>("Channel");
+					object Value;
+
+					for (int Index = 0, Offset = 0; Offset + Index < Modes.Length; Index++) {
+						if (Modes [Index + Offset] == '+') {
+							Value = true;
+						} 
+						else if (Modes [Index + Offset] == '-') {
+							Value = null;
+						}
+
+					}
+
 
                     for (int Index = 0, Offset = 0; Index < Nicks.Length && (Index + Offset) < Modes.Length; ) {
                         var Target = Nicks[Index];
-                        var TargetMode = Modes[Index + Offset].ToString();
+                        var TargetMode = Modes[Index + Offset];
 
-                        if (TargetMode == "+") {
+                        if (TargetMode == '+') {
                             Operator = '+';
                             Offset++;
                             continue;
                         }
-                        else if (TargetMode == "-") {
+                        else if (TargetMode == '-') {
                             Operator = '-';
                             Offset++;
                             continue;
                         }
 
                         if (Operator == '+') {
-                            Conversations[Channel].Modes[TargetMode, Target] = true;
+							Conversations[Channel].Modes[TargetMode.ToString(), Target] = true;
                         }
                         else {
-                            Conversations[Channel].Modes[TargetMode, Target] = null;
+							Conversations[Channel].Modes[TargetMode.ToString(), Target] = null;
                         }
                         Index++;
                     }

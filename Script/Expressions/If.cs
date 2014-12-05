@@ -52,11 +52,7 @@ namespace Poly.Script.Expressions {
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex) as Node;
 
                     if (Exp != null) {
-                        if (Exp.Elements == null)
-                            If.Elements = new Node[] { Exp };
-                        else 
-                            If.Elements = Exp.Elements;
-
+                        If.Elements = new Node[] { Exp };
                         ConsumeWhitespace(Text, ref Delta);
 
                         if (Text.Compare("else", Delta)) {

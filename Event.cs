@@ -96,9 +96,9 @@ namespace Poly {
                         else
                             Args.CopyTo(Matches);
 
-                        Handlers.ForEach<Handler>((Id, Func) => {
-                            Func(Matches);
-                        });
+                        foreach (var Pair in Handlers) {
+                            (Pair.Value as Handler)(Matches);
+                        }
 
                         return true;
                     }

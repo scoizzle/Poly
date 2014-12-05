@@ -20,6 +20,7 @@ namespace Poly.Script {
             { "App", typeof(App).FullName }, 
             { "Log", typeof(App.Log).FullName },
             { "LogLevel", typeof(App.Log.Levels).FullName },
+			{ "Event", typeof(Event).FullName },
             { "Console", typeof(System.Console).FullName },
             { "Math", typeof(System.Math).FullName },
             { "Convert", typeof(System.Convert).FullName },

@@ -124,6 +124,9 @@ namespace Poly.Script.Expressions {
 
             var Func = Function.GetFunction(Type, Name, ArgTypes);
 
+			if (Name == "FromSeconds")
+				App.Log.Info (Object.ToString());
+
             if (Func == null)
                 return null;
 

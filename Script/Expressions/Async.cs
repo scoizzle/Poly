@@ -14,12 +14,6 @@ namespace Poly.Script.Expressions {
         public Node Node = null;
         public int MaxExecutionTime = -1;
 
-        private async Task<object> ExecuteAsync(Data.jsObject Context) {
-            return await Task.Run<object>(() => {
-                return Node.Evaluate(Context);
-            });
-        }
-
         public override object Evaluate(Data.jsObject Context) {
             return Task.Run<object>(() => {
                 var Exec = Task.Run<object>(() => {

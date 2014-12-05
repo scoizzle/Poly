@@ -125,7 +125,8 @@ namespace Poly.Net.Tcp {
         public bool Connect(string ServerName, int Port, int Timeout = 1000) {
             try {
                 Socket.BeginConnect(ServerName, Port, (Obj) => {
-                    Socket.EndConnect(Obj);
+                    try { Socket.EndConnect(Obj); }
+                    catch {  }
                 }, Socket).AsyncWaitHandle.WaitOne(Timeout, false);
 
                 return Socket.Connected;

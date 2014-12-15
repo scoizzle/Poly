@@ -24,33 +24,27 @@ namespace Poly.Script.Types {
             return null;
         }
 
-        public static bool EvaluateNode(object Node, jsObject Context) {
-            object Val;
-            var N = Node as Node;
-
-            if (N != null)
-                Val = N.Evaluate(Context);
-            else
-                Val = Node;
-            
-            if (Val == null)
+        public static bool EvaluateNode(Node Node, jsObject Context) {
+            if (Node == null)
                 return false;
 
-            if (Val is bool) {
-                return (bool)Val;
-            }
-            else if (Val is string) {
-                return !string.IsNullOrEmpty((string)Val);
-            }
-            else if (Val is int) {
-                return (int)Val!= 0;
-            }
-            else if (Val is double) {
-                return !double.IsNaN((double)Val);
-            }
-            else if (Val is jsObject) {
-                return !(Val as jsObject).IsEmpty;
-            }
+            var Value = Node.Evaluate(Context);
+
+            if (Value is Boolean)
+                return (Boolean)(Value);
+
+            if (!string.IsNullOrEmpty(Value as string))
+                return true;
+
+            if (Value is Int32)
+                return (Int32)(Value) != 0;
+
+            if (Value is Double)
+                return (Double)(Value) != Double.NaN;
+
+            var Obj = Value as jsObject;
+            if (Obj != null)
+                return !Obj.IsEmpty;
 
             return false;
         }

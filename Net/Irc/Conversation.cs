@@ -14,7 +14,7 @@ namespace Poly.Net.Irc {
 
         public jsObject Users {
             get {
-                return Get("Users", jsObject.NewArray);
+                return Get("Users", jsObject.NewObject);
             }
         }
 

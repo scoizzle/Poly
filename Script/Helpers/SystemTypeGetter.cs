@@ -30,5 +30,9 @@ namespace Poly.Script.Helpers {
             }
             return null;
         }
+
+        public override string ToString() {
+            return Name;
+        }
     }
 }

@@ -39,27 +39,28 @@ namespace Poly.Net.Http {
                 File.ReadAllText(FileName)
             );
 
-            var Debug = Eng.ToString();
-
             Eng.Evaluate(Args);
         }
 
-        public void Host(string Name, jsObject Info) {
+        public Host Host(string Name, jsObject Info) {
             var Host = new Host(Info) {
                 Name = Name
             };
 
             this.Host(Name, Host);
+
+            return Host;
         }
 
-        public void Host(string Name, Host Host) {
+        public Host Host(string Name, Host Host) {
             foreach (int Port in Host.Ports.Values) {
                 if (!Listeners.ContainsKey(Port)) {
                     Listen(Port);
                 }
             }
 
-            Hosts[Name.Escape()] = Host;
+            Hosts[Name.Replace(".", "\\.")] = Host;
+            return Host;
         }
 
         public void Mime(string Ext, string Mime) {

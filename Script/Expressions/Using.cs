@@ -22,13 +22,13 @@ namespace Poly.Script.Expressions {
                 ConsumeValidName(Text, ref End);
 
                 var Close = End;
-                ConsumeWhitespace(Text, ref Close);
+                Text.ConsumeWhitespace(ref Close);
 
                 if (Text.Compare("=", Close)) { 
                     var Name = Text.Substring(Delta, End - Delta);
 
                     Delta = Close + 1;
-                    ConsumeWhitespace(Text, ref Delta);
+                    Text.ConsumeWhitespace(ref Delta);
 
                     Close = Delta;
                     ConsumeValidName(Text, ref Close);

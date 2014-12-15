@@ -176,6 +176,7 @@ namespace Poly.Net.Http {
                 return false;
 
             if (Host.Contains(":")) {
+                Headers.Set("Port", Host.Substring(":", ""));
                 Headers.Set("Host", Host.Substring("", ":"));
             }
 

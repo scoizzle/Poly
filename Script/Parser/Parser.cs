@@ -23,6 +23,7 @@ namespace Poly.Script {
             Switch.Parse,
             Case.Parse,
             Async.Parse,
+            Try.Parse,
             Expressions.Using.Parse,
             Include.Parse,
             Reload.Parse,

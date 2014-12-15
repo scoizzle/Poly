@@ -10,7 +10,7 @@ namespace Poly.Data {
             int i = 0;
 
             for (; i < Template.Length; i++) {
-                int Next = Template.FirstPossibleIndex(i, '{', '[', '\\');
+                int Next = Template.FirstPossibleIndex(i, '{', '[', ']', '\\');
 
                 if (Next == -1) {
                     Output.Append(Template, i, Template.Length - i);

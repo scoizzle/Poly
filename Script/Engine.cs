@@ -26,7 +26,8 @@ namespace Poly.Script {
             { "Convert", typeof(System.Convert).FullName },
             { "Time", typeof(System.DateTime).FullName },
             { "TimeSpan", typeof(System.TimeSpan).FullName },
-            { "File", typeof(System.IO.File).FullName }
+            { "File", typeof(System.IO.File).FullName },
+            { "Environment", typeof(System.Environment).FullName }
         };
 
         public jsObject<Class> Types = new jsObject<Class>();

@@ -16,6 +16,10 @@ namespace Poly.Net.Irc {
                 Nick = Raw;
         }
 
+        public User(jsObject Obj) {
+            Obj.CopyTo(this);
+        }
+
         public string Nick {
             get {
                 return Get<string>("Nick", string.Empty);
@@ -63,7 +67,7 @@ namespace Poly.Net.Irc {
 
         public jsObject Modes {
             get {
-                return Get<jsObject>("Modes", jsObject.NewArray);
+                return Get<jsObject>("Modes", jsObject.NewObject);
             }
             set {
                 Set("Modes", value);

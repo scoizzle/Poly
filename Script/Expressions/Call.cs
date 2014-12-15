@@ -36,7 +36,7 @@ namespace Poly.Script.Expressions {
                 if (Instance != null) {
                     Function = Instance.Class.GetFunction(Name);
                 }
-                else {
+                else if ((This as Helpers.SystemTypeGetter) == null) {
                     var Class = Engine.Types[Name];
                     if (Class != null)
                         Function = Class.Instaciator;
@@ -64,11 +64,17 @@ namespace Poly.Script.Expressions {
                 for (; Index < Arguments.Length; Index++) {
                     var F = Arguments[Index] as Function;
 
-                    if (F != null)
-                        ArgList[Index] = new Event.Handler(F.Evaluate);
-                    else
+                    if (F != null) {
+                        if (F.Arguments != null && string.IsNullOrEmpty(F.Name)) {
+                            ArgList[Index] = F.GetFunctionHandler(Context);
+                        }
+                        else {
+                            ArgList[Index] = new Event.Handler(F.Evaluate);
+                        }
+                    }
+                    else {
                         ArgList[Index] = Arguments[Index].Evaluate(Context);
-
+                    }
                 }
             }
 
@@ -124,9 +130,6 @@ namespace Poly.Script.Expressions {
 
             var Func = Function.GetFunction(Type, Name, ArgTypes);
 
-			if (Name == "FromSeconds")
-				App.Log.Info (Object.ToString());
-
             if (Func == null)
                 return null;
 
@@ -166,7 +169,7 @@ namespace Poly.Script.Expressions {
                         if (Engine.Shorthands.ContainsKey(FirstName)){
                             This = new Helpers.SystemTypeGetter(Engine.Shorthands[FirstName]);
                         }
-                        else if ((Type = Helpers.SystemTypeGetter.GetType(Name)) != null) {
+                        else if (!Name.StartsWith("_") && (Type = Helpers.SystemTypeGetter.GetType(Name)) != null) {
                             This = new Helpers.SystemTypeGetter(Name) { Cache = Type };
                         }
                         else if (Name.Contains('[', LastPeriod + 1)) {

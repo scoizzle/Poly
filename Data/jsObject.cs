@@ -103,6 +103,10 @@ namespace Poly.Data {
             }
         }
 
+        public void Debug() {
+            System.Diagnostics.Debugger.Break();
+        }
+
         public override string ToString() {
             return Stringify(this, false);
         }
@@ -145,7 +149,10 @@ namespace Poly.Data {
 					Output.Append (
 						Stringify (Obj, HumanFormat, Reserved + 1)
 					);
-				} 
+				}
+                else if (V is bool) {
+                    Output.Append(V.ToString().ToLower());
+                }
 				else {
 					V = V.ToString ().Escape ();
 					Output.AppendFormat ("\"{0}\"", V);

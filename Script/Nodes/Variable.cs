@@ -220,6 +220,24 @@ namespace Poly.Script.Nodes {
                 Var.IsStatic = true;
                 Delta += 7;
             }
+            else if (Text.Compare("Enum", Index)) {
+                if (Text.Compare(':', Index + 4)) {
+                    string Type;
+                    
+                    var Next = Text.IndexOf(':', Index + 5);
+                    if (Next == -1 || Text.IndexOf(';', Index + 5) < Next) {
+                        Type = Text.Substring(":", ";", Index + 4); 
+                    }
+                    else {
+                        Type = Text.FindMatchingBrackets(":", ":", Index);
+                    }
+
+                    if (!string.IsNullOrEmpty(Type)) {
+                        List.Add(new Helpers.SystemTypeGetter(Type));
+                        Delta += 6 + Type.Length;
+                    }
+                }
+            }
 
             var SigFig = Delta;
 

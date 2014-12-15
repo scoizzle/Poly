@@ -278,6 +278,10 @@ namespace System {
             return null;
         }
 
+        public static string Substring(this String This, String Start, String Stop) {
+            return Substring(This, Start, Stop, 0, false, false);
+        }
+
         public static string Substring(this String This, String Start, String Stop = "", int Index = 0, bool includeStartStop = false, bool LastStop = false) {
             int X = -1, Y = -1;
 

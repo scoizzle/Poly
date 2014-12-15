@@ -39,6 +39,7 @@ namespace Poly.Script.Expressions {
                 ConsumeWhitespace(Text, ref Delta);
 
                 Try.Node = Engine.Parse(Text, ref Delta, LastIndex) as Node;
+                ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("catch", Delta)) {
                     Delta += 5;

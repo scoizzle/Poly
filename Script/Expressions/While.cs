@@ -13,7 +13,7 @@ namespace Poly.Script.Expressions {
         public Node Boolean = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running) {
+            while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState != ThreadState.AbortRequested) {
                 foreach (var Node in Elements) {
                     if (Node is Return)
                         return Node;
@@ -60,7 +60,7 @@ namespace Poly.Script.Expressions {
                     var Exp = Engine.Parse(Text, ref Delta, LastIndex);
 
                     if (Exp != null) {
-                        While.Elements = Exp.Elements;
+                        While.Elements = new Node[] { Exp };
                         ConsumeWhitespace(Text, ref Delta);
 
                         Index = Delta;

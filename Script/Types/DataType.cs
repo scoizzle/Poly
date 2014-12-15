@@ -83,6 +83,9 @@ namespace Poly.Script.Types {
         }
 
         public static bool Equal(object Left, object Right) {
+            if (Object.ReferenceEquals(Left, Right))
+                return true;
+
             if (Left is int) {
                 return Integer.Equal((int)Left, Right);
             }

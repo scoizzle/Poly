@@ -67,7 +67,7 @@ namespace Poly.Net.Irc {
             { "OnNetworkChannelsCount", ":{Sender} 254 {Receiver} {Count} :{Message}" },
             { "OnServerClientsInfo", ":{Sender} 255 {Receiver} :{Message}" },
             { "OnServerUsersCount", ":{Sender} 265 {Receiver} :{Message}" },
-            { "OnNetworkUsersCount", ":{Sender} 266 {Receiver} :{Message}" },
+            { "OnNetworkUsersCount", ":{Sender} 266 {Receiver} [{Local:n} {Global:n}] :{Message}" },
             { "OnWhoEnd", ":{Sender} 315 {Receiver} {Nick} :{Message}" },
             { "OnListStart", ":{Sender} 321 {Receiver} :{Message}" },
             { "OnList", ":{Sender} 322 {Receiver} :{Message}" },

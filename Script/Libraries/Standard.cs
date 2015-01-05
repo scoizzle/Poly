@@ -13,6 +13,7 @@ namespace Poly.Script.Libraries {
 
             Add(Sleep);
             Add(Url);
+            Add(Break);
             Add(Libraries.Global.Load);
         }
 
@@ -30,6 +31,11 @@ namespace Poly.Script.Libraries {
             if (!string.IsNullOrEmpty(Raw))
                 return new Poly.Net.Url(Raw);
 
+            return null;
+        });
+
+        public static Function Break = new Function("Break", (Args) => {
+            System.Diagnostics.Debugger.Break();
             return null;
         });
     }

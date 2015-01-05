@@ -64,7 +64,7 @@ namespace Poly {
 				Handler(Environment.NewLine);
             }
 
-            public static void Benchmark(string Name, int Iterations, Action Todo) {    
+            public static void Benchmark(string Name, int Iterations, Action Todo) {
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
                 GC.Collect();
@@ -77,6 +77,23 @@ namespace Poly {
                 }
                 watch.Stop();
                 Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", Name, watch.Elapsed.TotalMilliseconds,Iterations / watch.Elapsed.TotalSeconds);
+            }
+
+            public static void Benchmark(string Name, int Iterations, Event.Handler Todo) {
+                Data.jsObject Obj = new Data.jsObject();
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                var watch = new Stopwatch();
+                for (int i = 0; i < Iterations; i++) {
+                    watch.Start();
+                    Todo(Obj);
+                    watch.Stop();
+                    Obj.Clear();
+                }
+                Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", Name, watch.Elapsed.TotalMilliseconds, Iterations / watch.Elapsed.TotalSeconds);
             }
         }
     }

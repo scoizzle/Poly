@@ -132,7 +132,7 @@ namespace Poly.Script.Expressions {
 
             if (Func == null)
                 return null;
-
+                        
             SystemFunction = Func;
             try {
                 return Func(Object, ArgList);
@@ -206,8 +206,21 @@ namespace Poly.Script.Expressions {
                     }
 
                     Call.Arguments = List.ToArray();
-                    Close++;
                     ConsumeWhitespace(Text, ref Close);
+
+                    if (Text.Compare('.', Close)) {
+                        Close++;
+                        ConsumeWhitespace(Text, ref Close);
+
+                        var Child = Parse(Engine, Text, ref Close, LastIndex);
+
+                        if (Child != null) {
+                            Child.This = Call;
+
+                            Index = Close;
+                            return Child;
+                        }
+                    }
 
                     Index = Close;
                     return Call;

@@ -16,7 +16,7 @@ namespace Poly.Script.Types {
 
         public static object Devide(T Left, object Right) { return null; }
 
-        public static bool Equal(T Left, object Right) { return Object.ReferenceEquals(Left, Right); }
+        public static bool Equal(T Left, object Right) { return false; }
 
         public static bool LessThan(T Left, object Right) { return false; }
 
@@ -83,22 +83,7 @@ namespace Poly.Script.Types {
         }
 
         public static bool Equal(object Left, object Right) {
-            if (Object.ReferenceEquals(Left, Right))
-                return true;
-
-            if (Left is int) {
-                return Integer.Equal((int)Left, Right);
-            }
-            else if (Left is double) {
-                return Float.Equal((double)Left, Right);
-            }
-            else if (Left is string) {
-                return String.Equal((string)Left, Right);
-            }
-            else if (Left is jsObject) {
-                return Object.Equal((jsObject)Left, Right);
-            }
-            return Right == null;
+            return object.Equals(Left, Right);
         }
 
         public static bool LessThan(object Left, object Right) {

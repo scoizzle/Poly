@@ -10,7 +10,7 @@ namespace Poly.Script.Helpers {
 
     public class ExtensionManager {
         public static void Load(string Name) {
-            var Asm = Assembly.Load(Name);
+            var Asm = AppDomain.CurrentDomain.Load(Name);
 
             foreach (var Type in Asm.GetTypes()) {
                 if (typeof(Library).IsAssignableFrom(Type)) {

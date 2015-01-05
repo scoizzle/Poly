@@ -46,7 +46,7 @@ namespace Poly.Script.Types {
             if (Obj != null)
                 return !Obj.IsEmpty;
 
-            return false;
+            return Value != null;
         }
 
         public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {

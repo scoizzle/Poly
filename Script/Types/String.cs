@@ -17,7 +17,7 @@ namespace Poly.Script.Types {
         }
 
         public new static object Add(string Left, object Right) {
-            return Left + Right;
+            return string.Concat(Left, Right);
         }
 
         public new static object Subtract(string Left, object Right) {

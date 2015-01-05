@@ -78,7 +78,6 @@
     <Compile Include="Script\Expressions\Html\Generator.cs" />
     <Compile Include="Script\Expressions\Html\Element.cs" />
     <Compile Include="Script\Helpers\CachedScript.cs" />
-    <Compile Include="Script\Helpers\ContextGetter.cs" />
     <Compile Include="Script\Helpers\SystemTypeGetter.cs" />
     <Compile Include="Script\Engine.cs" />
     <Compile Include="Script\Expressions\Async.cs" />

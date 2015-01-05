@@ -136,7 +136,7 @@ namespace Poly.Script.Expressions {
 
                         var Exp = Engine.Parse(Text, ref Open, LastIndex);
                         if (Exp != null) {
-                            For.Elements = Exp.Elements;
+                            For.Elements = new Node[] { Exp };
                             ConsumeWhitespace(Text, ref Open);
 
                             Index = Open;

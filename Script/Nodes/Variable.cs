@@ -27,63 +27,65 @@ namespace Poly.Script.Nodes {
             if (Elements == null)
                 return Context;
 
-            object Current = 
-                this.IsStatic ? 
+            object Current =
+                this.IsStatic ?
                     Engine.Static :
                     Context;
 
-            int Index = 0;
-            foreach (Node N in Elements) {
-                Index ++;
-                string Key;
-                object Value = null;
+            for (int i = 0; i < Elements.Length; i++) {
+                var Node = Elements[i];
+                var Str = Node as Types.String;
+                var String = default(string);
+                var Key = default(object);
 
-                var S = N as Types.String;
-                if (S != null) {
-                    Key = S.Value;
+                if (Str != null) { 
+                    String = Str.Value;
                 }
                 else {
-                    Value = N.Evaluate(Context);
+                    Key = Node.Evaluate(Context);
 
-                    var Get = N as Helpers.ContextGetter;
-                    if (Get != null)
-                        return Value;
-
-                    if (Value == null)
-                        return null;
-
-                    Key = Value.ToString();
-
-                    if ((N as Helpers.SystemTypeGetter) == null)
-                        Value = null;
+                    if (Key != null)
+                        String = Key.ToString();
+                    else return null;
                 }
 
-                var jO = Current as jsObject;
+                var Value = default(object);
+                var Object = Current as jsObject;
 
-                object V = null;
-                if (jO != null && jO.TryGetValue(Key, out V))
-                    Value = V;
-                else if (Value == null) {
-                    var T = Current as Type;
-                    if (T != null)
-                        Value = GetProperty(T, null, Key);
-                    else if (Current != null && (V = GetProperty(Current.GetType(), Current, Key)) != null)
-                        Value = V;
+                if (Object != null) {
+                    if (!Object.TryGetValue(String, out Value)) {
+                        var Instance = Current as Types.ClassInstance;
+
+                        if (Instance != null) {
+                            var Func = Instance.Class.Functions[String];
+
+                            if (Func != null)
+                                Value = new Event.Handler(Func.Evaluate);
+                        }
+                    }
+                }
+
+                if (Value == default(object) && Current != null) {
+                    var Type = Current as Type;
+
+                    if (Type == null) {
+                        Type = Current.GetType();
+                    }
+
+                    if (Key is int) {
+                        String = Current as string;
+                        var Int = (int)(Key);
+
+                        if (String != null && Int > -1 && Int < String.Length)
+                            Value = String[Int];
+                    }
                     else {
-                        var I = Current as Types.ClassInstance;
-
-                        if (I != null)
-                            Value = new Event.Handler(I.Class.GetFunction(Key).Evaluate);
-                        else if (!this.IsStatic && this.Engine.Types.ContainsKey(Key))
-                            this.Engine.Types.TryGetValue(Key, out Value); 
-                    }                   
+                        Value = GetProperty(Type, Current, String);
+                    }
                 }
 
-                if (Index == Elements.Length)
+                if (Elements.Length - i == 1)
                     return Value;
-
-                if (Value == null)
-                    break;
 
                 Current = Value;
             }
@@ -100,108 +102,99 @@ namespace Poly.Script.Nodes {
                     Engine.Static :
                     Context;
 
-            int Index = 0;
-            foreach (Node N in Elements) {
-                Index++;
-                string Key;
-                object Value = null;
+            for (int i = 0; i < Elements.Length; i++) {
+                var Node = Elements[i];
+                var Str = Node as Types.String;
+                var String = default(string);
 
-                var S = N as Types.String;
-                if (S != null) {
-                    Key = S.Value;
+                if (Str != null) {
+                    String = Str.Value;
                 }
                 else {
-                    Value = N.Evaluate(Context);
+                    var Key = Node.Evaluate(Context) as string;
 
-                    if (Value == null)
-                        return false;
-
-                    Key = Value.ToString();
+                    if (Key != null)
+                        String = Key.ToString();
+                    else return false;
                 }
 
-                var jO = Current as jsObject;
-                if (Index == Elements.Length) {
-                    if (jO != null) {
-                        if (Val == null)
-                            jO.Remove(Key);
-                        else
-                            jO.AssignValue(Key, Val);
+                var Value = default(object);
+                var Object = Current as jsObject;
+
+                if (Object != null) {
+                    if (Elements.Length - i == 1) {
+                        if (Val == null) {
+                            Object.Remove(String);
+                        }
+                        else {
+                            Object.AssignValue(String, Val);
+                        }
                         return true;
                     }
-                    else {
-                        var T = Current as Type;
-                        if (T == null)
-                            T = Current.GetType();
 
-                        return SetProperty(T, Current, Key, Val);
-                    }
-                }
+                    if (!Object.TryGetValue(String, out Value)) {
+                        var Instance = Current as Types.ClassInstance;
 
-                if (jO == null || !jO.TryGetValue(Key, out Value)) {
-                    if (Value == null) {
-                        var T = Current as Type;
-                        if (T != null)
-                            Value = GetProperty(T, null, Key);
-                        else if (Current != null)
-                            Value = GetProperty(Current.GetType(), Current, Key);
+                        if (Instance != null) {
+                            var Func = Instance.Class.Functions[String];
 
-                        if (jO != null && Value == null) {
-                            Value = new jsObject();
-                            jO.AssignValue(Key, Value);
+                            if (Func != null)
+                                Value = new Event.Handler(Func.Evaluate);
                         }
                     }
                 }
 
-                if (Value == null)
-                    break;
+                if (Value == default(object) && Current != null) {
+                    var Type = Current as Type;
+
+                    if (Type == null)
+                        Type = Current.GetType();
+
+                    if (Elements.Length - i == 1) {
+                        return SetProperty(Type, Current, String, Val);
+                    }
+
+                    Value = GetProperty(Type, Current, String);
+                }
 
                 Current = Value;
             }
 
-            return false;
+            return false;        
         }
-
+        
         public static object GetProperty(Type Type, object Obj, string Name) {
-            try {
-                var Prop = Type.GetProperty(Name);
+            var Prop = Type.GetProperty(Name);
 
-                if (Prop != null)
-                    return Prop.GetValue(Obj, null);
+            if (Prop != null)
+                return Prop.GetValue(Obj, null);
 
-                var Field = Type.GetField(Name);
+            var Field = Type.GetField(Name);
 
-                if (Field != null)
-                    return Field.GetValue(Obj);
-            }
-            catch {
-                App.Log.Error(
-                    string.Format("Could find property or field {0} for Type {1}", Name, Type.Name)
-                );
-            }
+            if (Field != null)
+                return Field.GetValue(Obj);
+
             return null;
         }
 
         public static bool SetProperty(Type Type, object Obj, string Name, object Value) {
-            try {
-                if (Obj != null) {
-                    var Prop = Type.GetProperty(Name);
+            if (Obj != null) {
+                var Prop = Type.GetProperty(Name);
 
-                    if (Prop != null)
-                        Prop.SetValue(Obj, Value);
+                if (Prop != null) {
+                    Prop.SetValue(Obj, Value);
+                    return true;
                 }
-
-                var Field = Type.GetField(Name);
-
-                if (Field != null)
-                    Field.SetValue(Obj, Value);
             }
-            catch {
-                App.Log.Error(
-                    string.Format("Could find property or field {0} for Type {1}", Name, Type.Name)
-                );
-                return false;
+
+            var Field = Type.GetField(Name);
+
+            if (Field != null) {
+                Field.SetValue(Obj, Value);
+                return true;
             }
-            return true;
+
+            return false;
         }
 
         public static Variable Parse(Engine Engine, string Text, int Index, int LastIndex = -1) {
@@ -273,7 +266,7 @@ namespace Poly.Script.Nodes {
                 var Key = Text.Substring(SigFig, Delta - SigFig);
 
                 if (Key == "_") {
-                    List.Add(new Helpers.ContextGetter());
+                    List.Add(new Variable(Engine));
                 }
                 else if (Engine.Shorthands.ContainsKey(Key)) {
                     List.Add(new Helpers.SystemTypeGetter(Engine.Shorthands[Text.Substring(SigFig, Delta - SigFig)]));

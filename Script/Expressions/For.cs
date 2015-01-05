@@ -24,6 +24,10 @@ namespace Poly.Script.Expressions {
 
                     var Result = Node.Evaluate(Context);
 
+                    var Ret = Result as Return;
+                    if (Ret != null)
+                        return Ret;
+
                     if (Result == Break) 
                         return null;
 

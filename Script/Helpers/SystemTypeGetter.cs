@@ -18,7 +18,8 @@ namespace Poly.Script.Helpers {
             if (Cache != null)
                 return Cache;
 
-            return Cache = GetType(Name);
+            Cache = GetType(Name);
+            return Cache;
         }
 
         public static Type GetType(string Name) {

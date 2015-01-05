@@ -35,43 +35,14 @@ namespace System {
         }
 
         public static bool Compare(this String This, String Possible, int Index, bool IgnoreCase = false) {
-            int X = 0;
-            
-            if (IgnoreCase) {
-                for (; Index + X < This.Length && X < Possible.Length; X++) {
-                    if (char.ToLower(This[Index + X]) != char.ToLower(Possible[X])) {
-                        return false;
-                    }
-                }
-            }
-            else {
-                for (; Index + X < This.Length && X < Possible.Length; X++) {
-                    if (This[Index + X] != Possible[X])
-                        return false;
-                }
-            }
+            if (Index == -1 || (This.Length - Index) < Possible.Length)
+                return false;
 
-            return X == Possible.Length;
+            return String.Compare(This, Index, Possible, 0, Possible.Length, IgnoreCase) == 0;
         }
 
         public static bool Compare(this String This, String ContainsSub, int Index, int ContainsIndex, int ContainsLength, bool IgnoreCase = false) {
-            int X = 0;
-
-            if (IgnoreCase) {
-                for (;Index + X < This.Length && X < ContainsLength; X++) {
-                    if (char.ToLower(This[Index + X]) != char.ToLower(ContainsSub[ContainsIndex + X])) {
-                        return false;
-                    }
-                }
-            }
-            else {
-                for (;Index + X < This.Length && X < ContainsLength; X++) {
-                    if (This[Index + X] != ContainsSub[ContainsIndex + X])
-                    return false;
-                }
-            }
-
-            return X == ContainsLength;
+            return String.Compare(This, Index, ContainsSub, ContainsIndex, ContainsLength, IgnoreCase) == 0;
         }
 
         public static bool FindMatchingBrackets(this String This, String Open, String Close, ref int Index, ref int End, bool IncludeBrackets = false) {
@@ -112,111 +83,72 @@ namespace System {
         }
 
         public static int Find(this String This, char C, int Index = 0, int Last = int.MaxValue) {
-            if (Index > -1) {
-                if (Last == int.MaxValue)
-                    Last = This.Length;
+            if (string.IsNullOrEmpty(This) || Index < 0 || Last < Index)
+                return -1;
 
-                for (int i = Index; i < This.Length && i < Last; i++) {
-                    if (i > 0 && This[i - 1] == '\\')
-                        continue;
+            int i = This.IndexOf(C, Index);
 
-                    if (This[i] == C) {
-                        return i;
-                    }
-                }
-            }
-            return -1;
+            while (i > 0 && i < This.Length && This[i - 1] == '\\')
+                i = This.IndexOf(C, i + 1);
+
+            return i;
         }
 
         public static int Find(this String This, string C, int Index = 0, int Last = int.MaxValue) {
-            if (Index > -1) {
-                if (C.Length == 1)
-                    return Find(This, C[0], Index, Last);
+            if (string.IsNullOrEmpty(This) || Index < 0 || Last < Index)
+                return -1;
 
-                if (Last == int.MaxValue)
-                    Last = This.Length;
+            int i = This.IndexOf(C, Index);
 
-                for (int i = Index; i < This.Length && i + C.Length < Last; i++) {
-                    if (This.Compare(C, i, 0, C.Length)) {
-                        return i;
-                    }
-                }
-            }
-            return -1;
+            while (i > 0 && i < This.Length && This[i - 1] == '\\')
+                i = This.IndexOf(C, i + 1);
+
+            return i;
         }
 
         public static int FindLast(this String This, char C, int Index = 0) {
-            if (Index > -1) {
-                int Last = -1;
-                for (int i = Index; i < This.Length; i++) {
-                    if (i > 0 && This[i - 1] == '\\')
-                        continue;
+            if (string.IsNullOrEmpty(This))
+                return -1;
 
-                    if (This[i] == C) {
-                        Last = i;
-                    }
-                }
-                return Last;
-            }
-            return -1;
+            int i = This.LastIndexOf(C, Index);
+
+            while (i > 0 && i < This.Length && This[i - 1] == '\\')
+                i = This.LastIndexOf(C, i + 1);
+
+            return i;
         }
 
         public static int FindLast(this String This, string C, int Index = 0) {
-            if (Index > -1) {
-                if (C.Length == 1)
-                    return FindLast(This, C[0], Index);
+            if (string.IsNullOrEmpty(This))
+                return -1;
+            
+            int i = This.LastIndexOf(C, Index);
 
-                int Last = -1;
-                for (int i = Index; i < This.Length; i++) {
-                    if (i > 0 && This[i - 1] == '\\')
-                        continue;
+            while (i > 0 && i < This.Length && This[i - 1] == '\\')
+                i = This.LastIndexOf(C, i + 1);
 
-                    if (Compare(This, C, i, 0, C.Length)) {
-                        Last = i;
-                    }
-                }
-                return Last;
-            }
-            return -1;
+            return i;
         }
 
         public static bool Contains(this String This, char C, int Index = 0) {
             if (string.IsNullOrEmpty(This))
                 return false;
 
-            if (Index > -1) {
-                for (int i = Index; i < This.Length; i++) {
-                    if (This[i] == C) {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            return This.IndexOf(C, Index) != -1;
         }
 
         public static bool Contains(this String This, char C, int Index, int LastIndex) {
             if (string.IsNullOrEmpty(This))
                 return false;
 
-            if (Index > -1) {
-                for (int i = Index; i < LastIndex && i < This.Length; i++) {
-                    if (This[i] == C) {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            return This.IndexOf(C, Index) < LastIndex;
         }
 
         public static bool Contains(this String This, string C, int Index = 0) {
-            if (Index > -1) {
-                for (int i = Index; i < This.Length; i++) {
-                    if (Compare(This, C, i, 0, C.Length)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            if (string.IsNullOrEmpty(This))
+                return false;
+
+            return This.IndexOf(C, Index) != -1;
         }
 
         public static int FirstPossibleIndex(this String This, int Start = 0, params char[] Possible) {
@@ -392,6 +324,26 @@ namespace System {
             }
 
             return Output.ToArray();
+        }
+
+        public static IEnumerable<string> Split(this String This, char Seperator, int Start = 0, int Stop = int.MaxValue) {
+            Stop = This.Length;
+            Start = This.IndexOf(Seperator, Start);
+
+            if (Start == -1) {
+                yield return This.Substring(0, Stop);
+            }
+            else {
+                int Index = 0;
+
+                do {
+                    yield return This.Substring(Index, Start);
+
+                    Index = Start;
+                    Start = This.IndexOf(Seperator, Start + 1);
+                }
+                while (Start > 0 && Start < Stop);
+            }
         }
 
         public static string[] Split(this String This, String Seperator, int Start = 0, int Stop = int.MaxValue) {

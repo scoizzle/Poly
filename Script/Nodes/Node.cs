@@ -123,6 +123,27 @@ namespace Poly.Script.Nodes {
             Index = Delta;
         }
 
+        public static bool Cast<T>(object I, out T V) {
+            if (I is T) {
+                V = (T)(I);
+                return true;
+            }
+
+            V = default(T);
+            return false;
+        }
+
+        public static bool Cast<T1, T2>(object Left, out T1 L, object Right, out T2 R) {
+            if (!Cast<T1>(Left, out L) || !Cast<T2>(Right, out R)) {
+                L = default(T1);
+                R = default(T2);
+
+                return false;
+            }
+
+            return true;
+        }
+
         public static bool IsParseOk(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (Engine == null || string.IsNullOrEmpty(Text) || LastIndex > Text.Length || Index >= LastIndex)
                 return false;

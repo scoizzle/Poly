@@ -7,7 +7,7 @@ using System.Text;
 namespace Poly.Script.Types {
     using Nodes;
     public class Integer : DataType<int> {
-        int Value;
+        public int Value;
 
         public Integer(int Val) {
             this.Value = Val;

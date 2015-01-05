@@ -7,7 +7,7 @@ namespace Poly.Script.Types {
     using Nodes;
 
     public class Float : DataType<double> {
-        double Value;
+        public double Value;
 
         public Float(double Val) {
             this.Value = Val;

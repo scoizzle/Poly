@@ -16,8 +16,10 @@ namespace Poly.Script.Nodes {
             return Value;
         }
 
-        public static StaticValue New(object Val) {
-            return new StaticValue(Val);
+        public override string ToString() {
+            if (Value != null)
+                return Value.ToString();
+            return string.Empty;
         }
     }
 }

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
+
 using Poly.Data;
 
 namespace Poly.Script.Expressions {
@@ -231,7 +233,23 @@ namespace Poly.Script.Expressions {
         }
 
         public override string ToString() {
-            return string.Join(".", This, string.Format("{0}({1})", Name, string.Join<Node>(",", Arguments)));
+            StringBuilder Output = new StringBuilder();
+
+            Output.Append(This);
+
+            if (This != null && !string.IsNullOrEmpty(Name))
+                Output.Append('.');
+
+            Output.Append(Name);
+
+            if (Arguments == default(Node[])) {
+                Output.Append("()");
+            }
+            else {
+                Output.AppendFormat("({0})", string.Join<Node>(", ", Arguments));
+            }
+
+            return Output.ToString();
         }
     }
 }

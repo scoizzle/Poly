@@ -34,7 +34,10 @@ namespace Poly.Script.Expressions {
         }
 
         public override string ToString() {
-            return string.Join(" ", "return", base.ToString());
+            if (Value != null)
+                return "return " + Value.ToString();
+
+            return "return";
         }
     }
 }

@@ -62,6 +62,9 @@ namespace Poly.Script.Nodes {
                             if (Func != null)
                                 Value = new Event.Handler(Func.Evaluate);
                         }
+                        else {
+                            Engine.Types.TryGetValue(String, out Value);
+                        }
                     }
                 }
 
@@ -72,11 +75,11 @@ namespace Poly.Script.Nodes {
                         Type = Current.GetType();
                     }
 
-                    if (Key is int) {
+                    if (Key is int && Current is string) {
                         String = Current as string;
                         var Int = (int)(Key);
 
-                        if (String != null && Int > -1 && Int < String.Length)
+                        if (Int > -1 && Int < String.Length)
                             Value = String[Int];
                     }
                     else {
@@ -155,6 +158,11 @@ namespace Poly.Script.Nodes {
                     }
 
                     Value = GetProperty(Type, Current, String);
+
+                    if (Value == default(object) && Object != default(jsObject)) {
+                        Value = new jsObject();
+                        Object.AssignValue(String, Value);
+                    }
                 }
 
                 Current = Value;

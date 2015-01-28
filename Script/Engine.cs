@@ -15,6 +15,7 @@ namespace Poly.Script {
 
         public List<Library> Using = new List<Library>();
 
+        public Dictionary<string, Expressions.Html.Template> HtmlTemplates = new Dictionary<string, Expressions.Html.Template>();
         public Dictionary<string, CachedScript> Includes = new Dictionary<string, CachedScript>();
         public Dictionary<string, string> Shorthands = new Dictionary<string, string>() {
             { "App", typeof(App).FullName }, 

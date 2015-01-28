@@ -19,6 +19,63 @@ namespace Poly.Script.Libraries {
             Add(Descape);
             Add(Server);
         }
+        /* func Get(Url, Headers) {
+         *   Client = System.Web.WebClient();
+         *   
+         *   foreach (Header in Headers)
+         *     Client.Headers.Add(Header.Key, Header.Value.ToString());
+         *     
+         *   try 
+         *     return Client.DownloadString(Url);
+         *   
+         *   return null;
+         * }
+         */
+
+        public static Function _Get = new Function("Get", (Event.Handler)null, "Url", "Headers") {
+            Elements = new Node[] {
+                new Expressions.Assign( 
+                    new Variable(new Engine(), "Client"),
+                    new Expressions.Call(
+                        new Engine(), 
+                        new Helpers.SystemTypeGetter("System.Web.WebClient"), 
+                        "WebClient"
+                    )
+                ),
+                new Expressions.Foreach() { 
+                    Variable = new Variable(new Engine(), "Header"),
+                    List = new Variable(new Engine(), "Headers"),
+                    Elements = new Node[] {
+                        new Expressions.Call(
+                            new Engine(), 
+                            new Variable(new Engine(), "Client.Headers"), 
+                            "Add", 
+                            new Node[] { 
+                                new Variable(new Engine(), "Header.Key"), 
+                                new Variable(new Engine(), "Header.Value")
+                            }
+                        )
+                    }
+                },
+                new Expressions.Try() {
+                    Node = new Node() { Elements = new Node[] {
+                        new Expressions.Return(){
+                            Value = new Expressions.Call(
+                                new Engine(), 
+                                new Variable(new Engine(), "Client"), 
+                                "DownloadString", 
+                                new Node[] { 
+                                    new Variable(new Engine(), "Url")
+                                }
+                            )
+                        }
+                    }}
+                },
+                new Expressions.Return() {
+                    Value = Expression.Null
+                }
+            }
+        };
 
         public static Function Get = new Function("Get", (Args) => {
             var Url = Args.Get<string>("Url");
@@ -32,11 +89,13 @@ namespace Poly.Script.Libraries {
                             Client.Headers.Add(K, V.ToString());
                         });
                     }
-
-                    return Client.DownloadString(Uri);
+                    try {
+                        return Client.DownloadString(Uri);
+                    }
+                    catch { }
                 }
             }
-            return string.Empty;
+            return null;
         }, "Url", "Headers");
 
         public static Function Post = new Function("Post", (Args) => {

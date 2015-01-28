@@ -16,6 +16,14 @@ namespace Poly.Script.Expressions.Html {
         public List<Attribute> Attributes = new List<Attribute>();
         public List<Element> Elements = new List<Element>();
 
+        public override string Evaluate(Data.jsObject Context) {
+            StringBuilder Out = new StringBuilder();
+
+            Evaluate(Out, Context);
+
+            return Out.ToString();
+        }
+
         public override void Evaluate(StringBuilder Output, Data.jsObject Context) {
             Output.AppendFormat("<{0}", Type);
 

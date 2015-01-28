@@ -123,6 +123,16 @@ namespace Poly.Script.Nodes {
             Index = Delta;
         }
 
+        public static string ExtractValidName(string Text, ref int Index) {
+            var End = Index;
+            ConsumeValidName(Text, ref End);
+
+            if (End > Index)
+                return Text.Substring(Index, End - Index);
+
+            return string.Empty;
+        }
+
         public static bool Cast<T>(object I, out T V) {
             if (I is T) {
                 V = (T)(I);

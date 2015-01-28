@@ -16,6 +16,18 @@ namespace Poly.Script.Expressions.Html {
             this.Template = Template;
         }
 
+        public override string Evaluate(jsObject Context) {
+            if (Var == null)
+                return null;
+
+            var Obj = Var.Evaluate(Context);
+
+            if (Obj == null)
+                return null;
+
+            return Obj.ToString();
+        }
+
         public override void Evaluate(StringBuilder Output, jsObject Context) {
             if (Var == null)
                 return;

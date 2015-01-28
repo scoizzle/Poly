@@ -14,7 +14,7 @@ namespace Poly.Script.Expressions.Html {
                 var Delta = Index;
                 var Close = Delta;
 
-                if (Text.FindMatchingBrackets("`", "`", ref Delta, ref Close)){
+                if (Text.FindMatchingBrackets("`", "`", ref Delta, ref Close)) {
                     var Obj =  Html.Parse(Engine, Text, ref Delta, Close);
 
                     if (Obj != null) {
@@ -22,6 +22,14 @@ namespace Poly.Script.Expressions.Html {
                         return new Generator(Obj);
                     }
                 }                
+            }
+            else if (Text.Compare("html", Index)) {
+                var Delta = Index;
+
+                if (Html.FuncParser(Engine, Text, ref Delta, LastIndex) != null) {
+                    Index = Delta;
+                    return Expression.NoOperation;
+                }
             }
 
             return null;

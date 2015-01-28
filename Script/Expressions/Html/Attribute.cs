@@ -17,6 +17,10 @@ namespace Poly.Script.Expressions.Html {
             this.Value = Val;
         }
 
+        public override string Evaluate(Data.jsObject Context) {
+            return string.Format(Format, Name, Value.Evaluate(Context));
+        }
+
         public override void Evaluate(StringBuilder Output, Data.jsObject Context) {
             if (Value != null) {
                 Output.AppendFormat(Format, Name, Value.Evaluate(Context));

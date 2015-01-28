@@ -25,7 +25,7 @@ namespace Poly.Script.Nodes {
 
         public override object Evaluate(jsObject Context) {
             if (Elements == null)
-                return Context;
+                return null;
 
             object Current =
                 this.IsStatic ?
@@ -37,19 +37,27 @@ namespace Poly.Script.Nodes {
                 var Str = Node as Types.String;
                 var String = default(string);
                 var Key = default(object);
+                var Value = default(object);
 
                 if (Str != null) { 
                     String = Str.Value;
                 }
+                else if (Node is Helpers.SystemTypeGetter) {
+                    Current = Node.Evaluate(Context);
+                    continue;
+                }
                 else {
                     Key = Node.Evaluate(Context);
 
-                    if (Key != null)
+                    if (Key != null) {
                         String = Key.ToString();
+                    }
+                    else if (Node.Elements == null && Elements.Length - i == 1) {
+                        return Context;
+                    }
                     else return null;
                 }
 
-                var Value = default(object);
                 var Object = Current as jsObject;
 
                 if (Object != null) {

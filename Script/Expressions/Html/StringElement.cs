@@ -12,6 +12,10 @@ namespace Poly.Script.Expressions.Html {
             this.Value = Str;
         }
 
+        public override string Evaluate(Data.jsObject Context) {
+            return Value;
+        }
+
         public override void Evaluate(StringBuilder Output, Data.jsObject Context) {
             Output.Append(this.Value);
         }

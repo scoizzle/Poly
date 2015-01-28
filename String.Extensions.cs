@@ -88,8 +88,11 @@ namespace System {
 
             int i = This.IndexOf(C, Index);
 
-            while (i > 0 && i < This.Length && This[i - 1] == '\\')
+            while (i > 0 && i < This.Length && i < Last && This[i - 1] == '\\')
                 i = This.IndexOf(C, i + 1);
+
+            if (i > Last)
+                return -1;
 
             return i;
         }

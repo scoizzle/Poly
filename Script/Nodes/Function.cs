@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -43,7 +44,7 @@ namespace Poly.Script.Nodes {
 
         public Function(string Name, Event.Handler Handler, params string[] ArgumentNames) {
             this.Name = Name;
-            this.Arguments = ArgumentNames;
+            this.Arguments = ArgumentNames.Where(N => N != "this").ToArray();
             this.Method = Handler;
         }
 
@@ -59,6 +60,38 @@ namespace Poly.Script.Nodes {
 
         public override string ToString() {
             return string.Format("{0}({1}) {{2}}", Name, string.Join(", ", Arguments), base.ToString());
+        }
+
+        public static Function Create(string Name, Func<object> Func) {
+            return new Function(Name, (Args) => { return Func(); });
+        }
+
+        public static Function Create<T1>(string Name, Func<T1, object> Func, params string[] Params) {
+            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        }
+
+        public static Function Create<T1, T2>(string Name, Func<T1, T2, object> Func, params string[] Params) {
+            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        }
+
+        public static Function Create<T1, T2, T3>(string Name, Func<T1, T2, T3, object> Func, params string[] Params) {
+            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        }
+
+        public static Function Create<T1, T2, T3, T4>(string Name, Func<T1, T2, T3, T4, object> Func, params string[] Params) {
+            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        }
+
+        public static Function Create<T1, T2, T3, T4, T5>(string Name, Func<T1, T2, T3, T4, T5, object> Func, params string[] Params) {
+            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        }
+
+        public static Function Create<T1, T2, T3, T4, T5, T6>(string Name, Func<T1, T2, T3, T4, T5, T6, object> Func, params string[] Params) {
+            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        }
+
+        public static Function Create<T1, T2, T3, T4, T5, T6, T7>(string Name, Func<T1, T2, T3, T4, T5, T6, T7, object> Func, params string[] Params) {
+            return new Function(Name, Event.Wrapper(Func, Params), Params);
         }
 
         public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {

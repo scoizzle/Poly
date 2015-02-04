@@ -20,7 +20,7 @@ namespace Poly.Net.Http {
         }
 
         public object Psx(Request Request, string FileName) {
-            var Eng = ScriptCache.Get(FileName);
+            var Eng = ScriptCache.Get(Request.Host.Path, FileName);
 
             if (Eng == null)
                 return null;

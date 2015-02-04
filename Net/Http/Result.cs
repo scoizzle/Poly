@@ -8,41 +8,15 @@ using Poly.Data;
 using Poly.Net.Tcp;
 
 namespace Poly.Net.Http {
-    public class Result : Data.jsObject {
-        public string Status {
-            get {
-                return Get<string>("Status", "200 Ok");
-            }
-            set {
-                Set("Status", value);
-            }
-        }
+    public class Result : jsComplex {
+        public string Status, MIME;
+        public jsObject Cookies, Headers;
 
-        public string MIME {
-            get {
-                return Get<string>("MIME", "text/html");
-            }
-            set {
-                this["MIME"] = value;
-            }
-        }
-
-        public Data.jsObject Cookies {
-            get {
-                return Get<jsObject>("Cookies", jsObject.NewObject);
-            }
-            set {
-                this["Cookies"] = value;
-            }
-        }
-
-        public Data.jsObject Headers {
-            get {
-                return Get<jsObject>("Headers", jsObject.NewObject);
-            }
-            set {
-                this["Headers"] = value;
-            }
+        public Result() {
+            this.Status = Ok;
+            this.MIME = "text/html";
+            this.Cookies = new jsObject();
+            this.Headers = new jsObject();
         }
 
         public static implicit operator Result(string Status) {

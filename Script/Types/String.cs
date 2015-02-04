@@ -4,6 +4,8 @@ namespace Poly.Script.Types {
     using Nodes;
 
 	public class String : DataType<string> {
+        public readonly static String Empty = new String(string.Empty);
+
         public string Value;
 
         public String(string Str) { Value = Str; }

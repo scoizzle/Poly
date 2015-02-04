@@ -7,30 +7,9 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Http {
-    public class Packet : jsObject {
-        public Data.jsObject Headers {
-            get {
-                return Get<jsObject>("Headers", jsObject.NewObject);
-            }
-        }
-
-        public Data.jsObject GET {
-            get {
-                return Get<jsObject>("Get", jsObject.NewObject);
-            }
-        }
-
-        public Data.jsObject POST {
-            get {
-                return Get<jsObject>("Post", jsObject.NewObject);
-            }
-        }
-
-        public Data.jsObject Cookies {
-            get {
-                return Get<jsObject>("Cookies", jsObject.NewObject);
-            }
-        }
+    public class Packet : jsComplex {
+        public jsObject Headers, Get, Post, Cookies;
+        public string RawTarget, Connection, Type, Target, Version, Value, Query;
 
         public int ContentLength {
             get {
@@ -59,67 +38,13 @@ namespace Poly.Net.Http {
             }
         }
 
-        public string RawTarget {
-            get {
-                return Get<string>("RawTarget");
-            }
-            set {
-                this["RawTarget"] = value;
-            }
-        }
+        public Packet() {
+            Headers = new jsObject();
+            Get = new jsObject();
+            Post = new jsObject();
+            Cookies = new jsObject();
 
-        public string Connection {
-            get {
-                return Headers.Get<string>("Connection");
-            }
-            set {
-                Headers["Connection"] = value;
-            }
-        }
-
-        public string Type {
-            get {
-                return Get<string>("Type");
-            }
-            set {
-                this["Type"] = value;
-            }
-        }
-
-        public string Target {
-            get {
-                return Get<string>("Target");
-            }
-            set {
-                this["Target"] = value;
-            }
-        }
-
-        public string Version {
-            get {
-                return Get<string>("Version");
-            }
-            set {
-                this["Version"] = value;
-            }
-        }
-
-        public string Value {
-            get {
-                return Get<string>("Value");
-            }
-            set {
-                this["Value"] = value;
-            }
-        }
-
-        public string Query {
-            get {
-                return Get<string>("Query");
-            }
-            set {
-                Set("Query", value);
-            }
+            RawTarget = Connection = Type = Target = Version = Value = Query = string.Empty;
         }
 
         public bool Receive(Net.Tcp.Client Client) {
@@ -153,7 +78,7 @@ namespace Poly.Net.Http {
                         return false;
                     }
 
-                    GET[Pair[0]] = Pair[1];
+                    Get[Pair[0]] = Pair[1];
                 }
             }
             else {
@@ -202,7 +127,7 @@ namespace Poly.Net.Http {
                         if (Match == null)
                             continue;
 
-                        POST.Set(
+                        Post.Set(
                             Match["Key"] as string,
                             Match["Value"] as string
                         );

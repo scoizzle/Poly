@@ -40,12 +40,21 @@ namespace Poly.Script.Expressions {
                 }
                 else if ((This as Helpers.SystemTypeGetter) == null) {
                     var Class = Engine.Types[Name];
-                    if (Class != null)
+
+                    if (Class != null) {
                         Function = Class.Instaciator;
-                    else if ((Class = Object as Class) != null)
+                    }
+                    else if ((Class = Object as Class) != null) {
                         Function = Class.Instaciator;
-                    else
-                        this.Function = Function = Engine.GetFunction(Name);
+                    }
+                    else if ((Function = Engine.GetFunction(Name)) != null) {
+                        if (Function.Arguments != null && Function.Arguments.Length < Arguments.Length) {
+                            Function = null;
+                        }
+                        else {
+                            this.Function = Function;
+                        }
+                    }
                 }
 
                 if (string.IsNullOrEmpty(Name)) {
@@ -92,7 +101,8 @@ namespace Poly.Script.Expressions {
             }
 
             if (Function != null) {
-                jsObject Args = new jsObject();
+                jsObject Args = new jsObject("this", Object);
+
                 for (Index = 0; Index < ArgList.Length; Index++) {
                     string Key;
 
@@ -103,7 +113,7 @@ namespace Poly.Script.Expressions {
 
                     Args[Key] = ArgList[Index];
                 }     
-                Args["this"] = Object;
+
                 return Function.Evaluate(Args);
             }
 

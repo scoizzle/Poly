@@ -18,9 +18,7 @@ namespace Poly.Net.Http {
             Script.Engine Engine;
             if (CachedScripts.TryGetValue(Name, out Engine)) {
                 foreach (var Pair in Engine.Includes) {
-                    var Cached = Pair.Value as Script.Helpers.CachedScript;
-
-                    if (!Cached.IsCurrent())
+                    if (!Pair.Value.IsCurrent())
                         return false;
                 }
             }
@@ -37,11 +35,13 @@ namespace Poly.Net.Http {
             return false;
         }
 
-        public Script.Engine Load(string Name) {
+        public Script.Engine Load(string EngineIncludePath, string Name) {
             if (!File.Exists(Name))
                 return null;
 
             var Engine = new Script.Engine();
+
+            Engine.IncludePath = EngineIncludePath;
 
             if (!Engine.Parse(File.ReadAllText(Name)))
                 return null;
@@ -51,11 +51,11 @@ namespace Poly.Net.Http {
             return Engine;
         }
 
-        public Script.Engine Get(string Name) {
+        public Script.Engine Get(string EngineIncludePath, string Name) {
             if (IsCurrent(Name)) {
                 return CachedScripts[Name];
             }
-            return Load(Name);
+            return Load(EngineIncludePath, Name);
         }
     }
 }

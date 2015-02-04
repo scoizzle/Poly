@@ -61,7 +61,7 @@ namespace Poly.Script.Nodes {
                 var Object = Current as jsObject;
 
                 if (Object != null) {
-                    if (!Object.TryGetValue(String, out Value)) {
+                    if (!Object.GetValue(String, out Value)) {
                         var Instance = Current as Types.ClassInstance;
 
                         if (Instance != null) {

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.IO;
 
 namespace Poly.Script.Libraries {
     using Data;
@@ -15,36 +16,28 @@ namespace Poly.Script.Libraries {
             Add(Save);
             Add(Template);
             Add(Match);
+            Add(Break);
 			Add(TypeName);
             Add(ToNum);
             Add(ToObject);
         }
 
-        public static Function Load = new Function("Load", (Args) => {
-            var FileName = Args.Get<string>("0");
-
+        public static Function Load = Function.Create("Load", (string FileName) => {
             if (System.IO.File.Exists(FileName)) {
-                if (Args.ContainsKey("this")) {
-                    jsObject.FromFile(FileName).CopyTo(Args.getObject("this"));
-                }
-                else {
-                    return jsObject.FromFile(FileName);
-                }
+                return jsObject.FromFile(FileName);
             }
 
             return null;
-        });
+        }, "FileName");
+        
 
-        public static Function Save = new Function("Save", (Args) => {
-            var FileName = Args.Get<string>("0");
-
-            if (!string.IsNullOrEmpty(FileName) && Args.ContainsKey("this")) {
-                System.IO.File.WriteAllText(FileName, Args.getObject("this").ToString());
+        public static Function Save = Function.Create("Save", (jsObject This, string FileName)=>{
+            if (!string.IsNullOrEmpty(FileName) && This != null){
+                File.WriteAllText(FileName, This.ToString());
                 return true;
             }
-
             return false;
-        });
+        }, "this", "FileName");
 
         public static Function Template = new Function("Template", (Args) => {
             var This = Args.getObject("this");
@@ -64,6 +57,11 @@ namespace Poly.Script.Libraries {
             if (!string.IsNullOrEmpty(This) && !string.IsNullOrEmpty(Regex))
                 return This.Match(Regex);
 
+            return null;
+        });
+
+        public static Function Break = Function.Create("Break", () => {
+            System.Diagnostics.Debugger.Break();
             return null;
         });
 

@@ -59,9 +59,7 @@ namespace Poly.Script.Expressions {
 
                 Index = Delta;
                 if (Inc is Types.String && !Live) {
-                    var Str = Inc.ToString();
-
-                    return ExtensionManager.Include(Engine, Str);
+                    return ExtensionManager.Include(Engine, Engine.IncludePath + Inc.ToString());
                 }
                 else {
                     return new Include(Engine, Inc);

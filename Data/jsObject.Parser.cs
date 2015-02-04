@@ -40,7 +40,7 @@ namespace Poly.Data {
         public static object _Raw(string Text, ref int Index, int LastIndex) {
             var C = Text[Index];
 
-            if ((C > '9' || C < '0') && (C != 't' && C != 'T') && (C != 'f' && C != 'F'))
+            if ((C > '9' || C < '0') && (C != 't' && C != 'T') && (C != 'f' && C != 'F') && C != '@')
                 return null;
 
             var SubIndex = Text.IndexOf(Text.FirstPossible(Index, ',', '}', ']'), Index);

@@ -18,12 +18,18 @@ namespace Poly.Script.Expressions.Html {
         }
 
         public override string Evaluate(Data.jsObject Context) {
-            return string.Format(Format, Name, Value.Evaluate(Context));
+            if (Value != null) {
+                return string.Format(Format, Name, Value.Evaluate(Context));
+            }
+            return Name;
         }
 
         public override void Evaluate(StringBuilder Output, Data.jsObject Context) {
             if (Value != null) {
                 Output.AppendFormat(Format, Name, Value.Evaluate(Context));
+            }
+            else {
+                Output.AppendFormat(" {0}", Name);
             }
         }
     }

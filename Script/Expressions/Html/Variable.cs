@@ -36,9 +36,20 @@ namespace Poly.Script.Expressions.Html {
             var js = Obj as jsObject;
 
             if (Template != null && js != null) {
-                js.ForEach<jsObject>((K, V) => {
-                    Template.Evaluate(Output, V);
-                });
+                foreach (var Pair in js) {
+                    if (Pair.Value is jsObject) {
+                        Template.Evaluate(Output, Pair.Value as jsObject);
+                    }
+                    else {
+                        Context.Set("Key", Pair.Key);
+                        Context.Set("Value", Pair.Value);
+
+                        Template.Evaluate(Output, Context);
+                        
+                        Context.Remove("Key");
+                        Context.Remove("Value");
+                    }
+                }
             }
             else {
                 if (Obj != null)
@@ -65,6 +76,7 @@ namespace Poly.Script.Expressions.Html {
 
                 Element Template = null;
 
+                Expression.ConsumeWhitespace(Text, ref Delta);
                 if (Var != null && Text.Compare("{", Delta)) {
                     var Start = Delta;
                     var End = Delta;

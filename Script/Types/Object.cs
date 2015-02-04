@@ -37,7 +37,7 @@ namespace Poly.Script.Types {
                 Obj.ForEach((K, V) => {
                     object Key, Value;
                     if (K.StartsWith("@")) {
-                        Key = Variable.Parse(Engine, K, 1);
+                        Key = Engine.Parse(K, 1);
                     }
                     else {
                         Key = K;
@@ -47,7 +47,7 @@ namespace Poly.Script.Types {
                         Value = new Builder(Engine, V as jsObject);
                     }
                     else if (V is string && (V as string).StartsWith("@")) {
-                        Value = Variable.Parse(Engine, V as string, 1);
+                        Value = Engine.Parse(V as string, 1);
                     }
                     else {
                         Value = V;

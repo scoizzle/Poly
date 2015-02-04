@@ -45,7 +45,7 @@ namespace Poly {
         public static Handler Wrapper<T1>(Func<T1, object> Func, params string[] ArgNames) {
 			if(Func == null)
 				return null;
-
+            
             return (Args) => {
                 object[] Arguments = new object[1];
 

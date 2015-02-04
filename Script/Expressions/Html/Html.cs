@@ -27,12 +27,21 @@ namespace Poly.Script.Expressions.Html {
                 return Var;
             }
             else {
-                var Next = Text.FirstPossible(Delta, ':', ',', '(', '{');
+                var Next = Text.FirstPossible(Delta, ':', ',', '(', '{', '}');
 
-                if (Next == '{' || Next == char.MinValue)
+                if (Next == '{' || Next == char.MinValue) {
                     return null;
+                }
 
-                Expression.ConsumeValidName(Text, ref Delta);
+                if (Next == ',' || Next == '}') {
+                    var End = Text.IndexOf(Next, Delta);
+
+                    Index = End + 1;
+
+                    return new Attribute(Text.Substring(Delta, End - Delta).Trim(), null);
+                }
+
+                ConsumeValidName(Text, ref Delta);
                 Name = Text.Substring(Index, Delta - Index);  
             }
 
@@ -55,22 +64,20 @@ namespace Poly.Script.Expressions.Html {
                     return new StringElement(Name);
                 }
             }
-            else if (Text.Compare('(', Delta)) {
-                if (Engine.HtmlTemplates.ContainsKey(Name)) {
-                    var Close = Delta;
+            else if (Text.Compare('(', Delta) && Engine.HtmlTemplates.ContainsKey(Name)) {
+                var Close = Delta;
 
-                    if (Text.FindMatchingBrackets("(", ")", ref Delta, ref Close)) {
-                        var Args = Text.Substring(Delta, Close - Delta).ParseCParams();
-                        var Arguments = new Element[Args.Length];
+                if (Text.FindMatchingBrackets("(", ")", ref Delta, ref Close)) {
+                    var Args = Text.Substring(Delta, Close - Delta).ParseCParams();
+                    var Arguments = new Element[Args.Length];
 
-                        for (int i = 0; i < Args.Length; i++){
-                            int Ignore = 0;
-                            Arguments[i] = Parse(Engine, Args[i], ref Ignore, Args[i].Length);
-                        }
-
-                        Index = Close + 1;
-                        return new Templater(Engine.HtmlTemplates[Name], Arguments);
+                    for (int i = 0; i < Args.Length; i++){
+                        int Ignore = 0;
+                        Arguments[i] = Parse(Engine, Args[i], ref Ignore, Args[i].Length);
                     }
+
+                    Index = Close + 1;
+                    return new Templater(Engine.HtmlTemplates[Name], Arguments);
                 }
             }
             else if (Text.Compare(':', Delta)) {
@@ -84,10 +91,10 @@ namespace Poly.Script.Expressions.Html {
                 }
                 else if (Text.Compare('@', Delta)) {
                     Delta++;
-                    Expression.ConsumeValidName(Text, ref Close);
+                    ConsumeValidName(Text, ref Close);
 
                     Index = Close + 1;
-                    return new Attribute(Name, Nodes.Variable.Parse(Engine, Text, ref Delta, Close));
+                    return new Attribute(Name, Engine.Parse(Text, Delta));
                 }
                 else if (Text.Compare('{', Delta)) {
                     Expression.ConsumeExpression(Text, ref Close);
@@ -99,6 +106,17 @@ namespace Poly.Script.Expressions.Html {
                     }
 
                     return Elem;
+                }
+                else {
+                    var Next = Text.FirstPossible(Delta, ':', ',', '(', '{', '}');
+
+                    if (Next == ',' || Next == '}') {
+                        var End = Text.IndexOf(Next, Delta);
+
+                        Index = End + 1;
+
+                        return new Attribute(Text.Substring(Delta, End - Delta).Trim(), null);
+                    }
                 }
             }
 
@@ -132,10 +150,20 @@ namespace Poly.Script.Expressions.Html {
 
                             if (Text.Compare('{', Delta)) {
                                 if (Text.FindMatchingBrackets("{", "}", ref Delta, ref End, false)) {
-                                    var Body = Parse(Engine, Text, ref Delta, End);
+                                    List<Element> Members = new List<Element>();
+
+                                    while (Delta < End) {
+                                        var E = Parse(Engine, Text, ref Delta, End);
+
+                                        if (E != null)
+                                            Members.Add(E);
+                                    }
+
+                                    var Body = Members.Count > 1 ? 
+                                        new Document(Members.ToArray()) :
+                                        Members.First();
 
                                     Index = End + 1;
-
                                     return Engine.HtmlTemplates[Name] = new Template(Args, Body);
                                 }
                             }
@@ -145,6 +173,20 @@ namespace Poly.Script.Expressions.Html {
             }
 
             return null;
+        }
+
+        public static void ConsumeValidName(string Text, ref int Index) {
+            var Delta = Index;
+
+            for (; Delta < Text.Length; ) {
+                if (IsValidChar(Text[Delta]) || Text[Delta] == '@' || Text[Delta] == '-')
+                    Delta++;
+                else if (Text[Delta] == '[')
+                    ConsumeBlock(Text, ref Delta);
+                else break;
+            }
+
+            Index = Delta;
         }
     }
 }

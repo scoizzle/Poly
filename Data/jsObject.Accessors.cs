@@ -168,7 +168,7 @@ namespace Poly.Data {
         public bool TryGet<T>(string Key, out T Value) {
             object Obj;
 
-            if (base.TryGetValue(Key, out Obj)) {
+            if (GetValue(Key, out Obj)) {
 				try {
                     Value = (T)Obj;
                     return true;
@@ -266,6 +266,10 @@ namespace Poly.Data {
 
                 Current = Next;
             }
+        }
+
+        public virtual bool GetValue(string Key, out object Value) {
+            return TryGetValue(Key, out Value);
         }
 
         public virtual void AssignValue<T>(string Key, T Value) {

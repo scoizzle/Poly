@@ -36,10 +36,8 @@
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
-    <Reference Include="System.Web" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
@@ -75,6 +73,7 @@
     <Compile Include="Net\Tcp\Server.cs" />
     <Compile Include="Net\Url.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Script\Expressions\Html\Document.cs" />
     <Compile Include="Script\Expressions\Html\Generator.cs" />
     <Compile Include="Script\Expressions\Html\Element.cs" />
     <Compile Include="Script\Expressions\Html\Template.cs" />
@@ -119,6 +118,7 @@
     <Compile Include="Script\Expressions\For.cs" />
     <Compile Include="Script\Helpers\Extension.cs" />
     <Compile Include="Script\Helpers\Library.cs" />
+    <Compile Include="Script\Libraries\Html.cs" />
     <Compile Include="Script\Libraries\TimeSpan.cs" />
     <Compile Include="Script\Libraries\Hash.cs" />
     <Compile Include="Script\Libraries\Tcp.cs" />

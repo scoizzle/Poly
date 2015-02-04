@@ -11,72 +11,37 @@ using Poly.Net.Tcp;
 using Poly.Script;
 
 namespace Poly.Net.Http {
-    public partial class Request : jsObject {
-        public bool Handled {
-            get {
-                return Get<bool>("Handled", false);
-            }
-            set {
-                Set("Handled", value);
-            }
-        }
+    public partial class Request : jsComplex {
+        public bool Handled;
 
-        public Client Client {
-            get {
-                return Get<Client>("Client", default(Client));
-            }
-            set {
-                Set("Client", value);
-            }
-        }
+        public Client Client;
+        public Packet Packet;
+        public Result Result;
+        public Host Host;
 
-        public Packet Packet {
-            get {
-                return Get<Packet>("Packet", default(Packet));
-            }
-            set {
-                Set("Packet", value);
-            }
-        }
-
-        public Result Result {
-            get {
-                return Get<Result>("Result", () => { return "200 Ok"; });
-            }
-            set {
-                Set("Result", value);
-            }
-        }
-        
-        public Host Host = null;
-
-        public Session Session {
-            get {
-                return Get<Session>("Session");
-            }
-            set {
-                Set("Session", value);
-            }
-        }
+        public Session Session;
 
         public MemoryStream Data { get; private set; }
 
         public Request(Client Client, Packet Packet) {
+            this.Handled = false;
+
             this.Client = Client;
             this.Packet = Packet;
 
-            Data = new MemoryStream();
+            this.Result = new Result();
+            this.Data = new MemoryStream();
         }
 
         public Data.jsObject Get {
             get {
-                return Packet.GET;
+                return Packet.Get;
             }
         }
 
         public Data.jsObject Post {
             get {
-                return Packet.POST;
+                return Packet.Post;
             }
         }
 

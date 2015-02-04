@@ -8,110 +8,42 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Http {
-    public class Host : jsObject {
+    public class Host : jsComplex {
+        public bool SessionsEnabled;
+
+        public string Name, Path, DefaultDocument, DefaultExtension, SessionCookieName, SessionDomain, SessionPath;
+
+        public jsObject PathOverrides, Ports;
+
         public Event.Engine Handlers = new Event.Engine();
 
         public Host() {
+            this.Name = "localhost";
+            this.Path = "WWW/";
+            this.DefaultDocument = "index.html";
+            this.DefaultExtension = "htm";
+
+            this.SessionsEnabled = true;
+            this.SessionCookieName = "SessionId";
+            this.SessionDomain = Name;
+            this.SessionPath = "";
+
+            this.PathOverrides = new jsObject();
+            this.Ports = new jsObject();
         }
 
-        public Host(jsObject Base) {
+        public Host(jsObject Base) : this() {
             if (Base != null) {
                 Base.CopyTo(this);
             }
         }
 
-        public string Name {
-            get {
-                return this.Get<string>("Name", "localhost");
-            }
-            set {
-                this["Name"] = value;
-            }
-        }
-
-        public string Path {
-            get {
-                return this.Get<string>("Path", "WWW/");
-            }
-            set {
-                this["Path"] = value;
-            }
-        }
-
-        public string DefaultDocument {
-            get {
-                return this.Get<string>("DefaultDocument", "index.html");
-            }
-            set {
-                this["DefaultDocument"] = value;
-            }
-        }
-
-        public string DefaultExtension {
-            get {
-                return this.Get<string>("DefaultExtension", "htm");
-            }
-            set {
-                this["DefaultExtension"] = value;
-            }
-        }
-
-        public string SessionCookieName {
-            get {
-                return this.Get<string>("SessionCookieName", "SessionId");
-            }
-            set {
-                this["SessionCookieName"] = value;
-            }
-        }
-        public string SessionDomain {
-            get {
-                return this.Get<string>("SessionDomain", () => { return Name; });
-            }
-            set {
-                this["SessionDomain"] = value;
-            }
-        }
-        public string SessionPath {
-            get {
-                return this.Get<string>("SessionPath", () => { return ""; });
-            }
-            set {
-                this["SessionPath"] = value;
-            }
-        }
-
-        public bool SessionsEnabled {
-            get {
-                if (!this.ContainsKey("SessionsEnabled"))
-                    return true;
-                return this.Get<bool>("SessionsEnabled");
-            }
-            set {
-                this.Set("SessionsEnabled", value);
-            }
-        }
-
-        public jsObject PathOverrides {
-            get {
-                return Get<jsObject>("PathOverrides", jsObject.NewObject);
-            }
-            set {
-                Set("PathOverrides", value);
-            }
-        }
-
-        public jsObject Ports {
-            get {
-                return Get<jsObject>("Ports", jsObject.NewArray);
-            }
-            set {
-                Set("Ports", value);
-            }
-        }
-
         public void On(string Path, Event.Handler Handler) {
             Handlers.Register(Path, Handler);
+        }
+
+        public void Load(Server Serv, string Name) {
+            Serv.ScriptCache.Load(Path, Path + Name);
         }
 
         public string GetWWW(Request Request) {

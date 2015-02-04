@@ -26,7 +26,9 @@ namespace Poly.Data {
             }
         }
 
-        public jsObject() { }
+        public jsObject() { 
+
+        }
 
         public jsObject(string Json) {
             Parse(Json);
@@ -103,10 +105,6 @@ namespace Poly.Data {
             }
         }
 
-        public void Debug() {
-            System.Diagnostics.Debugger.Break();
-        }
-
         public override string ToString() {
             return Stringify(this, false);
         }
@@ -125,56 +123,58 @@ namespace Poly.Data {
             return Output.ToString(0, Output.Length - 1);
         }
 
-        public static string Stringify(jsObject This, bool HumanFormat, int Reserved = 1) {
-            StringBuilder Output = new StringBuilder();
+        public static string Stringify(jsObject This, bool HumanFormat) {
+            return Stringify(new StringBuilder(), This, HumanFormat, 1);
+        }
 
+        private static string Stringify(StringBuilder Output, jsObject This, bool HumanFormat, int Tabs) {
             Output.Append(This.IsArray ? '[' : '{');
 
             if (HumanFormat) {
                 Output.AppendLine();
-                Output.Append('\t', Reserved);
+                Output.Append('\t', Tabs);
             }
 
             int Index = 0;
             foreach (var Pair in This) {
-                var K = Pair.Key;
-                var V = Pair.Value;
-
-                if (!This.IsArray)
-                    Output.AppendFormat("\"{0}\":", K);
-
-                var Obj = V as jsObject;
-
-				if (Obj != null) {
-					Output.Append (
-						Stringify (Obj, HumanFormat, Reserved + 1)
-					);
-				}
-                else if (V is bool) {
-                    Output.Append(V.ToString().ToLower());
-                }
-				else {
-					V = V.ToString ().Escape ();
-					Output.AppendFormat ("\"{0}\"", V);
-				} 
-
-                if (This.Count > 1 && (This.Count - Index) != 1) {
-                    Output.Append(',');
-                    Index++;
-                }
-                else {
-                    Reserved--;
-                }
-
-                if (HumanFormat) {
-                    Output.Append(Environment.NewLine);
-                    Output.Append('\t', Reserved);
-                }
+                Index++;
+                StringifyInternal(Output, This, Pair.Key, Pair.Value, Index == This.Count, HumanFormat, Tabs);
             }
 
             Output.Append(This.IsArray ? ']' : '}');
 
+            if (Tabs > 1)
+                return string.Empty;
+
             return Output.ToString();
+        }
+
+        protected static void StringifyInternal(StringBuilder Output, jsObject This, string Key, object Value, bool IsLast, bool HumanFormat, int Tabs) {
+            if (!This.IsArray)
+                Output.AppendFormat("\"{0}\":", Key);
+
+            if (Value is jsComplex) {
+                jsComplex.Stringify(Output, Value as jsComplex, HumanFormat, Tabs);
+            }
+            else if (Value is jsObject) {
+                Stringify(Output, Value as jsObject, HumanFormat, Tabs + 1);
+            }
+            else if (Value is bool) {
+                Output.Append(Value.ToString().ToLower());
+            }
+            else {
+                Value = Value.ToString().Escape();
+                Output.AppendFormat("\"{0}\"", Value);
+            }
+
+            if (!IsLast) {
+                Output.Append(',');
+            }
+
+            if (HumanFormat) {
+                Output.Append(Environment.NewLine);
+                Output.Append('\t', Tabs);
+            }
         }
 
         public static string PostEncode(string Input) {
@@ -276,6 +276,109 @@ namespace Poly.Data {
 
         public void ForEach(Action<string, T> Action) {
             base.ForEach<T>(Action);
+        }
+    }
+
+    public class jsComplex : jsObject {
+        static Dictionary<Type, Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>> Cache = 
+            new Dictionary<Type, Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>>();
+
+        static jsComplex() {
+            foreach (var Mod in AppDomain.CurrentDomain.GetAssemblies()) {
+                foreach (var T in Mod.GetTypes()) {
+                    if (typeof(jsComplex).IsAssignableFrom(T)) {
+                        var TypeCache = new Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>();
+
+                        foreach (var Field in T.GetFields()) {
+                            TypeCache.Add(Field.Name, new Tuple<Func<object, object>, Action<object, object>>(
+                                Field.GetValue,
+                                Field.SetValue
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        static Dictionary<string, Tuple<Func<object, object>, Action<object, object>>> InitType(Type T) {
+            var TypeCache = new Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>();
+
+            foreach (var Field in T.GetFields()) {
+                TypeCache.Add(Field.Name, new Tuple<Func<object, object>, Action<object, object>>(
+                    Field.GetValue,
+                    Field.SetValue
+                ));
+            }
+
+            return TypeCache;
+        }
+
+        Dictionary<string, Tuple<Func<object, object>, Action<object, object>>> LocalCache;
+
+        public jsComplex() {
+            var T = this.GetType();
+
+            if (!Cache.TryGetValue(T, out LocalCache)) lock (Cache) {
+                Cache[T] = LocalCache = InitType(T);
+            }
+        }
+
+        public override bool GetValue(string Key, out object Value) {
+            if (TryGetValue(Key, out Value))
+                return true;
+
+            if (LocalCache.ContainsKey(Key)) {
+                Value = LocalCache[Key].Item1(this);
+                return true;
+            }
+
+            Value = null;
+            return false;
+        }
+
+        public override void AssignValue<T>(string Key, T Value) {
+            if (LocalCache.ContainsKey(Key)) {
+                LocalCache[Key].Item2(this, Value);
+            }
+            else {
+                base.AssignValue(Key, Value);
+            }
+        }
+
+        public static string Stringify(jsComplex This, bool HumanFormat) {
+            return Stringify(new StringBuilder(), This, HumanFormat, 1);
+        }
+
+        public static string Stringify(StringBuilder Output, jsComplex This, bool HumanFormat, int Tabs) {
+            Output.Append(This.IsArray ? '[' : '{');
+
+            if (HumanFormat) {
+                Output.AppendLine();
+                Output.Append('\t', Tabs);
+            }
+
+            int Index = 0, Total = This.Count + This.LocalCache.Count;
+
+            foreach (var Pair in This) {
+                Index++;
+                StringifyInternal(Output, This, Pair.Key, Pair.Value, Index == Total, HumanFormat, Tabs);
+            }
+
+            foreach (var Pair in This.LocalCache) {
+                Index++;
+                StringifyInternal(Output, This, Pair.Key, Pair.Value.Item1(This), Index == Total, HumanFormat, Tabs);
+            }
+
+            Output.Append(This.IsArray ? ']' : '}');
+
+            if (Tabs > 1)
+                return string.Empty;
+
+            return Output.ToString();
+        }
+
+        public override string ToString() {
+            return Stringify(this, false);
         }
     }
 }

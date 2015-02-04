@@ -13,6 +13,8 @@ namespace Poly.Script {
         public Library Functions = new Library();
         public jsObject Static = new jsObject();
 
+        public string IncludePath = string.Empty;
+
         public List<Library> Using = new List<Library>();
 
         public Dictionary<string, Expressions.Html.Template> HtmlTemplates = new Dictionary<string, Expressions.Html.Template>();

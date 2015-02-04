@@ -20,12 +20,11 @@ namespace Poly.Script.Helpers {
         }
 
         private static Node IncludeMultiple(Engine Engine, string Name) {
-            var Parts = Name.Split('\\', '/');
+            var Last = Name.LastIndexOf('/');
+            var Path = Name.Substring(0, Last);
+            var File = Name.Substring(Last + 1);
 
-            if (Parts.Length == 0)
-                return null;
-
-            var Files = Directory.GetFiles(Parts[0], Name.Substring(Parts[0].Length + 1), SearchOption.TopDirectoryOnly);
+            var Files = Directory.GetFiles(Path, File, SearchOption.TopDirectoryOnly);
             var List = new List<Node>();
 
             foreach (var FileName in Files) {

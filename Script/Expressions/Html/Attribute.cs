@@ -25,11 +25,18 @@ namespace Poly.Script.Expressions.Html {
         }
 
         public override void Evaluate(StringBuilder Output, Data.jsObject Context) {
-            if (Value != null) {
-                Output.AppendFormat(Format, Name, Value.Evaluate(Context));
+            if (Value == null)
+                return;
+
+            if (Value == Types.String.Empty) {
+                Output.AppendFormat(" {0}", Name);
             }
             else {
-                Output.AppendFormat(" {0}", Name);
+                var Val = Value.Evaluate(Context);
+
+                if (Val != null){
+                    Output.AppendFormat(Format, Name, Val);
+                }
             }
         }
     }

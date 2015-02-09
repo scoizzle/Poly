@@ -17,6 +17,10 @@ namespace Poly.Script.Expressions {
             return null;
         }
 
+        public override string ToString() {
+            return string.Format("({0})", Node);
+        }
+
         public static new Eval Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;

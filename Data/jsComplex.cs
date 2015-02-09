@@ -7,7 +7,6 @@ using System.Text;
 using System.Dynamic;
 
 namespace Poly.Data {
-
     public class jsComplex : jsObject {
         static Dictionary<Type, Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>> Cache =
             new Dictionary<Type, Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>>();
@@ -16,14 +15,7 @@ namespace Poly.Data {
             foreach (var Mod in AppDomain.CurrentDomain.GetAssemblies()) {
                 foreach (var T in Mod.GetTypes()) {
                     if (typeof(jsComplex).IsAssignableFrom(T)) {
-                        var TypeCache = new Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>();
-
-                        foreach (var Field in T.GetFields()) {
-                            TypeCache.Add(Field.Name, new Tuple<Func<object, object>, Action<object, object>>(
-                                Field.GetValue,
-                                Field.SetValue
-                            ));
-                        }
+                        InitType(T);
                     }
                 }
             }

@@ -1,9 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Security;
 
 using Poly.Data;
 
@@ -17,13 +12,21 @@ namespace Poly.Script.Libraries {
             RegisterStaticObject("Html", this);
 
             Add(Escape);
+            Add(Descape);
         }
 
         public static Function Escape = Function.Create("Escape", (string Input) => {
             if (string.IsNullOrEmpty(Input))
                 return string.Empty;
 
-            return SecurityElement.Escape(Input);
+            return Input.HtmlEscape();
         }, "Input");
+
+        public static Function Descape = Function.Create("Descape", (string Input) => {
+            if (string.IsNullOrEmpty(Input))
+                return string.Empty;
+
+            return Input.HtmlDescape();
+        }, "Descape");
     }
 }

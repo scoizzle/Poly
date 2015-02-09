@@ -22,6 +22,9 @@ namespace Poly.Script.Expressions.Html {
 
             var Obj = Var.Evaluate(Context);
 
+            if (Obj is Expressions.Return)
+                Obj = (Obj as Expressions.Return).Evaluate(Context);
+
             if (Obj == null)
                 return null;
 

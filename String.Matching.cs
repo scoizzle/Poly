@@ -97,14 +97,23 @@ namespace Poly {
         private static jsObject Match(this String This, String Wild, ref int Index, ref int Offset, bool IgnoreCase = false, jsObject Storage = null, bool Store = true, int DataLen = 0, int WildLen = 0) {
             if (string.IsNullOrEmpty(This) || string.IsNullOrEmpty(Wild))
                 return null;
-            
-            if (Wild.Length == 1 && This.Length > 1 && Wild != "*")
-                return null;
 
+            if (WildLen == 1 && DataLen > 1 && Wild != "*")
+                return null;
+            
             if (Store && Storage == null)
                 Storage = new jsObject();
 
-            for (; Index < DataLen && Offset < WildLen;) {
+            if (WildLen == 2 && Wild[0] == '*'){
+                if (This[DataLen - 1] == Wild[1]) {
+                    return Storage;
+                }
+                else {
+                    return null;
+                }
+            }
+
+            while (Index < DataLen && Offset < WildLen) {
                 var C = Wild[Offset];
 
 				if (!WildChars.Contains(C) && (C == This[Index] || C == '?')) {
@@ -195,6 +204,9 @@ namespace Poly {
                         return null;
                 }
             }
+
+            if ((WildLen - Offset) != 0)
+                return null;
 
             return Storage;
         }

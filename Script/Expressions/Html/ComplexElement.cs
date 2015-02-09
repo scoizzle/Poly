@@ -9,7 +9,7 @@ namespace Poly.Script.Expressions.Html {
 
     public class ComplexElement : Element {
         public static List<string> SingletonTags = new List<string>() {
-            "area", "base", "br", "col", "command", "embed", "hr", "img", "input", "link", "meta", "param", "source"
+            "area", "base", "br", "col", "command", "embed", "hr", "img", "input", "link", "meta", "param", "source", "!doctype"
         };
 
         public string Type;

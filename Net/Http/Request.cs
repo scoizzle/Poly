@@ -83,6 +83,13 @@ namespace Poly.Net.Http {
 
         }
 
+        public void Template(string Txt, jsObject Data) {
+            if (Data == null)
+                return;
+
+            Print(Data.Template(Txt));
+        }
+
         public void SendReply() {
             if (!Client.Connected || Handled)
                 return;

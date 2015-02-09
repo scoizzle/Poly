@@ -9,22 +9,11 @@ namespace Poly {
     public partial class Event {
         public delegate object Handler(jsObject Args);
 
-        public static Handler Handle(Handler Handler) {
-            return Handler;
-        }
-
-		public static object Invoke(Handler Func, jsObject Args) {
-			if (Func == null)
-				return null;
-
-			return Func (Args);
-		}
-
-        public static object Invoke(Handler Func, params object[] ArgPairs) {
+        public static object Invoke(Handler Func, jsObject Args) {
             if (Func == null)
                 return null;
 
-			return Func(new jsObject(ArgPairs));
+            return Func(Args);
         }
 
         public static object Invoke(Handler Func, jsObject Args, params object[] ArgPairs) {
@@ -39,15 +28,25 @@ namespace Poly {
             return Func(Args);
         }
 
-        public class Engine : jsObject<Handler> {
-            private int uid = 0;
-            public override void AssignValue<T>(string Key, T Value) {
-                if (Value is Event.Handler) {
-                    this.Add(Key, Value as Event.Handler);
+        public class Engine : Dictionary<string, List<Handler>> {
+            public void Register(string EventName, Handler Handler) {
+                if (!ContainsKey(EventName)) {
+                    Add(EventName, new List<Handler>());
                 }
-                else {
-                    base.AssignValue<T>(Key, Value);
+
+                this[EventName].Add(Handler);
+            }
+
+            public void Register(string EventName, Handler Handler, Script.Types.ClassInstance This) {
+                if (This == null) {
+                    Register(EventName, Handler);
+                    return;
                 }
+
+                Register(EventName, (Context) => { 
+                    Context["this"] = This; 
+                    return Handler(Context); 
+                });
             }
 
             public void Add(Handler Handler) {
@@ -58,53 +57,38 @@ namespace Poly {
                 Register(Name, Handler);
             }
 
-            public void Register(string EventName, Handler Handler) {
-                base[EventName, uid++.ToString()] = Handler;
-            }
-
-            public void Invoke(string EventName, jsObject Args) {
-                var List = getObject(EventName);
-
-                if (List != null) {
-                    List.ForEach((K, V) => {
-                        (V as Handler)(Args);
-                    });
-                }
-            }
-
-            public IEnumerable<object> Execute(string EventName, jsObject Args) {
-                var List = getObject(EventName);
-
-                for (int i = 0; i < List.Count; i++) {
-                    yield return (List.ElementAt(i).Value as Handler)(Args);
-                }
-            }
-
             public bool MatchAndInvoke(string Data, jsObject Args) {
                 return MatchAndInvoke(Data, Args, false);
             }
 
             public bool MatchAndInvoke(string Data, jsObject Args, bool KeyIsWild) {
-                return ForEach<jsObject>((Name, Handlers) => {
-                    var Key = KeyIsWild ? Data : Name;
-                    var Wild = KeyIsWild ? Name : Data;
+                foreach (var Pair in this) {
+                    var Key = KeyIsWild ? Data : Pair.Key;
+                    var Wild = KeyIsWild ? Pair.Key : Data;
                     var Matches = default(jsObject);
 
                     if ((Matches = Key.Match(Wild)) != null) {
-                        if (Matches.Count == 0)
+                        if (Matches.Count == 0) {
                             Matches = Args;
-                        else
+                        }
+                        else if (Args is jsComplex) {
+                            Matches.CopyTo(Args);
+                            Matches = Args;
+                        }
+                        else {
                             Args.CopyTo(Matches);
+                        }
 
-                        foreach (var Pair in Handlers) {
-                            (Pair.Value as Handler)(Matches);
+
+                        foreach (var Event in Pair.Value) {
+                            Event(Matches);
                         }
 
                         return true;
                     }
-
-                    return false;
-                });
+                }
+            
+                return false;
             }
         }
     }

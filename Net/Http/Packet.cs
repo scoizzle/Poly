@@ -8,7 +8,8 @@ using Poly.Data;
 
 namespace Poly.Net.Http {
     public class Packet : jsComplex {
-        public jsObject Headers, Get, Post, Cookies;
+        static readonly char[] PathSplit = new char[] { '/' };
+        public jsObject Headers, Get, Post, Cookies, Route;
         public string RawTarget, Connection, Type, Target, Version, Value, Query;
 
         public int ContentLength {
@@ -43,6 +44,7 @@ namespace Poly.Net.Http {
             Get = new jsObject();
             Post = new jsObject();
             Cookies = new jsObject();
+            Route = new jsObject();
 
             RawTarget = Connection = Type = Target = Version = Value = Query = string.Empty;
         }
@@ -83,6 +85,11 @@ namespace Poly.Net.Http {
             }
             else {
                 Target = Split[1];
+            }
+
+
+            foreach(var Part in Target.Split(PathSplit, StringSplitOptions.RemoveEmptyEntries)){
+                Route.Add(Part);
             }
 
             while (!string.IsNullOrEmpty(Line = Client.Receive())) {

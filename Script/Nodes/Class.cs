@@ -5,7 +5,7 @@ using Poly.Data;
 namespace Poly.Script.Nodes {
     public class Class : Node {
 		public string Name, LastName;
-		public jsObject<Function> Functions;
+		public jsObject<Function> Functions, StaticFunctions;
         public Function Constructor,
                         Instaciator;
 
@@ -20,6 +20,7 @@ namespace Poly.Script.Nodes {
                 this.LastName = Name;
 
 			this.Functions = new jsObject<Function> ();
+            this.StaticFunctions = new jsObject<Function>();
             this.Base = Base;
 		}
 
@@ -103,14 +104,26 @@ namespace Poly.Script.Nodes {
                         ConsumeWhitespace(Text, ref Open);
                         ConsumeExpression(Text, ref Delta);
 
+
                         var List = new List<Node>();
                         while (true) {
+                            bool IsStatic = false;
                             Node Node = null;
+
+                            if (Text.Compare("static", Open)) {
+                                IsStatic = true;
+                                Open += 6;
+                            }
 
                             if ((Node = Function.Parse(Engine, Text, ref Open, Delta, false)) != null) {
                                 var Func = Node as Function;
 
-                                Type.Functions.Add(Func.Name, Func);
+                                if (IsStatic) {
+                                    Type.StaticFunctions.Add(Func.Name, Func);
+                                }
+                                else {
+                                    Type.Functions.Add(Func.Name, Func);
+                                }
                             }
                             else {
                                 var Obj = Engine.Parse(Text, ref Open, Delta - 1) as Expressions.Assign;

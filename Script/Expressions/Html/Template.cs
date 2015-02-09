@@ -41,7 +41,9 @@ namespace Poly.Script.Expressions.Html {
             var Args = new Data.jsObject();
 
             for (int i = 0; i < Arguments.Length && i < Template.Arguments.Length; i++) {
-                Args[Template.Arguments[i]] = Arguments[i].Evaluate(Context);
+                if (Arguments[i] != null) {
+                    Args[Template.Arguments[i]] = Arguments[i].Evaluate(Context);
+                }
             }
 
             Template.Evaluate(Output, Args);

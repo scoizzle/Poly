@@ -35,6 +35,7 @@ namespace Poly.Script.Expressions {
             
             if (Function == null) {
                 var Instance = Object as Types.ClassInstance;
+
                 if (Instance != null) {
                     Function = Instance.Class.GetFunction(Name);
                 }
@@ -46,6 +47,12 @@ namespace Poly.Script.Expressions {
                     }
                     else if ((Class = Object as Class) != null) {
                         Function = Class.Instaciator;
+                    }
+                    else if ((Class = This as Class) != null) {
+                        this.Function = Function = Class.StaticFunctions[Name];
+                    }
+                    else if (Object is string && Engine.Types.ContainsKey(Object as string)) {
+                        Function = Engine.Types[Object as string].GetFunction(Name);
                     }
                     else if ((Function = Engine.GetFunction(Name)) != null) {
                         if (Function.Arguments != null && Function.Arguments.Length < Arguments.Length) {
@@ -155,11 +162,11 @@ namespace Poly.Script.Expressions {
             };
         }
 
-        public static new Call Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             return Parse(Engine, Text, ref Index, LastIndex, false);
         }
 
-        public static Call Parse(Engine Engine, string Text, ref int Index, int LastIndex, bool Constructor = false) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex, bool Constructor = false) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
@@ -188,9 +195,13 @@ namespace Poly.Script.Expressions {
                             This = new Variable(Engine, Name);
                             LastPeriod = Name.Length - 1;
                         }
+                        else if (Engine.Types.ContainsKey(FirstName)) {
+                            This = Engine.Types[FirstName];
+                        }
                         else {
                             This = new Variable(Engine, FirstName); 
                         }
+
                         Name = Name.Substring(LastPeriod + 1);
                     }
                     else This = null;
@@ -206,25 +217,44 @@ namespace Poly.Script.Expressions {
                         return null;
 
                     var RawArgs = Text.Substring(Open, Close - Open - 1).ParseCParams();
-                    var List = new List<Node>();
 
-                    for (int i = 0; i < RawArgs.Length; i++) {
-                        var Arg = Engine.Parse(RawArgs[i], 0);
+                    if (This == null && Engine.HtmlTemplates.ContainsKey(Name)) {
+                        var Args = Text.Substring(Delta, Close - Delta).ParseCParams();
+                        var Arguments = new Html.Element[Args.Length];
 
-                        if (Arg == null)
-                            return null;
+                        for (int i = 0; i < Args.Length; i++) {
+                            int Ignore = 0;
+                            Arguments[i] = Html.Html.Parse(Engine, Args[i], ref Ignore, Args[i].Length);
+                        }
 
-                        List.Add(Arg);
+                        This = new Html.Generator(new Html.Templater(Engine.HtmlTemplates[Name], Arguments));
+
+                        if (!Text.Compare('.', Close)) {
+                            return This;
+                        }
+                    }
+                    else {
+                        var List = new List<Node>();
+                        for (int i = 0; i < RawArgs.Length; i++) {
+                            var Arg = Engine.Parse(RawArgs[i], 0);
+
+                            if (Arg == null)
+                                return null;
+
+                            List.Add(Arg);
+                        }
+
+                        Call.Arguments = List.ToArray();
                     }
 
-                    Call.Arguments = List.ToArray();
                     ConsumeWhitespace(Text, ref Close);
+
 
                     if (Text.Compare('.', Close)) {
                         Close++;
                         ConsumeWhitespace(Text, ref Close);
 
-                        var Child = Parse(Engine, Text, ref Close, LastIndex);
+                        var Child = Parse(Engine, Text, ref Close, LastIndex) as Call;
 
                         if (Child != null) {
                             Child.This = Call;

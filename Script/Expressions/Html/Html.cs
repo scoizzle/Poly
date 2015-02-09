@@ -38,7 +38,7 @@ namespace Poly.Script.Expressions.Html {
 
                     Index = End + 1;
 
-                    return new Attribute(Text.Substring(Delta, End - Delta).Trim(), null);
+                    return new Attribute(Text.Substring(Delta, End - Delta).Trim(), Types.String.Empty);
                 }
 
                 ConsumeValidName(Text, ref Delta);
@@ -179,7 +179,7 @@ namespace Poly.Script.Expressions.Html {
             var Delta = Index;
 
             for (; Delta < Text.Length; ) {
-                if (IsValidChar(Text[Delta]) || Text[Delta] == '@' || Text[Delta] == '-')
+                if (IsValidChar(Text[Delta]) || Text[Delta] == '@' || Text[Delta] == '-' || Text[Delta] == '!')
                     Delta++;
                 else if (Text[Delta] == '[')
                     ConsumeBlock(Text, ref Delta);

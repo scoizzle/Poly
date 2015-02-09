@@ -62,10 +62,13 @@ namespace Poly.Script.Nodes {
 
                 if (Object != null) {
                     if (!Object.GetValue(String, out Value)) {
-                        var Instance = Current as Types.ClassInstance;
+                        Class Class;
+                        Function Func;
 
-                        if (Instance != null) {
-                            var Func = Instance.Class.Functions[String];
+                        if (Current is Types.ClassInstance) {
+                            Class = (Current as Types.ClassInstance).Class;
+
+                            Func = Class.GetFunction(String);
 
                             if (Func != null)
                                 Value = new Event.Handler(Func.Evaluate);
@@ -77,13 +80,17 @@ namespace Poly.Script.Nodes {
                 }
 
                 if (Value == default(object) && Current != null) {
-                    var Type = Current as Type;
+                    Class Class;
+                    Function Func;
 
-                    if (Type == null) {
-                        Type = Current.GetType();
+                    if (Current is Class) {
+                        Class = Current as Class;
+
+                        if (Class.StaticFunctions.TryGet(String, out Func)) {
+                            Value = new Event.Handler(Func.Evaluate);
+                        }
                     }
-
-                    if (Key is int && Current is string) {
+                    else if (Key is int && Current is string) {
                         String = Current as string;
                         var Int = (int)(Key);
 
@@ -91,6 +98,12 @@ namespace Poly.Script.Nodes {
                             Value = String[Int];
                     }
                     else {
+                        var Type = Current as Type;
+
+                        if (Type == null) {
+                            Type = Current.GetType();
+                        }
+
                         Value = GetProperty(Type, Current, String);
                     }
                 }
@@ -253,11 +266,14 @@ namespace Poly.Script.Nodes {
             for (; Delta < LastPossibleIndex; Delta++) {
                 if (Text[Delta] == '.') {
                     var Key = Text.Substring(SigFig, Delta - SigFig);
-                    if (Engine.Shorthands.ContainsKey(Key)) {
-                        List.Add(new Helpers.SystemTypeGetter(Engine.Shorthands[Key]));
-                    }
-                    else {
-                        List.Add(new Types.String(Key));
+
+                    if (!string.IsNullOrEmpty(Key)) {
+                        if (Engine.Shorthands.ContainsKey(Key)) {
+                            List.Add(new Helpers.SystemTypeGetter(Engine.Shorthands[Key]));
+                        }
+                        else {
+                            List.Add(new Types.String(Key));
+                        }
                     }
 
                     SigFig = Delta + 1;

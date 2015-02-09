@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Security;
 
 using Poly;
 using Poly.Data;
@@ -264,6 +265,10 @@ namespace System {
             return new string(Array);
         }
 
+        public static string HtmlEscape(this String This) {
+            return SecurityElement.Escape(This);
+        }
+
         private static char FindDescapeChar(string Val) {
             foreach (var Pair in EscapeChars) {
                 if (Pair.Value == Val)
@@ -309,6 +314,10 @@ namespace System {
             }
 
             return new string(Array);
+        }
+
+        public static string HtmlDescape(this String This) {
+            return System.Text.RegularExpressions.Regex.Replace(This.Replace("+", " "), "%([A-Fa-f\\d]{2})", a => "" + Convert.ToChar(Convert.ToInt32(a.Groups[1].Value, 16)));
         }
 
         public static string MD5(this String This) {

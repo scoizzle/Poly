@@ -124,8 +124,15 @@ namespace Poly.Script.Expressions {
                 return Function.Evaluate(Args);
             }
 
-            if (Object == null)
-                return null;
+            if (Object == null) {
+                if (This == null) {
+                    This = new Variable(Engine, "_");
+                    Object = Context;
+                }
+                else {
+                    return null;
+                }
+            }
 
             var Type = Object as Type;
             
@@ -219,17 +226,16 @@ namespace Poly.Script.Expressions {
                     var RawArgs = Text.Substring(Open, Close - Open - 1).ParseCParams();
 
                     if (This == null && Engine.HtmlTemplates.ContainsKey(Name)) {
-                        var Args = Text.Substring(Delta, Close - Delta).ParseCParams();
-                        var Arguments = new Html.Element[Args.Length];
+                        var Arguments = new Html.Element[RawArgs.Length];
 
-                        for (int i = 0; i < Args.Length; i++) {
-                            int Ignore = 0;
-                            Arguments[i] = Html.Html.Parse(Engine, Args[i], ref Ignore, Args[i].Length);
+                        for (int i = 0; i < RawArgs.Length; i++) {
+                            Arguments[i] = new Html.Variable(Engine.Parse(RawArgs[i], 0), null);
                         }
 
                         This = new Html.Generator(new Html.Templater(Engine.HtmlTemplates[Name], Arguments));
 
                         if (!Text.Compare('.', Close)) {
+                            Index = Close;
                             return This;
                         }
                     }

@@ -37,7 +37,7 @@ namespace Poly {
                 this[EventName].Add(Handler);
             }
 
-            public void Register(string EventName, Handler Handler, Script.Types.ClassInstance This) {
+            public void Register(string EventName, Handler Handler, object This) {
                 if (This == null) {
                     Register(EventName, Handler);
                     return;
@@ -48,12 +48,22 @@ namespace Poly {
                     return Handler(Context); 
                 });
             }
+            public void Register(string EventName, Handler Handler, string Name, object This) {
+                if (string.IsNullOrEmpty(Name) || This == null) 
+                    return;
+                
+
+                Register(EventName, (Context) => {
+                    Context[Name] = This;
+                    return Handler(Context);
+                });
+            }
 
             public void Add(Handler Handler) {
                 Register(Handler.Method.Name, Handler);
             }
 
-            public new void Add(string Name, Handler Handler) {
+            public void Add(string Name, Handler Handler) {
                 Register(Name, Handler);
             }
 

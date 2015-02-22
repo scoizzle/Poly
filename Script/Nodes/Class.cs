@@ -60,7 +60,7 @@ namespace Poly.Script.Nodes {
             return null;
         }
 
-        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
@@ -126,16 +126,12 @@ namespace Poly.Script.Nodes {
                                 }
                             }
                             else {
-                                var Obj = Engine.Parse(Text, ref Open, Delta - 1) as Expressions.Assign;
+                                var Obj = Engine.Parse(Text, ref Open, Delta - 1);
 
-                                if (Obj != null) {
+                                if (Obj is Expressions.Assign) {
                                     List.Add(Obj);
                                 }
                                 else break;
-                            }
-
-                            while (Text.Compare(";", Open)) {
-                                Open++;
                             }
 
                             ConsumeWhitespace(Text, ref Open);

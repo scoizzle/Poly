@@ -7,7 +7,7 @@ using Poly.Data;
 
 namespace Poly.Net.Irc {
     public class User : jsObject {
-        public static string TemplateFormat = "{Nick::escape}!{Ident}@{Host}";
+        public static string TemplateFormat = "{Nick::Escape}!{Ident}@{Host}";
 
         public User() { }
 

@@ -15,7 +15,7 @@ namespace Poly {
             { "--fork[-{flag}]", Event.Wrapper((string flag) => {
                 App.Fork("redirect".Compare(flag, true, 0));
                 return null;
-            }, "flag" )}
+            } )}
         };
         
 		public static void Init(int LogLevel = Log.Levels.None) {

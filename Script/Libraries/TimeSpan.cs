@@ -15,8 +15,7 @@ namespace Poly.Script.Libraries {
             Add(ToDurationString);
         }
 
-        public static Function ToDurationString = new Function("ToDurationString", 
-            Event.Wrapper<System.TimeSpan>(Poly.TimeSpanExtensions.ToDurationString, "this")
-        );
+
+        public static Function ToDurationString = Function.Create<System.TimeSpan>("ToDurationString", Poly.TimeSpanExtensions.ToDurationString);
     }
 }

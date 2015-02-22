@@ -5,6 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Poly.Script.Expressions.Html {
+    using Data;
+
     public class Template {
         public string[] Arguments;
         public Element Body;

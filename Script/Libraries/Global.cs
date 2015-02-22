@@ -28,7 +28,7 @@ namespace Poly.Script.Libraries {
             }
 
             return null;
-        }, "FileName");
+        });
         
 
         public static Function Save = Function.Create("Save", (jsObject This, string FileName)=>{
@@ -37,7 +37,7 @@ namespace Poly.Script.Libraries {
                 return true;
             }
             return false;
-        }, "this", "FileName");
+        });
 
         public static Function Template = new Function("Template", (Args) => {
             var This = Args.getObject("this");

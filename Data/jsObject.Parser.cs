@@ -8,36 +8,7 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject : Dictionary<string, object> {
-        public static object getObjectValue(string val) {
-            int ntVal;
-            if (int.TryParse(val, out ntVal)) {
-                return ntVal;
-            }
-
-            bool blVal;
-            if (bool.TryParse(val, out blVal)) {
-                return blVal;
-            }
-
-            float fVal;
-            if (float.TryParse(val, out fVal)) {
-                return fVal;
-            }
-
-            double dbVal;
-            if (double.TryParse(val, out dbVal)) {
-                return dbVal;
-            }
-
-            long lnVal;
-            if (long.TryParse(val, out lnVal)) {
-                return lnVal;
-            }
-
-            return val;
-        }
-
-        public static object _Raw(string Text, ref int Index, int LastIndex) {
+        public static string _Raw(string Text, ref int Index, int LastIndex) {
             var C = Text[Index];
 
             if ((C > '9' || C < '0') && (C != 't' && C != 'T') && (C != 'f' && C != 'F') && C != '@')
@@ -52,7 +23,7 @@ namespace Poly.Data {
 
             Index = SubIndex;
 
-            return getObjectValue(Sub);
+            return Sub;
         }
 
         private static string _String(string Text, ref int Index, int LastIndex) {

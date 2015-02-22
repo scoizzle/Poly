@@ -179,6 +179,7 @@ namespace Poly.Data {
                         var Type = typeof(T);
                         if (ParserCache.ContainsKey(Type)) {
                             Value = (T)ParserCache[Type](str);
+                            AssignValue<T>(Key, Value);
                             return true;
                         }
                     }

@@ -5,86 +5,79 @@ using System.Text;
 
 namespace Poly.Data {
     public static class jsObjectExtension {
-        public static string Template(this jsObject This, string Template) {
-            StringBuilder Output = new StringBuilder();
-            int i = 0;
+        private static bool Template(jsObject This, string Format, StringBuilder Output) {
+            StringIterator It = new StringIterator(Format);
 
-            for (; i < Template.Length; i++) {
-                int Next = Template.FirstPossibleIndex(i, '{', '[', ']', '\\');
-
-                if (Next == -1) {
-                    Output.Append(Template, i, Template.Length - i);
-                    break;
+            for (; !It.IsDone(); It.Tick()) {
+                var Current = It.Index;
+                if (It.Goto('{')) {
+                    while (It.IsAfter('\\')) {
+                        It.Tick();
+                        It.Goto('{');
+                    }
                 }
-                else
-                    Output.Append(Template, i, Next - i);
 
-                char C = Template[Next];
 
-                if (C == '\\' && (Template.Length - Next) > 1) {
-                    Output.Append(Template, Next + 1, 1);
-                    i = Next + 1;
-                }
-                else if (C == '{') {
-                    int Close = Next;
+                Output.Append(It.String, Current, It.Index - Current);
 
-                    if (!Template.FindMatchingBrackets("{", "}", ref Next, ref Close))
-                        return "";
+                It.Tick();
+                Current = It.Index;
 
-                    int Start = Close;
-                    int NameEnd = Template.Find(':', Next, Close);
+                if (It.Goto('{', '}')) {
+                    var NameEnd = It.String.IndexOf(':', Current, It.Index - Current);
 
                     if (NameEnd == -1)
-                        NameEnd = Close;
+                        NameEnd = It.Index;
 
-                    var Name = Template.Substring(Next, NameEnd - Next);
-                    var Obj = This.Get<object>(Name);
+                    var Name = It.Substring(Current, NameEnd - Current);
+                    var ObjectEnd = It.Find(string.Format("{{/{0}}}", Name));
 
-                    int Stop = Template.Find("{/" + Name, Close);
+                    var Object = This[Name];
 
-                    if (Stop == -1) {
-                        if (Obj != null)
-                            Output.Append(Obj);
+                    if (Object != null) {
+                        var JObj = Object as jsObject;
 
-                        i = Start;
-                    }
-                    else {
-                        var JObj = Obj as jsObject;
-                        if (Obj != null && JObj != null) {
-                            var SubTemplate = Template.Substring(Start + 1, Stop - Start - 1);
+                        if (JObj != null && ObjectEnd != -1) {
+                            var SubTemplate = It.Substring(It.Index, ObjectEnd - It.Index);
 
-                            if (JObj.All(p => p.Value is jsObject)) {
-                                foreach (var Pair in JObj) {
-                                    var SObj = Pair.Value as jsObject;
+                            foreach (jsObject Sub in JObj.Values) {
+                                if (Sub == null)
+                                    continue;
 
-                                    if (SObj != null) {
-                                        Output.Append(SObj.Template(SubTemplate));
-                                    }
-                                }
+                                Template(Sub, SubTemplate, Output);
                             }
-                            else {
-                                Output.Append(JObj.Template(SubTemplate));
-                            }
+
+                            It.Index += Name.Length + 3;
                         }
-
-                        i = Template.Find('}', Stop);
+                        else {
+                            Output.Append(Object);
+                        }
                     }
                 }
-                else if (C == '[' || C == ']') {
-                    i++;
+                else if (It.IsAt('[') || It.IsAt(']')) {
+                    It.Tick();
                 }
-                else break;
+                else return false;
             }
 
-            return Output.ToString();
+            return true;
         }
-        
+
+        public static string Template(this jsObject This, string Format) {
+            StringBuilder Output = new StringBuilder();
+
+            if (Template(This, Format, Output))
+                return Output.ToString();
+
+            return null;
+        }
+                
         public static bool Extract(this jsObject This, string Template, string Data, bool IgnoreCase = false) {
             if (string.IsNullOrEmpty(Template) || string.IsNullOrEmpty(Data)) {
                 return false;
             }
 
-            if (Data.Match(Template, IgnoreCase, This) == null)
+            if (Data.Match(Template, IgnoreCase, 0, This) == null)
                 return false;
             return true;
         }

@@ -66,32 +66,32 @@ namespace Poly.Script.Nodes {
             return new Function(Name, (Args) => { return Func(); });
         }
 
-        public static Function Create<T1>(string Name, Func<T1, object> Func, params string[] Params) {
-            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        public static Function Create<T1>(string Name, Func<T1, object> Func) {
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
         }
 
-        public static Function Create<T1, T2>(string Name, Func<T1, T2, object> Func, params string[] Params) {
-            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        public static Function Create<T1, T2>(string Name, Func<T1, T2, object> Func) {
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
         }
 
-        public static Function Create<T1, T2, T3>(string Name, Func<T1, T2, T3, object> Func, params string[] Params) {
-            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        public static Function Create<T1, T2, T3>(string Name, Func<T1, T2, T3, object> Func) {
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
         }
 
-        public static Function Create<T1, T2, T3, T4>(string Name, Func<T1, T2, T3, T4, object> Func, params string[] Params) {
-            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        public static Function Create<T1, T2, T3, T4>(string Name, Func<T1, T2, T3, T4, object> Func) {
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
         }
 
-        public static Function Create<T1, T2, T3, T4, T5>(string Name, Func<T1, T2, T3, T4, T5, object> Func, params string[] Params) {
-            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        public static Function Create<T1, T2, T3, T4, T5>(string Name, Func<T1, T2, T3, T4, T5, object> Func) {
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
         }
 
-        public static Function Create<T1, T2, T3, T4, T5, T6>(string Name, Func<T1, T2, T3, T4, T5, T6, object> Func, params string[] Params) {
-            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        public static Function Create<T1, T2, T3, T4, T5, T6>(string Name, Func<T1, T2, T3, T4, T5, T6, object> Func) {
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
         }
 
-        public static Function Create<T1, T2, T3, T4, T5, T6, T7>(string Name, Func<T1, T2, T3, T4, T5, T6, T7, object> Func, params string[] Params) {
-            return new Function(Name, Event.Wrapper(Func, Params), Params);
+        public static Function Create<T1, T2, T3, T4, T5, T6, T7>(string Name, Func<T1, T2, T3, T4, T5, T6, T7, object> Func) {
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
         }
 
         public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
@@ -196,7 +196,7 @@ namespace Poly.Script.Nodes {
             return Cache[Key] = GetDelegate(Info, ArgTypes);
         }
 
-        static Func<object, object[], object> GetDelegate(MethodInfo Info, Type[] Types) {
+        public static Func<object, object[], object> GetDelegate(MethodInfo Info, Type[] Types) {
             var Method = new DynamicMethod(string.Empty, typeof(object), new Type[] { typeof(object), typeof(object) }, Info.DeclaringType.Module);
             var Params = Info.GetParameters();
 

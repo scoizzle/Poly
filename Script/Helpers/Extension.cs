@@ -24,7 +24,8 @@ namespace Poly.Script.Helpers {
             var Path = Name.Substring(0, Last);
             var File = Name.Substring(Last + 1);
 
-            var Files = Directory.GetFiles(Path, File, SearchOption.TopDirectoryOnly);
+            var Files = Directory.GetFiles(Path, File, SearchOption.TopDirectoryOnly).ToList();
+            Files.Sort();
             var List = new List<Node>();
 
             foreach (var FileName in Files) {

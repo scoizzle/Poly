@@ -98,7 +98,7 @@ namespace System {
         }
 
         public static int Find(this String This, string C, int Index = 0, int Last = int.MaxValue) {
-            if (string.IsNullOrEmpty(This) || Index < 0 || Last < Index)
+            if (string.IsNullOrEmpty(This) || string.IsNullOrEmpty(C) || Index < 0 || Last < Index)
                 return -1;
 
             int i = This.IndexOf(C, Index);
@@ -197,6 +197,10 @@ namespace System {
                     return This[X];
 
             return char.MinValue;
+        }
+
+        public static string Template(this String This, params object[] Args) {
+            return string.Format(This, Args);
         }
 
         public static string Substring(this String This, int Start, int Length = int.MaxValue) {

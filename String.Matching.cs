@@ -8,305 +8,369 @@ using Poly.Data;
 
 namespace Poly {
     public static class StringMatching {
-        public static readonly char[] WildChars = new char[] {
+        static readonly char[] SpecialChars = new char[] {
             '{', '*', '?', '^', '\\', '[', '('
         };
 
-        public static jsObject<Func<string, string>> Modifiers = new jsObject<Func<string, string>>() {
-            { "escape", (V) => { return V.Escape(); }},
-            { "descape", (V) => { return V.Descape(); }},
-            { "uriEscape", (V) => { return Uri.EscapeDataString(V); }},
-            { "uriDescape", (V) => { 
-                return Regex.Replace(V.Replace("+", " "), "%([A-Fa-f\\d]{2})", a => "" + Convert.ToChar(Convert.ToInt32(a.Groups[1].Value, 16)));
-            }},
-            { "toUpper", (V) => { return V.ToUpper(); }},
-            { "toLower", (V) => { return V.ToLower(); }},
+        public delegate bool TestDelegate(char C);
+        public delegate string ModDelegate(string Str);
+
+        public static Dictionary<string, TestDelegate> Tests = new Dictionary<string, TestDelegate>() {
+            { "Alpha", char.IsLetter },
+            { "Numeric", char.IsNumber },
+            { "AlphaNumeric", char.IsLetterOrDigit },
+            { "Punctuation", char.IsPunctuation },
+            { "Whitespace", char.IsWhiteSpace },
+            { "NoWhitespace", c => { return !char.IsWhiteSpace(c); }}
         };
 
-        public static Dictionary<char, Func<char, bool>> MatchValidityCheckers = new Dictionary<char, Func<char, bool>>() {
-            { 'a', char.IsLetter },
-            { 'n', char.IsNumber },
-            { 'p', char.IsPunctuation },
-            { 'w', char.IsWhiteSpace }
+        public static Dictionary<string, ModDelegate> Modifiers = new Dictionary<string, ModDelegate>() {
+            { "Escape", StringConversions.Escape },
+            { "Descape", StringConversions.Descape },
+            { "UrlEscape", StringConversions.Escape },
+            { "UrlDescape", StringConversions.Descape },
+            { "MD5", StringConversions.MD5 },
+            { "SHA1", StringConversions.SHA1 },
+            { "SHA256", StringConversions.SHA256 },
+            { "SHA512", StringConversions.SHA512 },
+            { "Base64Encode", StringConversions.Base64Encode },
+            { "Base64Decode", StringConversions.Base64Decode },
+            { "ToUpper", s => { return s.ToUpper(); }},
+            { "ToLower", s => { return s.ToLower(); }}
         };
 
-        private static jsObject Obj = new jsObject();
-        
-        public static bool Compare(this String This, String Wild, bool IgnoreCase = false, int Index = 0) {
-            return Match(This, Wild, IgnoreCase, Obj, 0, false) != null;
+        private class MatchInfo {
+            public bool IgnoreCase, Store;
+            public StringIterator Data, Wild;
+
+            public jsObject Result;
+
+            public MatchInfo(string Data, string Wild, bool IgnoreCase, bool Store) {
+                this.Store = Store;
+                this.IgnoreCase = IgnoreCase;
+                this.Data = new StringIterator(Data);
+                this.Wild = new StringIterator(Wild);
+                this.Result = new jsObject();
+            }
+
+            public MatchInfo(string Data, string Wild, bool IgnoreCase, bool Store, int DataLength, int WildLength) {
+                this.Store = Store;
+                this.IgnoreCase = IgnoreCase;
+                this.Data = new StringIterator(Data, DataLength);
+                this.Wild = new StringIterator(Wild, WildLength);
+                this.Result = new jsObject();
+            }
+
+            public void Tick() {
+                Data.Index++;
+                Wild.Index++;
+            }
         }
 
-        public static jsObject Match(this String Data, String Wild, bool IgnoreCase = false, jsObject Storage = null, int Index = 0, bool Store = true) {
-            if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
-                return null;
-
-            int Offset = 0, DataLen = Data.Length, Wildlen = Wild.Length;
-            return Match(Data, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, DataLen, Wildlen);
+        public static bool Compare(this String Data, String Wild) {
+            return Match(new MatchInfo(Data, Wild, false, false)) != null;
         }
 
-		public static jsObject MatchAll(this String Data, String Wild, bool IgnoreCase = false, int Index = 0) {
-			if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
-				return null;
+        public static bool Compare(this String Data, String Wild, bool IgnoreCase) {
+            return Match(new MatchInfo(Data, Wild, IgnoreCase, false)) != null;
+        }
 
-			jsObject Storage = new jsObject ();
+        public static bool Compare(this String Data, String Wild, bool IgnoreCase, int Index) {
+            var Info = new MatchInfo(Data, Wild, IgnoreCase, true);
 
-			while (Index < Data.Length) {
-				var Offset = 0;
-				var Node = new jsObject ();
+            Info.Data.Index = Index;
 
-				if (Match(Data, Wild, ref Index, ref Offset, IgnoreCase, Node, true, Data.Length - Index, Wild.Length) != null)
-					Storage.Add(Node);
-				else
-					break;
-			}
+            return Match(Info) != null;
+        }
 
-			return Storage;
-		}
+        public static jsObject Match(this String Data, String Wild) {
+            return Match(new MatchInfo(Data, Wild, false, true));
+        }
 
-        public static jsObject MatchChain(this String Data, params String[] Wilds) {
-			if (string.IsNullOrEmpty(Data))
-				return null;
+        public static jsObject Match(this String Data, String Wild, bool IgnoreCase) {
+            return Match(new MatchInfo(Data, Wild, IgnoreCase, true));
+        }
 
-            var Index = 0;
-            var Storage = new jsObject();
+        public static jsObject Match(this String Data, String Wild, bool IgnoreCase, int Index) {
+            var Info = new MatchInfo(Data, Wild, IgnoreCase, true);
 
-            while (Index < Data.Length) {
-                var Node = new jsObject();
-                var Delta = Index;
-                var Offset = 0;
+            Info.Data.Index = Index;
 
-                foreach (var Wild in Wilds) {
-                    Node = Match(Data, Wild, ref Delta, ref Offset, true, Node, true, Data.Length, Wild.Length);
+            return Match(Info);
+        }
 
-                    if (Node != null && Node.Count != 0) {
-                        Storage.Add(Node);
-                        Index = Delta;
-                        break;
+        public static jsObject Match(this String Data, String Wild, bool IgnoreCase, jsObject Storage) {
+            var Info = new MatchInfo(Data, Wild, IgnoreCase, true);
+
+            Info.Result = Storage;
+
+            return Match(Info);
+        }
+
+        public static jsObject Match(this String Data, String Wild, bool IgnoreCase, int Index, jsObject Storage) {
+            var Info = new MatchInfo(Data, Wild, IgnoreCase, true);
+
+            Info.Data.Index = Index;
+            Info.Result = Storage;
+
+            return Match(Info);
+        }
+
+        public static jsObject Match(this String Data, String Wild, bool IgnoreCase, int Index, int DataLength, int WildIndex, int WildLength) {
+            var Info = new MatchInfo(Data, Wild, IgnoreCase, true, DataLength, WildLength);
+
+            Info.Data.Index = Index;
+            Info.Wild.Index = WildIndex;
+
+            return Match(Info);
+        }
+
+        public static jsObject MatchAll(this String Data, String Wild) {
+            var Info = new MatchInfo(Data, Wild, true, true);
+            var Result = new jsObject();
+
+            while (Match(Info) != null) {
+                if (Info.Result.Count > 1 && Info.Result.ContainsKey("Key")){
+                    if (Info.Result.Count == 2 && Info.Result.ContainsKey("Value")) {
+                        Result.Add(Info.Result["Key"].ToString(), Info.Result["Value"]);
+                    }
+                    else {
+                        Result.Add(Info.Result["Key"].ToString(), Info.Result);
                     }
                 }
+                else {
+                    Result.Add(Info.Result);
+                }
 
-                if (Node == null)
-                    return null;
-
-                Data.ConsumeWhitespace(ref Index);
+                Info.Wild.Index = 0;
+                Info.Result = new jsObject();
             }
 
-            return Storage;
+            return Result;
         }
 
-        private static jsObject Match(this String This, String Wild, ref int Index, ref int Offset, bool IgnoreCase = false, jsObject Storage = null, bool Store = true, int DataLen = 0, int WildLen = 0) {
-            if (string.IsNullOrEmpty(This) || string.IsNullOrEmpty(Wild))
-                return null;
+        private static jsObject Match(MatchInfo Info) {
+            var Data = Info.Data;
+            var Wild = Info.Wild;
 
-            if (WildLen == 1 && DataLen > 1 && Wild != "*")
-                return null;
-            
-            if (Store && Storage == null)
-                Storage = new jsObject();
+            if (Wild.Length == 1 && Wild.String == "*")
+                return Info.Result;
 
-            if (WildLen == 2 && Wild[0] == '*'){
-                if (This[DataLen - 1] == Wild[1]) {
-                    return Storage;
-                }
-                else {
-                    return null;
-                }
-            }
-
-            while (Index < DataLen && Offset < WildLen) {
-                var C = Wild[Offset];
-
-				if (!WildChars.Contains(C) && (C == This[Index] || C == '?')) {
-                    Index++; Offset++;
+            while (Data.Index < Data.Length && Wild.Index < Wild.Length) {
+                if (Data.IsAt(Wild[Wild.Index], Info.IgnoreCase) || Wild.IsAt('?')) {
+                    Info.Tick();
                     continue;
                 }
 
-                switch (C) {
-                    case '\\':
-                        if (This[Index] == Wild[Offset + 1])
-                            Index++; Offset += 2;
-                        break;
-                    case '*':
-                        if (++Offset == WildLen)
-                            return Storage;
-
-                        if (Wild[Offset] == '\\')
-                            Offset++;
-
-                        if (!FindNextSection(This, Wild, ref Index, ref Offset, IgnoreCase))
-                            return null;
-                        break;
-                    case '{':
-                        int NameEnd = Offset;
-
-                        if (Wild.FindMatchingBrackets("{", "}", ref Offset, ref NameEnd)) {
-                            int Sub = Index,
-                                SubW = NameEnd + 1;
-
-							if (SubW == WildLen) {
-								Sub = DataLen;
-							}
-							else {
-								if (!FindNextSection(This, Wild, ref Sub, ref SubW, IgnoreCase))
-									return null;
-							}
-
-                            string Key = "", Value = "";
-
-                            if (!VerifyAndExtractData(This, Wild, Index, Offset, Sub, SubW - 1, ref Key, ref Value))
-                                return null;
-
-                            if (Store) {
-                                Storage.Set(Key, Value);
-                            }
-
-                            Index = Sub;
-                            Offset = SubW;
-
-                            break;
-                    	}
-                    	return null;
-                    case '[':
-                        int OptEnd = Offset;
-
-                        if (Wild.FindMatchingBrackets("[", "]", ref Offset, ref OptEnd)) {
-                            var Opt = Match(This, Wild, ref Index, ref Offset, IgnoreCase, null, Store, DataLen, OptEnd);
-
-                            if (Opt != null) {
-                                Opt.CopyTo(Storage);
-                            }
-
-                            Offset = OptEnd + 1;
-                        }
-                        break;
-					case '(':
-						int End = Offset;
-						if (Wild.FindMatchingBrackets("(", ")", ref Offset, ref End)) {
-							int Dend = Index;
-							if (This.FindMatchingBrackets("(", ")", ref Index, ref Dend)) {
-								if (Match(This, Wild, ref Index, ref Offset, IgnoreCase, Storage, Store, Dend + 1, End) == null)
-									return null;
-								continue;
-							}
-						}
-
-						if (C == This [Index] || C == '?') {
-							Index++;
-							Offset++;
-							continue;
-						}
-						break;
-					case '^':
-						This.ConsumeWhitespace(ref Index);
-						Offset++;
-						break;
-                    default:
+                if (Wild.IsAt('\\')){
+                    if (Data.IsAt(Wild[Wild.Index + 1], Info.IgnoreCase)) {
+                        Info.Tick();
+                        Wild.Tick();
+                        continue;
+                    }
+                    else {
                         return null;
+                    }
                 }
+
+                if (Wild.IsAt('*')) {
+                    Wild.Tick();
+
+                    if (Wild.IsDone())
+                        return Info.Result;
+
+                    if (!GotoNextSection(Info))
+                        return null;
+
+                    continue;
+                }
+
+                if (Wild.IsAt('{')) {
+                    Wild.Tick();
+                    var WildCurrent = Wild.Index;
+
+                    if (Wild.Goto('{', '}')) {
+                        Wild.Tick();
+
+                        string Value;
+                        if (Wild.IsDone()) {
+                            Value = Data.Substring(Data.Index);
+                        }
+                        else {
+                            var DataCurrent = Data.Index;
+
+                            if (GotoNextSection(Info)) {
+                                Value = Data.String.Substring(DataCurrent, Data.Index - DataCurrent);
+                            }
+                            else return null;
+                        }
+
+                        if (!VerifyAndStoreData(Info, Wild.Substring(WildCurrent, Wild.Index - WildCurrent - 1), Value)) {
+                            return null;
+                        }
+
+                        continue;
+                    }
+
+                    return null;
+                }
+                
+                if (Wild.IsAt('[')) {
+                    Wild.Tick();
+                    var ClosingBracket = Wild.Find(']');
+
+                    if (ClosingBracket != -1) {
+                        Info.Wild = new StringIterator(Wild.String, ClosingBracket) { Index = Wild.Index };
+
+                        Match(Info);
+
+                        Info.Wild = Wild;
+                        Wild.Index = ClosingBracket + 1;
+                    }
+                    continue;
+                }
+
+                if (Wild.IsAt('^')) {
+                    Data.ConsumeWhitespace();
+                    Wild.Tick();
+                    continue;
+                }
+
+                break;
             }
 
-            if ((WildLen - Offset) != 0)
+
+            if (!Wild.IsDone())
                 return null;
 
-            return Storage;
+            return Info.Result;
         }
 
-        private static bool VerifyAndExtractData(String Data, String Wild, int Index, int Offset, int DLen, int WLen, ref string Key, ref string Value) {
-            int NameEnd = Wild.Find(':', Offset, WLen), LimitEnd = -1;
+        private static bool VerifyAndStoreData(MatchInfo Info, string KeyAndExpression, string Value) {
+            int x = KeyAndExpression.IndexOf(':'), 
+                y = KeyAndExpression.IndexOf(':', x + 1);
 
-            if (NameEnd == -1) {
-                Key = Wild.Substring(Offset, WLen - Offset);
-                Value = Data.Substring(Index, DLen - Index);
+            string Key;
+            if (x == -1) {
+                Key = KeyAndExpression.Substring(0, KeyAndExpression.Length);
+                Info.Result.AssignValue(Key, Value);
                 return true;
             }
             else {
-                Key = Wild.Substring(Offset, NameEnd - Offset);
-                LimitEnd = Wild.Find(':', NameEnd + 1, WLen);
+                Key = KeyAndExpression.Substring(0, x);
             }
 
-            if (LimitEnd == -1)
-                LimitEnd = WLen;
+            string ValueTests;
+            if (y == -1) {
+                ValueTests = KeyAndExpression.Substring(x + 1, KeyAndExpression.Length - x - 1);
+            }
+            else {
+                ValueTests = KeyAndExpression.Substring(x + 1, y - x - 1);
+            }
 
-            if ((LimitEnd - NameEnd) > 1) {
-                for (int I = Index; I < DLen; I++) {
-                    bool Valid = false;
-					var D = Data [I];
-                    for (int iC = NameEnd + 1; iC < LimitEnd; iC++) {
-                        var C = Wild[iC];
-						Func<char, bool> Handler;
+            if (ValueTests.Length > 0) {
+                string[] TestNames = ValueTests.Split(';');
+                List<TestDelegate> TestFunctions = new List<TestDelegate>();
 
-						if (MatchValidityCheckers.TryGetValue(C, out Handler))
-						if (Valid = Handler(D))
-							break;
+                foreach (var Name in TestNames) {
+                    TestDelegate Delg;
+
+                    if (Tests.TryGetValue(Name.Trim(), out Delg)) {
+                        TestFunctions.Add(Delg);
                     }
+                    else if (Name.Contains(',')) {
+                        x = Name.IndexOf(',');
+                        var Min = Name.Substring(0, x).Trim().ToInt();
+                        var Max = Name.Substring(x).Trim().ToInt();
 
-                    if (!Valid)
+                        if (Value.Length < Min || Value.Length > Max)
+                            return false;
+                    }
+                    else {
+                        App.Log.Error("Unable to find Match Test: {0}".Template(Name));
                         return false;
-                }
-            }
-
-            Value = Data.Substring(Index, DLen - Index);
-
-            if (Wild.Contains('e', NameEnd + 1, LimitEnd) && string.IsNullOrWhiteSpace(Value)) {
-                return false;
-            }
-
-            if (LimitEnd < WLen) {
-                Func<string, string> Modder;
-                foreach (var Mod in Wild.Split(",", LimitEnd + 1, WLen)) {
-                    if (Modifiers.TryGet(Mod, out Modder)) {
-                        Value = Modder(Value);
                     }
                 }
+
+                bool IsOk = true;
+                for (int i = 0, t; i < Value.Length && IsOk; i++) {
+                    IsOk = false;
+
+                    for (t = 0; t < TestNames.Length; t++) {
+                        if (TestFunctions[t](Value[i])) {
+                            IsOk = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!IsOk)
+                    return false;
             }
+
+            object FinalValue;
+
+            if (y > x) {
+                string ValueModifiers = KeyAndExpression.Substring(y + 1);
+                if (ValueModifiers[0] == '<' && ValueModifiers[ValueModifiers.Length - 1] == '>') {
+                    FinalValue = MatchAll(Value, ValueModifiers.Substring(1, ValueModifiers.Length - 2));
+                }
+                else {
+                    string[] ModNames = ValueModifiers.Split(';');
+
+                    foreach (var Name in ModNames) {
+                        ModDelegate Delg;
+
+                        if (Modifiers.TryGetValue(Name.Trim(), out Delg)) {
+                            Value = Delg(Value);
+                        }
+                        else {
+                            App.Log.Error("Unable to find Match Modifier: {0}".Template(Name));
+                            return false;
+                        }
+                    }
+
+                    FinalValue = Value;
+                }
+            }
+            else {
+                FinalValue = Value;
+            }
+
+            if (Info.Store) {
+                Info.Result.AssignValue(Key, FinalValue);
+            }
+
             return true;
         }
 
-        private static bool FindNextSection(String This, String Wild, ref int Index, ref int WildIndex, bool IgnoreCase = false) {
-            int NextToken = -1;
-            
-            for (int I = WildIndex; I < Wild.Length; I++){
-                if (WildChars.Contains(Wild[I])) {
-                    NextToken = I;
-                    break;
+        private static Tuple<char, int> FirstPossibleSpecialIndex(StringIterator It) {
+            for (int i = It.Index, c; i < It.Length; i++) {
+                for (c = 0; c < SpecialChars.Length; c++) {
+                    if (It[i] == SpecialChars[c] && It[i - 1] != '\\') {
+                        return new Tuple<char, int>(SpecialChars[c], i);
+                    }
                 }
             }
 
-            if (NextToken == -1) {
-                NextToken = Wild.Length;
-            }
-			else if (Wild [NextToken] == '^' && (Wild.Length - NextToken) != 1) {
-				ConsumeUntilWhitespaceOr(This, Wild[NextToken + 1], ref Index);
-				return true;
-			}
+            return null;
+        }
 
-            if ((NextToken - WildIndex) == 0) {
-                WildIndex = Wild.Length;
-                Index = This.Length;
+        private static bool GotoNextSection(MatchInfo Info) {
+            var Index = FirstPossibleSpecialIndex(Info.Wild);
+            var Length = (Index == null ? Info.Wild.Length : Index.Item2) - Info.Wild.Index;
+
+            if (Length == 0 && Info.Wild.IsAt('^')) {
+                Info.Data.ConsumeUntil(char.IsWhiteSpace);
                 return true;
             }
-
-            int NextBlock = This.FindSubstring(Wild, Index, WildIndex, NextToken - WildIndex, IgnoreCase);
-
-            if (NextBlock == -1) {
-                if (NextToken == Wild.Length && Wild[Wild.Length - 1] == ']') {
-                    Index = This.Length;
-                    return true;
-                }
-                return false;
-            }                
-
-            Index = NextBlock;
-            return true;
+            else {
+                return Info.Data.Goto(
+                    Info.Wild, 
+                    Length, 
+                    Info.IgnoreCase
+                );
+            }
         }
-
-		private static void ConsumeUntilWhitespaceOr(String This, char Or, ref int Index){
-			if (!string.IsNullOrEmpty(This))
-				for (; Index < This.Length; Index++)
-					if (char.IsWhiteSpace(This [Index]))
-						break;
-					else if (This [Index] == Or)
-						break;
-		}
     }
 }

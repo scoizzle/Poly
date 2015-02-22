@@ -53,7 +53,7 @@ namespace Poly.Script.Nodes {
             while (Index < Text.Length) {
                 StringIteration.ConsumeWhitespace(Text, ref Index);
 
-                if (Text.Compare(";", Index) || Text.Compare(",", Index))
+                if (Index > -1 && Index < Text.Length && (Text[Index] == ';' || Text[Index] == ','))
                     Index++;
                 else break;
             }

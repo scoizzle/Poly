@@ -20,13 +20,13 @@ namespace Poly.Script.Libraries {
                 return string.Empty;
 
             return Input.HtmlEscape();
-        }, "Input");
+        });
 
         public static Function Descape = Function.Create("Descape", (string Input) => {
             if (string.IsNullOrEmpty(Input))
                 return string.Empty;
 
             return Input.HtmlDescape();
-        }, "Descape");
+        });
     }
 }

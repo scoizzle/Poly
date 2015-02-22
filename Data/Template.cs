@@ -6,58 +6,67 @@ using System.Text;
 namespace Poly.Data {
     public static class jsObjectExtension {
         private static bool Template(jsObject This, string Format, StringBuilder Output) {
-            StringIterator It = new StringIterator(Format);
+            int i = 0;
 
-            for (; !It.IsDone(); It.Tick()) {
-                var Current = It.Index;
-                if (It.Goto('{')) {
-                    while (It.IsAfter('\\')) {
-                        It.Tick();
-                        It.Goto('{');
-                    }
+            for (; i < Format.Length; i++) {
+                int Next = Format.FirstPossibleIndex(i, '{', '[', ']', '\\');
+
+                if (Next == -1) {
+                    Output.Append(Format, i, Format.Length - i);
+                    break;
                 }
+                else
+                    Output.Append(Format, i, Next - i);
 
+                char C = Format[Next];
 
-                Output.Append(It.String, Current, It.Index - Current);
+                if (C == '\\' && (Format.Length - Next) > 1) {
+                    Output.Append(Format, Next + 1, 1);
+                    i = Next + 1;
+                }
+                else if (C == '{') {
+                    int Close = Next;
 
-                It.Tick();
-                Current = It.Index;
+                    if (!Format.FindMatchingBrackets("{", "}", ref Next, ref Close))
+                        return false;
 
-                if (It.Goto('{', '}')) {
-                    var NameEnd = It.String.IndexOf(':', Current, It.Index - Current);
+                    int Start = Close;
+                    int NameEnd = Format.Find(':', Next, Close);
 
                     if (NameEnd == -1)
-                        NameEnd = It.Index;
+                        NameEnd = Close;
 
-                    var Name = It.Substring(Current, NameEnd - Current);
-                    var ObjectEnd = It.Find(string.Format("{{/{0}}}", Name));
+                    var Name = Format.Substring(Next, NameEnd - Next);
+                    var Obj = This.Get<object>(Name);
 
-                    var Object = This[Name];
+                    int Stop = Format.Find("{/" + Name, Close);
 
-                    if (Object != null) {
-                        var JObj = Object as jsObject;
+                    if (Stop == -1) {
+                        if (Obj != null)
+                            Output.Append(Obj);
 
-                        if (JObj != null && ObjectEnd != -1) {
-                            var SubTemplate = It.Substring(It.Index, ObjectEnd - It.Index);
+                        i = Start;
+                    }
+                    else {
+                        var JObj = Obj as jsObject;
+                        if (Obj != null && JObj != null) {
+                            var SubFormat = Format.Substring(Start + 1, Stop - Start - 1);
 
-                            foreach (jsObject Sub in JObj.Values) {
-                                if (Sub == null)
+                            foreach (jsObject SObj in JObj.Values) {
+                                if (SObj == null)
                                     continue;
 
-                                Template(Sub, SubTemplate, Output);
+                                Template(SObj, SubFormat, Output);
                             }
+                        }
 
-                            It.Index += Name.Length + 3;
-                        }
-                        else {
-                            Output.Append(Object);
-                        }
+                        i = Stop + Name.Length + 3;
                     }
                 }
-                else if (It.IsAt('[') || It.IsAt(']')) {
-                    It.Tick();
+                else if (C == '[' || C == ']') {
+                    i++;
                 }
-                else return false;
+                else break;
             }
 
             return true;
@@ -71,6 +80,7 @@ namespace Poly.Data {
 
             return null;
         }
+        
                 
         public static bool Extract(this jsObject This, string Template, string Data, bool IgnoreCase = false) {
             if (string.IsNullOrEmpty(Template) || string.IsNullOrEmpty(Data)) {

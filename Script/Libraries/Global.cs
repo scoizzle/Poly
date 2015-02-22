@@ -39,12 +39,9 @@ namespace Poly.Script.Libraries {
             return false;
         });
 
-        public static Function Template = new Function("Template", (Args) => {
-            var This = Args.getObject("this");
-            var Regex = Args.Get<string>("0");
-
-            if (This != null && !string.IsNullOrEmpty(Regex)) {
-                return This.Template(Regex);
+        public static Function Template = Function.Create("Template", (jsObject This, string Format) => {
+            if (This != null && !string.IsNullOrEmpty(Format)) {
+                return This.Template(Format);
             }
 
             return string.Empty;

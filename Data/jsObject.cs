@@ -105,6 +105,19 @@ namespace Poly.Data {
             }
         }
 
+        public jsObject Sort() {
+            var Keys = this.Keys.ToList();
+
+            if (Keys.Count > 0)
+                Keys.Sort();
+
+            var Out = new jsObject();
+            foreach (var K in Keys) {
+                Out.AssignValue(K, base[K]);
+            }
+            return Out;
+        }
+
         public override string ToString() {
             return Stringify(this, false);
         }

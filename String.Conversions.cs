@@ -269,6 +269,10 @@ namespace System {
             return SecurityElement.Escape(This);
         }
 
+        public static string UriEscape(this String This) {
+            return Uri.EscapeDataString(This);
+        }
+
         private static char FindDescapeChar(string Val) {
             foreach (var Pair in EscapeChars) {
                 if (Pair.Value == Val)
@@ -318,6 +322,10 @@ namespace System {
 
         public static string HtmlDescape(this String This) {
             return System.Text.RegularExpressions.Regex.Replace(This.Replace("+", " "), "%([A-Fa-f\\d]{2})", a => "" + Convert.ToChar(Convert.ToInt32(a.Groups[1].Value, 16)));
+        }
+
+        public static string UriDescape(this String This) {
+            return Uri.UnescapeDataString(This);
         }
 
         public static string MD5(this String This) {

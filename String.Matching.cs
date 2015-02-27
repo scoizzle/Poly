@@ -27,8 +27,8 @@ namespace Poly {
         public static Dictionary<string, ModDelegate> Modifiers = new Dictionary<string, ModDelegate>() {
             { "Escape", StringConversions.Escape },
             { "Descape", StringConversions.Descape },
-            { "UrlEscape", StringConversions.Escape },
-            { "UrlDescape", StringConversions.Descape },
+            { "UrlEscape", StringConversions.UriEscape },
+            { "UrlDescape", StringConversions.UriDescape },
             { "MD5", StringConversions.MD5 },
             { "SHA1", StringConversions.SHA1 },
             { "SHA256", StringConversions.SHA256 },

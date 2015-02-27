@@ -8,10 +8,22 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject : Dictionary<string, object> {
-        public static string _Raw(string Text, ref int Index, int LastIndex) {
+        public static object getObjectValue(string val) {
+            object Out;
+            foreach (var F in ParserCache.Values) {
+                Out = F(val);
+
+                if (Out != null)
+                    return Out;
+            }
+
+            return val;
+        }
+
+        public static object _Raw(string Text, ref int Index, int LastIndex) {
             var C = Text[Index];
 
-            if ((C > '9' || C < '0') && (C != 't' && C != 'T') && (C != 'f' && C != 'F') && C != '@')
+            if ((C > '9' || C < '0') && (C != 't' && C != 'T') && (C != 'f' && C != 'F'))
                 return null;
 
             var SubIndex = Text.IndexOf(Text.FirstPossible(Index, ',', '}', ']'), Index);
@@ -23,7 +35,7 @@ namespace Poly.Data {
 
             Index = SubIndex;
 
-            return Sub;
+            return getObjectValue(Sub);
         }
 
         private static string _String(string Text, ref int Index, int LastIndex) {

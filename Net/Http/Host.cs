@@ -42,6 +42,10 @@ namespace Poly.Net.Http {
             Handlers.Register(Path, Handler);
         }
 
+        public void On(string Path, Event.Handler Handler, string ThisName, object This) {
+            Handlers.Register(Path, Handler, ThisName, This);
+        }
+
         public void Load(Server Serv, string Name) {
             Serv.ScriptCache.Load(Path, Path + Name);
         }

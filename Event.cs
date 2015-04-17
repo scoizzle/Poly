@@ -29,12 +29,20 @@ namespace Poly {
         }
 
         public class Engine : Dictionary<string, List<Handler>> {
+            public string[] Names {
+                get {
+                    return this.Keys.ToArray();
+                }
+            }
+
             public void Register(string EventName, Handler Handler) {
-                if (!ContainsKey(EventName)) {
-                    Add(EventName, new List<Handler>());
+                List<Handler> List;
+
+                if (!TryGetValue(EventName, out List)) {
+                    Add(EventName, List = new List<Handler>());
                 }
 
-                this[EventName].Add(Handler);
+                List.Add(Handler);
             }
 
             public void Register(string EventName, Handler Handler, object This) {
@@ -48,19 +56,15 @@ namespace Poly {
                     return Handler(Context); 
                 });
             }
+
             public void Register(string EventName, Handler Handler, string Name, object This) {
                 if (string.IsNullOrEmpty(Name) || This == null) 
-                    return;
-                
+                    return;                
 
                 Register(EventName, (Context) => {
                     Context[Name] = This;
                     return Handler(Context);
                 });
-            }
-
-            public void Add(Handler Handler) {
-                Register(Handler.Method.Name, Handler);
             }
 
             public void Add(string Name, Handler Handler) {
@@ -90,7 +94,7 @@ namespace Poly {
                         }
 
 
-                        foreach (var Event in Pair.Value) {
+                        foreach (Handler Event in Pair.Value) {
                             Event(Matches);
                         }
 

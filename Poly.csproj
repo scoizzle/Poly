@@ -30,7 +30,8 @@
     <Externalconsole>true</Externalconsole>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>idea.ico</ApplicationIcon>
+    <ApplicationIcon>
+    </ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -79,6 +80,7 @@
     <Compile Include="Script\Expressions\Html\Element.cs" />
     <Compile Include="Script\Expressions\Html\Template.cs" />
     <Compile Include="Script\Expressions\Unary\Comparative.cs" />
+    <Compile Include="Script\Expressions\Unary\Conditional.cs" />
     <Compile Include="Script\Expressions\Unary\Is.cs" />
     <Compile Include="Script\Helpers\CachedScript.cs" />
     <Compile Include="Script\Helpers\SystemTypeGetter.cs" />
@@ -170,7 +172,4 @@
   <Target Name="AfterBuild">
   </Target>
   -->
-  <ItemGroup>
-    <Content Include="idea.ico" />
-  </ItemGroup>
 </Project>

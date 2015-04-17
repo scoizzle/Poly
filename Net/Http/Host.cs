@@ -35,6 +35,8 @@ namespace Poly.Net.Http {
         public Host(jsObject Base) : this() {
             if (Base != null) {
                 Base.CopyTo(this);
+
+                SessionDomain = Name;
             }
         }
 

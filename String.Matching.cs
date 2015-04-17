@@ -156,7 +156,7 @@ namespace Poly {
             if (Wild.Length == 1 && Wild.String == "*")
                 return Info.Result;
 
-            while (Data.Index < Data.Length && Wild.Index < Wild.Length) {
+            while (!Data.IsDone() && !Wild.IsDone()) {
                 if (Data.IsAt(Wild[Wild.Index], Info.IgnoreCase) || Wild.IsAt('?')) {
                     Info.Tick();
                     continue;
@@ -179,6 +179,16 @@ namespace Poly {
                     if (Wild.IsDone())
                         return Info.Result;
 
+                    var Index = FirstPossibleSpecialIndex(Wild);
+
+                    if (Index == null) {
+                        if (Data.EndsWith(Wild)) {
+                            Data.Index = Data.Length;
+                            Wild.Index = Wild.Length;
+                            break;
+                        }
+                    }
+                    
                     if (!GotoNextSection(Info))
                         return null;
 
@@ -195,6 +205,7 @@ namespace Poly {
                         string Value;
                         if (Wild.IsDone()) {
                             Value = Data.Substring(Data.Index);
+                            Data.Index = Data.Length;
                         }
                         else {
                             var DataCurrent = Data.Index;
@@ -241,6 +252,8 @@ namespace Poly {
 
 
             if (!Wild.IsDone())
+                return null;
+            else if (!Data.IsDone())
                 return null;
 
             return Info.Result;
@@ -347,8 +360,8 @@ namespace Poly {
         private static Tuple<char, int> FirstPossibleSpecialIndex(StringIterator It) {
             for (int i = It.Index, c; i < It.Length; i++) {
                 for (c = 0; c < SpecialChars.Length; c++) {
-                    if (It[i] == SpecialChars[c] && It[i - 1] != '\\') {
-                        return new Tuple<char, int>(SpecialChars[c], i);
+                    if (It[i] == SpecialChars[c] && It[i - 1] != '\\') {                        
+                        return new Tuple<char, int>(It[i], i);
                     }
                 }
             }

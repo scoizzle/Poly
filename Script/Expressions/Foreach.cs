@@ -9,7 +9,7 @@ namespace Poly.Script.Expressions {
 
     public class Foreach : Expression {
         public Variable Variable = null;
-        public Variable List = null;
+        public Node List = null;
 
         private object LoopNodes<K, V>(jsObject Context, K Key, V Value) {
             var Var = new jsObject();
@@ -74,24 +74,43 @@ namespace Poly.Script.Expressions {
             return null;
         }
 
+        private object LoopArray(jsObject Context, Array Array) {
+            int Index = 0;
+            foreach (object O in Array) {
+                var Result = LoopNodes(Context, Index.ToString(), O);
+
+                var Ret = Result as Return;
+
+                if (Ret != null)
+                    return Ret;
+
+                if (Result == Break)
+                    break;
+            }
+            return null;
+        }
+
         public override object Evaluate(Data.jsObject Context) {
             if (Variable == null || List == null) {
                 return null;
             }
 
-            var Array = List.Evaluate(Context);
+            var Collection = List.Evaluate(Context);
 
-            if (Array == null)
+            if (Collection == null)
                 return null;
 
             object Value = null;
 
-            var String = Array as string;
+            var String = Collection as string;
             if (!string.IsNullOrEmpty(String)) {
                 Value = LoopString(Context, String);
             }
+            else if (Collection is Array) {
+                Value = LoopArray(Context, Collection as Array);
+            }
             else {
-                Value = LoopObject(Context, Array as jsObject);
+                Value = LoopObject(Context, Collection as jsObject);
             }
 
             if (!(Value is Return))
@@ -130,7 +149,7 @@ namespace Poly.Script.Expressions {
                         Open += 2;
                         ConsumeWhitespace(Text, ref Open);
 
-                        For.List = Variable.Parse(Engine, Text, ref Open, Close);
+                        For.List = Engine.Parse(Text, ref Open, Close);
                         Open = Close;
                         ConsumeWhitespace(Text, ref Open);
 

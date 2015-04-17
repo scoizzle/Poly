@@ -21,7 +21,7 @@ namespace Poly.Net.Http {
 
         public Session Session;
 
-        public MemoryStream Data { get; private set; }
+        public Stream Data { get; set; }
 
         public Request(Client Client, Packet Packet) {
             this.Handled = false;
@@ -59,9 +59,7 @@ namespace Poly.Net.Http {
         }
 
         public void Print(string txt) {
-            var Bytes = Client.Encoding.GetBytes(txt);
-
-            Print(Bytes);
+            Print(Client.Encoding.GetBytes(txt));
         }
 
         public void Print(string FileName, jsObject Data) {
@@ -114,14 +112,16 @@ namespace Poly.Net.Http {
                 );
             }
 
-            foreach (jsObject Opt in Cookies.Values) {
-                Output.Append("Set-Cookie: ");
+            foreach (var Pair in Cookies) {
+                if (Pair.Value is jsObject) {
+                    Output.Append("Set-Cookie: ");
 
-                foreach (var Pair in Opt) {
-                    Output.AppendFormat("{0}={1}; ", Pair.Key, Pair.Value);
+                    foreach (var P in Pair.Value as jsObject) {
+                        Output.AppendFormat("{0}={1}; ", P.Key, P.Value);
+                    }
+
+                    Output.AppendLine();
                 }
-
-                Output.AppendLine();
             }
 
             Client.SendLine(Output.ToString());

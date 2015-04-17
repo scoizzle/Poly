@@ -38,7 +38,12 @@ namespace Poly.Script.Expressions.Html {
 
                     Index = End + 1;
 
-                    return new Attribute(Text.Substring(Delta, End - Delta).Trim(), Types.String.Empty);
+                    Name = Text.Substring(Delta, End - Delta).Trim();
+
+                    if (ComplexElement.SingletonTags.Contains(Name))
+                        return new ComplexElement() { Type = Name };
+                    else 
+                        return new Attribute(Name, Types.String.Empty);
                 }
 
                 ConsumeValidName(Text, ref Delta);
@@ -175,7 +180,7 @@ namespace Poly.Script.Expressions.Html {
             return null;
         }
 
-        public static void ConsumeValidName(string Text, ref int Index) {
+        public new static void ConsumeValidName(string Text, ref int Index) {
             var Delta = Index;
 
             for (; Delta < Text.Length; ) {

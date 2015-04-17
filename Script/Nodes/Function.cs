@@ -94,7 +94,7 @@ namespace Poly.Script.Nodes {
             return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
         }
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             return Parse(Engine, Text, ref Index, LastIndex, true);
         }
 
@@ -173,7 +173,7 @@ namespace Poly.Script.Nodes {
 
             MethodInfo Info;
 
-            if (Type.Name == Name) {
+            if (Type.Name == Name || Type.FullName == Name) {
                 return Cache[Key] = (object This, object[] Args) => {
                     return Activator.CreateInstance(Type, Args);
                 };
@@ -325,7 +325,7 @@ namespace Poly.Script.Nodes {
             foreach (var T in Types) {
                 foreach (var C in T.Name)
                     Result -= C;
-                Result *= 31;
+                Result += 31 + Types.Length + T.Name.Length;
             }
 
             return Result;

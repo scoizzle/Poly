@@ -28,7 +28,9 @@ namespace Poly.Data {
             { typeof(long),
                 (str) => {
                     long val;
-                    return long.TryParse(str, out val) ? val : default(long);
+                    if (long.TryParse(str, out val))
+                        return val;
+                    return null;
                 }
             },
             { typeof(float), 

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Reflection;
+
 using Poly.Data;
 
 namespace Poly.Script.Nodes {
@@ -8,9 +10,12 @@ namespace Poly.Script.Nodes {
         Engine Engine;
         public bool IsStatic;
 
+        Type RequestedType;
+
         public Variable(Engine Engine) {
             this.Engine = Engine;
             this.IsStatic = false;
+            this.RequestedType = null;
         }
 
         public Variable(Engine Eng, string Text) {
@@ -20,6 +25,7 @@ namespace Poly.Script.Nodes {
             if (V != null) {
                 this.Elements = V.Elements;
                 this.IsStatic = V.IsStatic;
+                this.RequestedType = V.RequestedType;
             }
         }
 
@@ -44,6 +50,10 @@ namespace Poly.Script.Nodes {
                 }
                 else if (Node is Helpers.SystemTypeGetter) {
                     Current = Node.Evaluate(Context);
+
+                    if (Elements.Length - i == 1)
+                        return Current;
+
                     continue;
                 }
                 else {
@@ -192,8 +202,10 @@ namespace Poly.Script.Nodes {
             return false;        
         }
         
-        public static object GetProperty(Type Type, object Obj, string Name) {
-            var Prop = Type.GetProperty(Name);
+        private object GetProperty(Type Type, object Obj, string Name) {
+            var Prop = RequestedType == null ? 
+                Type.GetProperty(Name) :
+                Type.GetProperty(Name, RequestedType);
 
             if (Prop != null)
                 return Prop.GetValue(Obj, null);
@@ -206,9 +218,11 @@ namespace Poly.Script.Nodes {
             return null;
         }
 
-        public static bool SetProperty(Type Type, object Obj, string Name, object Value) {
+        private bool SetProperty(Type Type, object Obj, string Name, object Value) {
             if (Obj != null) {
-                var Prop = Type.GetProperty(Name);
+                var Prop = RequestedType == null ?
+                    Type.GetProperty(Name) :
+                    Type.GetProperty(Name, RequestedType);
 
                 if (Prop != null) {
                     Prop.SetValue(Obj, Value);
@@ -248,7 +262,7 @@ namespace Poly.Script.Nodes {
                     
                     var Next = Text.IndexOf(':', Index + 5);
                     if (Next == -1 || Text.IndexOf(';', Index + 5) < Next) {
-                        Type = Text.Substring(":", ";", Index + 4); 
+                        Type = Text.Substring(":", ";", Index); 
                     }
                     else {
                         Type = Text.FindMatchingBrackets(":", ":", Index);
@@ -268,7 +282,7 @@ namespace Poly.Script.Nodes {
                     var Key = Text.Substring(SigFig, Delta - SigFig);
 
                     if (!string.IsNullOrEmpty(Key)) {
-                        if (Engine.Shorthands.ContainsKey(Key)) {
+                        if (Engine.Shorthands.ContainsKey(Key) && List.Count == 0) {
                             List.Add(new Helpers.SystemTypeGetter(Engine.Shorthands[Key]));
                         }
                         else {
@@ -300,7 +314,7 @@ namespace Poly.Script.Nodes {
                 if (Key == "_") {
                     List.Add(new Variable(Engine));
                 }
-                else if (Engine.Shorthands.ContainsKey(Key)) {
+                else if (Engine.Shorthands.ContainsKey(Key) && List.Count == 0) {
                     List.Add(new Helpers.SystemTypeGetter(Engine.Shorthands[Text.Substring(SigFig, Delta - SigFig)]));
                 }
                 else {
@@ -311,20 +325,53 @@ namespace Poly.Script.Nodes {
             if (List.Count == 0)
                 return null;
 
-            Var.Elements = List.ToArray();
 
             Index = Delta;
+            Var.Elements = List.ToArray();
+
+            ConsumeWhitespace(Text, ref Delta);
+            if (Text.Compare("as", Delta)) {
+                Delta += 2;
+                ConsumeWhitespace(Text, ref Delta);
+
+                int Start = Delta;
+                ConsumeValidName(Text, ref Delta);
+
+                if (Delta != Start) {
+                    var Name = Text.Substring(Start, Delta - Start);
+
+                    if (Engine.Shorthands.ContainsKey(Name)) {
+                        Var.RequestedType = Helpers.SystemTypeGetter.GetType(Engine.Shorthands[Name]);
+                    }
+                    else {
+                        Var.RequestedType = Helpers.SystemTypeGetter.GetType(Name);
+                    }
+
+                    Index = Delta;
+                }
+            }
+            else if (List.Count == 1) {
+                var First = List[0] as Variable;
+
+                if (First != null && First.RequestedType != null) {
+                    return First;
+                }
+            }
+
             return Var;
         }
 
         public override string ToString() {
+            if (Elements == null)
+                return "_";
+
             StringBuilder Output = new StringBuilder(IsStatic ? "Static." : string.Empty);
 
             foreach (var E in Elements) {
                 var V = E as Variable;
 
                 if (V != null) {
-                    Output.AppendFormat("[{0}].", V.ToString());
+                    Output.AppendFormat("[{0}].", V);
                 }
                 else {
                     Output.AppendFormat("{0}.", E);

@@ -6,6 +6,9 @@ using Poly.Data;
 
 namespace Poly.Script.Expressions {
     using Nodes;
+    using Helpers;
+    using Types;
+
     public class Call : Expression {
         string Name;
 
@@ -33,46 +36,31 @@ namespace Poly.Script.Expressions {
                 Object = This.Evaluate(Context);
             }
             
-            if (Function == null) {
-                var Instance = Object as Types.ClassInstance;
-
-                if (Instance != null) {
-                    Function = Instance.Class.GetFunction(Name);
+            if (Function == null && !(Object is Type)) {
+                if (Object is ClassInstance) {
+                    Function = (Object as ClassInstance).Class.GetFunction(Name);
                 }
-                else if ((This as Helpers.SystemTypeGetter) == null) {
-                    var Class = Engine.Types[Name];
-
-                    if (Class != null) {
-                        Function = Class.Instaciator;
-                    }
-                    else if ((Class = Object as Class) != null) {
-                        Function = Class.Instaciator;
-                    }
-                    else if ((Class = This as Class) != null) {
-                        this.Function = Function = Class.StaticFunctions[Name];
-                    }
-                    else if (Object is string && Engine.Types.ContainsKey(Object as string)) {
-                        Function = Engine.Types[Object as string].GetFunction(Name);
-                    }
-                    else if ((Function = Engine.GetFunction(Name)) != null) {
-                        if (Function.Arguments != null && Function.Arguments.Length < Arguments.Length) {
-                            Function = null;
-                        }
-                        else {
-                            this.Function = Function;
-                        }
-                    }
+                else if (Object is Class) {
+                    Function = (Object as Class).Instaciator;
                 }
-
-                if (string.IsNullOrEmpty(Name)) {
+                else if (Object is Function) {
                     Function = Object as Function;
+                }
+                else if (This is Class) {
+                    this.Function = Function = (This as Class).StaticFunctions[Name];
+                }
+                else if (Object is string) {
+                    var Str = Object as string;
 
-                    if (Function == null) {
-                        var C = Object as Class;
-
-                        if (C != null)
-                            Function = C.Instaciator;
+                    if (Engine.Types.ContainsKey(Str)) {
+                        Function = Engine.Types[Str].GetFunction(Name);
                     }
+                    else if (!Engine.GetFunction(Str, Name, out Function)) {
+                        Function = Engine.GetFunction(Name);
+                    }
+                }
+                else {
+                    Function = Engine.GetFunction(Name);
                 }
             }
 
@@ -100,13 +88,6 @@ namespace Poly.Script.Expressions {
                 return SystemFunction(Object, ArgList);
             }
 
-            if (Function == null && This != null) {
-                if (Object == null)
-                    this.Function = Function = Engine.GetFunction(This.ToString(), Name);
-                else
-                    this.Function = Function = Engine.GetFunction(Object.GetType(), Name);
-            }
-
             if (Function != null) {
                 jsObject Args = new jsObject("this", Object);
 
@@ -129,9 +110,7 @@ namespace Poly.Script.Expressions {
                     This = new Variable(Engine, "_");
                     Object = Context;
                 }
-                else {
-                    return null;
-                }
+                else return null;
             }
 
             var Type = Object as Type;
@@ -185,35 +164,37 @@ namespace Poly.Script.Expressions {
                 ConsumeWhitespace(Text, ref Delta);
 
                 if (Text.Compare("(", Delta)) {
-                    Node This;
+                    var Call = new Call(Engine, null, Name);
+
+                    Class Class;
                     Type Type;
 
-                    if (Name.Contains('.')) {
+                    if ((Type = SystemTypeGetter.GetType(Name)) != null) {
+                        Call.This = new SystemTypeGetter(Name) { Cache = Type };
+                    }
+                    else if ((Class = Engine.Types[Name]) != null) {
+                        Call.Function = Class.Instaciator;
+                    }
+                    else if (Name.Contains('.')) {
                         var LastPeriod = Name.LastIndexOf('.');
                         var FirstName = Name.Substring(0, LastPeriod);
 
-                        if (Engine.Shorthands.ContainsKey(FirstName)){
-                            This = new Helpers.SystemTypeGetter(Engine.Shorthands[FirstName]);
-                        }
-                        else if (!Name.StartsWith("_") && (Type = Helpers.SystemTypeGetter.GetType(Name)) != null) {
-                            This = new Helpers.SystemTypeGetter(Name) { Cache = Type };
+                        Call.Name = Name.Substring(LastPeriod + 1);
+
+                        if (Engine.Shorthands.ContainsKey(FirstName)) {
+                            Call.This = new Helpers.SystemTypeGetter(Engine.Shorthands[FirstName]);
                         }
                         else if (Name.Contains('[', LastPeriod + 1)) {
-                            This = new Variable(Engine, Name);
+                            Call.This = new Variable(Engine, Name);
                             LastPeriod = Name.Length - 1;
                         }
                         else if (Engine.Types.ContainsKey(FirstName)) {
-                            This = Engine.Types[FirstName];
+                            Call.This = Engine.Types[FirstName];
                         }
-                        else {
-                            This = new Variable(Engine, FirstName); 
+                        else if (!Engine.GetFunction(FirstName, Call.Name, out Call.Function)) {
+                            Call.This = Engine.Parse(FirstName, 0);
                         }
-
-                        Name = Name.Substring(LastPeriod + 1);
                     }
-                    else This = null;
-
-                    var Call = new Call(Engine, This, Name);
 
                     var Open = Delta + 1;
                     var Close = Delta;
@@ -225,14 +206,14 @@ namespace Poly.Script.Expressions {
 
                     var RawArgs = Text.Substring(Open, Close - Open - 1).ParseCParams();
 
-                    if (This == null && Engine.HtmlTemplates.ContainsKey(Name)) {
+                    if (Call.This == null && Engine.HtmlTemplates.ContainsKey(Name)) {
                         var Arguments = new Html.Element[RawArgs.Length];
 
                         for (int i = 0; i < RawArgs.Length; i++) {
                             Arguments[i] = new Html.Variable(Engine.Parse(RawArgs[i], 0), null);
                         }
 
-                        This = new Html.Generator(new Html.Templater(Engine.HtmlTemplates[Name], Arguments));
+                        var This = new Html.Generator(new Html.Templater(Engine.HtmlTemplates[Name], Arguments));
 
                         if (!Text.Compare('.', Close)) {
                             Index = Close;

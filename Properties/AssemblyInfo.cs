@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("Poly")]
-[assembly: AssemblyDescription("An extension to .Net")]
+[assembly: AssemblyDescription("An extension to .Net http://github.com/scoizzle/Poly/")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Scoizzle.com")]
 [assembly: AssemblyProduct("Poly")]

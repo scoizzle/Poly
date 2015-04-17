@@ -20,9 +20,10 @@ namespace Poly.Script.Libraries {
 			Add(TypeName);
             Add(ToNum);
             Add(ToObject);
+            Add(ToStr);
         }
 
-        public static Function Load = Function.Create("Load", (string FileName) => {
+        public static Function Load = Function.Create("FromFile", (string FileName) => {
             if (System.IO.File.Exists(FileName)) {
                 return jsObject.FromFile(FileName);
             }
@@ -31,7 +32,7 @@ namespace Poly.Script.Libraries {
         });
         
 
-        public static Function Save = Function.Create("Save", (jsObject This, string FileName)=>{
+        public static Function Save = Function.Create("ToFile", (jsObject This, string FileName)=>{
             if (!string.IsNullOrEmpty(FileName) && This != null){
                 File.WriteAllText(FileName, This.ToString());
                 return true;
@@ -114,6 +115,13 @@ namespace Poly.Script.Libraries {
                 return This;
             }
             return null;
+        });
+
+        public static Function ToStr = Function.Create("ToString", (object This) => {
+            if (This == null)
+                return "";
+
+            return Convert.ToString(This);
         });
     }
 }

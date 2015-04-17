@@ -10,6 +10,7 @@ namespace Poly.Script.Expressions.Unary {
         public delegate Node Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
         public static List<Handler> UnaryParsers = new List<Handler>() {
             Comparative.Parse,
+            Conditional.Parse,
             Is.Parse,
             Equal.Parse,
             NotEqual.Parse,

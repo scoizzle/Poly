@@ -12,15 +12,10 @@ namespace Poly.Script.Expressions {
 
     public class Async : Expression {
         public Node Node = null;
-        public int MaxExecutionTime = -1;
 
         public override object Evaluate(Data.jsObject Context) {
             return Task.Run<object>(() => {
-                var Exec = Task.Run<object>(() => {
-                    return Node.Evaluate(Context);
-                });
-                Exec.Wait(MaxExecutionTime);
-                return Exec.Result;
+                return Node.Evaluate(Context);
             });
         }
 
@@ -36,17 +31,6 @@ namespace Poly.Script.Expressions {
                 var Delta = Index + 5;
                 var Async = new Async();
                 ConsumeWhitespace(Text, ref Delta);
-
-                if (Text.Compare("(", Delta)) {
-                    var Close = Delta;
-                    Delta += 1;
-                    ConsumeEval(Text, ref Close);
-
-                    Async.MaxExecutionTime = Text.Substring(Delta, Close - Delta - 1).ToInt();
-
-                    Delta = Close;
-                    ConsumeWhitespace(Text, ref Delta);
-                }
 
                 Async.Node = Engine.Parse(Text, ref Delta, LastIndex) as Node;
 

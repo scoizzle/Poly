@@ -67,11 +67,11 @@ namespace Poly.Net.Http {
             RawTarget = Split[1];
             Version = Split[2];
 
-            if (Split[1].Contains("?")) {
-                Query = '?' + Split[1].Substring("?");
-                Target = Split[1].Substring("", "?");
+            if (RawTarget.Contains("?")) {
+                Query = '?' + RawTarget.Substring("?");
+                Target = Uri.UnescapeDataString(RawTarget.Substring("", "?"));
 
-                Split = Split[1].Split('&');
+                Split = RawTarget.Split('&');
 
                 for (int n = 0; n < Split.Length; n++) {
                     var Pair = Split[n].Split('=');
@@ -84,7 +84,7 @@ namespace Poly.Net.Http {
                 }
             }
             else {
-                Target = Split[1];
+                Target = Uri.UnescapeDataString(Split[1]);
             }
 
 
@@ -109,7 +109,7 @@ namespace Poly.Net.Http {
 
             if (Host.Contains(":")) {
                 Headers.Set("Port", Host.Substring(":", ""));
-                Headers.Set("Host", Host.Substring("", ":"));
+                Host = Host.Substring("", ":");
             }
 
             if (Headers.ContainsKey("Cookie")) {
@@ -129,7 +129,7 @@ namespace Poly.Net.Http {
                     Split = Value.Split('&');
 
                     for (int n = 0; n < Split.Length; n++) {
-                        var Match = Split[n].Match("{Key::uriDescape}={Value::uriDescape}");
+                        var Match = Split[n].Match("{Key::UrlDescape}={Value::UrlDescape}"); 
 
                         if (Match == null)
                             continue;

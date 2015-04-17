@@ -8,7 +8,7 @@ using Poly.Data;
 namespace System {
     public static class StringIteration {
         public static bool Consume(this String Text, String Part, ref int Index) {
-            if (!Text.Compare(Part, Index)) {
+            if (!Text.Compare(Part, Index, false)) {
                 return false;
             }
 

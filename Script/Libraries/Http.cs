@@ -20,46 +20,32 @@ namespace Poly.Script.Libraries {
             Add(Server);
         }
 
-        public static Function Get = new Function("Get", (Args) => {
-            var Url = Args.Get<string>("Url");
-            var Headers = Args.getObject("Headers");
-            var Uri = default(Uri);
-
-            if (Uri.TryCreate(Url, UriKind.RelativeOrAbsolute, out Uri)) {
-                using (var Client = new WebClient()) {
-                    if (Headers != null) {
-                        Headers.ForEach((K, V) => {
-                            Client.Headers.Add(K, V.ToString());
-                        });
-                    }
-                    try {
-                        return Client.DownloadString(Uri);
-                    }
-                    catch { }
+        public static Function Get = Function.Create("Get", (string Url, jsObject Headers) => {
+            using (var Client = new WebClient()) {
+                if (Headers != null) {
+                    Headers.ForEach((K, V) => {
+                        Client.Headers.Add(K, V.ToString());
+                    });
                 }
+
+                try {
+                    return Client.DownloadString(Url);
+                }
+                catch { }
             }
             return null;
-        }, "Url", "Headers");
+        });
 
-        public static Function Post = new Function("Post", (Args) => {
-            var Url = Args.Get<string>("Url");
+        public static Function Post = Function.Create("Post", (string Url, jsObject Headers, object RawData) => {
+            var Data = RawData is jsObject ?
+                (RawData as jsObject).ToPostString() :
+                (RawData as string);
 
-            var Data = Args["Data"] is jsObject ? 
-                Args.getObject("Data").ToPostString() : 
-                Args.Get<string>("Data");
-
-            var Headers = Args.getObject("Headers");
-
-            if (!string.IsNullOrEmpty(Url)) {
-                WebClient Client = new WebClient();
-
+            using (var Client = new WebClient()) {
                 if (Headers != null) {
-                    foreach (var Pair in Headers) {
-                        if (Pair.Value == null)
-                            continue;
-
-                        Client.Headers.Add(Pair.Key, Pair.Value.ToString());
-                    }
+                    Headers.ForEach((K, V) => {
+                        Client.Headers.Add(K, V.ToString());
+                    });
                 }
 
                 try {
@@ -68,24 +54,18 @@ namespace Poly.Script.Libraries {
                 catch { }
             }
             return null;
-        }, "Url", "Headers", "Data");
+        });
 
-        public static Function Server = new Function("Server", (Args) => {
+        public static Function Server = Function.Create("Server", () => {
             return new Net.Http.Server();
         });
 
-        public static Function Escape = new Function("Escape", (Args) => {
-            var Str = Args.Get<string>("Str");
+        public static Function Escape = Function.Create("Escape", (string Str) => {
             return System.Uri.EscapeUriString(Str);
-        }, "Str");
+        });
 
-        public static Function Descape = new Function("Descape", (Args) => {
-            var Str = Args.Get<string>("Str");
-
-            if (string.IsNullOrEmpty(Str))
-                return "";
-
+        public static Function Descape = Function.Create("Descape", (string Str) => {
             return System.Uri.UnescapeDataString(Str);
-        }, "Str");
+        });
     }
 }

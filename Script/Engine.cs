@@ -31,12 +31,24 @@ namespace Poly.Script {
             { "Time", typeof(System.DateTime).FullName },
             { "TimeSpan", typeof(System.TimeSpan).FullName },
             { "File", typeof(System.IO.File).FullName },
+            { "Path", typeof(System.IO.Path).FullName },
+            { "Directory", typeof(System.IO.Directory).FullName },
             { "Environment", typeof(System.Environment).FullName }
         };
 
         public jsObject<Class> Types = new jsObject<Class>();
 
         public Engine() {
+        }
+
+        public override object Evaluate(jsObject Context) {
+            var Result = base.Evaluate(Context);
+            var R = Result as Expressions.Return;
+
+            if (R != null)
+                return R.Evaluate(Context);
+
+            return Result;
         }
 
         public object Evaluate(string Script, params object[] Args) {
@@ -82,6 +94,11 @@ namespace Poly.Script {
                     return Func;
 
             return null;
+        }
+
+        public bool GetFunction(string LibName, string Name, out Function Func) {
+            Func = GetFunction(LibName, Name);
+            return Func != null;
         }
 
         public Function GetFunction(Type Type, string Name) {

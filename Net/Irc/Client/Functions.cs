@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 using Poly;
 using Poly.Data;
@@ -55,10 +56,10 @@ namespace Poly.Net.Irc {
                     Packet.Message = Msg;
                     Send(Packet);
                 }
-
-                return;
             }
-            Packet.Send(Connection);
+            else {
+                Packet.Send(Connection);
+            }
         }
 
         public void SendPong(string Message) {

@@ -18,14 +18,17 @@ namespace Poly.Script.Types {
         }
 
         public override string ToString() {
-            if (Value != null)
-                return Value.ToString();
-
-            return string.Empty;
+            return Value.ToString();
         }
+
         public new static object Add(int Left, object Right) {
             if (Right is int) {
-                return Left + (int)Right;
+                try {
+                    return checked(Left + (int)Right);
+                }
+                catch {
+                    return Convert.ToInt64(Left) + (int)Right;
+                }
             }
             else if (Right is double) {
                 return Left + (double)Right;

@@ -49,7 +49,7 @@ namespace Poly.Script.Helpers {
 
                 CachedScript Inc = null;
                 if (Engine.Includes.TryGetValue(FileName, out Inc) && Inc.IsCurrent()) {
-                        return Inc;
+                    return Inc;
                 }
                 else {
                     Inc = new CachedScript(Engine, FileName, LastWrite);

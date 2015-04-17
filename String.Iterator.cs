@@ -27,6 +27,15 @@ namespace Poly {
             }
         }
 
+        public char Current {
+            get {
+                if (IsDone())
+                    return char.MinValue;
+
+                return this[Index];
+            }
+        }
+
         public int Find(char C) {
             var Res = String.Find(C, Index);
 
@@ -87,6 +96,7 @@ namespace Poly {
             }
             return false;
         }
+
         public bool IsAfter(char C) {
             return this[Index - 1] == C;
         }
@@ -170,15 +180,27 @@ namespace Poly {
         }
 
         public bool Goto(StringIterator It, int Length, bool IgnoreCase) {
-            for (int i = this.Index; i + Length < this.Length; i++) {
+            for (int i = this.Index; i + Length < String.Length ; i++) {
+                if (It.IsAt('\\'))
+                    It.Tick();
+
                 if (String[i] == It[It.Index]) {
-                    if (string.Compare(this.String, i, It.String, It.Index, Length, IgnoreCase) == 0) {
+                    if (String.Compare(this.String, i, It.String, It.Index, Length, IgnoreCase) == 0) {
                         this.Index = i;
                         return true;
                     }
                 }
             }
             return false;
+        }
+
+        public bool EndsWith(StringIterator It) {
+            for (int i = 1; i <= Length - Index && i <= It.Length - It.Index; i ++) {
+                if (this[Length - i] != It[It.Length - i]) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         public bool IsDone() {

@@ -118,14 +118,6 @@ namespace Poly.Data {
             return Out;
         }
 
-        public override string ToString() {
-            return Stringify(this, false);
-        }
-
-        public virtual string ToString(bool HumanFormat) {
-            return Stringify(this, HumanFormat);
-        }
-
         public string ToPostString() {
             StringBuilder Output = new StringBuilder();
 
@@ -136,58 +128,100 @@ namespace Poly.Data {
             return Output.ToString(0, Output.Length - 1);
         }
 
+        public override string ToString() {
+            return Stringify(this, false);
+        }
+
+        public virtual string ToString(bool HumanFormat) {
+            return Stringify(this, HumanFormat);
+        }
+
         public static string Stringify(jsObject This, bool HumanFormat) {
-            return Stringify(new StringBuilder(), This, HumanFormat, 1);
-        }
-
-        private static string Stringify(StringBuilder Output, jsObject This, bool HumanFormat, int Tabs) {
-            Output.Append(This.IsArray ? '[' : '{');
-
             if (HumanFormat) {
-                Output.AppendLine();
-                Output.Append('\t', Tabs);
-            }
-
-            int Index = 0;
-            foreach (var Pair in This) {
-                Index++;
-                StringifyInternal(Output, This, Pair.Key, Pair.Value, Index == This.Count, HumanFormat, Tabs);
-            }
-
-            Output.Append(This.IsArray ? ']' : '}');
-
-            if (Tabs > 1)
-                return string.Empty;
-
-            return Output.ToString();
-        }
-
-        protected static void StringifyInternal(StringBuilder Output, jsObject This, string Key, object Value, bool IsLast, bool HumanFormat, int Tabs) {
-            if (!This.IsArray)
-                Output.AppendFormat("\"{0}\":", Key);
-
-            if (Value is jsComplex) {
-                jsComplex.Stringify(Output, Value as jsComplex, HumanFormat, Tabs);
-            }
-            else if (Value is jsObject) {
-                Stringify(Output, Value as jsObject, HumanFormat, Tabs + 1);
-            }
-            else if (Value is bool) {
-                Output.Append(Value.ToString().ToLower());
+                return Stringify(new StringBuilder(), This, null, 1).ToString();
             }
             else {
-                Value = Value.ToString().Escape();
-                Output.AppendFormat("\"{0}\"", Value);
+                return Stringify(new StringBuilder(), This, null).ToString();
+            }
+        }
+
+        public static StringBuilder Stringify(StringBuilder Output, jsObject This, jsObject Parent) {
+            Output.Append(This.IsArray ? '[' : '{');
+
+            int Index = 1;
+            foreach (var Pair in This) {
+                var Key = Pair.Key;
+                var Value = Pair.Value;
+
+                if (Object.ReferenceEquals(Value, Parent))
+                    continue;
+
+                if (!This.IsArray) {
+                    Output.AppendFormat("\"{0}\":", Pair.Key);
+                }
+
+                if (Value is jsComplex) {
+                    jsComplex.Stringify(Output, Value as jsComplex, This);
+                }
+                else if (Value is jsObject) {
+                    Stringify(Output, Value as jsObject, This);
+                }
+                else if (Value is bool) {
+                    Output.Append(Value.ToString().ToLower());
+                }
+                else {
+                    Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
+                }
+
+                if (Index != This.Count) {
+                    Output.Append(",");
+                    Index++;
+                }
+            }
+            Output.Append(This.IsArray ? "]" : "}");
+
+            return Output;
+        }
+
+        public static StringBuilder Stringify(StringBuilder Output, jsObject This, jsObject Parent, int Tabs) {
+            Output.AppendLine(This.IsArray ? "[" : "{").Append('\t', Tabs);
+
+            int Index = 1;
+            foreach (var Pair in This) {
+                var Key = Pair.Key;
+                var Value = Pair.Value;
+
+                if (Object.ReferenceEquals(Value, Parent))
+                    continue;
+
+                if (!This.IsArray) {
+                    Output.AppendFormat("\"{0}\":", Pair.Key);
+                }
+
+                if (Value is jsComplex) {
+                    jsComplex.Stringify(Output, Value as jsComplex, This, Tabs + 1);
+                }
+                else if (Value is jsObject) {
+                    Stringify(Output, Value as jsObject, This, Tabs + 1);
+                }
+                else if (Value is bool) {
+                    Output.Append(Value.ToString().ToLower());
+                }
+                else {
+                    Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
+                }
+
+                if (Index != This.Count) {
+                    Output.Append(",");
+                    Index++;
+                }
+
+                Output.AppendLine().Append('\t', Tabs);
             }
 
-            if (!IsLast) {
-                Output.Append(',');
-            }
+            Output.Append(This.IsArray ? "]" : "}");
 
-            if (HumanFormat) {
-                Output.Append(Environment.NewLine);
-                Output.Append('\t', Tabs);
-            }
+            return Output;
         }
 
         public static string PostEncode(string Input) {

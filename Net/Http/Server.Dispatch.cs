@@ -13,11 +13,12 @@ namespace Poly.Net.Http {
 
     public partial class Server {
         public static void StaticFileHandler(string FileName, Request Request) {
-            Request.Print(File.ReadAllBytes(FileName));
-
             Request.Result.MIME = Server.GetMime(
                 Request.Host.GetExtension(FileName)
             );
+
+            Request.Data = File.OpenRead(FileName);
+            Request.Finish();
         }
 
         public virtual void DefaultFileHandler(string FileName, Request Request) {
@@ -100,7 +101,7 @@ namespace Poly.Net.Http {
                     Client.Close();
                     break;
                 }
-
+                
                 Request.Host = Hosts.Search<Host>(Packet.Host, true, true);
 
                 if (Request.Host == null) {
@@ -112,7 +113,7 @@ namespace Poly.Net.Http {
                     IPEndPoint Point = Client.Socket.LocalEndPoint as IPEndPoint;
 
                     if (!Request.Host.Ports.ContainsValue(Point.Port)) {
-                        Request.Result = Result.BadRequest;
+                        Request.Result = Result.NoResponse;
                         Request.Finish();
                         continue;
                     }

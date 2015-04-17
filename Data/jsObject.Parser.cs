@@ -23,7 +23,7 @@ namespace Poly.Data {
         public static object _Raw(string Text, ref int Index, int LastIndex) {
             var C = Text[Index];
 
-            if ((C > '9' || C < '0') && (C != 't' && C != 'T') && (C != 'f' && C != 'F'))
+            if ((C > '9' || C < '0') && (C != 't' && C != 'T') && (C != 'f' && C != 'F') && C != '@')
                 return null;
 
             var SubIndex = Text.IndexOf(Text.FirstPossible(Index, ',', '}', ']'), Index);
@@ -82,7 +82,12 @@ namespace Poly.Data {
                         Storage.Set(Name, _Array(Text, ref Open, Close, jsObject.NewArray()));
                     }
                     else {
-                        Storage.Set(Name, _Raw(Text, ref Open, Close));
+                        object Val = _Raw(Text, ref Open, Close);
+
+                        if (Val == null)
+                            return null;
+
+                        Storage.Set(Name, Val);
                     }
                 }
                 while (Open < Close);
@@ -141,7 +146,7 @@ namespace Poly.Data {
                 Index += Name.Length + 2;
             }
             else {
-                Name = Text.Substring("", ":", Index, false).Trim();
+                Name = Text.Substring("", ":", Index).Trim();
             }
 
             Index = Text.IndexOf(':', Index);

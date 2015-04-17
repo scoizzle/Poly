@@ -18,6 +18,16 @@ namespace System {
             { '/', "\\/" }
         };
 
+        private static Dictionary<char, string> DescapeChars = new Dictionary<char, string>() {
+            { 'r', "\r" },
+            { 'n', "\n" },
+            { 't', "\t" },
+            { 'f', "\f" },
+            { '"', "\"" },
+            { '\\', "\\" },
+            { '/', "/" }
+        };
+
         public static bool ToBool(this String This) {
             if (This.Compare("true", 0, true)) {
                 return true;
@@ -206,16 +216,19 @@ namespace System {
                     Offset++;
                     break;
                 }
+                else if (This[Offset] == ';')
+                    break;
                 else return false;
             }
 
-            if (Offset < LastIndex && (This[Offset] == '-' || This[Offset] == '+'))
-                Offset++;
-
-            while (Offset < LastIndex) {
-                if (char.IsDigit(This[Offset]))
+            if (Offset < LastIndex && (This[Offset] == '-' || This[Offset] == '+')) { 
                     Offset++;
-                else return false;
+
+                while (Offset < LastIndex) {
+                    if (char.IsDigit(This[Offset]))
+                        Offset++;
+                    else return false;
+                }
             }
 
             if ((Offset - Index) == 0)
@@ -282,42 +295,46 @@ namespace System {
         }
 
         public static string Descape(this String This) {
-            if (This.Find('\\') == -1)
-                return This;
+            StringIterator It = new StringIterator(This);
+            StringBuilder Output = new StringBuilder();
 
-            int NewLength = This.Length;
+            while (!It.IsDone()) {
+                var Index = It.Index;
 
-            NewLength -= This.CountOf("\\u") * 5;
-            NewLength -= (This.CountOf("\\") - This.CountOf("\\\\"));
+                if (It.Goto('\\')) {
+                    Output.Append(This, Index, It.Index - Index);
 
-            char[] Array = new char[NewLength];
+                    It.Tick();
 
-            for (int i = 0, o = 0; o < This.Length && i < NewLength; i++, o++) {
-                if (This[o] == '\\') {
-                    if (This[o + 1] == 'u') {
-                        Array[i] = Convert.ToChar(
-                            Int32.Parse(This.Substring(o + 2, 4), Globalization.NumberStyles.HexNumber)
+                    if (It.IsAt('u')) {
+                        It.Tick();
+
+                        Output.Append(
+                            Convert.ToChar(
+                                Int32.Parse(
+                                    This.Substring(It.Index, 4), Globalization.NumberStyles.HexNumber
+                                )
+                            )
                         );
+
+                        It.Index += 4;
+                    }
+                    else if (DescapeChars.ContainsKey(It.Current)) {
+                        Output.Append(DescapeChars[It.Current]);
+                        It.Tick();
                     }
                     else {
-                        var Desc = This.Substring(o, 2);
-                        var C = FindDescapeChar(Desc);
-
-                        if (C != '\x00') {
-                            Array[i] = C;
-                        }
-                        else {
-                            Array[i] = This[o + 1];
-                        }
+                        Output.Append(It.Current);
+                        It.Tick();
                     }
-                    o++;
                 }
                 else {
-                    Array[i] = This[o];
+                    Output.Append(This, Index, This.Length - Index);
+                    break;
                 }
             }
 
-            return new string(Array);
+            return Output.ToString();
         }
 
         public static string HtmlDescape(this String This) {

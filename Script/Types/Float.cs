@@ -18,10 +18,7 @@ namespace Poly.Script.Types {
         }
 
         public override string ToString() {
-            if (Value != null)
-                return Value.ToString();
-
-            return string.Empty;
+            return Value.ToString();
         }
 
         public new static object Add(double Left, object Right) {

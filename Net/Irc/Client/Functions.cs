@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
+using System.Threading.Tasks;
 
 using Poly;
 using Poly.Data;
@@ -13,38 +14,31 @@ namespace Poly.Net.Irc {
         }
 
         public bool Connect(string Server, int Port) {
-            if (Connection == null)
-                Connection = new Poly.Net.Tcp.Client();
-            else if (Connection.Connected)
-                return true;
+            Connection.Connect(Server, Port);
 
-            if (Connection.Connect(Server, Port)) {
-                Connection.AutoFlush = true;
-                return true;
-            }
-            return false;
+            return Connection.Connected;
         }
 
         public void Disconnect() {
-            if (Connection == null)
-                return;
-
-            Connection.Close();
-            Connection = null;
+            if (Connection != null)
+                Connection.Close();
         }
 
-        public void Start() {
+        public async Task Start() {
+            Connection = new Tcp.Client();
             Connect();
 
-            this.ConnectionHandlerThread = new System.Threading.Thread(HandleBasicConnection);
-            this.ConnectionHandlerThread.Start();
+            await Task.Factory.StartNew(HandleBasicConnection);
+        }
+
+        public async void Restart() {
+            Stop();
+            await Start();
         }
 
         public void Stop() {
             Disconnect();
 
-            this.ConnectionHandlerThread.Abort();
-            this.ConnectionHandlerThread = null;
             this.Connection = null;
         }
 
@@ -63,55 +57,31 @@ namespace Poly.Net.Irc {
         }
 
         public void SendPong(string Message) {
-            Send(
-                new Packet("Pong") {
-                    { "Message", Message }
-                }
-            );
+            Send(new Packet(Packet.Pong, Message));
         }
 
         public void SendUser(string Name, string RealName, bool Hidden = false) {
-            Send(
-                new Packet("User") { 
-                    { "Ident", Name },
-                    { "Visible", Hidden ? "8" : "0" },
-                    { "Message", RealName }
-                }
-            );
+            Packet.Send(Connection, Packet.User, RealName, new string[] {
+                Name, 
+                Hidden ? "8" : "0",
+                "*"
+            });
         }
 
         public void SendPass(string Pass) {
-            Send(
-                new Packet("Pass") {
-                    { "Message", Pass }
-                }
-            );
+            Send(new Packet(Packet.Pass, string.Empty, Pass));
         }
 
         public void SendNick(string Nick) {
-            Send(
-                new Packet("Nick") {
-                    { "Message", Nick }
-                }
-            );
+            Send(new Packet(Packet.Nick, string.Empty, Nick));
         }
 
         public void SendOper(string Name, string Pass) {
-            Send(
-                new Packet("Oper") {
-                    { "Sender", Name },
-                    { "Message", Pass }
-                }
-            );
+            Send(new Packet(Packet.Oper, Pass, Name));
         }
 
         public void SendTopic(string Convo, string Topic) {
-            Send(
-                new Packet("Topic") {
-                    { "Receiver", Convo },
-                    { "Message", Topic }
-                }
-            );
+            Send(new Packet(Packet.Topic, Topic, Convo));
         }
 
         public void JoinChannel(string Channel) {
@@ -119,12 +89,8 @@ namespace Poly.Net.Irc {
         }
 
         public void JoinChannel(string Channel, string Key = "") {
-            Send(
-                new Packet("Join") {
-                    { "Receiver", Channel },
-                    { "Message", Key }
-                }
-            );
+            Send(new Packet(Packet.Join, Key, Channel));
+
             if (!Conversations.ContainsKey(Channel))
                 Conversations.Set(Channel, new Conversation(Channel));
         }
@@ -134,31 +100,18 @@ namespace Poly.Net.Irc {
 		}
 
         public void PartChannel(string Channel, string Message = "") {
-            Send(
-                new Packet("Part") {
-                    { "Receiver", Channel },
-                    { "Message", Message }
-                }
-            );
+            Send(new Packet(Packet.Part, Message, Channel));
+
             if (Conversations.ContainsKey(Channel))
                 Conversations.Remove(Channel);
         }
 
         public void QuitServer(string Message = "") {
-            Send(
-                new Packet("Quit") {
-                    { "Message", Message }
-                }
-            );
+            Send(new Packet(Packet.Quit, Message));
         }
 
         public void SendMessage(string Target, string Message) {
-            Send(
-                new Packet("Msg") {
-                    { "Receiver", Target },
-                    { "Message", Message }
-                }
-            );
+            Send(new Packet(Packet.Msg, Message, Target));
         }
 
         public void SendMessage(Conversation Convo, string Message) {
@@ -170,12 +123,7 @@ namespace Poly.Net.Irc {
         }
 
         public void SendNotice(string Target, string Message) {
-            Send(
-                new Packet("Notice") {
-                    { "Receiver", Target },
-                    { "Message", Message }
-                }
-            );
+            Send(new Packet(Packet.Notice, Message, Target));
         }
 
         public void SendNotice(Conversation Convo, string Message) {
@@ -213,36 +161,19 @@ namespace Poly.Net.Irc {
         }
 
         public void SendMode(string Target, string Modes) {
-            Send(
-                new Packet("Mode") {
-                    { "Reciever", Target },
-                    { "Message", Modes }
-                }
-            );
+            Send(new Packet(Packet.Mode, Modes, Target));
         }
 
         public void SendWho(string Search) {
-            Send(
-                new Packet("Who") {
-                    { "Receiver", Search }
-                }
-            );
+            Send(new Packet(Packet.Who, "", Search));
         }
 
         public void SendWhois(string Search) {
-            Send(
-                new Packet("Whois") {
-                    { "Receiver", Search }
-                }
-            );
+            Send(new Packet(Packet.Whois, "", Search));
         }
 
         public void SendWhowas(string Search) {
-            Send(
-                new Packet("Whowas") {
-                    { "Receiver", Search }
-                }
-            );
+            Send(new Packet(Packet.Whowas, "", Search));
         }
 
         public void RegisterConnection() {

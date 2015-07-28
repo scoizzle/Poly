@@ -16,12 +16,7 @@ namespace Poly.Script.Expressions {
         }
 
         public override object Evaluate(jsObject Context) {
-            var L = Left.Evaluate(Context);
-
-            if (L != null)
-                return L;
-
-            return Right.Evaluate(Context);
+            return Left.Evaluate(Context) ?? Right.Evaluate(Context);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

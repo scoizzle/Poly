@@ -1,24 +1,176 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
+using System.Reflection;
+using System.Diagnostics;
 
 using Poly;
 using Poly.Data;
 using Poly.Net.Tcp;
 
 namespace Poly.Net.Irc {
-    public class Packet : jsObject {
+    [DebuggerDisplay("{Debug}")]
+    public partial class Packet : jsComplex {
+        public const string Format = @":{Sender} {Type:!Whitespace}[ {Receiver:![\:],!Whitespace}][ {Args:![\:]:Trim}] :{Message::Trim}",
+                            HeadlessFormat = "{Type} {Args}[ :{Message::Trim}]";
+
+        public static Matcher Fmt = new Matcher(Format),
+                              HlFmt = new Matcher(HeadlessFormat);
+
+        public bool IsHeadless;
+        public string Type,
+                      Message,
+                      Sender,
+                      Receiver,
+                      Args;
+
+        public bool IsCTCP {
+            get {
+                if (IsHeadless || string.IsNullOrEmpty(Message))
+                    return false;
+
+                return Message.First() == '\x01' && Message.Last() == '\x01';
+            }
+        }
+
+        public string Debug {
+            get {
+                return ToString();
+            }
+        }
+
+        public Packet() {
+            Type = Message = Sender = Receiver = Args = string.Empty;
+        }
+
+        public Packet(string Type, string Message, params string[] Args) : this() {
+            this.IsHeadless = true;
+
+            this.Type = Type;
+            this.Message = Message;
+
+            this.SetArgs(Args);
+        }
+
+        public Packet(Packet.Reply Type, string Message, params string[] Args) 
+            : this(((int)Type).ToString("D3"), Message, Args) {
+        }
+
+        public Packet(string Type, string Sender, string Receiver, string Message, params string[] Args) 
+            : this(Type, Message) {
+            this.IsHeadless = false;
+
+            this.Sender = Sender;
+            this.Receiver = Receiver;
+
+            this.SetArgs(Args);
+        }
+
+        public Packet(Packet.Reply Type, string Sender, string Receiver, string Message, params string[] Args) 
+            : this(((int)Type).ToString("D3"), Sender, Receiver, Message, Args) {
+        }
+
+        public void SetArgs(params string[] Values) {
+            this.Args = string.Join(" ", Values);
+        }
+
+        public void Send(Tcp.Client Client) {
+            Send(Client, this);
+        }
+
+        public void Send(Tcp.Client[] List) {
+            Send(List, this);
+        }
+
+        public static void Send(Tcp.Client Client, Packet Packet) {
+            if (Client != null && Client.Connected) {
+                var Out = Packet.ToString();
+                Client.SendLine(Out);
+            }
+        }
+
+        public static void Send(Tcp.Client[] List, Packet Packet) {
+            var Out = Packet.ToString();
+            App.Log.Warning(Out);
+            for (int i = 0; i < List.Length; i++) {
+                if (List[i] != null && List[i].Connected)
+                    try {
+                        List[i].SendLine(Out);
+                    }
+                    catch { }
+            }
+        }
+
+        public static Packet Receive(Tcp.Client Client) {
+            if (Client != null && Client.Connected) {
+                return FromString(Client.ReadLine());
+            }
+
+            return null;
+        }
+
+        public static void Send(Tcp.Client Client, string Type, string Message, params string[] Args) {
+            Send(Client, new Packet(Type, Message, Args));
+        }
+
+        public static void Send(Tcp.Client Client, Packet.Reply Type, string Message, params string[] Args) {
+            Send(Client, new Packet(Type, Message, Args));
+        }
+
+        public static void Send(Tcp.Client Client, string Type, string Sender, string Receiver, string Message, params string[] Args) {
+            Send(Client, new Packet(Type, Sender, Receiver, Message, Args));
+        }
+
+        public static void Send(Tcp.Client Client, Packet.Reply Type, string Sender, string Receiver, string Message, params string[] Args) {
+            Send(Client, new Packet(Type, Sender, Receiver, Message, Args));
+        }
+        
+        public static Packet FromString(string Line) {
+            if (string.IsNullOrEmpty(Line))
+                return null;
+
+            var Pack = new Packet();
+
+            if (Line.StartsWith(":")) {
+                if (Fmt.Match(Line, Pack) != null) {
+                    return Pack;
+                }
+            }
+            else {
+                if (HlFmt.Match(Line, Pack) != null) {
+                    Pack.IsHeadless = true;
+                    return Pack;
+                }
+            }
+
+            return null;
+        }
+
+        public override string ToString() {
+            if (this.IsHeadless) {
+                return this.Template(HeadlessFormat);
+            }
+            else {
+                return this.Template(Format);
+            }
+        }
+    }
+
+    [DebuggerDisplay("{Output}")]
+    public partial class _Packet : jsObject {
         public static Dictionary<string, string> Formats = new Dictionary<string, string>() {
-            { "Pong", "PONG :{Message}" },
-            { "User", "USER {Ident} {Visible} * :{Message}" },
-            { "Nick", "NICK {Message}" },
-            { "Pass", "PASS :{Message}" },
+            { "Pong", "PONG [:]{Message}" },
+            { "User", "USER {Ident} {Visible} * :{Realname}" },
+            { "Nick", "NICK [:]{Message}" },
+            { "Pass", "PASS :{Pass}" },
             { "Mode", "MODE {Receiver}[ {Message}]" },
             { "CTCP", "PRIVMSG {Receiver} :\x0001{Message}\x0001" },
             { "CTCPReply", "NOTICE {Receiver} :\x0001{Message}\x0001" },
             { "Msg", "PRIVMSG {Receiver} :{Message}" },
             { "Notice", "NOTICE {Receiver} :{Message}" },
-            { "Join", "JOIN {Receiver}[ {Message}]" },
+            { "Join", "JOIN {Receiver}[ :{Message}]" },
             { "Part", "PART {Receiver} :{Message}" },
             { "Error", "ERROR :{Message}" },
             { "Quit", "QUIT :{Message}" },
@@ -30,6 +182,7 @@ namespace Poly.Net.Irc {
             { "Version", "VERSION" },
             { "Stats", "STATS {Receiver}" },
             { "Links", "LINKS {Receiver}" },
+            { "ISON", "ISON {Receiver}" },
             { "Time", "TIME" },
             { "Trace", "TRACE" },
             { "Admin", "ADMIN" },
@@ -60,6 +213,7 @@ namespace Poly.Net.Irc {
             { "OnServerInfo", ":{Sender} 003 {Receiver} :{Message}" },
             { "OnServerMoreInfo", ":{Sender} 004 {Receiver} {Message}" },
             { "OnServerFeatures", ":{Sender} 005 {Receiver} {Features} :{Message}" },
+            { "OnModeIs", ":{Sender} 221 {Receiver} :{Message}"},
             { "OnServerRecords", ":{Sender} 250 {Receiver} :{Message}" },
             { "OnNetworkUsersStats", ":{Sender} 251 {Receiver} :{Message}" },
             { "OnNetworkOpersCount", ":{Sender} 252 {Receiver} {Count} :{Message}" },
@@ -68,7 +222,8 @@ namespace Poly.Net.Irc {
             { "OnServerClientsInfo", ":{Sender} 255 {Receiver} :{Message}" },
             { "OnServerUsersCount", ":{Sender} 265 {Receiver} :{Message}" },
             { "OnNetworkUsersCount", ":{Sender} 266 {Receiver} [{Local:Numeric} {Global:Numeric}] :{Message}" },
-            { "OnWhoEnd", ":{Sender} 315 {Receiver} {Nick} :{Message}" },
+            { "OnISON", ":{Sender} 303 {Receiver} :{Message}" },
+            { "OnWhoEnd", ":{Sender} 315 {Receiver} {Channel} :{Message}" },
             { "OnListStart", ":{Sender} 321 {Receiver} :{Message}" },
             { "OnList", ":{Sender} 322 {Receiver} :{Message}" },
             { "OnListEnd", ":{Sender} 323 {Receiver} :{Message}" },
@@ -76,7 +231,7 @@ namespace Poly.Net.Irc {
             { "OnTopicEmpty", ":{Sender} 331 {Nick} {Receiver} :{Message}" },
             { "OnTopicInit", ":{Sender} 332 {Nick} {Receiver} :{Message}" },
             { "OnTopicInfo", ":{Sender} 333 {Nick} {Receiver} {Author} {Message}" },
-            { "OnWho", ":{Sender} 352 {Receiver} {Channel} {Ident} {Host} {Server} {Nick} {Modes} :{HopCount} {RealName}" },
+            { "OnWho", ":{Sender} 352 {Receiver} {Channel} {Ident} {Host} {Server} {Nick} {Modes} :{HopCount} {Realname}" },
             { "OnChannelUserList", ":{Sender} 353 {Receiver} = {Channel} :{Message}" },
             { "OnNAMESEnd", ":{Sender} 366 {Receiver} {Channel} :{Message}" },
             { "OnMOTDStart", ":{Sender} 375 {Receiver} :{Message}" },
@@ -124,22 +279,29 @@ namespace Poly.Net.Irc {
             { "OnNoPermission", ":{Sender} 481 {Receiver} :{Message}" },
             { "OnChannelOpNeeded", ":{Sender} 482 {Receiver} :{Message}" },
             { "OnCantKillServer", ":{Sender} 483 {Receiver} :{Message}" },
-            { "OnExpression.NoOperationerHost", ":{Sender} 491 {Receiver} :{Message}" },
+            { "OnerHost", ":{Sender} 491 {Receiver} :{Message}" },
             { "OnUnknownModeFlag", ":{Sender} 501 {Receiver} :{Message}" },
             { "OnUsersDontMatch", ":{Sender} 502 {Receiver} :{Message}" },
         };
 
-        public Packet() { }
+        static KeyValuePair<string, string>[] _PacketFormatArray = Formats.ToArray();
 
-        public Packet(string TypeName) {
+        public _Packet() {
+        }
+
+        public _Packet(string TypeName) {
             this.Format = Formats[TypeName];
+        }
+
+        public _Packet(string TypeName, params object[] Args) : base(Args) {
+            Format = Formats[TypeName];
         }
 
         public string Format = string.Empty;
 
         public string Sender {
             get {
-                return Get<string>("Sender", string.Empty);
+                return Get<string>("Sender") ?? string.Empty;
             }
             set {
                 Set("Sender", value);
@@ -148,7 +310,7 @@ namespace Poly.Net.Irc {
 
         public string Receiver {
             get {
-                return Get<string>("Receiver", string.Empty);
+                return Get<string>("Receiver") ?? string.Empty;
             }
             set {
                 Set("Receiver", value);
@@ -157,7 +319,7 @@ namespace Poly.Net.Irc {
 
         public string Action {
             get {
-                return Get<string>("Action", string.Empty);
+                return Get<string>("Action") ?? string.Empty;
             }
             set {
                 Set("Action", value);
@@ -166,39 +328,77 @@ namespace Poly.Net.Irc {
 
         public string Message {
             get {
-                return Get<string>("Message", string.Empty);
+                return Get<string>("Message") ?? string.Empty;
             }
             set {
                 Set("Message", value);
             }
         }
 
+        public string Output {
+            get {
+                return ToString();
+            }
+        }
+
         public void Send(Poly.Net.Tcp.Client Client) {
-			if (Client != null) {
-            	Client.SendLine(this.Template(Format));
+            if (Client != null) {
+                var Out = this.Template(Format);
+
+            	Client.SendLine(Out);
 			}
         }
 
-        public bool Receive(Poly.Net.Tcp.Client Client) {
-            string Data = Client.Receive();
+        public static void Send(Tcp.Client Client, string Type, jsObject Info) {
+            Client.SendLine(Info.Template(Formats[Type]));
+        }
 
-            if (Data == null)
-                return false;
+        public static void Send(Tcp.Client Client, string Type, params object[] Items) {
+            var Out = new jsObject(Items).Template(Formats[Type]);
 
-            foreach (var Pair in Formats) {
-                if (Data.Match(Pair.Value, false, this) != null) {
+            Client.SendLine(Out);
+        }
+
+        public bool Recieve(Tcp.Client Client) {
+            var Line = Client.ReadLine();
+            
+            foreach (var Pair in _PacketFormatArray) {
+                if (Line.Match(Pair.Value, false, this) != null) {
                     this.Format = Pair.Value;
                     this.Action = Pair.Key;
                     return true;
                 }
             }
 
-            this.Message = Data;
             return false;
         }
 
-        public static implicit operator Packet(string Name) {
-            return new Packet(Name);
+        public static _Packet Get(Tcp.Client Client) {
+            var _Packet = new _Packet();
+
+            if (_Packet.Recieve(Client)) {
+                return _Packet;
+            }
+            return null;
+        }
+
+        public static async Task<_Packet> RecieveAsync(Tcp.Client Client) {
+            return await Task.Factory.StartNew(() => {
+                var _Packet = new _Packet();
+
+                if (_Packet.Recieve(Client)) {
+                    return _Packet;
+                }
+                return null;
+            });
+        }
+
+        public static implicit operator _Packet(string Name) {
+            return new _Packet(Name);
+        }
+
+        public override string ToString() {
+            return this.Template(Format);
         }
 
         public override string ToString(bool humanformat) {

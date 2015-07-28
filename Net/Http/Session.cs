@@ -20,7 +20,7 @@ namespace Poly.Net.Http {
             if (Req.Client == null || !Req.Client.Connected)
                 return string.Empty;
 
-            return Req.Client.Socket.RemoteEndPoint.ToString().MD5().SHA1();
+            return Req.Client.Client.RemoteEndPoint.ToString().MD5().SHA1();
         }
 
         public static Session CreateSession(Server Serv, Request Req, Host Info) {

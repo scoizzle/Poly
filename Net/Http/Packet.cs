@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading;
+using System.Threading.Tasks;
 
 using Poly;
 using Poly.Data;
@@ -9,12 +9,13 @@ using Poly.Data;
 namespace Poly.Net.Http {
     public class Packet : jsComplex {
         static readonly char[] PathSplit = new char[] { '/' };
-        public jsObject Headers, Get, Post, Cookies, Route;
-        public string RawTarget, Connection, Type, Target, Version, Value, Query;
+        public new jsObject Get;
+        public jsObject Headers, Post, Cookies, Route;
+        public string Host, RawTarget, Connection, Type, Target, Version, Value, Query;
 
         public int ContentLength {
             get {
-                return Headers.Get<int>("Content-Length", 0);
+                return Headers.Get<int?>("Content-Length") ?? 0;
             }
             set {
                 Headers.Set("Content-Length", value);
@@ -30,15 +31,6 @@ namespace Poly.Net.Http {
             }
         }
 
-        public string Host {
-            get {
-                return Headers.Get<string>("Host");
-            }
-            set {
-                this.Headers["Host"] = value;
-            }
-        }
-
         public Packet() {
             Headers = new jsObject();
             Get = new jsObject();
@@ -46,7 +38,7 @@ namespace Poly.Net.Http {
             Cookies = new jsObject();
             Route = new jsObject();
 
-            RawTarget = Connection = Type = Target = Version = Value = Query = string.Empty;
+            Host = RawTarget = Connection = Type = Target = Version = Value = Query = string.Empty;
         }
 
         public bool Receive(Net.Tcp.Client Client) {
@@ -92,20 +84,24 @@ namespace Poly.Net.Http {
                 Route.Add(Part);
             }
 
-            while (!string.IsNullOrEmpty(Line = Client.Receive())) {
-                var Match = Line.Match("{Key}: {Value}");
+            while (!string.IsNullOrEmpty(Line = Client.ReadLine())) {
+                var Index = Line.Find(": ");
 
-                if (Match == null)
-                    continue;
+                if (Index == -1) {
+                    Client.Close();
+                    return false;
+                }
 
                 Headers.Set(
-                    Match["Key"] as string,
-                    Match["Value"] as string
+                    Line.Substring(0, Index),
+                    Line.Substring(Index + 2)
                 );
             }
 
             if (!Headers.ContainsKey("Host"))
                 return false;
+
+            Host = Headers["Host"] as string;
 
             if (Host.Contains(":")) {
                 Headers.Set("Port", Host.Substring(":", ""));
@@ -123,21 +119,16 @@ namespace Poly.Net.Http {
             }
 
             if (Headers.ContainsKey("Content-Length")) {
-                Value = new string(Client.Receive(ContentLength));
+                Value = Client.Reader.CurrentEncoding.GetString(Client.Read(ContentLength));
 
                 if (Type == "POST" && ContentType == "application/x-www-form-urlencoded") {
                     Split = Value.Split('&');
 
                     for (int n = 0; n < Split.Length; n++) {
-                        var Match = Split[n].Match("{Key::UrlDescape}={Value::UrlDescape}"); 
+                        var Pair = Split[n].Split('=');
+                        Cookies[Pair[0]] = Pair[1];
 
-                        if (Match == null)
-                            continue;
-
-                        Post.Set(
-                            Match["Key"] as string,
-                            Match["Value"] as string
-                        );
+                        Post.Set(Pair[0], Pair[1]);
                     }
                 }
             }

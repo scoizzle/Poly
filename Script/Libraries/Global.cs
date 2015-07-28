@@ -18,7 +18,6 @@ namespace Poly.Script.Libraries {
             Add(Match);
             Add(Break);
 			Add(TypeName);
-            Add(ToNum);
             Add(ToObject);
             Add(ToStr);
         }
@@ -48,48 +47,15 @@ namespace Poly.Script.Libraries {
             return string.Empty;
         });
 
-        public static Function Match = new Function("Match", (Args) => {
-            var This = Args.Get<string>("this");
-            var Regex = Args.Get<string>("0");
-
+        public static Function Match = Function.Create("Match", (string This, string Regex) => {
             if (!string.IsNullOrEmpty(This) && !string.IsNullOrEmpty(Regex))
                 return This.Match(Regex);
 
             return null;
         });
 
-        public static Function Break = Function.Create("Break", () => {
+        public static Function Break = Function.Create("Break", (object Input) => {
             System.Diagnostics.Debugger.Break();
-            return null;
-        });
-
-        public static Function ToNum = new Function("ToNum", (Args) => {
-            var This = Args.Get<object>("this");
-
-            if (This == null)
-                return null;
-
-            if (This is string) {
-                var Int = 0;
-                if (int.TryParse(This as string, out Int)) {
-                    return Int;
-                }
-
-                var Flt = 0d;
-                if (double.TryParse(This as string, out Flt)) {
-                    return Flt;
-                }
-            }
-            else if (This is bool) {
-                return Convert.ToBoolean(This) ? 1 : 0;
-            }
-            else if (This is double) {
-                return (double)This;
-            }
-            else if (This is int) {
-                return (int)This;
-            }
-
             return null;
         });
 
@@ -102,17 +68,9 @@ namespace Poly.Script.Libraries {
 			return This.GetType().FullName;
 		});
 
-        public static Function ToObject = new Function("ToObject", (Args) => {
-            var This = Args.Get<object>("this");
-
-            if (This == null)
-                return null;
-
-            if (This is string) {
-                return (This as string).ToJsObject();
-            }
-            else if (This is jsObject) {
-                return This;
+        public static Function ToObject = Function.Create<object>("ToObject", (This) => {
+            if (This != null) {
+                return This.ToString().ToJsObject();
             }
             return null;
         });
@@ -121,7 +79,7 @@ namespace Poly.Script.Libraries {
             if (This == null)
                 return "";
 
-            return Convert.ToString(This);
+            return This.ToString();
         });
     }
 }

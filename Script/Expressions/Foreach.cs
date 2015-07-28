@@ -23,12 +23,9 @@ namespace Poly.Script.Expressions {
 
                 if (Ret != null)
                     return Ret;
-
-                object Val;
+				
                 if (Node != null)
-                    Val = Node.Evaluate(Context);
-                else 
-                    Val = null;                
+                    Node.Evaluate(Context);             
 
                 if (Ret == Break || Ret == Continue)
                     return Ret;
@@ -75,10 +72,9 @@ namespace Poly.Script.Expressions {
         }
 
         private object LoopArray(jsObject Context, Array Array) {
-            int Index = 0;
-            foreach (object O in Array) {
-                var Result = LoopNodes(Context, Index.ToString(), O);
-
+            for (int Index = 0; Index < Array.Length; Index++) {
+                var Result = LoopNodes(Context, Index, Array.GetValue(Index));
+                
                 var Ret = Result as Return;
 
                 if (Ret != null)
@@ -86,7 +82,9 @@ namespace Poly.Script.Expressions {
 
                 if (Result == Break)
                     break;
+
             }
+
             return null;
         }
 

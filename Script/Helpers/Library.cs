@@ -37,8 +37,6 @@ namespace Poly.Script {
                     }
                 }
             }
-
-            Assemblies = null;
         }
 
         public static void RegisterLibrary(string name, Library Lib) {

@@ -13,9 +13,11 @@ namespace Poly.Net.Http {
 
         public string Name, Path, DefaultDocument, DefaultExtension, SessionCookieName, SessionDomain, SessionPath;
 
+        public Matcher Matcher;
         public jsObject PathOverrides, Ports;
 
         public Event.Engine Handlers = new Event.Engine();
+        public Cache Cache;
 
         public Host() {
             this.Name = "localhost";
@@ -30,14 +32,8 @@ namespace Poly.Net.Http {
 
             this.PathOverrides = new jsObject();
             this.Ports = new jsObject();
-        }
 
-        public Host(jsObject Base) : this() {
-            if (Base != null) {
-                Base.CopyTo(this);
-
-                SessionDomain = Name;
-            }
+            this.Cache = new Cache(this.Path);
         }
 
         public void On(string Path, Event.Handler Handler) {
@@ -47,11 +43,7 @@ namespace Poly.Net.Http {
         public void On(string Path, Event.Handler Handler, string ThisName, object This) {
             Handlers.Register(Path, Handler, ThisName, This);
         }
-
-        public void Load(Server Serv, string Name) {
-            Serv.ScriptCache.Load(Path, Path + Name);
-        }
-
+        
         public string GetWWW(Request Request) {
             string Req = Request.Packet.Target;
 
@@ -62,7 +54,7 @@ namespace Poly.Net.Http {
             string FileName = Req;
 
             foreach (var ovr in PathOverrides) {
-                if (Req.Compare(ovr.Key)) {
+                if (Req.Match(ovr.Key) != null) {
                     FileName = ovr.Value.ToString();
                     break;
                 }

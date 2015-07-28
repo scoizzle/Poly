@@ -28,16 +28,10 @@ namespace Poly.Script.Expressions.Html {
             if (Value == null)
                 return;
 
-            if (Value == Types.String.Empty) {
-                Output.AppendFormat(" {0}", Name);
-            }
-            else {
-                var Val = Value.Evaluate(Context);
+            var Val = Value.Evaluate(Context);
 
-                if (Val != null){
-                    Output.AppendFormat(Format, Name, Val);
-                }
-            }
+            if (Val != null && !string.IsNullOrEmpty(Val.ToString()))
+                Output.AppendFormat(Format, Name, Val);
         }
     }
 }

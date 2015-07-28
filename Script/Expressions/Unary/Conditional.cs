@@ -14,18 +14,15 @@ namespace Poly.Script.Expressions {
 
         public Conditional(Node Bool, Node Left, Node Right) {
             this.Boolean = Bool;
-            this.Left = Left;
-            this.Right = Right;
+
+            this.Left = Left == null ? Expression.Null : Left;
+            this.Right = Right == null ? Expression.Null : Right;
         }
 
         public override object Evaluate(jsObject Context) {
-            if (Left != null && Bool.EvaluateNode(this.Boolean, Context)) {
-                return this.Left.Evaluate(Context);
-            }
-            else if (Right != null) {
-                return this.Right.Evaluate(Context);
-            }
-            return null;
+            return Bool.EvaluateNode(this.Boolean, Context) ? 
+                Left.Evaluate(Context) :
+                Right.Evaluate(Context);
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

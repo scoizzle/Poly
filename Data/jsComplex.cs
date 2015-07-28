@@ -44,8 +44,8 @@ namespace Poly.Data {
                 }
         }
 
-        public override bool GetValue(string Key, out object Value) {
-            if (TryGetValue(Key, out Value))
+        public override bool TryGet(string Key, out object Value) {
+            if (base.TryGet(Key, out Value))
                 return true;
 
             if (LocalCache.ContainsKey(Key)) {
@@ -54,6 +54,23 @@ namespace Poly.Data {
             }
 
             Value = null;
+            return false;
+        }
+
+        public override bool TryGet<T>(string Key, out T Value) {
+            if (base.TryGet<T>(Key, out Value))
+                return true;
+
+            if (LocalCache.ContainsKey(Key)) {
+                var Val = LocalCache[Key].Item1(this);
+
+                if (Val is T) {
+                    Value = (T)(Val);
+                    return true;
+                }
+            }
+
+            Value = default(T);
             return false;
         }
 
@@ -66,7 +83,7 @@ namespace Poly.Data {
             }
         }
         
-        public static StringBuilder Stringify(StringBuilder Output, jsComplex This, jsObject Parent) {
+        new public static StringBuilder Stringify(StringBuilder Output, jsComplex This, jsObject Parent) {
             Output.Append(This.IsArray ? '[' : '{');
 
             int Index = 1;
@@ -82,7 +99,7 @@ namespace Poly.Data {
                 }
 
                 if (Value is jsComplex) {
-                    Stringify(Output, Value as jsComplex, This);
+                    jsComplex.Stringify(Output, Value as jsComplex, This);
                 }
                 else if (Value is jsObject) {
                     jsObject.Stringify(Output, Value as jsObject, This);
@@ -113,17 +130,21 @@ namespace Poly.Data {
                 }
 
                 if (Value is jsComplex) {
-                    Stringify(Output, Value as jsComplex, This);
+                    jsComplex.Stringify(Output, Value as jsComplex, This);
                 }
-                else if (Value is jsObject) {
+                else 
+                if (Value is jsObject) {
                     jsObject.Stringify(Output, Value as jsObject, This);
                 }
-                else if (Value is bool) {
+                else 
+                if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                else {
+                else 
+                if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
+                else continue;
 
                 if (Index != This.LocalCache.Count) {
                     Output.Append(",");
@@ -152,7 +173,7 @@ namespace Poly.Data {
                 }
 
                 if (Value is jsComplex) {
-                    Stringify(Output, Value as jsComplex, This);
+                    jsComplex.Stringify(Output, Value as jsComplex, This);
                 }
                 else if (Value is jsObject) {
                     jsObject.Stringify(Output, Value as jsObject, This);
@@ -160,9 +181,10 @@ namespace Poly.Data {
                 else if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                else {
+                if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
+                else continue;
 
                 if (Index != This.Count) {
                     Output.Append(",");
@@ -186,7 +208,7 @@ namespace Poly.Data {
                 }
 
                 if (Value is jsComplex) {
-                    Stringify(Output, Value as jsComplex, This, Tabs + 1);
+                    jsComplex.Stringify(Output, Value as jsComplex, This, Tabs + 1);
                 }
                 else if (Value is jsObject) {
                     jsObject.Stringify(Output, Value as jsObject, This, Tabs + 1);
@@ -194,9 +216,10 @@ namespace Poly.Data {
                 else if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                else {
+                if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
+                else continue;
 
                 if (Index != This.LocalCache.Count) {
                     Output.Append(",");
@@ -211,8 +234,17 @@ namespace Poly.Data {
             return Output;
         }
 
+        public static string Stringify(jsComplex This, bool HumanFormat) {
+            if (HumanFormat) {
+                return jsComplex.Stringify(new StringBuilder(), This, null, 1).ToString();
+            }
+            else {
+                return jsComplex.Stringify(new StringBuilder(), This, null).ToString();
+            }
+        }
+
         public override string ToString() {
-            return Stringify(this, false);
+            return jsComplex.Stringify(this, false);
         }
     }
 }

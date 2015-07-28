@@ -7,13 +7,16 @@ namespace Poly.Script.Nodes {
     public class Node : IDisposable {
         public Node[] Elements;
 
+        public static Node ContextAccess = new Helpers.ContextAccessor();
+
         public void Dispose() { Elements = null; }
 
         public virtual object Evaluate(jsObject Context) {
             if (Elements == null)
                 return null;
 
-            foreach (Node N in Elements) {
+            for (int i = 0; i < Elements.Length; i++) {
+                var N = Elements[i];
                 var R = N as Expressions.Return;
                 if (R != null)
                     return R;

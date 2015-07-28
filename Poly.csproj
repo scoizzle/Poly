@@ -29,11 +29,8 @@
     <WarningLevel>4</WarningLevel>
     <Externalconsole>true</Externalconsole>
   </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>
-    </ApplicationIcon>
-  </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
@@ -46,7 +43,7 @@
     <Compile Include="Application.Logging.cs" />
     <Compile Include="Char.Extensions.cs" />
     <Compile Include="Data\jsComplex.cs" />
-    <Compile Include="Event.Queue.cs" />
+    <Compile Include="Event.Engine.cs" />
     <Compile Include="Data\Hash.cs" />
     <Compile Include="Data\jsObject.Accessors.cs" />
     <Compile Include="Data\jsObject.cs" />
@@ -54,21 +51,27 @@
     <Compile Include="Data\Template.cs" />
     <Compile Include="Event.Wrappers.cs" />
     <Compile Include="Event.cs" />
+    <Compile Include="Match.cs" />
     <Compile Include="Mime.cs" />
+    <Compile Include="Net\Http\Cache.cs" />
     <Compile Include="Net\Http\Host.cs" />
     <Compile Include="Net\Http\Http.cs" />
-    <Compile Include="Net\Http\FileCache.cs" />
     <Compile Include="Net\Http\Packet.cs" />
     <Compile Include="Net\Http\Result.cs" />
     <Compile Include="Net\Http\MimeTypes.cs" />
     <Compile Include="Net\Http\Request.cs" />
-    <Compile Include="Net\Http\ScriptCache.cs" />
     <Compile Include="Net\Http\Server.cs" />
     <Compile Include="Net\Http\Server.Dispatch.cs" />
     <Compile Include="Net\Http\Server.Routing.cs" />
     <Compile Include="Net\Http\Session.cs" />
     <Compile Include="Net\Irc\Conversation.cs" />
     <Compile Include="Net\Irc\Packet.cs" />
+    <Compile Include="Net\Irc\Packet.Types.cs" />
+    <Compile Include="Net\Irc\Server\Connection.cs" />
+    <Compile Include="Net\Irc\Server\Events.cs" />
+    <Compile Include="Net\Irc\Server\Threads.cs" />
+    <Compile Include="Net\Irc\Server\Functions.cs" />
+    <Compile Include="Net\Irc\Server\Server.cs" />
     <Compile Include="Net\Irc\User.cs" />
     <Compile Include="Net\Tcp\Client.cs" />
     <Compile Include="Net\Tcp\MultiPortServer.cs" />
@@ -82,7 +85,9 @@
     <Compile Include="Script\Expressions\Unary\Comparative.cs" />
     <Compile Include="Script\Expressions\Unary\Conditional.cs" />
     <Compile Include="Script\Expressions\Unary\Is.cs" />
+    <Compile Include="Script\Expressions\Unary\Template.cs" />
     <Compile Include="Script\Helpers\CachedScript.cs" />
+    <Compile Include="Script\Helpers\ContextAccessor.cs" />
     <Compile Include="Script\Helpers\SystemTypeGetter.cs" />
     <Compile Include="Script\Engine.cs" />
     <Compile Include="Script\Expressions\Async.cs" />
@@ -124,23 +129,26 @@
     <Compile Include="Script\Helpers\Extension.cs" />
     <Compile Include="Script\Helpers\Library.cs" />
     <Compile Include="Script\Libraries\Html.cs" />
-    <Compile Include="Script\Libraries\String.cs" />
     <Compile Include="Script\Libraries\TimeSpan.cs" />
     <Compile Include="Script\Libraries\Hash.cs" />
     <Compile Include="Script\Libraries\Tcp.cs" />
-    <Compile Include="Script\Libraries\Sockets.cs" />
     <Compile Include="Script\Libraries\Global.cs" />
     <Compile Include="Script\Libraries\Http.cs" />
     <Compile Include="Script\Libraries\Standard.cs" />
     <Compile Include="Script\Nodes\Function.Extensions.cs" />
     <Compile Include="Script\Expressions\If.cs" />
     <Compile Include="Script\Helpers\Interface.cs" />
-    <Compile Include="Script\Types\DataType.cs" />
     <Compile Include="Script\Nodes\StaticValue.cs" />
     <Compile Include="Script\Parser\Parser.cs" />
-    <Compile Include="Script\Types\Bool.cs" />
-    <Compile Include="Script\Types\Float.cs" />
-    <Compile Include="Script\Types\Integer.cs" />
+    <Compile Include="Script\Types\Bool.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Script\Types\Float.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Script\Types\Integer.cs">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Script\Types\Object.cs" />
     <Compile Include="Script\Expressions\Call.cs" />
     <Compile Include="Script\Expressions\Return.cs" />
@@ -152,18 +160,30 @@
     <Compile Include="Script\Nodes\Value.cs" />
     <Compile Include="Script\Nodes\Variable.cs" />
     <Compile Include="Script\Types\ClassInstance.cs" />
-    <Compile Include="Script\Types\String.cs" />
-    <Compile Include="String.Conversions.cs" />
-    <Compile Include="String.Extensions.cs" />
+    <Compile Include="Script\Types\String.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="String\Matching\Block.cs" />
+    <Compile Include="String\Matching\Blocks\Extract.cs" />
+    <Compile Include="String\Matching\Blocks\WildCard.cs" />
+    <Compile Include="String\Matching\Blocks\Whitespace.cs" />
+    <Compile Include="String\Matching\Blocks\Optional.cs" />
+    <Compile Include="String\Matching\Blocks\WildCharacter.cs" />
+    <Compile Include="String\Matching\Blocks\Static.cs" />
+    <Compile Include="String\Matching\Context.cs" />
+    <Compile Include="String\Matching\Matcher.cs" />
+    <Compile Include="String\String.Conversions.cs" />
+    <Compile Include="String\String.Extensions.cs" />
     <Compile Include="Net\Irc\Client\Client.cs" />
     <Compile Include="Net\Irc\Client\Events.cs" />
     <Compile Include="Net\Irc\Client\Functions.cs" />
     <Compile Include="Net\Irc\Client\Threads.cs" />
-    <Compile Include="String.Iteration.cs" />
-    <Compile Include="String.Iterator.cs" />
-    <Compile Include="String.Matching.cs" />
+    <Compile Include="String\String.Iteration.cs" />
+    <Compile Include="String\String.Iterator.cs" />
+    <Compile Include="String\String.Matching.cs" />
     <Compile Include="TimeSpan.Extensions.cs" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

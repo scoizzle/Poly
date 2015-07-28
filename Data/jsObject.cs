@@ -5,15 +5,16 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Dynamic;
+using System.Threading.Tasks;
 
 namespace Poly.Data {
     public partial class jsObject : Dictionary<string, object> {
         public new object this[string Key] {
             get {
-                return Get<object>(Key);
+                return Get<object>(Key.Split("."));
             }
             set {
-                Set(Key, value);
+                Set(Key.Split("."), value);
             }
         }
 
@@ -22,13 +23,22 @@ namespace Poly.Data {
                 return Get<object>(Keys);
             }
             set {
-                Set<object>(Keys, value);
+                Set(Keys, value);
             }
         }
 
-        public jsObject() { 
+        static jsObject() {
+            Parsers = new Dictionary<Type, ParserDelegate>();
 
+            RegisterParser<bool>(Convert.ToBoolean);
+            RegisterParser<int>(Convert.ToInt32);
+            RegisterParser<long>(Convert.ToInt64);
+            RegisterParser<float>(Convert.ToSingle);
+            RegisterParser<double>(Convert.ToDouble);
+            RegisterParser<decimal>(Convert.ToDecimal);
         }
+
+        public jsObject() { }
 
         public jsObject(string Json) {
             Parse(Json);
@@ -52,10 +62,18 @@ namespace Poly.Data {
             Add(Count.ToString(), Object);
         }
 
+        public void CopyTo(jsObject Object, params string[] Keys) {
+            foreach (var K in Keys){
+                Object.Set(K, this.Get(K));
+            }
+        }
+
         public void CopyTo(jsObject Object) {
-            ForEach((K, V) => {
-                Object[K] = V;
-            });
+            var L = this.ToArray();
+
+            for (int i = 0; i < L.Length; i++) {
+                Object.AssignValue(L[i].Key, L[i].Value);
+            }
         }
 
         public void ForEach(Action<string, object> Action) {
@@ -92,7 +110,7 @@ namespace Poly.Data {
         }
 
         public void ForEach<T>(string Key, Action<string, T> Action) where T : class {
-            var Obj = getObject(Key);
+            var Obj = Get<jsObject>(Key);
 
             if (Obj == null)
                 return;
@@ -169,9 +187,10 @@ namespace Poly.Data {
                 else if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                else {
+                if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
+                else continue;
 
                 if (Index != This.Count) {
                     Output.Append(",");
@@ -207,9 +226,10 @@ namespace Poly.Data {
                 else if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                else {
+                if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
+                else continue;
 
                 if (Index != This.Count) {
                     Output.Append(",");
@@ -285,6 +305,10 @@ namespace Poly.Data {
             return new jsObject();
         }
 
+        public static void RegisterParser<T>(Func<string, T> Handler) {
+            Parsers.Add(typeof(T), (str) => { return Handler(str); });
+        }
+
         public static implicit operator jsObject(string Text) {
             jsObject Object = new jsObject();
 
@@ -294,6 +318,18 @@ namespace Poly.Data {
 
             return default(jsObject);
         }
+
+        public static jsObject operator +(jsObject Js, object Obj) {
+            Js.Add(Obj);
+
+            return Js;
+        }
+
+        public static jsObject operator -(jsObject Js, string Key) {
+            Js[Key] = null;
+
+            return Js;
+        }
     }
 
     public class jsObject<T> : jsObject where T : class {
@@ -301,10 +337,10 @@ namespace Poly.Data {
 
         public new T this[string Key] {
             get {
-                return Get<T>(Key);
+                return Get<T>(Key.Split("."));
             }
             set {
-                Set(Key, value);
+                Set(Key.Split("."), value);
             }
         }
 
@@ -313,7 +349,7 @@ namespace Poly.Data {
                 return Get<T>(Keys);
             }
             set {
-                Set<T>(Keys, value);
+                Set(Keys, value);
             }
         }
 

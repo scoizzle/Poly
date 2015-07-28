@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Poly.Script.Nodes {
     public class Operator : Node {
-        public Node Left = null, Right = null;
+        public Node Left, Right;
 
         public override object Evaluate(Data.jsObject Context) {
             object L, R;
@@ -24,7 +24,7 @@ namespace Poly.Script.Nodes {
             return Execute(L, R);
         }
 
-        public virtual object Execute(object Left, object Right) {
+        public virtual object Execute(dynamic Left, dynamic Right) {
             return null;
         }
     }

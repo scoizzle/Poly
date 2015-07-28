@@ -10,11 +10,15 @@ namespace Poly.Data {
     public partial class jsObject : Dictionary<string, object> {
         public static object getObjectValue(string val) {
             object Out;
-            foreach (var F in ParserCache.Values) {
-                Out = F(val);
 
-                if (Out != null)
-                    return Out;
+            foreach (var F in Parsers.Values) {
+                try {
+                    Out = F(val);
+
+                    if (Out != null)
+                        return Out;
+                }
+                catch { }
             }
 
             return val;

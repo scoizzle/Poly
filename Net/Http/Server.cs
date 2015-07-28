@@ -13,12 +13,13 @@ namespace Poly.Net.Http {
     using Script;
 
     public partial class Server : MultiPortServer {
-        public jsObject<Host> Hosts = new jsObject<Host>();
+        public Host[] Hosts = new Host[0];
         public jsObject<Session> Sessions = new jsObject<Session>();
 
-        public FileCache FileCache = new FileCache();
-        public ScriptCache ScriptCache = new ScriptCache();
-
+        public Server() {
+            base.OnClientConnect += this.OnClientConnect;
+        }
+        
         public static string GetMime(string Ext) {
             var Mime = Poly.Mime.GetMime(Ext);
 
@@ -43,9 +44,9 @@ namespace Poly.Net.Http {
         }
 
         public Host Host(string Name, jsObject Info) {
-            var Host = new Host(Info) {
-                Name = Name
-            };
+            var Host = new Host();
+
+            Info.CopyTo(Host);
 
             this.Host(Name, Host);
 
@@ -53,13 +54,15 @@ namespace Poly.Net.Http {
         }
 
         public Host Host(string Name, Host Host) {
-            foreach (int Port in Host.Ports.Values) {
-                if (!Listeners.ContainsKey(Port)) {
-                    Listen(Port);
-                }
+            foreach (int? Port in Host.Ports.Values) {
+                if (Port != null)
+                    Listen((int)Port);
             }
 
-            Hosts[Name.Replace(".", "\\.")] = Host;
+            Host.Matcher = new Matcher(Name);
+
+            Array.Resize(ref Hosts, Hosts.Length + 1);
+            Hosts[Hosts.Length - 1] = Host;
             return Host;
         }
 

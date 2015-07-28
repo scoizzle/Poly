@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Poly.Script.Nodes {
     public class StaticValue : Value {
-        private object Value;
+        public object Value;
 
         public StaticValue(object Value) {
             this.Value = Value;

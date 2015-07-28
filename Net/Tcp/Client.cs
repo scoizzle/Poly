@@ -15,267 +15,170 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Tcp {
-	public class Client {
-        private StreamReader p_sRead = null;
-        private StreamWriter p_sWrite = null;
-        private Stream p_Stream = null;
-        private bool p_bAutoFlush = true;
-        private int p_recvTimeout = int.MinValue;
-
-        public Socket Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+    public class Client : TcpClient {
+        public bool Secure;
         
-        public bool Secure = false;
+        public Stream Stream { get; private set; }
 
-        public bool AutoFlush {
-            get {
-                if (Writer == null)
-                    return p_bAutoFlush;
-                if (p_bAutoFlush != Writer.AutoFlush)
-                    Writer.AutoFlush = p_bAutoFlush;
-                return p_bAutoFlush;                
-            }
-            set {
-                p_bAutoFlush = value;
-                if (Writer != null) {
-                    Writer.AutoFlush = value;
-                }
-            }
+        public StreamReader Reader { get; private set; }
+
+        public StreamWriter Writer { get; private set; }
+
+        public Client() : base() { 
+            Secure = false;
+            NoDelay = true;
         }
 
-        public bool Connected {
-            get {
-                return Socket.Connected;
-            }
-        }
-		
-        public Client() {
-        }
+        public Client(Socket This) : this() {
+            this.Client = This;
 
-        public Client(Socket Base) {
-            this.Socket = Base;
+            Stream = GetStream();
+            Reader = new StreamReader(Stream);
+            Writer = new StreamWriter(Stream);
+
+            Writer.AutoFlush = true;
         }
 
-        public int ReceiveTimeout {
-            get {
-                if (p_recvTimeout == int.MinValue) {
-                    if (Socket.ReceiveTimeout == 0) {
-                        return -1;
-                    }
-                    else {
-                        return Socket.ReceiveTimeout;
-                    }
-                }
-                return p_recvTimeout;
-            }
-            set {
-                p_recvTimeout = value;
-            }
+        public Client(TcpClient This) : this(This.Client) { }
+
+        public void Dispose() {
+            Writer.Close();
+            Reader.Close();
+
+            Stream.Close();
+
+            Close();
         }
-
-        public StreamReader Reader {
-            get {
-                if (p_sRead == null) {
-                    p_sRead = new StreamReader(this.GetStream());
-                }
-                return p_sRead;
-            }
-        }
-
-        public StreamWriter Writer {
-            get {
-                if (p_sWrite == null) {
-                    try {
-                        p_sWrite = new StreamWriter(this.GetStream());
-                        p_sWrite.AutoFlush = p_bAutoFlush;
-                    }
-                    catch { }
-                }
-                return p_sWrite;
-            }
-        }
-
-        public Encoding Encoding {
-            get {
-                if (Writer != null) {
-                    return Writer.Encoding;
-                }
-                return Encoding.Default;
-            }
-        }
-
-        public Stream GetStream() {
-            if (!Connected)
-                return (p_Stream = null);
-
-            if (p_Stream == null) {
-                Stream Stream = new NetworkStream(Socket);
-
-                if (Secure) {
-                    Stream = new SslStream(
-                        Stream
-                    );
-                }
-
-                p_Stream = new BufferedStream(Stream);
-            }
-
-            return p_Stream;
-        }
-
-        public bool Connect(string ServerName, int Port, int Timeout = 1000) {
+        
+        public new void Connect(string hostname, int port) {
             try {
-                Socket.BeginConnect(ServerName, Port, (Obj) => {
-                    try { Socket.EndConnect(Obj); }
-                    catch {  }
-                }, Socket).AsyncWaitHandle.WaitOne(Timeout, false);
+                base.Connect(hostname, port);
 
-                return Socket.Connected;
-            }
-            catch {
-                return false;
-            }
-        }
+                if (Connected) {
+                    Stream = GetStream();
+                    Reader = new StreamReader(Stream);
+                    Writer = new StreamWriter(Stream);
 
-        public bool Connect(string SecureServerName, int Port, bool Secure, int Timeout = 1000) {
-            if (Connect(SecureServerName, Port, Timeout)) {
-                if (this.Secure = Secure) {
-                    try {
-                        var SStream = GetStream() as SslStream;
-                        SStream.AuthenticateAsClient(SecureServerName);
-                    }
-                    catch (Exception Error) {
-                        App.Log.Error(Error.Message);
-                        return false;
-                    }
+                    Writer.AutoFlush = true;
                 }
             }
-            return false;
+            catch { return; }
         }
 
-        public void Close() {
+        public void SecureConnect(string securehostname, int port) {
+            this.Secure = true;
+
+            try {
+                base.Connect(securehostname, port);
+            }
+            catch { return; }
+
             if (Connected) {
-                p_sRead = null;
-                p_sWrite = null;
-            }
-            Socket.Close();
-		}
+                var SecureStream = new SslStream(GetStream());
 
-        public bool SendLine(string Packet) {
-            if (!Connected)
-                return false;
+                try {
+                    SecureStream.AuthenticateAsClient(securehostname);
 
-            if (!Writer.BaseStream.CanWrite)
-                return false;
+                    Stream = SecureStream;
+                    Reader = new StreamReader(Stream);
+                    Writer = new StreamWriter(Stream);
 
-            try {
-                Writer.WriteLine(Packet);
-            }
-            catch {
-                return false;
-            }
-            return true;
-        }
-
-        public virtual bool SendLine(params string[] Parts) {
-            if (!Writer.BaseStream.CanWrite)
-                return false;
-
-            try {
-                for (int i = 0; Connected && i < Parts.Length; i++) {
-                    Writer.Write(Parts[i]);
+                    Writer.AutoFlush = true;
                 }
-                Writer.WriteLine();
+                catch {
+                    Dispose();
+                }
             }
-            catch {
-                return false;
-            }
-            return true;
         }
 
-        public string ReadLine() {
-			if (!Connected) {
-                return null;
+        public void Send(string Data) {
+            if (Connected) {
+                try {
+                    Writer.Write(Data);
+                    Writer.Flush();
+                }
+                catch (InvalidOperationException) {
+                    Dispose();
+                }
+                catch { }
+            }
+        }
+        public void SendLine(string Line) {
+            if (Connected) {
+                try {
+                    Writer.WriteLine(Line);
+                    Writer.Flush();
+                }
+                catch (InvalidOperationException) {
+                    Dispose();
+                }
+                catch { }
+            }
+        }
+
+        public async void SendLineAsync(string Line) {
+            if (Connected) {
+                try {
+                    await Task.Run(() => {
+                        Writer.WriteLine(Line);
+                        Writer.Flush();
+                    });
+                }
+                catch (InvalidOperationException) {
+                    Dispose();
+                }
+                catch { }
+            }
+        }
+
+        public byte[] Read(int Length) {
+            if (Connected && !Reader.EndOfStream) {
+                try {
+                    int Remaining = Length;
+                    byte[] Buffer = new byte[Length];
+
+                    while (Remaining > 0)
+                        Remaining -= Stream.Read(Buffer, Length - Remaining, Remaining);
+
+                    return Buffer;
+                }
+                catch (InvalidOperationException) {
+                    Dispose();
+                }
+                catch { }
             }
 
-            try {
-                var Task = Reader.ReadLineAsync();
-
-                Task.Wait(ReceiveTimeout);
-
-                if (Task.IsCompleted)
-                    return Task.Result;                
-            }
-            catch { }
             return null;
         }
 
-        public virtual bool Send(string Packet) {
-            if (!Connected || string.IsNullOrEmpty(Packet))
-                return false;
-
-            return Send(Encoding.GetBytes(Packet));
-        }
-
-        public virtual void Send(params string[] Parts) {
-            for (int i = 0; Connected && i < Parts.Length; i++) {
-                Send(Encoding.GetBytes(Parts[i]));
-            }
-        }
-
-        public virtual bool Send(byte[] Bytes) {
-            if (!Connected || Bytes == null)
-                return false;
-
-            if (!Writer.BaseStream.CanWrite)
-                return false;
-
-            try {
-                var Stream = GetStream();
-                if (Stream == null)
-                    return false;
-
-                Stream.Write(Bytes, 0, Bytes.Length);
-            }
-            catch { 
-                return false; 
-            }
-            return true;
-        }
-
-        public virtual string Receive() {
-            return ReadLine();
-        }
-        
-        public virtual char[] Receive(int Length) {
-
-            char[] Buffer = new char[Length];
-
-            try {
-                for (int n = 0; n < Length; ) {
-                    n += Reader.Read(Buffer, n, Length - n);
+        public string ReadLine() {
+            if (Connected) {
+                try {
+                    return Reader.ReadLine();
                 }
+                catch (InvalidOperationException) {
+                    Dispose();
+                }
+                catch { }
             }
-            catch {
-                return null;
+
+            return null;
+        }
+
+        public async Task<string> ReadLineAsync() {
+            if (Connected) {
+                try {
+                    return await Reader.ReadLineAsync();
+                }
+                catch (InvalidOperationException) {
+                    Dispose();
+                }
+                catch { }
             }
 
-            return Buffer;
+            return null;
         }
-
-        public virtual string Request(string Data) {
-            if (!Send(Data))
-                return null;
-            return Receive();
-        }
-
-        private static bool ValidateServerCertificate(object Sender, X509Certificate Cert, X509Chain Chain, SslPolicyErrors Errors) {
-            return Errors == SslPolicyErrors.None;
-        }
-
-        public static implicit operator Client(Socket Sock) {
-            return new Client(Sock);
-        }
-	}
+    }
 }
 
 

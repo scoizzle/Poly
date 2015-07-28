@@ -35,7 +35,7 @@ namespace Poly.Script {
             Expressions.Html.Parser.Parse,
             Expressions.Unary.Parser.Parse,
             Expressions.Eval.Parse,
-            Object.Parse,
+            ObjectBuilder.Parse,
             String.Parse,
             Integer.Parse,
             Float.Parse,

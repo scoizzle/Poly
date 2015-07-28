@@ -7,29 +7,30 @@ using System.Threading.Tasks;
 namespace Poly {
     public static class TimeSpanExtensions {
         public static string ToDurationString(this TimeSpan This) {
-            StringBuilder Output = new StringBuilder();
-
-            int Years = This.Days / 365;
-            int Days = Years > 0 ? 
-                This.Days % 365 :
-                This.Days;
-            
-            if (Years > 0) {
-                Output.AppendFormat("{0}y ", Years);
-            }
-
-            if (Days > 0) {
-                Output.AppendFormat("{0}d ", Days);
-            }
-
-            if (This.Hours > 0) {
-                Output.AppendFormat("{0}h ", This.Hours);
-            }
-
-            Output.AppendFormat("{0}m ", This.Minutes);
-            Output.AppendFormat("{0}s", This.Seconds);
-
-            return Output.ToString();
+            if (This.TotalDays > 365)
+                if (This.TotalDays < 365 * 2)
+                    return "1 year, and {0} months".ToString((int)((This.TotalDays - 365) / 30.436875));
+                else
+                    return "{0} years".ToString((int)(This.TotalDays / 365));
+            else 
+            if (This.TotalDays > 30.436875)
+                return "{0} months".ToString((int)(This.TotalDays / 30.436875));
+            else
+            if (This.TotalDays > 7)
+                return "{0} weeks".ToString((int)(This.TotalDays / 7));
+            else
+            if (This.TotalDays == 1)
+                return "yesterday";
+            if (This.TotalDays > 1)
+                return "{0} days".ToString(This.Days);
+            else
+            if (This.TotalHours > 1)
+                return "{0} hours".ToString(This.Hours);
+            else
+            if (This.TotalMinutes > 1)
+                return "{0} minutes".ToString(This.Minutes);
+            else
+                return "{0} seconds".ToString(This.Seconds);
         }
     }
 }

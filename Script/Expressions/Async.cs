@@ -14,8 +14,14 @@ namespace Poly.Script.Expressions {
         public Node Node = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            return Task.Run<object>(() => {
-                return Node.Evaluate(Context);
+            return Task.Factory.StartNew(() => {
+                var Result = Node.Evaluate(Context);
+
+                if (Result is Return) {
+                    Result = (Result as Return).Evaluate(Context);
+                }
+
+                return Result;
             });
         }
 

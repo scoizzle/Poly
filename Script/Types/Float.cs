@@ -6,7 +6,7 @@ using System.Text;
 namespace Poly.Script.Types {
     using Nodes;
 
-    public class Float : DataType<double> {
+    public class Float : Value {
         public double Value;
 
         public Float(double Val) {
@@ -19,127 +19,6 @@ namespace Poly.Script.Types {
 
         public override string ToString() {
             return Value.ToString();
-        }
-
-        public new static object Add(double Left, object Right) {
-            if (Right is int) {
-                return Left + (int)Right;
-            }
-            else if (Right is double) {
-                return Left + (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left + Temp;
-
-                return Left + (string)Right;
-            }
-            return null;
-        }
-
-        public new static object Subtract(double Left, object Right) {
-            if (Right is int) {
-                return Left - (int)Right;
-            }
-            else if (Right is double) {
-                return Left - (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left - Temp;
-            }
-            return null;
-        }
-
-        public new static object Multiply(double Left, object Right) {
-            if (Right is int) {
-                return Left * (int)Right;
-            }
-            else if (Right is double) {
-                return Left * (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left * Temp;
-            }
-            return null;
-        }
-
-        public new static object Devide(double Left, object Right) {
-            if (Right is int) {
-                return Left / (int)Right;
-            }
-            else if (Right is double) {
-                return Left / (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left / Temp;
-            }
-            return null;
-        }
-
-        public new static bool GreaterThan(double Left, object Right) {
-            if (Right is int) {
-                return Left > (int)Right;
-            }
-            else if (Right is double) {
-                return Left > (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left > Temp;
-            }
-            return false;
-        }
-
-        public new static bool LessThan(double Left, object Right) {
-            if (Right is int) {
-                return Left < (int)Right;
-            }
-            else if (Right is double) {
-                return Left < (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left < Temp;
-            }
-            return false;
-        }
-
-        public new static bool Equal(double Left, object Right) {
-            if (Right is int) {
-                return Left == (int)Right;
-            }
-            else if (Right is double) {
-                return Left == (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left == Temp;
-            }
-            return false;
         }
 
         public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {

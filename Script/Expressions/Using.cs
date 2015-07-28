@@ -36,7 +36,7 @@ namespace Poly.Script.Expressions {
                     var For = Text.Substring(Delta, Close - Delta);
 
                     if (Text.Compare(";", Close)) {
-                        Engine.Shorthands[Name] = For;
+                        Engine.ReferencedTypes[Name] = SystemTypeGetter.GetType(For);
                         Index = Close + 1;
                         return Expression.NoOperation;
                     }

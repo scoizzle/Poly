@@ -40,13 +40,13 @@ namespace Poly.Script.Nodes {
 
             for (int i = 0; i < Elements.Length; i++) {
                 var Node = Elements[i];
-                var Str = Node as Types.String;
+                var Str = Node as StaticValue;
                 var String = default(string);
                 var Key = default(object);
                 var Value = default(object);
 
-                if (Str != null) { 
-                    String = Str.Value;
+                if (Str != null && Str.Value != null) {
+                    String = Str.Value as string;
                 }
                 else if (Node is Helpers.SystemTypeGetter) {
                     Current = Node.Evaluate(Context);
@@ -71,7 +71,7 @@ namespace Poly.Script.Nodes {
                 var Object = Current as jsObject;
 
                 if (Object != null) {
-                    if (!Object.GetValue(String, out Value)) {
+                    if (!Object.TryGet(String, out Value)) {
                         Class Class;
                         Function Func;
 
@@ -256,22 +256,20 @@ namespace Poly.Script.Nodes {
                 Var.IsStatic = true;
                 Delta += 7;
             }
-            else if (Text.Compare("Enum", Index)) {
-                if (Text.Compare(':', Index + 4)) {
-                    string Type;
+            else if (Text.Compare("Enum:", Index)) {
+                string Type;
                     
-                    var Next = Text.IndexOf(':', Index + 5);
-                    if (Next == -1 || Text.IndexOf(';', Index + 5) < Next) {
-                        Type = Text.Substring(":", ";", Index); 
-                    }
-                    else {
-                        Type = Text.FindMatchingBrackets(":", ":", Index);
-                    }
+                var Next = Text.IndexOf(':', Index + 5);
+                if (Next == -1 || Text.IndexOf(';', Index + 5) < Next) {
+                    Type = Text.Substring(":", ";", Index); 
+                }
+                else {
+                    Type = Text.FindMatchingBrackets(":", ":", Index);
+                }
 
-                    if (!string.IsNullOrEmpty(Type)) {
-                        List.Add(new Helpers.SystemTypeGetter(Type));
-                        Delta += 6 + Type.Length;
-                    }
+                if (!string.IsNullOrEmpty(Type)) {
+                    List.Add(new Helpers.SystemTypeGetter(Type));
+                    Delta += 6 + Type.Length;
                 }
             }
 
@@ -282,8 +280,8 @@ namespace Poly.Script.Nodes {
                     var Key = Text.Substring(SigFig, Delta - SigFig);
 
                     if (!string.IsNullOrEmpty(Key)) {
-                        if (Engine.Shorthands.ContainsKey(Key) && List.Count == 0) {
-                            List.Add(new Helpers.SystemTypeGetter(Engine.Shorthands[Key]));
+                        if (Engine.ReferencedTypes.ContainsKey(Key) && List.Count == 0) {
+                            List.Add(new Helpers.SystemTypeGetter(Engine.ReferencedTypes[Key]));
                         }
                         else {
                             List.Add(new Types.String(Key));
@@ -314,8 +312,8 @@ namespace Poly.Script.Nodes {
                 if (Key == "_") {
                     List.Add(new Variable(Engine));
                 }
-                else if (Engine.Shorthands.ContainsKey(Key) && List.Count == 0) {
-                    List.Add(new Helpers.SystemTypeGetter(Engine.Shorthands[Text.Substring(SigFig, Delta - SigFig)]));
+                else if (Engine.ReferencedTypes.ContainsKey(Key) && List.Count == 0) {
+                    List.Add(new Helpers.SystemTypeGetter(Engine.ReferencedTypes[Text.Substring(SigFig, Delta - SigFig)]));
                 }
                 else {
                     List.Add(new Types.String(Text.Substring(SigFig, Delta - SigFig)));
@@ -340,8 +338,8 @@ namespace Poly.Script.Nodes {
                 if (Delta != Start) {
                     var Name = Text.Substring(Start, Delta - Start);
 
-                    if (Engine.Shorthands.ContainsKey(Name)) {
-                        Var.RequestedType = Helpers.SystemTypeGetter.GetType(Engine.Shorthands[Name]);
+                    if (Engine.ReferencedTypes.ContainsKey(Name)) {
+                        Var.RequestedType = Engine.ReferencedTypes[Name];
                     }
                     else {
                         Var.RequestedType = Helpers.SystemTypeGetter.GetType(Name);

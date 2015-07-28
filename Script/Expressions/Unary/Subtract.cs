@@ -13,16 +13,9 @@ namespace Poly.Script.Expressions {
             this.Right = Right;
         }
 
-        public override object Execute(object Left, object Right) {
-            if (Left == null || Right == null) {
-                if (Left != null)
-                    return Left;
-                if (Right != null)
-                    return Right;
-                return null;
-            }
-
-            return DataType.Subtract(Left, Right);
+        public override object Execute(dynamic Left, dynamic Right) {
+            try { return Left - Right; }
+            catch { return null; }
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
@@ -40,7 +33,7 @@ namespace Poly.Script.Expressions {
                     )
                 );
             }
-            else if (Text.Compare("--")) {
+            else if (Text.Compare("--", Index)) {
                 Index += 2;
                 var Var = Variable.Parse(Engine, Left, 0);
 

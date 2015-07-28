@@ -16,5 +16,20 @@ namespace Poly {
 
             return new string(Buf);
         }
+
+        public static bool CompareWithoutCase(this char C, char S) {
+            if (C >= 'A' && C <= 'Z') {
+                if (S >= 'A' && S <= 'Z')
+                    return C == S;
+                else
+                    return C - 'A' == S - 'a';
+            }
+            else {
+                if (S >= 'a' && S <= 'z')
+                    return C == S;
+                else
+                    return C - 'a' == S - 'A';
+            }
+        }
     }
 }

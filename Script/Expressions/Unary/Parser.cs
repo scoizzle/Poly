@@ -24,6 +24,7 @@ namespace Poly.Script.Expressions.Unary {
             Between.Parse,
             Assign.Parse,
             Match.Parse,
+            Template.Parse,
             Multiply.Parse,
             Devide.Parse,
             Add.Parse,

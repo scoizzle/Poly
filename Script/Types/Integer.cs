@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Poly.Script.Types {
     using Nodes;
-    public class Integer : DataType<int> {
+    public class Integer : Value {
         public int Value;
 
         public Integer(int Val) {
@@ -19,139 +19,6 @@ namespace Poly.Script.Types {
 
         public override string ToString() {
             return Value.ToString();
-        }
-
-        public new static object Add(int Left, object Right) {
-            if (Right is int) {
-                try {
-                    return checked(Left + (int)Right);
-                }
-                catch {
-                    return Convert.ToInt64(Left) + (int)Right;
-                }
-            }
-            else if (Right is double) {
-                return Left + (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left + Temp;
-            }
-            return null;
-        }
-
-        public new static object Subtract(int Left, object Right) {
-            if (Right is int) {
-                return Left - (int)Right;
-            }
-            else if (Right is double) {
-                return Left - (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left - Temp;
-            }
-            return null;
-        }
-
-        public new static object Multiply(int Left, object Right) {
-            if (Right is int) {
-                return Left * (int)Right;
-            }
-            else if (Right is double) {
-                return Left * (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left * Temp;
-            }
-            return null;
-        }
-
-        public new static object Devide(int Left, object Right) {
-            if (Right is int) {
-                if ((int)Right == 0)
-                    return null;
-
-                return Left / (int)Right;
-            }
-            else if (Right is double) {
-                if ((double)Right == 0)
-                    return null;
-                return Left / (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp)) {
-                    if ((int)Temp == 0)
-                        return null;
-
-                    return Left / Temp;
-                }
-            }
-            return null;
-        }
-
-        public new static bool GreaterThan(int Left, object Right) {
-            if (Right is int) {
-                return Left > (int)Right;
-            }
-            else if (Right is double) {
-                return Left > (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left > Temp;
-            }
-            return false;
-        }
-
-        public new static bool LessThan(int Left, object Right) {
-            if (Right is int) {
-                return Left < (int)Right;
-            }
-            else if (Right is double) {
-                return Left < (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left < Temp;
-            }
-            return false;
-        }
-
-        public new static bool Equal(int Left, object Right) {
-            if (Right is int) {
-                return Left == (int)Right;
-            }
-            else if (Right is double) {
-                return Left == (double)Right;
-            }
-            else if (Right is string) {
-                var Str = (string)Right;
-                var Temp = double.NaN;
-
-                if (double.TryParse(Str, out Temp))
-                    return Left == Temp;
-            }
-            return false;
         }
 
         public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {

@@ -10,48 +10,35 @@ using Poly.Net.Tcp;
 
 namespace Poly.Net.Irc {
     public partial class Client : User {
-        public Poly.Net.Tcp.Client Connection = new Poly.Net.Tcp.Client();
-        private Thread ConnectionHandlerThread = null;
+        public Tcp.Client Connection;
+        public Event.Engine Events;
+
+        public jsObject CharModes;
+
+        public jsObject<Conversation> Conversations;
+        public jsObject<User> Users;
+
 
         public Client() {
+            Events = new Event.Engine();
 
+            Conversations = new jsObject<Conversation>();
+            Users = new jsObject<User>();
+            CharModes = new jsObject();
         }
         
         public bool Connected {
             get {
-                if (Connection == null)
-                    return false;
+                if (Connection != null)
+                    return Connection.Connected;
 
-                return Connection.Connected;
-            }
-        }
-
-        public jsObject<Conversation> Conversations {
-            get {
-                return Get<jsObject<Conversation>>("Conversations", jsObject<Conversation>.NewTypedObject);
-            }
-        }
-
-        public jsObject<User> Users {
-            get {
-                return Get<jsObject<User>>("Users", jsObject<User>.NewTypedObject);
-            }
-        }
-
-        public jsObject CharModes {
-            get {
-                return Get<jsObject>("CharModes", () => { 
-                    return new jsObject(
-                        "@", "o",
-                        "+", "v"
-                    ); 
-                });
+                return false;
             }
         }
 
         public string Server {
             get {
-                return Get<string>("Server", string.Empty);
+                return Get<string>("Server") ?? string.Empty;
             }
             set {
                 Set("Server", value);
@@ -60,7 +47,7 @@ namespace Poly.Net.Irc {
 
         public int Port {
             get {
-                return Get<int>("Port", 6667);
+                return Get<int?>("Port") ?? 6667;
             }
             set {
                 Set("Port", value);

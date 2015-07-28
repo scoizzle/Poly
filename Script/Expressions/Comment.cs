@@ -9,31 +9,25 @@ namespace Poly.Script.Expressions {
         public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
+                        
+            if (Text.Compare("/*", Index)) {
+                var Delta = Text.Find("*/", Index);
 
-            if (Text.Compare("//", Index) || Text.Compare('#', Index)) {
-                var Delta = Index + 2;
+                if (Delta == -1)
+                    Index = LastIndex;
+                else
+                    Index = Delta;
 
-                while (Delta < LastIndex) {
-                    if (Text.Compare('\n', Delta))
-                        break;
-
-                    Delta++;
-                }
-
-                Index = Delta;
                 return Expression.NoOperation;
             }
-            else if (Text.Compare("/*", Index)) {
-                var Delta = Index + 2;
+            else if (Text.Compare("//", Index) || Text.Compare('#', Index)) {
+                var Delta = Text.Find(Environment.NewLine, Index);
 
-                while (Delta < LastIndex) {
-                    if (Text.Compare("*/", Delta))
-                        break;
+                if (Delta == -1)
+                    Index = LastIndex;
+                else
+                    Index = Delta;
 
-                    Delta++;
-                }
-
-                Index = Delta;
                 return Expression.NoOperation;
             }
 

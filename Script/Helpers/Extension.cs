@@ -56,7 +56,7 @@ namespace Poly.Script.Helpers {
                 }
 
                 if (Engine.Parse(File.ReadAllText(FileName), 0, Inc) != null) {
-                    Engine.Includes.Add(FileName, Inc);
+                    Engine.Includes[FileName] = Inc;
                     return Inc;
                 }
             }

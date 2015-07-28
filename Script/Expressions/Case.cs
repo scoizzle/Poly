@@ -11,7 +11,7 @@ namespace Poly.Script.Expressions {
         public bool IsDefault = false;
 
         public override string ToString() {
-            return "case " + Convert.ToString(Object) + ":" + base.ToString();
+            return "case " + Object.ToString() + ":" + base.ToString();
         }
 
         public static new Case Parse(Engine Engine, string Text, ref int Index, int LastIndex) {

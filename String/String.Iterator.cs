@@ -37,12 +37,7 @@ namespace Poly {
         }
 
         public int Find(char C) {
-            var Res = String.Find(C, Index);
-
-            if (Res > Length)
-                return -1;
-
-            return Res;
+            return String.Find(C, Index, Length);
         }
 
         public int Find(string Str) {
@@ -58,19 +53,18 @@ namespace Poly {
             var Count = 0;
             var Start = Index;
 
-            for (; !IsDone(); Tick()) {
-                if (IsAt('\\'))
+            for (; Start < Length; Start++) {
+                if (this[Start] == '\\')
                     continue;
 
-                if (IsAt(Open))
+                if (this[Start] == Open)
                     Count++;
 
-                if (IsAt(Close)) {
+                if (this[Start] == Close) {
                     Count--;
 
-                    if (Count == -1) {
-                        try { return Index; }
-                        finally { Index = Start; }
+                    if (Count == 0) {
+                        return Start;
                     }
                 }
             }
@@ -78,6 +72,30 @@ namespace Poly {
             return -1;
         }
 
+        public char FirstPossible(params char[] Chars) {
+            return FirstPossible(ref Index, String.Length, Chars);
+        }
+
+        public char FirstPossible(ref int Index, params char[] Chars) {
+            return FirstPossible(ref Index, String.Length, Chars);
+        }
+
+        public char FirstPossible(ref int Index, int Length, params char[] Chars) {
+            int Location = Length;
+            char Lowest = default(char);
+
+            for (int i = 0; i < Chars.Length; i++) {
+                int Loc = String.Find(Chars[i], this.Index, Location);
+
+                if (Loc != -1) {
+                    Location = Loc;
+                    Lowest = Chars[i];
+                }
+            }
+
+            Index = Location;
+            return Lowest;
+        }
 
         public bool IsAt(char C) {
             if (Index > -1 && Index < Length)
@@ -95,6 +113,10 @@ namespace Poly {
                 }
             }
             return false;
+        }
+
+        public bool IsAt(string str) {
+            return StringExtensions.Compare(String, Index, str, 0, str.Length);
         }
 
         public bool IsAfter(char C) {
@@ -115,7 +137,7 @@ namespace Poly {
         }
 
         public bool Consume(string Str) {
-            if (string.Compare(String, Index, Str, 0, Str.Length) == 0) {
+            if (this.String.Compare(Index, Str, 0, Str.Length)) {
                 Index += Str.Length;
                 return true;
             }
@@ -123,7 +145,7 @@ namespace Poly {
         }
 
         public bool Consume(StringIterator It, int Length, bool IgnoreCase) {
-            if (string.Compare(String, Index, It.String, It.Index, Length, IgnoreCase) == 0) {
+            if (this.String.Compare(Index, It.String, It.Index, Length, IgnoreCase)) {
                 Index += Length;
                 return true;
             }
@@ -131,10 +153,13 @@ namespace Poly {
         }
 
         public void ConsumeUntil(Func<char, bool> f) {
-            while (!IsDone()) {
-                if (f(String[Index]))
+            var I = Index;
+            while (I < Length) {
+                if (f(String[I])) {
+                    Index = I;
                     return;
-                Tick();
+                }
+                I++;
             }
         }
 
@@ -157,11 +182,11 @@ namespace Poly {
 
                 if (IsAt(Open))
                     Count++;
-
+                else
                 if (IsAt(Close)) {
                     Count--;
 
-                    if (Count == -1) {
+                    if (Count == 0) {
                         return true;
                     }
                 }
@@ -180,17 +205,23 @@ namespace Poly {
         }
 
         public bool Goto(StringIterator It, int Length, bool IgnoreCase) {
-            for (int i = this.Index; i + Length < String.Length ; i++) {
+            int i = String.Find(It.Current, this.Index);
+
+            if (i == -1)
+                return false;
+
+            do {
                 if (It.IsAt('\\'))
                     It.Tick();
 
                 if (String[i] == It[It.Index]) {
-                    if (String.Compare(this.String, i, It.String, It.Index, Length, IgnoreCase) == 0) {
+                    if (this.String.Compare(i, It.String, It.Index, Length, IgnoreCase)) {
                         this.Index = i;
                         return true;
                     }
                 }
             }
+            while (i++ + Length < String.Length);
             return false;
         }
 
@@ -226,12 +257,8 @@ namespace Poly {
         }
 
         public void ConsumeWhitespace() {
-            while (!IsDone()) {
-                if (!char.IsWhiteSpace(String[Index]))
-                    break;
-
+            while (!IsDone() && char.IsWhiteSpace(String[Index]))
                 Tick();
-            }
         }
 
         public override string ToString() {

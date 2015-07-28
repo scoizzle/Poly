@@ -13,8 +13,8 @@ namespace Poly.Script.Expressions {
         public Case Default = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            foreach (var Node in Elements) {
-                var Case = Node as Case;
+            for (int i = 0; i < Elements.Length; i++) {
+                var Case = Elements[i] as Case;
 
                 if (Case == null)
                     continue;

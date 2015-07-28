@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.Threading.Tasks;
 using System.Diagnostics;
 
 namespace Poly {
@@ -28,58 +29,87 @@ namespace Poly {
 				Handler = Console.Write;
 			}
 
-            public static void Info(string Message) {
+            public static void Info(object Message) {
                 if (Level >= Levels.Info) {
                     Print("[INFO] ", Message);
                 }
             }
 
-            public static void Warning(string Message) {
+            public static void Info(string Format, params object[] Args) {
+                Info(string.Format(Format, Args) as object);
+            }
+
+            public static void Warning(object Message) {
                 if (Level >= Levels.Warning) {
                     Print("[WARNING] ", Message);
                 }
             }
 
-            public static void Error(string Message) {
+            public static void Warning(string Format, params object[] Args) {
+                Warning(string.Format(Format, Args) as object);
+            }
+
+            public static void Error(object Message) {
                 if (Level >= Levels.Error) {
                     Print("[ERROR] ", Message);
                 }
             }
 
-            public static void Fatal(string Message) {
+            public static void Error(string Format, params object[] Args) {
+                Error(string.Format(Format, Args) as object);
+            }
+
+            public static void Fatal(object Message) {
                 if (Level >= Levels.Fatal) {
                     Print("[FATAL] ", Message);
                 }
                 App.Exit(-1);
             }
 
-            public static void Print(params string[] Message) {
+            public static void Fatal(string Format, params object[] Args) {
+                Fatal(string.Format(Format, Args) as object);
+            }
+
+            public static void Print(params object[] Messages) {
                 if (!Active)
                     return;
 
-                foreach (string part in Message) {
+                foreach (string part in 
+                    from obj in Messages
+                    where obj != null
+                    select obj.ToString()) 
+                {
 					Handler(part);
                 }
 
 				Handler(Environment.NewLine);
             }
 
-            public static void Benchmark(string Name, int Iterations, Action Todo) {
+            public static Task Benchmark(string Name, int Iterations, Action Todo) {
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
                 GC.Collect();
 
                 Todo();
-                
-                var watch = Stopwatch.StartNew();
-                for (int i = 0; i < Iterations; i++) {
-                    Todo();
-                }
-                watch.Stop();
-                Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", Name, watch.Elapsed.TotalMilliseconds,Iterations / watch.Elapsed.TotalSeconds);
+
+                return Task.Factory.StartNew(() => {
+                    var watch = Stopwatch.StartNew();
+
+                    int i = 0;
+                    
+                    try {
+                        for (; i < Iterations; i++) {
+                            Todo();
+                        }
+                    }
+                    catch { }
+
+                    watch.Stop(); 
+                    Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds);
+                });
             }
 
-            public static void Benchmark(string Name, int Iterations, Event.Handler Todo) {
+            public static Data.jsObject Benchmark(string Name, int Iterations, Event.Handler Todo) {
                 Data.jsObject Obj = new Data.jsObject();
 
                 GC.Collect();
@@ -91,9 +121,9 @@ namespace Poly {
                     watch.Start();
                     Todo(Obj);
                     watch.Stop();
-                    Obj.Clear();
                 }
                 Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", Name, watch.Elapsed.TotalMilliseconds, Iterations / watch.Elapsed.TotalSeconds);
+                return Obj;
             }
         }
     }

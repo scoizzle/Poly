@@ -19,21 +19,22 @@ namespace Poly.Script {
 
         public Dictionary<string, Expressions.Html.Template> HtmlTemplates = new Dictionary<string, Expressions.Html.Template>();
         public Dictionary<string, CachedScript> Includes = new Dictionary<string, CachedScript>();
-        public Dictionary<string, string> Shorthands = new Dictionary<string, string>() {
-            { "App", typeof(App).FullName }, 
-            { "Log", typeof(App.Log).FullName },
-            { "LogLevel", typeof(App.Log.Levels).FullName },
-			{ "Event", typeof(Event).FullName },
-            { "Events", typeof(Event.Engine).FullName },
-            { "Console", typeof(System.Console).FullName },
-            { "Math", typeof(System.Math).FullName },
-            { "Convert", typeof(System.Convert).FullName },
-            { "Time", typeof(System.DateTime).FullName },
-            { "TimeSpan", typeof(System.TimeSpan).FullName },
-            { "File", typeof(System.IO.File).FullName },
-            { "Path", typeof(System.IO.Path).FullName },
-            { "Directory", typeof(System.IO.Directory).FullName },
-            { "Environment", typeof(System.Environment).FullName }
+
+        public Dictionary<string, Type> ReferencedTypes = new Dictionary<string, Type>() {
+            { "App", typeof(App) }, 
+            { "Log", typeof(App.Log) },
+            { "LogLevel", typeof(App.Log.Levels) },
+			{ "Event", typeof(Event) },
+            { "Events", typeof(Event.Engine) },
+            { "Console", typeof(System.Console) },
+            { "Math", typeof(System.Math) },
+            { "Convert", typeof(System.Convert) },
+            { "Time", typeof(System.DateTime) },
+            { "TimeSpan", typeof(System.TimeSpan) },
+            { "File", typeof(System.IO.File) },
+            { "Path", typeof(System.IO.Path) },
+            { "Directory", typeof(System.IO.Directory) },
+            { "Environment", typeof(System.Environment) }
         };
 
         public jsObject<Class> Types = new jsObject<Class>();

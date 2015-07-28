@@ -30,7 +30,7 @@ namespace Poly.Script.Nodes {
 			base.Evaluate (Inst);
 
             if (Constructor != null) {
-                Context.Set<Types.ClassInstance>("this", Inst);
+                Context.Set("this", Inst);
                 Constructor.Evaluate(Context);
                 Context.Remove("this");
             }
@@ -45,7 +45,8 @@ namespace Poly.Script.Nodes {
             else {
                 this.Instaciator = new Function(LastName, CreateInstance);
             }
-            Engine.Types.Add(Name, this);
+
+            Engine.Types[Name] = this;
         }
 
         public Function GetFunction(string Name) {

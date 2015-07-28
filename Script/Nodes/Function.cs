@@ -50,10 +50,10 @@ namespace Poly.Script.Nodes {
 
         public override object Evaluate(jsObject Context) {
             var Result = Method(Context);
-            var R = Result as Expressions.Return;
 
-            if (R != null)
-                return R.Evaluate(Context);
+            if (Result is Expressions.Return) {
+                return (Result as Expressions.Return).Evaluate(Context);
+            }
 
             return Result;
         }

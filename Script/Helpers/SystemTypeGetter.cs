@@ -14,6 +14,10 @@ namespace Poly.Script.Helpers {
             this.Name = Name;
         }
 
+        public SystemTypeGetter(Type Type) {
+            Cache = Type;
+        }
+
         public override object Evaluate(Data.jsObject Context) {
             if (Cache != null)
                 return Cache;

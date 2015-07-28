@@ -243,39 +243,23 @@ namespace System {
         }
 
         public static string Escape(this String This) {
-            int NewLength = This.Length;
+            StringBuilder Output = new StringBuilder();
+            StringIterator It = new StringIterator(This);
 
-            for (int i = 0; i < This.Length; i++) {
-                switch (This[i]) {
-                    case '\r':
-                    case '\n':
-                    case '\t':
-                    case '\f':
-                    case '\"':
-                    case '\\':
-                    case '/':
-                        NewLength++;
-                        break;
+            int Next = 0;
+            while (!It.IsDone()) {
+                var c = It.FirstPossible(ref Next, '\r', '\n', '\t', '\f', '\"', '\\', '/');
+
+                if (c == default(char)) {
+                    Output.Append(It.Substring(It.Index, It.Length - It.Index));
+                    break;
                 }
+
+                Output.Append(EscapeChars[c]);
+                It.Index = Next + 1;
             }
 
-            char[] Array = new char[NewLength];
-
-
-            for (int i = 0, o = 0; o < This.Length && i < NewLength; i++, o++) {
-                if (EscapeChars.ContainsKey(This[o])) {
-                    var Esc = EscapeChars[This[o]];
-
-                    Array[i] = Esc[0];
-                    Array[i + 1] = Esc[1];
-                    i++;
-                }
-                else {
-                    Array[i] = This[o];
-                }
-            }
-
-            return new string(Array);
+            return Output.ToString();
         }
 
         public static string HtmlEscape(this String This) {

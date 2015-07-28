@@ -14,7 +14,9 @@ namespace Poly.Script.Expressions {
 
         public override object Evaluate(Data.jsObject Context) {
             do {
-                foreach (var Node in Elements) {
+                for (int i = 0; i < Elements.Length; i++) {
+                    var Node = Elements[i];
+
                     if (Node is Return)
                         return Node;
 

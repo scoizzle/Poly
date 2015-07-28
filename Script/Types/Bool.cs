@@ -7,46 +7,36 @@ using Poly.Data;
 
 namespace Poly.Script.Types {
     using Nodes;
-    public class Bool : DataType<bool> {
-        public new static object Equal(bool Left, object Right) {
-            if (Right is bool) {
-                return Left == (bool)Right;
-            }
-            else if (Right is int) {
-                return (Left ? 1 : 0) == ((int)Right % 2);
-            }
-            else if (Right is double) {
-                return (Left ? 1 : 0) == ((double)Right % 2);
-            }
-            else if (Right is string) {
-                return Left.ToString() == Right.ToString();
-            }
-            return null;
-        }
-
+    public class Bool : Value {
         public static bool EvaluateNode(Node Node, jsObject Context) {
             if (Node == null)
                 return false;
 
-            var Value = Node.Evaluate(Context);
+            dynamic Value = Node.Evaluate(Context);
+
+            if (Value == null)
+                return false;
 
             if (Value is Boolean)
                 return (Boolean)(Value);
 
-            if (!string.IsNullOrEmpty(Value as string))
-                return true;
+            if (Value is string)
+                return (Value as string).Length > 0;
 
-            if (Value is Int32)
-                return (Int32)(Value) != 0;
+            if (Value is jsObject)
+                return !(Value as jsObject).IsEmpty;
 
-            if (Value is Double)
-                return (Double)(Value) != Double.NaN;
+            if (Value is byte || 
+                Value is char ||
+                Value is short ||
+                Value is int ||
+                Value is long ||
+                Value is float ||
+                Value is double ||
+                Value is decimal)
+                    return Value > 0;
 
-            var Obj = Value as jsObject;
-            if (Obj != null)
-                return !Obj.IsEmpty;
-
-            return Value != null;
+            return true;
         }
 
         public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {

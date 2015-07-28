@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.IO;
 using System.IO.Compression;
+using System.Threading.Tasks;
 
 using Poly;
 using Poly.Data;
@@ -12,8 +13,6 @@ using Poly.Script;
 
 namespace Poly.Net.Http {
     public partial class Request : jsComplex {
-        public bool Handled;
-
         public Client Client;
         public Packet Packet;
         public Result Result;
@@ -24,8 +23,6 @@ namespace Poly.Net.Http {
         public Stream Data { get; set; }
 
         public Request(Client Client, Packet Packet) {
-            this.Handled = false;
-
             this.Client = Client;
             this.Packet = Packet;
 
@@ -33,7 +30,7 @@ namespace Poly.Net.Http {
             this.Data = new MemoryStream();
         }
 
-        public Data.jsObject Get {
+        new public Data.jsObject Get {
             get {
                 return Packet.Get;
             }
@@ -59,7 +56,7 @@ namespace Poly.Net.Http {
         }
 
         public void Print(string txt) {
-            Print(Client.Encoding.GetBytes(txt));
+            Print(Client.Writer.Encoding.GetBytes(txt));
         }
 
         public void Print(string FileName, jsObject Data) {
@@ -81,14 +78,11 @@ namespace Poly.Net.Http {
 
         }
 
-        public void SendReply() {
-            if (!Client.Connected || Handled)
-                return;
-
-            var Type = Result.Headers.Search<string>("Content-Type");
+        public StringBuilder GetReplyHeaders() {
+            var Type = Result.Headers.Get<string>("Content-Type");
 
             var Length = this.Data == null ?
-                Result.Headers.Search<object>("Content-Length") :
+                Result.Headers.Get<object>("Content-Length") :
                 this.Data.Length;
 
             if (string.IsNullOrEmpty(Type))
@@ -98,7 +92,7 @@ namespace Poly.Net.Http {
                 Length = 0;
 
             StringBuilder Output = new StringBuilder();
-            Output.AppendFormat("HTTP/1.1 {1}{0}Date: {2}{0}Content-Type: {3}{0}Content-Length: {4}{0}", Environment.NewLine, 
+            Output.AppendFormat("HTTP/1.1 {0}\r\nDate: {1}\r\nContent-Type: {2}\r\nContent-Length: {3}\r\n",
                 Result.Status, 
                 DateTime.UtcNow.HttpTimeString(),
                 Type,
@@ -106,7 +100,7 @@ namespace Poly.Net.Http {
             );
 
             foreach (var Pair in Result.Headers) {
-                Output.AppendFormat("{1}: {2}{0}", Environment.NewLine,
+                Output.AppendFormat("{0}: {1}\r\n",
                     Pair.Key,
                     Pair.Value
                 );
@@ -124,44 +118,32 @@ namespace Poly.Net.Http {
                 }
             }
 
-            Client.SendLine(Output.ToString());
+            return Output.AppendLine();
         }
 
-        public void Finish() {
-            if (Handled)
-                return;
-
-            if (Packet.Connection == "keep-alive") {
-                Result.Headers["Connection"] = "Keep-Alive";
-                Result.Headers["Keep-Alive"] = "timeout=10, max=99";
-            }
+        public async Task Finish() {
+            Data.Position = 0;
 
             var Accept = Packet.Headers["Accept-Encoding"] as string;
-            var Compressed = Accept != null && Accept.Contains("gzip") && Data.Length > 512;
-            var Stream = Client.GetStream();
-
-            if (Stream == null)
-                return;
-            
-            if (Compressed) {
+            if (Data.Length > 10 && Accept != null && Accept.Contains("gzip")) {
                 var Buffer = new MemoryStream();
 
-                using (var Compress = new GZipStream(Buffer, CompressionMode.Compress, true)) {
-                    Data.Position = 0;
-                    Data.CopyTo(Compress);
+                using (var Compression = new GZipStream(Buffer, CompressionMode.Compress, true)) {
+                    Data.CopyTo(Compression);
                 }
+
+                Data = Buffer;
+                Data.Position = 0;
 
                 Result.Headers["Vary"] = "Accept-Encoding";
                 Result.Headers["Content-Encoding"] = "gzip";
-                Data = Buffer;
             }
 
-            SendReply();
-
-            Data.Position = 0;
-            Data.CopyToAsync(Stream);
-
-            Handled = true;
+            try {
+                await Client.Writer.WriteAsync(GetReplyHeaders().ToString());
+                await Data.CopyToAsync(Client.Stream);
+            }
+            catch { Client.Close(); }
         }
 
         public void SetCookie(string name, string value) {

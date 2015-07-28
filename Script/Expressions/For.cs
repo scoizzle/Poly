@@ -18,20 +18,18 @@ namespace Poly.Script.Expressions {
                 Init.Evaluate(Context);
 
             while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState != ThreadState.AbortRequested) {
-                foreach (var Node in Elements) {
+                for (int i = 0; i < Elements.Length; i++) {
+                    var Node = Elements[i];
+
                     if (Node is Return)
                         return Node;
 
                     var Result = Node.Evaluate(Context);
 
-                    var Ret = Result as Return;
-                    if (Ret != null)
-                        return Ret;
-
-                    if (Result == Break) 
+                    if (Result == Break)
                         return null;
 
-                    if (Result == Continue) 
+                    if (Result == Continue)
                         break;
                 }
 

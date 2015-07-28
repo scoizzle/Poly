@@ -14,7 +14,9 @@ namespace Poly.Script.Expressions {
 
         public override object Evaluate(Data.jsObject Context) {
             while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState != ThreadState.AbortRequested) {
-                foreach (var Node in Elements) {
+                for (int i = 0; i < Elements.Length; i++) {
+                    var Node = Elements[i];
+
                     if (Node is Return)
                         return Node;
 

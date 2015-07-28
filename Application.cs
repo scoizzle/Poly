@@ -10,13 +10,8 @@ using Poly.Data;
 namespace Poly {
     public partial class App {
         public static bool Running = false;
-
-        public static Event.Engine Commands = new Event.Engine() {
-            { "--fork[-{flag}]", Event.Wrapper((string flag) => {
-                App.Fork("redirect".Compare(flag, true, 0));
-                return null;
-            } )}
-        };
+		public static jsObject GlobalContext = new jsObject();
+        public static Event.Engine Commands = new Event.Engine();
         
 		public static void Init(int LogLevel = Log.Levels.None) {
             if (LogLevel != Log.Levels.None) {
@@ -25,11 +20,6 @@ namespace Poly {
             }
             
             App.Log.Info("Application initializing...");
-            
-            int workerThreads, completionThreads;
-
-            ThreadPool.GetMaxThreads(out workerThreads, out completionThreads);
-			ThreadPool.SetMaxThreads(workerThreads, completionThreads * Environment.ProcessorCount);
 
 			Running = true;
             App.Log.Info("Application running...");
@@ -43,53 +33,14 @@ namespace Poly {
             }
         }
 
-        public static void Fork(bool RedirectOutput = false) {
-            var This = Process.GetCurrentProcess();
-
-            List<string> Args = new List<string>(Environment.GetCommandLineArgs());
-
-            Args.RemoveAt(0);
-            Args.Remove("--fork");
-            Args.Remove("--fork-redirect");
-
-            string FileName = IsRunningOnMono() ? "mono" : This.MainModule.FileName;
-            string Arguments = IsRunningOnMono() ? This.MainModule.FileName + " " + string.Join(" ", Args) : string.Join(" ", Args);
-
-            if (RedirectOutput) {
-                Process Worker = Process.Start(
-                    new ProcessStartInfo(FileName, Arguments) {
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        WindowStyle = ProcessWindowStyle.Hidden,
-                        RedirectStandardOutput = true
-                    }
-                );
-
-                Worker.Start();
-
-                ThreadPool.QueueUserWorkItem((obj) => {
-                    Process P = obj as Process;
-                    while (!P.HasExited && App.Running) {
-                        Console.WriteLine(P.StandardOutput.ReadLine());
-                    }
-                    App.Exit();
-                }, Worker);
-
-                while (App.Running)
-                    Thread.Sleep(150);
-            }
-            else {
-                Process.Start(FileName, Arguments);
-                Environment.Exit(0);
-            }
-        }
-
         public static bool IsRunningOnMono() {
             return Type.GetType("Mono.Runtime") != null;
         }
 
-        public static void Wait() {
-            Console.ReadKey();
+        public static void WaitforExit() {
+			while (Running) {
+				Commands.MatchAndInvoke (Console.ReadLine(), GlobalContext, true);
+			}
         }
 
 		public static void Exit(int Status = 0) {

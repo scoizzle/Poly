@@ -12,8 +12,9 @@ namespace Poly.Script.Expressions {
             this.Right = Right;
         }
 
-        public override object Execute(object Left, object Right) {
-            return DataType.Add(Left, Right);
+        public override object Execute(dynamic Left, dynamic Right) {
+            try { return Left + Right; }
+            catch { return null; }
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
@@ -39,7 +40,7 @@ namespace Poly.Script.Expressions {
                     Var,
                     new Add(
                         Var,
-                        new Integer(1)
+                        new StaticValue(1)
                     )
                 );
             }

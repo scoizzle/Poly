@@ -13,22 +13,9 @@ namespace Poly.Script.Expressions {
             this.Right = Right;
         }
 
-        public override object Execute(object Left, object Right) {
-            if (Left == null || Right == null) {
-                if (Left != null)
-                    return Left;
-                if (Right != null)
-                    return Right;
-                return null;
-            }
-
-            var V = DataType.GreaterThan(Left, Right);
-
-            if (!V) {
-                V = DataType.Equal(Left, Right);
-            }
-
-            return V;
+        public override object Execute(dynamic Left, dynamic Right) {
+            try { return Left >= Right; }
+            catch { return false; }
         }
 
         public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {

@@ -38,7 +38,7 @@ namespace Poly.Net {
 
         public jsObject Query {
             get {
-                return getObject("Query");
+                return Get<jsObject>("Query");
             }
             set {
                 Set("Query", value);

@@ -7,7 +7,7 @@ using System.Net.Sockets;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
+using System.Threading.Tasks;
 
 
 namespace Poly.Net.Tcp {
@@ -36,7 +36,8 @@ namespace Poly.Net.Tcp {
             this.Port = port;
         }
 
-        public Server(IPAddress addr, int port, string CertificateFile) : base(addr, port) {
+        public Server(IPAddress addr, int port, string CertificateFile)
+            : base(addr, port) {
             ServerCert = X509Certificate.CreateFromCertFile(CertificateFile);
             Secure = true;
         }
@@ -44,61 +45,45 @@ namespace Poly.Net.Tcp {
         public bool AuthClient(Client Client) {
             try {
                 Client.Secure = true;
-                var Stream = Client.GetStream() as SslStream;
+                var Stream = Client.Stream as SslStream;
 
                 Stream.AuthenticateAsServer(this.ServerCert, false, SslProtocols.Tls, false);
-            }
-            catch {
-                return false;
-            }
 
-            return true;
+                return true;
+            }
+            catch { }
+            return false;
         }
 
-        public new void Start() {
-            base.Start(100);
+        new public async void Start() {
+            if (ClientConnect == null)
+                throw new NullReferenceException("Must specify ClientConnect handler!");
 
-            BeginAcceptSocket(OnClientConnect, this);
+            base.Start();
+            await AcceptConnections();
         }
 
         public new void Stop() {
             base.Stop();
         }
 
-        private void OnClientConnect(IAsyncResult State) {
-            try {
-                var Socket = this.EndAcceptSocket(State);
+        private async Task AcceptConnections() {
+            while (Active) {
+                try {
+                    var Sock = await AcceptSocketAsync();
 
-                ThreadPool.QueueUserWorkItem(
-                    new WaitCallback(OnConnect),
-                    Socket
-                );
+                    await Task.Run(() => {
+                        var Client = new Client(Sock);
+
+                        if (Secure)
+                            if (!AuthClient(Client))
+                                return;
+
+                        ClientConnect(Client);
+                    });
+                }
+                catch { }
             }
-            catch { }
-
-            if (Active)
-                BeginAcceptSocket(OnClientConnect, this);
-        }
-
-        private void OnConnect(object State) {
-            OnConnect(State as Socket);
-        }
-
-        public void OnConnect(Socket con) {
-            if (this.ClientConnect != null) {
-                var Client = (Client)(con);
-
-                if (Secure && !AuthClient(Client))
-                    return;
-
-                this.ClientConnect(Client);
-            }
-        }
-
-        public void OnConnect(Event.Handler Handler) {
-            this.ClientConnect = (C) => {
-                Event.Invoke(Handler, "Client", C);
-            };
         }
     }
 }

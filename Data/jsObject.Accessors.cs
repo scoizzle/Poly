@@ -8,142 +8,105 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject {
-        public static Dictionary<Type, Func<string, object>> ParserCache = new Dictionary<Type, Func<string, object>>() {
-            { typeof(int), 
-                (str) => { 
-                    int val; 
-                    if (int.TryParse(str, out val)) 
-                        return val;
-                    return null;
-                }
-            },
-            { typeof(bool), 
-                (str) => { 
-                    bool val;
-                    if (bool.TryParse(str, out val))
-                        return val;
-                    return null;
-                }
-            },
-            { typeof(long),
-                (str) => {
-                    long val;
-                    if (long.TryParse(str, out val))
-                        return val;
-                    return null;
-                }
-            },
-            { typeof(float), 
-                (str) => { 
-                    float val;
-                    if (float.TryParse(str, out val))
-                        return val;
-                    return null;
-                }
-            },
-            { typeof(double),
-                (str) => {
-                    double val;
-                    if (double.TryParse(str, out val))
-                        return val;
-                    return null;
-                }
-            },
-            { typeof(jsObject),
-                (str) => {
-                    jsObject Obj = new jsObject();
-
-                    if (Obj.Parse(str))
-                        return Obj;
-
-                    return null;
-                }
-            },
-        };
+        public delegate object ParserDelegate(string Value);
+        public static Dictionary<Type, ParserDelegate> Parsers;
 
         public static Func<jsObject> NewObject = () => { return new jsObject(); },
                                      NewArray = () => { return new jsObject() { IsArray = true }; };
 
-        public T Get<T>(string Key) {
-            T Value;
-            if (StringExtensions.Contains(Key, '.')) {
-                int Open = 0, Close = Key.Find('.');
-                jsObject Current = this;
 
-                while (Current != null && Open != -1 && Close != -1) {
-                    var Sub = Key.Substring(Open, Close - Open);
+        public object Get(string Key) {
+            return Get(Key.Split("."));
+        }
 
-                    if (Close == Key.Length && Current.TryGet<T>(Sub, out Value))
-                        return Value;
+        public object Get(params string[] Keys) {
+            int i = 0;
+            object Value;
+            jsObject Current = this;
 
-                    if (!Current.TryGet<jsObject>(Sub, out Current))
-                        return default(T);
+            do {
+                if (Current.TryGet(Keys[i], out Value)) {
+                    if (Keys.Length - i == 1)
+                        break;
 
-                    Open = Close + 1;
-                    Close = Key.Find('.', Open);
-
-                    if (Close == -1) {
-                        Close = Key.Length;
-                    }
+                    if (Value is jsObject)
+                        Current = Value as jsObject;
+                    else
+                        return null;
                 }
             }
-            else {
-                if (this.TryGet<T>(Key, out Value))
-                    return Value;
-            }
+            while (++i < Keys.Length);
 
-            return default(T);
+            return Value;
         }
 
-        public T Get<T>(string Key, T Default) {
-            object Value = Get<T>(Key);
+        public object Get(IEnumerable<string> Keys) {
+            object Value = null;
+            jsObject Current = this;
+            int I = 0, Len = Keys.Count() - 1;
 
-            if (Value == null) {
-                Set<T>(Key, Default);
-                return Default;
-            }
-
-            return (T)Value;
-        }
-
-        public T Get<T>(string Key, Func<T> OnMissingHander) {
-            T Value = Get<T>(Key);
-
-            if (Value == null) {
-                Set<T>(Key, Value = OnMissingHander());
+            foreach (var K in Keys) {
+                if (Current.TryGet(K, out Value)) {
+                    if (I++ == Len)
+                        break;
+                    else 
+                    if (Value is jsObject)
+                        Current = Value as jsObject;
+                }
+                else return null;
             }
 
             return Value;
         }
 
-        public T Get<T>(string[] Keys) {
-            T Value;
-            jsObject Current = this;
+        public T Get<T>(string Key) {
+            return Get<T>(Key.Split("."));
+        }
 
-            for (int i = 0; Current != null && i < Keys.Length; i++) {
-                var Sub = Keys[i];
+        public T Get<T>(params string[] Key) {
+            var Value = Get(Key);
 
-                if (StringExtensions.Contains(Sub, '.')) {
-                    Current = Current.Get<jsObject>(Sub);
-                    continue;
+            if (Value != null) {
+                if (Value is T)
+                    return (T)(Value);
+
+                if (Value is string && Parsers.ContainsKey(typeof(T))) {
+                    Value = Parsers[typeof(T)](Value as string);
+
+                    Set(Key, Value);
+
+                    return (T)(Value);
                 }
-
-                if ((Keys.Length - i) == 1 && Current.TryGet<T>(Sub, out Value)) {
-                    return Value;
-                }
-
-                if (!Current.TryGet<jsObject>(Sub, out Current))
-                    break;
             }
+
             return default(T);
         }
 
-        public T Search<T>(string Key, bool IgnoreCase = true, bool KeyIsWild = false) where T : class {
+        public T Get<T>(IEnumerable<string> Key) {
+            var Value = Get(Key);
+
+            if (Value != null) {
+                if (Value is T)
+                    return (T)(Value);
+
+                if (Value is string && Parsers.ContainsKey(typeof(T))) {
+                    Value = Parsers[typeof(T)](Value as string);
+
+                    Set(Key, Value);
+
+                    return (T)(Value);
+                }
+            }
+
+            return default(T);
+        }
+
+        public T Search<T>(string Key, bool KeyIsWild = false) where T : class {
             T Value = default(T);
 
             if (KeyIsWild) {
                 ForEach<T>((K, V) => {
-                    if (Key.Compare(K, IgnoreCase)) {
+                    if (Key.Match(K) != null) {
                         Value = V;
                         return true;
                     }
@@ -152,7 +115,7 @@ namespace Poly.Data {
             }
             else {
                 ForEach<T>((K, V) => {
-                    if (K.Compare(Key, IgnoreCase)) {
+                    if (K.Match(Key) != null) {
                         Value = V;
                         return true;
                     }
@@ -163,118 +126,86 @@ namespace Poly.Data {
             return Value;
         }
 
-        public jsObject getObject(string Key) {
-            return Get<jsObject>(Key);
+        public void Set(string Key, object Value) {
+            AssignValue(Key, Value);
         }
-        
-        public bool TryGet<T>(string Key, out T Value) {
-            object Obj;
 
-            if (GetValue(Key, out Obj)) {
-				try {
-                    Value = (T)Obj;
+        public void Set(IEnumerable<string> Keys, object Value) {
+            object Object;
+            jsObject Current = this;
+            int I = 1, Len = Keys.Count();
+
+            foreach (var K in Keys) {
+                if (I++ == Len)
+                    Current.AssignValue(K, Value);
+                else if (Current.TryGet(K, out Object)) {
+                    if (Value is jsObject)
+                        Current = Value as jsObject;
+                    else break;
+                }
+                else {
+                    Current.AssignValue(K, Current = new jsObject());
+                }
+            }
+        }
+
+        public void Set(string[] Keys, object Value) {
+            int i = 0;
+            object Object;
+            jsObject Current = this;
+
+            do {
+                if (Keys.Length - i == 1) {
+                    Current.AssignValue(Keys[i], Value);
+                }
+                else if (Current.TryGet(Keys[i], out Object)) {
+                    if (Object is jsObject)
+                        Current = Object as jsObject;
+                    else break;
+                }
+                else {
+                    Current.AssignValue(Keys[i], Current = new jsObject());
+                }
+            }
+            while (++i < Keys.Length);
+        }
+
+        public virtual bool TryGet(string Key, out object Value) {
+            return TryGetValue(Key, out Value);
+        }
+
+        public virtual bool TryGet<T>(string Key, out T Value) {
+            object Val;
+
+            if (TryGet(Key, out Val)) {
+                if (Val is T) {
+                    Value = (T)(Val);
                     return true;
-				}
-				catch {
-                    var str = Obj as string;
-                    if (str != null) {
-                        var Type = typeof(T);
-                        if (ParserCache.ContainsKey(Type)) {
-                            Value = (T)ParserCache[Type](str);
-                            AssignValue<T>(Key, Value);
-                            return true;
-                        }
+                }
+                else if (Val is string && Parsers.ContainsKey(typeof(T))) {
+                    Val = Parsers[typeof(T)](Val as string);
+
+                    if (Val is T) {
+                        Set(Key, Val);
+                        Value = (T)(Val);
+                        return true;
                     }
-                    else {
-                        Value = default(T);
-                        return false;
-                    }
-				}
+                }
             }
 
             Value = default(T);
             return false;
         }
 
-        public void Set<T>(string Key, T Value) {
-            if (StringExtensions.Contains(Key, '.')) {
-                jsObject Current = this;
-                int Open = 0, Close = Key.Find('.');
+        public T GetValue<T>(string Key) {
+            T Val;
 
-                while (Current != null && Open != -1 && Close != -1) {
-                    var Sub = Key.Substring(Open, Close - Open);
+            if (TryGet<T>(Key, out Val))
+                return Val;
 
-                    if (Close == Key.Length) {
-                        if (Value == null) {
-                            Current.Remove(Sub);
-                        }
-                        else {
-                            Current.AssignValue<T>(Sub, Value);
-                        }
-                        return;
-                    }
-
-                    jsObject Next;
-                    if (!Current.TryGet<jsObject>(Sub, out Next)) {
-                        Next = new jsObject();
-                        Current.AssignValue(Sub, Next);
-                    }
-                    Current = Next;
-
-                    Open = Close + 1;
-                    Close = Key.Find('.', Open);
-
-                    if (Close == -1) {
-                        Close = Key.Length;
-                    }
-                }
-            }
-
-            if (Value == null) {
-                this.Remove(Key);
-            }
-            else {
-                this.AssignValue(Key, Value);
-            }
+            return default(T);
         }
-
-        public void Set<T>(string[] Keys, T Value) {
-            jsObject Current = this;
-
-            for (int i = 0; i < Keys.Length; i++) {
-                var Sub = Keys[i];
-
-                if ((Keys.Length - i) == 1) {
-                    if (Sub.Contains('.')) {
-                        Current.Set(Sub, Value);
-                    }
-                    else {
-                        Current.AssignValue<T>(Sub, Value);
-                    }
-                    break;
-                }
-
-                var Next = Current.Get<jsObject>(Sub);
-
-                if (Next == null) {
-                    Next = new jsObject();
-
-                    if (Sub.Contains('.')) {
-                        Current.Set(Sub, Next);
-                    }
-                    else {
-                        Current.AssignValue<jsObject>(Sub, Next);
-                    }
-                }
-
-                Current = Next;
-            }
-        }
-
-        public virtual bool GetValue(string Key, out object Value) {
-            return TryGetValue(Key, out Value);
-        }
-
+        
         public virtual void AssignValue<T>(string Key, T Value) {
             base[Key] = Value;
         }

@@ -41,7 +41,7 @@ namespace Poly.Net.Tcp {
 
         public Client(TcpClient This) : this(This.Client) { }
 
-        public void Dispose() {
+        new public void Dispose() {
             Writer.Close();
             Reader.Close();
 

@@ -19,9 +19,7 @@ namespace Poly {
             try {
                 this.GenerateLists();
             }
-            catch (Exception Error) {
-                return;
-            }
+            catch { }
         }
 
         public jsObject Match(string Data) {

@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 namespace Poly.Script.Expressions {
     using Nodes;
-    using Types;
     public class Add : Operator {
         public Add(Node Left,  Node Right) {
             this.Left = Left;

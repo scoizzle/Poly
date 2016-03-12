@@ -11,7 +11,8 @@ namespace Poly.Data {
         public delegate object ParserDelegate(string Value);
         public static Dictionary<Type, ParserDelegate> Parsers;
 
-        public static Func<jsObject> NewObject = () => { return new jsObject(); },
+        public static Func<jsObject> NewObject = () => { return new jsObject(); }
+        ,
                                      NewArray = () => { return new jsObject() { IsArray = true }; };
 
 
@@ -49,7 +50,7 @@ namespace Poly.Data {
                 if (Current.TryGet(K, out Value)) {
                     if (I++ == Len)
                         break;
-                    else 
+                    else
                     if (Value is jsObject)
                         Current = Value as jsObject;
                 }
@@ -139,8 +140,8 @@ namespace Poly.Data {
                 if (I++ == Len)
                     Current.AssignValue(K, Value);
                 else if (Current.TryGet(K, out Object)) {
-                    if (Value is jsObject)
-                        Current = Value as jsObject;
+                    if (Object is jsObject)
+                        Current = Object as jsObject;
                     else break;
                 }
                 else {
@@ -205,7 +206,7 @@ namespace Poly.Data {
 
             return default(T);
         }
-        
+
         public virtual void AssignValue<T>(string Key, T Value) {
             base[Key] = Value;
         }

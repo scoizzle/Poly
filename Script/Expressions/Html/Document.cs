@@ -1,31 +1,46 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Poly.Script.Expressions.Html {
+    using Nodes;
+    using Data;
+
     public class Document : Element {
-        public Element[] Elements;
+        Element[] Members;
 
-        public Document(params Element[] Members) {
-            this.Elements = Members;
+        public override void Evaluate(StringBuilder Output, jsObject Context) {
+            if (Members != null)
+            for (int i = 0; i < Members.Length; i++) {
+                Members[i].Evaluate(Output, Context);
+            }
         }
 
-        public override string Evaluate(Data.jsObject Context) {
-            StringBuilder Output = new StringBuilder();
+        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
+                return null;
 
-            foreach (var E in Elements) {
-                E.Evaluate(Output, Context);
+            var Delta = Index;
+            if (Text.Compare('{', Delta)) {
+                if (Text.FindMatchingBrackets('{', '}', ref Delta, ref LastIndex)) {
+                    List<Element> Elements = new List<Element>();
+
+                    while (IsParseOk(Engine, Text, ref Delta, LastIndex)) {
+                        var E = Html.Parse(Engine, Text, ref Delta, LastIndex) as Element;
+
+                        if (E == null)
+                            break;
+
+                        Elements.Add(E);
+                    }
+
+                    Index = Delta + 1;
+                    return new Document() {
+                        Members = Elements.ToArray()
+                    };
+                }
             }
-
-            return Output.ToString();
-        }
-
-        public override void Evaluate(StringBuilder Output, Data.jsObject Context) {
-            foreach (var E in Elements) {
-                E.Evaluate(Output, Context);
-            }
+            return null;
         }
     }
 }

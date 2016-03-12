@@ -20,7 +20,7 @@ namespace Poly.Script.Libraries {
             Add(Server);
         }
 
-        public static Function Get = Function.Create("Get", (string Url, jsObject Headers) => {
+        new public static Function Get = Function.Create("Get", (string Url, jsObject Headers) => {
             using (var Client = new WebClient()) {
                 if (Headers != null) {
                     Headers.ForEach((K, V) => {

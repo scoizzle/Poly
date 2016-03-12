@@ -41,7 +41,7 @@ namespace Poly.Script.Expressions {
                     Var,
                     new Subtract(
                         Var,
-                        new Integer(1)
+                        new StaticValue(1)
                     )
                 );
             }

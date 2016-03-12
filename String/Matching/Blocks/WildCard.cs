@@ -29,6 +29,13 @@ namespace Poly {
                     }
                     else
                     if (Next is Static) {
+						if ((Context.BlockCount - Context.BlockIndex) == 2) {
+							if (Context.EndsWith (Next.Format)) {
+								Context.Index = Context.Length;
+								return true;
+							}
+						}
+								
                         return Context.Goto(Next.Format);
                     }
 

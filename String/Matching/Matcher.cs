@@ -28,7 +28,9 @@ namespace Poly {
                 return null;
 
             var Context = new Context(Data, new jsObject()) {
-                Index = Index
+                Index = Index,
+				BlockCount = Handlers == null ?
+					0 : Handlers.Length
             };
 
             if (Match(Context)) {
@@ -50,7 +52,9 @@ namespace Poly {
                 return null;
 
             var Context = new Context(Data, Storage) {
-                Index = Index
+				Index = Index,
+				BlockCount = Handlers == null ?
+					0 : Handlers.Length
             };
 
             if (Match(Context)) {
@@ -73,7 +77,7 @@ namespace Poly {
                 }
             }
 
-            return true;
+            return Context.IsDone();
         }
 
         private Block[] Parse(string Fmt) {

@@ -5,33 +5,45 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Poly.Script.Expressions.Html {
+    using Data;
     using Nodes;
+
     public class Attribute : Element {
-        public string Name;
-        public Nodes.Node Value;
+        public string Key;
+        public Node Value;
 
-        public static string Format = " {0}=\"{1}\"";
+        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
+                return null;
 
-        public Attribute(string Key, Nodes.Node Val) {
-            this.Name = Key;
-            this.Value = Val;
-        }
+            var Delta = Index;
+            ConsumeValidName(Text, ref Delta);
 
-        public override string Evaluate(Data.jsObject Context) {
-            if (Value != null) {
-                return string.Format(Format, Name, Value.Evaluate(Context));
+            if (Delta != Index) {
+                var Name = Text.Substring(Index, Delta - Index);
+                ConsumeWhitespace(Text, ref Delta);
+
+                if (Text.Compare(':', Delta)) {
+                    Delta++;
+                    ConsumeWhitespace(Text, ref Delta);
+
+                    if (Text.Compare('{', Delta))
+                        return ComplexElement.Parse(Engine, Text, ref Index, LastIndex);
+
+                    Index = Delta;
+
+                    return new Attribute() {
+                        Key = Name,
+                        Value = Html.Parse(Engine, Text, ref Index, LastIndex)
+                    };
+                }
             }
-            return Name;
+
+            return null;
         }
 
-        public override void Evaluate(StringBuilder Output, Data.jsObject Context) {
-            if (Value == null)
-                return;
-
-            var Val = Value.Evaluate(Context);
-
-            if (Val != null && !string.IsNullOrEmpty(Val.ToString()))
-                Output.AppendFormat(Format, Name, Val);
+        public override string ToString() {
+            return string.Format("{0}=\"{1}\"", Key, Value);
         }
     }
 }

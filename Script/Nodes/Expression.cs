@@ -18,6 +18,7 @@ namespace Poly.Script.Nodes {
             NoOperation = new Node();
             Break = new Node();
             Continue = new Node();
+
             Null = new StaticValue(null);
             True = new StaticValue(true);
             False = new StaticValue(false);

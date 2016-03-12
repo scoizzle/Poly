@@ -9,27 +9,10 @@ using Poly.Data;
 namespace Poly.Net.Http {
     public class Packet : jsComplex {
         static readonly char[] PathSplit = new char[] { '/' };
+        public int ContentLength;
         public new jsObject Get;
         public jsObject Headers, Post, Cookies, Route;
-        public string Host, RawTarget, Connection, Type, Target, Version, Value, Query;
-
-        public int ContentLength {
-            get {
-                return Headers.Get<int?>("Content-Length") ?? 0;
-            }
-            set {
-                Headers.Set("Content-Length", value);
-            }
-        }
-
-        public string ContentType {
-            get {
-                return Headers.Get<string>("Content-Type");
-            }
-            set {
-                Headers.Set("Content-Type", value);
-            }
-        }
+        public string Host, RawTarget, Connection, Type, Target, Version, Value, Query, ContentType;
 
         public Packet() {
             Headers = new jsObject();
@@ -38,7 +21,8 @@ namespace Poly.Net.Http {
             Cookies = new jsObject();
             Route = new jsObject();
 
-            Host = RawTarget = Connection = Type = Target = Version = Value = Query = string.Empty;
+            ContentLength = 0;
+            Host = RawTarget = Connection = Type = Target = Version = Value = Query = ContentType = string.Empty;
         }
 
         public bool Receive(Net.Tcp.Client Client) {
@@ -60,10 +44,11 @@ namespace Poly.Net.Http {
             Version = Split[2];
 
             if (RawTarget.Contains("?")) {
-                Query = '?' + RawTarget.Substring("?");
-                Target = Uri.UnescapeDataString(RawTarget.Substring("", "?"));
+                var QueryStartIndex = RawTarget.IndexOf('?');
+                Query = RawTarget.Substring(QueryStartIndex + 1);
+                Target = Uri.UnescapeDataString(RawTarget.Substring(0, QueryStartIndex));
 
-                Split = RawTarget.Split('&');
+                Split = Query.Split('&');
 
                 for (int n = 0; n < Split.Length; n++) {
                     var Pair = Split[n].Split('=');
@@ -118,17 +103,27 @@ namespace Poly.Net.Http {
                 }
             }
 
+            if (Headers.ContainsKey("Content-Type"))
+                ContentType = Headers.Get<string>("Content-Type");
+            
             if (Headers.ContainsKey("Content-Length")) {
-                Value = Client.Reader.CurrentEncoding.GetString(Client.Read(ContentLength));
+                ContentLength = Headers.Get<int>("Content-Length");
 
-                if (Type == "POST" && ContentType == "application/x-www-form-urlencoded") {
-                    Split = Value.Split('&');
+                if (ContentLength > 0) {
+                    var RawContent = new char[ContentLength];
+                    Client.Reader.ReadBlock(RawContent, 0, ContentLength);
 
-                    for (int n = 0; n < Split.Length; n++) {
-                        var Pair = Split[n].Split('=');
-                        Cookies[Pair[0]] = Pair[1];
+                    Value = new string(RawContent);
+                    RawContent = null;
 
-                        Post.Set(Pair[0], Pair[1]);
+                    if (Type == "POST" && ContentType == "application/x-www-form-urlencoded") {
+                        Split = Value.Split('&');
+
+                        for (int n = 0; n < Split.Length; n++) {
+                            var Pair = Split[n].Split('=');
+
+                            Post.Set(Pair[0], Pair[1]);
+                        }
                     }
                 }
             }

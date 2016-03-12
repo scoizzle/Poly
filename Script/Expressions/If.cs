@@ -8,6 +8,7 @@ using Poly.Data;
 namespace Poly.Script.Expressions {
     using Nodes;
     using Types;
+
     public class If : Expression {
         public Node Boolean = null, Else = null;
 

@@ -3,98 +3,55 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Poly.Data;
 
 namespace Poly.Script.Expressions.Html {
+    using Data;
     using Nodes;
+
     public class Variable : Element {
-        Script.Nodes.Node Var;
-        Element Template;
-
-        public Variable(Script.Nodes.Node V, Element Template) {
-            this.Var = V;
-            this.Template = Template;
-        }
-
-        public override string Evaluate(jsObject Context) {
-            if (Var == null)
-                return null;
-
-            var Obj = Var.Evaluate(Context);
-
-            if (Obj is Expressions.Return)
-                Obj = (Obj as Expressions.Return).Evaluate(Context);
-
-            if (Obj == null)
-                return null;
-
-            return Obj.ToString();
-        }
+        public Node Value;
 
         public override void Evaluate(StringBuilder Output, jsObject Context) {
-            if (Var == null)
-                return;
+            if (Value != null) {
+                var Result = Value.Evaluate(Context);
 
-            var Obj = Var.Evaluate(Context);
-            var js = Obj as jsObject;
-
-            if (Template != null && js != null) {
-                foreach (var Pair in js) {
-                    if (Pair.Value is jsObject) {
-                        Template.Evaluate(Output, Pair.Value as jsObject);
-                    }
-                    else {
-                        Context.Set("Key", Pair.Key);
-                        Context.Set("Value", Pair.Value);
-
-                        Template.Evaluate(Output, Context);
-                        
-                        Context.Remove("Key");
-                        Context.Remove("Value");
-                    }
-                }
-            }
-            else {
-                if (Obj != null)
-                    Output.Append(Obj.ToString());
+                if (Result != null)
+                    Output.Append(Result);
             }
         }
 
-        public override string ToString() {
-            if (Template != null) {
-                return string.Format("{0}{{{1}}}", Var, Template);
-            }
-            else {
-                return string.Format("{0}", Var);
-            }
-        }
-
-        public static Element Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!Expression.IsParseOk(Engine, Text, ref Index, LastIndex))
+        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
                 return null;
 
-            if (Text.Compare("@", Index)) {
-                var Delta = Index + 1;
-                var Var = Engine.Parse(Text, ref Delta, LastIndex);
+            if (Text.Compare('@', Index)) {
+                var Delta = ++Index;
+                ConsumeValidName(Text, ref Delta);
 
-                Element Template = null;
+                var Node = Engine.Parse(Text, ref Index, Delta);
+                if (Node == null)
+                    return null;
 
-                Expression.ConsumeWhitespace(Text, ref Delta);
-                if (Var != null && Text.Compare("{", Delta)) {
+                ConsumeWhitespace(Text, ref Delta);
+                if (Text.Compare('{', Delta)) {
                     var Start = Delta;
                     var End = Delta;
-                    if (Text.FindMatchingBrackets("{", "}", ref Start, ref End)) {
-                        Template = Html.Parse(Engine, Text, ref Start, End);
+
+                    if (Text.FindMatchingBrackets("{", "}", ref Start, ref End, true)) {
                         Index = End + 1;
+
+                        return new Template() {
+                            Value = Node,
+                            Format = Document.Parse(Engine, Text, ref Start, End) as Element
+                        };
                     }
                 }
                 else {
-                    Index = Delta;
+                    return new Variable() { 
+                        Value = Node 
+                    };
                 }
-
-                return new Variable(Var, Template);
             }
-
             return null;
         }
     }

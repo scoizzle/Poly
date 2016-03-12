@@ -9,6 +9,7 @@ using Poly.Data;
 namespace Poly.Script.Expressions {
     using Nodes;
     using Helpers;
+
     public class Using : Expression {
         public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
             if (!IsParseOk(Engine, Text, ref Index, LastIndex))

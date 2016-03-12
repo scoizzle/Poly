@@ -6,49 +6,63 @@ using System.Threading.Tasks;
 
 namespace Poly.Script.Expressions.Html {
     using Data;
+    using Nodes;
 
-    public class Template {
-        public string[] Arguments;
-        public Element Body;
+    public class Template : Variable {
+        public Element Format;
 
-        public Template(string[] Args, Element Body) {
-            this.Arguments = Args;
-            this.Body = Body;
-        }
+        public override void Evaluate(StringBuilder Output, jsObject Context) {
+            if (Value != null) {
+                var Result = Value.Evaluate(Context);
 
-        public void Evaluate(StringBuilder Output, Data.jsObject Context) {
-            if (Body == null)
-                return;
+                if (Result is jsObject) {
+                    var Obj = Result as jsObject;
 
-            Body.Evaluate(Output, Context);
-        }
-    }
+                    if (Obj.Values.All(s => s is jsObject)) {
+                        foreach (var Sub in Obj.Values) {
+                            Format.Evaluate(Output, Sub as jsObject);
+                        }
+                    }
+                    else {
+                        foreach (var Sub in Obj) {
+                            Context.Set("Key", Sub.Key);
+                            Context.Set("Value", Sub.Value);
 
-    public class Templater : Element {
-        public Template Template;
-        public Element[] Arguments;
+                            Format.Evaluate(Output, Context);
 
-        public Templater(Template Temp, params Element[] Args) {
-            this.Template = Temp;
-            this.Arguments = Args;
-        }
-
-        public override string Evaluate(Data.jsObject Context) {
-            StringBuilder Out = new StringBuilder();
-            Evaluate(Out, Context);
-            return Out.ToString();
-        }
-
-        public override void Evaluate(StringBuilder Output, Data.jsObject Context) {
-            var Args = new Data.jsObject();
-
-            for (int i = 0; i < Arguments.Length && i < Template.Arguments.Length; i++) {
-                if (Arguments[i] != null) {
-                    Args[Template.Arguments[i]] = Arguments[i].Evaluate(Context);
+                            Context.Remove("Key");
+                            Context.Remove("Value");
+                        }
+                    }
                 }
             }
+        }
 
-            Template.Evaluate(Output, Args);
+        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
+            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
+                return null;
+
+            if (Text.Compare('|', Index)) {
+                Index++;
+
+                if (Text.Compare('\'', Index)) {
+                    var String = Text.FindMatchingBrackets('\'', '\'', Index, false);
+
+                    Index += String.Length + 2;
+
+                    return new Expressions.Template(Expression.ContextAccess, new Nodes.StaticValue(String));
+                }
+                else
+                if (Text.Compare('"', Index)) {
+                    var String = Text.FindMatchingBrackets('"', '"', Index, false);
+
+                    Index += String.Length + 2;
+
+                    return new Expressions.Template(Expression.ContextAccess, new Nodes.StaticValue(String));
+
+                }
+            }
+            return null;
         }
     }
 }

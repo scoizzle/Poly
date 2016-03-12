@@ -47,26 +47,27 @@ namespace Poly.Script.Expressions {
 
             if (Text.Compare("include", Index)) {
                 var Delta = Index += 7;
-                bool Live = false;
+				bool Live = false;
 
-                if (Text.Compare("_live", Delta)) {
-                    Delta += 5;
-                    Live = true;
-                }
-                ConsumeWhitespace(Text, ref Delta);
+				if (Text.Compare ("_live", Delta)) {
+					Delta += 5;
+					Live = true;
+				}
+	                ConsumeWhitespace(Text, ref Delta);
 
-                var Inc = Engine.Parse(Text, ref Delta, LastIndex);
+	                var Inc = Engine.Parse(Text, ref Delta, LastIndex);
 
-                Index = Delta;
-                if (Inc is Types.String && !Live) {
+	                Index = Delta;
+
+				if (Live) {
+					return new Include(Engine, Inc);  
+				}
+				else if (Inc is StaticValue) {
                     return ExtensionManager.Include(Engine, Engine.IncludePath + Inc.ToString());
-                }
-                else {
-                    return new Include(Engine, Inc);
-                }                  
+                }                
             }
 
-            return null;
-        }
-    }
+			return null;
+	    }
+	}
 }

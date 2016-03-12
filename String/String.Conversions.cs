@@ -322,7 +322,7 @@ namespace System {
         }
 
         public static string HtmlDescape(this String This) {
-            return System.Text.RegularExpressions.Regex.Replace(This.Replace("+", " "), "%([A-Fa-f\\d]{2})", a => "" + Convert.ToChar(Convert.ToInt32(a.Groups[1].Value, 16)));
+            return System.Text.RegularExpressions.Regex.Replace(This.Replace("+", " "), "%([A-Fa-f\\d]{2})", a => Convert.ToChar(Convert.ToInt32(a.Groups[1].Value, 16)).ToString());
         }
 
         public static string UriDescape(this String This) {
@@ -396,7 +396,7 @@ namespace System {
         }
 
         public static jsObject ToJsObject(this String This) {
-            return (jsObject)(This);
+            return new jsObject(This);
         }
     }
 }

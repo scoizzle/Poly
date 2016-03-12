@@ -66,7 +66,7 @@ namespace Poly.Net.Http {
         }
 
         public async Task OnClientRequest(Request Request) {
-            var WWW = Request.Host.GetWWW(Request);
+			var WWW = Request.Host.GetWWW(Request.Packet.Target);
             var EXT = Request.Host.GetExtension(WWW);
 
             var Args = new jsObject(
@@ -80,13 +80,13 @@ namespace Poly.Net.Http {
                 Handlers.MatchAndInvoke(Request.Packet.Target, Args, true) ||
                 Handlers.MatchAndInvoke(EXT, Args)) { }
             else {
-                HandleFile(Request, WWW, EXT);
+                HandleFile(Request, WWW);
             }
 
             await Request.Finish();    
         }
 
-        public virtual void HandleFile(Request Request, string WWW, string EXT) {
+        public virtual void HandleFile(Request Request, string WWW) {
             Cache.Item Cached;
 
             if (Request.Host.Cache.TryGetValue(WWW, out Cached)) {
@@ -94,7 +94,7 @@ namespace Poly.Net.Http {
                     Request.Result = Result.NotModified;
                 }
                 else {
-                    Request.Result.MIME = GetMime(EXT);
+                    Request.Result.ContentType = Cached.ContentType;
                     Request.Result.Headers["Last-Modified"] = Cached.LastWriteTime;
 
                     if (Cached.Content == null) {

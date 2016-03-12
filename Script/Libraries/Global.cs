@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Poly.Script.Libraries {
     using Data;
@@ -55,7 +56,7 @@ namespace Poly.Script.Libraries {
         });
 
         public static Function Break = Function.Create("Break", (object Input) => {
-            System.Diagnostics.Debugger.Break();
+		 	System.Diagnostics.Debugger.Break();
             return null;
         });
 
@@ -68,7 +69,7 @@ namespace Poly.Script.Libraries {
 			return This.GetType().FullName;
 		});
 
-        public static Function ToObject = Function.Create<object>("ToObject", (This) => {
+        public static Function ToObject = Function.Create("ToObject", (object This) => {
             if (This != null) {
                 return This.ToString().ToJsObject();
             }

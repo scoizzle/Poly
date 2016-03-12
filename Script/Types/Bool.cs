@@ -12,7 +12,7 @@ namespace Poly.Script.Types {
             if (Node == null)
                 return false;
 
-            dynamic Value = Node.Evaluate(Context);
+            var Value = Node.Evaluate(Context);
 
             if (Value == null)
                 return false;
@@ -33,8 +33,10 @@ namespace Poly.Script.Types {
                 Value is long ||
                 Value is float ||
                 Value is double ||
-                Value is decimal)
-                    return Value > 0;
+                Value is decimal) {
+                dynamic dyn = Value;
+                return dyn > 0;
+            }
 
             return true;
         }

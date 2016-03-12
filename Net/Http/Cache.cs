@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text;
-using System.Threading;
+using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
     public class Cache : Dictionary<string, Cache.Item> {
         public class Item {
-            public string LastWriteTime;
+            public string LastWriteTime, ContentType;
             public byte[] Content;
+            public FileInfo Info;
 
             public Script.Engine Script;
         }
@@ -41,28 +42,31 @@ namespace Poly.Net.Http {
         }
 
         void Load(string FullPath) {
-            var Info = new FileInfo(FullPath);
+            Update(FullPath, this[FullPath] = new Item());
+        }
 
+        void Update(string Name, Item I) {
             try {
-                var I = new Item() {
-                    LastWriteTime = Info.LastWriteTime.HttpTimeString()
-                };
+                var Info = I.Info = new FileInfo(Name);
+				Mime.Types.TryGetValue(I.Info.Extension.Substring(1), out I.ContentType);
 
-                using (var F = Info.OpenRead()) {
-                    if (Info.Length < 5242880) {
-                        I.Content = new byte[F.Length];
 
-                        for (var Len = F.Length; Len > 0; )
-                            if (Len > int.MaxValue)
-                                Len -= F.Read(I.Content, 0, int.MaxValue);
-                            else
-                                Len -= F.Read(I.Content, 0, (int)(Len));
-                    }
+                if (Info.Length < 5242880) {
+                    I.Content = File.ReadAllBytes(Name);
                 }
 
-                this[FullPath] = I;
+                I.LastWriteTime = Info.LastWriteTime.HttpTimeString();
+                I.Script = null;
+
+                foreach (var Item in this.Values) {
+                    if (Item.Script != null && Item.Script.Includes.ContainsKey(Name)) {
+                        Item.Script = null;
+                    }
+                }
             }
-            catch { }            
+			catch (Exception Error) {
+				App.Log.Error (Error.ToString ());
+			}
         }
 
         void Created(object sender, FileSystemEventArgs e) {
@@ -70,10 +74,7 @@ namespace Poly.Net.Http {
         }
 
         void Changed(object sender, FileSystemEventArgs e) {
-            try {
-                Load(e.FullPath);
-            }
-            catch { }
+            Update(e.FullPath, this[e.FullPath]);
         }
 
         void Renamed(object sender, RenamedEventArgs e) {

@@ -70,7 +70,7 @@ namespace Poly.Script.Expressions {
                         var Var = For.Init as Variable;
                         var Bol = For.Boolean as Between;
 
-                        For.Modifier = new Assign(Var, new Add(Var, new Integer(1)));
+                        For.Modifier = new Assign(Var, new Add(Var, new StaticValue(1)));
                         For.Init = new Assign(Var, Bol.Left);
                         Bol.Left = Var;
                     }

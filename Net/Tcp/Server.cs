@@ -59,7 +59,7 @@ namespace Poly.Net.Tcp {
             if (ClientConnect == null)
                 throw new NullReferenceException("Must specify ClientConnect handler!");
 
-            base.Start();
+            base.Start(10240);
             await AcceptConnections();
         }
 
@@ -70,7 +70,7 @@ namespace Poly.Net.Tcp {
         private async Task AcceptConnections() {
             while (Active) {
                 try {
-                    var Sock = await AcceptSocketAsync();
+                    var Sock = AcceptSocket();
 
                     await Task.Run(() => {
                         var Client = new Client(Sock);

@@ -9,14 +9,16 @@ using Poly.Net.Tcp;
 
 namespace Poly.Net.Http {
     public class Result : jsComplex {
-        public string Status, MIME;
+        public string Status, ContentType;
+        public long ContentLength;
         public jsObject Cookies, Headers;
 
         public Result() {
             this.Status = Ok;
-            this.MIME = "text/html";
+            this.ContentType = "text/html";
             this.Cookies = new jsObject();
             this.Headers = new jsObject();
+            this.ContentLength = 0;
         }
 
         public static implicit operator Result(string Status) {

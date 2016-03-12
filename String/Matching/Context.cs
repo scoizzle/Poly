@@ -11,7 +11,7 @@ namespace Poly {
         class Context : StringIterator {
             public bool Store;
             public jsObject Storage;
-            public int BlockIndex;
+            public int BlockIndex, BlockCount;
 
             public Context(string Data) : base(Data) {
                 this.Storage = new jsObject();

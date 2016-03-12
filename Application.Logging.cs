@@ -20,6 +20,7 @@ namespace Poly {
                 public const int Error = 1;
                 public const int Warning = 2;
                 public const int Info = 3;
+				public const int Debug = 4;
             };
 
 			static Log() {
@@ -27,6 +28,16 @@ namespace Poly {
 				Level = Levels.Fatal;
 
 				Handler = Console.Write;
+			}
+				
+			public static void Debug(object Message) {
+				if (Level >= Levels.Debug) {
+					Print("[DEBUG] ", Message);
+				}
+			}
+
+			public static void Debug(string Format, params object[] Args) {
+				Debug(string.Format(Format, Args) as object);
 			}
 
             public static void Info(object Message) {

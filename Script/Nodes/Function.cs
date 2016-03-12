@@ -21,7 +21,7 @@ namespace Poly.Script.Nodes {
             Cache = new Dictionary<int, Func<object, object[], object>>();
         }
 
-        private Function() {
+        public Function() {
             Method = base.Evaluate;
         }
 
@@ -103,6 +103,8 @@ namespace Poly.Script.Nodes {
                 return null;
 
             var Delta = Index;
+            var IsHtml = false;
+
             if (Text.Compare("func", Delta)) {
                 Delta += 4;
 
@@ -110,6 +112,11 @@ namespace Poly.Script.Nodes {
                     Delta += 4;
                 }
             }
+            else if (Text.Compare("html", Delta)) {
+                IsHtml = true;
+                Delta += 4;
+            }
+
             ConsumeWhitespace(Text, ref Delta);
 
             Function Func = null;
@@ -121,40 +128,67 @@ namespace Poly.Script.Nodes {
             Delta = Close;
             ConsumeWhitespace(Text, ref Delta);
 
-            if (Text.Compare("(", Delta)) {
-                Func = new Function(Text.Substring(Open, Close - Open));
+			if (Text.Compare ("(", Delta)) {
+				if (IsHtml)
+					Func = new Expressions.Html.Function (Text.Substring (Open, Close - Open));
+				else
+					Func = new Function (Text.Substring (Open, Close - Open));
 
-                Open = Delta + 1;
-                Close = Delta;
+				Open = Delta + 1;
+				Close = Delta;
 
-                ConsumeEval(Text, ref Close);
-                Delta = Close;
-                ConsumeWhitespace(Text, ref Delta);
+				ConsumeEval (Text, ref Close);
+				Delta = Close;
+				ConsumeWhitespace (Text, ref Delta);
 
-                if (Text.Compare("=>", Delta)) {
-                    if (!string.IsNullOrEmpty(Func.Name))
-                        return null;
+				if (Text.Compare ("=>", Delta)) {
+					if (!string.IsNullOrEmpty (Func.Name))
+						return null;
 
-                    Delta += 2;
-                    ConsumeWhitespace(Text, ref Delta);
-                }
+					Delta += 2;
+					ConsumeWhitespace (Text, ref Delta);
+				}
 
-                if (Text.Compare("{", Delta)) {
-                    if (Expression.Parse(Engine, Text, ref Delta, LastIndex, Func)) {
-                        Func.Arguments = Text.Substring(Open, Close - Open - 1).ParseCParams();
+				if (Text.Compare ("{", Delta)) {
+					if (IsHtml) {
+						var Document = Expressions.Html.Html.Parse (Engine, Text, ref Delta, LastIndex) as Expressions.Html.Element;
 
-                        ConsumeWhitespace(Text, ref Delta);
-                        Index = Delta;
+						if (Document != null) {
+							Func.Arguments = Text.Substring (Open, Close - Open - 1).ParseCParams ();
 
-                        if (!string.IsNullOrEmpty(Func.Name) && IsEngineWide) {
-                            Engine.Functions[Func.Name] = Func;
-                            return Expression.NoOperation;
-                        }
+							(Func as Expressions.Html.Function).Format = Document;
+							Index = Delta;
 
-                        return Func;
-                    }
-                }
-            }
+							if (!string.IsNullOrEmpty (Func.Name) && IsEngineWide) {
+								Engine.Functions [Func.Name] = Func;
+								return Expression.NoOperation;
+							}
+
+							return Func;
+						}
+					} else if (Expression.Parse (Engine, Text, ref Delta, LastIndex, Func)) {
+						Func.Arguments = Text.Substring (Open, Close - Open - 1).ParseCParams ();
+
+						ConsumeWhitespace (Text, ref Delta);
+						Index = Delta;
+
+						if (!string.IsNullOrEmpty (Func.Name) && IsEngineWide) {
+							Engine.Functions [Func.Name] = Func;
+							return Expression.NoOperation;
+						}
+
+						return Func;
+					}
+				}
+			} 
+			else if (Text.Compare ('{', Delta) && IsHtml) {
+				var Node = Expressions.Html.Document.Parse (Engine, Text, ref Delta, LastIndex);
+
+				if (Node != null) {
+					Index = Delta;
+					return Node;
+				}
+			}
             return null;
         }
 
@@ -313,8 +347,8 @@ namespace Poly.Script.Nodes {
         static int GetHashCode(string Input) {
             int Result = 0;
 
-            foreach (char c in Input)
-                Result += c;
+            for (int i = 0; i < Input.Length; i++)
+                Result += Input[i];
 
             return Result;
         }

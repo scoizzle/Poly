@@ -20,10 +20,11 @@ namespace Poly.Script.Helpers {
         }
 
         public override object Evaluate(jsObject Context) {
-            if (Reload())
-                return base.Evaluate(Context);
-
-            return null;
+			if (!IsCurrent ())
+			if (!Reload ())
+				return null;
+			
+            return base.Evaluate(Context);
         }
 
         public bool IsCurrent() {
@@ -33,12 +34,25 @@ namespace Poly.Script.Helpers {
         }
 
         public bool Reload() {
-            if (this.IsCurrent())
-                return true;
-
             this.Elements = null;
 
-            return Engine.Parse(File.ReadAllText(FileName), 0, this) != null;
+			var Result = Engine.Parse (File.ReadAllText (FileName), 0, this);
+
+			if (Result != null) {
+				if (Result is Value) {
+					this.Elements = new Node[1] { Result };
+				} else {
+					this.Elements = Result.Elements;
+				}
+
+				return true;
+			}
+
+			return false;
         }
+
+		public override string ToString () {
+			return string.Format ("Cached {0} : {1}", FileName, LastWriteTime);
+		}
     }
 }

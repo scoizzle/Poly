@@ -62,13 +62,13 @@ namespace Poly.Data {
             Add(Count.ToString(), Object);
         }
 
-        public void CopyTo(jsObject Object, params string[] Keys) {
+        public virtual void CopyTo(jsObject Object, params string[] Keys) {
             foreach (var K in Keys){
                 Object.Set(K, this.Get(K));
             }
         }
 
-        public void CopyTo(jsObject Object) {
+        public virtual void CopyTo(jsObject Object) {
             var L = this.ToArray();
 
             for (int i = 0; i < L.Length; i++) {
@@ -146,6 +146,11 @@ namespace Poly.Data {
             return Output.ToString(0, Output.Length - 1);
         }
 
+        public string ToHtmlString() {
+            return this.ToString(true).Replace("\t", "&emsp;")
+                                  .Replace("\r\n", "<br/>");
+        }
+
         public override string ToString() {
             return Stringify(this, false);
         }
@@ -187,7 +192,7 @@ namespace Poly.Data {
                 else if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                if (Value != null) {
+                else if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
                 else continue;
@@ -226,7 +231,7 @@ namespace Poly.Data {
                 else if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                if (Value != null) {
+                else if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
                 else continue;

@@ -8,42 +8,11 @@ using Poly.Data;
 using Poly.Script;
 
 namespace Poly.Net {
-    public class Url : jsObject {
-        public string Protocol {
-            get {
-                return Get<string>("Protocol");
-            }
-            set {
-                Set("Protocol", value);
-            }
-        }
-
-        public string Host {
-            get {
-                return Get<string>("Host");
-            }
-            set {
-                Set("Host", value);
-            }
-        }
-
-        public string Path {
-            get {
-                return Get<string>("Path");
-            }
-            set {
-                Set("Path", value);
-            }
-        }
-
-        public jsObject Query {
-            get {
-                return Get<jsObject>("Query");
-            }
-            set {
-                Set("Query", value);
-            }
-        }
+    public class Url : jsComplex {
+        public string Protocol;
+        public string Host;
+        public string Path;
+        public jsObject Query;
 
         public Url(string Url) {
             Parse(Url);

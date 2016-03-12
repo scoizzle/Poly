@@ -13,7 +13,7 @@ using Poly.Net.Tcp;
 namespace Poly.Net.Irc {
     [DebuggerDisplay("{Debug}")]
     public partial class Packet : jsComplex {
-        public const string Format = @":{Sender} {Type:!Whitespace}[ {Receiver:![\:],!Whitespace}][ {Args:![\:]:Trim}] :{Message::Trim}",
+        public const string Format = @":{Sender} {Type:!Whitespace}[ {Receiver:![\:],!Whitespace} ][ {Args:![\:]:Trim}]:{Message::Trim}",
                             HeadlessFormat = "{Type} {Args}[ :{Message::Trim}]";
 
         public static Matcher Fmt = new Matcher(Format),

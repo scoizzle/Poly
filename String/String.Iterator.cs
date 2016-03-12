@@ -225,6 +225,18 @@ namespace Poly {
             return false;
         }
 
+		public bool EndsWith(string Str) {
+			if (Str.Length > Length || string .IsNullOrEmpty(Str))
+				return false;
+
+			for (int i = 1; i <= Str.Length; i++) {
+				if (this [Length - i] != Str [Str.Length - i]) {
+					return false;
+				}
+			}
+			return true;
+		}
+
         public bool EndsWith(StringIterator It) {
             for (int i = 1; i <= Length - Index && i <= It.Length - It.Index; i ++) {
                 if (this[Length - i] != It[It.Length - i]) {

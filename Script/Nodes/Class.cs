@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Poly.Data;
 
 namespace Poly.Script.Nodes {
+    [DebuggerDisplay("{Name}")]
     public class Class : Node {
 		public string Name, LastName;
 		public jsObject<Function> Functions, StaticFunctions;
@@ -101,6 +103,8 @@ namespace Poly.Script.Nodes {
                     }
 
                     if (Type != null && Text.Compare("{", Delta)) {
+                        Type.Register(Engine);
+
                         Open = Delta + 1;
                         ConsumeWhitespace(Text, ref Open);
                         ConsumeExpression(Text, ref Delta);
@@ -143,7 +147,6 @@ namespace Poly.Script.Nodes {
                         ConsumeWhitespace(Text, ref Delta);
                         Index = Delta;
 
-                        Type.Register(Engine);
                         return Expression.NoOperation;
                     }
                 }

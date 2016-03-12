@@ -19,6 +19,7 @@ namespace Poly.Script {
 
         public Dictionary<string, Expressions.Html.Template> HtmlTemplates = new Dictionary<string, Expressions.Html.Template>();
         public Dictionary<string, CachedScript> Includes = new Dictionary<string, CachedScript>();
+		public Dictionary<string, PersistentFile> PersistentFiles = new Dictionary<string, PersistentFile>();
 
         public Dictionary<string, Type> ReferencedTypes = new Dictionary<string, Type>() {
             { "App", typeof(App) }, 
@@ -34,7 +35,11 @@ namespace Poly.Script {
             { "File", typeof(System.IO.File) },
             { "Path", typeof(System.IO.Path) },
             { "Directory", typeof(System.IO.Directory) },
-            { "Environment", typeof(System.Environment) }
+            { "Environment", typeof(System.Environment) },
+            { "Int", typeof(int) },
+            { "UInt", typeof(uint) },
+            { "Long", typeof(long) },
+            { "ULong", typeof(ulong) }
         };
 
         public jsObject<Class> Types = new jsObject<Class>();

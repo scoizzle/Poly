@@ -44,6 +44,14 @@ namespace Poly.Data {
                 }
         }
 
+        public override void CopyTo(jsObject Object) {
+            base.CopyTo(Object);
+
+            foreach (var Pair in LocalCache) {
+                Object.AssignValue(Pair.Key, Pair.Value.Item1(this));
+            }
+        }
+
         public override bool TryGet(string Key, out object Value) {
             if (base.TryGet(Key, out Value))
                 return true;
@@ -83,7 +91,7 @@ namespace Poly.Data {
             }
         }
         
-        new public static StringBuilder Stringify(StringBuilder Output, jsComplex This, jsObject Parent) {
+        public static StringBuilder Stringify(StringBuilder Output, jsComplex This, jsObject Parent) {
             Output.Append(This.IsArray ? '[' : '{');
 
             int Index = 1;
@@ -181,7 +189,7 @@ namespace Poly.Data {
                 else if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                if (Value != null) {
+                else if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
                 else continue;
@@ -216,7 +224,7 @@ namespace Poly.Data {
                 else if (Value is bool) {
                     Output.Append(Value.ToString().ToLower());
                 }
-                if (Value != null) {
+                else if (Value != null) {
                     Output.AppendFormat("\"{0}\"", Value.ToString().Escape());
                 }
                 else continue;

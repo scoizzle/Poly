@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 using Poly.Data;
 
@@ -9,7 +10,7 @@ namespace Poly.Script.Expressions {
     using Helpers;
     using Types;
 
-    public class Call : Expression {
+    public class Call : Html.Element {
         string Name;
 
         Node This;
@@ -30,61 +31,105 @@ namespace Poly.Script.Expressions {
             if ((T = SystemTypeGetter.GetType(Name)) != null)
                 This = new StaticValue(T);
             else if ((T = SystemTypeGetter.GetType(Name)) != null)
-                This = new StaticValue(T);
+				This = new StaticValue(T);
+			else if ((C = Engine.Types[Name]) != null)
+				Function = C.Instaciator;
             else if (Name.Contains('.')) {
                 var Parent = Name.Substring(0, Name.LastIndexOf('.'));
                 this.Name = Name.Substring(Parent.Length + 1);
 
-                if ((C = Engine.Types[Name]) != null)
-                    Function = C.Instaciator;
-                else if (Engine.ReferencedTypes.ContainsKey(Parent))
+                if (Engine.ReferencedTypes.ContainsKey(Parent))
                     This = new Nodes.StaticValue(Engine.ReferencedTypes[Parent]);
-                else if (Name.Contains('[', Parent.Length + 1)) 
-                {   This = new Variable(Engine, Name); this.Name = string.Empty; }
+                else if (Name.Contains('[', Parent.Length + 1))
+                    { This = Engine.Parse(Name, 0) as Variable; this.Name = string.Empty; }
                 else if (Engine.Types.ContainsKey(Parent))
                     This = Engine.Types[Parent];
                 else if (!Engine.GetFunction(Parent, this.Name, out Function)) 
                     This = Engine.Parse(Parent, 0);
-                else return;
             }
         }
 
         public override object Evaluate(jsObject Context) {
-            int Index;
             object Object = null;
-            object[] ArgList = null;
             var Function = this.Function;
+
+			#if DEBUG
+			App.Log.Debug("Calling {0}", this.ToString());
+			#endif
             
             if (this.This != null) {
                 Object = This.Evaluate(Context);
             }
 
-            if (Arguments != null) {
-                ArgList = new object[Arguments.Length];
-
-                for (Index = 0; Index < Arguments.Length; Index++) {
-                    var F = Arguments[Index] as Function;
-
-                    if (F != null) {
-                        if (F.Arguments != null && string.IsNullOrEmpty(F.Name)) {
-                            ArgList[Index] = F.GetFunctionHandler(Context);
-                        }
-                        else {
-                            ArgList[Index] = new Event.Handler(F.Evaluate);
-                        }
-                    }
-                    else {
-                        ArgList[Index] = Arguments[Index].Evaluate(Context);
-                    }
-                }
+            if (Function != null) {
+                return Execute(Function, Object, Context);
             }
 
-            if (SystemFunction != null && Object != null) {
-                return SystemFunction(Object, ArgList);
+            if (SystemFunction != null && (SystemFunction.Method.IsStatic == (Object == null))) {
+                return Execute(SystemFunction, Object, Context);
+            }
+
+            Type Type = Object is Type ?
+                Object as Type :
+                Object != null ?
+                    Object.GetType() :
+                    null;
+
+            Function = GetFunction(Object, Context);
+
+            if (Function != null) {
+                return Execute(Function, Object, Context);
+            }
+            else if (Type == null) {
+                This = Expression.ContextAccess;
+                Object = Context;
+                Type = Object.GetType();
+            }
+
+            var ArgList = GetArguments(Context);            
+            var ArgTypes = ArgList != null && ArgList.Length > 0 ?
+                ArgList.Where(o => o != null)
+                       .Select(o => o.GetType())
+                       .ToArray() :
+                null;
+                                    
+            SystemFunction = Function.GetFunction(Type, Name, ArgTypes);
+
+            if (SystemFunction == null) {
+                if ((Function = Engine.GetFunction(Type, Name)) != null)
+                    return Execute(Function, Object, Context);
+                else 
+                    return null;
+            }
+
+            try {
+                return Execute(SystemFunction, Object, ArgList);
+            }
+            catch { 
+                return null;
+            }
+        }
+
+        public override void Evaluate(StringBuilder Output, jsObject Context) {
+            object Object = null;
+            var Function = this.Function;
+
+            if (this.This != null) {
+                Object = This.Evaluate(Context);
             }
 
             if (Function != null) {
-                return Execute(Function, Object, ArgList);
+                if (Function is Html.Function) {
+                    Execute(Function as Html.Function, Output, Object, Context);
+                    return;
+                }
+                else {
+                    Output.Append(Execute(Function, Object, Context));
+                }
+            }
+
+            if (SystemFunction != null && (SystemFunction.Method.IsStatic == (Object == null))) {
+                Output.Append(Execute(SystemFunction, Object, Context));
             }
 
             Type Type = Object as Type;
@@ -99,34 +144,15 @@ namespace Poly.Script.Expressions {
                     Type = Object.GetType();
                 }
 
-                if (Object is ClassInstance) {
-                    Function = (Object as ClassInstance).Class.GetFunction(Name);
-                }
-                else if (Object is Class) {
-                    Function = (Object as Class).Instaciator;
-                }
-                else if (Object is Function) {
-                    Function = Object as Function;
-                }
-                else if (This is Class) {
-                    this.Function = Function = (This as Class).StaticFunctions[Name];
-                }
-                else if (Object is string) {
-                    var Str = Object as string;
-
-                    if (Engine.Types.ContainsKey(Str)) {
-                        Function = Engine.Types[Str].GetFunction(Name);
-                    }
-                    else if (!Engine.GetFunction(Str, Name, out Function)) {
-                        Function = Engine.GetFunction(Name);
-                    }
-                }
-                else {
-                    Function = Engine.GetFunction(Name);
-                }
+                Function = GetFunction(Object, Context);
 
                 if (Function != null) {
-                    return Execute(Function, Object, ArgList);
+                    if (Function is Html.Function) {
+                        Execute(Function as Html.Function, Output, Object, Context);
+                    }
+                    else {
+                        Output.Append(Execute(Function, Object, Context));
+                    }
                 }
             }
             else if (!(This is StaticValue)) {
@@ -134,60 +160,138 @@ namespace Poly.Script.Expressions {
             }
 
             if (Object == null)
-                return null;
-            
-            Type[] ArgTypes = null;
+                return;
 
-            if (ArgList != null && ArgList.Length > 0) {
-                ArgTypes = new Type[ArgList.Length];
+            var ArgList = GetArguments(Context);
+            var ArgTypes = ArgList != null && ArgList.Length > 0 ?
+                ArgList.Select(o => o.GetType()).ToArray() :
+                null;
 
-                for (Index = 0; Index < ArgList.Length; Index++) {
-                    if (ArgList[Index] == null) {
-                        ArgTypes = null;
-                        break;
+            SystemFunction = Function.GetFunction(Type, Name, ArgTypes);
+
+            if (SystemFunction == null) {
+                if ((Function = Engine.GetFunction(Type, Name)) != null)
+                    Output.Append(Execute(Function, Object, Context));
+                else
+                    return;
+            }
+
+            try {
+                Output.Append(Execute(SystemFunction, Object, ArgList));
+            }
+            catch { }
+        }
+
+        private Function GetFunction(object Object, jsObject Context) {
+            if (This is Class) {
+                return this.Function = (This as Class).StaticFunctions[Name];
+            }
+            else if (Object != null) {
+                if (Object is ClassInstance) {
+                    return (Object as ClassInstance).Class.GetFunction(Name);
+                }
+                else if (Object is Class) {
+                    return (Object as Class).Instaciator;
+                }
+                else if (Object is Function) {
+                    return Object as Function;
+                }
+                else if (Object is string) {
+                    var Str = Object as string;
+
+                    if (Engine.Types.ContainsKey(Str)) {
+                        return Engine.Types[Str].GetFunction(Name);
                     }
-
-                    ArgTypes[Index] = ArgList[Index].GetType();
+                    else if (!Engine.GetFunction(Str, Name, out Function)) {
+                        return Engine.GetFunction(Name);
+                    }
                 }
             }
 
-            var Func = Function.GetFunction(Type, Name, ArgTypes);
+            return Engine.GetFunction(Name);
+        }
 
-            if (Func == null) {
-                if ((Function = Engine.GetFunction(Type, Name)) != null)
-                    return Execute(Function, Object, ArgList);
-                else 
-                    return null;
+        private object[] GetArguments(jsObject Context) {
+            if (Arguments == null)
+                return null;
+
+            object[] ArgList = new object[Arguments.Length];
+
+            for (int Index = 0; Index < Arguments.Length; Index++) {
+                var F = Arguments[Index] as Function;
+
+                if (F != null) {
+                    if (F.Arguments != null && string.IsNullOrEmpty(F.Name)) {
+                        ArgList[Index] = F.GetFunctionHandler(Context);
+                    }
+                    else {
+                        ArgList[Index] = new Event.Handler(F.Evaluate);
+                    }
+                }
+                else {
+                    ArgList[Index] = Arguments[Index].Evaluate(Context);
+                }
             }
-                        
-            SystemFunction = Func;
+
+            return ArgList;
+        }
+
+        private jsObject GetFunctionArguments(Function Func, object This, jsObject Context) {
+            jsObject Args = new jsObject();
+
+            if (This != null)
+                Args.Set("this", This);
+
+            if (Arguments == null)
+                return Args;
+
+            for (int Index = 0; Index < Arguments.Length; Index++) {
+                var F = Arguments[Index] as Function;
+                var Key = Func.Arguments != null && Index < Func.Arguments.Length ?
+                    Func.Arguments[Index] :
+                    Index.ToString();
+
+                if (F != null) {
+                    if (F.Arguments != null && string.IsNullOrEmpty(F.Name)) {
+                        Args[Key] = F.GetFunctionHandler(Context);
+                    }
+                    else {
+                        Args[Key] = new Event.Handler(F.Evaluate);
+                    }
+                }
+                else {
+                    Args[Key] = Arguments[Index].Evaluate(Context);
+                }
+            }
+
+            return Args;
+        }
+
+        private object Execute(Function Func, object This, jsObject Context) {
+            return Func.Evaluate(GetFunctionArguments(Func, This, Context));
+        }
+
+        private object Execute(Html.Function Func, StringBuilder Output, object This, jsObject Context) {
+            Func.Evaluate(Output, GetFunctionArguments(Func, This, Context));
+            return null;
+        }
+
+        private object Execute(Func<object, object[], object> Func, object This, object[] Args) {
             try {
-                return Func(Object, ArgList);
+                return Func(This, Args);
             }
-            catch { 
-                SystemFunction = null;
+            catch {
                 return null;
             }
         }
 
-        private static object Execute(Function Func, object This, object[] ArgList) {
-            jsObject Args = new jsObject("this", This);
-
-            if (ArgList != null) {
-                for (int Index = 0; Index < ArgList.Length; Index++) {
-                    string Key;
-
-                    if (Func.Arguments != null && Index < Func.Arguments.Length)
-                        Key = Func.Arguments[Index];
-                    else
-                        Key = Index.ToString();
-
-                    Args[Key] = ArgList[Index];
-                }
+        private object Execute(Func<object, object[], object> Func, object This, jsObject Context) {
+            try {
+                return Func(This, GetArguments(Context));
             }
-
-            return Func.Evaluate(Args);
-
+            catch { 
+                return null; 
+            }
         }
 
         public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
@@ -199,7 +303,7 @@ namespace Poly.Script.Expressions {
                 return null;
 
             var Delta = Index;
-            ConsumeValidName(Text, ref Delta);
+            Expression.ConsumeValidName(Text, ref Delta);
 
             if (Index != Delta) {
                 var Name = Text.Substring(Index, Delta - Index);
@@ -207,8 +311,7 @@ namespace Poly.Script.Expressions {
 
                 if (Text.Compare("(", Delta)) {
                     var Call = new Call(Engine, Name);
-
-
+                    
                     var Open = Delta + 1;
                     var Close = Delta;
 
@@ -219,33 +322,17 @@ namespace Poly.Script.Expressions {
 
                     var RawArgs = Text.Substring(Open, Close - Open - 1).ParseCParams();
 
-                    if (Call.This == null && Engine.HtmlTemplates.ContainsKey(Name)) {
-                        var Arguments = new Html.Element[RawArgs.Length];
+                    var List = new List<Node>();
+                    for (int i = 0; i < RawArgs.Length; i++) {
+                        var Arg = Engine.Parse(RawArgs[i], 0);
 
-                        for (int i = 0; i < RawArgs.Length; i++) {
-                            Arguments[i] = new Html.Variable(Engine.Parse(RawArgs[i], 0), null);
-                        }
+                        if (Arg == null)
+                            return null;
 
-                        var This = new Html.Generator(new Html.Templater(Engine.HtmlTemplates[Name], Arguments));
-
-                        if (!Text.Compare('.', Close)) {
-                            Index = Close;
-                            return This;
-                        }
+                        List.Add(Arg);
                     }
-                    else {
-                        var List = new List<Node>();
-                        for (int i = 0; i < RawArgs.Length; i++) {
-                            var Arg = Engine.Parse(RawArgs[i], 0);
 
-                            if (Arg == null)
-                                return null;
-
-                            List.Add(Arg);
-                        }
-
-                        Call.Arguments = List.ToArray();
-                    }
+                    Call.Arguments = List.ToArray();
 
                     ConsumeWhitespace(Text, ref Close);
 
@@ -257,7 +344,14 @@ namespace Poly.Script.Expressions {
                         var Child = Parse(Engine, Text, ref Close, LastIndex) as Call;
 
                         if (Child != null) {
-                            Child.This = Call;
+                            var Current = Child;
+                            while (Current.This != null) {
+                                if (Current.This is Call)
+                                    Current = Current.This as Call;
+                                else return Child;
+                            }
+
+                            Current.This = Call;
 
                             Index = Close;
                             return Child;
@@ -271,7 +365,7 @@ namespace Poly.Script.Expressions {
 
             return null;
         }
-
+        
         public override string ToString() {
             StringBuilder Output = new StringBuilder();
 

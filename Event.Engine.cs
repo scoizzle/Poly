@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 using Poly.Data;
 
@@ -67,59 +68,63 @@ namespace Poly {
             }
 
             public bool MatchAndInvoke(string Data, jsObject Args) {
-                return MatchAndInvoke(Data, Args, false);
+                jsObject Matches = null;
+                Item Workers = null;
+
+                Matcher Match = new Matcher(Data);
+
+                foreach (var Pair in Handlers) {
+                    if ((Matches = Data.Match(Pair.Key)) != null) {
+                        Workers = Pair.Value;
+                        break;
+                    }
+                }
+
+                if (Workers != null) {
+                    Execute(Workers, Args, Matches);
+                    return true;
+                }
+
+                return false;
             }
 
             public bool MatchAndInvoke(string Data, jsObject Args, bool KeyIsWild) {
-                Item Work = null;
-                var List = Handlers.ToArray();
-                var Matches = default(jsObject);
-
+				if (string.IsNullOrEmpty (Data))
+					return false;
+				
                 if (KeyIsWild) {
-                    for (int i = 0; i < List.Length; i ++) {
-                        var Item = List[i].Value;
-                        Matches = Item.Comparer.Match(Data);
+                    jsObject Matches = null;
+                    Item Workers = null;
 
-                        if (Matches != null) {
-                            Work = Item;
+                    foreach (var Pair in Handlers) {
+                        if ((Matches = Pair.Value.Comparer.Match(Data)) != null) {
+                            Workers = Pair.Value;
                             break;
                         }
                     }
-                }
-                else {
-                    var Match = new Matcher(Data);
 
-                    for (int i = 0; i < List.Length; i ++) {
-                        var Item = List[i].Key;
-                        Matches = Match.Match(Item);
-
-                        if (Matches != null) {
-                            Work = List[i].Value;
-                            break;
-                        }
+                    if (Workers != null) {
+                        Execute(Workers, Args, Matches);
+                        return true;
                     }
-                }
 
-                if (Work == null)
                     return false;
-
-                if (Matches.Count == 0) {
-                    Matches = Args;
                 }
-                else if (Args is jsComplex) {
-                    Matches.CopyTo(Args);
+                
+                return MatchAndInvoke(Data, Args);
+            }
+
+            private void Execute(Item Item, jsObject Args, jsObject Matches) {
+                if (Matches.Count == 0) {
                     Matches = Args;
                 }
                 else {
                     Args.CopyTo(Matches);
                 }
 
-                var Workers = Work.Workers.ToArray();
-                for (int i = 0; i < Workers.Length; i ++){
-                    Workers[i](Matches);
+                foreach (var Handler in Item.Workers) {
+                    Handler(Matches);
                 }
-
-                return true;
             }
         }
     }

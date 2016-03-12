@@ -1,11 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using IO = System.IO;
-
-using Poly;
 using Poly.Data;
+using Pth = System.IO.Path;
 
 namespace Poly.Net.Http {
     public class Host : jsComplex {
@@ -19,9 +14,9 @@ namespace Poly.Net.Http {
         public Event.Engine Handlers = new Event.Engine();
         public Cache Cache;
 
-        public Host() {
+		public Host() {
             this.Name = "localhost";
-            this.Path = "WWW/";
+            this.Path = "WWW";
             this.DefaultDocument = "index.html";
             this.DefaultExtension = "htm";
 
@@ -32,9 +27,12 @@ namespace Poly.Net.Http {
 
             this.PathOverrides = new jsObject();
             this.Ports = new jsObject();
-
-            this.Cache = new Cache(this.Path);
         }
+
+		public void Ready() {
+			this.Path = Pth.GetFullPath (Path);
+			this.Cache = new Cache(this.Path);
+		}
 
         public void On(string Path, Event.Handler Handler) {
             Handlers.Register(Path, Handler);
@@ -44,47 +42,40 @@ namespace Poly.Net.Http {
             Handlers.Register(Path, Handler, ThisName, This);
         }
         
-        public string GetWWW(Request Request) {
-            string Req = Request.Packet.Target;
+        public string GetWWW(string Target) {
+			var WWW = Target[0] == '/' ?
+				Path + Target :
+				Path + '/' + Target;
 
-            if (!Req.Contains(".") && !Req.EndsWith("/")) {
-                Req += "/";
-            }
+			foreach (var ovr in PathOverrides) {
+				if (WWW.Match(ovr.Key) != null) {
+					WWW = ovr.Value as string;
+				}
+			}
 
-            string FileName = Req;
+			if (WWW.EndsWith ("/") || string.IsNullOrEmpty (Pth.GetExtension (WWW))) {
+				WWW = WWW + DefaultDocument;
+			}
 
-            foreach (var ovr in PathOverrides) {
-                if (Req.Match(ovr.Key) != null) {
-                    FileName = ovr.Value.ToString();
-                    break;
-                }
-            }
-            try {
-                FileName = IO.Path.GetFullPath(
-                    Request.Host.Path + IO.Path.DirectorySeparatorChar + FileName
-                );
-
-                if (GetExtension(FileName) == string.Empty) {
-                    FileName = IO.Path.GetFullPath(
-                        FileName + IO.Path.DirectorySeparatorChar + DefaultDocument
-                    );
-                }
-
-                return FileName;
-            }
-            catch { 
-                return Req; 
-            }
+			return WWW;
         }
 
         public string GetExtension(string FileName) {
-            var Ext = IO.Path.GetExtension(FileName);
+            var Ext = Pth.GetExtension(FileName);
 
             if (string.IsNullOrEmpty(Ext)) {
                 return "";
             }
 
             return Ext.Substring(1);
+        }
+
+        public object Psx(Server Serv, Request Request, string Target) {
+			var File = Pth.GetFullPath(
+                Path + Target
+            );
+
+            return Serv.Psx(Request, File);
         }
     }
 }

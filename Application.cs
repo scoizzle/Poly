@@ -11,14 +11,21 @@ namespace Poly {
     public partial class App {
         public static bool Running = false;
 		public static jsObject GlobalContext = new jsObject();
-        public static Event.Engine Commands = new Event.Engine();
+		public static Event.Engine Commands = new Event.Engine ();
         
 		public static void Init(int LogLevel = Log.Levels.None) {
             if (LogLevel != Log.Levels.None) {
                 App.Log.Active = true;
                 App.Log.Level = LogLevel;
             }
-            
+
+			App.Commands.Add("--log-level={Level}", Event.Wrapper((int Level) => {
+					App.Log.Level = Level;
+					return Level;
+				})
+			);
+
+			App.GlobalContext.Set ("StartTime", DateTime.Now);
             App.Log.Info("Application initializing...");
 
 			Running = true;

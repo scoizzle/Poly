@@ -25,7 +25,7 @@ namespace Poly.Net.Http {
             if (Request.Host.Cache.TryGetValue(FileName, out Cached)) {
                 if (Cached.Script == null) {
                     Cached.Script = new Engine();
-                    Cached.Script.IncludePath = Request.Host.Path;
+					Cached.Script.IncludePath = Request.Host.Path + Path.DirectorySeparatorChar;
 
                     Cached.Script.ReferencedTypes.Add("Response", typeof(Result));
 

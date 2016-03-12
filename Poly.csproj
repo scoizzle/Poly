@@ -10,7 +10,8 @@
     <RootNamespace>Poly</RootNamespace>
     <AssemblyName>Poly</AssemblyName>
     <FileAlignment>512</FileAlignment>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5.1</TargetFrameworkVersion>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,6 +22,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
+    <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <Optimize>true</Optimize>
@@ -78,14 +80,20 @@
     <Compile Include="Net\Tcp\Server.cs" />
     <Compile Include="Net\Url.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Script\Expressions\Html\Document.cs" />
-    <Compile Include="Script\Expressions\Html\Generator.cs" />
-    <Compile Include="Script\Expressions\Html\Element.cs" />
-    <Compile Include="Script\Expressions\Html\Template.cs" />
     <Compile Include="Script\Expressions\Unary\Comparative.cs" />
     <Compile Include="Script\Expressions\Unary\Conditional.cs" />
+    <Compile Include="Script\Expressions\Unary\As.cs" />
     <Compile Include="Script\Expressions\Unary\Is.cs" />
     <Compile Include="Script\Expressions\Unary\Template.cs" />
+    <Compile Include="Script\Expressions\Html\Attribute.cs" />
+    <Compile Include="Script\Expressions\Html\ComplexElement.cs" />
+    <Compile Include="Script\Expressions\Html\Document.cs" />
+    <Compile Include="Script\Expressions\Html\Element.cs" />
+    <Compile Include="Script\Expressions\Html\Function.cs" />
+    <Compile Include="Script\Expressions\Html\Html.cs" />
+    <Compile Include="Script\Expressions\Html\StaticValue.cs" />
+    <Compile Include="Script\Expressions\Html\Template.cs" />
+    <Compile Include="Script\Expressions\Html\Variable.cs" />
     <Compile Include="Script\Helpers\CachedScript.cs" />
     <Compile Include="Script\Helpers\ContextAccessor.cs" />
     <Compile Include="Script\Helpers\SystemTypeGetter.cs" />
@@ -94,12 +102,6 @@
     <Compile Include="Script\Expressions\Case.cs" />
     <Compile Include="Script\Expressions\Comment.cs" />
     <Compile Include="Script\Expressions\Eval.cs" />
-    <Compile Include="Script\Expressions\Html\Html.cs" />
-    <Compile Include="Script\Expressions\Html\Parser.cs" />
-    <Compile Include="Script\Expressions\Html\ComplexElement.cs" />
-    <Compile Include="Script\Expressions\Html\Attribute.cs" />
-    <Compile Include="Script\Expressions\Html\StringElement.cs" />
-    <Compile Include="Script\Expressions\Html\Variable.cs" />
     <Compile Include="Script\Expressions\Reload.cs" />
     <Compile Include="Script\Expressions\Try.cs" />
     <Compile Include="Script\Expressions\Switch.cs" />
@@ -181,7 +183,10 @@
     <Compile Include="String\String.Iteration.cs" />
     <Compile Include="String\String.Iterator.cs" />
     <Compile Include="String\String.Matching.cs" />
+    <Compile Include="Task.Extensions.cs" />
     <Compile Include="TimeSpan.Extensions.cs" />
+    <Compile Include="Script\Expressions\Persistent.cs" />
+    <Compile Include="Script\Helpers\PersistentFile.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

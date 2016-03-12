@@ -11,6 +11,7 @@ namespace Poly.Script.Expressions.Unary {
         public static List<Handler> UnaryParsers = new List<Handler>() {
             Comparative.Parse,
             Conditional.Parse,
+            As.Parse,
             Is.Parse,
             Equal.Parse,
             NotEqual.Parse,

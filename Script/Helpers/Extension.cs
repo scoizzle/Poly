@@ -24,8 +24,7 @@ namespace Poly.Script.Helpers {
             var Path = Name.Substring(0, Last);
             var File = Name.Substring(Last + 1);
 
-            var Files = Directory.GetFiles(Path, File, SearchOption.TopDirectoryOnly).ToList();
-            Files.Sort();
+            var Files = Directory.GetFiles(Path, File, SearchOption.AllDirectories).ToList();
             var List = new List<Node>();
 
             foreach (var FileName in Files) {
@@ -33,7 +32,7 @@ namespace Poly.Script.Helpers {
 
                 if (Result != null) {
                     var jsRes = Result as Node;
-                    if (jsRes != null) 
+                    if (jsRes != null && jsRes.Elements != null) 
                         List.Add(Result);
                 }
                     
@@ -45,18 +44,19 @@ namespace Poly.Script.Helpers {
         public static Node Include(Engine Engine, string FileName) {
             if (File.Exists(FileName)) {
                 FileName = Path.GetFullPath(FileName);
-                DateTime LastWrite = File.GetLastWriteTime(FileName);
 
                 CachedScript Inc = null;
                 if (Engine.Includes.TryGetValue(FileName, out Inc) && Inc.IsCurrent()) {
                     return Inc;
                 }
                 else {
-                    Inc = new CachedScript(Engine, FileName, LastWrite);
+					Inc = new CachedScript(Engine, FileName, DateTime.Today);
                 }
 
-                if (Engine.Parse(File.ReadAllText(FileName), 0, Inc) != null) {
-                    Engine.Includes[FileName] = Inc;
+				App.Log.Info (Inc.ToString());
+
+				if (Inc.Reload()) {
+					Engine.Includes[FileName] = Inc;
                     return Inc;
                 }
             }

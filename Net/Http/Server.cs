@@ -63,6 +63,7 @@ namespace Poly.Net.Http {
 
             Array.Resize(ref Hosts, Hosts.Length + 1);
             Hosts[Hosts.Length - 1] = Host;
+
             return Host;
         }
 

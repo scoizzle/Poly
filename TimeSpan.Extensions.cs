@@ -9,7 +9,7 @@ namespace Poly {
         public static string ToDurationString(this TimeSpan This) {
             if (This.TotalDays > 365)
                 if (This.TotalDays < 365 * 2)
-                    return "1 year, and {0} months".ToString((int)((This.TotalDays - 365) / 30.436875));
+                    return "1 year and {0} months".ToString((int)((This.TotalDays - 365) / 30.436875));
                 else
                     return "{0} years".ToString((int)(This.TotalDays / 365));
             else 
@@ -26,11 +26,14 @@ namespace Poly {
             else
             if (This.TotalHours > 1)
                 return "{0} hours".ToString(This.Hours);
-            else
+			else
+			if (This.TotalMinutes == 1)
+				return "1 minute";
+			else
             if (This.TotalMinutes > 1)
                 return "{0} minutes".ToString(This.Minutes);
             else
-                return "{0} seconds".ToString(This.Seconds);
+            return "{0} seconds".ToString(This.Seconds);
         }
     }
 }

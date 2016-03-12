@@ -78,54 +78,26 @@ namespace Poly.Net.Http {
 
         }
 
-        public StringBuilder GetReplyHeaders() {
-            var Type = Result.Headers.Get<string>("Content-Type");
-
-            var Length = this.Data == null ?
-                Result.Headers.Get<object>("Content-Length") :
-                this.Data.Length;
-
-            if (string.IsNullOrEmpty(Type))
-                Type = Result.MIME;
-
-            if (Length == null)
-                Length = 0;
-
-            StringBuilder Output = new StringBuilder();
-            Output.AppendFormat("HTTP/1.1 {0}\r\nDate: {1}\r\nContent-Type: {2}\r\nContent-Length: {3}\r\n",
-                Result.Status, 
-                DateTime.UtcNow.HttpTimeString(),
-                Type,
-                Length
-            );
-
-            foreach (var Pair in Result.Headers) {
-                Output.AppendFormat("{0}: {1}\r\n",
-                    Pair.Key,
-                    Pair.Value
-                );
-            }
-
-            foreach (var Pair in Cookies) {
-                if (Pair.Value is jsObject) {
-                    Output.Append("Set-Cookie: ");
-
-                    foreach (var P in Pair.Value as jsObject) {
-                        Output.AppendFormat("{0}={1}; ", P.Key, P.Value);
-                    }
-
-                    Output.AppendLine();
-                }
-            }
-
-            return Output.AppendLine();
-        }
-
         public async Task Finish() {
+            bool GZip, HeadersOnly;
+            long ContentLength;
+            string Accept, ContentType;
+
             Data.Position = 0;
 
-            var Accept = Packet.Headers["Accept-Encoding"] as string;
-            if (Data.Length > 10 && Accept != null && Accept.Contains("gzip")) {
+            Accept = Packet.Headers.Get<string>("Accept-Encoding") ?? "";
+            ContentType = Result.Headers.Get<string>("Content-Type") ?? Result.ContentType;
+
+            HeadersOnly = Packet.Type == "HEAD";
+            ContentLength = HeadersOnly ?
+                0 : this.Data.Length;
+
+            GZip = !HeadersOnly && Accept.Contains("gzip") && ContentLength > 64;
+
+            if (GZip) {
+                Result.Headers["Vary"] = "Accept-Encoding";
+                Result.Headers["Content-Encoding"] = "gzip";
+
                 var Buffer = new MemoryStream();
 
                 using (var Compression = new GZipStream(Buffer, CompressionMode.Compress, true)) {
@@ -135,13 +107,43 @@ namespace Poly.Net.Http {
                 Data = Buffer;
                 Data.Position = 0;
 
-                Result.Headers["Vary"] = "Accept-Encoding";
-                Result.Headers["Content-Encoding"] = "gzip";
+                ContentLength = Data.Length;
             }
 
+            StringBuilder Headers = new StringBuilder();
+            Headers.AppendFormat("HTTP/1.1 {0}\r\nDate: {1}\r\nContent-Type: {2}\r\nContent-Length: {3}\r\n",
+                Result.Status,
+                DateTime.UtcNow.HttpTimeString(),
+                ContentType,
+                ContentLength
+            );
+
+            foreach (var Pair in Result.Headers) {
+                Headers.AppendFormat("{0}: {1}\r\n",
+                    Pair.Key,
+                    Pair.Value
+                );
+            }
+
+            foreach (var Pair in Cookies) {
+                if (Pair.Value is jsObject) {
+                    Headers.Append("Set-Cookie: ");
+
+                    foreach (var P in Pair.Value as jsObject) {
+                        Headers.AppendFormat("{0}={1}; ", P.Key, P.Value);
+                    }
+
+                    Headers.AppendLine();
+                }
+            }
+
+            Headers.AppendLine();
+
             try {
-                await Client.Writer.WriteAsync(GetReplyHeaders().ToString());
-                await Data.CopyToAsync(Client.Stream);
+                await Client.Writer.WriteAsync(Headers.ToString());
+
+                if (!HeadersOnly)
+                    await Data.CopyToAsync(Client.Stream);
             }
             catch { Client.Close(); }
         }

@@ -2,239 +2,212 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Reflection;
+using System.Linq;
 
 using Poly.Data;
 
 namespace Poly.Script.Nodes {
     public class Variable : Node {
         Engine Engine;
-        public bool IsStatic;
-
-        Type RequestedType;
+        public bool IsStatic, IsGlobal;
 
         public Variable(Engine Engine) {
             this.Engine = Engine;
-            this.IsStatic = false;
-            this.RequestedType = null;
-        }
-
-        public Variable(Engine Eng, string Text) {
-            this.Engine = Eng;
-
-            var V = Parse(Eng, Text, 0);
-            if (V != null) {
-                this.Elements = V.Elements;
-                this.IsStatic = V.IsStatic;
-                this.RequestedType = V.RequestedType;
-            }
+            this.IsGlobal = this.IsStatic = false;
         }
 
         public override object Evaluate(jsObject Context) {
             if (Elements == null)
                 return null;
 
-            object Current =
-                this.IsStatic ?
-                    Engine.Static :
-                    Context;
+            object Current;
+            if (IsGlobal)
+                Current = App.GlobalContext;
+            else
+            if (IsStatic)
+                Current = Engine.Static;
+            else
+                Current = Context;
 
-            for (int i = 0; i < Elements.Length; i++) {
-                var Node = Elements[i];
-                var Str = Node as StaticValue;
-                var String = default(string);
-                var Key = default(object);
-                var Value = default(object);
+            for (int Index = 0; Index < Elements.Length; Index++) {
+                string Key;
 
-                if (Str != null && Str.Value != null) {
-                    String = Str.Value as string;
+                if (Elements[Index] is StaticValue) {
+                    Key = (Elements[Index] as StaticValue).Value as string;
                 }
-                else if (Node is Helpers.SystemTypeGetter) {
-                    Current = Node.Evaluate(Context);
-
-                    if (Elements.Length - i == 1)
-                        return Current;
-
+                else if (Elements[Index] is Helpers.SystemTypeGetter) {
+                    Current = Elements[Index].Evaluate(Context);
                     continue;
                 }
                 else {
-                    Key = Node.Evaluate(Context);
+                    var Result = Elements[Index].Evaluate(Context);
 
-                    if (Key != null) {
-                        String = Key.ToString();
-                    }
-                    else if (Node.Elements == null && Elements.Length - i == 1) {
-                        return Context;
-                    }
-                    else return null;
+                    if (Result == null)
+                        continue;
+                    else
+                        Key = Result.ToString();
                 }
 
-                var Object = Current as jsObject;
-
-                if (Object != null) {
-                    if (!Object.TryGet(String, out Value)) {
-                        Class Class;
-                        Function Func;
-
-                        if (Current is Types.ClassInstance) {
-                            Class = (Current as Types.ClassInstance).Class;
-
-                            Func = Class.GetFunction(String);
-
-                            if (Func != null)
-                                Value = new Event.Handler(Func.Evaluate);
-                        }
-                        else {
-                            Engine.Types.TryGetValue(String, out Value);
-                        }
-                    }
-                }
-
-                if (Value == default(object) && Current != null) {
-                    Class Class;
-                    Function Func;
-
-                    if (Current is Class) {
-                        Class = Current as Class;
-
-                        if (Class.StaticFunctions.TryGet(String, out Func)) {
-                            Value = new Event.Handler(Func.Evaluate);
-                        }
-                    }
-                    else if (Key is int && Current is string) {
-                        String = Current as string;
-                        var Int = (int)(Key);
-
-                        if (Int > -1 && Int < String.Length)
-                            Value = String[Int];
-                    }
-                    else {
-                        var Type = Current as Type;
-
-                        if (Type == null) {
-                            Type = Current.GetType();
-                        }
-
-                        Value = GetProperty(Type, Current, String);
-                    }
-                }
-
-                if (Elements.Length - i == 1)
-                    return Value;
-
-                Current = Value;
+                Current = GetNextValue(Current, Key);
             }
 
-            return null;
+            return Current;
         }
 
         public bool Assign(jsObject Context, object Val) {
             if (Elements == null)
                 return false;
 
-            object Current =
-                this.IsStatic ?
-                    Engine.Static :
-                    Context;
+            object Current, Next;
+            string Key;
 
-            for (int i = 0; i < Elements.Length; i++) {
-                var Node = Elements[i];
-                var Str = Node as Types.String;
-                var String = default(string);
+            if (IsGlobal)
+                Current = App.GlobalContext;
+            else
+                if (IsStatic)
+                    Current = Engine.Static;
+                else
+                    Current = Context;
 
-                if (Str != null) {
-                    String = Str.Value;
+            for (int Index = 0; Index < Elements.Length; Index++) {
+                if (Elements[Index] is StaticValue) {
+                    Key = (Elements[Index] as StaticValue).Value as string;
+                }
+                else if (Elements[Index] is Helpers.SystemTypeGetter) {
+                    Current = Elements[Index].Evaluate(Context);
+                    continue;
                 }
                 else {
-                    var Key = Node.Evaluate(Context) as string;
+                    var Result = Elements[Index].Evaluate(Context);
 
-                    if (Key != null)
-                        String = Key.ToString();
-                    else return false;
+                    if (Result == null)
+                        break;
+                    else
+                        Key = Result.ToString();
                 }
 
-                var Value = default(object);
-                var Object = Current as jsObject;
-
-                if (Object != null) {
-                    if (Elements.Length - i == 1) {
-                        if (Val == null) {
-                            Object.Remove(String);
-                        }
-                        else {
-                            Object.AssignValue(String, Val);
-                        }
-                        return true;
-                    }
-
-                    if (!Object.TryGetValue(String, out Value)) {
-                        var Instance = Current as Types.ClassInstance;
-
-                        if (Instance != null) {
-                            var Func = Instance.Class.Functions[String];
-
-                            if (Func != null)
-                                Value = new Event.Handler(Func.Evaluate);
-                        }
-                    }
+                if (Index == Elements.Length - 1) {
+                    return SetNextValue(Current, Key, Val);
                 }
+                else {
+                    Next = GetNextValue(Current, Key);
 
-                if (Value == default(object) && Current != null) {
-                    var Type = Current as Type;
+                    if (Next == null) {
+                        Next = new jsObject();
 
-                    if (Type == null)
-                        Type = Current.GetType();
-
-                    if (Elements.Length - i == 1) {
-                        return SetProperty(Type, Current, String, Val);
+                        if (!SetNextValue(Current, Key, Next))
+                            return false;
                     }
 
-                    Value = GetProperty(Type, Current, String);
-
-                    if (Value == default(object) && Object != default(jsObject)) {
-                        Value = new jsObject();
-                        Object.AssignValue(String, Value);
-                    }
+                    Current = Next;
                 }
-
-                Current = Value;
             }
 
-            return false;        
+            return false;
         }
-        
-        private object GetProperty(Type Type, object Obj, string Name) {
-            var Prop = RequestedType == null ? 
-                Type.GetProperty(Name) :
-                Type.GetProperty(Name, RequestedType);
 
-            if (Prop != null)
-                return Prop.GetValue(Obj, null);
+        private object GetNextValue(object Current, string Key) {
+            if (Current is jsObject) {
+                object Result = null;
+                var Obj = Current as jsObject;
 
-            var Field = Type.GetField(Name);
+                if (Obj.TryGet(Key, out Result)) {
+                    return Result;
+                }
+                else
+                if (Current is Types.ClassInstance) {
+                    Function F = (Current as Types.ClassInstance).GetFunction(Key);
 
-            if (Field != null)
-                return Field.GetValue(Obj);
+					if (F != null)
+                    	return new Event.Handler(F.Evaluate);
+                }
+            }
+
+            if (Current is Class) {
+                Function F = (Current as Class).StaticFunctions[Key];
+
+				if (F != null)
+                	return new Event.Handler(F.Evaluate);
+            }
+            else {
+                object C = Engine.Types.Get(Key);
+
+                if (C != null)
+                    return C;
+            }
+            
+            if (Current is Type) {
+                return GetObjectValue(Current as Type, Current, Key);
+            }
+            
+            if (Current != null) {
+                return GetObjectValue(Current.GetType(), Current, Key);
+            }
 
             return null;
         }
 
-        private bool SetProperty(Type Type, object Obj, string Name, object Value) {
-            if (Obj != null) {
-                var Prop = RequestedType == null ?
-                    Type.GetProperty(Name) :
-                    Type.GetProperty(Name, RequestedType);
+        private bool SetNextValue(object Current, string Key, object Value) {
+            if (Current is jsObject) {
+                var Obj = Current as jsObject;
 
-                if (Prop != null) {
-                    Prop.SetValue(Obj, Value);
-                    return true;
+                if (Value == null)
+                    Obj.Remove(Key);
+                else
+                    Obj.AssignValue(Key, Value);
+
+                return true;
+            }
+            else
+                if (Current is Type) {
+                    return SetObjectValue(Current as Type, Current, Key, Value);
                 }
+                else {
+                    return SetObjectValue(Current.GetType(), Current, Key, Value);
+                }
+        }
+
+        private object GetObjectValue(Type Type, object Obj, string Name) {
+            var Prop = Type.GetProperty(Name);
+
+            if (Prop != null) {
+                try {
+                    return Prop.GetValue(Obj, null);
+                }
+                catch { }
             }
 
             var Field = Type.GetField(Name);
 
             if (Field != null) {
-                Field.SetValue(Obj, Value);
-                return true;
+                try {
+                    return Field.GetValue(Obj);
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
+        private bool SetObjectValue(Type Type, object Obj, string Name, object Value) {
+            var Prop = Type.GetProperty(Name);
+
+            if (Prop != null) {
+                try {
+                    Prop.SetValue(Obj, Value);
+                    return true;
+                }
+                catch { }
+            }
+
+            var Field = Type.GetField(Name);
+
+            if (Field != null) {
+                try {
+                    Field.SetValue(Obj, Value);
+                    return true;
+                }
+                catch { }
             }
 
             return false;
@@ -248,51 +221,53 @@ namespace Poly.Script.Nodes {
             if (!IsParseOk(Engine, Text, ref Index, LastPossibleIndex))
                 return null;
 
-            var Var = new Variable(Engine);
             var Delta = Index;
-            var List = new List<Node>();
+            var End = Index;
+            ConsumeValidName(Text, ref End);
 
-            if (Text.Compare("Static", Index)) {
-                Var.IsStatic = true;
-                Delta += 7;
+            if (Delta == End)
+                return null;
+
+            bool IsStatic, IsGlobal;
+            IsStatic = IsGlobal = false;
+
+            if (Text.Compare("Global", Delta)) {
+                IsGlobal = true;
+                Delta += 6;
             }
-            else if (Text.Compare("Enum:", Index)) {
-                string Type;
-                    
-                var Next = Text.IndexOf(':', Index + 5);
-                if (Next == -1 || Text.IndexOf(';', Index + 5) < Next) {
-                    Type = Text.Substring(":", ";", Index); 
-                }
-                else {
-                    Type = Text.FindMatchingBrackets(":", ":", Index);
-                }
-
-                if (!string.IsNullOrEmpty(Type)) {
-                    List.Add(new Helpers.SystemTypeGetter(Type));
-                    Delta += 6 + Type.Length;
-                }
+            else 
+            if (Text.Compare("Static", Delta)) {
+                IsStatic = true;
+                Delta += 6;
+            }
+            else
+            if (Text.Compare("_", Delta)) {
+                Index++;
+                return new Variable(Engine) { Elements = new Node[0] };
             }
 
             var SigFig = Delta;
+            var List = new List<Node>();
 
-            for (; Delta < LastPossibleIndex; Delta++) {
+            for (; Delta < End; Delta++) {
                 if (Text[Delta] == '.') {
                     var Key = Text.Substring(SigFig, Delta - SigFig);
-
-                    if (!string.IsNullOrEmpty(Key)) {
-                        if (Engine.ReferencedTypes.ContainsKey(Key) && List.Count == 0) {
-                            List.Add(new Helpers.SystemTypeGetter(Engine.ReferencedTypes[Key]));
-                        }
-                        else {
-                            List.Add(new Types.String(Key));
-                        }
-                    }
-
                     SigFig = Delta + 1;
+
+                    if (string.IsNullOrEmpty(Key))
+                        continue;
+
+                    if (List.Count == 0 && Engine.ReferencedTypes.ContainsKey(Key)) {
+                        List.Add(new Helpers.SystemTypeGetter(Engine.ReferencedTypes[Key]));
+                    }
+                    else {
+                        List.Add(new StaticValue(Key));
+                    }
                 }
-                else if (Text[Delta] == '[') {
-                    if ((Delta - SigFig) > 1) {
-                        List.Add(new Types.String(Text.Substring(SigFig, Delta - SigFig)));
+                else
+                if (Text[Delta] == '[') {
+                    if (Delta != SigFig) {
+                        List.Add(new StaticValue(Text.Substring(SigFig, Delta - SigFig)));
                     }
 
                     if (Text.FindMatchingBrackets("[", "]", ref Delta, ref SigFig, false)) {
@@ -301,82 +276,39 @@ namespace Poly.Script.Nodes {
                     }
                     else return null;
                 }
-                else if (!IsValidChar(Text[Delta])) {
+                else
+                if (!IsValidChar(Text[Delta]))
                     break;
-                }
             }
 
-            if ((Delta - SigFig) > 0 && Delta <= LastPossibleIndex && Text[SigFig] != ';') {
-                var Key = Text.Substring(SigFig, Delta - SigFig);
-
-                if (Key == "_") {
-                    List.Add(new Variable(Engine));
-                }
-                else if (Engine.ReferencedTypes.ContainsKey(Key) && List.Count == 0) {
-                    List.Add(new Helpers.SystemTypeGetter(Engine.ReferencedTypes[Text.Substring(SigFig, Delta - SigFig)]));
-                }
-                else {
-                    List.Add(new Types.String(Text.Substring(SigFig, Delta - SigFig)));
-                }
+            if (SigFig < End) {
+                List.Add(new StaticValue(Text.Substring(SigFig, End - SigFig)));
             }
 
-            if (List.Count == 0)
-                return null;
-
-
-            Index = Delta;
-            Var.Elements = List.ToArray();
-
-            ConsumeWhitespace(Text, ref Delta);
-            if (Text.Compare("as", Delta)) {
-                Delta += 2;
-                ConsumeWhitespace(Text, ref Delta);
-
-                int Start = Delta;
-                ConsumeValidName(Text, ref Delta);
-
-                if (Delta != Start) {
-                    var Name = Text.Substring(Start, Delta - Start);
-
-                    if (Engine.ReferencedTypes.ContainsKey(Name)) {
-                        Var.RequestedType = Engine.ReferencedTypes[Name];
-                    }
-                    else {
-                        Var.RequestedType = Helpers.SystemTypeGetter.GetType(Name);
-                    }
-
-                    Index = Delta;
-                }
-            }
-            else if (List.Count == 1) {
-                var First = List[0] as Variable;
-
-                if (First != null && First.RequestedType != null) {
-                    return First;
-                }
-            }
-
-            return Var;
+            Index = End;
+            return new Variable(Engine) {
+                Elements = List.ToArray(),
+                IsGlobal = IsGlobal,
+                IsStatic = IsStatic
+            };
         }
 
+		private IEnumerable<string> ToStringParts() {
+			if (IsGlobal)
+				yield return "Global";
+
+			if (IsStatic)
+				yield return "Static";
+
+			if (Elements == null)
+				yield return "_";
+
+			foreach (var e in Elements)
+				yield return e.ToString ();
+		}
+
         public override string ToString() {
-            if (Elements == null)
-                return "_";
-
-            StringBuilder Output = new StringBuilder(IsStatic ? "Static." : string.Empty);
-
-            foreach (var E in Elements) {
-                var V = E as Variable;
-
-                if (V != null) {
-                    Output.AppendFormat("[{0}].", V);
-                }
-                else {
-                    Output.AppendFormat("{0}.", E);
-                }
-            }
-
-            return Output.ToString(0, Output.Length - 1);
+			return string.Join (".", ToStringParts ());
         }
     }
 }

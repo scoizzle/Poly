@@ -6,7 +6,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.Security;
 using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text;
@@ -15,170 +14,132 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Tcp {
-    public class Client : TcpClient {
-        public bool Secure;
-        
-        public Stream Stream { get; private set; }
+	using Http;
 
-        public StreamReader Reader { get; private set; }
+	public class Client : TcpClient {
+        public static readonly byte[] NewLineBytes = Encoding.Default.GetBytes(App.NewLine);
 
-        public StreamWriter Writer { get; private set; }
 
-        public Client() : base() { 
-            Secure = false;
-            NoDelay = true;
+        public BufferedStreamer Stream { get; private set; }
+
+		public Client() { }
+		public Client(IPEndPoint End) { Connect(End); }
+		public Client(string Host, int Port) { Connect(Host, Port); }
+
+		public IPEndPoint LocalIPEndPoint {
+			get {
+				return Client?.LocalEndPoint as IPEndPoint;
+			}
+		}
+
+		public IPEndPoint RemoteIPEndPoint {
+			get {
+				return Client?.RemoteEndPoint as IPEndPoint;
+			}
+		}
+
+        public BufferedStreamer GetStreamer() {
+            InitStream();
+            return Stream;
         }
 
-        public Client(Socket This) : this() {
-            this.Client = This;
-
-            Stream = GetStream();
-            Reader = new StreamReader(Stream);
-            Writer = new StreamWriter(Stream);
-
-            Writer.AutoFlush = true;
+        private void InitStream() {
+            if (Stream == null)
+                Stream = new BufferedStreamer(base.GetStream());
         }
 
-        public Client(TcpClient This) : this(This.Client) { }
-
-        new public void Dispose() {
-            Writer.Close();
-            Reader.Close();
-
-            Stream.Close();
-
-            Close();
-        }
-        
-        public new void Connect(string hostname, int port) {
-            try {
-                base.Connect(hostname, port);
-
+        public async Task<bool> Send(byte[] bytes) {
+            try { 
                 if (Connected) {
-                    Stream = GetStream();
-                    Reader = new StreamReader(Stream);
-                    Writer = new StreamWriter(Stream);
+                    InitStream();
 
-                    Writer.AutoFlush = true;
+                    await Stream.Send(bytes);
                 }
             }
-            catch { return; }
-        }
+            catch { return false; }
+            return true;
+		}
 
-        public void SecureConnect(string securehostname, int port) {
-            this.Secure = true;
+		public async Task<bool> Send(string str) {
+			return await Send(str, Encoding.Default);
+		}
 
-            try {
-                base.Connect(securehostname, port);
+		public async Task<bool> Send(string str, Encoding enc) {
+            return await Send(enc.GetBytes(str));
+		}
+
+		public async Task<bool> SendLine() {
+			return await SendLine(string.Empty, Encoding.Default);
+		}
+
+		public async Task<bool> SendLine(string line) {
+			return await SendLine(line, Encoding.Default);
+		}
+
+		public async Task<bool> SendLine(string line, Encoding enc) {
+            try { 
+			    if (Connected) {
+                    InitStream();
+
+                    if (!string.IsNullOrEmpty(line)) {
+                        var bytes = enc.GetBytes(line);
+
+                        await Stream.Send(bytes, NewLineBytes);
+                    }
+                }
             }
-            catch { return; }
+            catch { return false; }
+            return true;
+		}
 
+		public async Task<bool> Receive(Stream storage, long length) {
             if (Connected) {
-                var SecureStream = new SslStream(GetStream());
+                InitStream();
 
-                try {
-                    SecureStream.AuthenticateAsClient(securehostname);
-
-                    Stream = SecureStream;
-                    Reader = new StreamReader(Stream);
-                    Writer = new StreamWriter(Stream);
-
-                    Writer.AutoFlush = true;
-                }
-                catch {
-                    Dispose();
-                }
+                return await Stream.Receive(storage, length);
             }
+            return false;
         }
 
-        public void Send(string Data) {
-            if (Connected) {
-                try {
-                    Writer.Write(Data);
-                    Writer.Flush();
-                }
-                catch (InvalidOperationException) {
-                    Dispose();
-                }
-                catch { }
-            }
-        }
-        public void SendLine(string Line) {
-            if (Connected) {
-                try {
-                    Writer.WriteLine(Line);
-                    Writer.Flush();
-                }
-                catch (InvalidOperationException) {
-                    Dispose();
-                }
-                catch { }
-            }
+        public async Task<string> ReceieveString(long byteLen) {
+            return await ReceieveString(byteLen, Encoding.Default);
         }
 
-        public async void SendLineAsync(string Line) {
-            if (Connected) {
-                try {
-                    await Task.Run(() => {
-                        Writer.WriteLine(Line);
-                        Writer.Flush();
-                    });
-                }
-                catch (InvalidOperationException) {
-                    Dispose();
-                }
-                catch { }
-            }
-        }
+        public async Task<string> ReceieveString(long byteLen, Encoding enc) {
+            var Out = new MemoryStream();
 
-        public byte[] Read(int Length) {
-            if (Connected && !Reader.EndOfStream) {
-                try {
-                    int Remaining = Length;
-                    byte[] Buffer = new byte[Length];
-
-                    while (Remaining > 0)
-                        Remaining -= Stream.Read(Buffer, Length - Remaining, Remaining);
-
-                    return Buffer;
-                }
-                catch (InvalidOperationException) {
-                    Dispose();
-                }
-                catch { }
+            if (await Receive(Out, byteLen)) {
+                return enc.GetString(Out.ToArray());
             }
 
             return null;
         }
 
-        public string ReadLine() {
+		public async Task<string> ReceiveLine() {
+			return await ReceiveLine(Encoding.Default);
+		}
+
+		public async Task<string> ReceiveLine(Encoding enc) {
+			var Out = new MemoryStream();
+			if (await ReceiveUntil(Out, NewLineBytes))
+                return enc.GetString(Out.ToArray());
+            return null;
+		}
+
+		public async Task<bool> ReceiveUntil(Stream storage, byte[] chain) {
             if (Connected) {
-                try {
-                    return Reader.ReadLine();
-                }
-                catch (InvalidOperationException) {
-                    Dispose();
-                }
-                catch { }
+                InitStream();
+
+                return await Stream.ReceiveUntil(storage, chain);
             }
 
-            return null;
+            return false;
         }
 
-        public async Task<string> ReadLineAsync() {
-            if (Connected) {
-                try {
-                    return await Reader.ReadLineAsync();
-                }
-                catch (InvalidOperationException) {
-                    Dispose();
-                }
-                catch { }
-            }
-
-            return null;
-        }
-    }
+        public static implicit operator Client(Socket socket) {
+			return new Client() { Client = socket };
+		}
+	}
 }
 
 

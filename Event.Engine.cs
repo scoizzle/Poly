@@ -1,44 +1,36 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-using Poly.Data;
 
 namespace Poly {
+    using Data;
+
     public partial class Event {
         public class Engine {
-            public class Item {
-                public Matcher Comparer;
-                public List<Handler> Workers;
-
-                public Item(string Fmt) {
-                    Workers = new List<Handler>();
-                    Comparer = new Matcher(Fmt);
-                }
-            }
-
-            Dictionary<string, Item> Handlers;
+			ManagedArray<KeyValuePair<Matcher, ManagedArray<Handler>>> Handlers;
 
             public Engine() {
-                Handlers = new Dictionary<string, Item>();
+                Handlers = new ManagedArray<KeyValuePair<Matcher, ManagedArray<Handler>>>();
             }
 
-            public string[] Names {
-                get {
-                    return Handlers.Keys.ToArray();
-                }
+            public void Add(string Name, Handler Handler) {
+                Register(Name, Handler);
             }
 
             public void Register(string EventName, Handler Handler) {
-                Item List;
-
-                if (!Handlers.TryGetValue(EventName, out List)) {
-                    Handlers.Add(EventName, List = new Item(EventName));
+                var Pair = Handlers.Where(p => string.Compare(p.Key.Format, EventName, StringComparison.Ordinal) == 0).FirstOrDefault();
+                
+                if (Pair.Value == null) {
+                    Handlers.Add(
+                        new KeyValuePair<Matcher, ManagedArray<Handler>>(
+                            new Matcher(EventName), 
+                            new ManagedArray<Handler>() {
+                                Handler
+                            }
+                        )
+                    );
                 }
-
-                List.Workers.Add(Handler);
+                else Pair.Value.Add(Handler);
             }
 
             public void Register(string EventName, Handler Handler, object This) {
@@ -63,68 +55,30 @@ namespace Poly {
                 });
             }
 
-            public void Add(string Name, Handler Handler) {
-                Register(Name, Handler);
-            }
-
             public bool MatchAndInvoke(string Data, jsObject Args) {
-                jsObject Matches = null;
-                Item Workers = null;
+                var Len = Handlers.Count;
+                for (int i = 0; i < Len; i++) {
+                    var I = Handlers.Elements[i];
+                    var R = I.Key.Match(Data);
 
-                Matcher Match = new Matcher(Data);
+                    if (R == null)
+                        continue;
+                    else
+                    if (R.Count == 0)
+                        R = Args;
+                    else
+                        Args.CopyTo(R);
 
-                foreach (var Pair in Handlers) {
-                    if ((Matches = Data.Match(Pair.Key)) != null) {
-                        Workers = Pair.Value;
-                        break;
-                    }
-                }
-
-                if (Workers != null) {
-                    Execute(Workers, Args, Matches);
+                    Execute(I.Value, R);
                     return true;
                 }
-
                 return false;
             }
 
-            public bool MatchAndInvoke(string Data, jsObject Args, bool KeyIsWild) {
-				if (string.IsNullOrEmpty (Data))
-					return false;
-				
-                if (KeyIsWild) {
-                    jsObject Matches = null;
-                    Item Workers = null;
-
-                    foreach (var Pair in Handlers) {
-                        if ((Matches = Pair.Value.Comparer.Match(Data)) != null) {
-                            Workers = Pair.Value;
-                            break;
-                        }
-                    }
-
-                    if (Workers != null) {
-                        Execute(Workers, Args, Matches);
-                        return true;
-                    }
-
-                    return false;
-                }
-                
-                return MatchAndInvoke(Data, Args);
-            }
-
-            private void Execute(Item Item, jsObject Args, jsObject Matches) {
-                if (Matches.Count == 0) {
-                    Matches = Args;
-                }
-                else {
-                    Args.CopyTo(Matches);
-                }
-
-                foreach (var Handler in Item.Workers) {
-                    Handler(Matches);
-                }
+            private void Execute(ManagedArray<Handler> Workers, jsObject Args) {
+                var WorkersLen = Workers.Count;
+                for (int i = 0; i < WorkersLen; i++)
+                    Workers.Elements[i](Args);
             }
         }
     }

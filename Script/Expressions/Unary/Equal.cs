@@ -18,18 +18,8 @@ namespace Poly.Script.Expressions {
             catch { return null; }
         }
 
-        public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("==", Index)) {
-                Index += 2;
-                ConsumeWhitespace(Text, ref Index);
-
-                return new Equal(
-                    Engine.Parse(Left, 0),
-                    Engine.Parse(Text, ref Index, LastIndex)
-                );
-            }
-
-            return null;
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            return new Equal(Left, Engine.ParseValue(It));
         }
 
         public override string ToString() {

@@ -7,101 +7,82 @@ using Poly.Data;
 
 namespace Poly.Script.Types {
     using Nodes;
-    public class ObjectBuilder : Value {
-        private bool IsArray = false;
-        private Dictionary<object, object> List = new Dictionary<object, object>();
+    public class Object : Value {
+        private bool IsArray;
 
-        public ObjectBuilder(Engine Eng, jsObject Obj) {
-            this.Prepare(Eng, Obj);
-            this.IsArray = Obj.IsArray;
-        }
-
-        private void Prepare(Engine Engine, jsObject Obj) {
-            Obj.ForEach((K, V) => {
-                object Key, Value;
-                if (K.StartsWith("@")) {
-                    Key = Engine.Parse(K, 1);
-                }
-                else {
-                    Key = K;
-                }
-
-                if (V is jsObject) {
-                    Value = new ObjectBuilder(Engine, V as jsObject);
-                }
-                else if (V is string && (V as string).StartsWith("@")) {
-                    Value = Engine.Parse(V as string, 1);
-                }
-                else {
-                    Value = V;
-                }
-
-                List.Add(Key, Value);
-            });
+        public Object() {
+            IsArray = false;
         }
 
         public override object Evaluate(jsObject Context) {
-            jsObject Object = new jsObject() { IsArray = this.IsArray };
+            var Obj = new jsObject() { IsArray = IsArray };
 
-            foreach (var Pair in List) {
-                object K;
+            if (Elements == null)
+                return Obj;
 
-                var N = Pair.Key as Node;
-
-                if (N != null)
-                    K = N.Evaluate(Context);
-                else
-                    K = Pair.Key;
-
-                if (K == null)
-                    K = Pair.Key;
-
-                var Key = K.ToString();
-
-                object V;
-                N = Pair.Value as Node;
-
-                if (N != null)
-                    V = N.Evaluate(Context);
-                else
-                    V = Pair.Value;
-
-                Object.Set(Key, V);
-            }
-
-            return Object;
-        }
-
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
-
-            var Delta = Index;
-
-            if (Text[Delta] == '{') {
-                var String = Text.FindMatchingBrackets("{", "}", Delta, true);
-                var Obj = new jsObject();
-
-                if (jsObject.Parse(String, 0, Obj)) {
-                    Index = Delta + String.Length;
-                    return new ObjectBuilder(Engine, Obj);
+            if (IsArray) { 
+                foreach (Node Element in Elements) {
+                    Obj.AssignValue(Obj.Count.ToString(), Element.Evaluate(Context));
                 }
             }
-            else if (Text[Delta] == '[') {
-                var String = Text.FindMatchingBrackets("[", "]", Delta, true);
+            else {
+                foreach (Expressions.KeyValuePair Pair in Elements) {
+                    var Result = Pair.Eval(Context);
+                    var Key = Result.Key == null ?
+                        Obj.Count.ToString() :
+                        Result.Key.ToString();
 
-                var Obj = new jsObject() {
-                    IsArray = true
-                };
-
-                if (jsObject.Parse(String, 0, Obj)) {
-                    Index = Delta + String.Length;
-                    return new ObjectBuilder(Engine, Obj);
+                    Obj.AssignValue(Key, Result.Value);
                 }
             }
 
-            return null;
+            return Obj;
         }
+
+		public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ('{')) {
+				var Start = It.Index;
+
+				if (It.Goto ('{', '}')) {
+					var Sub = It.Clone (Start, It.Index);
+					var Node = new Object ();
+
+					if (Engine.ParseOperations (Sub, Node) != null) {
+						if (Node.Elements == null || Node.Elements.All (n => n is Expressions.KeyValuePair)) {
+							Sub.Consume (WhitespaceFuncs);
+
+							if (Sub.IsDone() && It.Consume('}'))
+								return Node;
+						}
+					}
+				}
+			} else if (It.Consume ('[')) {
+				var Start = It.Index;
+
+				if (It.Goto ('[', ']')) {
+					var Sub = It.Clone (Start, It.Index);
+					var Node = new Object() { IsArray = true };
+
+					if (Engine.ParseValues (Sub, Node) != null) {
+						Sub.Consume (WhitespaceFuncs);
+
+						if (Sub.IsDone() && It.Consume(']'))
+							return Node;
+					}
+				}
+			}
+
+			return null;
+		}
+
+		public override string ToString () {
+			if (IsArray) {
+				return '[' + (Elements != null ? string.Join<Node> (",", Elements) : "") + ']';
+			}
+			else {
+				return '{' + (Elements != null ? string.Join<Node> (",", Elements) : "") + '}';
+			}
+		}
     }
 }
 

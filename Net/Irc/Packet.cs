@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
-using System.Reflection;
 using System.Diagnostics;
 
 using Poly;
@@ -32,6 +30,17 @@ namespace Poly.Net.Irc {
                     return false;
 
                 return Message.First() == '\x01' && Message.Last() == '\x01';
+            }
+            set
+            {
+                if (value) {
+                    Message = '\x01' + Message + '\x01';
+                }
+                else {
+                    if (Message.First() == '\x01' && Message.Last() == '\x01') {
+                        Message = Message.Substring(1, Message.Length - 2);
+                    }
+                }
             }
         }
 
@@ -68,7 +77,7 @@ namespace Poly.Net.Irc {
             this.SetArgs(Args);
         }
 
-        public Packet(Packet.Reply Type, string Sender, string Receiver, string Message, params string[] Args) 
+        public Packet(Reply Type, string Sender, string Receiver, string Message, params string[] Args) 
             : this(((int)Type).ToString("D3"), Sender, Receiver, Message, Args) {
         }
 
@@ -84,20 +93,20 @@ namespace Poly.Net.Irc {
             Send(List, this);
         }
 
-        public static void Send(Tcp.Client Client, Packet Packet) {
+        public static async void Send(Tcp.Client Client, Packet Packet) {
             if (Client != null && Client.Connected) {
                 var Out = Packet.ToString();
-                Client.SendLine(Out);
+                await Client.SendLine(Out);
             }
         }
 
-        public static void Send(Tcp.Client[] List, Packet Packet) {
+        public static async void Send(Tcp.Client[] List, Packet Packet) {
             var Out = Packet.ToString();
-            App.Log.Warning(Out);
+
             for (int i = 0; i < List.Length; i++) {
                 if (List[i] != null && List[i].Connected)
                     try {
-                        List[i].SendLine(Out);
+                        await List[i].SendLine(Out);
                     }
                     catch { }
             }
@@ -105,7 +114,11 @@ namespace Poly.Net.Irc {
 
         public static Packet Receive(Tcp.Client Client) {
             if (Client != null && Client.Connected) {
-                return FromString(Client.ReadLine());
+                var Task = Client.ReceiveLine();
+                Task.Wait();
+
+                if (Task.IsCompleted && !Task.IsFaulted)
+                    return FromString(Task.Result);
             }
 
             return null;
@@ -341,29 +354,29 @@ namespace Poly.Net.Irc {
             }
         }
 
-        public void Send(Poly.Net.Tcp.Client Client) {
+        public async void Send(Poly.Net.Tcp.Client Client) {
             if (Client != null) {
                 var Out = this.Template(Format);
 
-            	Client.SendLine(Out);
+            	await Client.SendLine(Out);
 			}
         }
 
-        public static void Send(Tcp.Client Client, string Type, jsObject Info) {
-            Client.SendLine(Info.Template(Formats[Type]));
+        public static async void Send(Tcp.Client Client, string Type, jsObject Info) {
+            await Client.SendLine(Info.Template(Formats[Type]));
         }
 
-        public static void Send(Tcp.Client Client, string Type, params object[] Items) {
+        public static async void Send(Tcp.Client Client, string Type, params object[] Items) {
             var Out = new jsObject(Items).Template(Formats[Type]);
 
-            Client.SendLine(Out);
+            await Client.SendLine(Out);
         }
 
-        public bool Recieve(Tcp.Client Client) {
-            var Line = Client.ReadLine();
+        public async Task<bool> Recieve(Tcp.Client Client) {
+            var Line = await Client.ReceiveLine();
             
             foreach (var Pair in _PacketFormatArray) {
-                if (Line.Match(Pair.Value, false, this) != null) {
+                if (Line.Match(Pair.Value, this) != null) {
                     this.Format = Pair.Value;
                     this.Action = Pair.Key;
                     return true;
@@ -371,26 +384,6 @@ namespace Poly.Net.Irc {
             }
 
             return false;
-        }
-
-        public static _Packet Get(Tcp.Client Client) {
-            var _Packet = new _Packet();
-
-            if (_Packet.Recieve(Client)) {
-                return _Packet;
-            }
-            return null;
-        }
-
-        public static async Task<_Packet> RecieveAsync(Tcp.Client Client) {
-            return await Task.Factory.StartNew(() => {
-                var _Packet = new _Packet();
-
-                if (_Packet.Recieve(Client)) {
-                    return _Packet;
-                }
-                return null;
-            });
         }
 
         public static implicit operator _Packet(string Name) {

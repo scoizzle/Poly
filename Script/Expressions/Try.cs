@@ -11,8 +11,7 @@ namespace Poly.Script.Expressions {
 
         public override object Evaluate(Data.jsObject Context) {
             try {
-                if (Node != null)
-                    return Node.Evaluate(Context);
+				return Node?.Evaluate(Context);
             }
             catch (Exception Error) {
                 if (Catch != null) {
@@ -29,30 +28,20 @@ namespace Poly.Script.Expressions {
             return "try " + base.ToString();
         }
 
-        public static new Try Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("try")) {
+				var Node = new Try ();
 
-            if (Text.Compare("try", Index)) {
-                var Delta = Index + 3;
-                var Try = new Try();
-                ConsumeWhitespace(Text, ref Delta);
+				Node.Node = Engine.ParseExpression (It);
+				It.Consume (WhitespaceFuncs);
 
-                Try.Node = Engine.Parse(Text, ref Delta, LastIndex) as Node;
-                ConsumeWhitespace(Text, ref Delta);
+				if (It.Consume ("catch")) {
+					Node.Catch = Engine.ParseExpression (It);
+				}
 
-                if (Text.Compare("catch", Delta)) {
-                    Delta += 5;
-                    ConsumeWhitespace(Text, ref Delta);
-
-                    Try.Catch = Engine.Parse(Text, ref Delta, LastIndex) as Node;
-                }
-
-                Index = Delta;
-                return Try;
-            }
-
-            return null;
-        }
+				return Node;
+			}
+			return null;
+		}
     }
 }

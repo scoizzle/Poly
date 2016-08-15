@@ -7,54 +7,49 @@ namespace Poly.Script.Expressions.Unary {
     using Nodes;
 
     public class Parser {
-        public delegate Node Handler(Engine Engine, string Text, ref int Index, int LastIndex, string Left);
-        public static List<Handler> UnaryParsers = new List<Handler>() {
-            Comparative.Parse,
-            Conditional.Parse,
-            As.Parse,
-            Is.Parse,
-            Equal.Parse,
-            NotEqual.Parse,
-            NotNull.Parse,
-            LessThanEqual.Parse,
-            LessThan.Parse,
-            GreaterThanEqual.Parse,
-            GreaterThan.Parse,
-            And.Parse,
-            Or.Parse,
-            Between.Parse,
-            Assign.Parse,
-            Match.Parse,
-            Template.Parse,
-            Multiply.Parse,
-            Devide.Parse,
-            Add.Parse,
-            Subtract.Parse,
-        };
+        public delegate Node _Handler(Engine Engine, StringIterator It, Node Left);
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!Expression.IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+        public static Dictionary<string, _Handler> Parsers,
+                                                   RightHandedParsers;
 
-            var Delta = Index;
-            Expression.ConsumeContent(Text, ref Delta);
+        static Parser() {
+            Parsers = new Dictionary<string, _Handler>() {
+                { ":", KeyValuePair.Parse },
+                { "??", Comparative.Parse },
+                { "?", Conditional.Parse },
+                { "as", As.Parse },
+                { "is", Is.Parse },
+                { "->", Between.Parse },
+                { "~", Match.Parse },
+                { "~!", MatchAll.Parse },
+                { "&&", And.Parse },
+                { "||", Or.Parse },
+                { "|", Template.Parse },
+                { "!=", NotEqual.Parse },
+                { "%", Modulus.Parse },
+                { "==", Equal.Parse },
+                { "=", Assign.Parse },
+                { "<=", LessThanEqual.Parse },
+                { "<", LessThan.Parse },
+                { ">=", GreaterThanEqual.Parse },
+                { ">", GreaterThan.Parse },
+                { "+=", Add.Assignment },
+                { "++", Add.Iterator },
+                { "+", Add.Parse },
+                { "-=", Subtract.Assignment },
+                { "--", Subtract.Iterator },
+                { "-", Subtract.Parse },
+                { "*=", Multiply.Assignment },
+                { "*", Multiply.Parse },
+                { "/=", Devide.Assignment },
+                { "/", Devide.Parse }
+            };
 
-            if (Delta > LastIndex)
-                return null;
-
-            var Left = Text.Substring(Index, Delta - Index);
-            Node.ConsumeWhitespace(Text, ref Delta);
-
-            for (int i = 0; i < UnaryParsers.Count; i++) {
-                var U = UnaryParsers[i](Engine, Text, ref Delta, LastIndex, Left);
-
-                if (U != null) {
-                    Index = Delta;
-                    return U;
-                }
-            }
-
-            return null;
+            RightHandedParsers = new Dictionary<string, _Handler>() {
+                { "!", NotNull.Parse },
+                { ":", KeyValuePair.Parse },
+                { "|", Template.Parse },
+            };
         }
     }
 }

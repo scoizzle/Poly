@@ -9,8 +9,8 @@ namespace Poly.Script.Expressions {
     using Types;
     using Expressions;
     public class For : Expression {
-        public Node Init = null, 
-                    Boolean = null, 
+        public Node Init = null,
+                    Boolean = null,
                     Modifier = null;
 
         public override object Evaluate(Data.jsObject Context) {
@@ -45,50 +45,47 @@ namespace Poly.Script.Expressions {
                 base.ToString();
         }
 
-        public static new For Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+        new public static Node Parse(Engine Engine, StringIterator It) {
+            if (It.Consume("for")) {
+                It.Consume(WhitespaceFuncs);
 
-            if (Text.Compare("for", Index)) {
-                var Delta = Index + 3;
-                ConsumeWhitespace(Text, ref Delta);
+                if (It.Consume('(')) {
+                    var Start = It.Index;
 
-                if (Text.Compare("(", Delta)) {
-                    var For = new For();
-                    var Open = Delta + 1;
-                    var Close = Delta;
+                    if (It.Goto('(', ')')) {
+                        var Sub = It.Clone(Start, It.Index);
 
-                    ConsumeEval(Text, ref Close);
+                        var Node = new For() {
+                            Init = Engine.ParseOperation(Sub),
+                            Boolean = Engine.ParseOperation(Sub)
+                        };
 
-                    if (Delta == Close)
-                        return null;
+                        if (Node.Boolean is Between) {
+                            var Var = Node.Init as Variable;
+                            var Bol = Node.Boolean as Between;
 
-                    For.Init = Engine.Parse(Text, ref Open, Close) as Node;
-                    For.Boolean = Engine.Parse(Text, ref Open, Close) as Node;
+                            Node.Modifier = new Assign(Var, new Add(Var, new StaticValue(1)));
+                            Node.Init = new Assign(Var, Bol.Left);
+                            Bol.Left = Var;
 
-                    if (For.Boolean is Between) {
-                        var Var = For.Init as Variable;
-                        var Bol = For.Boolean as Between;
+                        }
+                        else {
+                            Node.Modifier = Engine.ParseOperation(Sub);
+                        }
 
-                        For.Modifier = new Assign(Var, new Add(Var, new StaticValue(1)));
-                        For.Init = new Assign(Var, Bol.Left);
-                        Bol.Left = Var;
-                    }
-                    else {
-                        For.Modifier = Engine.Parse(Text, ref Open, Close) as Node;
-                    }
+                        It.Consume(')');
+                        It.Consume(WhitespaceFuncs);
 
-                    Delta = Close;
-                    ConsumeWhitespace(Text, ref Delta);
+                        if (It.IsAt('{')) {
+                            Expression.Parse(Engine, It, Node);
+                        }
+                        else {
+                            Node.Elements = new Node[] {
+                                Engine.ParseExpression (It)
+                            };
+                        }
 
-                    var Exp = Engine.Parse(Text, ref Delta, LastIndex);
-
-                    if (Exp != null) {
-                        For.Elements = new Node[] { Exp };
-                        ConsumeWhitespace(Text, ref Delta);
-
-                        Index = Delta;
-                        return For;
+                        return Node;
                     }
                 }
             }

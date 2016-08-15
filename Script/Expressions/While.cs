@@ -35,44 +35,32 @@ namespace Poly.Script.Expressions {
 
         public override string ToString() {
             return "while (" + Boolean.ToString() + ") " + base.ToString();
-        }
+		}
 
-        public static new While Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("while")) {
+                It.ConsumeWhitespace();
 
-            if (Text.Compare("while", Index)) {
-                var Delta = Index + 5;
-                ConsumeWhitespace(Text, ref Delta);
+                var Node = new While() {
+                    Boolean = Eval.Parse(Engine, It)
+                };
+                
+                if (Node.Boolean != null) {
+                    It.ConsumeWhitespace();
 
-                if (Text.Compare("(", Delta)) {
-                    var While = new While();
-                    var Open = Delta + 1;
-                    var Close = Delta;
+					if (It.IsAt ('{')) {
+						Expression.Parse (Engine, It, Node);
+					}
+					else {
+						Node.Elements = new Node[] {
+							Engine.ParseExpression (It)
+						};
+					}
 
-                    ConsumeEval(Text, ref Close);
-
-                    if (Delta == Close)
-                        return null;
-
-                    While.Boolean = Engine.Parse(Text, ref Open, Close);
-
-                    Delta = Close + 1;
-                    ConsumeWhitespace(Text, ref Delta);
-                    var Exp = Engine.Parse(Text, ref Delta, LastIndex);
-
-                    if (Exp != null) {
-                        While.Elements = new Node[] { Exp };
-                        ConsumeWhitespace(Text, ref Delta);
-
-                        Index = Delta;
-                        return While;
-                    }
-                    
-                }
-            }
-
-            return null;
-        }
+					return Node;
+				}
+			}
+			return null;
+		}
     }
 }

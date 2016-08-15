@@ -1,50 +1,71 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Poly.Script.Expressions.Html {
     using Nodes;
 
-    public class Html : Node {
-        static Helpers.Parser[] Parsers = new Helpers.Parser[] {
-            Variable.Parse,
-            Template.Parse,
-            Document.Parse,
-            Call.Parse,
-            ComplexElement.Parse,
+    public class Html : Expression {
+        public delegate Element Parser(Engine Engine, StringIterator It);
+        public static Parser[] _Parsers = new Parser[] {
+			Comment.Parse,
+            If.Parse,
+            Foreach.Parse,
+            For.Parse,
+            StaticValue.Parse,
+			PolyTemplate.Parse,
             Attribute.Parse,
-            StaticValue.Parse
+            ComplexElement.Parse,
+            Call.Parse,
+			Variable.Parse
         };
+        
+        new public static Node Parse(Engine Engine, StringIterator It) {
+			var Start = It.Index;
+            if (It.Consume("html")) {
+                It.ConsumeWhitespace();
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
-            
-            for (int i = 0; i < Parsers.Length; i++) {
-                var Val = Parsers[i](Engine, Text, ref Index, LastIndex);
+				if (It.IsAt('{')) {
+                    var Node = Document.Parse(Engine, It);
 
-                if (Val != null)
-                    return Val;
+                    if (Node != null) {
+                        return Optimizer.FromDocument(Node as Document);
+                    }
+				}
+            }
+			It.Index = Start;
+            return null;
+        }
+
+        public static Element ParseElement(Engine Engine, StringIterator It) {
+			It.Consume(WhitespaceFuncs);
+
+			if (!It.IsDone()) {
+                Element Current = null;
+                if (_Parsers.Any(f => (Current = f(Engine, It)) != null)) {
+                    return Current;
+                }
             }
 
             return null;
         }
 
-        public static Node Parser(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+        public static Element ParseElements(Engine Engine, StringIterator It, Element Storage) {
+            var List = new List<Node>();
 
-            if (Text.Compare('`', Index)) {
-                var Delta = Index;
+            while (!It.IsDone()) {
+                var Node = ParseElement(Engine, It);
 
-                if (Text.FindMatchingBrackets('`', '`', ref Index, ref Delta)) {
-                    var Value = Parse(Engine, Text, ref Index, Delta);
+                if (Node == null)
+                    break;
 
-                    if (Value != null) {
-                        Index = Delta + 2;
-                        return Value;
-                    }                    
-                }
+                List.Add(Node);
             }
-            return null;
-        }            
+
+            if (List.Count != 0)
+                Storage.Elements = List.ToArray();
+
+            return Storage;
+        }
     }
 }

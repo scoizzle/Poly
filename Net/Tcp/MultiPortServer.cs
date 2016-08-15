@@ -7,43 +7,51 @@ using System.Net.Sockets;
 
 namespace Poly.Net.Tcp {
     public class MultiPortServer {
-        public Event.Engine Events = new Event.Engine();
         public Dictionary<int, Tcp.Server> Listeners = new Dictionary<int, Tcp.Server>();
 
-        public event Tcp.Server.ClientConnectHandler OnClientConnect;
-        public event Action OnStart, OnStop;
+        public event Server.OnClientConnectDelegate OnClientConnect;
 
         public bool Active { get; private set; }
 
-        public void Listen(int Port) {
-            if (!Listeners.ContainsKey(Port))
-                Listeners.Add(Port, new Tcp.Server(Port));
+        public IPEndPoint Accept(int Port) {
+            Server Serv;
+
+            if (Listeners.ContainsKey(Port)) {
+                Serv = Listeners[Port];
+                return Serv.LocalEndpoint as IPEndPoint;
+            }
+
+            Serv = new Server(Port);
+            Listeners.Add(Port, Serv);
+
+            return Serv.LocalEndpoint as IPEndPoint;
         }
 
-        public void ListenSsl(int Port, string CertificateFile) {
-            if (!Listeners.ContainsKey(Port))
-                Listeners.Add(Port, new Tcp.Server(IPAddress.Any, Port, CertificateFile));
+        public void AcceptSSL(int Port, string CertificateFile) {
+            throw new NotImplementedException();
+
+            //if (!Listeners.ContainsKey(Port))
+                //Listeners.Add(Port, new Tcp.Server(IPAddress.Any, Port, CertificateFile));
         }
 
-        public void Start() {
+        public void Decline(int Port) {
+            Listeners[Port]?.Stop();
+            Listeners.Remove(Port);
+        }
+
+        public virtual void Start() {
             Active = true;
 
-            if (OnStart != null) 
-                OnStart();
-
             foreach (var Listener in Listeners.Values) {
-                if (!Listener.Active) {
-                    Listener.ClientConnect += OnClientConnect;
+                if (!Listener.Running) {
+                    Listener.ClientConnected += OnClientConnect;
                     Listener.Start();
                 }
             }
         }
 
-        public void Stop() {
+        public virtual void Stop() {
             Active = false;
-
-            if (OnStop != null) 
-                OnStop();
 
             foreach (var Listen in Listeners.Values) {
                 Listen.Stop();

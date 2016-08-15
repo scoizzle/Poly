@@ -28,28 +28,33 @@ namespace Poly.Script.Nodes {
 
 		public object CreateInstance(jsObject Context) {
 			var Inst = new Types.ClassInstance (this);
-
-			base.Evaluate (Inst);
-
-            if (Constructor != null) {
-                Context.Set("this", Inst);
-                Constructor.Evaluate(Context);
-                Context.Remove("this");
-            }
-
+			Construct (Inst, Context);
 			return Inst;
 		}
 
-        public void Register(Engine Engine) {
-            if (Functions.TryGet<Function>(LastName, out Constructor)) {
-                this.Instaciator = new Function(LastName, CreateInstance, Constructor.Arguments);
-            }
-            else {
-                this.Instaciator = new Function(LastName, CreateInstance);
-            }
+		private void Construct(Types.ClassInstance Instance, jsObject Context) {
+			Base?.Construct (Instance, Context);
+			base.Evaluate (Instance);
 
+			if (Constructor != null) {
+				Context.Set("this", Instance);
+				Constructor.Evaluate(Context);
+				Context.Remove("this");
+			}
+		}
+
+        public void Register(Engine Engine) {
             Engine.Types[Name] = this;
         }
+
+		public void InitInstanciator() {
+			if (Functions.TryGet<Function>(LastName, out Constructor)) {
+				this.Instaciator = new Function(LastName, CreateInstance, Constructor.Arguments);
+			}
+			else {
+				this.Instaciator = new Function(LastName, CreateInstance);
+			}
+		}
 
         public Function GetFunction(string Name) {
 			Function Func;
@@ -57,102 +62,93 @@ namespace Poly.Script.Nodes {
 			if (Functions.TryGet<Function> (Name, out Func))
 				return Func;
 
+            return Base?.GetFunction(Name);
+        }
+
+        public Function GetStaticFunction(string Name) {
+            Function Func;
+
+            if (StaticFunctions.TryGet<Function>(Name, out Func))
+                return Func;
+
             if (Base != null)
-                return Base.GetFunction(Name);
+                return Base.GetStaticFunction(Name);
 
             return null;
+
         }
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		public static Node Parse(Engine Engine, StringIterator It) {
+			Class Node;
+			if (It.Consume ("class")) {
+				It.ConsumeWhitespace ();
 
-            var Delta = Index;
-            if (Text.Compare("class", Delta)) {
-                Delta += 5;
-                ConsumeWhitespace(Text, ref Delta);
+				var Start = It.Index;
+				if (It.Consume (NameFuncs)) {
+					var Name = It.Substring (Start, It.Index - Start);
+					It.ConsumeWhitespace ();
 
-                Class Type = null;
+					if (It.Consume (':')) {
+						It.ConsumeWhitespace ();
+						Start = It.Index;
 
-                var Open = Delta;
-                ConsumeValidName(Text, ref Delta);
+						if (It.Consume (NameFuncs)) {
+							var BaseName = It.Substring (Start, It.Index - Start);
+							var Base = Engine.Types [BaseName];
+								
+							Node = new Class (Name, Base);
+						} else
+							return null;
+					} else {
+						Node = new Class (Name);
+					}
+					It.ConsumeWhitespace ();
 
-                if (Delta > Open) {
-                    var Name = Text.Substring(Open, Delta - Open);
-                    ConsumeWhitespace(Text, ref Delta);
+					if (It.Consume ('{')) {
+						It.ConsumeWhitespace ();
 
-                    if (Text.Compare(":", Delta)) {
-                        Delta++;
-                        ConsumeWhitespace(Text, ref Delta);
+						Start = It.Index;
+						if (It.Goto ('{', '}')) {
+							var Sub = It.Clone (Start, It.Index);
+							var List = new List<Node> ();
+							Node.Register (Engine);
 
-                        Open = Delta;
-                        ConsumeValidName(Text, ref Delta);
+							while (!Sub.IsDone ()) {
+								bool IsStatic = Sub.Consume ("static");
+								Function Func;
 
-                        if (Delta > Open) {
-                            Class Base;
-                            var BaseName = Text.Substring(Open, Delta - Open);
-                            ConsumeWhitespace(Text, ref Delta);
+								Sub.ConsumeWhitespace ();
+								if ((Func = Expressions.Html.Function.Parse (Engine, Sub, false) as Function) != null ||
+								    (Func = Nodes.Function.Parse (Engine, Sub, false) as Function) != null) {
 
-                            if ((Base = Engine.Types[BaseName] as Class) != null) {
-                                Type = new Class(Name, Base);
-                            }
-                        }
-                    }
-                    else {
-                        Type = new Class(Name);
-                    }
+									if (IsStatic) {
+										Node.StaticFunctions.Add (Func.Name, Func);
+									} else {
+										Node.Functions.Add (Func.Name, Func);
+									}
+								} else {
+									var Exp = Engine.ParseExpression (Sub);
 
-                    if (Type != null && Text.Compare("{", Delta)) {
-                        Type.Register(Engine);
+									if (Exp == null)
+										break;
 
-                        Open = Delta + 1;
-                        ConsumeWhitespace(Text, ref Open);
-                        ConsumeExpression(Text, ref Delta);
+									List.Add (Exp);
+								}
 
+								Sub.Consume (WhitespaceFuncs);
+							}
 
-                        var List = new List<Node>();
-                        while (true) {
-                            bool IsStatic = false;
-                            Node Node = null;
+							Node.Elements = List.ToArray ();
 
-                            if (Text.Compare("static", Open)) {
-                                IsStatic = true;
-                                Open += 6;
-                            }
+							It.Consume ('}');
 
-                            if ((Node = Function.Parse(Engine, Text, ref Open, Delta, false)) != null) {
-                                var Func = Node as Function;
-
-                                if (IsStatic) {
-                                    Type.StaticFunctions.Add(Func.Name, Func);
-                                }
-                                else {
-                                    Type.Functions.Add(Func.Name, Func);
-                                }
-                            }
-                            else {
-                                var Obj = Engine.Parse(Text, ref Open, Delta - 1);
-
-                                if (Obj is Expressions.Assign) {
-                                    List.Add(Obj);
-                                }
-                                else break;
-                            }
-
-                            ConsumeWhitespace(Text, ref Open);
-                        }
-
-                        Type.Elements = List.ToArray();
-
-                        ConsumeWhitespace(Text, ref Delta);
-                        Index = Delta;
-
-                        return Expression.NoOperation;
-                    }
-                }
-            }
-
-            return null;
-        }
+							Node.InitInstanciator ();
+							return Expression.NoOperation;
+						}
+					}
+				}
+			}
+			return null;
+		}
     }
 }

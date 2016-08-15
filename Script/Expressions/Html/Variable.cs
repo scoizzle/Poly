@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Poly.Script.Expressions.Html {
     using Data;
@@ -11,48 +8,26 @@ namespace Poly.Script.Expressions.Html {
     public class Variable : Element {
         public Node Value;
 
+        public Variable() { }
+
+        public Variable(Node Val) {
+            Value = Val;
+        }
+
         public override void Evaluate(StringBuilder Output, jsObject Context) {
-            if (Value != null) {
-                var Result = Value.Evaluate(Context);
+            var Result = Value?.Evaluate(Context);
 
-                if (Result != null)
-                    Output.Append(Result);
-            }
+            if (Result != null)
+                Output.Append(Result);
         }
 
-        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Element Parse(Engine Engine, StringIterator It) {
+			var Var = Nodes.Variable.Parse (Engine, It);
 
-            if (Text.Compare('@', Index)) {
-                var Delta = ++Index;
-                ConsumeValidName(Text, ref Delta);
-
-                var Node = Engine.Parse(Text, ref Index, Delta);
-                if (Node == null)
-                    return null;
-
-                ConsumeWhitespace(Text, ref Delta);
-                if (Text.Compare('{', Delta)) {
-                    var Start = Delta;
-                    var End = Delta;
-
-                    if (Text.FindMatchingBrackets("{", "}", ref Start, ref End, true)) {
-                        Index = End + 1;
-
-                        return new Template() {
-                            Value = Node,
-                            Format = Document.Parse(Engine, Text, ref Start, End) as Element
-                        };
-                    }
-                }
-                else {
-                    return new Variable() { 
-                        Value = Node 
-                    };
-                }
-            }
-            return null;
-        }
+			if (Var != null) {
+				return new Variable (Var);
+			}
+			return null;
+		}
     }
 }

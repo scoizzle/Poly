@@ -7,11 +7,17 @@ using Poly.Data;
 namespace Poly.Script.Expressions {
     using Nodes;
 
-    public class Foreach : Expression {
-        public Variable Variable = null;
-        public Node List = null;
+	public class Foreach : Expression {
+		public Node List;
+        public Variable Variable, ValueVar;
 
-        private object LoopNodes<K, V>(jsObject Context, K Key, V Value) {
+		public Foreach() {
+			List = null;
+			Variable = null;
+			ValueVar = null;
+		}
+
+        private object LoopNodes<K, V>(jsObject Context, K Key, V Value) {				
             var Var = new jsObject();
             Variable.Assign(Context, Var);
 
@@ -35,12 +41,33 @@ namespace Poly.Script.Expressions {
             return null;
         }
 
+		private object LoopNodes<K, V>(jsObject Context, Variable KeyName, K Key, Variable ValueName, V Value) {
+			KeyName.Assign (Context, Key);
+			ValueName.Assign (Context, Value);
+
+			foreach (var Node in Elements) {
+				var Ret = Node as Return;
+
+				if (Ret != null)
+					return Ret;
+
+				if (Node != null)
+					Node.Evaluate (Context);             
+
+				if (Ret == Break || Ret == Continue)
+					return Ret;
+			}
+			return null;
+		}
+
         private object LoopString(jsObject Context, string String) {
             if (string.IsNullOrEmpty(String))
                 return null;
 
             for (int i = 0 ; i < String.Length; i ++) {
-                var Result = LoopNodes<int, char>(Context, i, String[i]);
+				var Result = ValueVar == null ?
+					LoopNodes (Context, i, String [i]) :
+					LoopNodes (Context, Variable, i, ValueVar, String [i]);;
 
                 var Ret = Result as Return;
 
@@ -58,7 +85,10 @@ namespace Poly.Script.Expressions {
                 return null;
 
             foreach (var Pair in Object) {
-                var Result = LoopNodes<string, object>(Context, Pair.Key, Pair.Value);
+				var Result = ValueVar == null ?
+					LoopNodes (Context, Pair.Key, Pair.Value) :
+					LoopNodes (Context, Variable, Pair.Key, ValueVar, Pair.Value);
+				
                 var Ret = Result as Return;
 
                 if (Ret != null)
@@ -72,8 +102,10 @@ namespace Poly.Script.Expressions {
         }
 
         private object LoopArray(jsObject Context, Array Array) {
-            for (int Index = 0; Index < Array.Length; Index++) {
-                var Result = LoopNodes(Context, Index, Array.GetValue(Index));
+			for (int Index = 0; Index < Array.Length; Index++) {
+				var Result = ValueVar == null ?
+					LoopNodes (Context, Index, Array.GetValue(Index)) :
+					LoopNodes (Context, Variable, Index, ValueVar, Array.GetValue(Index));
                 
                 var Ret = Result as Return;
 
@@ -88,7 +120,7 @@ namespace Poly.Script.Expressions {
             return null;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
+        public override object Evaluate(jsObject Context) {
             if (Variable == null || List == null) {
                 return null;
             }
@@ -99,17 +131,12 @@ namespace Poly.Script.Expressions {
                 return null;
 
             object Value = null;
-
-            var String = Collection as string;
-            if (!string.IsNullOrEmpty(String)) {
-                Value = LoopString(Context, String);
-            }
-            else if (Collection is Array) {
-                Value = LoopArray(Context, Collection as Array);
-            }
-            else {
-                Value = LoopObject(Context, Collection as jsObject);
-            }
+			if (Collection is jsObject)
+				Value = LoopObject(Context, Collection as jsObject);
+			else if (Collection is string)
+				Value = LoopString(Context, Collection as string);
+			else if (Collection is Array)
+				Value = LoopArray(Context, Collection as Array);
 
             if (!(Value is Return))
                 Variable.Assign(Context, null);
@@ -122,49 +149,48 @@ namespace Poly.Script.Expressions {
                 base.ToString();
         }
 
-        public static new Foreach Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("foreach")) {
+				It.Consume (WhitespaceFuncs);
 
-            if (Text.Compare("foreach", Index)) {
-                var Delta = Index + 7;
-                ConsumeWhitespace(Text, ref Delta);
+				if (It.Consume ('(')) {
+					var Node = new Foreach ();
+					var Key = Engine.ParseOperation (It);
 
-                if (Text.Compare("(", Delta)) {
-                    var For = new Foreach();
-                    var Open = Delta + 1;
-                    var Close = Delta;
+					if (Key is KeyValuePair) {
+						var Pair = (Key as KeyValuePair);
+						Node.Variable = Pair.Left as Variable;
+						Node.ValueVar = Pair.Right as Variable;
+					} else if (Key is Variable) {
+						Node.Variable = Key as Variable;
+					} else
+						return null;
 
-                    ConsumeEval(Text, ref Close);
+					It.Consume (WhitespaceFuncs);
+					if (It.Consume ("in")) {
+						It.Consume (WhitespaceFuncs);
 
-                    if (Delta == Close)
-                        return null;
+						Node.List = Engine.ParseValue (It);
 
-                    For.Variable = Variable.Parse(Engine, Text, ref Open, Close);
-                    ConsumeWhitespace(Text, ref Open);
+						It.Consume (WhitespaceFuncs);
+						if (It.Consume (')')) {
+							It.Consume (WhitespaceFuncs);
 
-                    if (Text.Compare("in", Open)) {
-                        Open += 2;
-                        ConsumeWhitespace(Text, ref Open);
+							if (It.IsAt ('{')) {
+								Expression.Parse (Engine, It, Node);
+							}
+							else {
+								Node.Elements = new Node[] {
+									Engine.ParseExpression (It)
+								};
+							}
 
-                        For.List = Engine.Parse(Text, ref Open, Close);
-                        Open = Close;
-                        ConsumeWhitespace(Text, ref Open);
-
-                        var Exp = Engine.Parse(Text, ref Open, LastIndex);
-                        if (Exp != null) {
-                            For.Elements = new Node[] { Exp };
-                            ConsumeWhitespace(Text, ref Open);
-
-                            Index = Open;
-
-                            return For;
-                        }
-                    }
-                }
-            }
-
-            return null;
-        }
+							return Node;
+						}
+					}
+				}
+			}
+			return null;
+		}
     }
 }

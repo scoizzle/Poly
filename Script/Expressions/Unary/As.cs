@@ -23,24 +23,18 @@ namespace Poly.Script.Expressions {
             return null;
         }
 
-        public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("as", Index)) {
-                Index += 2;
-                ConsumeWhitespace(Text, ref Index);
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            var Start = It.Index;
 
-                var End = Index;
-                ConsumeValidName(Text, ref End);
-                
-                var Name = Text.Substring(Index, End - Index);
+            if (It.Consume(char.IsLetterOrDigit)) {
+                var Name = It.Substring(Start, It.Index - Start);
 
                 if (Engine.ReferencedTypes.ContainsKey(Name)) {
-                    return new As(
-                        Engine.Parse(Left, 0),
-                        Engine.ReferencedTypes[Name]
-                    );
+                    return new As(Left, Engine.ReferencedTypes[Name]);
                 }
             }
 
+            It.Index = Start;
             return null;
         }
 

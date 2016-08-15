@@ -7,39 +7,38 @@ using System.Threading.Tasks;
 namespace Poly.Script.Expressions {
     using Nodes;
     using Expressions;
-    class Eval : Expression {
-        public Node Node = null;
+    using Data;
 
-        public override object Evaluate(Data.jsObject Context) {
-            if (Node != null) {
-                return Node.Evaluate(Context);
-            }
-            return null;
+    class Eval : Expression {
+        public Node Node;
+
+        public override object Evaluate(jsObject Context) {
+            return Node?.Evaluate(Context);
         }
 
         public override string ToString() {
-            return string.Format("({0})", Node);
-        }
+            return string.Format("({0})", string.Join<Node>("", Elements));
+		}
 
-        public static new Eval Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static bool Parse(Engine Engine, StringIterator It, Node Storage) {
+			return false;
+		}
 
-            if (Text.Compare("(", Index)) {
-                var Delta = Index;
-                var Eval = new Eval();
-                var Statement = Text.FindMatchingBrackets("(", ")", Index);
+		new public static Node Parse(Engine Engine, StringIterator It) {
+            if (It.Consume('(')) {
+                var Open = It.Index;
 
-                Eval.Node = Engine.Parse(Statement, 0);
+                if (It.Goto('(', ')')) {
+                    var Node = Engine.ParseOperation(It.Clone(Open, It.Index));
 
-                Delta += Statement.Length + 2;
-                ConsumeWhitespace(Text, ref Delta);
-
-                Index = Delta;
-                return Eval;
+                    if (Node != null) {
+                        It.Consume(')');
+                        return new Eval() { Node = Node };
+                    }
+                }
             }
 
             return null;
-        }
+		}
     }
 }

@@ -7,39 +7,67 @@ namespace Poly.Script.Expressions.Html {
     using Data;
 
     public class Document : Element {
-        Element[] Members;
+        public override void ToEvaluationArray(StringBuilder output, List<Action<StringBuilder, jsObject>> list) {
+            foreach (Element e in Elements) {
+                e.ToEvaluationArray(output, list);
+            }
 
-        public override void Evaluate(StringBuilder Output, jsObject Context) {
-            if (Members != null)
-            for (int i = 0; i < Members.Length; i++) {
-                Members[i].Evaluate(Output, Context);
+            if (output.Length > 0) {
+                list.Add(Element.StaticAppender(output));
             }
         }
 
-        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+        new public static Element Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ('{')) {
+				var Start = It.Index;
 
-            var Delta = Index;
-            if (Text.Compare('{', Delta)) {
-                if (Text.FindMatchingBrackets('{', '}', ref Delta, ref LastIndex)) {
-                    List<Element> Elements = new List<Element>();
+				if (It.Goto('{', '}')) {
+					var Sub = It.Clone (Start, It.Index);
+					var List = new List<Element> ();
 
-                    while (IsParseOk(Engine, Text, ref Delta, LastIndex)) {
-                        var E = Html.Parse(Engine, Text, ref Delta, LastIndex) as Element;
+					while (!Sub.IsDone ()) {
+						var Elem = Html.ParseElement (Engine, Sub);
 
-                        if (E == null)
+						if (Elem == null)
+							break;
+
+						List.Add (Elem);
+						Sub.Consume (WhitespaceFuncs);
+					}
+
+					It.Consume ('}');
+					return new Document () {
+						Elements = List.ToArray ()
+					};
+				}
+			}
+
+			return null;
+        }
+
+        public static Element Parse(Engine Engine, StringIterator It, Element Storage) {
+            if (It.Consume('{')) {
+                var Start = It.Index;
+
+                if (It.Goto('{', '}')) {
+                    var Sub = It.Clone(Start, It.Index);
+                    var List = new List<Element>();
+
+                    while (!Sub.IsDone()) {
+                        var Elem = Html.ParseElement(Engine, Sub);
+
+                        if (Elem == null)
                             break;
 
-                        Elements.Add(E);
+                        List.Add(Elem);
+                        Sub.Consume(WhitespaceFuncs);
                     }
 
-                    Index = Delta + 1;
-                    return new Document() {
-                        Members = Elements.ToArray()
-                    };
+                    It.Consume('}');
+                    Storage.Elements = List.ToArray();
                 }
             }
+
             return null;
         }
     }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Poly.Script.Expressions {
     using Nodes;
@@ -14,6 +15,7 @@ namespace Poly.Script.Expressions {
 
         public override object Evaluate(Data.jsObject Context) {
             do {
+                if (Elements != null)
                 for (int i = 0; i < Elements.Length; i++) {
                     var Node = Elements[i];
 
@@ -29,7 +31,7 @@ namespace Poly.Script.Expressions {
                         break;
                 }
             }
-            while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState == ThreadState.Running);
+			while (Bool.EvaluateNode(Boolean, Context));
 
             return null;
         }
@@ -38,49 +40,37 @@ namespace Poly.Script.Expressions {
             return "do {" + base.ToString() + " } while (" + Boolean.ToString() + ");";
         }
 
-        public static new Do Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("do")) {
+				It.Consume (WhitespaceFuncs);
 
-            if (Text.Compare("do", Index)) {
-                var Delta = Index + 2;
-                ConsumeWhitespace(Text, ref Delta);
+				var Node = new Do ();
 
-                if (Text.Compare("{", Delta)) {
-                    var Do = new Do();
-                    var Open = Delta + 1;
-                    var Close = Delta;
+				if (It.IsAt ('{')) {
+					Expression.Parse (Engine, It, Node);
+				}
+				else {
+					Node.Elements = new Node[] {
+						Engine.ParseExpression (It)
+					};
+				}
+				It.Consume (WhitespaceFuncs);
 
-                    ConsumeExpression(Text, ref Close);
+				if (It.Consume ("while")) {
+					It.Consume (WhitespaceFuncs);
 
-                    if (Delta == Close)
-                        return null;
+					var Open = It.Index;  
 
-                    Engine.Parse(Text, ref Open, Close, Do);
+					if (It.Consume ('(') && It.Goto ('(', ')')) {
+						Node.Boolean = Engine.ParseValue (It.Clone (Open + 1, It.Index));
 
-                    Open = Close + 1;
-                    ConsumeWhitespace(Text, ref Open);
+						if (It.Consume (')'))
+							return Node;
+					}
+				}
 
-                    if (Text.Compare("while", Open)) {
-                        Open += 5;
-                        ConsumeWhitespace(Text, ref Open);
-
-                        if (Text.Compare("(", Open)) {
-                            Close = Open;
-                            Open ++;
-
-                            ConsumeEval(Text, ref Close);
-
-                            Do.Boolean = Engine.Parse(Text, ref Open, Close);
-                            Index = Close;
-
-                            return Do;
-                        }
-                    }
-                }
-            }
-
-            return null;
-        }
+			}
+			return null;
+		}
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -7,12 +8,19 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Http {
+    using Tcp;
+
     public class Packet : jsComplex {
-        static readonly char[] PathSplit = new char[] { '/' };
-        public int ContentLength;
+        public static readonly Matcher PathMatcher = new Matcher("/{Value:![/]}"),
+                                       QueryMembersMatcher = new Matcher("[&]{Key}={Value:!Whitespace,![&]}"),
+                                       HeaderPropertiesMatcher = new Matcher("[; ]{Key}={Value:!Whitepsace}"),
+                                       MultipartHeaderPropertiesMatcher = new Matcher("[;] {Key}=\"{Value}\"");
+
+        public int Port;
+        public long ContentLength;
         public new jsObject Get;
         public jsObject Headers, Post, Cookies, Route;
-        public string Host, RawTarget, Connection, Type, Target, Version, Value, Query, ContentType;
+        public string Host, RawTarget, Connection, Type, Target, Version, Query, ContentType, Boundary;
 
         public Packet() {
             Headers = new jsObject();
@@ -22,110 +30,135 @@ namespace Poly.Net.Http {
             Route = new jsObject();
 
             ContentLength = 0;
-            Host = RawTarget = Connection = Type = Target = Version = Value = Query = ContentType = string.Empty;
+            Host = RawTarget = Connection = Type = Target = Version = Query = ContentType = Boundary = string.Empty;
         }
 
-        public bool Receive(Net.Tcp.Client Client) {
-            if (!Client.Connected)
-                return false;
-            
-            var Line = Client.ReadLine();
+        public static async Task<Packet> Receive(Client Client) {
+            if (Client.Connected) {
+                int Index;
+                string FirstLine, CurrentLine;
+                Packet Recv = new Packet();
 
-            if (string.IsNullOrEmpty(Line))
-                return false;
+                try {
+                    FirstLine = await Client.ReceiveLine();
 
-            var Split = Line.Split(' ');
+                    while (!string.IsNullOrEmpty(CurrentLine = await Client.ReceiveLine())) {
+                        Index = CurrentLine.IndexOf(':');
 
-            if (Split.Length != 3)
-                return false;
+                        if (Index == -1) {
+                            Client.Close();
+                            return null;
+                        }
 
-            Type = Split[0];
-            RawTarget = Split[1];
-            Version = Split[2];
+                        Recv.Headers.Set(
+                            CurrentLine.Substring(0, Index),
+                            CurrentLine.Substring(Index + 2)
+                        );
+                    }
+                }
+                catch {
+                    return null;
+                }
 
-            if (RawTarget.Contains("?")) {
-                var QueryStartIndex = RawTarget.IndexOf('?');
-                Query = RawTarget.Substring(QueryStartIndex + 1);
-                Target = Uri.UnescapeDataString(RawTarget.Substring(0, QueryStartIndex));
+                Index = FirstLine.IndexOf(' ');
+                if (Index == -1)
+                    return null;
 
-                Split = Query.Split('&');
+                var Second = FirstLine.IndexOf(' ', Index + 1);
+                if (Index == -1 || Second  + 1 == FirstLine.Length)
+                    return null;
+                
+                Recv.Type = FirstLine.Substring(0, Index);
+                Recv.RawTarget = FirstLine.Substring(Index + 1, Second - Index - 1);
+                Recv.Version = FirstLine.Substring(Second + 1);
 
-                for (int n = 0; n < Split.Length; n++) {
-                    var Pair = Split[n].Split('=');
+                if ((Index = Recv.RawTarget.IndexOf('?')) != -1) {
+                    Recv.Query = Recv.RawTarget.Substring(Index + 1);
+                    Recv.Target = Uri.UnescapeDataString(Recv.RawTarget.Substring(0, Index));
 
-                    if (Pair.Length != 2) {
-                        return false;
+                    QueryMembersMatcher.MatchAll(Recv.Query, Recv.Get, true);
+                }
+                else {
+                    Recv.Target = Uri.UnescapeDataString(Recv.RawTarget);
+                }
+
+                if (!string.IsNullOrEmpty(Recv.Host = Recv.Headers.Get<string>("Host"))) {
+                    if ((Index = Recv.Host.IndexOf(':')) != -1) {
+                        int.TryParse(Recv.Host.Substring(Index + 1), out Recv.Port);
+                        Recv.Host = Recv.Host.Substring(0, Index);
                     }
 
-                    Get[Pair[0]] = Pair[1];
-                }
-            }
-            else {
-                Target = Uri.UnescapeDataString(Split[1]);
-            }
+                    if (Recv.Headers.ContainsKey("Content-Type")) {
+                        var Type = Recv.Headers.Get<string>("Content-Type");
 
-
-            foreach(var Part in Target.Split(PathSplit, StringSplitOptions.RemoveEmptyEntries)){
-                Route.Add(Part);
-            }
-
-            while (!string.IsNullOrEmpty(Line = Client.ReadLine())) {
-                var Index = Line.Find(": ");
-
-                if (Index == -1) {
-                    Client.Close();
-                    return false;
-                }
-
-                Headers.Set(
-                    Line.Substring(0, Index),
-                    Line.Substring(Index + 2)
-                );
-            }
-
-            if (!Headers.ContainsKey("Host"))
-                return false;
-
-            Host = Headers["Host"] as string;
-
-            if (Host.Contains(":")) {
-                Headers.Set("Port", Host.Substring(":", ""));
-                Host = Host.Substring("", ":");
-            }
-
-            if (Headers.ContainsKey("Cookie")) {
-                var RawCookie = Headers.Get<string>("Cookie");
-                Split = RawCookie.Split(';');
-
-                for (int n = 0; n < Split.Length; n++) {
-                    var Pair = Split[n].Split('=');
-                    Cookies[Pair[0]] = Pair[1];
-                }
-            }
-
-            if (Headers.ContainsKey("Content-Type"))
-                ContentType = Headers.Get<string>("Content-Type");
-            
-            if (Headers.ContainsKey("Content-Length")) {
-                ContentLength = Headers.Get<int>("Content-Length");
-
-                if (ContentLength > 0) {
-                    var RawContent = new char[ContentLength];
-                    Client.Reader.ReadBlock(RawContent, 0, ContentLength);
-
-                    Value = new string(RawContent);
-                    RawContent = null;
-
-                    if (Type == "POST" && ContentType == "application/x-www-form-urlencoded") {
-                        Split = Value.Split('&');
-
-                        for (int n = 0; n < Split.Length; n++) {
-                            var Pair = Split[n].Split('=');
-
-                            Post.Set(Pair[0], Pair[1]);
+						if (Type.StartsWith("multipart/form-data", StringComparison.Ordinal)) {
+                            Type = Type.Substring(30);
+                            Recv.ContentType = "multipart/form-data";
+                            Recv.Boundary = Type;
+                        }
+                        else {
+                            Recv.ContentType = Type;
                         }
                     }
+
+                    if ((Recv.ContentLength = Recv.Headers.Get<long>("Content-Length")) > 0) {
+                        if (Recv.Type == "POST") { 
+                            switch (Recv.ContentType) {
+                                case "application/x-www-form-urlencoded": {
+                                    QueryMembersMatcher.MatchAll(await Client.ReceieveString(Recv.ContentLength), Recv.Post, true);
+                                    break;
+                                }
+
+                                case "multipart/form-data": {
+										MultipartHandler Handler = new MultipartHandler(Client, Recv, new BufferedStreamer(Client.GetStream()));
+
+                                        if (!await Handler.Receive())
+                                            return null;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (Recv.Headers.ContainsKey("Cookie")) {
+                        HeaderPropertiesMatcher.MatchAll(Recv.Headers.Get<string>("Cookie"), Recv.Cookies, true);
+                    }
+
+                    PathMatcher.MatchAll(Recv.Target, Recv.Route, true);
+                    return Recv;
                 }
+            }
+
+            return null;
+        }
+
+        public static async Task<bool> Forward(Client In, Client Out) {
+            if (In.Connected && Out.Connected) {
+                var Stream = In.GetStreamer();
+                var Output = Out.GetStreamer();
+
+                var Headers = new StringBuilder();
+                long ContentLength = 0;
+
+                try {
+                    for (var c = 128; c != 0; c--) {
+                        var Line = await In.ReceiveLine();
+                        if (Line == null) return false;
+
+                        Headers.Append(Line).Append(App.NewLine);
+                        if (Line.Length == 0) break;
+
+                        if (ContentLength == 0) 
+                            if (string.Compare(Line, 0, "Content-Length: ", 0, 16, StringComparison.Ordinal) == 0)
+                                long.TryParse(Line.Substring(16), out ContentLength);
+                    }
+
+                    await Out.Send(Headers.ToString());
+
+                    if (ContentLength > 0)
+                        return await Stream.Receive(Output.Stream, ContentLength);
+                }
+                catch { return false; }
             }
 
             return true;

@@ -10,41 +10,34 @@ namespace Poly.Script.Expressions {
 	using Types;
 
 	public class Persist : Expression {
-		public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-			if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-				return null;
+        new public static Node Parse(Engine Engine, StringIterator It) {
+            if (It.Consume("persist")) {
+                It.ConsumeWhitespace();
 
-			var Delta = Index;
-			if (Text.Consume("persist", ref Delta)) {
-				Text.ConsumeWhitespace (ref Delta);
+                var Name = String.Parse(Engine, It) as StaticValue;
 
-				var Name = String.Parse(Engine, Text, ref Delta, LastIndex);
+                if (Name != null) {
+                    It.ConsumeWhitespace();
 
-				if (Name is StaticValue) {
-					ConsumeWhitespace (Text, ref Delta);
+                    if (It.Consume("->")) {
+                        It.ConsumeWhitespace();
 
-					if (Text.Consume ("->", ref Delta)) {
-						ConsumeWhitespace(Text, ref Delta);
+                        var Var = Variable.Parse(Engine, It) as Variable;
 
-						var Var = Variable.Parse (Engine, Text, ref Delta, LastIndex);
-						ConsumeWhitespace (Text, ref Delta);
+                        if (Var != null && (Var.IsGlobal || Var.IsStatic)) {
+                            var FileName = Engine.IncludePath + Name.Value as string;
 
-						if (Var != null && (Var.IsGlobal || Var.IsStatic)) {
-							Index = Delta;
+                            Engine.PersistentFiles.Add(FileName,
+                                new Helpers.PersistentFile(FileName, Var)
+                            );
 
-							var FileName = Engine.IncludePath + Name.ToString ();
+                            return Expression.NoOperation;
+                        }
+                    }
+                }
+            }
 
-							Engine.PersistentFiles.Add (FileName,
-								new Helpers.PersistentFile (FileName, Var)
-							);
-
-							return Expression.NoOperation;
-						}
-					}
-				}
-			}
-
-			return null;
-		}
+            return null;
+        }
 	}
 }

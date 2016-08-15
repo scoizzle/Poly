@@ -10,7 +10,7 @@ namespace Poly.Script.Expressions {
     using Nodes;
     using Helpers;
 
-    public class Include : Node {
+    public class Include : Expression {
         public Engine Engine = null;
         public Node Name = null;
 
@@ -41,33 +41,23 @@ namespace Poly.Script.Expressions {
             return "include '" + Name.ToString() + "'";
         }
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
-
-            if (Text.Compare("include", Index)) {
-                var Delta = Index += 7;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("include")) {
 				bool Live = false;
 
-				if (Text.Compare ("_live", Delta)) {
-					Delta += 5;
+				if (It.Consume ("_live"))
 					Live = true;
-				}
-	                ConsumeWhitespace(Text, ref Delta);
 
-	                var Inc = Engine.Parse(Text, ref Delta, LastIndex);
+				It.ConsumeWhitespace ();
 
-	                Index = Delta;
-
-				if (Live) {
-					return new Include(Engine, Inc);  
-				}
-				else if (Inc is StaticValue) {
-                    return ExtensionManager.Include(Engine, Engine.IncludePath + Inc.ToString());
-                }                
-            }
-
+				var Name = Engine.ParseValue (It);
+                
+				if (Live)
+					return new Include (Engine, Name);
+				else
+					return ExtensionManager.Include (Engine, Engine.IncludePath + Name.ToString());
+			}
 			return null;
-	    }
+		}
 	}
 }

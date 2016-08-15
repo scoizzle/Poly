@@ -19,11 +19,7 @@ namespace Poly.Script.Helpers {
         }
 
         public override object Evaluate(Data.jsObject Context) {
-            if (Cache != null)
-                return Cache;
-
-            Cache = GetType(Name);
-            return Cache;
+            return Cache ?? (Cache = GetType(Name));
         }
 
         public static Type GetType(string Name) {

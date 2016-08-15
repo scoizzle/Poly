@@ -32,6 +32,7 @@ namespace Poly {
 						if ((Context.BlockCount - Context.BlockIndex) == 2) {
 							if (Context.EndsWith (Next.Format)) {
 								Context.Index = Context.Length;
+                                Context.BlockIndex++;
 								return true;
 							}
 						}

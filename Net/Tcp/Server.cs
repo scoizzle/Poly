@@ -6,84 +6,62 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.Security;
 using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using System.Threading.Tasks;
 
 
 namespace Poly.Net.Tcp {
     public class Server : TcpListener {
-        public int Port = int.MaxValue;
+        public int Port { get; private set; }
 
-        public readonly bool Secure = false;
-        public readonly X509Certificate ServerCert = null;
+        public bool Running { get { return Active; } }
 
-        public delegate void ClientConnectHandler(Client Client);
-        public event ClientConnectHandler ClientConnect;
+        public delegate Task OnClientConnectDelegate(Client Client);
+        public event OnClientConnectDelegate ClientConnected;
 
-        public new bool Active {
-            get {
-                return base.Active;
-            }
-        }
+        private Thread ConnectionAccepter;
 
-        public Server(int port)
-            : this(IPAddress.Any, port) {
-            this.Port = port;
-        }
+        public Server(int port) : this(IPAddress.Any, port) {  }        
+        public Server(IPAddress addr, int port) : base(addr, port) { Port = port; }
 
-        public Server(IPAddress addr, int port)
-            : base(addr, port) {
-            this.Port = port;
-        }
-
-        public Server(IPAddress addr, int port, string CertificateFile)
-            : base(addr, port) {
-            ServerCert = X509Certificate.CreateFromCertFile(CertificateFile);
-            Secure = true;
-        }
-
-        public bool AuthClient(Client Client) {
-            try {
-                Client.Secure = true;
-                var Stream = Client.Stream as SslStream;
-
-                Stream.AuthenticateAsServer(this.ServerCert, false, SslProtocols.Tls, false);
-
+        new public bool Start() {
+            if (Active)
                 return true;
+
+            if (ClientConnected == null) {
+                App.Log.Error("Can't accept connections without OnClientConnect specified!");
+                return false;
             }
-            catch { }
-            return false;
+
+            try {
+                Start(65536);
+            }
+            catch {
+                App.Log.Error("Couldn't begin accepting connections on port {0}", Port);
+                return false;
+            }
+
+            ConnectionAccepter = GetAcceptThread();
+            ConnectionAccepter.Start();
+
+            return true;
         }
 
-        new public async void Start() {
-            if (ClientConnect == null)
-                throw new NullReferenceException("Must specify ClientConnect handler!");
-
-            base.Start(10240);
-            await AcceptConnections();
-        }
-
-        public new void Stop() {
+        new public void Stop() {
+            ConnectionAccepter.Abort();
             base.Stop();
         }
 
-        private async Task AcceptConnections() {
+        private Thread GetAcceptThread() {
+            return new Thread(AcceptConnections);
+        }
+
+        private async void AcceptConnections() {
             while (Active) {
-                try {
-                    var Sock = AcceptSocket();
-
-                    await Task.Run(() => {
-                        var Client = new Client(Sock);
-
-                        if (Secure)
-                            if (!AuthClient(Client))
-                                return;
-
-                        ClientConnect(Client);
-                    });
-                }
-                catch { }
+                var Worker = ClientConnected(await AcceptSocketAsync());
             }
         }
+
+
     }
 }

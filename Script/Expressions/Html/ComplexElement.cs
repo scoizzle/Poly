@@ -11,15 +11,13 @@ namespace Poly.Script.Expressions.Html {
     public class ComplexElement : Element {
         string Type;
         Attribute[] Attributes;
-        Element[] Members;
 
         public ComplexElement(string Type) {
             this.Type = Type;
 
-            Attributes = null;
-            Members = null;
+			Attributes = new Attribute[0];
         }
-
+        
         public override void Evaluate(StringBuilder Output, jsObject Context) {
             Output.Append("<")
                   .Append(Type);
@@ -36,14 +34,57 @@ namespace Poly.Script.Expressions.Html {
             }
             Output.Append(">");
             
-            for (int i = 0; i < Members.Length; i++) {
-                if (Members[i] != null)
-                    Members[i].Evaluate(Output, Context);
+            for (int i = 0; i < Elements.Length; i++) {
+                (Elements[i] as Element)?.Evaluate(Output, Context);
             }
-
-
+            
             if (!IsSingletonTag(Type)) {
                 Output.Append("</")
+                      .Append(Type)
+                      .Append(">");
+            }
+        }
+
+        public override void ToEvaluationArray(StringBuilder output, List<Action<StringBuilder, jsObject>> list) {
+            output.Append('<')
+                  .Append(Type);
+            
+            for (int i = 0; i < Attributes.Length; i++) {
+                var Item = Attributes[i];
+                output.Append(" ")
+                      .Append(Item.Key);
+
+                if (Item.Value != null) {
+                    output.Append("=\"");
+
+                    if (Item.Value is Element) {
+                        (Item.Value as Element).ToEvaluationArray(output, list);
+                    }
+                    else { 
+                        list.Add(StaticAppender(output));
+                        list.Add(NodeAppender(Item.Value.Evaluate));
+                        output.Clear();
+                    }
+
+                    output.Append('"');
+                }
+            }
+            output.Append('>');
+            
+            for (int i = 0; i < Elements.Length; i++) {
+                var Elem = Elements[i];
+
+                if (Elem is Element)
+                    (Elem as Element).ToEvaluationArray(output, list);
+                else {
+                    list.Add(StaticAppender(output));
+                    list.Add(NodeAppender(Elem.Evaluate));
+                    output.Clear();
+                }
+            }
+
+            if (!IsSingletonTag(Type)) {
+                output.Append("</")
                       .Append(Type)
                       .Append(">");
             }
@@ -71,83 +112,79 @@ namespace Poly.Script.Expressions.Html {
             return false;
         }
         
+        // type .class #id { ... }
+        new public static Element Parse(Engine Engine, StringIterator It) {
+            var Start = It.Index;
+            if (It.Consume(ComplexNameFuncs)) {
+				if (It.IsAt ('{')) {
+					string Class, Id;
+					var Node = ParseIdentification (It.Clone (Start, It.Index), out Class, out Id);
+                    It.Tick();
+					Start = It.Index;
 
-        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+					if (It.Goto ('{', '}')) {
+						var Sub = It.Clone (Start, It.Index);
+						var Attributes = new List<Attribute> ();
+						var Elements = new List<Element> ();
 
-            var Delta = Index;
-            ConsumeValidName(Text, ref Delta);
+						if (!string.IsNullOrEmpty (Class)) {
+							Attributes.Add (new Attribute ("class", new Nodes.StaticValue (Class)));
+						}
+						if (!string.IsNullOrEmpty (Id)) {
+							Attributes.Add (new Attribute ("id", new Nodes.StaticValue (Id)));
+						}
 
-            if (Delta != Index) {
-                var Name = Text.Substring(Index, Delta - Index).TrimEnd();
-                var Class = String.Empty;
-                ConsumeWhitespace(Text, ref Delta);
+						while (!Sub.IsDone ()) {
+							var Element = Html.ParseElement (Engine, Sub);
 
-                if (Text.Compare('.', Delta)) {
-                    Delta++;
-                    var Next = Text.FirstPossibleIndex(Delta, ':', '{');
+							if (Element == null)
+								break;
 
-                    Class = Text.Substring(Delta, Next - Delta);
-                    Delta = Next;
-                    ConsumeWhitespace(Text, ref Delta);
-                }
+							if (Element is Attribute) {
+								Attributes.Add (Element as Attribute);
+							} else {
+								Elements.Add (Element);
+							}
 
-                if (Text.Compare(':', Delta)) {
-                    Delta++;
-                    ConsumeWhitespace(Text, ref Delta);
-                }
+							Sub.Consume (WhitespaceFuncs);
+						}
 
-                if (Text.Compare('{', Delta)) {
-                    if (Text.FindMatchingBrackets('{', '}', ref Delta, ref LastIndex, false)) {
-                        List<Attribute> Attributes = new List<Attribute>();
-                        List<Element> Elements = new List<Element>();
+						Node.Attributes = Attributes.ToArray ();
+						Node.Elements = Elements.ToArray ();
 
-                        if (Class != string.Empty) {
-                            Attributes.Add(new Attribute() {
-                                Key = "class",
-                                Value = new Nodes.StaticValue(Class.Trim())
-                            });
-                        }
-
-                        while (IsParseOk(Engine, Text, ref Delta, LastIndex)) {
-                            var E = Html.Parse(Engine, Text, ref Delta, LastIndex) as Element;
-
-                            if (E is Attribute) {
-                                Attributes.Add(E as Attribute);
-                            }
-                            else if (E != null) {
-                                Elements.Add(E);
-                            }
-                        }
-
-                        Index = LastIndex + 1;
-                        return new ComplexElement(Name) {
-                            Attributes = Attributes.ToArray(),
-                            Members = Elements.ToArray()
-                        };
-                    }
-                }
-                else if (IsSingletonTag(Name)) {
-                    Index = Delta;
-
-                    return new ComplexElement(Name);
-                }
+						It.Consume ('}');
+						return Node;
+					}
+				} else It.Index = Start;
             }
             return null;
         }
+        
+        private static ComplexElement ParseIdentification(StringIterator It, out string Class, out string Id) {
+            var Start = It.Index;
+            It.Consume(ElementNameFuncs);
+            var Node = new ComplexElement(It.Substring(Start, It.Index - Start));
 
-        public new static bool IsValidChar(char c) {
-            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '!';
-        }
+            It.ConsumeWhitespace();
+            if (It.Consume('.')) {
+                Start = It.Index;
+                It.ConsumeUntil(c => c == '#');
 
-        public new static void ConsumeValidName(string Text, ref int Index) {
-            var Delta = Index;
+				if (It.Index == Start)
+					It.Index = It.Length;
+				
+                Class = It.Substring(Start, It.Index - Start).Trim();
+                It.ConsumeWhitespace();
+            }
+            else Class = null;
 
-            while (IsValidChar(Text[Delta]) || char.IsWhiteSpace(Text[Delta]))
-                Delta++;
+            if (It.Consume('#')) {
+                Id = It.Substring(It.Index, It.Length - It.Index).Trim();
+                It.ConsumeWhitespace();
+            }
+            else Id = null;
 
-            Index = Delta;
+            return Node;
         }
     }
 }

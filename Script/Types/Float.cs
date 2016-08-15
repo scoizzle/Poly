@@ -7,30 +7,25 @@ namespace Poly.Script.Types {
     using Nodes;
 
     public class Float : Value {
-        public double Value;
+		public static Node Parse(Engine Engine, StringIterator It) {
+			var Start = It.Index;
+			It.Consume ('+');
+			It.Consume ('-');
 
-        public Float(double Val) {
-            this.Value = Val;
-        }
+			It.Consume (
+				c => c == '.',
+				char.IsDigit
+			);
 
-        public override object Evaluate(Data.jsObject Context) {
-            return Value;
-        }
+			if (It.Index > Start) {
+				double Value;
 
-        public override string ToString() {
-            return Value.ToString();
-        }
+				if (double.TryParse (It.Substring (Start, It.Index - Start), out Value))
+					return new StaticValue (Value);
+			}
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
-
-            double Value = 0;
-
-            if (Text.ToDouble(ref Index, LastIndex, ref Value))
-                return new Float(Value);
-
-            return null;
-        }
+			It.Index = Start;
+			return null;
+		}
     }
 }

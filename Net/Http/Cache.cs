@@ -1,34 +1,86 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.IO;
-using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace Poly.Net.Http {
-    public class Cache : Dictionary<string, Cache.Item> {
-        public class Item {
-            public string LastWriteTime, ContentType;
-            public byte[] Content;
-            public FileInfo Info;
+    using Data;
 
+    public sealed class Cache : KeyValueCollection<Cache.Item>, IDisposable {
+        public class Item {
+            public FileInfo Info;
+            public string LastWriteTime, ContentType, FileExtension;
+
+            public virtual void Init(string FullName) {
+                Info = new FileInfo(FullName);
+
+                LastWriteTime = Info.LastWriteTimeUtc.HttpTimeString();
+                FileExtension = Info.Extension.Substring(1);
+
+                Mime.Types.TryGetValue(FileExtension, out ContentType);
+            }
+
+            public virtual void Update() {
+                Info.Refresh();
+                LastWriteTime = Info.LastWriteTimeUtc.HttpTimeString();
+            }
+
+            public Stream Content
+            {
+                get
+                {
+                    return Info.OpenRead();
+                }
+            }
+        }
+
+        public class PolyScriptItem : Item {
+            public string Text;
             public Script.Engine Script;
+
+            public override void Init(string FullName) {
+                base.Init(FullName);
+
+                Text = File.ReadAllText(FullName);
+            }
+
+            public override void Update() {
+                Script = null;
+
+                bool done = false;
+                while (!done) {
+                    try { Text = File.ReadAllText(Info.FullName); done = true; }
+                    catch { }
+                    Thread.Sleep(100);
+                }
+
+                base.Update();
+            }
         }
 
         FileSystemWatcher Watcher;
 
-        public Cache(string Path) {
-            Watcher = new FileSystemWatcher(System.IO.Path.GetFullPath(Path));
+        public Cache(string path) {
+            if (Directory.Exists(path)) {
+                path = System.IO.Path.GetFullPath(path);
+                Watcher = new FileSystemWatcher(path);
 
-            Watcher.Created += Created;
-            Watcher.Changed += Changed;
-            Watcher.Renamed += Renamed;
-            Watcher.Deleted += Deleted;
+                Watcher.Created += Created;
+                Watcher.Changed += Changed;
+                Watcher.Renamed += Renamed;
+                Watcher.Deleted += Deleted;
 
-            Watcher.IncludeSubdirectories = true;
-            Watcher.EnableRaisingEvents = true;
+                Watcher.IncludeSubdirectories = true;
+                Watcher.EnableRaisingEvents = true;
 
-            Load(new DirectoryInfo(Path));
+                Load(new DirectoryInfo(path));
+            }
+        }
+
+        public void Dispose() {
+            if (Watcher != null) {
+                Watcher.EnableRaisingEvents = false;
+                Watcher.Dispose();
+            }
         }
 
         void Load(DirectoryInfo Dir) {
@@ -42,31 +94,31 @@ namespace Poly.Net.Http {
         }
 
         void Load(string FullPath) {
-            Update(FullPath, this[FullPath] = new Item());
+            Item I;
+
+            if (FullPath.EndsWith(".psx")) {
+                I = new PolyScriptItem();
+            }
+            else {
+                I = new Item();
+            }
+
+            Add(FullPath, I);
+            I.Init(FullPath);
         }
 
         void Update(string Name, Item I) {
-            try {
-                var Info = I.Info = new FileInfo(Name);
-				Mime.Types.TryGetValue(I.Info.Extension.Substring(1), out I.ContentType);
+            if (I is PolyScriptItem) {
+                foreach (var pair in this) {
+                    var parent = pair.Value as PolyScriptItem;
+                    var inc = parent?.Script?.Includes.ContainsKey(Name);
 
-
-                if (Info.Length < 5242880) {
-                    I.Content = File.ReadAllBytes(Name);
-                }
-
-                I.LastWriteTime = Info.LastWriteTime.HttpTimeString();
-                I.Script = null;
-
-                foreach (var Item in this.Values) {
-                    if (Item.Script != null && Item.Script.Includes.ContainsKey(Name)) {
-                        Item.Script = null;
-                    }
+                    if (inc == true)
+                        parent.Script = null;
                 }
             }
-			catch (Exception Error) {
-				App.Log.Error (Error.ToString ());
-			}
+
+            I.Update();
         }
 
         void Created(object sender, FileSystemEventArgs e) {
@@ -74,7 +126,8 @@ namespace Poly.Net.Http {
         }
 
         void Changed(object sender, FileSystemEventArgs e) {
-            Update(e.FullPath, this[e.FullPath]);
+            if (this.ContainsKey(e.FullPath))
+                Update(e.FullPath, this[e.FullPath]);
         }
 
         void Renamed(object sender, RenamedEventArgs e) {
@@ -82,6 +135,7 @@ namespace Poly.Net.Http {
 
             Remove(e.OldFullPath);
         }
+
         void Deleted(object sender, FileSystemEventArgs e) {
             Remove(e.FullPath);
         }

@@ -5,33 +5,26 @@ using System.Text;
 
 namespace Poly.Script.Expressions {
     using Nodes;
+
     class Comment : Expression {
-        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
-                        
-            if (Text.Compare("/*", Index)) {
-                var Delta = Text.Find("*/", Index);
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.IsAt ("/*")) {
+				if (!It.Goto ("*/"))
+					It.Index = It.Length;
+				else
+					It.Consume ("*/");
+				
+				return Expression.NoOperation;
+			} 
+			else if (It.IsAt ("//") || It.IsAt ('#')) {
+				if (!It.Goto (Environment.NewLine))
+					It.Index = It.Length;
+				else
+					It.Consume (Environment.NewLine);
 
-                if (Delta == -1)
-                    Index = LastIndex;
-                else
-                    Index = Delta;
-
-                return Expression.NoOperation;
-            }
-            else if (Text.Compare("//", Index) || Text.Compare('#', Index)) {
-                var Delta = Text.Find(Environment.NewLine, Index);
-
-                if (Delta == -1)
-                    Index = LastIndex;
-                else
-                    Index = Delta;
-
-                return Expression.NoOperation;
-            }
-
-            return null;
+				return Expression.NoOperation;
+			}
+			return null;
         }
     }
 }

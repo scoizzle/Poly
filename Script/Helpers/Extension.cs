@@ -50,7 +50,7 @@ namespace Poly.Script.Helpers {
                     return Inc;
                 }
                 else {
-					Inc = new CachedScript(Engine, FileName, DateTime.Today);
+					Inc = new CachedScript(Engine, FileName, File.GetLastWriteTime(FileName));
                 }
 
 				App.Log.Info (Inc.ToString());

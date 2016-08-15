@@ -13,26 +13,22 @@ namespace Poly.Script.Expressions {
             return null;
         }
 
-        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+        new public static Node Parse(Engine Engine, StringIterator It) {
+            if (It.Consume("return")) {
+                It.ConsumeWhitespace();
 
-            if (Text.Compare("return", Index)) {
-                var Delta = Index + 6;
-                Text.ConsumeWhitespace(ref Delta);
+                if (It.IsAt(';'))
+                    return new Return();
 
-                var Ret = new Return();
+                var Val = Engine.ParseOperation(It);
 
-                if (!Text.Compare(";", Delta)) {
-                    Ret.Value = Engine.Parse(Text, ref Delta, LastIndex);
-                }
-
-                Index = Delta;
-                return Ret;
+                if (Val != null)
+                    return new Return() { Value = Val };
             }
+
             return null;
         }
-
+        
         public override string ToString() {
             if (Value != null)
                 return "return " + Value.ToString();

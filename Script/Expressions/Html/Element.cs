@@ -8,8 +8,34 @@ namespace Poly.Script.Expressions.Html {
     using Data;
     using Nodes;
 
-    public class Element : Nodes.Expression {
-        public virtual void Evaluate(StringBuilder Output, jsObject Context) { }
+    public class Element : Expression {
+        public static Func<char, bool>[] ElementNameFuncs,
+                                         ComplexNameFuncs,
+                                         AttributeNameFuncs;
+
+        static Element() {
+            ElementNameFuncs = new Func<char, bool>[] {
+                char.IsLetterOrDigit,
+                c => c == '!' || c == '-'
+            };
+
+            ComplexNameFuncs = new Func<char, bool>[] {
+                char.IsLetterOrDigit,
+                char.IsWhiteSpace,
+                c => c == '.' || c == '!' || c == '-' || c == '#'
+            };
+
+            AttributeNameFuncs = new Func<char, bool>[] {
+                char.IsLetterOrDigit,
+                c => c == '-'
+            };
+        }
+
+        public virtual void Evaluate(StringBuilder Output, jsObject Context) {
+            foreach (Element e in Elements) {
+                e.Evaluate(Output, Context);
+            }
+        }
 
         public override object Evaluate(jsObject Context) {
             var Output = new StringBuilder();
@@ -17,23 +43,27 @@ namespace Poly.Script.Expressions.Html {
             return Output.ToString();
         }
 
-        public new static void ConsumeWhitespace(string Text, ref int Index) {
-            while (Index < Text.Length) {
-                StringIteration.ConsumeWhitespace(Text, ref Index);
-
-                if (Index > -1 && Index < Text.Length && (Text[Index] == ';' || Text[Index] == ','))
-                    Index++;
-                else break;
+        public virtual void ToEvaluationArray(StringBuilder output, List<Action<StringBuilder, jsObject>> list) {
+            if (output.Length > 0) {
+                list.Add(StaticAppender(output));
+                output.Clear();
             }
+
+            list.Add(Evaluate);
         }
-        
-        public new static void ConsumeValidName(string Text, ref int Index) {
-            var Delta = Index;
 
-            while (IsValidChar(Text[Delta]) || Text[Delta] == '-' || Text[Delta] == '!')
-                Delta++;
+        public static Action<StringBuilder, jsObject> NodeAppender(Event.Handler Handle) {
+            return (o, c) => {
+                o.Append(Handle(c));
+            };
+        }
 
-            Index = Delta;
+        public static Action<StringBuilder, jsObject> StaticAppender(StringBuilder Output) {
+            var result = Output.ToString();
+
+            return (o, c) => {
+                o.Append(result);
+            };
         }
     }
 }

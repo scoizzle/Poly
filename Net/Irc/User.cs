@@ -23,7 +23,7 @@ namespace Poly.Net.Irc {
         }
 
         public User(string Raw) : this() {
-            if (Raw.Match(TemplateFormat, false, this) == null)
+            if (Raw.Match(TemplateFormat, this) == null)
                 Nick = Raw;
         }
 

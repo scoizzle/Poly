@@ -8,60 +8,44 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject {
-        public delegate object ParserDelegate(string Value);
-        public static Dictionary<Type, ParserDelegate> Parsers;
+        public delegate bool ParserDelegate<T>(string Text, out T Value);
+        public delegate object WrapperDelegate(string Text);
 
-        public static Func<jsObject> NewObject = () => { return new jsObject(); }
-        ,
+        public static KeyValueCollection<WrapperDelegate> Parsers;
+
+        public static Func<jsObject> NewObject = () => { return new jsObject(); },
                                      NewArray = () => { return new jsObject() { IsArray = true }; };
 
 
-        public object Get(string Key) {
-            return Get(Key.Split("."));
+        new public object Get(string Key) {
+            return Get(Key.Split(KeySeperatorCharacter));
         }
 
         public object Get(params string[] Keys) {
             int i = 0;
+			int len = Keys.Length;
+
             object Value;
             jsObject Current = this;
 
-            do {
-                if (Current.TryGet(Keys[i], out Value)) {
-                    if (Keys.Length - i == 1)
-                        break;
+			do {
+				if (Current.TryGet(Keys[i], out Value)) {
+					if (len - i == 1)
+						break;
 
-                    if (Value is jsObject)
-                        Current = Value as jsObject;
-                    else
-                        return null;
-                }
-            }
-            while (++i < Keys.Length);
-
-            return Value;
-        }
-
-        public object Get(IEnumerable<string> Keys) {
-            object Value = null;
-            jsObject Current = this;
-            int I = 0, Len = Keys.Count() - 1;
-
-            foreach (var K in Keys) {
-                if (Current.TryGet(K, out Value)) {
-                    if (I++ == Len)
-                        break;
-                    else
-                    if (Value is jsObject)
-                        Current = Value as jsObject;
-                }
-                else return null;
-            }
+					if (Value is jsObject)
+						Current = Value as jsObject;
+					else
+						return null;
+				}
+			}
+			while (++i < len);
 
             return Value;
         }
-
+        
         public T Get<T>(string Key) {
-            return Get<T>(Key.Split("."));
+            return Get<T>(Key.Split(KeySeperatorCharacter));
         }
 
         public T Get<T>(params string[] Key) {
@@ -71,12 +55,16 @@ namespace Poly.Data {
                 if (Value is T)
                     return (T)(Value);
 
-                if (Value is string && Parsers.ContainsKey(typeof(T))) {
-                    Value = Parsers[typeof(T)](Value as string);
+                if (Value is string) { 
+                    var Delegate = Parsers[typeof(T).Name];
 
-                    Set(Key, Value);
+                    if (Delegate != null) {
+                        Value = Delegate(Value as string);
 
-                    return (T)(Value);
+                        Set(Key, Value);
+
+                        return (T)(Value);
+                    }
                 }
             }
 
@@ -84,18 +72,22 @@ namespace Poly.Data {
         }
 
         public T Get<T>(IEnumerable<string> Key) {
-            var Value = Get(Key);
+            var Value = Get(Key.ToArray());
 
             if (Value != null) {
                 if (Value is T)
                     return (T)(Value);
 
-                if (Value is string && Parsers.ContainsKey(typeof(T))) {
-                    Value = Parsers[typeof(T)](Value as string);
+                if (Value is string) {
+                    var Delegate = Parsers[typeof(T).Name];
 
-                    Set(Key, Value);
+                    if (Delegate != null) {
+                        Value = Delegate(Value as string);
 
-                    return (T)(Value);
+                        Set(Key, Value);
+
+                        return (T)(Value);
+                    }
                 }
             }
 
@@ -127,7 +119,7 @@ namespace Poly.Data {
             return Value;
         }
 
-        public void Set(string Key, object Value) {
+        new public void Set(string Key, object Value) {
             AssignValue(Key, Value);
         }
 
@@ -183,10 +175,13 @@ namespace Poly.Data {
                     Value = (T)(Val);
                     return true;
                 }
-                else if (Val is string && Parsers.ContainsKey(typeof(T))) {
-                    Val = Parsers[typeof(T)](Val as string);
+                else
+                if (Val is string) {
+                    var Delegate = Parsers[typeof(T).Name];
 
-                    if (Val is T) {
+                    if (Delegate != null) {
+                        Val = Delegate(Val as string);
+
                         Set(Key, Val);
                         Value = (T)(Val);
                         return true;
@@ -198,13 +193,8 @@ namespace Poly.Data {
             return false;
         }
 
-        public T GetValue<T>(string Key) {
-            T Val;
-
-            if (TryGet<T>(Key, out Val))
-                return Val;
-
-            return default(T);
+        public T GetValue<T>(string Key) where T : class {
+            return base[Key] as T;
         }
 
         public virtual void AssignValue<T>(string Key, T Value) {

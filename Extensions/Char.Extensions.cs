@@ -18,18 +18,19 @@ namespace Poly {
         }
 
         public static bool CompareWithoutCase(this char C, char S) {
+            if (C == S)
+                return true;
+
             if (C >= 'A' && C <= 'Z') {
-                if (S >= 'A' && S <= 'Z')
-                    return C == S;
-                else
+                if (S >= 'a' && S <= 'z')
                     return C - 'A' == S - 'a';
             }
             else {
-                if (S >= 'a' && S <= 'z')
-                    return C == S;
-                else
+                if (S >= 'A' && S <= 'Z')
                     return C - 'a' == S - 'A';
             }
+
+            return false;
         }
     }
 }

@@ -47,7 +47,10 @@ namespace Poly {
             }
 
             public static void Info(string Format, params object[] Args) {
-                Info(string.Format(Format, Args) as object);
+                if (Args.Length == 0)
+                    Info(Format as object);
+                else
+                    Info(string.Format(Format, Args) as object);
             }
 
             public static void Warning(object Message) {
@@ -107,15 +110,31 @@ namespace Poly {
                     var watch = Stopwatch.StartNew();
 
                     int i = 0;
-                    
-                    try {
-                        for (; i < Iterations; i++) {
-                            Todo();
-                        }
+                    for (; i < Iterations; i++) {
+                        Todo();
                     }
-                    catch { }
 
                     watch.Stop(); 
+                    Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds);
+                });
+            }
+
+            public static Task Benchmark(string Name, int Iterations, Action<int> Todo) {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                Todo(0);
+
+                return Task.Factory.StartNew(() => {
+                    var watch = Stopwatch.StartNew();
+
+                    int i = 0;
+                    for (; i < Iterations; i++) {
+                        Todo(i);
+                    }
+
+                    watch.Stop();
                     Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds);
                 });
             }

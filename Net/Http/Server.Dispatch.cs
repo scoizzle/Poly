@@ -14,95 +14,68 @@ namespace Poly.Net.Http {
     using Script;
 
     public partial class Server {
-        public Host SearchForHost(string Query) {
-            for (int i = 0; i < Hosts.Length; i++) {
-                if (Hosts[i].Matcher.Match(Query) != null)
-                    return Hosts[i];
+        public Host FindHost(string Query) {
+            var Len = Hosts.Count;
+            var Elems = Hosts.Elements;
+
+            for (int i = 0; i < Len; i++) {
+                var Host = Elems[i];
+                if (Host.Matcher.Match(Query) != null)
+                    return Host;
             }
             return null;
         }
 
-        new public async void OnClientConnect(Client Client) {
-            while (Client.Connected) {
-                Packet Packet = new Net.Http.Packet();
-                Request Request = new Request(Client, Packet);
+        private async Task ClientConnected(Client client) {
+            while (client.Connected) {
+                var Packet = await Net.Http.Packet.Receive(client);
+                if (Packet == null) goto closeConnection;
 
-                if (!Packet.Receive(Client)) {
-                    Client.Close();
-                    break;
-                }
+                var Host = FindHost(Packet.Host);
+                var Request = new Request(client, Packet, Host);
+                if (Host == null) goto badRequest;
 
-                Request.Host = SearchForHost(Packet.Host);
+                await OnClientRequest(Request);
+                Thread.Sleep(5);
+                continue;
 
-                if (Request.Host == null) {
-                    Request.Result = Result.BadRequest;
-                    await Request.Finish();
-                    continue;
-                }
-                else if (!Request.Host.Ports.IsEmpty) {
-                    IPEndPoint Point = Client.Client.LocalEndPoint as IPEndPoint;
-
-                    if (!Request.Host.Ports.ContainsValue(Point.Port)) {
-                        Request.Result = Result.NoResponse;
-                        await Request.Finish();
-                        continue;
-                    }
-                }
-
-                if (Request.Host.SessionsEnabled) {
-                    Request.Session = Session.GetSession(this, Request, Request.Host);
-                }
-
-                try {
-                    await OnClientRequest(Request);
-                }
-                catch {
-                    Client.Close();
-                    break;
-                }
-
+            badRequest:
+                Request.Result = Result.BadRequest;
+                await Request.Finish();
                 Thread.Sleep(10);
             }
+
+        closeConnection:
+            client.Close();
         }
+        
+        private async Task OnClientRequest(Request Request) {
+            var Target = Request.Packet.Target;
+            if (!Request.Host.Handlers.MatchAndInvoke(Target, Request)) {
+                var WWW = Request.Host.GetWWW(Target);
+                var EXT = Request.Host.GetExtension(WWW);
 
-        public async Task OnClientRequest(Request Request) {
-			var WWW = Request.Host.GetWWW(Request.Packet.Target);
-            var EXT = Request.Host.GetExtension(WWW);
+                Request.Set("FileName", WWW);
+                Request.Set("FileEXT", EXT);
 
-            var Args = new jsObject(
-                "Server", this,
-                "Request", Request,
-                "FileName", WWW,
-                "FileEXT", EXT
-            );
-
-            if (Request.Host.Handlers.MatchAndInvoke(Request.Packet.Target, Args, true) ||
-                Handlers.MatchAndInvoke(Request.Packet.Target, Args, true) ||
-                Handlers.MatchAndInvoke(EXT, Args)) { }
-            else {
-                HandleFile(Request, WWW);
+                if (!Request.Host.Handlers.MatchAndInvoke(EXT, Request))
+                    HandleFile(Request, WWW);
             }
 
-            await Request.Finish();    
+            await Request.Finish();
         }
 
-        public virtual void HandleFile(Request Request, string WWW) {
+        private static void HandleFile(Request Request, string WWW) {
             Cache.Item Cached;
 
-            if (Request.Host.Cache.TryGetValue(WWW, out Cached)) {
+            if (Request.Host.Cache != null && Request.Host.Cache.TryGetValue(WWW, out Cached)) {
                 if (Cached.LastWriteTime == Request.Packet.Headers.Get<string>("If-Modified-Since")) {
                     Request.Result = Result.NotModified;
                 }
                 else {
-                    Request.Result.ContentType = Cached.ContentType;
                     Request.Result.Headers["Last-Modified"] = Cached.LastWriteTime;
-
-                    if (Cached.Content == null) {
-                        Request.Data = File.OpenRead(WWW);
-                    }
-                    else {
-                        Request.Data = new MemoryStream(Cached.Content, false);
-                    }
+                    Request.Result.ContentType = Cached.ContentType;
+                    Request.Data = Cached.Content;
                 }
             }
             else {

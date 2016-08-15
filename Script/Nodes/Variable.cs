@@ -7,7 +7,7 @@ using System.Linq;
 using Poly.Data;
 
 namespace Poly.Script.Nodes {
-    public class Variable : Node {
+    public class Variable : Value {
         Engine Engine;
         public bool IsStatic, IsGlobal;
 
@@ -32,20 +32,24 @@ namespace Poly.Script.Nodes {
             for (int Index = 0; Index < Elements.Length; Index++) {
                 string Key;
 
-                if (Elements[Index] is StaticValue) {
-                    Key = (Elements[Index] as StaticValue).Value as string;
-                }
-                else if (Elements[Index] is Helpers.SystemTypeGetter) {
-                    Current = Elements[Index].Evaluate(Context);
-                    continue;
-                }
-                else {
-                    var Result = Elements[Index].Evaluate(Context);
+				if (Elements[Index] is StaticValue) {
+					Key = (Elements[Index] as StaticValue).Value as string;
+				}
+				else if (Elements[Index] is Helpers.SystemTypeGetter) {
+					Current = Elements[Index].Evaluate(Context);
+					continue;
+				}
+				else if (Elements[Index] == ContextAccess) {
+					Current = Context;
+					continue;
+				}
+				else {
+					var Result = Elements[Index].Evaluate(Context);
 
-                    if (Result == null)
-                        continue;
-                    else
-                        Key = Result.ToString();
+					if (Result == null)
+						continue;
+					else
+						Key = Result.ToString();
                 }
 
                 Current = GetNextValue(Current, Key);
@@ -111,7 +115,7 @@ namespace Poly.Script.Nodes {
                 object Result = null;
                 var Obj = Current as jsObject;
 
-                if (Obj.TryGet(Key, out Result)) {
+                if ((Result = Obj.GetValue<object>(Key)) != null) {
                     return Result;
                 }
                 else
@@ -213,86 +217,81 @@ namespace Poly.Script.Nodes {
             return false;
         }
 
-        public static Variable Parse(Engine Engine, string Text, int Index, int LastIndex = -1) {
-            return Parse(Engine, Text, ref Index, LastIndex == -1 ? Text.Length : LastIndex);
-        }
+		public static Node Parse(Engine Engine, StringIterator It) {
+            var Start = It.Index;
+            var IsGlobal = It.Consume ("Global");
+			var IsStatic = IsGlobal ? false : It.Consume ("Static");
+            var Delta = It.Index;
 
-        public static Variable Parse(Engine Engine, string Text, ref int Index, int LastPossibleIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastPossibleIndex))
-                return null;
-
-            var Delta = Index;
-            var End = Index;
-            ConsumeValidName(Text, ref End);
-
-            if (Delta == End)
-                return null;
-
-            bool IsStatic, IsGlobal;
-            IsStatic = IsGlobal = false;
-
-            if (Text.Compare("Global", Delta)) {
-                IsGlobal = true;
-                Delta += 6;
-            }
-            else 
-            if (Text.Compare("Static", Delta)) {
-                IsStatic = true;
-                Delta += 6;
-            }
-            else
-            if (Text.Compare("_", Delta)) {
-                Index++;
-                return new Variable(Engine) { Elements = new Node[0] };
-            }
-
-            var SigFig = Delta;
             var List = new List<Node>();
 
-            for (; Delta < End; Delta++) {
-                if (Text[Delta] == '.') {
-                    var Key = Text.Substring(SigFig, Delta - SigFig);
-                    SigFig = Delta + 1;
+            while (!It.IsDone()) {
+                if (It.Current == '.') {
+                    var Name = It.Substring(Delta, It.Index - Delta);
 
-                    if (string.IsNullOrEmpty(Key))
-                        continue;
+                    if (!string.IsNullOrEmpty(Name)) {
+						if (string.CompareOrdinal(Name, "_") == 0) {
+							List.Add(ContextAccess);
+						}
+						else	
+                        if (Engine.ReferencedTypes.ContainsKey(Name)) {
+                            List.Add(new Helpers.SystemTypeGetter(Engine.ReferencedTypes[Name]));
+                        }
+                        else {
+                            List.Add(new StaticValue(Name));
+                        }
+                    }
 
-                    if (List.Count == 0 && Engine.ReferencedTypes.ContainsKey(Key)) {
-                        List.Add(new Helpers.SystemTypeGetter(Engine.ReferencedTypes[Key]));
-                    }
-                    else {
-                        List.Add(new StaticValue(Key));
-                    }
+                    It.Tick();
+                    Delta = It.Index;
                 }
-                else
-                if (Text[Delta] == '[') {
-                    if (Delta != SigFig) {
-                        List.Add(new StaticValue(Text.Substring(SigFig, Delta - SigFig)));
+                else if (It.Current == '[') {
+                    if (It.Index != Delta) {
+                        List.Add(new StaticValue(It.Substring(Delta, It.Index - Delta)));
                     }
 
-                    if (Text.FindMatchingBrackets("[", "]", ref Delta, ref SigFig, false)) {
-                        List.Add(Engine.Parse(Text, ref Delta, SigFig));
-                        Delta = ++SigFig;
+                    It.Tick();
+                    Delta = It.Index;
+
+                    if (It.Goto('[', ']')) {
+                        var Sub = Engine.ParseValue(It.Clone(Delta, It.Index));
+
+                        if (Sub == null)
+                            return null;
+
+                        List.Add(Sub);
+
+                        It.Tick();
+                        Delta = It.Index;
                     }
                     else return null;
                 }
-                else
-                if (!IsValidChar(Text[Delta]))
-                    break;
+                else if (char.IsLetterOrDigit(It.Current) || It.Current == '_') {
+                    It.Tick();
+                }
+                else break;
             }
 
-            if (SigFig < End) {
-                List.Add(new StaticValue(Text.Substring(SigFig, End - SigFig)));
+            if (It.Index != Start) {
+                if (It.Index != Delta) {
+                    if (1 == It.Index - Delta && It[Delta] == '_') {
+                        List.Add(ContextAccess);
+                    }
+                    else {
+                        List.Add(new StaticValue(It.Substring(Delta, It.Index - Delta)));
+                    }
+                }
+
+                return new Variable(Engine) {
+                    Elements = List.ToArray(),
+                    IsGlobal = IsGlobal,
+                    IsStatic = IsStatic
+                };
             }
 
-            Index = End;
-            return new Variable(Engine) {
-                Elements = List.ToArray(),
-                IsGlobal = IsGlobal,
-                IsStatic = IsStatic
-            };
-        }
-
+            return null;
+		}
+        
 		private IEnumerable<string> ToStringParts() {
 			if (IsGlobal)
 				yield return "Global";

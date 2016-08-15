@@ -7,14 +7,16 @@ using System.Text;
 using System.Dynamic;
 using System.Threading.Tasks;
 
-namespace Poly.Data {
-    public partial class jsObject : Dictionary<string, object> {
+namespace Poly.Data {    
+    public partial class jsObject : KeyValueCollection<object> {
+        public char KeySeperatorCharacter = '.';
+
         public new object this[string Key] {
             get {
-                return Get<object>(Key.Split("."));
+                return Get<object>(Key.Split(KeySeperatorCharacter));
             }
             set {
-                Set(Key.Split("."), value);
+                Set(Key.Split(KeySeperatorCharacter), value);
             }
         }
 
@@ -28,20 +30,20 @@ namespace Poly.Data {
         }
 
         static jsObject() {
-            Parsers = new Dictionary<Type, ParserDelegate>();
+            Parsers = new KeyValueCollection<WrapperDelegate>();
 
-            RegisterParser<bool>(Convert.ToBoolean);
-            RegisterParser<int>(Convert.ToInt32);
-            RegisterParser<long>(Convert.ToInt64);
-            RegisterParser<float>(Convert.ToSingle);
-            RegisterParser<double>(Convert.ToDouble);
-            RegisterParser<decimal>(Convert.ToDecimal);
+            RegisterParser(new ParserDelegate<bool>(bool.TryParse));
+            RegisterParser(new ParserDelegate<int>(int.TryParse));
+            RegisterParser(new ParserDelegate<long>(long.TryParse));
+            RegisterParser(new ParserDelegate<float>(float.TryParse));
+            RegisterParser(new ParserDelegate<double>(double.TryParse));
+            RegisterParser(new ParserDelegate<decimal>(decimal.TryParse));
         }
 
         public jsObject() { }
 
         public jsObject(string Json) {
-            Parse(Json);
+            Parse(Json, this);
         }
 
         public jsObject(params object[] KeyValuePairs) {
@@ -52,14 +54,20 @@ namespace Poly.Data {
 
         public bool IsEmpty {
             get {
-                return this.Count == 0;
+                return Count == 0;
             }
         }
 
         public bool IsArray { get; set; }
 
         public void Add(object Object) {
-            Add(Count.ToString(), Object);
+			if (Object is KeyValuePair<object, object>) {
+				var KVP = Object as KeyValuePair<object, object>?;
+				Add ((KVP.Value.Key ?? Count).ToString (), KVP.Value.Value);	
+			} 
+			else {
+				Add (Count.ToString (), Object);
+			}
         }
 
         public virtual void CopyTo(jsObject Object, params string[] Keys) {
@@ -69,21 +77,13 @@ namespace Poly.Data {
         }
 
         public virtual void CopyTo(jsObject Object) {
-            var L = this.ToArray();
-
-            for (int i = 0; i < L.Length; i++) {
-                Object.AssignValue(L[i].Key, L[i].Value);
-            }
+            ForEach((k, v) => Object.AssignValue(k, v));
         }
 
         public void ForEach(Action<string, object> Action) {
-            var List = this.ToList();
-
-            for (int i = 0; i < List.Count; i++) {
-                Action(List[i].Key, List[i].Value);
+            foreach (var Pair in this) {
+                Action(Pair.Key, Pair.Value);
             }
-
-            List = null;
         }
 
         public void ForEach(string Key, Action<string, object> Action) {
@@ -140,6 +140,7 @@ namespace Poly.Data {
             StringBuilder Output = new StringBuilder();
 
             ForEach((K, V) => {
+				if (K != null && V != null)
                 Output.AppendFormat("{0}={1}&", PostEncode(K), PostEncode(V.ToString()));
             });
 
@@ -294,13 +295,7 @@ namespace Poly.Data {
                 Data = Client.UploadString(Url, Data);
             }
 
-            jsObject Object = new jsObject();
-
-            if (Object.Parse(Data)) {
-                return Object;
-            }
-
-            return default(jsObject);
+            return jsObject.Parse(Data);
         }
 
         public static jsObject FromFile(string Path) {
@@ -310,18 +305,19 @@ namespace Poly.Data {
             return new jsObject();
         }
 
-        public static void RegisterParser<T>(Func<string, T> Handler) {
-            Parsers.Add(typeof(T), (str) => { return Handler(str); });
+        public static void RegisterParser<T>(ParserDelegate<T> Handler) {
+            Parsers.Add(typeof(T).Name, (str) => {
+                T value;
+
+                if (Handler(str, out value))
+                    return value;
+
+                return null;
+            });
         }
 
         public static implicit operator jsObject(string Text) {
-            jsObject Object = new jsObject();
-
-            if (Object.Parse(Text)) {
-                return Object;
-            }
-
-            return default(jsObject);
+            return Parse(Text);
         }
 
         public static jsObject operator +(jsObject Js, object Obj) {
@@ -342,10 +338,10 @@ namespace Poly.Data {
 
         public new T this[string Key] {
             get {
-                return Get<T>(Key.Split("."));
+                return Get<T>(Key.Split(KeySeperatorCharacter));
             }
             set {
-                Set(Key.Split("."), value);
+                Set(Key.Split(KeySeperatorCharacter), value);
             }
         }
 
@@ -360,10 +356,6 @@ namespace Poly.Data {
 
         public void Add(string Key, T Obj) {
             Set(Key, Obj);
-        }
-
-        public void ForEach(Action<string, T> Action) {
-            base.ForEach<T>(Action);
         }
     }
 }

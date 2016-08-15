@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Poly.Script.Nodes {
-    public class Operator : Node {
+    public class Operator : Value {
         public Node Left, Right;
 
         public override object Evaluate(Data.jsObject Context) {
@@ -26,6 +26,32 @@ namespace Poly.Script.Nodes {
 
         public virtual object Execute(dynamic Left, dynamic Right) {
             return null;
+        }
+
+        public static void ConsumeContent(StringIterator It) {
+            if (It.Consume('(')) {
+                It.Goto('(', ')');
+                It.Tick();
+            }
+            else if (It.Consume('{')) {
+                It.Goto('{', '}');
+                It.Tick();
+            }
+            else if (It.Consume('[')) {
+                It.Goto('[', ']');
+                It.Tick();
+            }
+            else if (It.Consume('"')) {
+                It.Goto('"', '"');
+                It.Tick();
+            }
+            else if (It.Consume('\'')) {
+                It.Goto('\'', '\'');
+                It.Tick();
+            }
+            else {
+                It.Consume(NameFuncs);
+            }
         }
     }
 }

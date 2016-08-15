@@ -9,44 +9,59 @@ using Poly.Data;
 
 namespace Poly {
     public partial class App {
-        public static bool Running = false;
-		public static jsObject GlobalContext = new jsObject();
-		public static Event.Engine Commands = new Event.Engine ();
-        
-		public static void Init(int LogLevel = Log.Levels.None) {
+        public static bool Running;
+		public static jsObject GlobalContext;
+		public static Event.Engine Commands;
+
+        public static readonly string NewLine = "\r\n";
+
+        static App() {
+            Running = false;
+            GlobalContext = new jsObject();
+            Commands = new Poly.Event.Engine();
+        }
+
+        public static string Query(string Question) {
+            Console.Write(Question);
+            return Console.ReadLine();
+        }
+
+        public static void Init(int LogLevel = Log.Levels.None) {
             if (LogLevel != Log.Levels.None) {
-                App.Log.Active = true;
-                App.Log.Level = LogLevel;
+                Log.Active = true;
+                Log.Level = LogLevel;
             }
 
 			App.Commands.Add("--log-level={Level}", Event.Wrapper((int Level) => {
-					App.Log.Level = Level;
+                Log.Level = Level;
 					return Level;
 				})
 			);
-
-			App.GlobalContext.Set ("StartTime", DateTime.Now);
-            App.Log.Info("Application initializing...");
+            
+            Log.Info("Application initializing...");
 
 			Running = true;
-            App.Log.Info("Application running...");
+            Log.Info("Application running...");
 		}
 
         public static void Init(int LogLevel = Log.Levels.None, params string[] Commands) {
             Init(LogLevel);
 
             foreach (var Cmd in Commands) {
-                App.Commands.MatchAndInvoke(Cmd, new jsObject(), true);
+                App.Commands.MatchAndInvoke(Cmd, GlobalContext);
             }
-        }
-
-        public static bool IsRunningOnMono() {
-            return Type.GetType("Mono.Runtime") != null;
         }
 
         public static void WaitforExit() {
 			while (Running) {
-				Commands.MatchAndInvoke (Console.ReadLine(), GlobalContext, true);
+				var Line = Console.ReadLine();
+
+				if (Line == null)
+					Thread.Sleep(500);
+				else
+					Commands.MatchAndInvoke (Line, GlobalContext);
+				
+				Thread.Sleep (50);
 			}
         }
 

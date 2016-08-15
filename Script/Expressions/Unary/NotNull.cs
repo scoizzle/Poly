@@ -16,17 +16,8 @@ namespace Poly.Script.Expressions {
             return !Bool.EvaluateNode(Right, Context);
         }
 
-        public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("!", Index)) {
-                Index += 1;
-                ConsumeWhitespace(Text, ref Index);
-
-                return new NotNull(
-                    Engine.Parse(Text, ref Index, LastIndex)
-                );
-            }
-
-            return null;
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            return new NotNull(Engine.ParseValue(It));
         }
 
         public override string ToString() {

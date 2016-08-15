@@ -244,19 +244,19 @@ namespace System {
 
         public static string Escape(this String This) {
             StringBuilder Output = new StringBuilder();
-            StringIterator It = new StringIterator(This);
 
-            int Next = 0;
-            while (!It.IsDone()) {
-                var c = It.FirstPossible(ref Next, '\r', '\n', '\t', '\f', '\"', '\\', '/');
+            for (int i = 0; i < This.Length; i++) {
+                var c = This[i];
 
-                if (c == default(char)) {
-                    Output.Append(It.Substring(It.Index, It.Length - It.Index));
-                    break;
-                }
-
-                Output.Append(EscapeChars[c]);
-                It.Index = Next + 1;
+                if (c == '\r' ||
+                    c == '\n' ||
+                    c == '\t' ||
+                    c == '\f' ||
+                    c == '\"' ||
+                    c == '\\' ||
+                    c == '/')
+                    Output.Append(EscapeChars[c]);
+                else Output.Append(c);
             }
 
             return Output.ToString();

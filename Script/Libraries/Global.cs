@@ -15,13 +15,11 @@ namespace Poly.Script.Libraries {
 
             Add(Load);
             Add(Save);
-            Add(Template);
-            Add(Match);
             Add(Break);
 			Add(TypeName);
             Add(ToObject);
-            Add(ToStr);
         }
+
 
         public static Function Load = Function.Create("FromFile", (string FileName) => {
             if (System.IO.File.Exists(FileName)) {
@@ -38,21 +36,7 @@ namespace Poly.Script.Libraries {
                 return true;
             }
             return false;
-        });
 
-        public static Function Template = Function.Create("Template", (jsObject This, string Format) => {
-            if (This != null && !string.IsNullOrEmpty(Format)) {
-                return This.Template(Format);
-            }
-
-            return string.Empty;
-        });
-
-        public static Function Match = Function.Create("Match", (string This, string Regex) => {
-            if (!string.IsNullOrEmpty(This) && !string.IsNullOrEmpty(Regex))
-                return This.Match(Regex);
-
-            return null;
         });
 
         public static Function Break = Function.Create("Break", (object Input) => {
@@ -74,13 +58,6 @@ namespace Poly.Script.Libraries {
                 return This.ToString().ToJsObject();
             }
             return null;
-        });
-
-        public static Function ToStr = Function.Create("ToString", (object This) => {
-            if (This == null)
-                return "";
-
-            return This.ToString();
         });
     }
 }

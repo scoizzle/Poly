@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.Threading.Tasks;
 
 using System.Net;
 using System.Net.Sockets;
@@ -13,11 +14,12 @@ namespace Poly.Net.Http {
     using Script;
 
     public partial class Server : MultiPortServer {
-        public Host[] Hosts = new Host[0];
-        public jsObject<Session> Sessions = new jsObject<Session>();
+        ManagedArray<Host> Hosts;
 
         public Server() {
-            base.OnClientConnect += this.OnClientConnect;
+            Hosts = new ManagedArray<Host>();
+
+            OnClientConnect += ClientConnected;
         }
         
         public static string GetMime(string Ext) {
@@ -26,45 +28,50 @@ namespace Poly.Net.Http {
             if (!string.IsNullOrEmpty(Mime))
                 return Mime;
 
-            return "text/html";
+            return "application/octet-stream";
         }
 
-        public void Configure(string FileName) {
-            var Args = new jsObject(
-                "Server", this
-            );
+        public override void Start() {
+            for (int i = 0; i < Hosts.Count; i++)
+                Hosts.Elements[i].Ready();
 
-            Script.Engine Eng = new Script.Engine();
-
-            Eng.Parse(
-                File.ReadAllText(FileName)
-            );
-
-            Eng.Evaluate(Args);
+            base.Start();
         }
 
-        public Host Host(string Name, jsObject Info) {
-            var Host = new Host();
+        public override void Stop() {
+            for (int i = 0; i < Hosts.Count; i++)
+                Hosts.Elements[i].Stop();
 
-            Info.CopyTo(Host);
+            base.Stop();
+        }
 
-            this.Host(Name, Host);
+        public Host AddHost(string Name) {
+            return AddHost(new Host(Name));
+        }
 
+        public Host AddHost(string Name, jsObject Info) {
+            var Host = AddHost(Name);
+            Info?.CopyTo(Host);
             return Host;
         }
 
-        public Host Host(string Name, Host Host) {
-            foreach (int? Port in Host.Ports.Values) {
-                if (Port != null)
-                    Listen((int)Port);
+        public Host AddHost(Host Info) {
+            Hosts.Add(Info);
+            return Info;
+        }
+
+        public void RemoveHost(string Name) {
+            var Elems = Hosts.Elements;
+            var Len = Hosts.Count;
+
+            for (var i = 0; i < Len; i++) {
+                var H = Elems[i];
+                if (string.Compare(H.Name, Name, StringComparison.Ordinal) != 0) continue;
+
+                H.Stop();
+                Hosts.RemoveAt(i);
+                break;
             }
-
-            Host.Matcher = new Matcher(Name);
-
-            Array.Resize(ref Hosts, Hosts.Length + 1);
-            Hosts[Hosts.Length - 1] = Host;
-
-            return Host;
         }
 
         public void Mime(string Ext, string Mime) {

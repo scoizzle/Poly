@@ -13,101 +13,162 @@ namespace Poly.Script {
     using Helpers;
 
     public partial class Engine {
-        public static List<Parser> ExpressionParsers = new List<Parser>() {
-            Comment.Parse,
-            If.Parse,
-            For.Parse,
-            Foreach.Parse,
-            Do.Parse,
-            While.Parse,
-            Switch.Parse,
-            Case.Parse,
-            Async.Parse,
-            Try.Parse,
-            Expressions.Using.Parse,
-            Include.Parse,
-			Persist.Parse,
+		public static List<Parser> _ExpressionParsers = new List<Parser>() {
+			Comment.Parse,
+			Invoke.Parse,
+			Expression.Parse,
+			If.Parse,
+			Do.Parse,
+			Foreach.Parse,
+			For.Parse,
+			While.Parse,
+			Class.Parse,
+			Switch.Parse,
+			Async.Parse,
+			Try.Parse,
+			Include.Parse,
+            Persist.Parse,
             Reload.Parse,
-            Return.Parse,
+            Using.Parse,
+			Return.Parse,
+			Expressions.Html.Html.Parse,
+			Expressions.Html.Function.Parse,
             Function.Parse,
-            Class.Parse,
-            Expression.Parse,
-            Expressions.Html.Html.Parser,
-            Expressions.Unary.Parser.Parse,
-            Call.Parse,
-            Expressions.Eval.Parse,
-            ObjectBuilder.Parse,
-            String.Parse,
-            Integer.Parse,
-            Float.Parse,
-            Bool.Parse,
-            Variable.Parse
+            ParseOperation
         };
 
-        public Node Parse(string Text, int Index, Node Storage = null) {
-            return Parse(Text, ref Index, Text.Length > 1 ? Text.Length : 1, Storage);
+		public static List<Parser> _ValueParsers = new List<Parser>() {
+            Invoke.Parse,
+            Expressions.Html.Html.Parse,
+            Expressions.Html.Function.ParseLambda,
+            Function.ParseLambda,
+            Call.Parse,
+            Expressions.Eval.Parse,
+            String.Parse,
+			Bool.Parse,
+            Integer.Parse,
+            Float.Parse,
+            Object.Parse,
+            Variable.Parse
+		};
+
+		public Node Parse (StringIterator Text) {
+			return ParseExpression (Text) ?? ParseValue (Text);
+		}
+
+		public Node ParseExpression(StringIterator It) {
+            It.Consume(WhitespaceFuncs);
+
+            if (!It.IsDone()) {
+                Node Current = null;
+				if (_ExpressionParsers.Any (f => (Current = f (this, It)) != null)) {
+					return Current;
+				}
+			}
+
+			return null;
+		}
+
+		public Node ParseValue(StringIterator It) {
+            It.Consume(WhitespaceFuncs);
+
+            if (!It.IsDone ()) {
+				Node Current = null;
+				if (_ValueParsers.Any (f => (Current = f (this, It)) != null)) {
+					return Current;
+				}
+			}
+
+			return null;
         }
 
-        public Node Parse(string Text, ref int Index, int LastIndex, Node Storage = null) {
-            if (!IsParseOk(this, Text, ref Index, LastIndex))
-                return null;
+        public Node ParseOperation(StringIterator It) {
+            return ParseOperation(this, It);
+        }
 
-            if (string.IsNullOrEmpty(Text)) {
-                return Expression.NoOperation;
+        public static Node ParseOperation(Engine Engine, StringIterator It) {
+            var Node = Engine.ParseValue(It);
+
+            while (!It.IsDone()) {
+                It.ConsumeWhitespace();
+
+                var List = Node == null ? 
+                    Expressions.Unary.Parser.RightHandedParsers : 
+                    Expressions.Unary.Parser.Parsers;
+
+                if (!List.Any(p => {
+                    if (It.Consume(p.Key)) {
+                        It.ConsumeWhitespace();
+
+                        Node = p.Value(Engine, It, Node);
+                        return true;
+                    }
+                    return false;
+                })) break;
             }
 
-            var List = Storage != null && Storage.Elements != null ?
-                new List<Node>(Storage.Elements) :
-                new List<Node>();
+            return Node;
+        }
 
-            while (Index < LastIndex) {
-                Node Node = null;
+        public Node ParseExpressions(StringIterator Text, Node Storage) {
+			var List = new List<Node> ();
 
-                ConsumeWhitespace(Text, ref Index);
+			while (!Text.IsDone ()) {
+				var Node = ParseExpression (Text);
 
-                if (Index >= LastIndex)
+				if (Node == null)
+					break;
+
+				if (Node == Expression.NoOperation)
+					continue;
+
+				List.Add (Node);
+			}
+
+			if (List.Count != 0)
+				Storage.Elements = List.ToArray ();
+
+			return Storage;
+		}
+
+		public Node ParseValues(StringIterator Text, Node Storage) {
+			var List = new List<Node> ();
+
+			while (!Text.IsDone ()) {
+				var Node = ParseValue (Text);
+
+				if (Node == null)
+					break;
+
+				List.Add (Node);
+			}
+
+			if (List.Count != 0)
+				Storage.Elements = List.ToArray ();
+
+			return Storage;
+        }
+
+        public Node ParseOperations(StringIterator Text, Node Storage) {
+            var List = new List<Node>();
+
+            while (!Text.IsDone()) {
+                var Node = ParseOperation(Text);
+
+                if (Node == null)
                     break;
 
-                for (int i = 0; i < ExpressionParsers.Count; i++) {
-                    Node = ExpressionParsers[i](this, Text, ref Index, LastIndex);
-
-                    if (Node == null)
-                        continue;
-
-                    if (Storage == null) {
-                        return Node;
-                    }
-                    else if (Node == Expression.NoOperation) {
-                        break;
-                    }
-                    else {
-                        List.Add(Node);
-                        break;
-                    }
-                }
-
-                if (Node == null) {
-                    return null;
-                }
-                else if (Node == Expression.Continue || Node == Expression.Break) {
-                    break;
-                }
+                List.Add(Node);
             }
 
-            if (List.Count != 0) {
+            if (List.Count != 0)
                 Storage.Elements = List.ToArray();
-            }
+
             return Storage;
         }
-
+        
         public bool Parse(string Text) {
-            int Index = 0;
-
-            if (string.IsNullOrEmpty(Text)) {
-                return false;
-            }
-
-            return Parse(Text, ref Index, Text.Length, this) != null;
+            return ParseExpressions(new StringIterator(Text), this) != null;
         }
     }
 }

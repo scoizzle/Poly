@@ -1,38 +1,38 @@
 ﻿using System;
+using System.Collections.Generic;
 using Poly.Data;
-using Pth = System.IO.Path;
+using path = System.IO.Path;
 
 namespace Poly.Net.Http {
     public class Host : jsComplex {
-        public bool SessionsEnabled;
-
-        public string Name, Path, DefaultDocument, DefaultExtension, SessionCookieName, SessionDomain, SessionPath;
+        public string Name, Path, DefaultDocument, DefaultExtension;
 
         public Matcher Matcher;
-        public jsObject PathOverrides, Ports;
 
-        public Event.Engine Handlers = new Event.Engine();
+        public Event.Engine Handlers;
         public Cache Cache;
 
-		public Host() {
-            this.Name = "localhost";
+		public Host(string hostName) {
+            this.Name = hostName;
             this.Path = "WWW";
-            this.DefaultDocument = "index.html";
+            this.DefaultDocument = "/index.html";
             this.DefaultExtension = "htm";
+            this.Handlers = new Event.Engine();
+        }
 
-            this.SessionsEnabled = true;
-            this.SessionCookieName = "SessionId";
-            this.SessionDomain = Name;
-            this.SessionPath = "";
-
-            this.PathOverrides = new jsObject();
-            this.Ports = new jsObject();
+        public Host(string hostName, jsObject args) : this(hostName) {
+            args?.CopyTo(this);
         }
 
 		public void Ready() {
-			this.Path = Pth.GetFullPath (Path);
+            this.Matcher = new Matcher(this.Name);
+            this.Path = path.GetFullPath (Path);
 			this.Cache = new Cache(this.Path);
 		}
+
+        public void Stop() {
+            this.Cache.Dispose();
+        }
 
         public void On(string Path, Event.Handler Handler) {
             Handlers.Register(Path, Handler);
@@ -43,39 +43,27 @@ namespace Poly.Net.Http {
         }
         
         public string GetWWW(string Target) {
-			var WWW = Target[0] == '/' ?
-				Path + Target :
-				Path + '/' + Target;
+            if (string.IsNullOrEmpty(Target) || Target == "/")
+                return path.GetFullPath(Path + DefaultDocument);
 
-			foreach (var ovr in PathOverrides) {
-				if (WWW.Match(ovr.Key) != null) {
-					WWW = ovr.Value as string;
-				}
-			}
-
-			if (WWW.EndsWith ("/") || string.IsNullOrEmpty (Pth.GetExtension (WWW))) {
-				WWW = WWW + DefaultDocument;
-			}
-
-			return WWW;
+            if (Target[Target.Length - 1] == '/') {
+                return Path + Target + DefaultDocument;
+            }
+            
+            return path.GetFullPath(Path + Target);
         }
 
         public string GetExtension(string FileName) {
-            var Ext = Pth.GetExtension(FileName);
+            var lastPeriod = FileName.FindLast('.');
 
-            if (string.IsNullOrEmpty(Ext)) {
-                return "";
-            }
+            if (lastPeriod == -1)
+                return string.Empty;
 
-            return Ext.Substring(1);
+            return FileName.Substring(lastPeriod + 1);
         }
 
         public object Psx(Server Serv, Request Request, string Target) {
-			var File = Pth.GetFullPath(
-                Path + Target
-            );
-
-            return Serv.Psx(Request, File);
+            return Serv.Psx(Request, Target);
         }
     }
 }

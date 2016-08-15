@@ -13,46 +13,25 @@ namespace Poly.Script.Expressions {
             catch { return null; }
         }
 
-        public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("+=", Index)) {
-                Index += 2;
-                ConsumeWhitespace(Text, ref Index);
-
-                var Var = Variable.Parse(Engine, Left, 0);
-
-                return new Assign(
-                    Var,
-                    new Add(
-                        Var,
-                        Engine.Parse(Text, ref Index, LastIndex)
-                    )
-                );
-            }
-            else if (Text.Compare("++", Index)) {
-                Index += 2;
-                var Var = Variable.Parse(Engine, Left, 0);
-
-                return new Assign(
-                    Var,
-                    new Add(
-                        Var,
-                        new StaticValue(1)
-                    )
-                );
-            }
-            else if (Text.Compare("+", Index)) {
-                Index += 1;
-                ConsumeWhitespace(Text, ref Index);
-
-                return new Add(
-                    Engine.Parse(Left, 0),
-                    Engine.Parse(Text, ref Index, LastIndex)
-                );
-            }
-
-            return null;
+        public static Node Assignment(Engine Engine, StringIterator It, Node Left) {
+            return new Assign(Left as Variable, 
+                new Add(
+                    Left, 
+                    Engine.ParseOperation(It)
+                )
+            );
         }
 
+        public static Node Iterator(Engine Engine, StringIterator It, Node Left) {
+            return new Assign(Left as Variable, 
+                new Add(Left, new StaticValue(1))
+            );
+        }
+
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            return new Add(Left, Engine.ParseValue(It));
+        }
+        
         public override string ToString() {
             return Left.ToString() + " + " + Right.ToString();
         }

@@ -1,48 +1,36 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.IO;
-using System.Net;
-using System.Net.Sockets;
-using System.Diagnostics;
 
 namespace Poly.Net.Http {
-    using Data;
-    using Net.Tcp;
     using Script;
 
     public partial class Server {
-        public Event.Engine Handlers = new Event.Engine();
-
-        public void On(string Path, Event.Handler Handler) {
-            Handlers.Register(Path, Handler);
-        }
-
         public object Psx(Request Request, string FileName) {
-            Cache.Item Cached;
+            Cache.Item CacheItem;
+            object Result = null;
 
-            if (Request.Host.Cache.TryGetValue(FileName, out Cached)) {
+            if (Request.Host.Cache.TryGetValue(FileName, out CacheItem)) {
+                var Cached = CacheItem as Cache.PolyScriptItem;
+
+                if (Cached == null)
+                    return null;
+
                 if (Cached.Script == null) {
                     Cached.Script = new Engine();
-					Cached.Script.IncludePath = Request.Host.Path + Path.DirectorySeparatorChar;
+                    Cached.Script.IncludePath = Request.Host.Path + Path.DirectorySeparatorChar;
 
+                    Cached.Script.Static.Set("Server", this);
                     Cached.Script.ReferencedTypes.Add("Response", typeof(Result));
-
-                    if (Cached.Script.Parse(Encoding.UTF8.GetString(Cached.Content))) {
-                        return Cached.Script.Evaluate(Request);
-                    }
-                    else {
+                    
+                    if (!Cached.Script.Parse(Cached.Text))
                         Cached.Script = null;
-                    }
-                }
-                else {
-                    return Cached.Script.Evaluate(Request);
                 }
 
+                Result = Cached.Script?.Evaluate(Request);
             }
 
-            return null;
+            return Result;
         }
     }
 }

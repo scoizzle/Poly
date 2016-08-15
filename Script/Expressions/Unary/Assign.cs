@@ -13,11 +13,7 @@ namespace Poly.Script.Expressions {
         }
 
         public override object Evaluate(Data.jsObject Context) {
-            object Val;
-            if (Right != null)
-                Val = Right.Evaluate(Context);
-            else
-                Val = null;
+			object Val = Right?.Evaluate (Context);
 
             (Left as Variable).Assign(Context, Val);
             return Val;
@@ -27,17 +23,9 @@ namespace Poly.Script.Expressions {
             return string.Format("{0} = {1}", Left, Right);
         }
 
-        public static Assign Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("=", Index)) {
-                Index += 1;
-                ConsumeWhitespace(Text, ref Index);
-
-                return new Assign(
-                    Variable.Parse(Engine, Left, 0),
-                    Engine.Parse(
-                        Text, ref Index, LastIndex
-                    )
-                );
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            if (Left is Variable) {
+                return new Assign(Left as Variable, Engine.ParseOperation(It));
             }
             return null;
         }

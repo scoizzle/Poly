@@ -40,26 +40,16 @@ namespace Poly.Script.Expressions {
             return false;
         }
 
-        public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("is", Index)) {
-                Index += 2;
-                ConsumeWhitespace(Text, ref Index);
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            var Start = It.Index;
 
-                var End = Index;
-                ConsumeValidName(Text, ref End);
-                
-                var Name = Text.Substring(Index, End - Index);
+            if (It.Consume(char.IsLetterOrDigit)) {
+                var Name = It.Substring(Start, It.Index - Start);
 
                 if (Engine.Types.ContainsKey(Name)) {
-                    return new Is(
-                        Engine.Parse(Left, 0),
-                        Engine.Types[Name]
-                    );
+                    return new Is(Left, Engine.Types[Name]);
                 }
-
-                return null;
             }
-
             return null;
         }
 

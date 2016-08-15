@@ -11,59 +11,40 @@ namespace Poly.Script.Expressions {
     using Helpers;
 
     public class Using : Expression {
-        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("using")) {
+				It.ConsumeWhitespace ();
 
-            if (Text.Compare("using", Index)) {
-                var Delta = Index += 5;
-                ConsumeWhitespace(Text, ref Delta);
+				var Start = It.Index;
+				if (It.Consume (NameFuncs)) {
+					var Name = It.Substring (Start, It.Index - Start);
 
-                var End = Delta;
-                ConsumeValidName(Text, ref End);
+					It.ConsumeWhitespace ();
+					if (It.Consume (':')) {
+						It.ConsumeWhitespace ();
 
-                var Close = End;
-                Text.ConsumeWhitespace(ref Close);
+						Start = It.Index;
 
-                if (Text.Compare("=", Close)) { 
-                    var Name = Text.Substring(Delta, End - Delta);
+						if (It.Consume (c => c == '.', char.IsLetterOrDigit)) {
+							var Type = It.Substring (Start, It.Index - Start);
+							Engine.ReferencedTypes [Name] = SystemTypeGetter.GetType (Type);
+							return Expression.NoOperation;
+						}
+					} else {
+						if (Library.Defined.ContainsKey (Name))
+							Engine.Usings.Add (Library.Defined [Name]);
+						else if (File.Exists (Name + ".dll"))
+							ExtensionManager.Load (Name);
+						else {
+							App.Log.Error("Couldn't find library: " + Name);
+							return null;
+						}
 
-                    Delta = Close + 1;
-                    Text.ConsumeWhitespace(ref Delta);
-
-                    Close = Delta;
-                    ConsumeValidName(Text, ref Close);
-
-                    var For = Text.Substring(Delta, Close - Delta);
-
-                    if (Text.Compare(";", Close)) {
-                        Engine.ReferencedTypes[Name] = SystemTypeGetter.GetType(For);
-                        Index = Close + 1;
-                        return Expression.NoOperation;
-                    }
-                }
-                else if (Text.Compare(";", Close)) {
-                    var Name = Text.Substring(Delta, Close - Delta);
-
-                    if (Library.Defined.ContainsKey(Name)) {
-                        Engine.Using.Add(Library.Defined[Name]);
-                    }
-                    else if (File.Exists(Name + ".dll")) {
-                        ExtensionManager.Load(Name);
-                    }
-                    else {
-                        App.Log.Error("Couldn't find library: " + Name);
-                    }
-
-                    Close += 1;
-                    ConsumeWhitespace(Text, ref Close);
-
-                    Index = Close;
-                    return Expression.NoOperation;
-                }
-            }
-
-            return null;
-        }
+						return Expression.NoOperation;
+					}
+				}
+			}
+			return null;
+		}
     }
 }

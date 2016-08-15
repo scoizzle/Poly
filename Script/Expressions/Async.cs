@@ -13,7 +13,7 @@ namespace Poly.Script.Expressions {
     public class Async : Expression {
         public Node Node = null;
 
-        public override object Evaluate(Data.jsObject Context) {
+        public override object Evaluate(jsObject Context) {
             return Task.Factory.StartNew(() => {
                 var Result = Node.Evaluate(Context);
 
@@ -29,23 +29,16 @@ namespace Poly.Script.Expressions {
             return "async " + base.ToString();
         }
 
-        public static new Async Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("async")) {
+				var Node = new Async () {
+					Node = Engine.ParseExpression(It)
+				};
 
-            if (Text.Compare("async", Index)) {
-                var Delta = Index + 5;
-                var Async = new Async();
-                ConsumeWhitespace(Text, ref Delta);
+				return Node;
+			}
 
-                Async.Node = Engine.Parse(Text, ref Delta, LastIndex) as Node;
-
-                Index = Delta;
-                return Async;
-            }
-
-
-            return null;
-        }
+			return null;
+		}
     }
 }

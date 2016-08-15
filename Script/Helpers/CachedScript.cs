@@ -34,17 +34,17 @@ namespace Poly.Script.Helpers {
         }
 
         public bool Reload() {
-            this.Elements = null;
+            Elements = null;
 
-			var Result = Engine.Parse (File.ReadAllText (FileName), 0, this);
+			var Result = Engine.ParseExpressions (new StringIterator(File.ReadAllText(FileName)), this);
 
 			if (Result != null) {
 				if (Result is Value) {
-					this.Elements = new Node[1] { Result };
+					Elements = new Node[1] { Result };
 				} else {
-					this.Elements = Result.Elements;
+					Elements = Result.Elements;
 				}
-
+                LastWriteTime = File.GetLastWriteTime(FileName);
 				return true;
 			}
 

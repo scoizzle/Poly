@@ -9,7 +9,7 @@ using Poly.Data;
 namespace Poly.Net.Irc {
     public partial class Client : User {
         public void InvokeEvent(string Name, jsObject Args) {
-            Events.MatchAndInvoke(Name, Args, true);
+            Events.MatchAndInvoke(Name, Args);
         }
 
         public void AddEvent(string Name, Poly.Event.Handler Ev) {

@@ -9,6 +9,7 @@ using Poly.Script;
 
 namespace Poly.Net {
     public class Url : jsComplex {
+		static Matcher UrlMatcher = new Matcher("{Protocol}://[{Username:![\\:@]}[:{Password:![@]}]@]{Host:![\\:]}[:{Port:Numeric}]/{Path}[?{Query:![#]}][#{Fragment}]");
         public string Protocol;
         public string Host;
         public string Path;
@@ -23,6 +24,8 @@ namespace Poly.Net {
         }
 
         public new bool Parse(string Url) {
+			return UrlMatcher.Match(Url, this) != null;
+			/*
             var Matches = Url.Match("{Protocol}://{Routing}/{Path}");
 
             if (Matches == null)
@@ -107,6 +110,7 @@ namespace Poly.Net {
             }
 
             return true;
+            */
         }
 
         public override string ToString() {
@@ -152,10 +156,8 @@ namespace Poly.Net {
             }
 
             if (ContainsKey("Fragment")) {
-                Output.Append('#');
-                Output.Append(
-                    Get<string>("Fragment")
-                );
+                Output.Append('#')
+                      .Append(Get<string>("Fragment"));
             }
 
             return Output.ToString();

@@ -12,31 +12,51 @@ namespace Poly.Script.Expressions.Html {
         public string Key;
         public Node Value;
 
-        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+        public Attribute() { }
 
-            var Delta = Index;
-            ConsumeValidName(Text, ref Delta);
+        public Attribute(string Key, Node Value) {
+            this.Key = Key;
+            this.Value = Value;
+        }
 
-            if (Delta != Index) {
-                var Name = Text.Substring(Index, Delta - Index);
-                ConsumeWhitespace(Text, ref Delta);
+        public override void Evaluate(StringBuilder Output, jsObject Context) {
+            Output.Append(" ").Append(Key);
+            
+            if (Value != null)
+                Output.Append("=\"")
+                      .Append(Value.Evaluate(Context))
+                      .Append('"');
+        }
 
-                if (Text.Compare(':', Delta)) {
-                    Delta++;
-                    ConsumeWhitespace(Text, ref Delta);
+        public override void ToEvaluationArray(StringBuilder output, List<Action<StringBuilder, jsObject>> list) {
+            output.Append(" ").Append(Key);
 
-                    if (Text.Compare('{', Delta))
-                        return ComplexElement.Parse(Engine, Text, ref Index, LastIndex);
+            if (Value != null) {
+                output.Append('"');
 
-                    Index = Delta;
-
-                    return new Attribute() {
-                        Key = Name,
-                        Value = Html.Parse(Engine, Text, ref Index, LastIndex)
-                    };
+                if (Value is StaticValue)
+                    output.Append(Value.ToString());
+                else {
+                    list.Add(StaticAppender(output));
+                    list.Add(NodeAppender(Value.Evaluate));
+                    output.Clear();
                 }
+
+                output.Append('"');
+            }
+        }
+
+        new public static Element Parse(Engine Engine, StringIterator It) {
+            var Start = It.Index;
+
+            if (It.Consume(AttributeNameFuncs)) {
+                var Name = It.Substring(Start, It.Index - Start);
+                It.ConsumeWhitespace();
+
+                if (It.Consume(':')) {
+                    return new Attribute(Name, Engine.ParseOperation(It));
+                }
+                else It.Index = Start;
             }
 
             return null;

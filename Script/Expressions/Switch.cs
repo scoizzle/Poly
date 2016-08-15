@@ -33,60 +33,51 @@ namespace Poly.Script.Expressions {
             return "switch (" + Convert.ToString(Object) + ") " + base.ToString();
         }
 
-        public static new Switch Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("switch")) {
+				It.Consume (WhitespaceFuncs);
 
-            if (Text.Compare("switch", Index)) {
-                var Delta = Index + 6;
-                ConsumeWhitespace(Text, ref Delta);
+				var Node = new Switch () {
+					Object = Eval.Parse(Engine, It)
+				};
 
-                var Open = Delta + 1;
-                var Close = Delta;
-                var Switch = new Switch();
-                var List = new List<Node>();
-                ConsumeEval(Text, ref Close);
+				if (Node.Object != null) {
+					It.Consume (WhitespaceFuncs);
 
-                if (Delta == Close)
-                    return null;
+					if (It.Consume ('{')) {
+						var Start = It.Index;
 
-                Switch.Object = Engine.Parse(Text, ref Open, Close - 1);
+						if (It.Goto ('{', '}') && It.Consume('}')) {
+							var Sub = It.Clone (Start, It.Index);
+							var List = new List<Node> ();
 
-                Delta = Close;
-                ConsumeWhitespace(Text, ref Delta);
+							while (!Sub.IsDone ()) {
+								Sub.Consume (WhitespaceFuncs);
 
-                if (Text[Delta] == '{') {
-                    Open = Delta + 1;
-                    Close = Delta;
+								var Member = Case.Parse(Engine, Sub) as Case;
 
-                    ConsumeExpression(Text, ref Close);
+								if (Member == null)
+									break;
 
-                    while (true) {
-                        var Option = Engine.Parse(Text, ref Open, Close) as Case;
+								if (Member.IsDefault) {
+									Node.Default = Member;
+								} else if (Member.Object is Operator) {
+									(Member.Object as Operator).Left = Node.Object;
+								} else {
+									Member.Object = new Equal (Node.Object, Member.Object);
+								}
 
-                        if (Option != null) {
-                            if (Option.IsDefault) {
-                                Switch.Default = Option;
-                            }
-                            else if (Option.Object is Operator) {
-                                (Option.Object as Operator).Left = Switch.Object;
-                            }
-                            else {
-                                Option.Object = new Equal(Switch.Object, Option.Object);
-                            }
+								List.Add (Member);
+							}
 
-                            List.Add(Option);
-                        }
-                        else break;
-                    }
+							Node.Elements = List.ToArray ();
+							return Node;
+						}
+					}
 
-                    Index = Close;
-                    Switch.Elements = List.ToArray();
-                    return Switch;
-                }
-            }
-
-            return null;
-        }
+				}
+			}
+			return null;
+		}
     }
 }

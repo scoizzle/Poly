@@ -18,44 +18,23 @@ namespace Poly.Script.Expressions {
             catch { return null; }
         }
 
-        public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("-=", Index)) {
-                Index += 2;
-                ConsumeWhitespace(Text, ref Index);
+        public static Node Assignment(Engine Engine, StringIterator It, Node Left) {
+            return new Assign(Left as Variable,
+                new Subtract(
+                    Left,
+                    Engine.ParseOperation(It)
+                )
+            );
+        }
 
-                var Var = Variable.Parse(Engine, Left, 0);
+        public static Node Iterator(Engine Engine, StringIterator It, Node Left) {
+            return new Assign(Left as Variable,
+                new Subtract(Left, new StaticValue(1))
+            );
+        }
 
-                return new Assign(
-                    Var,
-                    new Subtract(
-                        Var,
-                        Engine.Parse(Text, ref Index, LastIndex)
-                    )
-                );
-            }
-            else if (Text.Compare("--", Index)) {
-                Index += 2;
-                var Var = Variable.Parse(Engine, Left, 0);
-
-                return new Assign(
-                    Var,
-                    new Subtract(
-                        Var,
-                        new StaticValue(1)
-                    )
-                );
-            }
-            else if (Text.Compare("-", Index)) {
-                Index += 1;
-                ConsumeWhitespace(Text, ref Index);
-
-                return new Subtract(
-                    Engine.Parse(Left, 0),
-                    Engine.Parse(Text, ref Index, LastIndex)
-                );
-            }
-
-            return null;
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            return new Subtract(Left, Engine.ParseValue(It));
         }
 
         public override string ToString() {

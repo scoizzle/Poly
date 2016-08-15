@@ -41,20 +41,14 @@ namespace Poly.Script.Types {
             return true;
         }
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
-
-            if (Text.Compare("true", Index, true)) {
-                Index += 4;
-                return Expression.True;
-            }
-            else if (Text.Compare("false", Index, true)) {
-                Index += 5;
-                return Expression.False;
-            }
-
-            return null;
-        }
+		public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("true")) {
+				return Expression.True;
+			}
+			else if (It.Consume ("false")) {
+				return Expression.False;
+			}
+			return null;
+		}
     }
 }

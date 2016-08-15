@@ -4,9 +4,16 @@ using System.Text;
 namespace Poly.Script.Expressions.Html {
     using Nodes;
     using Data;
+    using System.Collections.Generic;
 
     public class StaticValue : Element {
         string Value;
+
+        public StaticValue() {}
+
+        public StaticValue(string Str) {
+            Value = Str.Descape();
+        }
 
         public override object Evaluate(jsObject Context) {
             return Value;
@@ -20,36 +27,18 @@ namespace Poly.Script.Expressions.Html {
             return Value;
         }
 
-        new public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+        public override void ToEvaluationArray(StringBuilder output, List<Action<StringBuilder, jsObject>> list) {
+            output.Append(Value);
+        }
 
-            if (Text.Compare('\'', Index)) {
-                var String = Text.FindMatchingBrackets('\'', '\'', Index, false);
-
-                Index += String.Length + 2;
-
-                return new StaticValue() { Value = String.Descape() };
+        new public static Element Parse(Engine Engine, StringIterator It) {
+            if (It.IsAt('"')) {
+                return new StaticValue(It.Extract('"', '"'));
             }
-            else
-            if (Text.Compare('"', Index)) {
-                var String = Text.FindMatchingBrackets('"', '"', Index, false);
-
-                Index += String.Length + 2;
-
-                return new StaticValue() { Value = String.Descape() };
-
+            else if (It.IsAt('\'')) {
+                return new StaticValue(It.Extract('\'', '\''));
             }
-            else {
-                var Next = Text.FirstPossibleIndex(Index, ',', '}');
 
-                if (Next != -1) {
-                    var String = Text.Substring(Index, Next - Index);
-                    Index = Next + 1;
-
-                    return new StaticValue() { Value = String };
-                }
-            }
             return null;
         }
     }

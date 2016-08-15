@@ -14,51 +14,34 @@ namespace Poly.Script.Expressions {
             return "case " + Object.ToString() + ":" + base.ToString();
         }
 
-        public static new Case Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			Case Node;
+			if (It.Consume ("case")) {
+				Node = new Case ();
+			} else if (It.Consume ("default")) {
+				Node = new Case () { IsDefault = true };
+			} else return null;
 
-            if (Text.Compare("case", Index)) {
-                var Delta = Index + 4;
-                ConsumeWhitespace(Text, ref Delta);
+			It.Consume (WhitespaceFuncs);
+			if (!Node.IsDefault) {
+				Node.Object = Engine.ParseValue (It);
+			}
 
-                var Case = new Case();
+			if (It.Consume (':')) {
+				It.Consume (WhitespaceFuncs);
 
-                Case.Object = Engine.Parse(Text, ref Delta, LastIndex);
-                ConsumeWhitespace(Text, ref Delta);
+				if (It.IsAt ('{')) {
+					Expression.Parse (Engine, It, Node);
+				}
+				else {
+					Node.Elements = new Node[] {
+						Engine.ParseExpression (It)
+					};
+				}
 
-                if (Text[Delta] == ':') {
-                    Delta++;
-                    ConsumeWhitespace(Text, ref Delta);
-
-                    Engine.Parse(Text, ref Delta, LastIndex, Case);
-                    ConsumeWhitespace(Text, ref Delta);
-
-                    Index = Delta;
-                    return Case;
-                }
-            }
-            else if (Text.Compare("default", Index)) {
-                var Delta = Index + 7;
-                ConsumeWhitespace(Text, ref Delta);
-
-                var Case = new Case();
-
-                if (Text[Delta] == ':') {
-                    Delta++;
-                    ConsumeWhitespace(Text, ref Delta);
-
-                    Engine.Parse(Text, ref Delta, LastIndex, Case);
-                    ConsumeWhitespace(Text, ref Delta);
-
-                    Index = Delta;
-
-                    Case.IsDefault = true;
-                    return Case;
-                }
-            }
-
-            return null;
-        }
+				return Node;
+			}
+			return null;
+		}
     }
 }

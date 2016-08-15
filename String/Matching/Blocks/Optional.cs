@@ -7,18 +7,19 @@ using System.Threading.Tasks;
 namespace Poly {
     public partial class Matcher {
         class Optional : Block {
-            Matcher Sub;
+			internal Block[] Blocks;
 
             public Optional(string Fmt)
                 : base(Fmt) {
-                    Sub = new Matcher(Fmt);
+				Blocks = Matcher.Parse(Fmt);
             }
 
             public override bool Match(Context Context) {
                 var c = new Context(Context.String) { Index = Context.Index };
 
-                if (Sub.Match(c)) {
+				if (Matcher.Match(Blocks, c)) {
                     Context.Index = c.Index;
+                    Context.BlockIndex += c.BlockIndex - Blocks.Length;
 
                     if (c.Store)
                         c.Storage.CopyTo(Context.Storage);

@@ -27,47 +27,45 @@ namespace Poly.Script.Expressions {
                 ((Else != null) ?  Else.ToString() : "");
         }
 
-        public static new If Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+		new public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("if")) {
+				It.Consume (WhitespaceFuncs);
 
-            if (Text.Compare("if", Index)) {
-                var Delta = Index += 2;
-                ConsumeWhitespace(Text, ref Delta);
+				var Node = new If () {
+					Boolean = Eval.Parse(Engine, It)
+				};
 
-                if (Text.Compare("(", Delta)) {
-                    var If = new If();
-                    var Open = Delta + 1;
-                    var Close = Delta;
+				if (Node.Boolean != null) {
+					It.Tick ();
+					It.Consume (WhitespaceFuncs); 
 
-                    ConsumeEval(Text, ref Close);
+					if (It.IsAt ('{')) {
+						Expression.Parse (Engine, It, Node);
+					}
+					else {
+						Node.Elements = new Node[] {
+							Engine.ParseExpression (It)
+						};
+					}
 
-                    if (Delta == Close)
-                        return null;
+					It.Consume (WhitespaceFuncs);
 
-                    If.Boolean = Engine.Parse(Text, ref Open, Close - 1);
+					if (It.Consume ("else")) {
+						It.Consume (WhitespaceFuncs);
 
-                    Delta = Close;
-                    ConsumeWhitespace(Text, ref Delta);
-
-                    var Exp = Engine.Parse(Text, ref Delta, LastIndex) as Node;
-
-                    if (Exp != null) {
-                        If.Elements = new Node[] { Exp };
-                        ConsumeWhitespace(Text, ref Delta);
-
-                        if (Text.Compare("else", Delta)) {
-                            Delta += 4;
-                            ConsumeWhitespace(Text, ref Delta);
-                            If.Else = Engine.Parse(Text, ref Delta, LastIndex) as Node;
+                        if (It.IsAt('{')) {
+                            Node.Else = Expression.Parse(Engine, It);
                         }
-                        Index = Delta;
-                        return If;
-                    }
-                }
-            }
+                        else {
+                            Node.Else = Engine.ParseExpression(It);
+                        }
+					}
 
-            return null;
-        }
+					return Node;
+
+				}
+			}
+			return null;
+		}
     }
 }

@@ -35,6 +35,7 @@ namespace Poly {
                     if (Length == -1)
                         return false;
 
+                    if (Tests != null)
                     for (var i = Context.Index; i < Length; i++) {
                         if (!ValidChar(Context[i]))
                             return false;
@@ -45,11 +46,18 @@ namespace Poly {
                     Context.Index += Length + Next.Format.Length;
                     Context.BlockIndex++;
                 }
-                else if (Next is WildCard || Next is WildChar) {
-                    while (ValidChar(Context.Current) && !Context.IsDone())
-                        Length ++;
-
-                    Context.Index += Length;
+				else if (Next is WildCard || Next is WildChar || Next is Optional) {
+                    if (Tests == null) {
+                        Context.Index = Context.Length;
+                    }
+                    else {
+                        for (var i = Context.Index; i < Context.Length; i++) {
+                            if (!ValidChar(Context[i]))
+                                break;
+                            Length++;
+                        }
+                        Context.Index += Length;
+                    }
                 }
                 else if (Next is Whitespace) {
                     Context.ConsumeUntil(char.IsWhiteSpace);
@@ -57,7 +65,7 @@ namespace Poly {
                 }
                 else {
                     while (!Context.IsDone()) {
-                        if (ValidChar(Context.Current)) {
+                        if (Tests != null && ValidChar(Context.Current)) {
                             Context.Tick();
                             Length++;
                         }
@@ -88,20 +96,22 @@ namespace Poly {
             }
 
             public bool ValidChar(char c) {
-                if (Tests == null)
-                    return true;
+                bool Result = false;
 
                 for (int i = 0; i < Tests.Length; i++) {
                     var R = Tests[i](c);
 
-                    if (R == null)
+                    if (R == true)
+                        return true;
+                    else
+                    if (R == false)
                         return false;
                     else
-                    if (R == true) 
-                        return true;
+                    if (R == null)
+                        Result = true;
                 }
 
-                return false;
+                return Result;
             }
 
             private string Modify(string Value) {
@@ -118,19 +128,20 @@ namespace Poly {
                 var List = new List<StringMatching.TestDelegate>();
 
                 foreach (var Name in Test.Split(TestModSplt, StringSplitOptions.RemoveEmptyEntries)) {
-                    var Key = Name[0] == '!' ?
+                    bool Not = Name[0] == '!';
+                    var Key = Not ?
                         Name.Substring(1) :
                         Name;
 
                     StringMatching.TestDelegate Current;
                     if (Key.StartsWith("[") && Key.EndsWith("]")) {
-                        var Split = Key.Substring(1, Key.Length - 2).ToCharArray();
+						var Split = Key.Substring(1, Key.Length - 2).Replace("\\:", ":").ToCharArray();
 
-                        if (Name[0] == '!') {
+                        if (Not) {
                             List.Add((c) => {
-                                if (Split.Contains(c) == true)
-                                    return null;
-                                return true;
+                                if (Split.Contains(c))
+                                    return false;
+                                return null;
                             });
                         }
                         else {
@@ -139,11 +150,11 @@ namespace Poly {
                     }
                     else
                     if (StringMatching.Tests.TryGetValue(Key, out Current)) {
-                        if (Name[0] == '!') {
+                        if (Not) {
                             List.Add((c) => {
                                 if (Current(c) == true)
-                                    return null;
-                                return true;
+                                    return false;
+                                return null;
                             });
                         }
                         else {

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-
+using Poly.Data;
 
 namespace Poly.Script.Nodes {
     public class StaticValue : Value {
@@ -12,8 +12,12 @@ namespace Poly.Script.Nodes {
             this.Value = Value;
         }
 
-        public override object Evaluate(Data.jsObject Context) {
+        public override object Evaluate(jsObject Context) {
             return Value;
+        }
+
+        public override void Evaluate(StringBuilder Output, jsObject Context) {
+            Output.Append(Value);
         }
 
         public override string ToString() {

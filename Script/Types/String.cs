@@ -5,27 +5,16 @@ namespace Poly.Script.Types {
 
 	public class String : Value {
         public readonly static StaticValue Empty = new StaticValue(string.Empty);
-        
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
 
-            if (Text[Index] == '"') {
-                var String = Text.FindMatchingBrackets("\"", "\"", Index, false);
-
-                Index += String.Length + 2;
-
-                return new StaticValue(String.Descape());
+		public static Node Parse(Engine Engine, StringIterator It) {
+            if (It.IsAt('"')) {
+                return new StaticValue(It.Extract('"', '"'));
             }
-            else if (Text[Index] == '\'') {
-                var String = Text.FindMatchingBrackets("'", "'", Index, false);
-
-                Index += String.Length + 2;
-
-                return new StaticValue(String.Descape());
+            else if (It.IsAt('\'')) {
+                return new StaticValue(It.Extract('\'', '\''));
             }
 
             return null;
-        }
+		}
     }
 }

@@ -44,7 +44,7 @@ namespace Poly.Net.Irc {
 
         public void Send(Packet Packet) {
             if (Packet.Message.Contains(Environment.NewLine)) {
-                var Messages = Packet.Message.Split(Environment.NewLine);
+                var Messages = Packet.Message.Split('\n');
 
                 foreach (var Msg in Messages) {
                     Packet.Message = Msg;

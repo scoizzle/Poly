@@ -14,6 +14,7 @@ namespace Poly.Script.Nodes {
                                            True,
                                            False;
 
+
         static Expression() {
             NoOperation = new Node();
             Break = new Node();
@@ -24,52 +25,50 @@ namespace Poly.Script.Nodes {
             False = new StaticValue(false);
         }
 
-        public static bool Parse(Engine Engine, string Text, ref int Index, int LastIndex, Node Storage) {
-            if (Text.Compare("{", Index)) {
-                var Open = Index + 1;
-                var Close = Index;
+		public static bool Parse(Engine Engine, StringIterator It, Node Storage) {
+			if (It.Consume ('{')) {
+				var Open = It.Index;
 
-                ConsumeExpression(Text, ref Close);
+				if (It.Goto ('{', '}')) {
+					if (Engine.ParseExpressions (It.Clone (Open, It.Index), Storage) != null) {
+						return It.Consume ('}');
+					}
+				}
+			}
+			return false;
+		}
 
-                if (Engine.Parse(Text, ref Open, Close - 1, Storage) != null) {
-                    Index = Close;
-                    return true;
+
+        public static bool ParseValues(Engine Engine, StringIterator It, Node Storage) {
+            if (It.Consume('{')) {
+                var Open = It.Index;
+
+                if (It.Goto('{', '}')) {
+                    if (Engine.ParseValues(It.Clone(Open, It.Index), Storage) != null) {
+                        return It.Consume('}');
+                    }
                 }
             }
             return false;
         }
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
 
-            if (Text.Compare("{", Index)) {
-                var Exp = new Expression();
-                var Open = Index + 1;
-                var Close = Index;
+        public static Node Parse(Engine Engine, StringIterator It) {
+			if (It.Consume ("break"))
+				return Break;
+			if (It.Consume ("continue"))
+				return Continue;
+			if (It.Consume ("null"))
+				return Null;
+			
+			if (It.IsAt ('{')) {
+				var Node = new Expression ();
 
-                ConsumeExpression(Text, ref Close);
+				if (Parse (Engine, It, Node))
+					return Node;
+			}
 
-                if (Engine.Parse(Text, ref Open, Close - 1, Exp) == null)
-                    return null;
-
-                Index = Close;
-                return Exp;
-            }
-            else if (Text.Compare("break", Index)) {
-                Index += 5;
-                return Break;
-            }
-            else if (Text.Compare("continue", Index)) {
-                Index += 8;
-                return Continue;
-            }
-            else if (Text.Compare("null", Index)) {
-                Index += 4;
-                return Null;
-            }
-
-            return null;
-        }
+			return null;
+		}
     }
 }

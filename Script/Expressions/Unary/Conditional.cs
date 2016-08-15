@@ -25,19 +25,16 @@ namespace Poly.Script.Expressions {
                 Right.Evaluate(Context);
         }
 
-        public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("?", Index)) {
-                Index += 1;
-                ConsumeWhitespace(Text, ref Index);
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            var L = Engine.ParseValue(It);
 
-                var L = Engine.Parse(Text, ref Index, LastIndex);
-                ConsumeWhitespace(Text, ref Index);
+            It.ConsumeWhitespace();
+            if (It.Consume(':')) {
+                It.ConsumeWhitespace();
 
-                if (Text.Compare(':', Index)) {
-                    var R = Engine.Parse(Text, ref Index, LastIndex);
+                var R = Engine.ParseValue(It);
 
-                    return new Conditional(Engine.Parse(Left, 0), L, R);
-                }
+                return new Conditional(Left, L, R);
             }
 
             return null;

@@ -15,13 +15,13 @@ namespace Poly.Script {
 
         public string IncludePath = string.Empty;
 
-        public List<Library> Using = new List<Library>();
+        public List<Library> Usings = new List<Library>();
 
-        public Dictionary<string, Expressions.Html.Template> HtmlTemplates = new Dictionary<string, Expressions.Html.Template>();
-        public Dictionary<string, CachedScript> Includes = new Dictionary<string, CachedScript>();
-		public Dictionary<string, PersistentFile> PersistentFiles = new Dictionary<string, PersistentFile>();
+        public KeyValueCollection<Expressions.Html.HtmlTemplate> HtmlTemplates = new KeyValueCollection<Expressions.Html.HtmlTemplate>();
+        public KeyValueCollection<CachedScript> Includes = new KeyValueCollection<CachedScript>();
+		public KeyValueCollection<PersistentFile> PersistentFiles = new KeyValueCollection<PersistentFile>();
 
-        public Dictionary<string, Type> ReferencedTypes = new Dictionary<string, Type>() {
+        public KeyValueCollection<Type> ReferencedTypes = new KeyValueCollection<Type>() {
             { "App", typeof(App) }, 
             { "Log", typeof(App.Log) },
             { "LogLevel", typeof(App.Log.Levels) },
@@ -39,7 +39,9 @@ namespace Poly.Script {
             { "Int", typeof(int) },
             { "UInt", typeof(uint) },
             { "Long", typeof(long) },
-            { "ULong", typeof(ulong) }
+            { "ULong", typeof(ulong) },
+            { "Double", typeof(double) },
+            { "Float", typeof(float) }
         };
 
         public jsObject<Class> Types = new jsObject<Class>();
@@ -73,7 +75,7 @@ namespace Poly.Script {
             if (this.Functions.TryGet(Name, out Func))
                 return Func;
 
-            foreach (var Use in Using) {
+            foreach (var Use in Usings) {
                 if (Use.TryGet(Name, out Func))
                     return Func;
             }
@@ -121,7 +123,7 @@ namespace Poly.Script {
         public static object Eval(string Script, jsObject Context = null) {
             var Eng = new Engine();
 
-            if (Eng.Parse(Script)) {
+			if (Eng.ParseExpressions(new StringIterator(Script), Eng) != null) {
                 if (Context == null) {
                     Context = new jsObject();
                 }

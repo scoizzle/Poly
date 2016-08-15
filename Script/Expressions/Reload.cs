@@ -39,20 +39,13 @@ namespace Poly.Script.Expressions {
             return "reload '" + Name.ToString() + "'";
         }
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+        public static Node Parse(Engine Engine, StringIterator It) {
+            if (It.Consume("reload")) {
+                var Name = Engine.ParseValue(It);
 
-            if (Text.Compare("reload", Index)) {
-                var Delta = Index += 6;
-                ConsumeWhitespace(Text, ref Delta);
-
-                var Inc = Engine.Parse(Text, ref Delta, LastIndex);
-
-                Index = Delta;
-                return new Reload(Engine, Inc);           
+                if (Name != null)
+                    return new Reload(Engine, Name);
             }
-
             return null;
         }
     }

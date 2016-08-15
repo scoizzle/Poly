@@ -17,18 +17,8 @@ namespace Poly.Script.Expressions {
             return Left < Right || Left == Right;
         }
 
-        public static Operator Parse(Engine Engine, string Text, ref int Index, int LastIndex, string Left) {
-            if (Text.Compare("->", Index)) {
-                Index += 2;
-                ConsumeWhitespace(Text, ref Index);
-
-                return new Between(
-                    Engine.Parse(Left, 0),
-                    Engine.Parse(Text, ref Index, LastIndex)
-                );
-            }
-
-            return null;
+        public static Node Parse(Engine Engine, StringIterator It, Node Left) {
+            return new Between(Left, Engine.ParseValue(It));
         }
 
         public override string ToString() {

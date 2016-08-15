@@ -6,16 +6,25 @@ using System.Text;
 
 namespace Poly.Script.Types {
     using Nodes;
-    public class Integer : Value {
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+	public class Integer : Value {
+		public static Node Parse(Engine Engine, StringIterator It) {
+			var Start = It.Index;
+			It.Consume ('+');
+			It.Consume ('-');
 
-            int Value = 0;
+			It.Consume (
+				char.IsDigit
+			);
 
-            if (Text.ToInt(ref Index, LastIndex, ref Value))
-                return new StaticValue(Value);
-            return null;
-        }
+			if (It.Index > Start && !It.IsAt('.')) {
+				int Value;
+
+				if (int.TryParse (It.Substring (Start, It.Index - Start), out Value))
+					return new StaticValue (Value);
+			}
+
+			It.Index = Start;
+			return null;
+		}
     }
 }

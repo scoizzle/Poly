@@ -6,7 +6,7 @@ using Poly.Data;
 namespace Poly.Script.Helpers {
 	using Nodes;
 
-	public class PersistentFile {
+	public sealed class PersistentFile : IDisposable {
 		FileInfo Info;
 		FileSystemWatcher Watcher;
 		Variable Var;
@@ -29,17 +29,18 @@ namespace Poly.Script.Helpers {
 			Watcher.EnableRaisingEvents = true;
 		}	
 
-		private void Update() {
-			try {
-				if (Info.Exists) {
-					var Content = File.ReadAllText(Info.FullName);
+        public void Dispose() {
+            Watcher?.Dispose();
+        }
 
-					if (Var.Assign(App.GlobalContext, new jsObject(Content))) {
-						App.Log.Info("Persisting {0} : {1}", Info.FullName, DateTime.Now);
-					}
+		private void Update() {
+			if (Info.Exists) {
+				var Content = File.ReadAllText(Info.FullName);
+
+				if (Var.Assign(App.GlobalContext, new jsObject(Content))) {
+					App.Log.Info("Persisting {0} : {1}", Info.FullName, DateTime.Now);
 				}
 			}
-			catch { Var.Assign (App.GlobalContext, null); }
 		}
 	}
 }

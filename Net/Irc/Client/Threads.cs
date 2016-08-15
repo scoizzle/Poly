@@ -9,18 +9,18 @@ using Poly.Data;
 namespace Poly.Net.Irc {
     public partial class Client : User {
         public void HandleBasicConnection() {
-            this.RegisterConnection();
+            RegisterConnection();
 
-            do {
-                var In = Packet.Receive(Connection);
+            while (Connected)
+            try {
+                do {
+                    var In = Packet.Receive(Connection);
 
-                if (In != null) {
-                    try {
-                        HandlePacket(In);
-                    }
-                    catch { }
-                }
-            } while (Connected);
+                    if (In != null)
+                            HandlePacket(In);
+                } while (Connected);
+            }
+            catch { }
 
             App.Log.Warning("Connection lost.");
             App.Log.Warning("Reconnecting.");

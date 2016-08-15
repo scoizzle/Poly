@@ -39,23 +39,19 @@ namespace Poly.Script.Expressions {
                 this.Name = Name.Substring(Parent.Length + 1);
 
                 if (Engine.ReferencedTypes.ContainsKey(Parent))
-                    This = new Nodes.StaticValue(Engine.ReferencedTypes[Parent]);
-                else if (Name.Contains('[', Parent.Length + 1))
-                    { This = Engine.Parse(Name, 0) as Variable; this.Name = string.Empty; }
-                else if (Engine.Types.ContainsKey(Parent))
-                    This = Engine.Types[Parent];
-                else if (!Engine.GetFunction(Parent, this.Name, out Function)) 
-                    This = Engine.Parse(Parent, 0);
+                    This = new StaticValue(Engine.ReferencedTypes[Parent]);
+                else if (Name.Contains('[', Parent.Length + 1)) 
+                    { This = Variable.Parse(Engine, new StringIterator(Name, Parent.Length + 1, Name.Length)); this.Name = string.Empty; }
+                else if (Engine.Types.ContainsKey(Parent)) 
+                    { This = Engine.Types[Parent]; }
+                else if (!Engine.GetFunction(Parent, this.Name, out Function))
+                    This = Engine.Parse(new StringIterator(Parent));
             }
         }
 
         public override object Evaluate(jsObject Context) {
             object Object = null;
             var Function = this.Function;
-
-			#if DEBUG
-			App.Log.Debug("Calling {0}", this.ToString());
-			#endif
             
             if (this.This != null) {
                 Object = This.Evaluate(Context);
@@ -93,28 +89,22 @@ namespace Poly.Script.Expressions {
                        .ToArray() :
                 null;
                                     
-            SystemFunction = Function.GetFunction(Type, Name, ArgTypes);
-
-            if (SystemFunction == null) {
-                if ((Function = Engine.GetFunction(Type, Name)) != null)
-                    return Execute(Function, Object, Context);
-                else 
-                    return null;
-            }
-
-            try {
+            SystemFunction = Helpers.RuntimeFunctionCache.GetFunction(Type, Name, ArgTypes);
+            if (SystemFunction != null)
                 return Execute(SystemFunction, Object, ArgList);
-            }
-            catch { 
-                return null;
-            }
+
+            Function = Engine.GetFunction(Type, Name);
+            if (Function != null)
+                return Execute(Function, Object, Context);
+
+            return null;
         }
 
         public override void Evaluate(StringBuilder Output, jsObject Context) {
             object Object = null;
             var Function = this.Function;
 
-            if (this.This != null) {
+            if (This != null) {
                 Object = This.Evaluate(Context);
             }
 
@@ -125,73 +115,67 @@ namespace Poly.Script.Expressions {
                 }
                 else {
                     Output.Append(Execute(Function, Object, Context));
+                    return;
                 }
             }
 
             if (SystemFunction != null && (SystemFunction.Method.IsStatic == (Object == null))) {
                 Output.Append(Execute(SystemFunction, Object, Context));
-            }
-
-            Type Type = Object as Type;
-            if (Type == null) {
-                if (This == null) {
-                    This = Node.ContextAccess;
-                    Object = Context;
-
-                    Type = Object.GetType();
-                }
-                else if (Object != null) {
-                    Type = Object.GetType();
-                }
-
-                Function = GetFunction(Object, Context);
-
-                if (Function != null) {
-                    if (Function is Html.Function) {
-                        Execute(Function as Html.Function, Output, Object, Context);
-                    }
-                    else {
-                        Output.Append(Execute(Function, Object, Context));
-                    }
-                }
-            }
-            else if (!(This is StaticValue)) {
-                This = new StaticValue(Type);
-            }
-
-            if (Object == null)
                 return;
+            }
+
+            Type Type = Object is Type ?
+                Object as Type :
+                Object != null ?
+                    Object.GetType() :
+                    null;
+
+            Function = GetFunction(Object, Context);
+
+            if (Function != null) {
+                if (Function is Html.Function) {
+                    Execute(Function as Html.Function, Output, Object, Context);
+                    return;
+                }
+                else {
+                    Output.Append(Execute(Function, Object, Context));
+                    return;
+                }
+            }
+            else if (Type == null) {
+                This = Expression.ContextAccess;
+                Object = Context;
+                Type = Object.GetType();
+            }
 
             var ArgList = GetArguments(Context);
             var ArgTypes = ArgList != null && ArgList.Length > 0 ?
                 ArgList.Select(o => o.GetType()).ToArray() :
                 null;
 
-            SystemFunction = Function.GetFunction(Type, Name, ArgTypes);
+            SystemFunction = Helpers.RuntimeFunctionCache.GetFunction(Type, Name, ArgTypes);
 
-            if (SystemFunction == null) {
-                if ((Function = Engine.GetFunction(Type, Name)) != null)
-                    Output.Append(Execute(Function, Object, Context));
-                else
-                    return;
-            }
-
-            try {
+            if (SystemFunction != null)
                 Output.Append(Execute(SystemFunction, Object, ArgList));
-            }
-            catch { }
+
+            Function = Engine.GetFunction(Type, Name);
+            if (Function != null)
+                Output.Append(Execute(Function, Object, Context));        
         }
 
         private Function GetFunction(object Object, jsObject Context) {
             if (This is Class) {
-                return this.Function = (This as Class).StaticFunctions[Name];
+                return Function = (This as Class).GetStaticFunction(Name);
             }
             else if (Object != null) {
                 if (Object is ClassInstance) {
                     return (Object as ClassInstance).Class.GetFunction(Name);
                 }
                 else if (Object is Class) {
-                    return (Object as Class).Instaciator;
+					if ((Object as Class).LastName == Name || string.IsNullOrEmpty(Name))
+                        return (Object as Class).Instaciator;
+                    else
+                        return (Object as Class).GetStaticFunction(Name);
                 }
                 else if (Object is Function) {
                     return Object as Function;
@@ -267,102 +251,76 @@ namespace Poly.Script.Expressions {
             return Args;
         }
 
-        private object Execute(Function Func, object This, jsObject Context) {
+		private object Execute(Function Func, object This, jsObject Context) {
             return Func.Evaluate(GetFunctionArguments(Func, This, Context));
         }
 
-        private object Execute(Html.Function Func, StringBuilder Output, object This, jsObject Context) {
+		private void Execute(Html.Function Func, StringBuilder Output, object This, jsObject Context) {
             Func.Evaluate(Output, GetFunctionArguments(Func, This, Context));
-            return null;
         }
 
         private object Execute(Func<object, object[], object> Func, object This, object[] Args) {
-            try {
-                return Func(This, Args);
-            }
-            catch {
-                return null;
-            }
+            return Func(This, Args);
         }
 
         private object Execute(Func<object, object[], object> Func, object This, jsObject Context) {
-            try {
-                return Func(This, GetArguments(Context));
-            }
-            catch { 
-                return null; 
-            }
+            return Func(This, GetArguments(Context));
         }
 
-        public static new Node Parse(Engine Engine, string Text, ref int Index, int LastIndex) {
-            return Parse(Engine, Text, ref Index, LastIndex, false);
-        }
+        new public static Call Parse(Engine Engine, StringIterator It) {
+            string Name;
 
-        public static Node Parse(Engine Engine, string Text, ref int Index, int LastIndex, bool Constructor = false) {
-            if (!IsParseOk(Engine, Text, ref Index, LastIndex))
-                return null;
+            var Start = It.Index;
 
-            var Delta = Index;
-            Expression.ConsumeValidName(Text, ref Delta);
+            if (It.Consume(CallNameFuncs)) {
+                Name = It.Substring(Start, It.Index - Start);
 
-            if (Index != Delta) {
-                var Name = Text.Substring(Index, Delta - Index);
-                ConsumeWhitespace(Text, ref Delta);
+                It.ConsumeWhitespace();
 
-                if (Text.Compare("(", Delta)) {
-                    var Call = new Call(Engine, Name);
-                    
-                    var Open = Delta + 1;
-                    var Close = Delta;
+                if (It.Consume("(")) {
+                    Start = It.Index;
 
-                    ConsumeEval(Text, ref Close);
+                    if (It.Goto('(', ')')) {
+                        var Sub = It.Clone(Start, It.Index);
+                        var List = new List<Node>();
 
-                    if (Delta == Close)
-                        return null;
+                        while (!Sub.IsDone()) {
+                            var Node = Engine.ParseOperation(Sub);
 
-                    var RawArgs = Text.Substring(Open, Close - Open - 1).ParseCParams();
+                            if (Node == null)
+                                return null;
 
-                    var List = new List<Node>();
-                    for (int i = 0; i < RawArgs.Length; i++) {
-                        var Arg = Engine.Parse(RawArgs[i], 0);
-
-                        if (Arg == null)
-                            return null;
-
-                        List.Add(Arg);
-                    }
-
-                    Call.Arguments = List.ToArray();
-
-                    ConsumeWhitespace(Text, ref Close);
-
-
-                    if (Text.Compare('.', Close)) {
-                        Close++;
-                        ConsumeWhitespace(Text, ref Close);
-
-                        var Child = Parse(Engine, Text, ref Close, LastIndex) as Call;
-
-                        if (Child != null) {
-                            var Current = Child;
-                            while (Current.This != null) {
-                                if (Current.This is Call)
-                                    Current = Current.This as Call;
-                                else return Child;
-                            }
-
-                            Current.This = Call;
-
-                            Index = Close;
-                            return Child;
+                            List.Add(Node);
+                            Sub.Consume(WhitespaceFuncs);
                         }
+
+                        var Call = new Call(Engine, Name, List.ToArray());
+
+                        It.Tick();
+                        It.ConsumeWhitespace();
+
+                        if (It.Consume('.')) {
+                            var Child = Parse(Engine, It);
+
+                            if (Child != null) {
+                                var Current = Child;
+                                while (Current.This != null) {
+                                    if (Current.This is Call)
+                                        Current = Current.This as Call;
+                                    else return Child;
+                                }
+
+                                Current.This = Call;
+                                return Child;
+                            }
+                        }
+
+                        return Call;
                     }
-
-                    Index = Close;
-                    return Call;
                 }
-            }
 
+                It.Index = Start;
+            }
             return null;
         }
         

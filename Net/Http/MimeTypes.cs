@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Poly.Net.Http {
 	public class Mime {
-		public static Dictionary<string, string> Types = new Dictionary<string, string>{
+		public static Dictionary<string, string> Types = new Dictionary<string, string> {
 			{ "123", "application/vnd.lotus-1-2-3" },
 			{ "3dml", "text/vnd.in3d.3dml" },
 			{ "3g2", "video/3gpp2" },

@@ -53,7 +53,7 @@ namespace Poly.Script.Expressions {
             object Object = null;
             var Function = this.Function;
             
-            if (this.This != null) {
+            if (This != null) {
                 Object = This.Evaluate(Context);
             }
 

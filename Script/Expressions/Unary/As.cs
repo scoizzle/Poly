@@ -12,7 +12,7 @@ namespace Poly.Script.Expressions {
         Type Type;
         public As(Node Left, Type T) {
             this.Left = Left;
-            this.Type = T;
+            Type = T;
         }
 
         public override object Evaluate(jsObject Context) {

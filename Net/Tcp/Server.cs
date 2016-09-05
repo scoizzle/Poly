@@ -56,12 +56,10 @@ namespace Poly.Net.Tcp {
             return new Thread(AcceptConnections);
         }
 
-        private async void AcceptConnections() {
-            while (Active) {
-                var Worker = ClientConnected(await AcceptSocketAsync());
-            }
-        }
-
-
+		private async void AcceptConnections() {
+			while (Active) {
+				ClientConnected(await AcceptSocketAsync());
+			}
+		}
     }
 }

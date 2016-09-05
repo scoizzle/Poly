@@ -13,7 +13,7 @@ namespace Poly.Script.Nodes {
 
         public Variable(Engine Engine) {
             this.Engine = Engine;
-            this.IsGlobal = this.IsStatic = false;
+            IsGlobal = IsStatic = false;
         }
 
         public override object Evaluate(jsObject Context) {

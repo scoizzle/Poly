@@ -39,7 +39,7 @@ namespace Poly.Net.Irc {
         public void Stop() {
             Disconnect();
 
-            this.Connection = null;
+            Connection = null;
         }
 
         public void Send(Packet Packet) {

@@ -40,10 +40,10 @@ namespace Poly.Net.Irc {
             Conversation Conv;
 
             if (string.IsNullOrEmpty(Packet.Receiver)) {
-                Conv = Conversations[this.Nick] ?? (Conversations[this.Nick] = new Conversation(this.Nick));
+                Conv = Conversations[Nick] ?? (Conversations[Nick] = new Conversation(Nick));
             }
             else
-            if (Packet.Receiver == this.Nick){
+            if (Packet.Receiver == Nick) {
                 Conv = Conversations[Sender.Nick] ?? (Conversations[Sender.Nick] = new Conversation(Sender.Nick));
             }
             else {

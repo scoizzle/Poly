@@ -55,12 +55,12 @@ namespace Poly.Net.Irc {
         }
 
         public Packet(string Type, string Message, params string[] Args) : this() {
-            this.IsHeadless = true;
+            IsHeadless = true;
 
             this.Type = Type;
             this.Message = Message;
 
-            this.SetArgs(Args);
+            SetArgs(Args);
         }
 
         public Packet(Packet.Reply Type, string Message, params string[] Args) 
@@ -69,12 +69,12 @@ namespace Poly.Net.Irc {
 
         public Packet(string Type, string Sender, string Receiver, string Message, params string[] Args) 
             : this(Type, Message) {
-            this.IsHeadless = false;
+            IsHeadless = false;
 
             this.Sender = Sender;
             this.Receiver = Receiver;
 
-            this.SetArgs(Args);
+            SetArgs(Args);
         }
 
         public Packet(Reply Type, string Sender, string Receiver, string Message, params string[] Args) 
@@ -82,7 +82,7 @@ namespace Poly.Net.Irc {
         }
 
         public void SetArgs(params string[] Values) {
-            this.Args = string.Join(" ", Values);
+            Args = string.Join(" ", Values);
         }
 
         public void Send(Tcp.Client Client) {
@@ -162,7 +162,7 @@ namespace Poly.Net.Irc {
         }
 
         public override string ToString() {
-            if (this.IsHeadless) {
+            if (IsHeadless) {
                 return this.Template(HeadlessFormat);
             }
             else {
@@ -303,7 +303,7 @@ namespace Poly.Net.Irc {
         }
 
         public _Packet(string TypeName) {
-            this.Format = Formats[TypeName];
+            Format = Formats[TypeName];
         }
 
         public _Packet(string TypeName, params object[] Args) : base(Args) {
@@ -377,8 +377,8 @@ namespace Poly.Net.Irc {
             
             foreach (var Pair in _PacketFormatArray) {
                 if (Line.Match(Pair.Value, this) != null) {
-                    this.Format = Pair.Value;
-                    this.Action = Pair.Key;
+                    Format = Pair.Value;
+                    Action = Pair.Key;
                     return true;
                 }
             }

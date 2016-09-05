@@ -13,14 +13,14 @@ namespace Poly.Script.Expressions {
         Node Boolean;
 
         public Conditional(Node Bool, Node Left, Node Right) {
-            this.Boolean = Bool;
+            Boolean = Bool;
 
             this.Left = Left == null ? Expression.Null : Left;
             this.Right = Right == null ? Expression.Null : Right;
         }
 
         public override object Evaluate(jsObject Context) {
-            return Bool.EvaluateNode(this.Boolean, Context) ? 
+            return Bool.EvaluateNode(Boolean, Context) ? 
                 Left.Evaluate(Context) :
                 Right.Evaluate(Context);
         }

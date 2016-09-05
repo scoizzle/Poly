@@ -14,7 +14,7 @@ namespace Poly.Script.Expressions {
         }
 
         public override object Evaluate(Data.jsObject Context) {
-            return Bool.EvaluateNode(this.Left, Context) || Bool.EvaluateNode(this.Right, Context);
+            return Bool.EvaluateNode(Left, Context) || Bool.EvaluateNode(Right, Context);
         }
 
         public static Node Parse(Engine Engine, StringIterator It, Node Left) {

@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Poly {
+    using Data;
     public partial class Matcher {
         class Extract : Block {
             static readonly char[] TestModSplt = new char[] { ',', ';' };
@@ -13,12 +14,15 @@ namespace Poly {
             public StringMatching.TestDelegate[] Tests;
             public StringMatching.ModDelegate[] Modifiers;
 
-            public Extract(string Name, string Tests, string Mods)
-                : base(string.Join(":", Name, Tests, Mods)) {
+            public Extract(string key) : base(key) {
+                Key = key;
+            }
 
-                this.Key = Name;
-                this.Tests = ParseTests(Tests);
-                this.Modifiers = ParseMods(Mods);
+            public Extract(string fmt, string key, string test, string mod) : base(fmt) {
+                Key = key;
+
+                Tests = ParseTests(test);
+                Modifiers = ParseMods(mod);
             }
 
             public override bool Match(Context Context) {
@@ -30,18 +34,38 @@ namespace Poly {
                     Context.Index = Context.Length;
                 }
                 else if (Next is Static) {
-                    Length = Context.Find(Next.Format);
+                    if (Tests != null) {
+                        var Format = Next.Format;
+                        var Len = Format.Length;
+                        var First = Format[0];
 
-                    if (Length == -1)
+                        var String = Context.String;
+                        var idx = Context.Index;
+                        var Last = Context.Length - Len - 1;
+
+                        for (; idx < Last; idx++) { 
+                            if (String[idx] == First) {
+                                if (string.Compare(String, idx, Format, 0, Len, StringComparison.Ordinal) == 0)
+                                    goto foundNext;
+                            }
+                            else if (!ValidChar(String[idx])) {
+                                return false;
+                            }
+                        }
+
                         return false;
 
-                    if (Tests != null)
-                    for (var i = Context.Index; i < Length; i++) {
-                        if (!ValidChar(Context[i]))
-                            return false;
+                    foundNext:
+                        Length = idx - Start;
                     }
+                    else {
+                        Length = Context.Find(Next.Format);
 
-                    Length -= Start;
+                        if (Length == -1)
+                            return false;
+
+                        Length -= Start;
+                    }
 
                     Context.Index += Length + Next.Format.Length;
                     Context.BlockIndex++;
@@ -64,20 +88,20 @@ namespace Poly {
                     Length = Context.Index - Start;
                 }
                 else {
-                    while (!Context.IsDone()) {
-                        if (Tests != null && ValidChar(Context.Current)) {
+                    if (Tests != null) {
+                        while (!Context.IsDone() && ValidChar(Context.Current)) {
                             Context.Tick();
                             Length++;
                         }
-                        else if (Next != null && Next.Match(Context)) {
+                    }
+                    else
+                    if (Next != null) {
+                        if (Next.Match(Context)) {
                             Context.BlockIndex++;
 
                             if (Length == 0)
                                 return true;
-
-                            break;
                         }
-                        else break;
                     }
                 }
                 
@@ -88,79 +112,97 @@ namespace Poly {
                     return false;
                 }
                 else {
-                    if (Context.Store)
-                        Context.Storage.Set(Key, Modify(Context.Substring(Start, Length)));
+					Context.Set(Key, Modify(Context.Substring(Start, Length)));
                 }
 
                 return true;
             }
 
             public bool ValidChar(char c) {
-                bool Result = false;
-
-                for (int i = 0; i < Tests.Length; i++) {
-                    var R = Tests[i](c);
-
-                    if (R == true)
-                        return true;
-                    else
-                    if (R == false)
-                        return false;
-                    else
-                    if (R == null)
-                        Result = true;
-                }
-
-                return Result;
+                return Tests.Any(f => f(c));
             }
 
-            private string Modify(string Value) {
-                if (Modifiers != null) {
-                    for (int i = 0; i < Modifiers.Length; i++) {
-                        Value = Modifiers[i](Value);
-                    }
+            private object Modify(string value) {
+                if (Modifiers == null)
+                    return value;
+
+                object Value = value;
+
+                var i = 0;
+                var Len = Modifiers.Length;
+
+                do {
+                    Value = Modifiers[i](Value as string);
                 }
+                while (Value is string && i++ < Len);
 
                 return Value;
             }
             
             private StringMatching.TestDelegate[] ParseTests(string Test) {
+                if (Test == null)
+                    return null;
+
+                var It = new StringIterator(Test);
                 var List = new List<StringMatching.TestDelegate>();
 
-                foreach (var Name in Test.Split(TestModSplt, StringSplitOptions.RemoveEmptyEntries)) {
-                    bool Not = Name[0] == '!';
-                    var Key = Not ?
-                        Name.Substring(1) :
-                        Name;
+                while (!It.IsDone()) {
+                    bool Not = It.Consume('!');
 
-                    StringMatching.TestDelegate Current;
-                    if (Key.StartsWith("[") && Key.EndsWith("]")) {
-						var Split = Key.Substring(1, Key.Length - 2).Replace("\\:", ":").ToCharArray();
+                    if (It.Consume('[')) {
+                        var Chars = new StringBuilder();
 
-                        if (Not) {
-                            List.Add((c) => {
-                                if (Split.Contains(c))
-                                    return false;
-                                return null;
-                            });
+                        while (!It.IsDone()) {
+                            if (It.Current == ']')
+                                break;
+
+                            if (It.Current == '\\') {
+                                It.Tick();
+
+                                Chars.Append(It.Current);
+                                It.Tick();
+                            }
+                            else {
+                                var First = It.Current;
+                                It.Tick();
+
+                                if (It.Current == '-') {
+                                    It.Tick();
+
+                                    var Sec = It.Current;
+                                    It.Tick();
+
+                                    var f = CharRange(First, Sec);
+                                    if (Not) List.Add(TestInvariant(f));
+                                    else List.Add(f);
+                                }
+                                else {
+                                    Chars.Append(First);
+                                }
+                            }
                         }
-                        else {
-                            List.Add(c => Split.Contains(c));
+                        
+                        if (It.Consume(']')) {
+                            var f = ArrayContains(Chars.ToString());
+
+                            if (Not) List.Add(TestInvariant(f));
+                            else List.Add(f);
                         }
                     }
-                    else
-                    if (StringMatching.Tests.TryGetValue(Key, out Current)) {
-                        if (Not) {
-                            List.Add((c) => {
-                                if (Current(c) == true)
-                                    return false;
-                                return null;
-                            });
-                        }
-                        else {
-                            List.Add(Current);
+                    else {
+                        var Start = It.Index;
+
+                        if (It.Consume(char.IsLetter)) {
+                            var testName = It.Substring(Start, It.Index - Start);
+                            var f = StringMatching.Tests.Get(testName);
+
+                            if (f != null)
+                                if (Not) List.Add(TestInvariant(f));
+                                else List.Add(f);
                         }
                     }
+
+                    It.Consume(char.IsWhiteSpace, C => C == ',');
                 }
 
                 if (List.Count > 0)
@@ -170,19 +212,63 @@ namespace Poly {
             }
 
             private StringMatching.ModDelegate[] ParseMods(string Mod) {
+                if (Mod == null)
+                    return null;
+
+                var It = new StringIterator(Mod);
                 var List = new List<StringMatching.ModDelegate>();
 
-                StringMatching.ModDelegate Current;
-                foreach (var Name in Mod.Split(TestModSplt, StringSplitOptions.RemoveEmptyEntries)) {
-                    if (StringMatching.Modifiers.TryGetValue(Name, out Current)) {
-                        List.Add(Current);
+                while (!It.IsDone()) {
+                    if (It.Consume('`')) {
+                        var Start = It.Index;
+
+                        if (It.Goto('`', '`')) {
+                            var modFmt = It.Substring(Start, It.Index - Start);
+                            var matcher = new Matcher(modFmt);
+
+                            List.Add((o) => {
+                                if (o is string) {
+                                    return matcher.MatchAll(o as string, true);
+                                }
+                                return null;
+                            });
+
+                            It.Tick();
+                        }
+                        else break;
                     }
+                    else {
+                        var Start = It.Index;
+
+                        if (It.Consume(char.IsLetterOrDigit)) {
+                            var modName = It.Substring(Start, It.Index - Start);
+                            var f = StringMatching.Modifiers.Get(modName);
+
+                            if (f != null)
+                                List.Add(f);
+                        }
+                        else break;
+                    }
+
+                    It.Consume(char.IsWhiteSpace, C => C == ',');
                 }
 
                 if (List.Count > 0)
                     return List.ToArray();
 
                 return null;
+            }
+
+            private StringMatching.TestDelegate ArrayContains(string arr) {
+                return c => arr.IndexOf(c) != -1;
+            }
+
+            private StringMatching.TestDelegate CharRange(char First, char Last) {
+                return c => c >= First && c <= Last;
+            }
+
+            private StringMatching.TestDelegate TestInvariant(StringMatching.TestDelegate f) {
+                return c => !f(c);
             }
         }
     }

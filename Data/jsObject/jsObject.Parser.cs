@@ -37,12 +37,11 @@ namespace Poly.Data {
 
         public static bool Parse(string Text, int Index, int Length, jsObject Storage) {
             var It = new StringIterator(Text, Index, Length);
-            object Result;
 
-            if ((Result = _Object(It, Storage)) != null)
+            if (_Object(It, Storage) != null)
                 return true;
             else
-            if ((Result = _Array(It, Storage)) != null)
+            if (_Array(It, Storage) != null)
                 return true;
             else
                 return false;

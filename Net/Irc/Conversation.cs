@@ -14,9 +14,9 @@ namespace Poly.Net.Irc {
 
         public Conversation(string Name) {
             this.Name = Name;
-            this.Topic = string.Empty;
-            this.Users = new jsObject();
-            this.Modes = new jsObject();
+            Topic = string.Empty;
+            Users = new jsObject();
+            Modes = new jsObject();
         }
 
 

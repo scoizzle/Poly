@@ -113,7 +113,7 @@ namespace Poly.Net.Tcp {
 
                     if (b == chain[i]) {
                         if (++i == chainLen) {
-                            storage.Write(Buffer, startPosition, Position - startPosition - chainLen);
+                            await storage.WriteAsync(Buffer, startPosition, Position - startPosition - chainLen);
                             await storage.FlushAsync();
                             return true;
                         }

@@ -28,8 +28,8 @@ namespace Poly.Script.Expressions {
             var FileName = Value.ToString();
             FileName = Path.GetFullPath(FileName);
 
-            if (this.Engine.Includes.ContainsKey(FileName)) {
-                return this.Engine.Includes[FileName].Reload();
+            if (Engine.Includes.ContainsKey(FileName)) {
+                return Engine.Includes[FileName].Reload();
             }
 
             return null;

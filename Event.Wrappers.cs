@@ -40,6 +40,125 @@ namespace Poly {
             };
         }
 
+        public static Handler Wrapper<T1>(Action<T1> Func) {
+            if (Func == null)
+                return null;
+
+            var Names = GetArgumentNames(Func.Method);
+
+            return (Args) => {
+                Func(
+                    Args.Get<T1>(Names[0])
+                );
+                return null;
+            };
+        }
+
+        public static Handler Wrapper<T1, T2>(Action<T1, T2> Func) {
+            if (Func == null)
+                return null;
+
+            var Names = GetArgumentNames(Func.Method);
+
+            return (Args) => {
+                Func(
+                    Args.Get<T1>(Names[0]),
+                    Args.Get<T2>(Names[1])
+                );
+                return null;
+            };
+        }
+
+        public static Handler Wrapper<T1, T2, T3>(Action<T1, T2, T3> Func) {
+            if (Func == null)
+                return null;
+
+            var Names = GetArgumentNames(Func.Method);
+
+            return (Args) => {
+                Func(
+                    Args.Get<T1>(Names[0]),
+                    Args.Get<T2>(Names[1]),
+                    Args.Get<T3>(Names[2])
+                );
+                return null;
+            };
+        }
+
+        public static Handler Wrapper<T1, T2, T3, T4>(Action<T1, T2, T3, T4> Func) {
+            if (Func == null)
+                return null;
+
+            var Names = GetArgumentNames(Func.Method);
+
+            return (Args) => {
+                Func(
+                    Args.Get<T1>(Names[0]),
+                    Args.Get<T2>(Names[1]),
+                    Args.Get<T3>(Names[2]),
+                    Args.Get<T4>(Names[3])
+                );
+                return null;
+            };
+        }
+
+        public static Handler Wrapper<T1, T2, T3, T4, T5>(Action<T1, T2, T3, T4, T5> Func) {
+            if (Func == null)
+                return null;
+
+            var Names = GetArgumentNames(Func.Method);
+
+            return (Args) => {
+                Func(
+                    Args.Get<T1>(Names[0]),
+                    Args.Get<T2>(Names[1]),
+                    Args.Get<T3>(Names[2]),
+                    Args.Get<T4>(Names[3]),
+                    Args.Get<T5>(Names[4])
+                );
+                return null;
+            };
+        }
+
+        public static Handler Wrapper<T1, T2, T3, T4, T5, T6>(Action<T1, T2, T3, T4, T5, T6> Func) {
+            if (Func == null)
+                return null;
+
+            var Names = GetArgumentNames(Func.Method);
+
+            return (Args) => {
+                Func(
+                    Args.Get<T1>(Names[0]),
+                    Args.Get<T2>(Names[1]),
+                    Args.Get<T3>(Names[2]),
+                    Args.Get<T4>(Names[3]),
+                    Args.Get<T5>(Names[4]),
+                    Args.Get<T6>(Names[5])
+                );
+                return null;
+            };
+        }
+
+        public static Handler Wrapper<T1, T2, T3, T4, T5, T6, T7>(Action<T1, T2, T3, T4, T5, T6, T7> Func) {
+            if (Func == null)
+                return null;
+
+            var Names = GetArgumentNames(Func.Method);
+
+            return (Args) => {
+                Func(
+                    Args.Get<T1>(Names[0]),
+                    Args.Get<T2>(Names[1]),
+                    Args.Get<T3>(Names[2]),
+                    Args.Get<T4>(Names[3]),
+                    Args.Get<T5>(Names[4]),
+                    Args.Get<T6>(Names[5]),
+                    Args.Get<T7>(Names[6])
+                );
+                return null;
+            };
+        }
+
         public static Handler Wrapper(Func<object> Func) {
             if (Func == null)
                 return null;

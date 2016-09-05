@@ -13,15 +13,17 @@ namespace Poly {
             public jsObject Storage;
             public int BlockIndex, BlockCount;
 
-            public Context(string Data) : base(Data) {
-                this.Storage = new jsObject();
-                this.Store = true;
+			public Context(string Data) : this(Data, new jsObject()) { }
+
+            public Context(string Data, jsObject storage) : base(Data) {
+                Storage = storage;
+                Store = true;
             }
 
-            public Context(string Data, jsObject Storage) : base(Data) {
-                this.Storage = Storage;
-                this.Store = true;
-            }
+			public void Set(string Key, object Value) {
+				if (!Store) return;
+				Storage.AssignValue(Key, Value);
+			}
         }
     }
 }

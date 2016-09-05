@@ -5,6 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Poly {
+    using Data;
+
     public class StringIterator {
         public string String;
         public int Index, Length;
@@ -41,7 +43,7 @@ namespace Poly {
         }
 
         public int Find(string Str) {
-            var Res = String.Find(Str, Index);
+			var Res = String.Find(Str, Index, Length);
 
             if (Res > Length)
                 return -1;
@@ -57,31 +59,6 @@ namespace Poly {
                 return Stop;
 
             return -1;
-        }
-
-        public char FirstPossible(params char[] Chars) {
-            return FirstPossible(ref Index, String.Length, Chars);
-        }
-
-        public char FirstPossible(ref int Index, params char[] Chars) {
-            return FirstPossible(ref Index, String.Length, Chars);
-        }
-
-        public char FirstPossible(ref int Index, int Length, params char[] Chars) {
-            int Location = Length;
-            char Lowest = default(char);
-
-            for (int i = 0; i < Chars.Length; i++) {
-                int Loc = String.IndexOf(Chars[i], Index, Location - Index);
-
-                if (Loc != -1) {
-                    Location = Loc;
-                    Lowest = Chars[i];
-                }
-            }
-
-            Index = Location;
-            return Lowest;
         }
 
         public bool IsAt(char C) {
@@ -149,18 +126,40 @@ namespace Poly {
 
 		public bool Consume(params Func<char, bool>[] Possible) {
 			if (!IsDone ()) {
-				if (!Possible.Any (f => f (this.Current)))
+				if (!Possible.Any (f => f (Current)))
 					return false;
 				
 				do {
 					Tick ();
 				} 
-				while (Possible.Any (f => f (this.Current)));
+				while (Possible.Any (f => f (Current)));
 
 				return true;
 			}
 			return false;
 		}
+
+        public T ConsumeAnyKey<T>(KeyValueCollection<T> Collection) {
+            foreach (var P in Collection) {
+                if (Consume(P.Key)) {
+                    return P.Value;
+                }
+            }
+            return default(T);
+        }
+
+        public bool ConsumeUntil(string str) {
+            var I = Index;
+            while (I < Length) {
+                if (IsAt(str)) {
+                    Index = I;
+                    return true;
+                }
+                I++;
+            }
+
+            return false;
+        }
 
         public void ConsumeUntil(Func<char, bool> f) {
             var I = Index;
@@ -171,6 +170,25 @@ namespace Poly {
                 }
                 I++;
             }
+        }
+
+        public string ExtractUntil(char Token) {
+            var Next = Find(Token);
+            if (Next == -1) return null;
+
+            var Str = String.Substring(Index, Next - Index);
+            Index = Next;
+            return Str;
+        }
+
+
+        public string ExtractUntil(string Token) {
+            var Next = Find(Token);
+            if (Next == -1) return null;
+
+            var Str = String.Substring(Index, Next - Index);
+            Index = Next;
+            return Str;
         }
 
         public bool Goto(char C) {
@@ -244,8 +262,8 @@ namespace Poly {
                     It.Tick();
 
                 if (String[i] == It[It.Index]) {
-                    if (this.String.Compare(i, It.String, It.Index, Length, IgnoreCase)) {
-                        this.Index = i;
+                    if (String.Compare(i, It.String, It.Index, Length, IgnoreCase)) {
+                        Index = i;
                         return true;
                     }
                 }
@@ -254,7 +272,57 @@ namespace Poly {
             return false;
         }
 
-		public bool EndsWith(string Str) {
+        public char GotoFirstPossible(params char[] Chars) {
+            return GotoFirstPossible(ref Index, String.Length, Chars);
+        }
+
+        public char GotoFirstPossible(ref int Index, params char[] Chars) {
+            return GotoFirstPossible(ref Index, String.Length, Chars);
+        }
+
+        public char GotoFirstPossible(ref int Index, int Length, params char[] Chars) {
+            int Location = Length;
+            char Lowest = default(char);
+
+            for (int i = 0; i < Chars.Length; i++) {
+                int Loc = String.IndexOf(Chars[i], Index, Location - Index);
+
+                if (Loc != -1) {
+                    Location = Loc;
+                    Lowest = Chars[i];
+                }
+            }
+
+            Index = Location;
+            return Lowest;
+        }
+
+        public string GotoFirstPossible(params string[] strings) {
+            return GotoFirstPossible(ref Index, String.Length, strings);
+        }
+
+        public string GotoFirstPossible(ref int Index, params string[] strings) {
+            return GotoFirstPossible(ref Index, String.Length, strings);
+        }
+
+        public string GotoFirstPossible(ref int Index, int Length, params string[] Chars) {
+            int Location = Length;
+            string Lowest = null;
+
+            for (int i = 0; i < Chars.Length; i++) {
+                int Loc = String.Find(Chars[i], Index, Location);
+
+                if (Loc != -1) {
+                    Location = Loc;
+                    Lowest = Chars[i];
+                }
+            }
+
+            Index = Location;
+            return Lowest;
+        }
+
+        public bool EndsWith(string Str) {
 			if (Str.Length > Length || string .IsNullOrEmpty(Str))
 				return false;
 

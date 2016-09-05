@@ -55,6 +55,10 @@ namespace Poly {
                 });
             }
 
+            public void Register<T1>(string EventName, Action<T1> Func) {
+                Register(EventName, Wrapper(Func));
+            }
+
             public bool MatchAndInvoke(string Data, jsObject Args) {
                 var Len = Handlers.Count;
                 for (int i = 0; i < Len; i++) {

@@ -1,37 +1,43 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Poly.Data;
 using path = System.IO.Path;
 
 namespace Poly.Net.Http {
     public class Host : jsComplex {
-        public string Name, Path, DefaultDocument, DefaultExtension;
+        public long CacheSize;
+        public string Name, Path, DefaultDocument, DefaultDocumentFullPath, DefaultExtension;
+		public jsObject Compressable;
 
         public Matcher Matcher;
-
+         
         public Event.Engine Handlers;
         public Cache Cache;
 
-		public Host(string hostName) {
-            this.Name = hostName;
-            this.Path = "WWW";
-            this.DefaultDocument = "/index.html";
-            this.DefaultExtension = "htm";
-            this.Handlers = new Event.Engine();
+        public Host(string hostName) {
+            Name = hostName;
+            Path = "WWW";
+            DefaultDocument = "/index.html";
+            DefaultExtension = "htm";
+            Handlers = new Event.Engine();
+            CacheSize = Cache.DefaultMaxSize;
+            Compressable = new jsObject() { IsArray = true };
         }
 
         public Host(string hostName, jsObject args) : this(hostName) {
             args?.CopyTo(this);
         }
 
-		public void Ready() {
-            this.Matcher = new Matcher(this.Name);
-            this.Path = path.GetFullPath (Path);
-			this.Cache = new Cache(this.Path);
-		}
+        public void Ready() {
+            Matcher = new Matcher(Name);
+            Cache = new Cache(Path, Compressable.Values.Cast<string>().ToArray());
+            Path = path.GetFullPath(Path);
+            DefaultDocumentFullPath = GetFullPath("");
+        }
 
         public void Stop() {
-            this.Cache.Dispose();
+            Cache.Dispose();
         }
 
         public void On(string Path, Event.Handler Handler) {
@@ -42,28 +48,21 @@ namespace Poly.Net.Http {
             Handlers.Register(Path, Handler, ThisName, This);
         }
         
-        public string GetWWW(string Target) {
-            if (string.IsNullOrEmpty(Target) || Target == "/")
-                return path.GetFullPath(Path + DefaultDocument);
-
-            if (Target[Target.Length - 1] == '/') {
-                return Path + Target + DefaultDocument;
-            }
-            
-            return path.GetFullPath(Path + Target);
+        public string GetFullPath(string Target) {
+            if (Target == null || Target.Length == 0 || Target == "/") 
+				Target = DefaultDocument;
+            else if (Target[Target.Length - 1] == '/') 
+				Target = Target + DefaultDocument;
+            return Target;
         }
 
         public string GetExtension(string FileName) {
-            var lastPeriod = FileName.FindLast('.');
+            var lastPeriod = FileName.LastIndexOf('.');
 
             if (lastPeriod == -1)
                 return string.Empty;
 
             return FileName.Substring(lastPeriod + 1);
-        }
-
-        public object Psx(Server Serv, Request Request, string Target) {
-            return Serv.Psx(Request, Target);
         }
     }
 }

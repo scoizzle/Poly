@@ -72,7 +72,7 @@ namespace Poly.Data {
 
         public virtual void CopyTo(jsObject Object, params string[] Keys) {
             foreach (var K in Keys){
-                Object.Set(K, this.Get(K));
+                Object.Set(K, Get(K));
             }
         }
 
@@ -92,10 +92,8 @@ namespace Poly.Data {
 
         public void ForEach<T>(Action<string, T> Action) where T : class {
             foreach (var Pair in this) {
-                T V = Pair.Value as T;
-
-                if (V != default(T))
-                    Action(Pair.Key, (T)Pair.Value);
+                if (Pair.Value is T)
+                    Action(Pair.Key, Pair.Value as T);
             }
         }
 
@@ -148,7 +146,7 @@ namespace Poly.Data {
         }
 
         public string ToHtmlString() {
-            return this.ToString(true).Replace("\t", "&emsp;")
+            return ToString(true).Replace("\t", "&emsp;")
                                   .Replace("\r\n", "<br/>");
         }
 
@@ -174,7 +172,6 @@ namespace Poly.Data {
 
             int Index = 1;
             foreach (var Pair in This) {
-                var Key = Pair.Key;
                 var Value = Pair.Value;
 
                 if (Object.ReferenceEquals(Value, Parent))
@@ -213,7 +210,6 @@ namespace Poly.Data {
 
             int Index = 1;
             foreach (var Pair in This) {
-                var Key = Pair.Key;
                 var Value = Pair.Value;
 
                 if (Object.ReferenceEquals(Value, Parent))

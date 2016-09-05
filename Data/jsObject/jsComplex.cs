@@ -37,7 +37,7 @@ namespace Poly.Data {
         Dictionary<string, Tuple<Func<object, object>, Action<object, object>>> LocalCache;
 
         public jsComplex() {
-            var T = this.GetType();
+            var T = GetType();
 
             if (!Cache.TryGetValue(T, out LocalCache)) lock (Cache) {
                     Cache[T] = LocalCache = InitType(T);
@@ -96,7 +96,6 @@ namespace Poly.Data {
 
             int Index = 1;
             foreach (var Pair in This) {
-                var Key = Pair.Key;
                 var Value = Pair.Value;
 
                 if (Object.ReferenceEquals(Value, Parent))
@@ -170,7 +169,6 @@ namespace Poly.Data {
 
             int Index = 1;
             foreach (var Pair in This) {
-                var Key = Pair.Key;
                 var Value = Pair.Value;
 
                 if (Object.ReferenceEquals(Value, Parent))

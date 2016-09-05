@@ -72,7 +72,7 @@ namespace Poly.Script {
         public Function GetFunction(string Name) {
             Function Func;
 
-            if (this.Functions.TryGet(Name, out Func))
+            if (Functions.TryGet(Name, out Func))
                 return Func;
 
             foreach (var Use in Usings) {

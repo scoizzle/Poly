@@ -169,19 +169,18 @@ namespace System {
             if (This == null || C == null || Index < 0 || Index >= This.Length || Last > This.Length)
                 return -1;
 
-            Index = This.IndexOf(C[0], Index, Last - Index);
+            var First = C[0];
+            var Len = C.Length;
 
-            if (Index == -1)
-                return -1;
+            Last -= Len - 1;
 
-            do {
-                if (string.Compare(This, Index, C, 0, C.Length, StringComparison.Ordinal) == 0)
-                    return Index;
-
-                Index++;
-                Index = This.IndexOf(C[0], Index, Last - Index);
+            for (; Index < Last; Index++) {
+                if (This[Index] == First) {
+                    if (string.Compare(This, Index, C, 0, Len, StringComparison.Ordinal) == 0)
+                        return Index;
+                }
             }
-            while (Index != -1);
+
             return -1;
         }
 
@@ -320,7 +319,7 @@ namespace System {
             return char.MinValue;
         }
 
-        public static string Template(this String This, params object[] Args) {
+        public static string Format(this String This, params object[] Args) {
             return string.Format(This, Args);
         }
 
@@ -469,6 +468,29 @@ namespace System {
             }
 
             return Output.ToArray();
+        }
+
+		public static void SplitAndHandle(this String This, string Sep, Action<string, string> Handler) {
+			var i = This.Find(Sep);
+
+			if (i == -1)
+				return;
+
+			Handler(This.Substring(0, i), This.Substring(i + Sep.Length));
+		}
+
+        public static bool Extract(this String This, string seperator, out string _1, out string _2) {
+            var i = This.Find(seperator);
+
+            if (i == -1) {
+                _1 = null;
+                _2 = null;
+                return false;
+            }
+
+            _1 = This.Substring(0, i);
+            _2 = This.Substring(i + seperator.Length);
+            return true;
         }
     }
 }

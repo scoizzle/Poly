@@ -28,7 +28,7 @@ namespace Poly.Data {
             }
         }
 
-        public void Remove(string Key) {
+        public bool Remove(string Key) {
             var Coll = GetCollection(Key.Length);
 
             if (Coll != null) {
@@ -37,8 +37,15 @@ namespace Poly.Data {
                 if (S != null) {
                     Coll.List.Remove(S);
                     Count--;
+                    return true;
                 }
             }
+            return false;
+        }
+
+        public void Clear() {
+            List.Clear();
+            Count = 0;
         }
 
         public bool ContainsKey(string Key) {
@@ -47,8 +54,9 @@ namespace Poly.Data {
             if (Coll == null)
                 return false;
 
-            for (int i = 0; i < Coll.List.Count; i++) {
-                if (string.Compare(Coll.List[i].Key, Key, StringComparison.Ordinal) == 0) {
+            var Len = Coll.List.Count;
+            for (int i = 0; i < Len; i++) {
+                if (string.Compare(Coll.List.Elements[i].Key, Key, StringComparison.Ordinal) == 0) {
                     return true;
                 }
             }
@@ -129,7 +137,7 @@ namespace Poly.Data {
 			var Len = Coll.List.Count;
 			for (int i = 0; i < Len; i++)
 			{
-                var Item = Coll.List[i];
+                var Item = Coll.List.Elements[i];
 
                 if (Item == null) {
                     Coll.List.RemoveAt(i--);
@@ -147,7 +155,7 @@ namespace Poly.Data {
         private T GetValueFromCollection(PairCollection Coll, string Key) {
 			var Len = Coll.List.Count;
             for (int i = 0; i < Len; i++) {
-				var Item = Coll.List[i];
+				var Item = Coll.List.Elements[i];
 
 				if (string.Compare(Item.Key, Key, StringComparison.Ordinal) == 0) {
                     return Item.Value;
@@ -160,7 +168,7 @@ namespace Poly.Data {
         private bool TryGetValueFromCollection(PairCollection Coll, string Key, out T Value) {
             var Len = Coll.List.Count;
             for (int i = 0; i < Len; i++) {
-                var Item = Coll.List[i];
+                var Item = Coll.List.Elements[i];
 
                 if (string.Compare(Item.Key, Key, StringComparison.Ordinal) == 0) {
                     Value = Item.Value;

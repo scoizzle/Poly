@@ -32,24 +32,16 @@ namespace Poly.Net.Http {
             this.Client = Client;
             this.Packet = Packet;
 
-            this.Get = Packet.Get;
-            this.Post = Packet.Post;
-            this.Cookies = Packet.Cookies;
+            Get = Packet.Get;
+            Post = Packet.Post;
+            Cookies = Packet.Cookies;
 
 
             Result = new Result();
             OutputBuilder = new StringBuilder();
 
             HeadersOnly = string.Compare(Packet.Type, "HEAD", StringComparison.Ordinal) == 0;
-
-            if (Packet != null && 
-                Packet.Headers.Get<string>("Accept-Encoding")?.Contains("gzip") == true)
-                {
-                    CompressionEnabled = !HeadersOnly;
-                }
-            else {
-                CompressionEnabled = false;
-            }
+			CompressionEnabled = Packet?.AcceptEncoding.Find("gzip") != -1;
         }
 
         public void Print(string txt) {
@@ -74,74 +66,56 @@ namespace Poly.Net.Http {
             }
         }
 
-        public async Task Finish() {
+        public async void Finish() {
             long ContentLength;
 
             if (Data == null) {
                 Data = new MemoryStream(Encoding.Default.GetBytes(OutputBuilder.ToString()));
             }
-            else if (Data is FileStream) {
-                CompressionEnabled = false;
-            }
             else { 
                 Data.Position = 0;
             }
+
             ContentLength = HeadersOnly ?
-                0 : this.Data.Length;
+                0 : Data.Length;
+			
+            StringBuilder Headers = new StringBuilder();
+            Headers.Append("HTTP/1.1 ").Append(Result.Status)
+                   .Append("\r\nDate: ").Append(DateTime.UtcNow.HttpTimeString())
+                   .Append("\r\nContent-Type: ").Append(Result.ContentType)
+                   .Append("\r\nContent-Length: ").Append(ContentLength.ToString()).Append(App.NewLine);
 
-            try {
-                if (CompressionEnabled && ContentLength > 512) { 
-                    Result.Headers["Vary"] = "Accept-Encoding";
-                    Result.Headers["Content-Encoding"] = "gzip";
+            foreach (var Pair in Result.Headers) {
+                Headers.Append(Pair.Key).Append(": ").Append(Pair.Value.ToString()).Append(App.NewLine);
+            }
 
-                    var Buffer = new MemoryStream();
+            foreach (var Pair in Result.Cookies) {
+                if (Pair.Value is jsObject) {
+                    Headers.Append("Set-Cookie: ");
 
-                    using (var Compression = new GZipStream(Buffer, CompressionMode.Compress, true)) {
-                        Data.CopyTo(Compression);
+                    foreach (var P in Pair.Value as jsObject) {
+                        Headers.Append(P.Key).Append("=").Append(P.Value).Append("; ");
                     }
 
-                    Data = Buffer;
-                    Data.Position = 0;
-
-                    ContentLength = Data.Length;
+                    Headers.Append(App.NewLine);
                 }
+            }
 
-                StringBuilder Headers = new StringBuilder();
-                Headers.Append("HTTP/1.1 ").Append(Result.Status)
-                       .Append("\r\nDate: ").Append(DateTime.UtcNow.HttpTimeString())
-                       .Append("\r\nContent-Type: ").Append(Result.ContentType)
-                       .Append("\r\nContent-Length: ").Append(ContentLength.ToString()).Append(App.NewLine);
+            Headers.Append(App.NewLine);
 
-                foreach (var Pair in Result.Headers) {
-                    Headers.Append(Pair.Key).Append(": ").Append(Pair.Value.ToString()).Append(App.NewLine);
-                }
-
-                foreach (var Pair in Result.Cookies) {
-                    if (Pair.Value is jsObject) {
-                        Headers.Append("Set-Cookie: ");
-
-                        foreach (var P in Pair.Value as jsObject) {
-                            Headers.Append(P.Key).Append("=").Append(P.Value).Append("; ");
-                        }
-
-                        Headers.Append(App.NewLine);
-                    }
-                }
-
-                Headers.Append(App.NewLine);
-
+			try {
                 if (Client.Connected) {
                     await Client.Send(Headers.ToString());
 
                     if (!HeadersOnly) {
-                        await Data.CopyToAsync(Client.Stream.Stream);
+                        var Out = Client.Stream.Stream;
+
+                        await Data.CopyToAsync(Out);
+                        await Out.FlushAsync();
                     }
                 }
             }
-            catch (Exception Error) {
-                App.Log.Error(Error.StackTrace);
-                Client.Close();
-            }
+            catch { }
         }
 
         public void SetCookie(string name, string value) {

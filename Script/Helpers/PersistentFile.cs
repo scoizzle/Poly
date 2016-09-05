@@ -12,7 +12,7 @@ namespace Poly.Script.Helpers {
 		Variable Var;
 
 		public PersistentFile (string FileName, Variable Var) {
-			this.Info = new FileInfo (FileName);
+            Info = new FileInfo (FileName);
 			this.Var = Var;
 
 			Watcher = new FileSystemWatcher (Info.Directory.FullName, Info.Name);

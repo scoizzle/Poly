@@ -14,11 +14,11 @@ namespace Poly.Net.Http {
         public jsObject Cookies, Headers;
 
         public Result() {
-            this.Status = Ok;
-            this.ContentType = "text/html";
-            this.Cookies = new jsObject();
-            this.Headers = new jsObject();
-            this.ContentLength = 0;
+            Status = Ok;
+            ContentType = "text/html";
+            Cookies = new jsObject();
+            Headers = new jsObject();
+            ContentLength = 0;
         }
 
         public static implicit operator Result(string Status) {

@@ -101,14 +101,24 @@ namespace Poly.Net.Tcp {
             return false;
         }
 
-        public async Task<string> ReceieveString(long byteLen) {
-            return await ReceieveString(byteLen, Encoding.Default);
+        public async Task<string> ReceiveString(long byteLen) {
+            return await ReceiveString(byteLen, Encoding.Default);
         }
 
-        public async Task<string> ReceieveString(long byteLen, Encoding enc) {
+        public async Task<string> ReceiveString(long byteLen, Encoding enc) {
             var Out = new MemoryStream();
 
             if (await Receive(Out, byteLen)) {
+                return enc.GetString(Out.ToArray());
+            }
+
+            return null;
+        }
+
+        public async Task<string> ReceiveStringUntil(byte[] chain, Encoding enc) {
+            var Out = new MemoryStream();
+
+            if (await ReceiveUntil(Out, chain)) {
                 return enc.GetString(Out.ToArray());
             }
 

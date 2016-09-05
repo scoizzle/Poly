@@ -1,143 +1,167 @@
 ﻿using System;
+using System.Linq;
 using System.IO;
+using System.IO.Compression;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
     using Data;
+    using Tcp;
+	using Script;
 
-    public sealed class Cache : KeyValueCollection<Cache.Item>, IDisposable {
-        public class Item {
-            public FileInfo Info;
-            public string LastWriteTime, ContentType, FileExtension;
+    public class Cache : KeyValueCollection<Cache.Item> {
+        public const long DefaultMaxSize = 10000000;
 
-            public virtual void Init(string FullName) {
-                Info = new FileInfo(FullName);
+        public long MaximumSize { get; private set; }
+        public long TotalSize { get; private set; }
 
-                LastWriteTime = Info.LastWriteTimeUtc.HttpTimeString();
-                FileExtension = Info.Extension.Substring(1);
+        public string[] CompressableExtensions { get; set; }
 
-                Mime.Types.TryGetValue(FileExtension, out ContentType);
-            }
+        public DirectoryInfo Directory;
+        public FileSystemWatcher Watcher;
+        
+        public Cache(string path) : this(path, DefaultMaxSize, new string[0]) { }
+        public Cache(string path, long maxSize) : this(path, maxSize, new string[0]) { }
+        public Cache(string path, params string[] compressableFileExtensions) : this(path, DefaultMaxSize, compressableFileExtensions) { }
+        public Cache(string path, long maxSize, params string[] compressableFileExtensions) {
+            Directory = new DirectoryInfo(path);
 
-            public virtual void Update() {
-                Info.Refresh();
-                LastWriteTime = Info.LastWriteTimeUtc.HttpTimeString();
-            }
+            if (Directory.Exists) {
+                MaximumSize = maxSize;
+                CompressableExtensions = compressableFileExtensions;
 
-            public Stream Content
-            {
-                get
-                {
-                    return Info.OpenRead();
-                }
-            }
-        }
-
-        public class PolyScriptItem : Item {
-            public string Text;
-            public Script.Engine Script;
-
-            public override void Init(string FullName) {
-                base.Init(FullName);
-
-                Text = File.ReadAllText(FullName);
-            }
-
-            public override void Update() {
-                Script = null;
-
-                bool done = false;
-                while (!done) {
-                    try { Text = File.ReadAllText(Info.FullName); done = true; }
-                    catch { }
-                    Thread.Sleep(100);
-                }
-
-                base.Update();
-            }
-        }
-
-        FileSystemWatcher Watcher;
-
-        public Cache(string path) {
-            if (Directory.Exists(path)) {
-                path = System.IO.Path.GetFullPath(path);
-                Watcher = new FileSystemWatcher(path);
+                Watcher = new FileSystemWatcher(Directory.FullName);
 
                 Watcher.Created += Created;
                 Watcher.Changed += Changed;
                 Watcher.Renamed += Renamed;
                 Watcher.Deleted += Deleted;
-
+                
                 Watcher.IncludeSubdirectories = true;
                 Watcher.EnableRaisingEvents = true;
 
-                Load(new DirectoryInfo(path));
+                Load(Directory);
             }
         }
 
         public void Dispose() {
-            if (Watcher != null) {
-                Watcher.EnableRaisingEvents = false;
-                Watcher.Dispose();
+            Watcher.EnableRaisingEvents = false;
+            Watcher.Dispose();
+
+            Clear();
+        }
+
+        async void Load(Item Item) {
+            if (MaximumSize > TotalSize + Item.FileSize) {
+                if (Item.IsCompressed) {
+                    var newMemCache = new MemoryStream();
+
+                    using (var Compression = new GZipStream(newMemCache, CompressionMode.Compress, true))
+                    using (var FS = Item.Info.OpenRead()) {
+                        await FS.CopyToAsync(Compression);
+                    }
+
+                    Item.Buffer = null;
+                    Item.Buffer = newMemCache.ToArray();
+                }
+                else {
+                    var newMemCache = new MemoryStream();
+
+                    using (var FS = Item.Info.OpenRead()) {
+                        await FS.CopyToAsync(newMemCache);
+                    }
+
+                    Item.Buffer = null;
+                    Item.Buffer = newMemCache.ToArray();
+                }
+
+                TotalSize += Item.Buffer.LongLength;
             }
+        }
+
+        void Load(string FileName) {
+            Load(new FileInfo(FileName));
+        }
+
+        void Load(FileInfo Info) {
+            var Item = new Item() {
+                Info = Info,
+                FileSize = Info.Length,
+                ContentType = Mime.Types[Info.Extension],
+                IsCompressed = CompressableExtensions.Contains(Info.Extension),
+                FileExtension = Info.Extension,
+                LastWriteTime = Info.LastWriteTimeUtc.HttpTimeString()
+            };
+
+            Load(Item);
+
+            Add(GetWWWName(Info.FullName), Item);
         }
 
         void Load(DirectoryInfo Dir) {
+			foreach (var File in Dir.GetFiles()) {
+				Load(File);
+			}
             foreach (var Sub in Dir.GetDirectories()) {
                 Load(Sub);
             }
-
-            foreach (var File in Dir.GetFiles()) {
-                Load(File.FullName);
-            }
         }
 
-        void Load(string FullPath) {
-            Item I;
+        void Update(Item I) {
+            if (I == null) return;
 
-            if (FullPath.EndsWith(".psx")) {
-                I = new PolyScriptItem();
-            }
-            else {
-                I = new Item();
-            }
+            I.Info.Refresh();
+            I.FileSize = I.Info.Length;
+            I.LastWriteTime = I.Info.LastWriteTimeUtc.HttpTimeString();
 
-            Add(FullPath, I);
-            I.Init(FullPath);
-        }
-
-        void Update(string Name, Item I) {
-            if (I is PolyScriptItem) {
-                foreach (var pair in this) {
-                    var parent = pair.Value as PolyScriptItem;
-                    var inc = parent?.Script?.Includes.ContainsKey(Name);
-
-                    if (inc == true)
-                        parent.Script = null;
-                }
-            }
-
-            I.Update();
+            Load(I);   
         }
 
         void Created(object sender, FileSystemEventArgs e) {
-            Load(e.FullPath);
+            Load(GetWWWName(e.FullPath));
         }
 
         void Changed(object sender, FileSystemEventArgs e) {
-            if (this.ContainsKey(e.FullPath))
-                Update(e.FullPath, this[e.FullPath]);
+            Update(this[GetWWWName(e.FullPath)]);
         }
 
         void Renamed(object sender, RenamedEventArgs e) {
-            this[e.FullPath] = this[e.OldFullPath];
+            var OldFullPath = GetWWWName(e.OldFullPath);
 
-            Remove(e.OldFullPath);
+            this[GetWWWName(e.FullPath)] = this[OldFullPath];
+
+            Remove(OldFullPath);
         }
 
         void Deleted(object sender, FileSystemEventArgs e) {
-            Remove(e.FullPath);
+            Remove(GetWWWName(e.FullPath));
+        }
+
+        string GetWWWName(string FullPath) {
+#if __MonoCS__
+            return FullPath.Substring(Directory.FullName.Length);
+#else
+            return FullPath.Substring(Directory.FullName.Length).Replace('\\', '/');
+#endif
+        }
+
+        public class Item {
+            public long FileSize;
+            public byte[] Buffer;
+            public bool IsCompressed;
+            public string LastWriteTime, ContentType, FileExtension;
+            public FileInfo Info;
+            public Engine Script;
+
+            public Stream Content {
+                get {
+                    if (Buffer != null)
+                        return new MemoryStream(Buffer, false);
+
+                    return Info.OpenRead();
+                }
+            }
         }
     }
 }

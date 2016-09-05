@@ -8,13 +8,15 @@ using System.Threading.Tasks;
 namespace System {
     public static class StreamExtensions {
         public static string GetString(this Stream This) {
-            return GetString(This, Encoding.Default);
+            return GetString(This, This.Length, Encoding.Default);
         }
 
-        public static string GetString(this Stream This, Encoding Enc) {
+        public static string GetString(this Stream This, long Length, Encoding Enc) {
             var Buffer = new byte[This.Length];
+
             This.Position = 0;
-            This.Write(Buffer, 0, Buffer.Length);
+            This.Read(Buffer, 0, Buffer.Length);
+
             var str = Enc.GetString(Buffer);
             Buffer = null;
             return str;

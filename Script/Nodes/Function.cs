@@ -18,26 +18,26 @@ namespace Poly.Script.Nodes {
         }
 
         public Function(Event.Handler Handler) {
-            this.Method = Handler;
-            this.Name = string.Concat(Handler.Method.DeclaringType.Name, '.', Handler.Method.Name);
+            Method = Handler;
+            Name = string.Concat(Handler.Method.DeclaringType.Name, '.', Handler.Method.Name);
         }
 
         public Function(string Name, Event.Handler Handler) {
             this.Name = Name;
-            this.Method = Handler;
+            Method = Handler;
         }
 
         public Function(string Name, params string[] ArgumentNames) {
             this.Name = Name;
-            this.Arguments = ArgumentNames;
+            Arguments = ArgumentNames;
 
-            this.Method = base.Evaluate;
+            Method = base.Evaluate;
         }
 
         public Function(string Name, Event.Handler Handler, params string[] ArgumentNames) {
             this.Name = Name;
-            this.Arguments = ArgumentNames.Where(N => N != "this").ToArray();
-            this.Method = Handler;
+            Arguments = ArgumentNames.Where(N => N != "this").ToArray();
+            Method = Handler;
         }
 
         public override object Evaluate(jsObject Context) {

@@ -7,17 +7,18 @@ using System.Threading.Tasks;
 namespace Poly {
     using Data;
     public partial class Matcher {
-        readonly static char[] Tokens = new char[] {
-            '{', '*', '?', '^', '\\', '['
-        };
-
         Block[] Handlers;
 
         public string Format { get; private set; }
 
         public Matcher(string Fmt) {
             Format = Fmt;
-            Handlers = Parse(Fmt);
+
+            try {
+                Handlers = Parse(Fmt);
+            } catch (Exception Error) {
+                App.Log.Error(Error);
+            }
         }
 
         public bool Compare(string Data) {
@@ -32,13 +33,11 @@ namespace Poly {
             return Match(Context);
         }
 
-        public jsObject Match(string Data) {
-            int Index = 0;
-
-            return Match(Data, ref Index, new jsObject());
+		public jsObject Match(string Data) {
+            return Match(Data, 0, new jsObject());
         }        
 
-        public jsObject Match(string Data, ref int Index) {
+        public jsObject Match(string Data, int Index) {
             if (Handlers == null)
                 return null;
 
@@ -49,7 +48,6 @@ namespace Poly {
             };
 
             if (Match(Context)) {
-                Index = Context.Index;
                 return Context.Storage;
             }
 
@@ -57,18 +55,14 @@ namespace Poly {
         }
 
         public jsObject Match(string Data, jsObject Storage) {
-            int Index = 0;
-
-            return Match(Data, ref Index, Storage);
+            return Match(Data, 0, Storage);
         }
 
         public jsObject Match(string Data, jsObject Storage, bool KeyValueExtract) {
-            int Index = 0;
-
-            return Match(Data, ref Index, Storage, KeyValueExtract);
+            return Match(Data, 0, Storage, KeyValueExtract);
         }
 
-        public jsObject Match(string Data, ref int Index, jsObject Storage) {
+        public jsObject Match(string Data, int Index, jsObject Storage) {
             if (Handlers == null)
                 return null;
 
@@ -79,14 +73,13 @@ namespace Poly {
             };
 
             if (Match(Context)) {
-                Index = Context.Index;
                 return Storage;
             }
 
             return null;
         }
 
-        public jsObject Match(string Data, ref int Index, jsObject Storage, bool KeyValueExtract) {
+        public jsObject Match(string Data, int Index, jsObject Storage, bool KeyValueExtract) {
             if (Handlers == null)
                 return null;
 
@@ -253,7 +246,7 @@ namespace Poly {
             switch (It.Current) {
                 default:{
                     var Start = It.Index;
-                    if (It.FirstPossible(Tokens) == default(char)) {
+                    if (It.GotoFirstPossible(StringMatching.Tokens) == default(char)) {
                         It.Index = It.Length;
                         return new Static(It.Substring(Start, It.Length - Start));
                     }
@@ -263,25 +256,81 @@ namespace Poly {
                 }
 
                 case '{': {
-                    var Offset = It.Find('{', '}');
                     It.Tick();
 
-                    if (Offset == -1)
+                    int Start, LastToken;
+                    Start = LastToken = It.Index;
+
+                    bool HasTests = false, HasMods = false;
+                    string Name, Format, Tests, Mods;
+                    Name = Format = Tests = Mods = null;
+                    var Next = It.GotoFirstPossible(":", "->", "}");
+                    if (Next == null) return null;
+
+                    do {
+                        switch (Next) {
+                            case ":": {
+                                Name = It.Substring(Start, It.Index - Start).Trim();
+                                It.Tick();
+
+                                LastToken = It.Index;
+                                HasTests = true;
+
+                                Next = It.GotoFirstPossible("->", "}");
+                                if (Next == null) return null;
+                                break;
+                            }
+
+                            case "->": {
+                                if (HasTests) Tests = It.Substring(LastToken, It.Index - LastToken).Trim();
+                                else Name = It.Substring(Start, It.Index - Start).Trim();
+
+                                HasMods = true;
+                                It.Consume("->");
+                                LastToken = It.Index;
+
+                                if (!It.Goto('{', '}')) return null;
+                                else Next = "}";
+
+                                break;
+                            }
+
+                            case "}": {
+                                if (HasMods)
+                                    Mods = It.Substring(LastToken, It.Index - LastToken).Trim();
+                                else
+                                if (HasTests)
+                                    Tests = It.Substring(LastToken, It.Index - LastToken).Trim();
+                                else
+                                    Name = It.Substring(Start, It.Index - Start).Trim();
+
+                                Format = It.Substring(Start, It.Index - Start);
+                                It.Tick();
+
+                                goto endOfExtract;
+                            }
+                        }
+                    }
+                    while (!It.IsDone());
+
+                endOfExtract:
+                    if (Tests == null && Mods == null)
+                        return new Extract(Name); 
+                    else
+                        return new Extract(Format, Name, Tests, Mods);
+                }
+
+                case '`': {
+                    It.Tick();
+
+                    var Start = It.Index;
+                    if (!It.Goto('`', '`'))
                         return null;
 
-                    var Grouping = It.Substring(It.Index, Offset - It.Index);
-                    var Keys = Grouping.Split(':').ToArray();
+                    var Sub = It.Substring(Start, It.Index - Start);
 
-                    var Name = Keys[0];
-
-                    var Tests = Keys.Length >= 2 ?
-                        Keys[1] : string.Empty;
-
-                    var Modifiers = Keys.Length == 3 ?
-                        Keys[2] : string.Empty;
-
-                    It.Index = ++Offset;
-                    return new Extract(Name, Tests, Modifiers);
+                    It.Tick();
+                    return new ExtractAll(Sub);
                 }
 
                 case '[': {

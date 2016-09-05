@@ -27,32 +27,42 @@ namespace Poly.Net.Http {
         }
 
         private async Task ClientConnected(Client client) {
-            while (client.Connected) {
-                var Packet = await Net.Http.Packet.Receive(client);
-                if (Packet == null) goto closeConnection;
+			try {
+                client.ReceiveTimeout = 5000;
 
-                var Host = FindHost(Packet.Host);
-                var Request = new Request(client, Packet, Host);
-                if (Host == null) goto badRequest;
+				while (client.Connected) {
+                    var Recv = Net.Http.Packet.Receive(client);
+                    var Packet = await Recv;
+					if (Packet == null) goto closeConnection;
 
-                await OnClientRequest(Request);
-                Thread.Sleep(5);
-                continue;
+					var Host = FindHost(Packet.Host);
+					var Request = new Request(client, Packet, Host);
+					if (Host == null) goto badRequest;
 
-            badRequest:
-                Request.Result = Result.BadRequest;
-                await Request.Finish();
-                Thread.Sleep(10);
+					OnClientRequest(Request);
+
+                    if (Packet.Connection == "close") goto closeConnection;
+                    else continue;
+
+				badRequest:
+					Request.Result = Result.BadRequest;
+					Request.Finish();
+
+					await Task.Delay(10);
+				}
+			}
+			catch (Exception Error) {
+                App.Log.Error(Error.ToString());
             }
 
         closeConnection:
             client.Close();
         }
         
-        private async Task OnClientRequest(Request Request) {
+        private static void OnClientRequest(Request Request) {
             var Target = Request.Packet.Target;
             if (!Request.Host.Handlers.MatchAndInvoke(Target, Request)) {
-                var WWW = Request.Host.GetWWW(Target);
+                var WWW = Request.Host.GetFullPath(Target);
                 var EXT = Request.Host.GetExtension(WWW);
 
                 Request.Set("FileName", WWW);
@@ -62,20 +72,33 @@ namespace Poly.Net.Http {
                     HandleFile(Request, WWW);
             }
 
-            await Request.Finish();
+            Request.Finish();
         }
 
         private static void HandleFile(Request Request, string WWW) {
-            Cache.Item Cached;
+            Cache.Item Cached = null;
 
-            if (Request.Host.Cache != null && Request.Host.Cache.TryGetValue(WWW, out Cached)) {
-                if (Cached.LastWriteTime == Request.Packet.Headers.Get<string>("If-Modified-Since")) {
-                    Request.Result = Result.NotModified;
-                }
-                else {
+            if (Request.Host.Cache.TryGetValue(WWW, out Cached)) {
+				if (Cached.LastWriteTime == Request.Packet.IfModifiedSince) {
+					Request.Result.Status = Result.NotModified;
+				}
+				else {
+                    if (Cached.IsCompressed) {
+                        if (Request.CompressionEnabled) {
+                            Request.Result.Headers["Vary"] = "Accept-Encoding";
+                            Request.Result.Headers["Content-Encoding"] = "gzip";
+                            Request.Data = Cached.Content;
+                        }
+                        else {
+                            Request.Data = Cached.Info.OpenRead();
+                        }
+                    }
+                    else {
+                        Request.Data = Cached.Content;
+                    }
+
                     Request.Result.Headers["Last-Modified"] = Cached.LastWriteTime;
                     Request.Result.ContentType = Cached.ContentType;
-                    Request.Data = Cached.Content;
                 }
             }
             else {

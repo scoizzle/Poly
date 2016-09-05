@@ -8,19 +8,23 @@ using Poly.Data;
 
 namespace Poly {
     public static class StringMatching {
-        public static readonly char[] SpecialChars = new char[] {
-            '{', '*', '?', '^', '\\', '[', '('
+        public static readonly char[] Tokens = new char[] {
+            '{', '[', '*', '?', '^', '\\', '`'
         };
 
-        public delegate bool? TestDelegate(char C);
-        public delegate string ModDelegate(string Str);
+        public delegate bool TestDelegate(char C);
+        public delegate object ModDelegate(string Str);
 
         public static KeyValueCollection<TestDelegate> Tests = new KeyValueCollection<TestDelegate>() {
-            { "Alpha", c => char.IsLetter(c) },
-            { "Numeric", c => char.IsNumber(c)},
-            { "AlphaNumeric", c => char.IsLetterOrDigit(c)},
-            { "Punctuation", c => char.IsPunctuation(c)},
-            { "Whitespace", c => char.IsWhiteSpace(c)},
+            { "AlphaNumeric", char.IsLetterOrDigit },
+            { "Alpha", char.IsLetter },
+            { "a", char.IsLetter },
+            { "Numeric", char.IsNumber },
+            { "n", char.IsNumber },
+            { "Punctuation", char.IsPunctuation },
+            { "p", char.IsPunctuation },
+            { "Whitespace", char.IsWhiteSpace },
+            { "w", char.IsWhiteSpace }
         };
 
         public static KeyValueCollection<ModDelegate> Modifiers = new KeyValueCollection<ModDelegate>() {
@@ -36,7 +40,15 @@ namespace Poly {
             { "Base64Decode", StringConversions.Base64Decode },
             { "ToUpper", s => { return s.ToUpper(); }},
             { "ToLower", s => { return s.ToLower(); }},
-            { "Trim", s => { return s.Trim(); }}
+            { "Trim", s => { return s.Trim(); }},
+            { "Int", s => int.Parse(s) },
+            { "UInt", s => uint.Parse(s) },
+            { "Long", s => long.Parse(s) },
+            { "ULong", s => ulong.Parse(s) },
+            { "Double", s => double.Parse(s) },
+            { "Float", s => float.Parse(s) },
+            { "Decimal", s => decimal.Parse(s) },
+            { "IPAddress", s => System.Net.IPAddress.Parse(s) }
         };
 
         public static KeyValueCollection<Matcher> Cache;
@@ -70,7 +82,7 @@ namespace Poly {
             if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
                 return null;
             
-            return GetMatcher(Wild).Match(Data, ref Index);
+            return GetMatcher(Wild).Match(Data,Index);
         }
 
         public static jsObject Match(this String Data, String Wild, jsObject Storage) {
@@ -84,7 +96,7 @@ namespace Poly {
             if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
                 return null;
 
-            return GetMatcher(Wild).Match(Data, ref Index, Storage);
+            return GetMatcher(Wild).Match(Data, Index, Storage);
         }
 
         public static jsObject MatchAll(this String Data, String Wild) {

@@ -56,7 +56,7 @@ namespace Poly.Data {
             KeyValuePair[] list;
 
             public KeyValuePair Current { get; private set; }
-            object IEnumerator.Current { get { return this.Current; } }
+            object IEnumerator.Current { get { return Current; } }
 
             internal Enumerator(KeyValueCollection<T> Coll) {
                 index = 0;

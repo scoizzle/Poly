@@ -19,6 +19,13 @@ namespace Poly {
 
                 return false;
             }
+
+            new public static Block Parse(StringIterator It) {
+                if (It.Consume('^'))
+                    return new Whitespace();
+
+                return null;
+            }
         }
     }
 }

@@ -17,12 +17,12 @@ namespace Poly.Script.Nodes {
 			this.Name = Name;
 
             if (this.Name.Contains('.'))
-                this.LastName = this.Name.Substring(this.Name.LastIndexOf('.') + 1);
+                LastName = this.Name.Substring(this.Name.LastIndexOf('.') + 1);
             else
-                this.LastName = Name;
+                LastName = Name;
 
-			this.Functions = new jsObject<Function> ();
-            this.StaticFunctions = new jsObject<Function>();
+            Functions = new jsObject<Function> ();
+            StaticFunctions = new jsObject<Function>();
             this.Base = Base;
 		}
 
@@ -49,10 +49,10 @@ namespace Poly.Script.Nodes {
 
 		public void InitInstanciator() {
 			if (Functions.TryGet<Function>(LastName, out Constructor)) {
-				this.Instaciator = new Function(LastName, CreateInstance, Constructor.Arguments);
+                Instaciator = new Function(LastName, CreateInstance, Constructor.Arguments);
 			}
 			else {
-				this.Instaciator = new Function(LastName, CreateInstance);
+                Instaciator = new Function(LastName, CreateInstance);
 			}
 		}
 

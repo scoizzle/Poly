@@ -7,7 +7,7 @@ namespace Poly.Script.Types {
         public Class Class;
 
         public ClassInstance(Class C) {
-            this.Class = C;
+            Class = C;
         }
 
         public Function GetFunction(string Name) {

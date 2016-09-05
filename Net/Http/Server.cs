@@ -21,15 +21,6 @@ namespace Poly.Net.Http {
 
             OnClientConnect += ClientConnected;
         }
-        
-        public static string GetMime(string Ext) {
-            var Mime = Poly.Mime.GetMime(Ext);
-
-            if (!string.IsNullOrEmpty(Mime))
-                return Mime;
-
-            return "application/octet-stream";
-        }
 
         public override void Start() {
             for (int i = 0; i < Hosts.Count; i++)

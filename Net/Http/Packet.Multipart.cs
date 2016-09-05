@@ -24,10 +24,11 @@ namespace Poly.Net.Http {
         }
 
         public async Task<bool> Receive() {
-            var boundary = Encoding.Default.GetBytes("--" + Packet.Boundary);
             var client = Client;
             var stream = Stream;
             var temp = new MemoryStream();
+			var endLength = stream.TotalBytesConsumed + Packet.ContentLength;
+			var boundary = Encoding.Default.GetBytes("--" + Packet.Boundary);
 
             var line = string.Empty;
 
@@ -37,8 +38,7 @@ namespace Poly.Net.Http {
                 line = await client.ReceiveLine();
 
             boundary = Encoding.Default.GetBytes("\r\n--" + Packet.Boundary);
-            while (stream.TotalBytesConsumed < Packet.ContentLength && Client.Connected) {
-
+			while (stream.TotalBytesConsumed < endLength && Client.Connected) {
                 var postInfo = new jsObject();
                 var isFile = false;
 

@@ -15,8 +15,8 @@ namespace Poly.Script.Helpers {
         public CachedScript(Engine Engine, string File, DateTime Time) {
             this.Engine = Engine;
 
-            this.FileName = File;
-            this.LastWriteTime = Time;
+            FileName = File;
+            LastWriteTime = Time;
         }
 
         public override object Evaluate(jsObject Context) {

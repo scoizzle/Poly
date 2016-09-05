@@ -55,6 +55,13 @@ namespace Poly.Data {
             count--;
         }
 
+        public void Clear() {
+            for (var i = 0; i < count; i++) {
+                Elements[i] = default(T);
+            }
+            count = 0;
+        }
+
         public int IndexOf(T value) {
             for (var i = 0; i < count; i++) {
                 if (Elements[i].Equals(value))
@@ -81,7 +88,7 @@ namespace Poly.Data {
             T[] list;
 
             public T Current { get; private set; }
-            object IEnumerator.Current { get { return this.Current; } }
+            object IEnumerator.Current { get { return Current; } }
 
             internal Enumerator(ManagedArray<T> array) {
                 index = 0;

@@ -11,125 +11,105 @@ namespace Poly.Net.Http {
     using Tcp;
 
     public class Packet : jsComplex {
-        public static readonly Matcher PathMatcher = new Matcher("/{Value:![/]}"),
+        public static readonly Matcher HeaderMatcher = new Matcher("{Type} {RawTarget} {Version}\r\n{Headers -> `{Key}: {Value:![\r]}[\r\n]`}"),
+                                       TargetMatcher = new Matcher("{Target:![?#]}[?{Query:![#]}][#{Fragment}]"),
+                                       PathMatcher = new Matcher("/{Value:![/]}"),
+                                       HostMatcher = new Matcher("{Host:![:]}[:{Port: Numeric -> Int}]"),
                                        QueryMembersMatcher = new Matcher("[&]{Key}={Value:!Whitespace,![&]}"),
                                        HeaderPropertiesMatcher = new Matcher("[; ]{Key}={Value:!Whitepsace}"),
-                                       MultipartHeaderPropertiesMatcher = new Matcher("[;] {Key}=\"{Value}\"");
+                                       MultipartHeaderPropertiesMatcher = new Matcher("[;] {Key}=\"{Value}\""),
+                                       MultipartBoundaryMatcher = new Matcher("{ContentType}; boundary={Boundary}");
+
+        static readonly byte[] DoubleNewLine = Encoding.Default.GetBytes("\r\n\r\n");
 
         public int Port;
         public long ContentLength;
         public new jsObject Get;
-        public jsObject Headers, Post, Cookies, Route;
-        public string Host, RawTarget, Connection, Type, Target, Version, Query, ContentType, Boundary;
+        public jsObject Post, Cookies, Route, Headers;
+        public string Host, RawTarget, Connection, Type, Target, Version, Query, ContentType, AcceptEncoding, Boundary, IfModifiedSince;
 
         public Packet() {
-            Headers = new jsObject();
             Get = new jsObject();
             Post = new jsObject();
             Cookies = new jsObject();
             Route = new jsObject();
+            Headers = new jsObject();
 
             ContentLength = 0;
             Host = RawTarget = Connection = Type = Target = Version = Query = ContentType = Boundary = string.Empty;
         }
 
-        public static async Task<Packet> Receive(Client Client) {
-            if (Client.Connected) {
-                int Index;
-                string FirstLine, CurrentLine;
-                Packet Recv = new Packet();
+        public static async Task<Packet> Receive(Client client) {
+            string headers;
 
-                try {
-                    FirstLine = await Client.ReceiveLine();
+            try { headers = await client.ReceiveStringUntil(DoubleNewLine, Encoding.Default); }
+            catch { return null; }
 
-                    while (!string.IsNullOrEmpty(CurrentLine = await Client.ReceiveLine())) {
-                        Index = CurrentLine.IndexOf(':');
+            if (headers == null || headers.Length == 0) goto closeConnection;
+            var Recv = new Packet();
 
-                        if (Index == -1) {
-                            Client.Close();
-                            return null;
-                        }
+            if (HeaderMatcher.Match(headers, Recv) == null)
+                return null;
 
-                        Recv.Headers.Set(
-                            CurrentLine.Substring(0, Index),
-                            CurrentLine.Substring(Index + 2)
-                        );
-                    }
-                }
-                catch {
-                    return null;
-                }
+            Recv.Headers.ForEach<string>((key, value) => {
+                ParseHeader(Recv, key, value);
+            });
 
-                Index = FirstLine.IndexOf(' ');
-                if (Index == -1)
-                    return null;
+            TargetMatcher.Match(Recv.RawTarget, Recv);
 
-                var Second = FirstLine.IndexOf(' ', Index + 1);
-                if (Index == -1 || Second  + 1 == FirstLine.Length)
-                    return null;
-                
-                Recv.Type = FirstLine.Substring(0, Index);
-                Recv.RawTarget = FirstLine.Substring(Index + 1, Second - Index - 1);
-                Recv.Version = FirstLine.Substring(Second + 1);
+            QueryMembersMatcher.MatchAll(Recv.Query, Recv.Get, true);
+			PathMatcher.MatchAll(Recv.Target, Recv.Route, true);
 
-                if ((Index = Recv.RawTarget.IndexOf('?')) != -1) {
-                    Recv.Query = Recv.RawTarget.Substring(Index + 1);
-                    Recv.Target = Uri.UnescapeDataString(Recv.RawTarget.Substring(0, Index));
+			if (Recv.ContentLength > 0 && Recv.Type == "POST") {
+				switch (Recv.ContentType) {
+					case "application/x-www-form-urlencoded": 
+						QueryMembersMatcher.MatchAll(await client.ReceiveString(Recv.ContentLength), Recv.Post, true);
+						break;
 
-                    QueryMembersMatcher.MatchAll(Recv.Query, Recv.Get, true);
-                }
-                else {
-                    Recv.Target = Uri.UnescapeDataString(Recv.RawTarget);
-                }
+					case "multipart/form-data": {
+						MultipartHandler Handler = new MultipartHandler(client, Recv, client.Stream);
 
-                if (!string.IsNullOrEmpty(Recv.Host = Recv.Headers.Get<string>("Host"))) {
-                    if ((Index = Recv.Host.IndexOf(':')) != -1) {
-                        int.TryParse(Recv.Host.Substring(Index + 1), out Recv.Port);
-                        Recv.Host = Recv.Host.Substring(0, Index);
-                    }
+						if (!await Handler.Receive())
+							return null;
+							
+						break;
+					}
+				}
+			}
 
-                    if (Recv.Headers.ContainsKey("Content-Type")) {
-                        var Type = Recv.Headers.Get<string>("Content-Type");
+            return Recv;
 
-						if (Type.StartsWith("multipart/form-data", StringComparison.Ordinal)) {
-                            Type = Type.Substring(30);
-                            Recv.ContentType = "multipart/form-data";
-                            Recv.Boundary = Type;
-                        }
-                        else {
-                            Recv.ContentType = Type;
-                        }
-                    }
-
-                    if ((Recv.ContentLength = Recv.Headers.Get<long>("Content-Length")) > 0) {
-                        if (Recv.Type == "POST") { 
-                            switch (Recv.ContentType) {
-                                case "application/x-www-form-urlencoded": {
-                                    QueryMembersMatcher.MatchAll(await Client.ReceieveString(Recv.ContentLength), Recv.Post, true);
-                                    break;
-                                }
-
-                                case "multipart/form-data": {
-										MultipartHandler Handler = new MultipartHandler(Client, Recv, new BufferedStreamer(Client.GetStream()));
-
-                                        if (!await Handler.Receive())
-                                            return null;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (Recv.Headers.ContainsKey("Cookie")) {
-                        HeaderPropertiesMatcher.MatchAll(Recv.Headers.Get<string>("Cookie"), Recv.Cookies, true);
-                    }
-
-                    PathMatcher.MatchAll(Recv.Target, Recv.Route, true);
-                    return Recv;
-                }
-            }
-
+        closeConnection:
+            client.Close();
             return null;
+        }
+
+        private static void ParseHeader(Packet recv, string Key, string Value) {
+            switch (Key) {
+                case "Host": 
+                    HostMatcher.Match(Value, recv);
+                    return;
+
+				case "Content-Length":
+					long.TryParse(Value, out recv.ContentLength);
+					return;
+
+				case "Content-Type":
+                    MultipartBoundaryMatcher.Match(Value, recv);
+					return;
+					
+				case "Cookie": 
+					HeaderPropertiesMatcher.MatchAll(Value, recv.Cookies, true);
+					return;
+
+				case "Accept-Encoding":
+					recv.AcceptEncoding = Value;
+					return;
+
+				case "If-Modified-Since":
+					recv.IfModifiedSince = Value;
+					return;
+            }
         }
 
         public static async Task<bool> Forward(Client In, Client Out) {
@@ -148,7 +128,7 @@ namespace Poly.Net.Http {
                         Headers.Append(Line).Append(App.NewLine);
                         if (Line.Length == 0) break;
 
-                        if (ContentLength == 0) 
+                        if (ContentLength == 0)
                             if (string.Compare(Line, 0, "Content-Length: ", 0, 16, StringComparison.Ordinal) == 0)
                                 long.TryParse(Line.Substring(16), out ContentLength);
                     }

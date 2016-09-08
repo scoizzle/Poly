@@ -27,7 +27,7 @@ namespace Poly.Net.Http {
 
         public Host(string hostName, jsObject args) : this(hostName) {
             args?.CopyTo(this);
-        }
+        } 
 
         public void Ready() {
             Matcher = new Matcher(Name);
@@ -47,6 +47,10 @@ namespace Poly.Net.Http {
         public void On(string Path, Event.Handler Handler, string ThisName, object This) {
             Handlers.Register(Path, Handler, ThisName, This);
         }
+
+        public void OnPSX(string Path, Server Serv, string File) {
+            Handlers.Register(Path, r => Serv.Psx(r as Request, File));
+        }
         
         public string GetFullPath(string Target) {
             if (Target == null || Target.Length == 0 || Target == "/") 
@@ -62,7 +66,11 @@ namespace Poly.Net.Http {
             if (lastPeriod == -1)
                 return string.Empty;
 
-            return FileName.Substring(lastPeriod + 1);
+            return FileName.Substring(lastPeriod);
+        }
+
+        public override string ToString() {
+            return Name;
         }
     }
 }

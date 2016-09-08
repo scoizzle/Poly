@@ -53,13 +53,22 @@ namespace Poly.Net.Http {
         }
 
         async void Load(Item Item) {
+            TotalSize -= Item.ContentLength;
+
             if (MaximumSize > TotalSize + Item.FileSize) {
                 if (Item.IsCompressed) {
                     var newMemCache = new MemoryStream();
 
-                    using (var Compression = new GZipStream(newMemCache, CompressionMode.Compress, true))
-                    using (var FS = Item.Info.OpenRead()) {
-                        await FS.CopyToAsync(Compression);
+                    for (var i = 0; i < 100; i++) {
+                        try {
+                            using (var Compression = new GZipStream(newMemCache, CompressionMode.Compress, true))
+                            using (var FS = Item.Info.OpenRead()) {
+                                await FS.CopyToAsync(Compression);
+                                break;
+                            }
+                        }
+                        catch { }
+                        await Task.Delay(1);
                     }
 
                     Item.Buffer = null;
@@ -68,14 +77,22 @@ namespace Poly.Net.Http {
                 else {
                     var newMemCache = new MemoryStream();
 
-                    using (var FS = Item.Info.OpenRead()) {
-                        await FS.CopyToAsync(newMemCache);
+                    for (var i = 0; i < 100; i++) {
+                        try {
+                            using (var FS = Item.Info.OpenRead()) {
+                                await FS.CopyToAsync(newMemCache);
+                                break;
+                            }
+                        }
+                        catch { }
+                        await Task.Delay(1);
                     }
 
                     Item.Buffer = null;
                     Item.Buffer = newMemCache.ToArray();
                 }
 
+                Item.ContentLength = Item.Buffer.LongLength;
                 TotalSize += Item.Buffer.LongLength;
             }
         }
@@ -115,6 +132,12 @@ namespace Poly.Net.Http {
             I.FileSize = I.Info.Length;
             I.LastWriteTime = I.Info.LastWriteTimeUtc.HttpTimeString();
 
+            foreach (var Pair in this) {
+                if (Pair.Value.Script?.Includes.ContainsKey(I.Info.FullName) == true) {
+                    Pair.Value.Script = null;
+                }
+            }
+
             Load(I);   
         }
 
@@ -147,7 +170,8 @@ namespace Poly.Net.Http {
         }
 
         public class Item {
-            public long FileSize;
+            public long FileSize,
+                        ContentLength;
             public byte[] Buffer;
             public bool IsCompressed;
             public string LastWriteTime, ContentType, FileExtension;

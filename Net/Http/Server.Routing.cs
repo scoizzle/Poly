@@ -8,7 +8,6 @@ namespace Poly.Net.Http {
     public partial class Server {
         public object Psx(Request Request, string FileName) {
 			Cache.Item Cached;
-            object Result = null;
 
 			if (Request.Host.Cache.TryGetValue(FileName, out Cached)) {
                 if (Cached.Script == null) {
@@ -21,11 +20,17 @@ namespace Poly.Net.Http {
 					if (!Cached.Script.Parse(Cached.Content.GetString()))
                         return Cached.Script = null;
                 }
+                
+                var Result = Cached.Script.Evaluate(Request);
 
-                Result = Cached.Script.Evaluate(Request);
+                Request.Result.Content = new MemoryStream(
+                    Encoding.Default.GetBytes(Request.OutputBuilder.ToString())
+                );
+
+				return Result;
             }
 
-            return Result;
+            return null;
         }
     }
 }

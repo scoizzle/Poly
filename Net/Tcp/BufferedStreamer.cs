@@ -169,6 +169,11 @@ namespace Poly.Net.Tcp {
             Position = Length = 0;
             Buffer = new byte[BufferSize];
         }
+
+		public void PollBuffer() {
+			if (Available == 0)
+				UpdateBuffer().Wait();
+		}
         
         private void Consume(int len) {
             Position += len;

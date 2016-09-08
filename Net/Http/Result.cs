@@ -9,16 +9,56 @@ using Poly.Net.Tcp;
 
 namespace Poly.Net.Http {
     public class Result : jsComplex {
+        public long ContentLength { get { return Content?.Length ?? 0; } }
+
         public string Status, ContentType;
-        public long ContentLength;
         public jsObject Cookies, Headers;
+
+        public Stream Content { get; set; }
 
         public Result() {
             Status = Ok;
             ContentType = "text/html";
             Cookies = new jsObject();
             Headers = new jsObject();
-            ContentLength = 0;
+        }
+        
+        public string GetResponseString() {
+            Headers.AssignValue("Date", DateTime.UtcNow.HttpTimeString());
+            Headers.AssignValue("Content-Type", ContentType);
+
+            if (Content != null && ContentLength > 0 && "chunked" != Headers.Get<string>("Transfer-Encoding"))
+                Headers.AssignValue("Content-Length", ContentLength);
+
+            var Output = new StringBuilder();
+
+            Output.Append("HTTP/1.1 ").Append(Status).Append(App.NewLine);
+            GetHeaderString(Output);
+            Output.Append(App.NewLine);
+
+            return Output.ToString();
+        }
+
+        public string GetHeaderString() {
+            var Output = new StringBuilder();
+            GetHeaderString(Output);
+            return Output.ToString();
+        }
+
+        public void GetHeaderString(StringBuilder Output) {
+            foreach (var Pair in Headers) {
+                Output.Append(Pair.Key).Append(": ").Append(Pair.Value).Append(App.NewLine);
+            }
+
+            foreach (var Obj in Cookies.OfType<jsObject>()) {
+                Output.Append("Set-Cookie: ");
+
+                foreach (var P in Obj) {
+                    Output.Append(P.Key).Append("=").Append(P.Value).Append("; ");
+                }
+
+                Output.Append(App.NewLine);
+            }
         }
 
         public static implicit operator Result(string Status) {

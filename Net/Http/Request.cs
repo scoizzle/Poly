@@ -12,144 +12,96 @@ using Poly.Net.Tcp;
 using Poly.Script;
 
 namespace Poly.Net.Http {
-    public partial class Request : jsComplex {
+    public partial class Request : Packet {
         public Host Host;
         public Client Client;
-        public Packet Packet;
         public Result Result;
-
-        public new jsObject Get;
-        public jsObject Post, Cookies;
 
         public bool CompressionEnabled,
                     HeadersOnly;
 
-        public Stream Data { get; set; }
-        public StringBuilder OutputBuilder;
-
-        public Request(Client Client, Packet Packet, Host Host) {
-            this.Host = Host;
-            this.Client = Client;
-            this.Packet = Packet;
-
-            Get = Packet.Get;
-            Post = Packet.Post;
-            Cookies = Packet.Cookies;
-
-
-            Result = new Result();
-            OutputBuilder = new StringBuilder();
-
-            HeadersOnly = string.Compare(Packet.Type, "HEAD", StringComparison.Ordinal) == 0;
-			CompressionEnabled = Packet?.AcceptEncoding.Find("gzip") != -1;
-        }
-
-        public void Print(string txt) {
-            OutputBuilder.Append(txt);
-        }
-
-        public void Print(string FileName, jsObject Data) {
-            if (File.Exists(FileName)) {
-                Print(
-                    Data.Template(
-                        File.ReadAllText(FileName)
-                    )
-                );
+        public string HeaderString {
+            get {
+                return Result.GetResponseString();
             }
         }
 
-        public void Load(string FileName) {
-            if (File.Exists(FileName)) {
-                Print(
-                    File.ReadAllText(FileName)
-                );
+        public StringBuilder OutputBuilder;
+
+        public Request(Client client) {
+            Client = client;
+            Result = new Result();
+            OutputBuilder = new StringBuilder();
+        }
+
+        public void Print(string Content) {
+            OutputBuilder.Append(Content);
+        }
+
+        public void Prepare() {
+            HeadersOnly = string.Compare(Type, "HEAD", StringComparison.Ordinal) == 0;
+            CompressionEnabled = AcceptEncoding.Find("gzip") != -1;
+        }
+
+        public async void SendFile(string FileName) {
+            bool OpenFileDirect = false;
+            Cache.Item Cached = null;
+
+            if (!Host.Cache.TryGetValue(FileName, out Cached)) {
+                Result.Status = Result.NotFound;
+                await Client.Send(HeaderString);
+                return;
+            }
+
+            if (Cached.LastWriteTime == IfModifiedSince) {
+                Result.Status = Result.NotModified;
+            }
+            else {
+                Result.Headers["Last-Modified"] = Cached.LastWriteTime;
+                Result.Headers["Content-Length"] = Cached.ContentLength;
+                Result.ContentType = Cached.ContentType;
+
+                if (Cached.IsCompressed) {
+                    if (CompressionEnabled) {
+                        Result.Headers["Vary"] = "Accept-Encoding";
+                        Result.Headers["Content-Encoding"] = "gzip";
+                    }
+                    else OpenFileDirect = true;
+                }
+            }
+
+            await Client.Send(HeaderString);
+
+            Stream In, Out;
+
+            In = OpenFileDirect ?
+                Cached.Info.OpenRead() :
+                Cached.Content;
+
+            Out = Client.Stream.Stream;
+
+            try {
+                await In.CopyToAsync(Out);
+                await Out.FlushAsync();
+            }
+            catch { }
+            finally {
+                In.Close();
             }
         }
 
         public async void Finish() {
-            long ContentLength;
+            try {
+                await Client.Send(HeaderString);
 
-            if (Data == null) {
-                Data = new MemoryStream(Encoding.Default.GetBytes(OutputBuilder.ToString()));
+				if (!HeadersOnly && Result.Content != null) {
+					var Out = Client.Stream.Stream;
+
+					await Result.Content.CopyToAsync(Out);
+					await Out.FlushAsync();
+				}
             }
-            else { 
-                Data.Position = 0;
-            }
-
-            ContentLength = HeadersOnly ?
-                0 : Data.Length;
-			
-            StringBuilder Headers = new StringBuilder();
-            Headers.Append("HTTP/1.1 ").Append(Result.Status)
-                   .Append("\r\nDate: ").Append(DateTime.UtcNow.HttpTimeString())
-                   .Append("\r\nContent-Type: ").Append(Result.ContentType)
-                   .Append("\r\nContent-Length: ").Append(ContentLength.ToString()).Append(App.NewLine);
-
-            foreach (var Pair in Result.Headers) {
-                Headers.Append(Pair.Key).Append(": ").Append(Pair.Value.ToString()).Append(App.NewLine);
-            }
-
-            foreach (var Pair in Result.Cookies) {
-                if (Pair.Value is jsObject) {
-                    Headers.Append("Set-Cookie: ");
-
-                    foreach (var P in Pair.Value as jsObject) {
-                        Headers.Append(P.Key).Append("=").Append(P.Value).Append("; ");
-                    }
-
-                    Headers.Append(App.NewLine);
-                }
-            }
-
-            Headers.Append(App.NewLine);
-
-			try {
-                if (Client.Connected) {
-                    await Client.Send(Headers.ToString());
-
-                    if (!HeadersOnly) {
-                        var Out = Client.Stream.Stream;
-
-                        await Data.CopyToAsync(Out);
-                        await Out.FlushAsync();
-                    }
-                }
-            }
-            catch { }
-        }
-
-        public void SetCookie(string name, string value) {
-            SetCookie (name, value, 0);
-        }
-
-		public void SetCookie(string name, string value, string path) {
-			SetCookie (name, value, 0, path);
-		}
-
-		public void SetCookie(string name, string value, string path, string domain) {
-			SetCookie (name, value, 0, path, domain);
-		}
-
-        public void SetCookie(string name, string value, long expire = 0, string path = "", string domain = "", bool secure = false) {
-            var Options = new jsObject();
-
-            Options[name] = value;
-
-            if (expire > 0) {
-                Options["expire"] = DateTime.UtcNow.AddSeconds(expire).HttpTimeString();
-            }
-
-            if (!string.IsNullOrEmpty(path))
-                Options["path"] = path;
-
-            if (!string.IsNullOrEmpty(domain))
-                Options["domain"] = domain;
-
-            if (secure)
-                Options["secure"] = "true";
-
-
-            Result.Cookies[name] = Options;
+			catch { }
         }
     }
 }

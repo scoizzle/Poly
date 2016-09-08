@@ -25,6 +25,7 @@ namespace Poly.Script {
 			Class.Parse,
 			Switch.Parse,
 			Async.Parse,
+            Await.Parse,
 			Try.Parse,
 			Include.Parse,
             Persist.Parse,

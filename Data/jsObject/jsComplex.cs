@@ -8,41 +8,30 @@ using System.Dynamic;
 
 namespace Poly.Data {
     public class jsComplex : jsObject {
-        static Dictionary<Type, Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>> Cache =
-            new Dictionary<Type, Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>>();
-
-        static jsComplex() {
-            foreach (var Mod in AppDomain.CurrentDomain.GetAssemblies()) {
-                foreach (var T in Mod.GetTypes()) {
-                    if (typeof(jsComplex).IsAssignableFrom(T)) {
-                        InitType(T);
-                    }
-                }
-            }
-        }
-
-        static Dictionary<string, Tuple<Func<object, object>, Action<object, object>>> InitType(Type T) {
-            var TypeCache = new Dictionary<string, Tuple<Func<object, object>, Action<object, object>>>();
+        static Dictionary<Type, KeyValueCollection<Tuple<Func<object, object>, Action<object, object>>>> Cache =
+            new Dictionary<Type, KeyValueCollection<Tuple<Func<object, object>, Action<object, object>>>>();
+        
+        static KeyValueCollection<Tuple<Func<object, object>, Action<object, object>>> InitType(Type T) {
+            var TypeCache = new KeyValueCollection<Tuple<Func<object, object>, Action<object, object>>>();
 
             foreach (var Field in T.GetFields()) {
-                TypeCache.Add(Field.Name, new Tuple<Func<object, object>, Action<object, object>>(
+                TypeCache[Field.Name] = new Tuple<Func<object, object>, Action<object, object>>(
                     Field.GetValue,
                     Field.SetValue
-                ));
+                );
             }
 
             return TypeCache;
         }
 
-        Dictionary<string, Tuple<Func<object, object>, Action<object, object>>> LocalCache;
-
         public jsComplex() {
-            var T = GetType();
+            var Type = GetType();
 
-            if (!Cache.TryGetValue(T, out LocalCache)) lock (Cache) {
-                    Cache[T] = LocalCache = InitType(T);
-                }
+            if (!Cache.TryGetValue(Type, out LocalCache))
+                Cache[Type] = LocalCache = InitType(Type);
         }
+
+        KeyValueCollection<Tuple<Func<object, object>, Action<object, object>>> LocalCache;
 
         public override void CopyTo(jsObject Object) {
             base.CopyTo(Object);
@@ -56,8 +45,10 @@ namespace Poly.Data {
             if (base.TryGet(Key, out Value))
                 return true;
 
-            if (LocalCache.ContainsKey(Key)) {
-                Value = LocalCache[Key].Item1(this);
+            var P = LocalCache.Get(Key);
+
+            if (P != null) {
+                Value = P.Item1(this);
                 return true;
             }
 
@@ -69,9 +60,10 @@ namespace Poly.Data {
             if (base.TryGet<T>(Key, out Value))
                 return true;
 
-            if (LocalCache.ContainsKey(Key)) {
-                var Val = LocalCache[Key].Item1(this);
+            var P = LocalCache.Get(Key);
 
+            if (P != null) {
+                var Val = P.Item1(this);
                 if (Val is T) {
                     Value = (T)(Val);
                     return true;
@@ -83,8 +75,10 @@ namespace Poly.Data {
         }
 
         public override void AssignValue<T>(string Key, T Value) {
-            if (LocalCache.ContainsKey(Key)) {
-                LocalCache[Key].Item2(this, Value);
+            var P = LocalCache.Get(Key);
+
+            if (P != null) {
+                P.Item2(this, Value);
             }
             else {
                 base.AssignValue(Key, Value);

@@ -10,28 +10,28 @@ using Poly.Data;
 namespace Poly.Script.Expressions {
     using Nodes;
 
-    public class Async : Expression {
+    public class Await : Expression {
         public Node Node = null;
 
         public override object Evaluate(jsObject Context) {
-            return Task.Factory.StartNew(() => {
-                var Result = Node.Evaluate(Context);
+            var Val = Node.Evaluate(Context) as Task<object>;
 
-                if (Result is Return) {
-                    Result = (Result as Return).Evaluate(Context);
-                }
+            if (Val != null) {
+                Val.Wait();
 
-                return Result;
-            });
+                return Val.Result;
+            }
+
+            return null;
         }
 
         public override string ToString() {
-            return "async " + Node.ToString();
+            return "await " + Node.ToString();
         }
 
 		new public static Node Parse(Engine Engine, StringIterator It) {
-			if (It.Consume ("async")) {
-				var Node = new Async () {
+			if (It.Consume ("await")) {
+				var Node = new Await () {
 					Node = Engine.ParseExpression(It)
 				};
 

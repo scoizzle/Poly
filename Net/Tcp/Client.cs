@@ -58,9 +58,21 @@ namespace Poly.Net.Tcp {
             }
             catch { return false; }
             return true;
-		}
+        }
 
-		public async Task<bool> Send(string str) {
+        public async Task<bool> Send(byte[] bytes, int index, int length) {
+            try {
+                if (Connected) {
+                    InitStream();
+
+                    await Stream.Send(bytes, index, length);
+                }
+            }
+            catch { return false; }
+            return true;
+        }
+
+        public async Task<bool> Send(string str) {
 			return await Send(str, Encoding.Default);
 		}
 
@@ -81,7 +93,7 @@ namespace Poly.Net.Tcp {
 			    if (Connected) {
                     InitStream();
 
-                    if (!string.IsNullOrEmpty(line)) {
+                    if (line != null) {
                         var bytes = enc.GetBytes(line);
 
                         await Stream.Send(bytes, NewLineBytes);

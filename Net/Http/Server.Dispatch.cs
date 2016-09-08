@@ -31,24 +31,25 @@ namespace Poly.Net.Http {
                 client.ReceiveTimeout = 5000;
 
 				while (client.Connected) {
-                    var Recv = Net.Http.Packet.Receive(client);
-                    var Packet = await Recv;
-					if (Packet == null) goto closeConnection;
+                    var Request = new Request(client);
+                    var Recv = Net.Http.Packet.Receive(client, Request);
 
-					var Host = FindHost(Packet.Host);
-					var Request = new Request(client, Packet, Host);
+                    var Packet = await Recv;
+                    if (Packet == null) goto closeConnection;
+                    else Request.Prepare();
+
+					var Host = FindHost(Packet.Hostname);
 					if (Host == null) goto badRequest;
 
+                    Request.Host = Host;
 					OnClientRequest(Request);
 
                     if (Packet.Connection == "close") goto closeConnection;
                     else continue;
 
-				badRequest:
-					Request.Result = Result.BadRequest;
+                badRequest:
+                    Request.Result = Result.BadRequest;
 					Request.Finish();
-
-					await Task.Delay(10);
 				}
 			}
 			catch (Exception Error) {
@@ -60,50 +61,26 @@ namespace Poly.Net.Http {
         }
         
         private static void OnClientRequest(Request Request) {
-            var Target = Request.Packet.Target;
-            if (!Request.Host.Handlers.MatchAndInvoke(Target, Request)) {
+            var Target = Request.Target;
+            var Handler = Request.Host.Handlers.GetHandler(Target, Request);
+
+            if (Handler == null) {
                 var WWW = Request.Host.GetFullPath(Target);
                 var EXT = Request.Host.GetExtension(WWW);
 
                 Request.Set("FileName", WWW);
                 Request.Set("FileEXT", EXT);
 
-                if (!Request.Host.Handlers.MatchAndInvoke(EXT, Request))
-                    HandleFile(Request, WWW);
-            }
+                Handler = Request.Host.Handlers.GetHandler(EXT, Request);
 
-            Request.Finish();
-        }
-
-        private static void HandleFile(Request Request, string WWW) {
-            Cache.Item Cached = null;
-
-            if (Request.Host.Cache.TryGetValue(WWW, out Cached)) {
-				if (Cached.LastWriteTime == Request.Packet.IfModifiedSince) {
-					Request.Result.Status = Result.NotModified;
-				}
-				else {
-                    if (Cached.IsCompressed) {
-                        if (Request.CompressionEnabled) {
-                            Request.Result.Headers["Vary"] = "Accept-Encoding";
-                            Request.Result.Headers["Content-Encoding"] = "gzip";
-                            Request.Data = Cached.Content;
-                        }
-                        else {
-                            Request.Data = Cached.Info.OpenRead();
-                        }
-                    }
-                    else {
-                        Request.Data = Cached.Content;
-                    }
-
-                    Request.Result.Headers["Last-Modified"] = Cached.LastWriteTime;
-                    Request.Result.ContentType = Cached.ContentType;
+                if (Handler == null) {
+                    Request.SendFile(WWW);
+                    return;
                 }
             }
-            else {
-                Request.Result = Result.NotFound;
-            }
+            
+            Handler(Request);
+            Request.Finish();
         }
     }
 }

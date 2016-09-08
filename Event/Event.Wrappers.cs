@@ -19,10 +19,10 @@ namespace Poly {
                 return null;
 
             return (Args) => {
+				if (Func == null)
+					return null;
+				
                 for (int i = 0; i < ArgPairs.Length / 2; i += 2) {
-                    if (Func == null)
-                        return null;
-
                     Args[ArgPairs[i].ToString()] = ArgPairs[i + 1];
                 }
 

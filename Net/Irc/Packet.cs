@@ -93,20 +93,20 @@ namespace Poly.Net.Irc {
             Send(List, this);
         }
 
-        public static async void Send(Tcp.Client Client, Packet Packet) {
+        public static void Send(Tcp.Client Client, Packet Packet) {
             if (Client != null && Client.Connected) {
                 var Out = Packet.ToString();
-                await Client.SendLine(Out);
+                Client.SendLine(Out);
             }
         }
 
-        public static async void Send(Tcp.Client[] List, Packet Packet) {
+        public static void Send(Tcp.Client[] List, Packet Packet) {
             var Out = Packet.ToString();
 
             for (int i = 0; i < List.Length; i++) {
                 if (List[i] != null && List[i].Connected)
                     try {
-                        await List[i].SendLine(Out);
+                        List[i].SendLine(Out);
                     }
                     catch { }
             }
@@ -114,11 +114,7 @@ namespace Poly.Net.Irc {
 
         public static Packet Receive(Tcp.Client Client) {
             if (Client != null && Client.Connected) {
-                var Task = Client.ReceiveLine();
-                Task.Wait();
-
-                if (Task.IsCompleted && !Task.IsFaulted)
-                    return FromString(Task.Result);
+                return FromString(Client.ReceiveLine());
             }
 
             return null;
@@ -354,26 +350,26 @@ namespace Poly.Net.Irc {
             }
         }
 
-        public async void Send(Poly.Net.Tcp.Client Client) {
+        public void Send(Poly.Net.Tcp.Client Client) {
             if (Client != null) {
                 var Out = this.Template(Format);
 
-            	await Client.SendLine(Out);
+            	Client.SendLine(Out);
 			}
         }
 
-        public static async void Send(Tcp.Client Client, string Type, jsObject Info) {
-            await Client.SendLine(Info.Template(Formats[Type]));
+        public static void Send(Tcp.Client Client, string Type, jsObject Info) {
+            Client.SendLine(Info.Template(Formats[Type]));
         }
 
-        public static async void Send(Tcp.Client Client, string Type, params object[] Items) {
+        public static void Send(Tcp.Client Client, string Type, params object[] Items) {
             var Out = new jsObject(Items).Template(Formats[Type]);
 
-            await Client.SendLine(Out);
+            Client.SendLine(Out);
         }
 
-        public async Task<bool> Recieve(Tcp.Client Client) {
-            var Line = await Client.ReceiveLine();
+        public bool Recieve(Tcp.Client Client) {
+            var Line = Client.ReceiveLine();
             
             foreach (var Pair in _PacketFormatArray) {
                 if (Line.Match(Pair.Value, this) != null) {

@@ -23,7 +23,7 @@ namespace Poly.Net.Http {
             Stream = stream;
         }
 
-        public async Task<bool> Receive() {
+        public bool Receive() {
             var client = Client;
             var stream = Stream;
             var temp = new MemoryStream();
@@ -32,17 +32,17 @@ namespace Poly.Net.Http {
 
             var line = string.Empty;
 
-            if (!await stream.Consume(boundary))
+			if (!stream.Consume(boundary).AwaitResult())
                 return false;
             else
-                line = await client.ReceiveLine();
+                line = client.ReceiveLine();
 
             boundary = Encoding.Default.GetBytes("\r\n--" + Packet.Boundary);
 			while (stream.TotalBytesConsumed < endLength && Client.Connected) {
                 var postInfo = new jsObject();
                 var isFile = false;
 
-                while (!string.IsNullOrEmpty(line = await client.ReceiveLine())) {
+                while (!string.IsNullOrEmpty(line = client.ReceiveLine())) {
                     if (line.StartsWith("Content-Disposition", StringComparison.Ordinal)) {
                         var Results = Packet.MultipartHeaderPropertiesMatcher.MatchAll(line.Substring("form-data"), true);
 
@@ -65,7 +65,7 @@ namespace Poly.Net.Http {
                     var f = new TempFileUpload(postInfo.Get<string>("FileName"));
 
                     using (var fstream = f.GetWriteStream())
-                        await stream.ReceiveUntil(fstream, boundary);
+						stream.ReceiveUntil(fstream, boundary).Wait();
 
                     f.Info.Refresh();
 
@@ -73,7 +73,7 @@ namespace Poly.Net.Http {
                 }
                 else {
                     temp = new MemoryStream();
-                    if (!await stream.ReceiveUntil(temp, boundary))
+					if (!stream.ReceiveUntil(temp, boundary).AwaitResult())
                         return false;
 
                     postInfo.Set("Content", Encoding.Default.GetString(temp.ToArray()));
@@ -81,9 +81,9 @@ namespace Poly.Net.Http {
 
                 Packet.Post.Set(postInfo.Get<string>("Name"), postInfo);
 
-                if (await stream.Consume(doubleDash))
+				if (stream.Consume(doubleDash).AwaitResult())
                     return true;
-                else if (!string.IsNullOrEmpty(line = await client.ReceiveLine()))
+                else if (!string.IsNullOrEmpty(line = client.ReceiveLine()))
                     return false;
             }
             return false;

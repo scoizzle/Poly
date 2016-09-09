@@ -26,30 +26,28 @@ namespace Poly.Net.Http {
             return null;
         }
 
-        private async Task ClientConnected(Client client) {
+        private void ClientConnected(Client client) {
 			try {
                 client.ReceiveTimeout = 5000;
 
 				while (client.Connected) {
-                    var Request = new Request(client);
-                    var Recv = Net.Http.Packet.Receive(client, Request);
+                    var request = new Request(client);
 
-                    var Packet = await Recv;
-                    if (Packet == null) goto closeConnection;
-                    else Request.Prepare();
+					if (!Packet.Receive(client, request)) goto closeConnection;
+					else request.Prepare();
 
-					var Host = FindHost(Packet.Hostname);
-					if (Host == null) goto badRequest;
+					var host = FindHost(request.Hostname);
+					if (host == null) goto badRequest;
 
-                    Request.Host = Host;
-					OnClientRequest(Request);
+                    request.Host = host;
+					OnClientRequest(request);
 
-                    if (Packet.Connection == "close") goto closeConnection;
+                    if (request.Connection == "close") goto closeConnection;
                     else continue;
 
                 badRequest:
-                    Request.Result = Result.BadRequest;
-					Request.Finish();
+                    request.Result = Result.BadRequest;
+					request.Finish();
 				}
 			}
 			catch (Exception Error) {

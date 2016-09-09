@@ -48,47 +48,47 @@ namespace Poly.Net.Tcp {
                 Stream = new BufferedStreamer(base.GetStream());
         }
 
-        public async Task<bool> Send(byte[] bytes) {
+		public bool Send(byte[] bytes) {
             try { 
                 if (Connected) {
                     InitStream();
 
-                    await Stream.Send(bytes);
+					return Stream.Send(bytes).AwaitResult();
                 }
             }
             catch { return false; }
             return true;
         }
 
-        public async Task<bool> Send(byte[] bytes, int index, int length) {
+        public bool Send(byte[] bytes, int index, int length) {
             try {
                 if (Connected) {
                     InitStream();
 
-                    await Stream.Send(bytes, index, length);
+					return Stream.Send(bytes, index, length).AwaitResult();
                 }
             }
             catch { return false; }
             return true;
         }
 
-        public async Task<bool> Send(string str) {
-			return await Send(str, Encoding.Default);
+        public bool Send(string str) {
+			return Send(str, Encoding.Default);
 		}
 
-		public async Task<bool> Send(string str, Encoding enc) {
-            return await Send(enc.GetBytes(str));
+		public bool Send(string str, Encoding enc) {
+            return Send(enc.GetBytes(str));
 		}
 
-		public async Task<bool> SendLine() {
-			return await SendLine(string.Empty, Encoding.Default);
+		public bool SendLine() {
+			return SendLine(string.Empty, Encoding.Default);
 		}
 
-		public async Task<bool> SendLine(string line) {
-			return await SendLine(line, Encoding.Default);
+		public bool SendLine(string line) {
+			return SendLine(line, Encoding.Default);
 		}
 
-		public async Task<bool> SendLine(string line, Encoding enc) {
+		public bool SendLine(string line, Encoding enc) {
             try { 
 			    if (Connected) {
                     InitStream();
@@ -96,7 +96,7 @@ namespace Poly.Net.Tcp {
                     if (line != null) {
                         var bytes = enc.GetBytes(line);
 
-                        await Stream.Send(bytes, NewLineBytes);
+						return Stream.Send(bytes, NewLineBytes).AwaitResult();
                     }
                 }
             }
@@ -104,55 +104,55 @@ namespace Poly.Net.Tcp {
             return true;
 		}
 
-		public async Task<bool> Receive(Stream storage, long length) {
+		public bool Receive(Stream storage, long length) {
             if (Connected) {
                 InitStream();
 
-                return await Stream.Receive(storage, length);
+				return Stream.Receive(storage, length).AwaitResult();
             }
             return false;
         }
 
-        public async Task<string> ReceiveString(long byteLen) {
-            return await ReceiveString(byteLen, Encoding.Default);
+        public string ReceiveString(long byteLen) {
+			return ReceiveString(byteLen, Encoding.Default);
         }
 
-        public async Task<string> ReceiveString(long byteLen, Encoding enc) {
+        public string ReceiveString(long byteLen, Encoding enc) {
             var Out = new MemoryStream();
 
-            if (await Receive(Out, byteLen)) {
+            if (Receive(Out, byteLen)) {
                 return enc.GetString(Out.ToArray());
             }
 
             return null;
         }
 
-        public async Task<string> ReceiveStringUntil(byte[] chain, Encoding enc) {
+        public string ReceiveStringUntil(byte[] chain, Encoding enc) {
             var Out = new MemoryStream();
 
-            if (await ReceiveUntil(Out, chain)) {
+            if (ReceiveUntil(Out, chain)) {
                 return enc.GetString(Out.ToArray());
             }
 
             return null;
         }
 
-		public async Task<string> ReceiveLine() {
-			return await ReceiveLine(Encoding.Default);
+		public string ReceiveLine() {
+			return ReceiveLine(Encoding.Default);
 		}
 
-		public async Task<string> ReceiveLine(Encoding enc) {
+		public string ReceiveLine(Encoding enc) {
 			var Out = new MemoryStream();
-			if (await ReceiveUntil(Out, NewLineBytes))
+			if (ReceiveUntil(Out, NewLineBytes))
                 return enc.GetString(Out.ToArray());
             return null;
 		}
 
-		public async Task<bool> ReceiveUntil(Stream storage, byte[] chain) {
+		public bool ReceiveUntil(Stream storage, byte[] chain) {
             if (Connected) {
                 InitStream();
 
-                return await Stream.ReceiveUntil(storage, chain);
+				return Stream.ReceiveUntil(storage, chain).AwaitResult();
             }
 
             return false;

@@ -206,6 +206,7 @@
     <Compile Include="Script\Expressions\Persistent.cs" />
     <Compile Include="Script\Helpers\PersistentFile.cs" />
     <Compile Include="Script\Expressions\Invoke.cs" />
+    <Compile Include="Extensions\Task.Extensions.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

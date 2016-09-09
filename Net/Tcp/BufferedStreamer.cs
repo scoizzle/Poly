@@ -52,8 +52,8 @@ namespace Poly.Net.Tcp {
             Position = Length = 0;
         }
 
-        public async Task<bool> Send(byte[] bytes) {
-            return await Send(bytes, 0, bytes.Length);
+        public Task<bool> Send(byte[] bytes) {
+            return Send(bytes, 0, bytes.Length);
         }
 
         public async Task<bool> Send(byte[] bytes, int index, int len) {

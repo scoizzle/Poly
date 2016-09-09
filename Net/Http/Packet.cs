@@ -21,7 +21,7 @@ namespace Poly.Net.Http {
                                        MultipartHeaderPropertiesMatcher = new Matcher("[;] {Key}=\"{Value}\""),
                                        MultipartBoundaryMatcher = new Matcher("{ContentType}; boundary={Boundary}");
 
-        static readonly byte[] DoubleNewLine = Encoding.Default.GetBytes("\r\n\r\n");
+        public static readonly byte[] DoubleNewLine = Encoding.Default.GetBytes("\r\n\r\n");
 
         public int Port;
         public long ContentLength;
@@ -50,7 +50,7 @@ namespace Poly.Net.Http {
 
                 try {
                     for (var c = 128; c != 0; c--) {
-                        var Line = await In.ReceiveLine();
+                        var Line = In.ReceiveLine();
                         if (Line == null) return false;
 
                         Headers.Append(Line).Append(App.NewLine);
@@ -61,7 +61,7 @@ namespace Poly.Net.Http {
                                 long.TryParse(Line.Substring(16), out ContentLength);
                     }
 
-                    await Out.Send(Headers.ToString());
+                    Out.Send(Headers.ToString());
 
                     if (ContentLength > 0)
                         return await Stream.Receive(Output.Stream, ContentLength);
@@ -72,16 +72,16 @@ namespace Poly.Net.Http {
             return true;
         }
 
-        public static async Task<Packet> Receive(Client client, Packet recv) {
+        public static bool Receive(Client client, Packet recv) {
             string headers;
 
-            try { headers = await client.ReceiveStringUntil(DoubleNewLine, Encoding.Default); }
-            catch { return null; }
+            try { headers = client.ReceiveStringUntil(DoubleNewLine, Encoding.Default); }
+            catch { return false; }
 
             if (headers == null || headers.Length == 0) goto closeConnection;
 
             if (HeaderMatcher.Match(headers, recv) == null)
-                return null;
+                return false;
 
             recv.Headers.ForEach<string>((key, value) => {
                 ParseHeader(recv, key, value);
@@ -95,25 +95,25 @@ namespace Poly.Net.Http {
 			if (recv.ContentLength > 0 && recv.Type == "POST") {
 				switch (recv.ContentType) {
 					case "application/x-www-form-urlencoded": 
-						QueryMembersMatcher.MatchAll(await client.ReceiveString(recv.ContentLength), recv.Post, true);
+						QueryMembersMatcher.MatchAll(client.ReceiveString(recv.ContentLength), recv.Post, true);
 						break;
 
 					case "multipart/form-data": {
 						MultipartHandler Handler = new MultipartHandler(client, recv, client.Stream);
 
-						if (!await Handler.Receive())
-							return null;
+						if (!Handler.Receive())
+							return false;
 							
 						break;
 					}
 				}
 			}
 
-            return recv;
+            return true;
 
         closeConnection:
             client.Close();
-            return null;
+            return false;
         }
 
         private static void ParseHeader(Packet recv, string Key, string Value) {

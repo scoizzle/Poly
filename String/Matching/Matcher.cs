@@ -201,8 +201,13 @@ namespace Poly {
         }
 
         private static bool Match(Block[] Handlers, Context Context) {
-            for (; Context.BlockIndex < Handlers.Length && !Context.IsDone(); Context.BlockIndex++) {
+            for (; Context.BlockIndex < Handlers.Length; Context.BlockIndex++) {
                 var Current = Handlers[Context.BlockIndex];
+
+                if (Context.IsDone()) {
+                    if (Current is Optional && Context.BlockIndex == Handlers.Length - 1) return true;
+                    break;
+                }
 
                 if (!Current.Match(Context)) {
                     if (Current is Optional)

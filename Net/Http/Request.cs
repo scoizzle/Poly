@@ -49,7 +49,7 @@ namespace Poly.Net.Http {
 
             if (!Host.Cache.TryGetValue(FileName, out Cached)) {
                 Result.Status = Result.NotFound;
-                await Client.Send(HeaderString);
+                Client.Send(HeaderString);
                 return;
             }
 
@@ -70,7 +70,7 @@ namespace Poly.Net.Http {
                 }
             }
 
-            await Client.Send(HeaderString);
+            Client.Send(HeaderString);
 
             Stream In, Out;
 
@@ -92,7 +92,7 @@ namespace Poly.Net.Http {
 
         public async void Finish() {
             try {
-                await Client.Send(HeaderString);
+                Client.Send(HeaderString);
 
 				if (!HeadersOnly && Result.Content != null) {
 					var Out = Client.Stream.Stream;

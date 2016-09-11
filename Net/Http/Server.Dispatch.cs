@@ -60,24 +60,19 @@ namespace Poly.Net.Http {
         
         private static void OnClientRequest(Request Request) {
             var Target = Request.Target;
-            var Handler = Request.Host.Handlers.GetHandler(Target, Request);
 
-            if (Handler == null) {
+            if (!Request.Host.Handlers.MatchAndInvoke(Target, Request)) {
                 var WWW = Request.Host.GetFullPath(Target);
                 var EXT = Request.Host.GetExtension(WWW);
 
                 Request.Set("FileName", WWW);
                 Request.Set("FileEXT", EXT);
 
-                Handler = Request.Host.Handlers.GetHandler(EXT, Request);
-
-                if (Handler == null) {
+                if (!Request.Host.Handlers.MatchAndInvoke(EXT, Request)) {
                     Request.SendFile(WWW);
-                    return;
                 }
             }
-            
-            Handler(Request);
+
             Request.Finish();
         }
     }

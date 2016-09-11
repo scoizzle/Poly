@@ -43,13 +43,11 @@ namespace Poly.Net.Http {
             CompressionEnabled = AcceptEncoding.Find("gzip") != -1;
         }
 
-        public async void SendFile(string FileName) {
-            bool OpenFileDirect = false;
+        public void SendFile(string FileName) {
             Cache.Item Cached = null;
 
             if (!Host.Cache.TryGetValue(FileName, out Cached)) {
                 Result.Status = Result.NotFound;
-                Client.Send(HeaderString);
                 return;
             }
 
@@ -66,27 +64,13 @@ namespace Poly.Net.Http {
                         Result.Headers["Vary"] = "Accept-Encoding";
                         Result.Headers["Content-Encoding"] = "gzip";
                     }
-                    else OpenFileDirect = true;
+                    else {
+                        Result.Content = Cached.Info.OpenRead();
+                        return;
+                    }
                 }
-            }
 
-            Client.Send(HeaderString);
-
-            Stream In, Out;
-
-            In = OpenFileDirect ?
-                Cached.Info.OpenRead() :
-                Cached.Content;
-
-            Out = Client.Stream.Stream;
-
-            try {
-                await In.CopyToAsync(Out);
-                await Out.FlushAsync();
-            }
-            catch { }
-            finally {
-                In.Close();
+                Result.Content = Cached.Content;
             }
         }
 

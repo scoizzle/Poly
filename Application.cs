@@ -53,13 +53,20 @@ namespace Poly {
         }
 
         public static void WaitforExit() {
-			while (Running) {
+            var eng = new Script.Engine();
+
+            while (Running) {
 				var Line = Console.ReadLine();
 
-				if (Line == null)
-					Thread.Sleep(500);
-				else
-					Commands.MatchAndInvoke (Line, GlobalContext);
+                if (Line == null)
+                    Thread.Sleep(500);
+                else if (Commands.MatchAndInvoke(Line, GlobalContext)) continue;
+                else {
+                    if (eng.Parse(Line)) {
+                        Console.WriteLine(eng.Evaluate(GlobalContext) ?? string.Empty);
+                        eng = new Script.Engine();
+                    }
+                }
 				
 				Thread.Sleep (50);
 			}

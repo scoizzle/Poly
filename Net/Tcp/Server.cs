@@ -50,7 +50,6 @@ namespace Poly.Net.Tcp {
         }
 
         new public void Stop() {
-            ConnectionAccepter.Abort();
             base.Stop();
         }
 
@@ -59,13 +58,19 @@ namespace Poly.Net.Tcp {
         }
 
 		private void AcceptConnections() {
-			while (Active) {
-				var socket = AcceptSocket();
+			do {
+				try {
+					while (Active) {
 
-				Task.Run(() => {
-					ClientConnected(socket);
-				});
-			}
+						var socket = AcceptSocket();
+
+						Task.Run(() => {
+							ClientConnected(socket);
+						});
+					}
+				}
+				catch { }
+			} while (Active);
 		}
     }
 }

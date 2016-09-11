@@ -136,7 +136,7 @@ namespace Poly.Script.Helpers {
                     EmitFastInt(IL, i);
                     IL.Emit(OpCodes.Ldloc, Locals[i]);
 
-                    if (Locals[i].LocalType.IsValueType)
+                    if (Locals[i].LocalType.GetTypeInfo().IsValueType)
                         IL.Emit(OpCodes.Box, Locals[i].LocalType);
 
                     IL.Emit(OpCodes.Stelem_Ref);
@@ -149,14 +149,14 @@ namespace Poly.Script.Helpers {
 
 
         static void EmitCastToReference(ILGenerator IL, Type Type) {
-            if (Type.IsValueType)
+            if (Type.GetTypeInfo().IsValueType)
                 IL.Emit(OpCodes.Unbox_Any, Type);
             else
                 IL.Emit(OpCodes.Castclass, Type);
         }
 
         static void EmitBoxIfNeeded(ILGenerator IL, Type Type) {
-            if (Type.IsValueType)
+            if (Type.GetTypeInfo().IsValueType)
                 IL.Emit(OpCodes.Box, Type);
         }
 

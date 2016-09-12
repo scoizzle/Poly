@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Runtime;
+using System.Reflection;
 
 namespace Poly.Script.Helpers {
     using Nodes;
@@ -23,12 +25,15 @@ namespace Poly.Script.Helpers {
         }
 
         public static Type GetType(string Name) {
-            foreach (var Mod in AppDomain.CurrentDomain.GetAssemblies()) {
-                var T = Mod.GetType(Name, false);
+            //var Asm = Assembly.GetEntryAssembly().
 
-                if (T != null)
-                    return T;
-            }
+            //foreach (var Type in Asm.GetTypes()) {
+            //    foreach (var Mod in AppDomain.CurrentDomain.GetAssemblies()) {
+            //    var T = Mod.GetType(Name, false);
+
+            //    if (T != null)
+            //        return T;
+            //}
             return null;
         }
 

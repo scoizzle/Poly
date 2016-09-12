@@ -23,16 +23,17 @@ namespace Poly.Script {
             StaticLibraries = new jsObject<Library>();
             TypeLibs = new Dictionary<Type, Library>();
 
+            Global = new Libraries.Global();
+            Standard = new Libraries.Standard();
+
             var LType = typeof(Library);
             var Assemblies = new Assembly[] {
-                Assembly.GetExecutingAssembly(),
-                Assembly.GetCallingAssembly(),
                 Assembly.GetEntryAssembly()
             };
 
             foreach (var Asm in Assemblies) {
                 foreach (var Type in Asm.GetTypes()) {
-                    if (LType.IsAssignableFrom(Type)) {
+                    if (LType.GetTypeInfo().IsAssignableFrom(Type)) {
                         Activator.CreateInstance(Type);
                     }
                 }

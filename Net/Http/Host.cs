@@ -7,7 +7,7 @@ using path = System.IO.Path;
 namespace Poly.Net.Http {
     public class Host : jsComplex {
         public long CacheSize;
-        public string Name, Path, DefaultDocument, DefaultDocumentFullPath, DefaultExtension;
+        public string Name, Path, DefaultDocument, DefaultExtension;
 		public jsObject Compressable;
 
         public Matcher Matcher;
@@ -33,7 +33,6 @@ namespace Poly.Net.Http {
             Matcher = new Matcher(Name);
             Cache = new Cache(Path, Compressable.Values.Cast<string>().ToArray());
             Path = path.GetFullPath(Path);
-            DefaultDocumentFullPath = GetFullPath("");
         }
 
         public void Stop() {
@@ -42,10 +41,6 @@ namespace Poly.Net.Http {
 
         public void On(string Path, Event.Handler Handler) {
             Handlers.Register(Path, Handler);
-        }
-
-        public void On(string Path, Event.Handler Handler, string ThisName, object This) {
-            Handlers.Register(Path, Handler, ThisName, This);
         }
 
         public void OnPSX(string Path, Server Serv, string File) {

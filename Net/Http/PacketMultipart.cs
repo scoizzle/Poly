@@ -11,7 +11,7 @@ namespace Poly.Net.Http {
     using Data;
 
     public class MultipartHandler {
-		static readonly byte[] doubleDash = Encoding.Default.GetBytes("--");
+		static readonly byte[] doubleDash = Encoding.UTF8.GetBytes("--");
 
         public Client Client { get; private set; }
         public Packet Packet { get; private set; }
@@ -28,16 +28,16 @@ namespace Poly.Net.Http {
             var stream = Stream;
             var temp = new MemoryStream();
 			var endLength = stream.TotalBytesConsumed + Packet.ContentLength;
-			var boundary = Encoding.Default.GetBytes("--" + Packet.Boundary);
+			var boundary = Encoding.UTF8.GetBytes("--" + Packet.Boundary);
 
             var line = string.Empty;
 
-			if (!stream.Consume(boundary).AwaitResult())
+			if (!stream.Consume(boundary))
                 return false;
             else
                 line = client.ReceiveLine();
 
-            boundary = Encoding.Default.GetBytes("\r\n--" + Packet.Boundary);
+            boundary = Encoding.UTF8.GetBytes("\r\n--" + Packet.Boundary);
 			while (stream.TotalBytesConsumed < endLength && Client.Connected) {
                 var postInfo = new jsObject();
                 var isFile = false;
@@ -76,12 +76,12 @@ namespace Poly.Net.Http {
 					if (!stream.ReceiveUntil(temp, boundary).AwaitResult())
                         return false;
 
-                    postInfo.Set("Content", Encoding.Default.GetString(temp.ToArray()));
+                    postInfo.Set("Content", Encoding.UTF8.GetString(temp.ToArray()));
                 }
 
                 Packet.Post.Set(postInfo.Get<string>("Name"), postInfo);
 
-				if (stream.Consume(doubleDash).AwaitResult())
+				if (stream.Consume(doubleDash))
                     return true;
                 else if (!string.IsNullOrEmpty(line = client.ReceiveLine()))
                     return false;

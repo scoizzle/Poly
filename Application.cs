@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Reflection;
-using System.Diagnostics;
+using System.Threading.Tasks;
 
 using Poly.Data;
 
@@ -18,7 +16,7 @@ namespace Poly {
         static App() {
             Running = false;
             GlobalContext = new jsObject();
-            Commands = new Poly.Event.Engine();
+            Commands = new Event.Engine();
         }
 
         public static string Query(string Question) {
@@ -59,7 +57,7 @@ namespace Poly {
 				var Line = Console.ReadLine();
 
                 if (Line == null)
-                    Thread.Sleep(500);
+                    Task.Delay(500);
                 else if (Commands.MatchAndInvoke(Line, GlobalContext)) continue;
                 else {
                     if (eng.Parse(Line)) {
@@ -67,17 +65,17 @@ namespace Poly {
                         eng = new Script.Engine();
                     }
                 }
-				
-				Thread.Sleep (50);
-			}
+
+                Task.Delay(50);
+            }
         }
 
 		public static void Exit(int Status = 0) {
             Log.Info("Applcation Exiting...");
 
             Running = false;
-			Thread.Sleep(1000);
-			Environment.Exit(0);
+            Task.Delay(1000);
+            Environment.Exit(0);
 		}
 	}
 }

@@ -22,6 +22,7 @@ namespace Poly.Script.Helpers {
             if (ArgTypes == null)
                 ArgTypes = EmptyTypeArray;
 
+            var ti = Type.GetTypeInfo();
             var Types = new TypeList() { List = ArgTypes };
             var Handler = GetCacheItem(Type, Name, Types);
 
@@ -37,14 +38,13 @@ namespace Poly.Script.Helpers {
                 MethodInfo Info = null;
 
                 try {
-                    Info = Type.GetMethod(Name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static, null, ArgTypes, null);
-                    
-                    Handler = GetDelegate(
-                        Info ?? Type.GetMethod(Name),
-                        ArgTypes
-                    );
+                    Info = ti.GetMethod(Name, ArgTypes) ?? ti.GetMethod(Name);
                 }
                 catch { }
+
+                if (Info == null) return null;
+
+                Handler = Info.Invoke;
             }
 
             if (Handler != null)
@@ -84,122 +84,7 @@ namespace Poly.Script.Helpers {
 
             Methods[ArgTypes] = Func;
         }
-
-        public static Func<object, object[], object> GetDelegate(MethodInfo Info, Type[] Types) {
-            var Method = new DynamicMethod(string.Empty, typeof(object), new Type[] { typeof(object), typeof(object) }, Info.DeclaringType.Module);
-            var Params = Info.GetParameters();
-
-            if (Types.Length != Params.Length)
-                return null;
-
-            var IL = Method.GetILGenerator();
-            var Locals = new LocalBuilder[Params.Length];
-
-            for (int i = 0; i < Params.Length; i++) {
-                Locals[i] = IL.DeclareLocal(Types[i]);
-            }
-
-            for (int i = 0; i < Params.Length; i++) {
-                IL.Emit(OpCodes.Ldarg_1);
-
-                EmitFastInt(IL, i);
-                IL.Emit(OpCodes.Ldelem_Ref);
-
-                EmitCastToReference(IL, Types[i]);
-                IL.Emit(OpCodes.Stloc, Locals[i]);
-            }
-
-            if (!Info.IsStatic)
-                IL.Emit(OpCodes.Ldarg_0);
-
-            for (int i = 0; i < Params.Length; i++) {
-                if (Params[i].ParameterType.IsByRef)
-                    IL.Emit(OpCodes.Ldloca_S, Locals[i]);
-                else
-                    IL.Emit(OpCodes.Ldloc, Locals[i]);
-            }
-
-            if (Info.IsStatic)
-                IL.EmitCall(OpCodes.Call, Info, null);
-            else
-                IL.EmitCall(OpCodes.Callvirt, Info, null);
-
-            if (Info.ReturnType == typeof(void))
-                IL.Emit(OpCodes.Ldnull);
-            else
-                EmitBoxIfNeeded(IL, Info.ReturnType);
-
-            for (int i = 0; i < Params.Length; i++) {
-                if (Params[i].ParameterType.IsByRef) {
-                    IL.Emit(OpCodes.Ldarg_1);
-
-                    EmitFastInt(IL, i);
-                    IL.Emit(OpCodes.Ldloc, Locals[i]);
-
-                    if (Locals[i].LocalType.GetTypeInfo().IsValueType)
-                        IL.Emit(OpCodes.Box, Locals[i].LocalType);
-
-                    IL.Emit(OpCodes.Stelem_Ref);
-                }
-            }
-
-            IL.Emit(OpCodes.Ret);
-            return (Func<object, object[], object>)Method.CreateDelegate(typeof(Func<object, object[], object>));
-        }
-
-
-        static void EmitCastToReference(ILGenerator IL, Type Type) {
-            if (Type.GetTypeInfo().IsValueType)
-                IL.Emit(OpCodes.Unbox_Any, Type);
-            else
-                IL.Emit(OpCodes.Castclass, Type);
-        }
-
-        static void EmitBoxIfNeeded(ILGenerator IL, Type Type) {
-            if (Type.GetTypeInfo().IsValueType)
-                IL.Emit(OpCodes.Box, Type);
-        }
-
-        static void EmitFastInt(ILGenerator IL, int value) {
-            switch (value) {
-                case -1:
-                    IL.Emit(OpCodes.Ldc_I4_M1);
-                    return;
-                case 0:
-                    IL.Emit(OpCodes.Ldc_I4_0);
-                    return;
-                case 1:
-                    IL.Emit(OpCodes.Ldc_I4_1);
-                    return;
-                case 2:
-                    IL.Emit(OpCodes.Ldc_I4_2);
-                    return;
-                case 3:
-                    IL.Emit(OpCodes.Ldc_I4_3);
-                    return;
-                case 4:
-                    IL.Emit(OpCodes.Ldc_I4_4);
-                    return;
-                case 5:
-                    IL.Emit(OpCodes.Ldc_I4_5);
-                    return;
-                case 6:
-                    IL.Emit(OpCodes.Ldc_I4_6);
-                    return;
-                case 7:
-                    IL.Emit(OpCodes.Ldc_I4_7);
-                    return;
-                case 8:
-                    IL.Emit(OpCodes.Ldc_I4_8);
-                    return;
-            }
-
-            if (value > -129 && value < 128)
-                IL.Emit(OpCodes.Ldc_I4_S, (SByte)value);
-            else
-                IL.Emit(OpCodes.Ldc_I4, value);
-        }        
-
+        
         public class TypeList {
             public Type[] List;
 

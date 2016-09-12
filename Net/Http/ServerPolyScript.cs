@@ -24,7 +24,7 @@ namespace Poly.Net.Http {
                 var Result = Cached.Script.Evaluate(Request);
 
                 Request.Result.Content = new MemoryStream(
-                    Encoding.Default.GetBytes(Request.OutputBuilder.ToString())
+                    Encoding.UTF8.GetBytes(Request.OutputBuilder.ToString())
                 );
 
 				return Result;

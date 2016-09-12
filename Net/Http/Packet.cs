@@ -21,7 +21,7 @@ namespace Poly.Net.Http {
                                        MultipartHeaderPropertiesMatcher = new Matcher("[;] {Key}=\"{Value}\""),
                                        MultipartBoundaryMatcher = new Matcher("{ContentType}; boundary={Boundary}");
 
-        public static readonly byte[] DoubleNewLine = Encoding.Default.GetBytes("\r\n\r\n");
+        public static readonly byte[] DoubleNewLine = Encoding.UTF8.GetBytes("\r\n\r\n");
 
         public int Port;
         public long ContentLength;
@@ -75,7 +75,7 @@ namespace Poly.Net.Http {
         public static bool Receive(Client client, Packet recv) {
             string headers;
 
-            try { headers = client.ReceiveStringUntil(DoubleNewLine, Encoding.Default); }
+            try { headers = client.ReceiveStringUntil(DoubleNewLine, Encoding.UTF8); }
             catch { return false; }
 
             if (headers == null || headers.Length == 0) goto closeConnection;
@@ -112,7 +112,7 @@ namespace Poly.Net.Http {
             return true;
 
         closeConnection:
-            client.Close();
+            client.Dispose();
             return false;
         }
 

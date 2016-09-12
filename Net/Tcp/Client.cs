@@ -17,14 +17,13 @@ namespace Poly.Net.Tcp {
 	using Http;
 
 	public class Client : TcpClient {
-        public static readonly byte[] NewLineBytes = Encoding.Default.GetBytes(App.NewLine);
+        public static readonly byte[] NewLineBytes = Encoding.UTF8.GetBytes(App.NewLine);
 
 
         public BufferedStreamer Stream { get; private set; }
 
 		public Client() { }
-		public Client(IPEndPoint End) { Connect(End); }
-		public Client(string Host, int Port) { Connect(Host, Port); }
+		public Client(string Host, int Port) { ConnectAsync(Host, Port); }
 
 		public IPEndPoint LocalIPEndPoint {
 			get {
@@ -73,7 +72,7 @@ namespace Poly.Net.Tcp {
         }
 
         public bool Send(string str) {
-			return Send(str, Encoding.Default);
+			return Send(str, Encoding.UTF8);
 		}
 
 		public bool Send(string str, Encoding enc) {
@@ -81,11 +80,11 @@ namespace Poly.Net.Tcp {
 		}
 
 		public bool SendLine() {
-			return SendLine(string.Empty, Encoding.Default);
+			return SendLine(string.Empty, Encoding.UTF8);
 		}
 
 		public bool SendLine(string line) {
-			return SendLine(line, Encoding.Default);
+			return SendLine(line, Encoding.UTF8);
 		}
 
 		public bool SendLine(string line, Encoding enc) {
@@ -114,7 +113,7 @@ namespace Poly.Net.Tcp {
         }
 
         public string ReceiveString(long byteLen) {
-			return ReceiveString(byteLen, Encoding.Default);
+			return ReceiveString(byteLen, Encoding.UTF8);
         }
 
         public string ReceiveString(long byteLen, Encoding enc) {
@@ -138,7 +137,7 @@ namespace Poly.Net.Tcp {
         }
 
 		public string ReceiveLine() {
-			return ReceiveLine(Encoding.Default);
+			return ReceiveLine(Encoding.UTF8);
 		}
 
 		public string ReceiveLine(Encoding enc) {
@@ -152,7 +151,7 @@ namespace Poly.Net.Tcp {
             if (Connected) {
                 InitStream();
 
-				return Stream.ReceiveUntil(storage, chain).AwaitResult();
+				return Stream.ReceiveUntil(storage, chain).AwaitResult(TimeSpan.FromMilliseconds(ReceiveTimeout));
             }
 
             return false;

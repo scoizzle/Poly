@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Dynamic;
 
 namespace Poly.Data {
     public partial class jsObject {

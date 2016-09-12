@@ -29,13 +29,6 @@ namespace Poly.Script.Expressions {
                 }
                 while (Class != null);
             }
-            else if (Left is Event.Handler) {
-                var Func = Left as Event.Handler;
-
-                if (Right is StaticValue && (Right as StaticValue).Value as string == "html") {
-                    return Func.Method.DeclaringType == typeof(Html.Function);
-                }
-            }
 
             return false;
         }

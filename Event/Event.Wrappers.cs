@@ -44,7 +44,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 Func(
@@ -58,7 +58,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 Func(
@@ -73,7 +73,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 Func(
@@ -89,7 +89,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 Func(
@@ -106,7 +106,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 Func(
@@ -124,7 +124,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 Func(
@@ -143,7 +143,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 Func(
@@ -172,7 +172,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 return Func(
@@ -185,7 +185,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 return Func(
@@ -199,7 +199,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 return Func(
@@ -214,7 +214,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 return Func(
@@ -230,7 +230,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 return Func(
@@ -247,7 +247,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 return Func(
@@ -265,7 +265,7 @@ namespace Poly {
             if (Func == null)
                 return null;
 
-            var Names = GetArgumentNames(Func.Method);
+            var Names = GetArgumentNames(Func.GetMethodInfo());
 
             return (Args) => {
                 return Func(

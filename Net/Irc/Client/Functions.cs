@@ -14,14 +14,14 @@ namespace Poly.Net.Irc {
         }
 
         public bool Connect(string Server, int Port) {
-            Connection.Connect(Server, Port);
+            Connection.ConnectAsync(Server, Port).Wait();
 
             return Connection.Connected;
         }
 
         public void Disconnect() {
             if (Connection != null)
-                Connection.Close();
+                Connection.Dispose();
         }
 
         public async Task Start() {

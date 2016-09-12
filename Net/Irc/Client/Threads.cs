@@ -24,7 +24,6 @@ namespace Poly.Net.Irc {
 
             App.Log.Warning("Connection lost.");
             App.Log.Warning("Reconnecting.");
-            Thread.Sleep(1000);
             Restart();
         }
 

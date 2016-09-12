@@ -139,16 +139,11 @@ namespace Poly.Script.Nodes {
                 if (C != null)
                     return C;
             }
-            
-            if (Current is Type) {
-                return GetObjectValue(Current as Type, Current, Key);
-            }
-            
-            if (Current != null) {
-                return GetObjectValue(Current.GetType(), Current, Key);
-            }
 
-            return null;
+            if (Current == null) return null;
+            var T = Current as Type;
+            
+            return GetObjectValue((T ?? Current.GetType()).GetTypeInfo(), Current, Key);
         }
 
         private bool SetNextValue(object Current, string Key, object Value) {
@@ -164,14 +159,14 @@ namespace Poly.Script.Nodes {
             }
             else
                 if (Current is Type) {
-                    return SetObjectValue(Current as Type, Current, Key, Value);
+                    return SetObjectValue((Current as Type).GetTypeInfo(), Current, Key, Value);
                 }
                 else {
-                    return SetObjectValue(Current.GetType(), Current, Key, Value);
+                    return SetObjectValue(Current.GetType().GetTypeInfo(), Current, Key, Value);
                 }
         }
 
-        private object GetObjectValue(Type Type, object Obj, string Name) {
+        private object GetObjectValue(TypeInfo Type, object Obj, string Name) {
             var Prop = Type.GetProperty(Name);
 
             if (Prop != null) {
@@ -193,7 +188,7 @@ namespace Poly.Script.Nodes {
             return null;
         }
 
-        private bool SetObjectValue(Type Type, object Obj, string Name, object Value) {
+        private bool SetObjectValue(TypeInfo Type, object Obj, string Name, object Value) {
             var Prop = Type.GetProperty(Name);
 
             if (Prop != null) {

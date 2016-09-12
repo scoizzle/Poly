@@ -41,7 +41,7 @@ namespace Poly {
 
                         var String = Context.String;
                         var idx = Context.Index;
-                        var Last = Context.Length - Len - 1;
+                        var Last = Context.Length;
 
                         for (; idx < Last; idx++) { 
                             if (String[idx] == First) {

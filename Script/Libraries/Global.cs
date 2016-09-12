@@ -11,8 +11,6 @@ namespace Poly.Script.Libraries {
 
     public class Global : Library {
         public Global() {
-            Library.Global = this;
-
             Add(Load);
             Add(Save);
             Add(Break);

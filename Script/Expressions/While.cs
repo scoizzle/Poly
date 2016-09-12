@@ -13,7 +13,7 @@ namespace Poly.Script.Expressions {
         public Node Boolean = null;
 
         public override object Evaluate(Data.jsObject Context) {
-            while (Bool.EvaluateNode(Boolean, Context) && Thread.CurrentThread.ThreadState != ThreadState.AbortRequested) {
+            while (Bool.EvaluateNode(Boolean, Context)) {
                 for (int i = 0; i < Elements.Length; i++) {
                     var Node = Elements[i];
 

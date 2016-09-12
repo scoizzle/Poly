@@ -1,35 +1,19 @@
 ﻿using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-// General Information about an assembly is controlled through the following 
+// General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("Poly")]
-[assembly: AssemblyDescription("An extension to .Net http://github.com/scoizzle/Poly/")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Scoizzle.com")]
+[assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("Poly")]
-[assembly: AssemblyCopyright("Copyright © Scoizzle.com 2013")]
-[assembly: AssemblyTrademark("Scot 'Scoizzle' Murphy")]
-[assembly: AssemblyCulture("")]
+[assembly: AssemblyTrademark("")]
 
-// Setting ComVisible to false makes the types in this assembly not visible 
-// to COM components.  If you need to access a type in this assembly from 
+// Setting ComVisible to false makes the types in this assembly not visible
+// to COM components.  If you need to access a type in this assembly from
 // COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("d0b80ecb-0be5-4446-8ebb-a3e1de82b33e")]
-
-// Version information for an assembly consists of the following four values:
-//
-//      Major Version
-//      Minor Version 
-//      Build Number
-//      Revision
-//
-// You can specify all the values or you can default the Build and Revision Numbers 
-// by using the '*' as shown below:
-// [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: Guid("a18f8777-15a9-4289-884f-db9cffbd6d5d")]

@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
-using System.Dynamic;
 using System.Threading.Tasks;
 
 namespace Poly.Data {    
@@ -280,18 +279,6 @@ namespace Poly.Data {
             }
 
             return new string(Buffer);
-        }
-
-        public static jsObject FromUrl(string Url, string Data = "") {
-            System.Net.WebClient Client = new System.Net.WebClient();
-            if (string.IsNullOrEmpty(Data)) {
-                Data = Client.DownloadString(Url);
-            }
-            else {
-                Data = Client.UploadString(Url, Data);
-            }
-
-            return jsObject.Parse(Data);
         }
 
         public static jsObject FromFile(string Path) {

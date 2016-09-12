@@ -14,7 +14,8 @@ namespace Poly.Net.Http {
     using Script;
 
     public partial class Server : MultiPortServer {
-        ManagedArray<Host> Hosts;
+        public ManagedArray<Host> Hosts;
+        public int ClientReceiveTimeout { get; set; }
 
         public Server() {
             Hosts = new ManagedArray<Host>();

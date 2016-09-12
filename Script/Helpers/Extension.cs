@@ -4,17 +4,22 @@ using System.Linq;
 using System.Text;
 using System.Reflection;
 using System.IO;
+using System.Runtime.Loader;
 
 namespace Poly.Script.Helpers {
     using Nodes;
 
     public class ExtensionManager {
         public static void Load(string Name) {
-            var Asm = AppDomain.CurrentDomain.Load(Name);
+            var Info = new FileInfo(Name);
 
-            foreach (var Type in Asm.GetTypes()) {
-                if (typeof(Library).IsAssignableFrom(Type)) {
-                    Activator.CreateInstance(Type);
+            using (var Stream = Info.OpenRead()) {
+                var Asm = AssemblyLoadContext.Default.LoadFromStream(Stream);
+
+                foreach (var Type in Asm.GetTypes()) {
+                    if (typeof(Library).GetTypeInfo().IsAssignableFrom(Type)) {
+                        Activator.CreateInstance(Type);
+                    }
                 }
             }
         }

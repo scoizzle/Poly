@@ -33,7 +33,7 @@ namespace Poly.Script.Expressions {
 					} else {
 						if (Library.Defined.ContainsKey (Name))
 							Engine.Usings.Add (Library.Defined [Name]);
-						else if (File.Exists (Name + ".dll"))
+						else if (File.Exists (Name))
 							ExtensionManager.Load (Name);
 						else {
 							App.Log.Error("Couldn't find library: " + Name);

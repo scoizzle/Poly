@@ -61,7 +61,7 @@ namespace Poly.Script.Expressions {
                 return Execute(Function, Object, Context);
             }
 
-            if (SystemFunction != null && (SystemFunction.Method.IsStatic == (Object == null))) {
+            if (SystemFunction != null && Object == null) {
                 return Execute(SystemFunction, Object, Context);
             }
 
@@ -119,7 +119,7 @@ namespace Poly.Script.Expressions {
                 }
             }
 
-            if (SystemFunction != null && (SystemFunction.Method.IsStatic == (Object == null))) {
+            if (SystemFunction != null && Object == null) {
                 Output.Append(Execute(SystemFunction, Object, Context));
                 return;
             }

@@ -81,7 +81,7 @@ namespace Poly.Net.Tcp {
             try {
                 while (length > 0) {
                     if (Available == 0)
-                        await UpdateBuffer();
+                        UpdateBuffer();
 
                     var Len = (int)(Math.Min(length, Available));
                     await storage.WriteAsync(Buffer, 0, Len);
@@ -101,7 +101,7 @@ namespace Poly.Net.Tcp {
         public async Task<bool> ReceiveUntil(Stream storage, byte[] chain) {
             try {
                 if (Available == 0)
-                    await UpdateBuffer();
+                    UpdateBuffer();
 
                 int i = 0,
                     b = -1,
@@ -127,7 +127,7 @@ namespace Poly.Net.Tcp {
                         await storage.FlushAsync();
 
                         startPosition = 0;
-                        await UpdateBuffer();
+                        UpdateBuffer();
                     }
                 }
             }
@@ -137,10 +137,10 @@ namespace Poly.Net.Tcp {
             return false;
         }
 
-        public async Task<bool> Consume(byte[] chain) {
+        public bool Consume(byte[] chain) {
             try {
                 if (Available == 0)
-                    await UpdateBuffer();
+                    UpdateBuffer();
 
                 var Len = chain.Length;
 
@@ -155,9 +155,9 @@ namespace Poly.Net.Tcp {
             return true;
         }
 
-        private async Task UpdateBuffer() {
+        private void UpdateBuffer() {
             try {
-                Length = await Stream.ReadAsync(Buffer, 0, MaxBufferLength);
+                Length = Stream.ReadAsync(Buffer, 0, MaxBufferLength).AwaitResult();
                 Position = 0;
             }
             catch {
@@ -169,11 +169,6 @@ namespace Poly.Net.Tcp {
             Position = Length = 0;
             Buffer = new byte[BufferSize];
         }
-
-		public void PollBuffer() {
-			if (Available == 0)
-				UpdateBuffer().Wait();
-		}
         
         private void Consume(int len) {
             Position += len;

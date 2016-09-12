@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
-using System.Dynamic;
 
 namespace Poly.Data {
     public class jsComplex : jsObject {
@@ -14,7 +13,7 @@ namespace Poly.Data {
         static KeyValueCollection<Tuple<Func<object, object>, Action<object, object>>> InitType(Type T) {
             var TypeCache = new KeyValueCollection<Tuple<Func<object, object>, Action<object, object>>>();
 
-            foreach (var Field in T.GetFields()) {
+            foreach (var Field in T.GetTypeInfo().GetFields()) {
                 TypeCache[Field.Name] = new Tuple<Func<object, object>, Action<object, object>>(
                     Field.GetValue,
                     Field.SetValue

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Poly.Script.Libraries {
     using Data;
@@ -20,8 +21,7 @@ namespace Poly.Script.Libraries {
         public static Function Sleep = new Function("Sleep", (Args) => {
             int Delay = Args.Get<int>("0");
 
-            System.Threading.Thread.Sleep(Delay);
-
+            Task.Delay(Delay).Wait();
             return null;
         });
 

@@ -33,16 +33,17 @@ namespace Poly.Net.Http {
 				while (client.Connected) {
                     var request = new Request(client);
 
-					if (!Packet.Receive(client, request)) goto closeConnection;
+					if (!Packet.Receive(client, request)) break;
 					else request.Prepare();
 
 					var host = FindHost(request.Hostname);
-					if (host == null) goto badRequest;
+					if (host == null)
+                        goto badRequest;
 
                     request.Host = host;
 					OnClientRequest(request);
 
-                    if (request.Connection == "close") goto closeConnection;
+                    if (request.Connection == "close") break;
                     else continue;
 
                 badRequest:
@@ -53,9 +54,6 @@ namespace Poly.Net.Http {
 			catch (Exception Error) {
                 App.Log.Error(Error.ToString());
             }
-
-        closeConnection:
-            client.Close();
         }
         
         private static void OnClientRequest(Request Request) {

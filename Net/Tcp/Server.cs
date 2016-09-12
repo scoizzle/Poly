@@ -19,8 +19,6 @@ namespace Poly.Net.Tcp {
         public delegate void OnClientConnectDelegate(Client Client);
         public event OnClientConnectDelegate ClientConnected;
 
-        private Thread ConnectionAccepter;
-
         public Server(int port) : this(IPAddress.Any, port) {  }        
         public Server(IPAddress addr, int port) : base(addr, port) { Port = port; }
 
@@ -43,9 +41,7 @@ namespace Poly.Net.Tcp {
                 return false;
             }
 
-            ConnectionAccepter = GetAcceptThread();
-            ConnectionAccepter.Start();
-
+            AcceptConnections();
             return true;
         }
 
@@ -53,24 +49,25 @@ namespace Poly.Net.Tcp {
             base.Stop();
         }
 
-        private Thread GetAcceptThread() {
-            return new Thread(AcceptConnections);
-        }
+		private async void AcceptConnections() {
+			try {
+                do {
+                    var socket = await AcceptSocketAsync();
 
-		private void AcceptConnections() {
-			do {
-				try {
-					while (Active) {
+                    OnClientConnect(socket);
+                }
+                while (Active);
+            }
+			catch { }
 
-						var socket = AcceptSocket();
-
-						Task.Run(() => {
-							ClientConnected(socket);
-						});
-					}
-				}
-				catch { }
-			} while (Active);
+            if (Active)
+                AcceptConnections();
 		}
+
+        private async void OnClientConnect(Socket sock) {
+            await Task.Yield();
+
+            ClientConnected(sock);
+        }
     }
 }

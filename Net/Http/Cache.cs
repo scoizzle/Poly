@@ -92,8 +92,8 @@ namespace Poly.Net.Http {
                     Item.Buffer = newMemCache.ToArray();
                 }
 
-                Item.ContentLength = Item.Buffer.LongLength;
-                TotalSize += Item.Buffer.LongLength;
+                Item.ContentLength = Item.Buffer.Length;
+                TotalSize += Item.Buffer.Length;
             }
         }
 

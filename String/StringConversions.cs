@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Security;
+using System.Net.Security;
 
 using Poly;
 using Poly.Data;
@@ -263,7 +263,7 @@ namespace System {
         }
 
         public static string HtmlEscape(this String This) {
-            return SecurityElement.Escape(This);
+            return Uri.EscapeDataString(This);
         }
 
         public static string UriEscape(this String This) {
@@ -330,8 +330,8 @@ namespace System {
         }
 
         public static string MD5(this String This) {
-            return Hash.MD5(
-                Encoding.Default.GetBytes(
+            return Hash.ToMD5(
+                Encoding.UTF8.GetBytes(
                     This
                 )
             );
@@ -341,24 +341,24 @@ namespace System {
             if (string.IsNullOrEmpty(This))
                 return "";
 
-            return Hash.SHA1(
-                Encoding.Default.GetBytes(
+            return Hash.ToSHA1(
+                Encoding.UTF8.GetBytes(
                     This
                 )
             );
         }
 
         public static string SHA256(this String This) {
-            return Hash.SHA256(
-                Encoding.Default.GetBytes(
+            return Hash.ToSHA256(
+                Encoding.UTF8.GetBytes(
                     This
                 )
             );
         }
 
         public static string SHA512(this String This) {
-            return Hash.SHA512(
-                Encoding.Default.GetBytes(
+            return Hash.ToSHA512(
+                Encoding.UTF8.GetBytes(
                     This
                 )
             );
@@ -366,14 +366,14 @@ namespace System {
 
         public static string Base64Encode(this String This) {
             return Convert.ToBase64String(
-                Encoding.Default.GetBytes(
+                Encoding.UTF8.GetBytes(
                     This
                 )
             );
         }
 
         public static string Base64Decode(this String This) {
-            return Encoding.Default.GetString(
+            return Encoding.UTF8.GetString(
                 Convert.FromBase64String(
                     This
                 )

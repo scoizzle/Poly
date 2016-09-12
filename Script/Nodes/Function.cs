@@ -19,7 +19,8 @@ namespace Poly.Script.Nodes {
 
         public Function(Event.Handler Handler) {
             Method = Handler;
-            Name = string.Concat(Handler.Method.DeclaringType.Name, '.', Handler.Method.Name);
+            var Info = Handler.GetMethodInfo();
+            Name = string.Concat(Info.DeclaringType.Name, '.', Info.Name);
         }
 
         public Function(string Name, Event.Handler Handler) {
@@ -59,31 +60,31 @@ namespace Poly.Script.Nodes {
         }
 
         public static Function Create<T1>(string Name, Func<T1, object> Func) {
-            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.GetMethodInfo()));
         }
 
         public static Function Create<T1, T2>(string Name, Func<T1, T2, object> Func) {
-            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.GetMethodInfo()));
         }
 
         public static Function Create<T1, T2, T3>(string Name, Func<T1, T2, T3, object> Func) {
-            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.GetMethodInfo()));
         }
 
         public static Function Create<T1, T2, T3, T4>(string Name, Func<T1, T2, T3, T4, object> Func) {
-            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.GetMethodInfo()));
         }
 
         public static Function Create<T1, T2, T3, T4, T5>(string Name, Func<T1, T2, T3, T4, T5, object> Func) {
-            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.GetMethodInfo()));
         }
 
         public static Function Create<T1, T2, T3, T4, T5, T6>(string Name, Func<T1, T2, T3, T4, T5, T6, object> Func) {
-            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.GetMethodInfo()));
         }
 
         public static Function Create<T1, T2, T3, T4, T5, T6, T7>(string Name, Func<T1, T2, T3, T4, T5, T6, T7, object> Func) {
-            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.Method));
+            return new Function(Name, Event.Wrapper(Func), Event.GetArgumentNames(Func.GetMethodInfo()));
         }
 
 		new public static Node Parse(Engine Engine, StringIterator It) {

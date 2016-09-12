@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Poly {
     static class ByteArray {
         public static string ConvertToString(this byte[] This) {
-            return Encoding.Default.GetString(This);
+            return Encoding.UTF8.GetString(This);
         }
 
         public static int FindSubByteArray(this byte[] This, byte[] sub) {

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace System {
     public static class StreamExtensions {
         public static string GetString(this Stream This) {
-            return GetString(This, This.Length, Encoding.Default);
+            return GetString(This, This.Length, Encoding.UTF8);
         }
 
         public static string GetString(this Stream This, long Length, Encoding Enc) {
@@ -27,11 +27,11 @@ namespace System {
         }
 
         public static void Write(this Stream This, string Text) {
-            Write(This, Text, Encoding.Default);
+            Write(This, Text, Encoding.UTF8);
         }
 
         public static void WriteLine(this Stream This, string Line) {
-            WriteLine(This, Line, Encoding.Default);
+            WriteLine(This, Line, Encoding.UTF8);
         }
 
         public static void Write(this Stream This, string Text, Encoding Encoding) {

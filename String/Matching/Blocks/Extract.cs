@@ -2,14 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Poly {
-    using Data;
     public partial class Matcher {
         class Extract : Block {
-            static readonly char[] TestModSplt = new char[] { ',', ';' };
-
             public string Key;
             public StringMatching.TestDelegate[] Tests;
             public StringMatching.ModDelegate[] Modifiers;
@@ -36,26 +32,14 @@ namespace Poly {
                 else if (Next is Static) {
                     if (Tests != null) {
                         var Format = Next.Format;
-                        var Len = Format.Length;
-                        var First = Format[0];
-
                         var String = Context.String;
-                        var idx = Context.Index;
                         var Last = Context.Length;
 
-                        for (; idx < Last; idx++) { 
-                            if (String[idx] == First) {
-                                if (string.Compare(String, idx, Format, 0, Len, StringComparison.Ordinal) == 0)
-                                    goto foundNext;
-                            }
-                            else if (!ValidChar(String[idx])) {
-                                return false;
-                            }
-                        }
+                        var idx = String.Find(Format, Start, Last);
 
-                        return false;
-
-                    foundNext:
+                        if (idx == -1 || !ValidString(String, Start, idx))
+                            return false;                        
+                        
                         Length = idx - Start;
                     }
                     else {
@@ -103,8 +87,7 @@ namespace Poly {
                                 return true;
                         }
                     }
-                }
-                
+                }                
 
                 if (Length == 0) {
                     if (Context.IsDone())
@@ -112,7 +95,7 @@ namespace Poly {
                     return false;
                 }
                 else {
-					Context.Set(Key, Modify(Context.Substring(Start, Length)));
+                    Context.AddExtraction(Key, Start, Length, Modifiers);
                 }
 
                 return true;
@@ -122,21 +105,26 @@ namespace Poly {
                 return Tests.Any(f => f(c));
             }
 
-            private object Modify(string value) {
-                if (Modifiers == null)
-                    return value;
+            public bool ValidString(string str, int Start, int Stop) {
+                if (Start < 0 || Start >= Stop)
+                    return false;
 
-                object Value = value;
-
-                var i = 0;
-                var Len = Modifiers.Length;
-
+                var len = Tests.Length;
                 do {
-                    Value = Modifiers[i](Value as string);
-                }
-                while (Value is string && i++ < Len);
+                    var c = str[Start];
+                    var i = 0;
 
-                return Value;
+                    while (i < len) {
+                        if (Tests[i++](c))
+                            goto Next;
+                    }
+
+                    if (i == len) return false;
+                    Next: Start++;
+                }
+                while (Start < Stop);
+
+                return true;
             }
             
             private StringMatching.TestDelegate[] ParseTests(string Test) {
@@ -183,7 +171,7 @@ namespace Poly {
                         }
                         
                         if (It.Consume(']')) {
-                            var f = ArrayContains(Chars.ToString());
+                            var f = ArrayContains(Chars.ToString().ToCharArray());
 
                             if (Not) List.Add(TestInvariant(f));
                             else List.Add(f);
@@ -219,6 +207,7 @@ namespace Poly {
                 var List = new List<StringMatching.ModDelegate>();
 
                 while (!It.IsDone()) {
+                    var Not = It.Consume('!');
                     if (It.Consume('`')) {
                         var Start = It.Index;
 
@@ -226,12 +215,24 @@ namespace Poly {
                             var modFmt = It.Substring(Start, It.Index - Start);
                             var matcher = new Matcher(modFmt);
 
-                            List.Add((o) => {
-                                if (o is string) {
-                                    return matcher.MatchAll(o as string, true);
-                                }
-                                return null;
-                            });
+                            if (Not) {
+                                List.Add((o) => {
+                                    var str = o as string;
+                                    if (str != null) {
+                                        return matcher.MatchKeyValuePairs(str);
+                                    }
+                                    return null;
+                                });
+                            }
+                            else {
+                                List.Add((o) => {
+                                    var str = o as string;
+                                    if (str != null) {
+                                        return matcher.MatchAll(str);
+                                    }
+                                    return null;
+                                });
+                            }
 
                             It.Tick();
                         }
@@ -259,8 +260,8 @@ namespace Poly {
                 return null;
             }
 
-            private StringMatching.TestDelegate ArrayContains(string arr) {
-                return c => arr.IndexOf(c) != -1;
+            private StringMatching.TestDelegate ArrayContains(char[] arr) {
+                return arr.Contains;
             }
 
             private StringMatching.TestDelegate CharRange(char First, char Last) {

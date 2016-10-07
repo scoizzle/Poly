@@ -46,9 +46,6 @@ namespace Poly.Script {
 
         public jsObject<Class> Types = new jsObject<Class>();
 
-        public Engine() {
-        }
-
         public override object Evaluate(jsObject Context) {
             var Result = base.Evaluate(Context);
             var R = Result as Expressions.Return;
@@ -132,6 +129,35 @@ namespace Poly.Script {
             }
 
             return null;
+        }
+
+        public static object EvalFile(string FileName, jsObject Context = null) {
+            var Info = new System.IO.FileInfo(FileName);
+
+            if (!Info.Exists) return null;          
+
+            var Eng = new Engine();
+            var Script = string.Empty;
+
+            try {
+                using (var read = Info.OpenRead())
+                    Script = read.GetString();
+            } catch { return null; }
+
+            if (Eng.ParseExpressions(new StringIterator(Script), Eng) == null)
+                return null;
+            
+            if (Context == null) Context = new jsObject();
+
+            Context.AssignValue("_FILE_", Info.FullName);
+            Context.AssignValue("_DIR_", Info.Directory.FullName);
+
+            var Result = Eng.Evaluate(Context);
+            
+            Context.Remove("_FILE_");
+            Context.Remove("_DIR_");
+
+            return Result ?? false;
         }
     }
 }

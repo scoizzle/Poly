@@ -27,7 +27,7 @@ namespace Poly.Script.Expressions {
                         if (Var != null && (Var.IsGlobal || Var.IsStatic)) {
                             var FileName = Engine.IncludePath + Name.Value as string;
 
-                            Engine.PersistentFiles.Add(FileName,
+                            Engine.PersistentFiles.Set(FileName,
                                 new Helpers.PersistentFile(FileName, Var)
                             );
 

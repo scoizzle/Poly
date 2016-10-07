@@ -90,7 +90,8 @@ namespace Poly.Net.Irc {
                         if (Conversations.ContainsKey(Sender.Nick))
                             Conversations.Remove(Sender.Nick);
 
-                        Conversations.ForEach<Conversation>((Name, Conver) => {
+                        Conversations.ForEach((Name, Conversat) => {
+                            var Conver = Conversat as Conversation;
                             if (Conver.Users.ContainsKey(Sender.Nick)) {
                                 Conver.Users.Remove(Sender.Nick);
                             }

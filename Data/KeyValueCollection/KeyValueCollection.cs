@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 
 namespace Poly.Data {
-    public partial class KeyValueCollection<T> : IEnumerable<KeyValueCollection<T>.KeyValuePair> {
+    public partial class KeyValueCollection<T> : IDictionary, IEnumerable<KeyValueCollection<T>.KeyValuePair> {
         ManagedArray<PairCollection> List;
 
         public int Count { get; private set; }

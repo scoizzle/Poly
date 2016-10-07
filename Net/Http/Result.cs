@@ -26,9 +26,7 @@ namespace Poly.Net.Http {
         public string GetResponseString() {
             Headers.AssignValue("Date", DateTime.UtcNow.HttpTimeString());
             Headers.AssignValue("Content-Type", ContentType);
-
-            if (Content != null && ContentLength > 0 && "chunked" != Headers.Get<string>("Transfer-Encoding"))
-                Headers.AssignValue("Content-Length", ContentLength);
+            Headers.AssignValue("Content-Length", ContentLength);
 
             var Output = new StringBuilder();
 
@@ -63,6 +61,32 @@ namespace Poly.Net.Http {
 
         public static implicit operator Result(string Status) {
             return new Result() { Status = Status };
+        }
+
+        public override bool TryGet(string Key, out object Value) {
+            switch (Key) {
+                default:
+                return base.TryGet(Key, out Value);
+
+                case "Status": Value = Status; break;
+                case "ContentType": Value = ContentType; break;
+                case "Cookies": Value = Cookies; break;
+                case "Headers": Value = Headers; break;
+                case "ContentLength": Value = ContentLength; break;
+                case "Content": Value = Content; break;
+            }
+            return true;
+        }
+
+        public override void AssignValue(string Key, object Value) {
+            switch (Key) {
+                default: base.AssignValue(Key, Value); break;
+                case "Status": Status = Value?.ToString(); break;
+                case "ContentType": ContentType = Value?.ToString(); break;
+                case "Cookies": Cookies = Value as jsObject; break;
+                case "Headers": Headers = Value as jsObject; break;
+                case "Content": Content = Value as Stream; break;
+            }
         }
 
         public const string Ok = "200 Ok";

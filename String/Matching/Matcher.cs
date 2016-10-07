@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Poly {
     using Data;
     public partial class Matcher {
-        Block[] Handlers;
+        Block[] Blocks;
 
         public string Format { get; private set; }
 
@@ -15,189 +15,115 @@ namespace Poly {
             Format = Fmt;
 
             try {
-                Handlers = Parse(Fmt);
+                Blocks = Parse(Fmt);
             } catch (Exception Error) {
                 App.Log.Error(Error);
             }
         }
 
         public bool Compare(string Data) {
-            if (Handlers == null)
-                return false;
-
-            var Context = new Context(Data, new jsObject()) {
-                BlockCount = Handlers == null ?
-                    0 : Handlers.Length
-            };
-
-            return Match(Context);
+            if (Blocks == null) return false;
+            return Match(new Context(Data, Blocks.Length));
         }
 
-		public jsObject Match(string Data) {
-            return Match(Data, 0, new jsObject());
-        }        
+        public jsObject Match(string Data, jsObject Storage = null, int Index = 0) {
+            if (Blocks == null) return null;
+            if (Storage == null) Storage = new jsObject();
 
-        public jsObject Match(string Data, int Index) {
-            if (Handlers == null)
-                return null;
-
-            var Context = new Context(Data, new jsObject()) {
-                Index = Index,
-				BlockCount = Handlers == null ?
-					0 : Handlers.Length
-            };
+            var Context = new Context(Data, Blocks.Length, Index);
 
             if (Match(Context)) {
-                return Context.Storage;
-            }
-
-            return null;
-        }
-
-        public jsObject Match(string Data, jsObject Storage) {
-            return Match(Data, 0, Storage);
-        }
-
-        public jsObject Match(string Data, jsObject Storage, bool KeyValueExtract) {
-            return Match(Data, 0, Storage, KeyValueExtract);
-        }
-
-        public jsObject Match(string Data, int Index, jsObject Storage) {
-            if (Handlers == null)
-                return null;
-
-            var Context = new Context(Data, Storage) {
-				Index = Index,
-				BlockCount = Handlers == null ?
-					0 : Handlers.Length
-            };
-
-            if (Match(Context)) {
+                Context.ExtractInto(Storage);
                 return Storage;
             }
 
             return null;
         }
 
-        public jsObject Match(string Data, int Index, jsObject Storage, bool KeyValueExtract) {
-            if (Handlers == null)
-                return null;
+        public jsObject MatchAll(string Data, jsObject Storage = null, int Index = 0) {
+            if (Blocks == null) return null;
+            if (Storage == null) Storage = new jsObject();
 
-            var Context = new Context(Data, KeyValueExtract ? new jsObject() : Storage) {
-                Index = Index,
-                BlockCount = Handlers == null ?
-                    0 : Handlers.Length
-            };
+            var Context = new Context(Data, Blocks.Length, Index, Data.Length);        
+            var Extracts = new ManagedArray<Context.Extraction>(Context.Extractions);
 
-            if (Match(Context)) {
-                Index = Context.Index;
+            if (Extracts.Count > 0)
+                Context.Extractions = new ManagedArray<Context.Extraction>();
 
-                if (KeyValueExtract) {
-                    Storage.Set(Context.Storage.Get<string>("Key"), Context.Storage.Get("Value"));
-                }
+            while (Matcher.Match(Blocks, Context)) {
+                Extracts.Add(new Context.GroupedExtraction(Context.Extractions));
 
-                return Storage;
-            }
-
-            return null;
-        }
-
-        public jsObject MatchAll(string Data) {
-            int Index = 0;
-
-            return MatchAll(Data, ref Index, new jsObject());
-        }
-
-        public jsObject MatchAll(string Data, bool SingleObject) {
-            int Index = 0;
-
-            return MatchAll(Data, ref Index, new jsObject(), SingleObject);
-        }
-
-        public jsObject MatchAll(string Data, ref int Index) {
-            return MatchAll(Data, ref Index, new jsObject());
-        }
-
-        public jsObject MatchAll(string Data, jsObject Storage) {
-            int Index = 0;
-
-            return MatchAll(Data, ref Index, Storage);
-        }
-
-        public jsObject MatchAll(string Data, jsObject Storage, bool SingleObject) {
-            int Index = 0;
-
-            return MatchAll(Data, ref Index, Storage, SingleObject);
-        }
-
-        public jsObject MatchAll(string Data, ref int Index, jsObject Storage) {
-            if (Handlers == null)
-                return null;
-
-            var Context = new Context(Data, new jsObject()) {
-                Index = Index,
-                BlockCount = Handlers == null ?
-                    0 : Handlers.Length
-            };
-
-            while (MatchPartial(Context)) {
-                Storage.Add(Context.Storage);
-                Context.Storage = new jsObject();
                 Context.BlockIndex = 0;
-
-                if (Context.IsDone())
-                    break;
+                Context.Extractions.Clear();
             }
 
-            Index = Context.Index;
+            if (Extracts.Count > 0) {
+                Context.Extractions.CopyTo(Extracts);
+                Context.Extractions = Extracts;
+            }
+
+            Context.ExtractInto(Storage);
             return Storage;
         }
 
-        public jsObject MatchAll(string Data, ref int Index, jsObject Storage, bool SingleObject) {
-            if (Handlers == null)
-                return null;
+        public jsObject MatchAllValues(string Data, jsObject Storage = null, int Index = 0) {
+            if (Blocks == null) return null;
+            if (Storage == null) Storage = new jsObject();
 
-            var Context = new Context(Data, new jsObject()) {
-                Index = Index,
-                BlockCount = Handlers == null ?
-                    0 : Handlers.Length
-            };
+            var Context = new Context(Data, Blocks.Length, Index, Data.Length);
+            var Extracts = new ManagedArray<Context.Extraction>(Context.Extractions);
 
-            while (MatchPartial(Context)) {
-                if (!SingleObject) {
-                    Storage.Add(Context.Storage);
-                }
-                else if (Context.Storage.Count == 2) {
-                    var Key = Context.Storage["Key"];
-                    var Value = Context.Storage["Value"];
+            if (Extracts.Count > 0)
+                Context.Extractions = new ManagedArray<Context.Extraction>();
 
-                    if (Key != null && Value != null)
-                        Storage.Set(Key as string, Value);
-                }
-                else if (Context.Storage.Count == 1) {
-                    var Value = Context.Storage["Value"];
+            while (Matcher.Match(Blocks, Context)) {
+                Extracts.Add(new Context.ValueExtraction(Context.Extractions));
 
-                    if (Value != null)
-                        Storage.Add(Value);
-                }
-
-                Context.Storage = new jsObject();
                 Context.BlockIndex = 0;
-
-                if (Context.IsDone())
-                    break;
+                Context.Extractions.Clear();
             }
 
-            Index = Context.Index;
+            if (Extracts.Count > 0) {
+                Context.Extractions.CopyTo(Extracts);
+                Context.Extractions = Extracts;
+            }
+
+            Context.ExtractInto(Storage);
+            return Storage;
+        }
+
+        public jsObject MatchKeyValuePairs(string Data, jsObject Storage = null, int Index = 0) {
+            if (Blocks == null) return null;
+            if (Storage == null) Storage = new jsObject();
+
+            var Context = new Context(Data, Blocks.Length, Index, Data.Length);
+            var Extracts = new ManagedArray<Context.Extraction>(Context.Extractions);
+
+            if (Extracts.Count > 0)
+                Context.Extractions = new ManagedArray<Context.Extraction>();
+
+            while (Match(Blocks, Context)) {
+                Extracts.Add(new Context.KeyValuePairExtraction(true, Context.Extractions));
+
+                Context.BlockIndex = 0;
+                Context.Extractions.Clear();
+            }
+
+            if (Extracts.Count > 0) {
+                Context.Extractions.CopyTo(Extracts);
+                Context.Extractions = Extracts;
+            }
+
+            Context.ExtractInto(Storage);
             return Storage;
         }
 
         private bool Match(Context Context) {
-			return Match(Handlers, Context) && Context.IsDone();
+			return Match(Blocks, Context) && Context.IsDone();
 		}
 
         private bool MatchPartial(Context Context) {
-            return Match(Handlers, Context);
+            return Match(Blocks, Context);
         }
 
         private static bool Match(Block[] Handlers, Context Context) {
@@ -205,7 +131,8 @@ namespace Poly {
                 var Current = Handlers[Context.BlockIndex];
 
                 if (Context.IsDone()) {
-                    if (Current is Optional && Context.BlockIndex == Handlers.Length - 1) return true;
+                    if (Handlers.All(Context.BlockIndex, b => b is Optional))
+                        return true;
                     break;
                 }
 
@@ -328,11 +255,7 @@ namespace Poly {
                 case '`': {
                     It.Tick();
 
-                    var Start = It.Index;
-                    if (!It.Goto('`', '`'))
-                        return null;
-
-                    var Sub = It.Substring(Start, It.Index - Start);
+                    var Sub = It.ExtractUntil('`');
 
                     It.Tick();
                     return new ExtractAll(Sub);

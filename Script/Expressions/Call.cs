@@ -15,7 +15,7 @@ namespace Poly.Script.Expressions {
 
         Node This;
         Function Function;
-        Func<object, object[], object> SystemFunction;
+        RuntimeFunction.Delegate SystemFunction;
 
         Node[] Arguments;
         Engine Engine;
@@ -89,7 +89,7 @@ namespace Poly.Script.Expressions {
                        .ToArray() :
                 null;
                                     
-            SystemFunction = Helpers.RuntimeFunctionCache.GetFunction(Type, Name, ArgTypes);
+            SystemFunction = Helpers.RuntimeFunction.GetFunction(Type, Name, ArgTypes);
             if (SystemFunction != null)
                 return Execute(SystemFunction, Object, ArgList);
 
@@ -153,7 +153,7 @@ namespace Poly.Script.Expressions {
                 ArgList.Select(o => o.GetType()).ToArray() :
                 null;
 
-            SystemFunction = Helpers.RuntimeFunctionCache.GetFunction(Type, Name, ArgTypes);
+            SystemFunction = Helpers.RuntimeFunction.GetFunction(Type, Name, ArgTypes);
 
             if (SystemFunction != null)
                 Output.Append(Execute(SystemFunction, Object, ArgList));
@@ -259,11 +259,11 @@ namespace Poly.Script.Expressions {
             Func.Evaluate(Output, GetFunctionArguments(Func, This, Context));
         }
 
-        private object Execute(Func<object, object[], object> Func, object This, object[] Args) {
+        private object Execute(RuntimeFunction.Delegate Func, object This, object[] Args) {
             return Func(This, Args);
         }
 
-        private object Execute(Func<object, object[], object> Func, object This, jsObject Context) {
+        private object Execute(RuntimeFunction.Delegate Func, object This, jsObject Context) {
             return Func(This, GetArguments(Context));
         }
 

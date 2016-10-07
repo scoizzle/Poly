@@ -9,10 +9,8 @@ using Poly.Script;
 
 namespace Poly.Net {
     public class Url : jsComplex {
-		static Matcher UrlMatcher = new Matcher("{Protocol}://[{Username:![\\:@]}[:{Password:![@]}]\\@]{Host:![\\:]}[:{Port:Numeric}]/{Path}[?{Query:![#]}][#{Fragment}]");
-        public string Protocol;
-        public string Host;
-        public string Path;
+		static Matcher UrlMatcher = new Matcher("{Protocol}://[{Username:![\\:@]}[:{Password:![@]}]\\@]{Host:![\\:]}[:{Port:Numeric}]/{Path:![?#]}[?{Query:![#]}][#{Fragment}]");
+        public string Protocol, Host, Path;
         public jsObject Query;
 
         public Url(string Url) {
@@ -75,6 +73,29 @@ namespace Poly.Net {
             }
 
             return Output.ToString();
+        }
+
+        public override bool TryGet(string Key, out object Value) {
+            switch (Key) {
+                default:
+                return base.TryGet(Key, out Value);
+
+                case "Protocol": Value = Protocol; break;
+                case "Host": Value = Host; break;
+                case "Path": Value = Path; break;
+                case "Query": Value = Query; break;
+            }
+            return true;
+        }
+
+        public override void AssignValue(string Key, object Value) {
+            switch (Key) {
+                default: base.AssignValue(Key, Value); break;
+                case "Protocol": Protocol = Value?.ToString(); break;
+                case "Host": Host = Value?.ToString(); break;
+                case "Path": Path = Value?.ToString(); break;
+                case "Query": Query = Value as jsObject; break;
+            }
         }
     }
 }

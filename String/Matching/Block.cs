@@ -17,7 +17,7 @@ namespace Poly {
 
             public virtual bool Match(Context Context) { return false; }
 
-            public virtual bool Template(StringBuilder Output, jsObject context) { return false; }
+            public virtual bool Template(StringBuilder Output, jsObject Context) { return false; }
 
             public override string ToString() { return Format; }
         }

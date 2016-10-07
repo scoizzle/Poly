@@ -27,7 +27,7 @@ namespace Poly {
 				Active = false;
 				Level = Levels.Fatal;
 
-				Handler = Console.Write;
+				Handler = Console.WriteLine;
 			}
 				
 			public static void Debug(object Message) {
@@ -88,15 +88,7 @@ namespace Poly {
                 if (!Active)
                     return;
 
-                foreach (string part in 
-                    from obj in Messages
-                    where obj != null
-                    select obj.ToString()) 
-                {
-					Handler(part);
-                }
-
-				Handler(Environment.NewLine);
+                Handler(string.Concat(Messages));
             }
 
             public static Task Benchmark(string Name, int Iterations, Action Todo) {

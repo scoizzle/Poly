@@ -52,44 +52,49 @@ namespace Poly.Net.Tcp {
             Position = Length = 0;
         }
 
-        public Task<bool> Send(byte[] bytes) {
+        public bool Send(byte[] bytes) {
             return Send(bytes, 0, bytes.Length);
         }
-
-        public async Task<bool> Send(byte[] bytes, int index, int len) {
+    
+        public bool Send(byte[] bytes, int index, int len) {
             try {
-                await Stream.WriteAsync(bytes, index, len);
-                await Stream.FlushAsync();
+                Stream.Write(bytes, index, len);
+                Stream.Flush();
             }
-            catch { return false; }
+            catch {
+                return false;
+            }
             return true;
         }
 
-        public async Task<bool> Send(params byte[][] byteGroup) {
+        public bool Send(params byte[][] byteGroup) {
             try {
-                foreach (var bytes in byteGroup)
-                    if (bytes != null) 
-                        await Stream.WriteAsync(bytes, 0, bytes.Length);
+                foreach (var bytes in byteGroup) {
+                    if (bytes != null)
+                        Stream.Write(bytes, 0, bytes.Length);                   
+                }
 
-                await Stream.FlushAsync();
+                Stream.Flush();
             }
-            catch { return false; }
+            catch {
+                return false;
+            }
             return true;
         }
 
-        public async Task<bool> Receive(Stream storage, long length) {
+        public bool Receive(Stream storage, long length) {
             try {
                 while (length > 0) {
                     if (Available == 0)
                         UpdateBuffer();
 
                     var Len = (int)(Math.Min(length, Available));
-                    await storage.WriteAsync(Buffer, 0, Len);
+                    storage.Write(Buffer, 0, Len);
 
                     length -= Len;
                     Consume(Len);
                 }
-                await storage.FlushAsync();
+                storage.Flush();
             }
             catch (Exception Error) {
                 App.Log.Error(Error.ToString());
@@ -98,7 +103,7 @@ namespace Poly.Net.Tcp {
             return true;
         }
 
-        public async Task<bool> ReceiveUntil(Stream storage, byte[] chain) {
+        public bool ReceiveUntil(Stream storage, byte[] chain) {
             try {
                 if (Available == 0)
                     UpdateBuffer();
@@ -113,8 +118,8 @@ namespace Poly.Net.Tcp {
 
                     if (b == chain[i]) {
                         if (++i == chainLen) {
-                            await storage.WriteAsync(Buffer, startPosition, Position - startPosition - chainLen);
-                            await storage.FlushAsync();
+                            storage.Write(Buffer, startPosition, Position - startPosition - chainLen);
+                            storage.Flush();
                             return true;
                         }
                     }
@@ -123,8 +128,8 @@ namespace Poly.Net.Tcp {
                     }
                     
                     if (Available == 0) {
-                        await storage.WriteAsync(Buffer, startPosition, Length - startPosition);
-                        await storage.FlushAsync();
+                        storage.Write(Buffer, startPosition, Length - startPosition);
+                        storage.Flush();
 
                         startPosition = 0;
                         UpdateBuffer();
@@ -155,9 +160,9 @@ namespace Poly.Net.Tcp {
             return true;
         }
 
-        private void UpdateBuffer() {
+        public void UpdateBuffer() {
             try {
-                Length = Stream.ReadAsync(Buffer, 0, MaxBufferLength).AwaitResult();
+                Length = Stream.Read(Buffer, 0, MaxBufferLength);
                 Position = 0;
             }
             catch {
@@ -167,7 +172,7 @@ namespace Poly.Net.Tcp {
 
         public void ResetBuffer() {
             Position = Length = 0;
-            Buffer = new byte[BufferSize];
+            Buffer = new byte[MaxBufferLength];
         }
         
         private void Consume(int len) {

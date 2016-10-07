@@ -16,11 +16,15 @@ namespace Poly {
         public delegate object ModDelegate(string Str);
 
         public static KeyValueCollection<TestDelegate> Tests = new KeyValueCollection<TestDelegate>() {
-            { "AlphaNumeric", char.IsLetterOrDigit },
-            { "Alpha", char.IsLetter },
-            { "a", char.IsLetter },
-            { "Numeric", char.IsNumber },
-            { "n", char.IsNumber },
+            { "AlphaNumeric", c => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') },
+            { "Alpha", c => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') },
+            { "a", c => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') },
+            { "Lower", c => (c >= 'a' && c <= 'z') },
+            { "l", c => (c >= 'a' && c <= 'z') },
+            { "Upper", c => (c >= 'A' && c <= 'Z') },
+            { "u", c => (c >= 'A' && c <= 'Z') },
+            { "Numeric", c => (c >= '0' && c <= '9') },
+            { "n", c => (c >= '0' && c <= '9') },
             { "Punctuation", char.IsPunctuation },
             { "p", char.IsPunctuation },
             { "Whitespace", char.IsWhiteSpace },
@@ -71,66 +75,25 @@ namespace Poly {
             }
         }
 
-        public static jsObject Match(this String Data, String Wild) {
+        public static jsObject Match(this String Data, String Wild, jsObject Storage = null, int Index = 0) {
             if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
                 return null;
 
-            return GetMatcher(Wild).Match(Data);
+            return GetMatcher(Wild).Match(Data, Storage, Index);
         }
 
-        public static jsObject Match(this String Data, String Wild, int Index) {
-            if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
-                return null;
-            
-            return GetMatcher(Wild).Match(Data,Index);
-        }
-
-        public static jsObject Match(this String Data, String Wild, jsObject Storage) {
-            if (Data == null || Wild == null)
-                return null;
-
-            return GetMatcher(Wild).Match(Data, Storage);
-        }
-
-        public static jsObject Match(this String Data, String Wild, int Index, jsObject Storage) {
+        public static jsObject MatchAll(this String Data, String Wild, jsObject Storage = null, int Index = 0) {
             if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
                 return null;
 
-            return GetMatcher(Wild).Match(Data, Index, Storage);
+            return GetMatcher(Wild).MatchAll(Data, Storage, Index);
         }
 
-        public static jsObject MatchAll(this String Data, String Wild) {
+        public static jsObject MatchKeyValuePairs(this String Data, String Wild, jsObject Storage = null, int Index = 0) {
             if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
                 return null;
 
-            return GetMatcher(Wild).MatchAll(Data);
-        }
-
-        public static jsObject MatchAll(this String Data, String Wild, int Index) {
-            if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
-                return null;
-
-            return GetMatcher(Wild).MatchAll(Data, ref Index);
-        }
-
-        public static jsObject MatchAll(this String Data, String Wild, jsObject Storage) {
-            if (Data == null || Wild == null)
-                return null;
-
-            return GetMatcher(Wild).MatchAll(Data, Storage);
-        }
-
-        public static jsObject MatchAll(this String Data, String Wild, int Index, jsObject Storage) {
-            if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
-                return null;
-
-            return GetMatcher(Wild).MatchAll(Data, ref Index, Storage, false);
-        }
-        public static jsObject MatchAll(this String Data, String Wild, int Index, jsObject Storage, bool SingleObject) {
-            if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
-                return null;
-
-            return GetMatcher(Wild).MatchAll(Data, ref Index, Storage, SingleObject);
+            return GetMatcher(Wild).MatchKeyValuePairs(Data, Storage, Index);
         }
     }
 }

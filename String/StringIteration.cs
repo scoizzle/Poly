@@ -78,5 +78,20 @@ namespace System {
 
             Index = Y + Close.Length;
         }
+
+        public static bool All(this String Text, int Start, int Stop, Func<char, bool> f) {
+            if (string.IsNullOrEmpty(Text) || Start >= Stop || Start < 0 || Stop > Text.Length)
+                return false;
+
+            do {
+                if (!f(Text[Start]))
+                    return false;
+
+                Start++;
+            }
+            while (Start < Stop);
+
+            return true;
+        }
     }
 }

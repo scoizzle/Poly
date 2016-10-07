@@ -28,6 +28,10 @@ namespace Poly.Data {
             }
         }
 
+        public void remove(string Key) {
+            Remove(Key);
+        }
+
         public bool Remove(string Key) {
             var Coll = GetCollection(Key.Length);
 
@@ -75,6 +79,10 @@ namespace Poly.Data {
             return false;
         }
 
+        public object get(string Key) {
+            return Get(Key);
+        }
+
         public T Get(string Key) {
             var Coll = GetCollection(Key.Length);
 
@@ -82,6 +90,10 @@ namespace Poly.Data {
                 return GetValueFromCollection(Coll, Key);
 
             return default(T);
+        }
+
+        public void set(string Key, object Value) {
+            Set(Key, (T)Value);
         }
         
         public void Set(string Key, T Value) {
@@ -134,15 +146,14 @@ namespace Poly.Data {
         }
 
         private KeyValuePair GetStorageFromCollection(PairCollection Coll, string Key) {
-			var Len = Coll.List.Count;
-			for (int i = 0; i < Len; i++)
-			{
+            var Len = Coll.List.Count;
+            for (int i = 0; i < Len; i++) {
                 var Item = Coll.List.Elements[i];
 
                 if (Item == null) {
                     Coll.List.RemoveAt(i--);
                     Len--;
-					continue;
+                    continue;
                 }
 
                 if (string.Compare(Item.Key, Key, StringComparison.Ordinal) == 0) {
@@ -153,11 +164,11 @@ namespace Poly.Data {
         }
 
         private T GetValueFromCollection(PairCollection Coll, string Key) {
-			var Len = Coll.List.Count;
+            var Len = Coll.List.Count;
             for (int i = 0; i < Len; i++) {
-				var Item = Coll.List.Elements[i];
+                var Item = Coll.List.Elements[i];
 
-				if (string.Compare(Item.Key, Key, StringComparison.Ordinal) == 0) {
+                if (string.Compare(Item.Key, Key, StringComparison.Ordinal) == 0) {
                     return Item.Value;
                 }
             }
@@ -181,7 +192,7 @@ namespace Poly.Data {
         }
 
         private PairCollection GetCollection(int Length) {
-			var Len = List.Count;
+            var Len = List.Count;
             for (int i = 0; i < Len; i++) {
                 if (List[i].Len == Length)
                     return List[i];

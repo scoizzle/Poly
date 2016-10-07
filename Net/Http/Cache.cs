@@ -2,12 +2,10 @@
 using System.Linq;
 using System.IO;
 using System.IO.Compression;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
     using Data;
-    using Tcp;
 	using Script;
 
     public class Cache : KeyValueCollection<Cache.Item> {
@@ -98,7 +96,14 @@ namespace Poly.Net.Http {
         }
 
         void Load(string FileName) {
-            Load(new FileInfo(FileName));
+            for (var i = 0; i < 10; i ++) {
+                try {
+                    Load(new FileInfo(FileName));
+                    break;
+                } 
+                catch { }
+                Task.Delay(100).Wait();
+            }
         }
 
         void Load(FileInfo Info) {
@@ -178,13 +183,19 @@ namespace Poly.Net.Http {
             public FileInfo Info;
             public Engine Script;
 
-            public Stream Content {
-                get {
-                    if (Buffer != null)
+            public Stream GetContent(bool CompressionEnabled) {
+                if (Buffer != null) {
+                    if (IsCompressed) {
+                        if (CompressionEnabled) {
+                            return new MemoryStream(Buffer, false);
+                        }
+                    }
+                    else {
                         return new MemoryStream(Buffer, false);
-
-                    return Info.OpenRead();
+                    }
                 }
+
+                return Info.OpenRead();
             }
         }
     }

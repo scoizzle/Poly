@@ -10,5 +10,10 @@ namespace Poly.Data {
         public bool ContainsValue(T Val) {
             return Values.Contains(Val);
         }
+
+        public void ForEach(Action<string, T> action) {
+            foreach (var Pair in this)
+                action(Pair.Key, Pair.Value);
+        }
     }
 }

@@ -17,10 +17,10 @@ namespace Poly.Net.Http {
         public Packet Packet { get; private set; }
         public BufferedStreamer Stream { get; private set; }
 
-        public MultipartHandler(Client client, Packet packet, BufferedStreamer stream) {
+        public MultipartHandler(Client client, Packet packet) {
             Client = client;
             Packet = packet;
-            Stream = stream;
+            Stream = client.GetStreamer();
         }
 
         public bool Receive() {
@@ -44,7 +44,7 @@ namespace Poly.Net.Http {
 
                 while (!string.IsNullOrEmpty(line = client.ReceiveLine())) {
                     if (line.StartsWith("Content-Disposition", StringComparison.Ordinal)) {
-                        var Results = Packet.MultipartHeaderPropertiesMatcher.MatchAll(line.Substring("form-data"), true);
+                        var Results = Packet.MultipartHeaderPropertiesMatcher.MatchAll(line.Substring("form-data"));
 
                         postInfo.Set("Name", Results["name"]);
 
@@ -65,7 +65,7 @@ namespace Poly.Net.Http {
                     var f = new TempFileUpload(postInfo.Get<string>("FileName"));
 
                     using (var fstream = f.GetWriteStream())
-						stream.ReceiveUntil(fstream, boundary).Wait();
+                        stream.ReceiveUntil(fstream, boundary);
 
                     f.Info.Refresh();
 
@@ -73,7 +73,7 @@ namespace Poly.Net.Http {
                 }
                 else {
                     temp = new MemoryStream();
-					if (!stream.ReceiveUntil(temp, boundary).AwaitResult())
+					if (!stream.ReceiveUntil(temp, boundary))
                         return false;
 
                     postInfo.Set("Content", Encoding.UTF8.GetString(temp.ToArray()));

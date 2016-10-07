@@ -33,9 +33,31 @@ namespace Poly.Data {
             Elements = new T[baseLength];
         }
 
+        public ManagedArray(T[] baseArray) {
+            Elements = baseArray;
+            count = Elements.Length;
+        }
+
+        public ManagedArray(ManagedArray<T> Base) {
+            Elements = new T[Base.count == 0 ? 4 : Base.count];
+            Base.CopyTo(this);
+        }
+
+        public void CopyTo(ManagedArray<T> destination) {
+            destination.ValidateSizeForInsert(count + destination.count);
+
+            var start = destination.count;
+            for (int i = 0; i < count; i++) {
+                destination.Elements[destination.count + i] = Elements[i];
+            }
+
+            destination.count += count;
+        }
+
         public void Add(T value) {
             ValidateSizeForInsert();
-            Elements[count++] = value;
+            Elements[count] = value;
+            count++;
         }
 
         public void Remove(T value) {
@@ -55,6 +77,21 @@ namespace Poly.Data {
             count--;
         }
 
+        public void RemoveAt(int Index, int Length) {
+            if (Index < 0 || Index >= count || Index + Length > count)
+                return;
+            
+            var Last = count - Length;
+            var i = Index;
+
+            for (; i < Last; i++) {
+                Elements[i] = Elements[i + Length];
+            }
+
+            Array.Clear(Elements, Index, Count - Index);
+            count -= Length;
+        }
+
         public void Clear() {
             for (var i = 0; i < count; i++) {
                 Elements[i] = default(T);
@@ -71,8 +108,13 @@ namespace Poly.Data {
         }
 
         private void ValidateSizeForInsert() {
-            if (Elements.Length == count + 1)
+            if (Elements.Length <= count + 1)
                 Array.Resize(ref Elements, Elements.Length * 2);
+        }
+
+        private void ValidateSizeForInsert(int newLen) {
+            if (Elements.Length <= newLen)
+                Array.Resize(ref Elements, newLen);
         }
 
         public IEnumerator<T> GetEnumerator() {
@@ -111,7 +153,6 @@ namespace Poly.Data {
                     return false;
                 }
             }
-
 
             void IEnumerator.Reset() {
                 index = 0;

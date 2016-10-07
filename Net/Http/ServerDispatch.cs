@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.IO;
@@ -14,63 +15,64 @@ namespace Poly.Net.Http {
     using Script;
 
     public partial class Server {
-        public Host FindHost(string Query) {
-            var Len = Hosts.Count;
-            var Elems = Hosts.Elements;
+        private void OnClientConnected(Client client) {
+            try {
+                var Stream = client.GetStreamer();
 
-            for (int i = 0; i < Len; i++) {
-                var Host = Elems[i];
-                if (Host.Matcher.Match(Query) != null)
-                    return Host;
-            }
-            return null;
-        }
+				while (Running && client.Connected && !Cancel.IsCancellationRequested) {
+                    if (Stream.Available == 0) {
+                        Thread.Sleep(0);
+                        Stream.UpdateBuffer();
+                        continue;
+                    }
 
-        private void ClientConnected(Client client) {
-			try {
-                client.ReceiveTimeout = 5000;
-
-				while (client.Connected) {
                     var request = new Request(client);
 
-					if (!Packet.Receive(client, request)) break;
-					else request.Prepare();
+                    if (!Packet.Receive(client, request))
+                        break;
 
-					var host = FindHost(request.Hostname);
-					if (host == null)
-                        goto badRequest;
-
-                    request.Host = host;
-					OnClientRequest(request);
-
-                    if (request.Connection == "close") break;
-                    else continue;
-
-                badRequest:
-                    request.Result = Result.BadRequest;
-					request.Finish();
-				}
+                    if (!Matcher.Compare(request.Hostname)) {
+                        request.Result = Result.BadRequest;
+                        request.Result.Headers.Set("Connection", "close");
+                        request.Finish();
+                        goto closeConnection;
+                    }
+                    else {
+                        request.Prepare();
+                        request.Host = this;
+                    }
+                    
+                    OnClientRequest(request);
+                }
 			}
 			catch (Exception Error) {
                 App.Log.Error(Error.ToString());
             }
+
+        closeConnection:
+            client.Dispose();
         }
         
-        private static void OnClientRequest(Request Request) {
+        private void OnClientRequest(Request Request) {
             var Target = Request.Target;
+            var EXT = Target.GetFileExtension();
+            
+            if (EXT.Length != 0 && Handlers.MatchAndInvoke(EXT, Request))
+                goto finish;
 
-            if (!Request.Host.Handlers.MatchAndInvoke(Target, Request)) {
-                var WWW = Request.Host.GetFullPath(Target);
-                var EXT = Request.Host.GetExtension(WWW);
-
-                Request.Set("FileName", WWW);
-                Request.Set("FileEXT", EXT);
-
-                if (!Request.Host.Handlers.MatchAndInvoke(EXT, Request)) {
-                    Request.SendFile(WWW);
-                }
+            var Cached = Cache.Get(Target);
+            if (Cached != null) {
+                Request.SendFile(Cached);
+                goto finish;
             }
 
+            Request.ProcessHeaders();
+            if (Handlers.MatchAndInvoke(Target, Request))
+                goto finish;
+
+            Request.Result.Status = Result.BadRequest;
+
+        finish:
             Request.Finish();
         }
     }

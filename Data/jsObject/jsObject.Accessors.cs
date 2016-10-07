@@ -93,31 +93,6 @@ namespace Poly.Data {
             return default(T);
         }
 
-        public T Search<T>(string Key, bool KeyIsWild = false) where T : class {
-            T Value = default(T);
-
-            if (KeyIsWild) {
-                ForEach<T>((K, V) => {
-                    if (Key.Match(K) != null) {
-                        Value = V;
-                        return true;
-                    }
-                    return false;
-                });
-            }
-            else {
-                ForEach<T>((K, V) => {
-                    if (K.Match(Key) != null) {
-                        Value = V;
-                        return true;
-                    }
-                    return false;
-                });
-            }
-
-            return Value;
-        }
-
         new public void Set(string Key, object Value) {
             AssignValue(Key, Value);
         }
@@ -196,7 +171,7 @@ namespace Poly.Data {
             return base[Key] as T;
         }
 
-        public virtual void AssignValue<T>(string Key, T Value) {
+        public virtual void AssignValue(string Key, object Value) {
             base[Key] = Value;
         }
     }

@@ -22,7 +22,7 @@ namespace Poly.Net.Tcp {
 
         public BufferedStreamer Stream { get; private set; }
 
-		public Client() { }
+		public Client() { Client.Blocking = false; }
 		public Client(string Host, int Port) { ConnectAsync(Host, Port); }
 
 		public IPEndPoint LocalIPEndPoint {
@@ -52,7 +52,7 @@ namespace Poly.Net.Tcp {
                 if (Connected) {
                     InitStream();
 
-					return Stream.Send(bytes).AwaitResult();
+                    return Stream.Send(bytes, 0, bytes.Length);
                 }
             }
             catch { return false; }
@@ -64,7 +64,7 @@ namespace Poly.Net.Tcp {
                 if (Connected) {
                     InitStream();
 
-					return Stream.Send(bytes, index, length).AwaitResult();
+                    return Stream.Send(bytes, index, length);
                 }
             }
             catch { return false; }
@@ -95,7 +95,7 @@ namespace Poly.Net.Tcp {
                     if (line != null) {
                         var bytes = enc.GetBytes(line);
 
-						return Stream.Send(bytes, NewLineBytes).AwaitResult();
+                        return Stream.Send(bytes, NewLineBytes);
                     }
                 }
             }
@@ -107,7 +107,7 @@ namespace Poly.Net.Tcp {
             if (Connected) {
                 InitStream();
 
-				return Stream.Receive(storage, length).AwaitResult();
+                return Stream.Receive(storage, length);
             }
             return false;
         }
@@ -151,7 +151,7 @@ namespace Poly.Net.Tcp {
             if (Connected) {
                 InitStream();
 
-				return Stream.ReceiveUntil(storage, chain).AwaitResult(TimeSpan.FromMilliseconds(ReceiveTimeout));
+                return Stream.ReceiveUntil(storage, chain);
             }
 
             return false;

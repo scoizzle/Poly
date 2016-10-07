@@ -15,15 +15,13 @@ namespace Poly {
             }
 
             public override bool Match(Context Context) {
-                var c = new Context(Context.String) { Index = Context.Index };
+                var c = new Context(Context.String, Blocks.Length) { Index = Context.Index, Length = Context.Length };
 
 				if (Matcher.Match(Blocks, c)) {
                     Context.Index = c.Index;
                     Context.BlockIndex += c.BlockIndex - Blocks.Length;
 
-                    if (c.Store)
-                        c.Storage.CopyTo(Context.Storage);
-
+                    c.Extractions.CopyTo(Context.Extractions);
                     return true;
                 }
 

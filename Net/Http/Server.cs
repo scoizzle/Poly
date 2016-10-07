@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
 using System.IO;
-using System.Threading.Tasks;
+using System.Threading;
 
 using System.Net;
 using System.Net.Sockets;
@@ -13,57 +13,52 @@ namespace Poly.Net.Http {
     using Net.Tcp;
     using Script;
 
-    public partial class Server : MultiPortServer {
-        public ManagedArray<Host> Hosts;
-        public int ClientReceiveTimeout { get; set; }
+    public partial class Server : Host {
+        public int Port { get; set; } = 80;
+        public int MaxConcurrentClients { get; set; } = Environment.ProcessorCount;
+        public int SendBufferSize { get; set; } = 16384;
 
-        public Server() {
-            Hosts = new ManagedArray<Host>();
+        public bool Running { get { return Listener?.Running == true; } }
 
-            OnClientConnect += ClientConnected;
+        private Tcp.Server Listener;
+        private CancellationTokenSource Cancel;
+
+        public Server(string hostname) : base(hostname) { }
+
+        public Server(string hostname, int port) : base(hostname) {
+            Port = port;
         }
 
-        public override void Start() {
-            for (int i = 0; i < Hosts.Count; i++)
-                Hosts.Elements[i].Ready();
+        private void Init() {
+            Listener = new Tcp.Server(Port);
+            Listener.OnClientConnected += OnClientConnected;
 
-            base.Start();
+            Cancel = new CancellationTokenSource();
         }
 
-        public override void Stop() {
-            for (int i = 0; i < Hosts.Count; i++)
-                Hosts.Elements[i].Stop();
-
-            base.Stop();
+        private void Dispose() {
+            Listener?.Stop();
+            Cancel?.Cancel();
+            Cancel = null;
+            Listener = null;
         }
 
-        public Host AddHost(string Name) {
-            return AddHost(new Host(Name));
+        public virtual void Start() {
+            if (Listener == null) Init();
+
+            Ready();
+            Listener.Start();
         }
 
-        public Host AddHost(string Name, jsObject Info) {
-            var Host = AddHost(Name);
-            Info?.CopyTo(Host);
-            return Host;
+        public virtual void Stop() {
+            Dispose();
+            Cache.Dispose();
         }
 
-        public Host AddHost(Host Info) {
-            Hosts.Add(Info);
-            return Info;
-        }
-
-        public void RemoveHost(string Name) {
-            var Elems = Hosts.Elements;
-            var Len = Hosts.Count;
-
-            for (var i = 0; i < Len; i++) {
-                var H = Elems[i];
-                if (string.Compare(H.Name, Name, StringComparison.Ordinal) != 0) continue;
-
-                H.Stop();
-                Hosts.RemoveAt(i);
-                break;
-            }
+        public virtual void Restart() {
+            Dispose();
+            Init();
+            Listener.Start();
         }
 
         public void Mime(string Ext, string Mime) {

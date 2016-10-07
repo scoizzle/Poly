@@ -12,43 +12,29 @@ namespace Poly {
             Block[] Blocks;
 
             public ExtractAll(string fmt)
-                : base('`' + fmt + '`') {
-                Blocks = Matcher.Parse(fmt);
+                : base("`" + fmt + '`') {
+                Blocks = Parse(fmt);
             }
 
-            public override bool Match(Context Ctx) {
+            public override bool Match(Context Context) {
                 if (Blocks == null) return false;
 
-				var Storage = Ctx.Storage;
-				
-                var Context = new Context(Ctx.String) {
-                    Index = Ctx.Index,
-                    BlockCount = Blocks?.Length ?? 0
-                };
-                
+                var Extracts = Context.Extractions;
+
+                if (Extracts.Count > 0)
+                    Context.Extractions = new ManagedArray<Context.Extraction>();
+
                 while (Matcher.Match(Blocks, Context)) {
-                    if (Context.Storage.Count == 2) {
-                        var Key = Context.Storage["Key"];
-                        var Value = Context.Storage["Value"];
-
-                        if (Key != null && Value != null)
-                            Storage.Set(Key as string, Value);
-                    }
-                    else if (Context.Storage.Count == 1) {
-                        var Value = Context.Storage["Value"];
-
-                        if (Value != null)
-                            Storage.Add(Value);
-                    }
-
-                    Context.Storage.Clear();
+                    Extracts.Add(new Context.GroupedExtraction(Context.Extractions));
+                    Context.Extractions.Clear();
                     Context.BlockIndex = 0;
-
-                    if (Context.IsDone())
-                        break;
                 }
 
-                Ctx.Index = Context.Index;
+                if (Extracts.Count > 0) {
+                    Context.Extractions.CopyTo(Extracts);
+                    Context.Extractions = Extracts;
+                }
+
                 return true;
             }
         }

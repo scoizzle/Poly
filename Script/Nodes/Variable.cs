@@ -111,19 +111,22 @@ namespace Poly.Script.Nodes {
         }
 
         private object GetNextValue(object Current, string Key) {
-            if (Current is jsObject) {
-                object Result = null;
-                var Obj = Current as jsObject;
+            if (Current == null) return null;
+            var Diction = Current as IDictionary;
 
-                if ((Result = Obj.GetValue<object>(Key)) != null) {
-                    return Result;
-                }
-                else
-                if (Current is Types.ClassInstance) {
-                    Function F = (Current as Types.ClassInstance).GetFunction(Key);
+            if (Diction != null) {
+                var Result = Diction.get(Key);
 
-					if (F != null)
-                    	return new Event.Handler(F.Evaluate);
+                if (Result != null) return Result;
+                else {
+                    var instance = Current as Types.ClassInstance;
+
+                    if (instance != null) {
+                        var F = instance.GetFunction(Key);
+
+                        if (F != null)
+                            return new Event.Handler(F.Evaluate);
+                    }
                 }
             }
 
@@ -140,21 +143,17 @@ namespace Poly.Script.Nodes {
                     return C;
             }
 
-            if (Current == null) return null;
-            var T = Current as Type;
-            
+            var T = Current as Type;            
             return GetObjectValue((T ?? Current.GetType()).GetTypeInfo(), Current, Key);
         }
 
         private bool SetNextValue(object Current, string Key, object Value) {
-            if (Current is jsObject) {
-                var Obj = Current as jsObject;
-
+            var Diction = Current as IDictionary;
+            if (Diction != null) {
                 if (Value == null)
-                    Obj.Remove(Key);
+                    Diction.remove(Key);
                 else
-                    Obj.AssignValue(Key, Value);
-
+                    Diction.set(Key, Value);
                 return true;
             }
             else

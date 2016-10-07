@@ -9,25 +9,22 @@ namespace Poly.Net.Http {
         public object Psx(Request Request, string FileName) {
 			Cache.Item Cached;
 
-			if (Request.Host.Cache.TryGetValue(FileName, out Cached)) {
+			if (Cache.TryGetValue(FileName, out Cached)) {
                 if (Cached.Script == null) {
                     Cached.Script = new Engine();
-                    Cached.Script.IncludePath = Request.Host.Path + Path.DirectorySeparatorChar;
+                    Cached.Script.IncludePath = Path + System.IO.Path.DirectorySeparatorChar;
 
                     Cached.Script.Static.Set("Server", this);
                     Cached.Script.ReferencedTypes.Add("Response", typeof(Result));
 
-					if (!Cached.Script.Parse(Cached.Content.GetString()))
+					if (!Cached.Script.Parse(Cached.GetContent(false).GetString()))
                         return Cached.Script = null;
                 }
                 
-                var Result = Cached.Script.Evaluate(Request);
-
+                Cached.Script.Evaluate(Request);
                 Request.Result.Content = new MemoryStream(
                     Encoding.UTF8.GetBytes(Request.OutputBuilder.ToString())
                 );
-
-				return Result;
             }
 
             return null;

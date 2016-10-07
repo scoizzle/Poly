@@ -5,6 +5,7 @@ using System.Text;
 using System.IO;
 using System.IO.Compression;
 using System.Threading.Tasks;
+using System.Threading;
 
 using Poly;
 using Poly.Data;
@@ -13,7 +14,7 @@ using Poly.Script;
 
 namespace Poly.Net.Http {
     public partial class Request : Packet {
-        public Host Host;
+        public Server Host;
         public Client Client;
         public Result Result;
 
@@ -51,12 +52,15 @@ namespace Poly.Net.Http {
                 return;
             }
 
+            SendFile(Cached);
+        }
+
+        public void SendFile(Cache.Item Cached) {
             if (Cached.LastWriteTime == IfModifiedSince) {
                 Result.Status = Result.NotModified;
             }
             else {
                 Result.Headers["Last-Modified"] = Cached.LastWriteTime;
-                Result.Headers["Content-Length"] = Cached.ContentLength;
                 Result.ContentType = Cached.ContentType;
 
                 if (Cached.IsCompressed) {
@@ -64,28 +68,65 @@ namespace Poly.Net.Http {
                         Result.Headers["Vary"] = "Accept-Encoding";
                         Result.Headers["Content-Encoding"] = "gzip";
                     }
-                    else {
-                        Result.Content = Cached.Info.OpenRead();
-                        return;
-                    }
                 }
 
-                Result.Content = Cached.Content;
+                Result.Content = Cached.GetContent(CompressionEnabled);
             }
         }
 
-        public async void Finish() {
+        public void Finish() {
             try {
-                Client.Send(HeaderString);
+                var In = Result.Content;
+                var Out = Client.Stream.Stream;
+                var Headers = HeaderString;
+                var Buffer = new byte[Host.SendBufferSize];
+                var Offset = Encoding.UTF8.GetBytes(Headers, 0, Headers.Length, Buffer, 0);
 
-				if (!HeadersOnly && Result.Content != null) {
-					var Out = Client.Stream.Stream;
+                if (HeadersOnly || In == null) {
+                    Out.Write(Buffer, 0, Offset);
+                }
+                else {
+                    var ToSend = In.Length;
+                    var Read = In.Read(Buffer, Offset, Buffer.Length - Offset);
 
-					await Result.Content.CopyToAsync(Out);
-					await Out.FlushAsync();
-				}
+                    Out.Write(Buffer, 0, Offset + Read);
+                    ToSend -= Read;
+                    
+                    while (ToSend > 0 && Client.Connected) {
+                        Read = In.Read(Buffer, 0, (int)Math.Min(Buffer.Length, ToSend));
+
+                        if (Read == 0)
+                            break;
+
+                        Out.Write(Buffer, 0, Read);
+                        ToSend -= Read;
+                        Thread.Sleep(0);
+                    }
+                }
+
+                Buffer = null;
             }
-			catch { }
+            catch { }
+        }
+
+        public bool ReceiveContent() {
+            if (ContentLength > 0) {
+                switch (ContentType) {
+                    case "application/x-www-form-urlencoded":
+                    QueryMembersMatcher.MatchAll(Client.ReceiveString(ContentLength), Post);
+                    break;
+
+                    case "multipart/form-data": {
+                        MultipartHandler Handler = new MultipartHandler(Client, this);
+
+                        if (!Handler.Receive())
+                            return false;
+
+                        break;
+                    }
+                }
+            }
+            return true;
         }
     }
 }

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Poly {
+namespace System {
     static class CharExtensions {
         private static string HexAlph = "0123456789ABCDEF";
         public static string ToHexString(this char C) {

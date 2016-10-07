@@ -70,7 +70,7 @@ namespace System {
 
             if (X == -1)
                 return false;
-
+            
             for (Y = X + 1; Y < End; Y++) {
                 if (This[Y] == '\\') {
                     Y++;
@@ -321,6 +321,15 @@ namespace System {
 
         public static string Format(this String This, params object[] Args) {
             return string.Format(This, Args);
+        }
+
+        public static string GetFileExtension(this String This) {
+            var lastPeriod = This.LastIndexOf('.');
+
+            if (lastPeriod == -1)
+                return string.Empty;
+
+            return This.Substring(lastPeriod);
         }
 
         public static string Substring(this String This, int Index) {

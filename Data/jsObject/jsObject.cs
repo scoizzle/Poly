@@ -60,9 +60,10 @@ namespace Poly.Data {
         public bool IsArray { get; set; }
 
         public void Add(object Object) {
-			if (Object is KeyValuePair<object, object>) {
-				var KVP = Object as KeyValuePair<object, object>?;
-				Add ((KVP.Value.Key ?? Count).ToString (), KVP.Value.Value);	
+            var KVP = Object as KeyValuePair;
+
+            if (KVP != null) {
+				Add (KVP.Key ?? Count.ToString (), KVP.Value);	
 			} 
 			else {
 				Add (Count.ToString (), Object);
@@ -77,47 +78,6 @@ namespace Poly.Data {
 
         public virtual void CopyTo(jsObject Object) {
             ForEach((k, v) => Object.AssignValue(k, v));
-        }
-
-        public void ForEach(Action<string, object> Action) {
-            foreach (var Pair in this) {
-                Action(Pair.Key, Pair.Value);
-            }
-        }
-
-        public void ForEach(string Key, Action<string, object> Action) {
-            ForEach<object>(Key, Action);
-        }
-
-        public void ForEach<T>(Action<string, T> Action) where T : class {
-            foreach (var Pair in this) {
-                if (Pair.Value is T)
-                    Action(Pair.Key, Pair.Value as T);
-            }
-        }
-
-        public bool ForEach<T>(Func<string, T, bool> Action) where T : class {
-            foreach (var Pair in this) {
-                var V = Pair.Value as T;
-
-                if (V != null && Action(Pair.Key, V))
-                    return true;
-            }
-            return false;
-        }
-
-        public void ForEach<T>(string Key, Action<string, T> Action) where T : class {
-            var Obj = Get<jsObject>(Key);
-
-            if (Obj == null)
-                return;
-
-            foreach (var Pair in Obj) {
-                var V = Pair.Value as T;
-
-                if (V != null)
-                    Action(Pair.Key, V);
-            }
         }
 
         public jsObject Sort() {

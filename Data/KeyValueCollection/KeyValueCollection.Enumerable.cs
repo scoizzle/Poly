@@ -12,7 +12,7 @@ namespace Poly.Data {
             get
             {
                 foreach (var group in List) {
-                        foreach (var pair in group.List) {
+                    foreach (var pair in group.List) {
                         yield return pair.Key;
                     }
                 }
@@ -36,7 +36,7 @@ namespace Poly.Data {
             get
             {
                 foreach (var group in List) {
-                        foreach (var pair in group.List) {
+                    foreach (var pair in group.List) {
                         yield return pair;
                     }
                 }
@@ -52,37 +52,58 @@ namespace Poly.Data {
         }
         
         public struct Enumerator : IEnumerator<KeyValuePair> {
-            int index;
-            KeyValuePair[] list;
+            int indexMajor, indexMinor;
+            KeyValueCollection<T> list;
+            PairCollection pc;
 
             public KeyValuePair Current { get; private set; }
             object IEnumerator.Current { get { return Current; } }
 
             internal Enumerator(KeyValueCollection<T> Coll) {
-                index = 0;
+                indexMajor = indexMinor = 0;
                 Current = null;
 
-                list = Coll.KeyValuePairs.ToArray();
+                list = Coll;
+
+                if (Coll.Count == 0) pc = null;
+                else {
+                    pc = list.List.Elements[indexMinor];
+                }
             }
 
             public void Dispose() { }
 
             public bool MoveNext() {
-                if (index < list.Length) {
-                    Current = list[index];
-                    index++;
+                if (pc == null) return false;
+
+                if (indexMinor < pc.List.Count) {
+                    Current = pc.List.Elements[indexMinor];
+                    indexMinor++;
                     return true;
                 }
-                else {
-                    Current = null;
-                    return false;
+
+                indexMinor = 0;
+                indexMajor++;
+                
+                if (indexMajor < list.List.Count) {
+                    pc = list.List.Elements[indexMajor];
+
+                    if (pc != null) {
+                        Current = pc.List.Elements[indexMinor];
+                        indexMinor++;
+                        return true;
+                    }
                 }
+
+                Current = null;
+                return false;
             }
-            
 
             void IEnumerator.Reset() {
-                index = 0;
-                Current = default(KeyValuePair);
+                indexMajor = indexMinor = 0;
+                Current = null;
+                list = null;
+                pc = null;
             }
         }
     }

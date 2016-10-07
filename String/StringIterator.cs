@@ -148,6 +148,19 @@ namespace Poly {
             return default(T);
         }
 
+        public bool ConsumeUntil(char str) {
+            var I = Index;
+            while (I < Length) {
+                if (IsAt(str)) {
+                    Index = I;
+                    return true;
+                }
+                I++;
+            }
+
+            return false;
+        }
+
         public bool ConsumeUntil(string str) {
             var I = Index;
             while (I < Length) {
@@ -181,7 +194,6 @@ namespace Poly {
             return Str;
         }
 
-
         public string ExtractUntil(string Token) {
             var Next = Find(Token);
             if (Next == -1) return null;
@@ -189,6 +201,25 @@ namespace Poly {
             var Str = String.Substring(Index, Next - Index);
             Index = Next;
             return Str;
+        }
+
+        public string ExtractUntil(params Func<char, bool>[] Possible) {
+            int Start, Stop;
+            char Current;
+
+            if (IsDone()) return null;
+            Start = Stop = Index;
+
+            while (Stop < Length) {
+                Current = String[Stop];
+
+                if (Possible.Any(f => f(Current))) {
+                    return String.Substring(Start, Stop - Start);
+                }
+
+                Stop++;
+            }
+            return null;
         }
 
         public bool Goto(char C) {

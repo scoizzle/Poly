@@ -21,7 +21,7 @@ namespace Poly.Script.Types {
 				double Value;
 
 				if (double.TryParse (It.Substring (Start, It.Index - Start), out Value))
-					return new StaticValue (Value);
+					return new StaticValue(Value);
 			}
 
 			It.Index = Start;

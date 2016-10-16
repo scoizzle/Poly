@@ -19,6 +19,7 @@ namespace Poly.Compiler {
         protected Stack<Label> ls;
 
         public Label Next { get { return ls.Peek(); } }
+        public Label Continue { get; set; }
 
         public Label PushNext() {
             var Next = il.DefineLabel();
@@ -117,13 +118,135 @@ namespace Poly.Compiler {
             return this;
         }
 
+        public Generator LoadField(FieldInfo Info) {
+            il.Emit(OpCodes.Ldfld, Info);
+            return this;
+        }
+
+        public Generator StoreField(FieldInfo Info) {
+            il.Emit(OpCodes.Stfld, Info);
+            return this;
+        }
+
+        public Generator LoadProperty(PropertyInfo Info) {
+            CallVirtual(Info.GetGetMethod());
+            return this;
+        }
+
+        public Generator StoreProperty(PropertyInfo Info) {
+            CallVirtual(Info.GetSetMethod());
+            return this;
+        }
+        
         public Generator Null() {
             il.Emit(OpCodes.Ldnull);
             return this;
         }
 
+        public Generator Byte() {
+            il.Emit(OpCodes.Conv_I1);
+            return this;
+        }
+
         public Generator Byte(byte value) {
             il.Emit(OpCodes.Ldc_I4_S, value);
+            return this;
+        }
+
+        public Generator Short() {
+            il.Emit(OpCodes.Conv_I2);
+            return this;
+        }
+
+        public Generator Short(short value) {
+            switch (value) {
+                default: {
+                    if (value > -129 && value < 128)
+                        il.Emit(OpCodes.Ldc_I4_S, (SByte)value);
+                    else
+                        il.Emit(OpCodes.Ldc_I4, value);
+                    break;
+                }
+
+                case -1:
+                il.Emit(OpCodes.Ldc_I4_M1);
+                break;
+                case 0:
+                il.Emit(OpCodes.Ldc_I4_0);
+                break;
+                case 1:
+                il.Emit(OpCodes.Ldc_I4_1);
+                break;
+                case 2:
+                il.Emit(OpCodes.Ldc_I4_2);
+                break;
+                case 3:
+                il.Emit(OpCodes.Ldc_I4_3);
+                break;
+                case 4:
+                il.Emit(OpCodes.Ldc_I4_4);
+                break;
+                case 5:
+                il.Emit(OpCodes.Ldc_I4_5);
+                break;
+                case 6:
+                il.Emit(OpCodes.Ldc_I4_6);
+                break;
+                case 7:
+                il.Emit(OpCodes.Ldc_I4_7);
+                break;
+                case 8:
+                il.Emit(OpCodes.Ldc_I4_8);
+                break;
+            }
+
+            return this;
+        }
+
+        public Generator Short(ushort value) {
+            switch (value) {
+                default: {
+                    if (value < 256)
+                        il.Emit(OpCodes.Ldc_I4_S, (SByte)value);
+                    else
+                        il.Emit(OpCodes.Ldc_I4, value);
+                    break;
+                }
+                
+                case 0:
+                il.Emit(OpCodes.Ldc_I4_0);
+                break;
+                case 1:
+                il.Emit(OpCodes.Ldc_I4_1);
+                break;
+                case 2:
+                il.Emit(OpCodes.Ldc_I4_2);
+                break;
+                case 3:
+                il.Emit(OpCodes.Ldc_I4_3);
+                break;
+                case 4:
+                il.Emit(OpCodes.Ldc_I4_4);
+                break;
+                case 5:
+                il.Emit(OpCodes.Ldc_I4_5);
+                break;
+                case 6:
+                il.Emit(OpCodes.Ldc_I4_6);
+                break;
+                case 7:
+                il.Emit(OpCodes.Ldc_I4_7);
+                break;
+                case 8:
+                il.Emit(OpCodes.Ldc_I4_8);
+                break;
+            }
+
+            return this;
+        }
+
+        public Generator Int() {
+            il.Emit(OpCodes.Conv_I4);
             return this;
         }
 
@@ -256,25 +379,59 @@ namespace Poly.Compiler {
                 il.Emit(OpCodes.Ldarg_S, Index);
                 break;
                 case 0:
-                il.Emit(OpCodes.Ldarg_0, Index);
+                il.Emit(OpCodes.Ldarg_0);
                 break;
                 case 1:
-                il.Emit(OpCodes.Ldarg_1, Index);
+                il.Emit(OpCodes.Ldarg_1);
                 break;
                 case 2:
-                il.Emit(OpCodes.Ldarg_2, Index);
+                il.Emit(OpCodes.Ldarg_2);
                 break;
                 case 3:
-                il.Emit(OpCodes.Ldarg_3, Index);
+                il.Emit(OpCodes.Ldarg_3);
                 break;
             }
 
             return this;
         }
 
+        public Generator StoreArg(int Index) {
+            if (Index > -129 && Index < 128)
+                il.Emit(OpCodes.Starg_S, Index);
+            else
+                il.Emit(OpCodes.Starg, Index);
+            return this;
+        }
+
         public Generator NewObject(Type Type, params Type[] argTypes) {
             il.Emit(OpCodes.Newobj, Type.GetConstructor(argTypes));
             return this;
+        }
+
+        public Generator NewArray(Type Type, int Length) {
+            Int(Length);
+            il.Emit(OpCodes.Newarr, Type);
+            return this;
+        }
+
+        public Generator LoadElement(Type Type) {
+            il.Emit(OpCodes.Ldelem, Type);
+            return this;
+        }
+
+        public Generator LoadElement(Type Type, int Index) {
+            Int(Index);
+            return LoadElement(Type);
+        }
+
+        public Generator StoreElement(Type Type) {
+            il.Emit(OpCodes.Stelem, Type);
+            return this;
+        }
+
+        public Generator StoreElement(Type Type, int Index) {
+            Int(Index);
+            return StoreElement(Type);
         }
 
         public Generator Return() {
@@ -314,6 +471,16 @@ namespace Poly.Compiler {
             return this;
         }
 
+        public Generator Call(MethodInfo Info) {
+            il.Emit(OpCodes.Call, Info);
+            return this;
+        }
+
+        public Generator CallVirtual(MethodInfo Info) {
+            il.Emit(OpCodes.Callvirt, Info);
+            return this;
+        }
+
         public Generator If(Delegate Conditionals, Delegate Body) {
             var End = PushNext();
 
@@ -322,6 +489,64 @@ namespace Poly.Compiler {
 
             PopNext();
             il.MarkLabel(End);
+            return this;
+        }
+
+        public Generator While(Delegate Conditionals, Delegate Body) {
+            Continue = PushNext();
+            var End = PushNext();
+
+            il.MarkLabel(Continue);
+
+            Conditionals(this);
+            Body(this);
+
+            Goto(Continue);
+
+            il.MarkLabel(End);
+
+            PopNext();
+            PopNext();
+            return this;
+        }
+
+        public Generator Do(Delegate Conditionals, Delegate Body) {
+            Continue = PushNext();
+            var End = PushNext();
+
+            il.MarkLabel(Continue);
+
+            Body(this);
+            Conditionals(this);
+
+            Goto(Continue);
+
+            il.MarkLabel(End);
+
+            PopNext();
+            PopNext();
+            return this;
+        }
+
+        public Generator For(Delegate Init, Delegate Conditionals, Delegate Modifiers, Delegate Body) {
+            Continue = PushNext();
+            var End = PushNext();
+
+            Init(this);
+
+            il.MarkLabel(Continue);
+
+            Conditionals(this);
+
+            Body(this);
+            Modifiers(this);
+
+            Goto(Continue);
+
+            il.MarkLabel(End);
+
+            PopNext();
+            PopNext();
             return this;
         }
     }

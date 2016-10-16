@@ -23,5 +23,9 @@ namespace Poly.Compiler {
         public Class ClassGenerator(string Name) {
             return new Class(mb.DefineType(Name));
         }
+
+        public Class ClassGenerator(string Name, Type baseType) {
+            return new Class(mb.DefineType(Name, TypeAttributes.Public, baseType));
+        }
     }
 }

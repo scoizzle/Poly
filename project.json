@@ -1,20 +1,16 @@
 {
-  "version": "1.0.0-*",
+  "version": "1.0.1-*",
 
   "dependencies": {
     "Microsoft.CSharp": "4.0.1",
     "Microsoft.Extensions.DependencyModel": "1.0.0",
     "NETStandard.Library": "1.6.0",
-    "System.Dynamic.Runtime": "4.0.11",
     "System.IO.FileSystem.Watcher": "4.0.0",
     "System.Net.Http": "4.1.0",
     "System.Net.NameResolution": "4.0.0",
     "System.Net.Sockets": "4.1.0",
     "System.Net.WebSockets": "4.0.0",
     "System.Reflection": "4.1.0",
-    "System.Reflection.Emit": "4.0.1",
-    "System.Reflection.Emit.ILGeneration": "4.0.1",
-    "System.Reflection.Emit.Lightweight": "4.0.1",
     "system.runtime.loader": "4.0.0",
     "System.Security.Cryptography.Algorithms": "4.2.0",
     "System.Threading": "4.0.11",

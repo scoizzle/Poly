@@ -1,12 +1,9 @@
 ﻿using System;
 using System.Linq;
-using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
 
-namespace Poly.Data {    
+namespace Poly.Data {
     public partial class JSON : KeyValueCollection<object> {
         public char KeySeperatorCharacter = '.';
 

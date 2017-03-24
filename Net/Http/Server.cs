@@ -19,15 +19,14 @@ namespace Poly.Net.Http {
             Port = port;
         }
 
+        ~Server() { 
+            Stop();
+        }
+
         private void Init() {
             Listener = new Tcp.Server(Port);
             Listener.OnClientConnected += OnClientConnected;
             sem = new SemaphoreSlim(Environment.ProcessorCount);
-        }
-
-        private void Dispose() {
-            Listener?.Stop();
-            Listener = null;
         }
 
         public virtual bool Start() {
@@ -38,18 +37,13 @@ namespace Poly.Net.Http {
         }
 
         public virtual void Stop() {
-            Dispose();
-            Cache.Dispose();
+            Listener?.Stop();
+            Listener = null;
         }
 
         public virtual void Restart() {
-            Dispose();
-            Init();
-            Listener.Start();
-        }
-
-        public void Mime(string Ext, string Mime) {
-            Poly.Mime.List[Ext] = Mime;
+            Stop();
+            Start();
         }
     }
 }

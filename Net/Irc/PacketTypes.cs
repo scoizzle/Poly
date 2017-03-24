@@ -1,16 +1,4 @@
-﻿using System;
-using System.Linq;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
-using System.Reflection;
-using System.Diagnostics;
-
-using Poly;
-using Poly.Data;
-using Poly.Net.Tcp;
-
-namespace Poly.Net.Irc {
+﻿namespace Poly.Net.Irc {
     public partial class Packet {
         public const string Ping = "PING",
                             Pong = "PONG",

@@ -754,7 +754,7 @@
           "System.Runtime": "4.1.0"
         },
         "compile": {
-          "ref/netstandard1.1/System.Reflection.Emit.dll": {}
+          "ref/netstandard1.1/_._": {}
         },
         "runtime": {
           "lib/netstandard1.3/System.Reflection.Emit.dll": {}
@@ -768,7 +768,7 @@
           "System.Runtime": "4.1.0"
         },
         "compile": {
-          "ref/netstandard1.0/System.Reflection.Emit.ILGeneration.dll": {}
+          "ref/netstandard1.0/_._": {}
         },
         "runtime": {
           "lib/netstandard1.3/System.Reflection.Emit.ILGeneration.dll": {}
@@ -783,7 +783,7 @@
           "System.Runtime": "4.1.0"
         },
         "compile": {
-          "ref/netstandard1.0/System.Reflection.Emit.Lightweight.dll": {}
+          "ref/netstandard1.0/_._": {}
         },
         "runtime": {
           "lib/netstandard1.3/System.Reflection.Emit.Lightweight.dll": {}
@@ -5046,16 +5046,12 @@
       "Microsoft.CSharp >= 4.0.1",
       "Microsoft.Extensions.DependencyModel >= 1.0.0",
       "NETStandard.Library >= 1.6.0",
-      "System.Dynamic.Runtime >= 4.0.11",
       "System.IO.FileSystem.Watcher >= 4.0.0",
       "System.Net.Http >= 4.1.0",
       "System.Net.NameResolution >= 4.0.0",
       "System.Net.Sockets >= 4.1.0",
       "System.Net.WebSockets >= 4.0.0",
       "System.Reflection >= 4.1.0",
-      "System.Reflection.Emit >= 4.0.1",
-      "System.Reflection.Emit.ILGeneration >= 4.0.1",
-      "System.Reflection.Emit.Lightweight >= 4.0.1",
       "System.Security.Cryptography.Algorithms >= 4.2.0",
       "System.Threading >= 4.0.11",
       "System.Threading.Tasks.Parallel >= 4.0.1",

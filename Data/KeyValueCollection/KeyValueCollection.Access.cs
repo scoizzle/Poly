@@ -28,10 +28,6 @@ namespace Poly.Data {
             }
         }
 
-        public void remove(string Key) {
-            Remove(Key);
-        }
-
         public bool Remove(string Key) {
             var Coll = GetCollection(Key.Length);
 
@@ -79,10 +75,6 @@ namespace Poly.Data {
             return false;
         }
 
-        public object get(string Key) {
-            return Get(Key);
-        }
-
         public T Get(string Key) {
             var Coll = GetCollection(Key.Length);
 
@@ -92,10 +84,6 @@ namespace Poly.Data {
             return default(T);
         }
 
-        public void set(string Key, object Value) {
-            Set(Key, (T)Value);
-        }
-        
         public void Set(string Key, T Value) {
             if (Key == null)
                 return;

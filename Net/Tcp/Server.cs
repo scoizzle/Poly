@@ -23,22 +23,22 @@ namespace Poly.Net.Tcp {
             if (Active) return true;
 
             if (OnClientConnected == null) {
-                App.Log.Error("Can't accept connections without OnClientConnect specified!");
+                Log.Error("Can't accept connections without OnClientConnect specified!");
                 return false;
             }
 
             try {
                 base.Start();
 
-                App.Log.Info("Now listening on port {0}", Port);
+                Log.Info("Now listening on port {0}", Port);
             }
             catch (Exception Error) {
-                App.Log.Error("Couldn't begin accepting connections on port {0}", Port);
-                App.Log.Error(Error);
+                Log.Error("Couldn't begin accepting connections on port {0}", Port);
+                Log.Error(Error);
                 return false;
             }
-            
-            ListenerTask = StartAcceptTask();
+        
+            StartAcceptTask();
             return true;
         }
 
@@ -47,25 +47,14 @@ namespace Poly.Net.Tcp {
             base.Stop();
         }
 
-        private Task StartAcceptTask() {
-            return Task.Run(async () => {
-                Socket client;
-
-            beginAccept:
-                try {
-                    while (Active) {
-                        client = await AcceptSocketAsync();
-
-                        var Worker = Task.Run(() => {
-                            OnClientConnected(client as Socket);
-                        });
-
-                        await Task.Delay(0);
-                    }
-                }
+        private async void StartAcceptTask() {
+            while (Active) {
+                try { OnClientConnected(new Client(await AcceptSocketAsync())); }
                 catch (OperationCanceledException) { }
-                catch (Exception) { goto beginAccept; }
-            });
+                catch (SocketException) { }
+
+                await Task.Delay(0);
+            }
         }
     }
 }

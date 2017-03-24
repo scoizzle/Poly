@@ -1,32 +1,69 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-
-using Poly;
+using System.Threading.Tasks;
 using Poly.Data;
 
-namespace Poly.Net.Irc {
-    public partial class Client : User {
-        public void HandleBasicConnection() {
-            RegisterConnection();
+namespace Poly.Net.Irc
+{
+    public partial class Client {
+        public async Task HandleBasicConnection() {
+            Packet packet;
 
-            while (Connected)
             try {
-                do {
-                    var In = Packet.Receive(Connection);
+                while (Connected) {
+                    packet = new Packet();
 
-                    if (In != null)
-                            HandlePacket(In);
-                } while (Connected);
+                    if (await packet.Receive(Connection))
+                        HandlePacket(packet);
+                }
             }
             catch { }
 
-            App.Log.Warning("Connection lost.");
-            App.Log.Warning("Reconnecting.");
-            Restart();
+            Log.Warning("Connection lost.");
         }
 
+        public void HandlePacket(Packet Packet) {
+            User Sender; 
+
+            if (Packet.Sender == null)
+                Sender = ServerUser;
+            else {
+                Sender = new User(Packet.Sender);
+
+                if (Users.ContainsKey(Sender.Nick))
+                    Sender = Users[Sender.Nick];
+                else
+                    Users[Sender.Nick] = Sender;
+            }
+
+            Conversation Convo;
+
+            if (string.IsNullOrEmpty(Packet.Receiver))
+                Convo = ServerConversation;
+            else 
+            if (Packet.Receiver == Info.Nick) {
+                if (!Conversations.TryGetValue(Sender.Nick, out Convo))
+                    Conversations[Sender.Nick] = Convo = new Conversation(Sender.Nick);
+            }
+            else
+            if (!Conversations.TryGetValue(Packet.Receiver, out Convo))
+                Conversations[Packet.Receiver] = Convo = new Conversation(Packet.Receiver);
+
+            int ReplyId;
+
+            if (int.TryParse(Packet.Type, out ReplyId)) {
+                var Reply = (Packet.Reply)(ReplyId);
+                Packet.Type = Reply.ToString();
+            }
+
+            Invoke(Packet.Type, new EventContext {
+                Client = this,
+                Conv = Convo,
+                Sender = Sender,
+                Packet = Packet
+            });
+        }
+
+        /*
         public void HandlePacket(object rawPacket) {
             var Packet = rawPacket as Packet;
             User Sender = new User(Packet.Sender);
@@ -52,7 +89,7 @@ namespace Poly.Net.Irc {
             if (!Conv.Users.ContainsKey(Sender.Nick))
                 Conv.Users.Add(Sender.Nick, Sender);
 
-            var Context = new jsObject(
+            var Context = new JSON(
                 "Convo", Conv,
                 "User", Sender,
                 "Packet", Packet
@@ -100,7 +137,7 @@ namespace Poly.Net.Irc {
 
                     case Packet.Msg:
                         if (Packet.IsCTCP) {
-                            jsObject Extract = Packet.Message.Match("\x01PING {Msg}\x01");
+                            JSON Extract = Packet.Message.Match("\x01PING {Msg}\x01");
 
                             if (Extract != null)
                                 SendMessage(Conv, Extract.Template("\x01PONG {Msg}\x01"));
@@ -177,7 +214,7 @@ namespace Poly.Net.Irc {
                                 }
                             }
                         } break;
-                         * */
+                         * 
                     case Packet.Topic:
                         Conv.Topic = Packet.Message;
                         break;
@@ -281,5 +318,6 @@ namespace Poly.Net.Irc {
                 InvokeEvent(EventName, Context);
             }
         }
+        */
     }
 }

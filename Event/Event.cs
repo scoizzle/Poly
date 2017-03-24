@@ -7,16 +7,16 @@ using Poly.Data;
 
 namespace Poly {
     public partial class Event {
-        public delegate object Handler(jsObject Args);
+        public delegate object Handler(JSON Args);
 
-        public static object Invoke(Handler Func, jsObject Args) {
+        public static object Invoke(Handler Func, JSON Args) {
             if (Func == null)
                 return null;
 
             return Func(Args);
         }
 
-        public static object Invoke(Handler Func, jsObject Args, params object[] ArgPairs) {
+        public static object Invoke(Handler Func, JSON Args, params object[] ArgPairs) {
             if (Func == null)
                 return null;
 

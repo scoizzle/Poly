@@ -10,83 +10,31 @@ namespace Poly.Net.Http {
     using Tcp;
     using Data;
 
-    public class MultipartHandler {
+    public static class MultipartHandler_ {
 		static readonly byte[] doubleDash = Encoding.UTF8.GetBytes("--");
+        static readonly Matcher PropertiesMatcher = new Matcher("{Key}: {Value}(!;? {Key}=\"{Value}\")?");
 
-        public Client Client { get; private set; }
-        public Packet Packet { get; private set; }
-        public BufferedStreamer Stream { get; private set; }
+        public static async Task<bool> Receive(Client client, Packet packet, string Boundary) {
+            var bb = Encoding.UTF8.GetBytes("--" + Boundary);
+            if (!client.Consume(bb)) return false;
 
-        public MultipartHandler(Client client, Packet packet) {
-            Client = client;
-            Packet = packet;
-            Stream = client.GetStreamer();
-        }
+            var l = await client.ReceiveLine();
+            bb = Encoding.UTF8.GetBytes("\r\n--" + Boundary);
 
-        public bool Receive() {
-            var client = Client;
-            var stream = Stream;
-            var temp = new MemoryStream();
-			var endLength = stream.TotalBytesConsumed + Packet.ContentLength;
-			var boundary = Encoding.UTF8.GetBytes("--" + Packet.Boundary);
+            var EndLength = packet.ContentLength + client.TotalBytesConsumed;
 
-            var line = string.Empty;
+            while (client.TotalBytesConsumed < EndLength && await client.IsConnected()) {
+                var Info = new JSON();
 
-			if (!stream.Consume(boundary))
-                return false;
-            else
-                line = client.ReceiveLine();
+                while (!string.IsNullOrEmpty(l = await client.ReceiveLine())) {
+                    var i = PropertiesMatcher.Match(l, Info);
+                    if (i == null) break;
 
-            boundary = Encoding.UTF8.GetBytes("\r\n--" + Packet.Boundary);
-			while (stream.TotalBytesConsumed < endLength && Client.Connected) {
-                var postInfo = new jsObject();
-                var isFile = false;
 
-                while (!string.IsNullOrEmpty(line = client.ReceiveLine())) {
-                    if (line.StartsWith("Content-Disposition", StringComparison.Ordinal)) {
-                        var Results = Packet.MultipartHeaderPropertiesMatcher.MatchAll(line.Substring("form-data"));
-
-                        postInfo.Set("Name", Results["name"]);
-
-                        if (Results.ContainsKey("filename")) {
-                            postInfo.Set("FileName", Results["filename"]);
-                            isFile = true;
-                        }
-                    }
-                    else if (line.StartsWith("Content-Type", StringComparison.Ordinal)) {
-                        postInfo.Set("ContentType", line.Substring(": "));
-                    }
                 }
-
-                if (!postInfo.ContainsKey("Name"))
-                    return false;
-
-                if (isFile) {
-                    var f = new TempFileUpload(postInfo.Get<string>("FileName"));
-
-                    using (var fstream = f.GetWriteStream())
-                        stream.ReceiveUntil(fstream, boundary);
-
-                    f.Info.Refresh();
-
-                    postInfo.Set("Content", f);
-                }
-                else {
-                    temp = new MemoryStream();
-					if (!stream.ReceiveUntil(temp, boundary))
-                        return false;
-
-                    postInfo.Set("Content", Encoding.UTF8.GetString(temp.ToArray()));
-                }
-
-                Packet.Post.Set(postInfo.Get<string>("Name"), postInfo);
-
-				if (stream.Consume(doubleDash))
-                    return true;
-                else if (!string.IsNullOrEmpty(line = client.ReceiveLine()))
-                    return false;
             }
-            return false;
+
+            return true;
         }
     }
 }

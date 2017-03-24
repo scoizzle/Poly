@@ -12,8 +12,16 @@ namespace Poly.Data {
         }
 
         public void ForEach(Action<string, T> action) {
-            foreach (var Pair in this)
-                action(Pair.Key, Pair.Value);
+            var c = List.Count;
+            for (int x = 0; x < c; x++) {
+                var l = List[x].List;
+                var lc = l.Count;
+
+                for (int y = 0; y < lc; y++) {
+                    var i = l[y];
+                    action(i.Key, i.Value);
+                }
+            }
         }
     }
 }

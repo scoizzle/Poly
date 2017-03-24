@@ -4,8 +4,8 @@ using System.Linq;
 using System.Text;
 
 namespace Poly.Data {
-    public static class jsObjectExtension {
-        internal static bool Template(jsObject This, string Format, StringBuilder Output, bool Strict) {
+    public static class JSONExtension {
+        internal static bool Template(JSON This, string Format, StringBuilder Output, bool Strict) {
 			if (This == null)
 				return !Strict;
 			
@@ -55,19 +55,19 @@ namespace Poly.Data {
                                     Index = Close;
                                 }
                                 else {
-                                    if (Object is jsObject) {
+                                    if (Object is JSON) {
                                         var SubTemplate = Format.Substring(Close + 1, Closure - Close - 1);
-                                        var jObj = Object as jsObject;
+                                        var jObj = Object as JSON;
 
-                                        if (jObj.All(v => v.Value is jsObject)) {
+                                        if (jObj.All(v => v.Value is JSON)) {
                                             foreach (var Pair in jObj) {
-                                                if (!Template(Pair.Value as jsObject, SubTemplate, Output, Strict) && Strict)
+                                                if (!Template(Pair.Value as JSON, SubTemplate, Output, Strict) && Strict)
                                                     return false;
                                             }
                                         }
                                         else {
                                             foreach (var Pair in jObj) {
-                                                var p = new jsObject("Key", Pair.Key, "Value", Pair.Value);
+                                                var p = new JSON("Key", Pair.Key, "Value", Pair.Value);
 
                                                 if (!Template(p, SubTemplate, Output, Strict) && Strict)
                                                     return false;
@@ -104,7 +104,7 @@ namespace Poly.Data {
             return true;
         }
 
-        public static string Template(this jsObject This, string Format) {
+        public static string Template(this JSON This, string Format) {
             StringBuilder Output = new StringBuilder();
 
             if (Template(This, Format, Output, false))

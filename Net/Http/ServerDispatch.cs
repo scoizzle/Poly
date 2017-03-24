@@ -1,79 +1,68 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
 using System.IO;
-using System.Net;
-using System.Net.Sockets;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Data;
     using Net.Tcp;
-    using Script;
 
     public partial class Server {
-        private void OnClientConnected(Client client) {
-            try {
-                var Stream = client.GetStreamer();
-
-				while (Running && client.Connected && !Cancel.IsCancellationRequested) {
-                    if (Stream.Available == 0) {
-                        Thread.Sleep(0);
-                        Stream.UpdateBuffer();
-                        continue;
-                    }
-
-                    var request = new Request(client);
-
-                    if (!Packet.Receive(client, request))
-                        break;
-
-                    if (!Matcher.Compare(request.Hostname)) {
-                        request.Result = Result.BadRequest;
-                        request.Result.Headers.Set("Connection", "close");
-                        request.Finish();
-                        goto closeConnection;
-                    }
-                    else {
-                        request.Prepare();
-                        request.Host = this;
-                    }
-                    
-                    OnClientRequest(request);
-                }
-			}
-			catch (Exception Error) {
-                App.Log.Error(Error.ToString());
-            }
-
-        closeConnection:
-            client.Dispose();
-        }
-        
-        private void OnClientRequest(Request Request) {
-            var Target = Request.Target;
-            var EXT = Target.GetFileExtension();
+        private async void OnClientConnected(Client client) {
+            var packet = new Packet();
+            var request = new Request(client, packet, this);
+            var finalizer = default(Task<bool>);
             
-            if (EXT.Length != 0 && Handlers.MatchAndInvoke(EXT, Request))
-                goto finish;
+            do {
+                if (await packet.Receive(client)) {
+                    await sem.WaitAsync();
 
-            var Cached = Cache.Get(Target);
-            if (Cached != null) {
-                Request.SendFile(Cached);
-                goto finish;
+                    try {
+                        if (Matcher.Compare(packet.Headers["Host"])) {
+                            request.Prepare();
+                            finalizer = OnClientRequest(request);
+                        }
+                        else {
+                            finalizer = Result.Send(client, Result.BadRequest);
+                        }
+                    }
+                    catch (IOException) { break; }
+                    catch (Exception) { }
+                    finally {
+                        sem.Release();
+                    }
+
+                    await finalizer;
+                    request.Reset();
+                }
+                else break;
             }
+            while (Running && await client.IsConnected());
+        }
 
-            Request.ProcessHeaders();
-            if (Handlers.MatchAndInvoke(Target, Request))
-                goto finish;
+        private Task<bool> OnClientRequest(Request request) {
+            var Target = request.Packet.Request;
+            var EXT = Target.GetFileExtension();
 
-            Request.Result.Status = Result.BadRequest;
+            Request.Handler f;
+            Cache.Item Cached;
 
-        finish:
-            Request.Finish();
+            if (EXT.Length != 0 &&
+               (f = Handlers.GetHandler(EXT)) != null) {
+                return f(request);
+            }
+            else
+            if ((f = Handlers.GetHandler(Target, request.Arguments)) != null) {
+                return f(request);
+            }
+            else {
+                Target = request.Host.GetFullPath(Target);
+
+                if ((Cached = Cache.Get(Target)) != null) {
+                    return request.SendFile(Cached);
+                }
+                else {
+                    return Result.Send(request.Client, Result.NotFound);
+                }
+            }
         }
     }
 }

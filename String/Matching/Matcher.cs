@@ -7,163 +7,245 @@ using System.Threading.Tasks;
 namespace Poly {
     using Data;
     public partial class Matcher {
+        bool IsAnything;
         Block[] Blocks;
-
+        
         public string Format { get; private set; }
 
         public Matcher(string Fmt) {
             Format = Fmt;
+            Blocks = Parse(new StringIterator(Fmt));
 
-            try {
-                Blocks = Parse(Fmt);
-            } catch (Exception Error) {
-                App.Log.Error(Error);
+            if (Blocks.Length == 1 && Blocks[0] is WildCard) {
+                IsAnything = true;
             }
         }
 
         public bool Compare(string Data) {
             if (Blocks == null) return false;
-            return Match(new Context(Data, Blocks.Length));
+            if (IsAnything) return true;
+
+            int Index = 0;
+            return Match(Blocks, Data, ref Index, _no) && Index >= Data.Length;
         }
 
-        public jsObject Match(string Data, jsObject Storage = null, int Index = 0) {
+        public JSON Match(string Data) {
             if (Blocks == null) return null;
-            if (Storage == null) Storage = new jsObject();
 
-            var Context = new Context(Data, Blocks.Length, Index);
+            var Index = 0;
+            var Storage = new JSON();
+            if (IsAnything) return Storage;
 
-            if (Match(Context)) {
-                Context.ExtractInto(Storage);
+            if (Match(Blocks, Data, ref Index, Storage.Set) && Index >= Data.Length)
                 return Storage;
-            }
 
             return null;
         }
 
-        public jsObject MatchAll(string Data, jsObject Storage = null, int Index = 0) {
+        public JSON Match(string Data, JSON Storage) {
             if (Blocks == null) return null;
-            if (Storage == null) Storage = new jsObject();
 
-            var Context = new Context(Data, Blocks.Length, Index, Data.Length);        
-            var Extracts = new ManagedArray<Context.Extraction>(Context.Extractions);
+            var Index = 0;
+            if (IsAnything) return Storage;
 
-            if (Extracts.Count > 0)
-                Context.Extractions = new ManagedArray<Context.Extraction>();
+            if (Match(Blocks, Data, ref Index, Storage.Set) && Index >= Data.Length)
+                return Storage;
 
-            while (Matcher.Match(Blocks, Context)) {
-                Extracts.Add(new Context.GroupedExtraction(Context.Extractions));
-
-                Context.BlockIndex = 0;
-                Context.Extractions.Clear();
-            }
-
-            if (Extracts.Count > 0) {
-                Context.Extractions.CopyTo(Extracts);
-                Context.Extractions = Extracts;
-            }
-
-            Context.ExtractInto(Storage);
-            return Storage;
+            return null;
         }
 
-        public jsObject MatchAllValues(string Data, jsObject Storage = null, int Index = 0) {
+        public JSON MatchAll(string Data) {
             if (Blocks == null) return null;
-            if (Storage == null) Storage = new jsObject();
 
-            var Context = new Context(Data, Blocks.Length, Index, Data.Length);
-            var Extracts = new ManagedArray<Context.Extraction>(Context.Extractions);
+            var Index = 0;
+            var Storage = new JSON();
+            if (IsAnything) return Storage;
 
-            if (Extracts.Count > 0)
-                Context.Extractions = new ManagedArray<Context.Extraction>();
+            if (MatchAll(Blocks, Data, ref Index, Storage.Set) && Index >= Data.Length)
+                return Storage;
 
-            while (Matcher.Match(Blocks, Context)) {
-                Extracts.Add(new Context.ValueExtraction(Context.Extractions));
-
-                Context.BlockIndex = 0;
-                Context.Extractions.Clear();
-            }
-
-            if (Extracts.Count > 0) {
-                Context.Extractions.CopyTo(Extracts);
-                Context.Extractions = Extracts;
-            }
-
-            Context.ExtractInto(Storage);
-            return Storage;
+            return null;
         }
 
-        public jsObject MatchKeyValuePairs(string Data, jsObject Storage = null, int Index = 0) {
-            if (Blocks == null) return null;
-            if (Storage == null) Storage = new jsObject();
+        public JSON MatchAll(string Data, JSON Storage) {
+            if (Blocks == null || Storage == null) return null;
+            if (IsAnything) return Storage;
 
-            var Context = new Context(Data, Blocks.Length, Index, Data.Length);
-            var Extracts = new ManagedArray<Context.Extraction>(Context.Extractions);
+            int Index = 0;
+            if (MatchAll(Blocks, Data, ref Index, Storage.Set) && Index >= Data.Length)
+                return Storage;
 
-            if (Extracts.Count > 0)
-                Context.Extractions = new ManagedArray<Context.Extraction>();
-
-            while (Match(Blocks, Context)) {
-                Extracts.Add(new Context.KeyValuePairExtraction(true, Context.Extractions));
-
-                Context.BlockIndex = 0;
-                Context.Extractions.Clear();
-            }
-
-            if (Extracts.Count > 0) {
-                Context.Extractions.CopyTo(Extracts);
-                Context.Extractions = Extracts;
-            }
-
-            Context.ExtractInto(Storage);
-            return Storage;
+            return null;
         }
 
-        private bool Match(Context Context) {
-			return Match(Blocks, Context) && Context.IsDone();
+        public JSON MatchAllValues(string Data) {
+            if (Blocks == null) return null;
+
+            var Index = 0;
+            var Storage = new JSON();
+            if (IsAnything) return Storage;
+
+            if (MatchAllValues(Blocks, Data, ref Index, Storage.Set) && Index >= Data.Length)
+                return Storage;
+
+            return null;
+        }
+
+        public JSON MatchAllValues(string Data, JSON Storage) {
+            if (Blocks == null || Storage == null) return null;
+            if (IsAnything) return Storage;
+
+            int Index = 0;
+            if (MatchAllValues(Blocks, Data, ref Index, Storage.Set) && Index >= Data.Length)
+                return Storage;
+
+            return null;
+        }
+
+        public JSON MatchKeyValuePairs(string Data) {
+            if (Blocks == null) return null;
+
+            var Index = 0;
+            var Storage = new JSON();
+            if (IsAnything) return Storage;
+
+            if (MatchKeyValuePairs(Blocks, Data, ref Index, Storage.Set) && Index >= Data.Length)
+                return Storage;
+
+            return null;
+        }
+
+        public JSON MatchKeyValuePairs(string Data, JSON Storage) {
+            if (Blocks == null || Storage == null) return null;
+            if (IsAnything) return Storage;
+
+            int Index = 0;
+            if (MatchKeyValuePairs(Blocks, Data, ref Index, Storage.Set) && Index >= Data.Length)
+                return Storage;
+
+            return null;
+        }
+
+        public string Template(JSON Storage) {
+            var Output = new StringBuilder();
+
+            if (Template(Output, Storage))
+                return Output.ToString();
+
+            return null;
+        }
+
+        public bool Template(StringBuilder Output, JSON Context) {
+            if (Blocks != null)
+            foreach (var b in Blocks) {
+                if (!b.Template(Output, Context))
+                    if (!b.IsOptional)
+                        return false;
+            }
+
+            return true;
+        }
+
+        private bool Match(string Data, int Index, Action<string, object> f) {
+			return Match(Blocks, Data, ref Index, f) && Index >= Data.Length;
 		}
 
-        private bool MatchPartial(Context Context) {
-            return Match(Blocks, Context);
-        }
+        private static bool Match(Block[] Blocks, string Data, ref int Index, Action<string, object> f) {
+            int i;
+            int L = Blocks.Length;
 
-        private static bool Match(Block[] Handlers, Context Context) {
-            for (; Context.BlockIndex < Handlers.Length; Context.BlockIndex++) {
-                var Current = Handlers[Context.BlockIndex];
+            for (i = 0; i < L; i++) {
+                var Current = Blocks[i];
 
-                if (Context.IsDone()) {
-                    if (Handlers.All(Context.BlockIndex, b => b is Optional))
-                        return true;
-                    break;
-                }
-
-                if (!Current.Match(Context)) {
-                    if (Current is Optional)
-                        continue;
-
+                if (!Current.Match(Data, ref Index, ref i, f)) {
                     return false;
                 }
             }
 
-			return Context.BlockIndex >= Handlers.Length;
+            return i >= L;
         }
 
-        private static Block[] Parse(string Fmt) {
-            StringIterator It = new StringIterator(Fmt);
+        private static bool MatchAll(Block[] Blocks, string Data, ref int Index, Action<string, object> f) {
+            if (Blocks == null) return false;
+
+            var i = 0;
+            var Length = Data.Length;
+            for (; Index < Length; i++) {
+                var Storage = new JSON();
+
+                if (!Match(Blocks, Data, ref Index, Storage.Set)) break;
+
+                f(i.ToString(), Storage);
+            }
+
+            return i > 0;
+        }
+
+        private static bool MatchAllValues(Block[] Blocks, string Data, ref int Index, Action<string, object> f) {
+            if (Blocks == null) return false;
+
+            var i = 0;
+            var Length = Data.Length;
+            Action<string, object> _f = (k, v) => {
+                if (string.Compare(k, "Value", StringComparison.Ordinal) == 0) {
+                    f(i.ToString(), v);
+                    i++;
+                }
+            };
+
+            while (Index < Length) {
+                if (!Match(Blocks, Data, ref Index, _f)) break;
+            }
+
+            return i > 0;
+        }
+
+        private static bool MatchKeyValuePairs(Block[] Blocks, string Data, ref int Index, Action<string, object> f) {
+            if (Blocks == null) return false;
+
+            string Key = null;
+            object Value = null;
+
+            Action<string, object> _f = (k, v) => {
+                if (string.Compare(k, "Key", StringComparison.Ordinal) == 0) {
+                    Key = v as string;
+                }
+                else
+                if (string.Compare(k, "Value", StringComparison.Ordinal) == 0) {
+                    Value = v;
+                }
+            };
+
+            var i = 0;
+            var Length = Data.Length;
+            for (; Index < Length; i++) {
+                if (!Match(Blocks, Data, ref Index, _f)) break;
+                else f(Key, Value);
+            }
+
+            return i > 0;
+        }
+
+        private static void _no(string Key, object Value) { }
+
+        private static Block[] Parse(StringIterator It) {
             List<Block> List = new List<Block>();
 
             Block Last = null;
             while (!It.IsDone()) {
-                var f = Parse(It);
+                var f = ParseBlock(It);
 
                 if (f == null) 
                     break;
 
                 if (Last != null) {
-                    if (Last is Optional) {
-                        (Last as Optional).Blocks.Last().Next = f;
+                    if (f is Optional) {
+                        Last.IsOptional = true;
+                        continue;
                     }
                     else {
                         Last.Next = f;
+                        Last.Prepare();
                     }
                 }
 
@@ -171,20 +253,37 @@ namespace Poly {
                 Last = f;
             }
 
+            if (Last != null) {
+                Last.Prepare();
+                Last.IsLast = true;
+            }
             return List.ToArray();
         }
 
-        private static Block Parse(StringIterator It) {
+        private static Block ParseBlock(StringIterator It) {
             switch (It.Current) {
                 default:{
                     var Start = It.Index;
                     if (It.GotoFirstPossible(StringMatching.Tokens) == default(char)) {
-                        It.Index = It.Length;
-                        return new Static(It.Substring(Start, It.Length - Start));
+                        It.Index = It.LastIndex;
+                        return new Static(It.Substring(Start, It.LastIndex - Start).Descape());
                     }
                     else {
-                        return new Static(It.Substring(Start, It.Index - Start));
+                        return new Static(It.Substring(Start, It.Index - Start).Descape());
                     }
+                }
+
+                case '(': {
+                    It.Tick();
+                    var Start = It.Index;
+
+                    if (It.Goto('(', ')')) {
+                        var End = It.Index;
+                        It.Tick();
+
+                        return new Group(It.Clone(Start, End));
+                    }
+                    return null;
                 }
 
                 case '{': {
@@ -252,25 +351,10 @@ namespace Poly {
                         return new Extract(Format, Name, Tests, Mods);
                 }
 
-                case '`': {
+                case '?':
                     It.Tick();
-
-                    var Sub = It.ExtractUntil('`');
-
-                    It.Tick();
-                    return new ExtractAll(Sub);
-                }
-
-                case '[': {
-                    var Offset = It.Find('[', ']');
-                    It.Tick();
-
-                    var Grouping = It.Substring(It.Index, Offset - It.Index);
-
-                    It.Index = ++Offset;
-                    return new Optional(Grouping);
-                }
-
+                    return new Optional();
+                
                 case '^':
                     It.Tick();
                     return new Whitespace();
@@ -278,15 +362,11 @@ namespace Poly {
                 case '*':
                     It.Tick();
                     return new WildCard();
-
-                case '?':
-                    It.Tick();
-                    return new WildChar();
-
-                case '\\':
-                    It.Tick();
-                    return new Static(It.Current.ToString());
             }
+        }
+        
+        public static string operator| (Matcher m, JSON data) {
+            return m.Template(data);
         }
     }
 }

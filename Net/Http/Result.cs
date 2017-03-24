@@ -3,90 +3,108 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Poly.Data;
 using Poly.Net.Tcp;
 
 namespace Poly.Net.Http {
-    public class Result : jsComplex {
+    public class Result : KeyValueCollection<string> {
         public long ContentLength { get { return Content?.Length ?? 0; } }
 
-        public string Status, ContentType;
-        public jsObject Cookies, Headers;
+        public string Status;
+        public KeyValueCollection<string> Cookies;
+
+        public Result(string status) {
+            Status = status;
+            Cookies = new KeyValueCollection<string>();
+        }
+
+        public Result(string status, Stream content) : this(status) {
+            Content = content;
+        }
 
         public Stream Content { get; set; }
 
-        public Result() {
-            Status = Ok;
-            ContentType = "text/html";
-            Cookies = new jsObject();
-            Headers = new jsObject();
+        public string ContentType {
+            get {
+                return base["Content-Type"] as string;
+            }
+            set {
+                base["Content-Type"] = value;
+            }
+        }
+
+        public Task<bool> Send(Client client, bool headersOnly) {
+            return Send(client, Status, headersOnly ? null : Content, this, Cookies);
+        }
+
+        public Task<bool> Send(Client client, byte[] Content) {
+            return Send(client, Status, new MemoryStream(Content, false), this, Cookies);
+        }
+
+        public static async Task<bool> Send(
+            Client client, 
+            string Status, 
+            Stream Content = null, 
+            KeyValueCollection<string> Headers = null, 
+            KeyValueCollection<string> Cookies = null
+        ) {
+            return await client.Send(GetResponseString(Status, Content?.Length ?? 0, Headers, Cookies)) &&
+                   await client.Send(Content);
         }
         
-        public string GetResponseString() {
-            Headers.AssignValue("Date", DateTime.UtcNow.HttpTimeString());
-            Headers.AssignValue("Content-Type", ContentType);
-            Headers.AssignValue("Content-Length", ContentLength);
+        public static Task<bool> Send(
+            Client client, 
+            string Status, 
+            string ContentString,
+            KeyValueCollection<string> Headers = null, 
+            KeyValueCollection<string> Cookies = null
+        ) {
+            return Send(client, Status, Encoding.UTF8.GetBytes(ContentString), Headers, Cookies);
+        }
 
+        public static async Task<bool> Send(
+            Client client, 
+            string Status, 
+            byte[] Content, 
+            KeyValueCollection<string> Headers = null, 
+            KeyValueCollection<string> Cookies = null
+        ) {
+            return await client.Send(GetResponseString(Status, Content?.Length ?? 0, Headers, Cookies)) &&
+                   await client.Send(Content);
+        }
+
+        private static string GetResponseString(
+            string Status,
+            long ContentLength = 0, 
+            KeyValueCollection<string> Headers = null, 
+            KeyValueCollection<string> Cookies = null
+        ) {
             var Output = new StringBuilder();
 
-            Output.Append("HTTP/1.1 ").Append(Status).Append(App.NewLine);
-            GetHeaderString(Output);
+            Output.Append("HTTP/1.1 ").Append(Status).Append(App.NewLine)
+                  .Append("Date: ").Append(DateTime.UtcNow.HttpTimeString()).Append(App.NewLine)
+                  .Append("Content-Length: ").Append(ContentLength).Append(App.NewLine);
+
+            if (Headers != null)
+            foreach (var Pair in Headers) {
+                Output.Append(Pair.Key).Append(": ").Append(Pair.Value).Append(App.NewLine);
+            }
+
+            if (Cookies != null)
+            foreach (var Obj in Cookies) {
+                Output.Append("Set-Cookie: ").Append(Obj.Key).Append("=").Append(Obj.Value).Append(App.NewLine);
+            }
+
             Output.Append(App.NewLine);
 
             return Output.ToString();
         }
 
-        public string GetHeaderString() {
-            var Output = new StringBuilder();
-            GetHeaderString(Output);
-            return Output.ToString();
-        }
-
-        public void GetHeaderString(StringBuilder Output) {
-            foreach (var Pair in Headers) {
-                Output.Append(Pair.Key).Append(": ").Append(Pair.Value).Append(App.NewLine);
-            }
-
-            foreach (var Obj in Cookies.OfType<jsObject>()) {
-                Output.Append("Set-Cookie: ");
-
-                foreach (var P in Obj) {
-                    Output.Append(P.Key).Append("=").Append(P.Value).Append("; ");
-                }
-
-                Output.Append(App.NewLine);
-            }
-        }
-
         public static implicit operator Result(string Status) {
-            return new Result() { Status = Status };
-        }
-
-        public override bool TryGet(string Key, out object Value) {
-            switch (Key) {
-                default:
-                return base.TryGet(Key, out Value);
-
-                case "Status": Value = Status; break;
-                case "ContentType": Value = ContentType; break;
-                case "Cookies": Value = Cookies; break;
-                case "Headers": Value = Headers; break;
-                case "ContentLength": Value = ContentLength; break;
-                case "Content": Value = Content; break;
-            }
-            return true;
-        }
-
-        public override void AssignValue(string Key, object Value) {
-            switch (Key) {
-                default: base.AssignValue(Key, Value); break;
-                case "Status": Status = Value?.ToString(); break;
-                case "ContentType": ContentType = Value?.ToString(); break;
-                case "Cookies": Cookies = Value as jsObject; break;
-                case "Headers": Headers = Value as jsObject; break;
-                case "Content": Content = Value as Stream; break;
-            }
+            return new Result(Status);
         }
 
         public const string Ok = "200 Ok";

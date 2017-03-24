@@ -1,27 +1,17 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Linq;
-using System.Text;
-using System.IO;
 using System.Threading;
 
-using System.Net;
-using System.Net.Sockets;
-
 namespace Poly.Net.Http {
-    using Data;
-    using Net.Tcp;
-    using Script;
-
     public partial class Server : Host {
         public int Port { get; set; } = 80;
-        public int MaxConcurrentClients { get; set; } = Environment.ProcessorCount;
-        public int SendBufferSize { get; set; } = 16384;
+        public int MaxConcurrentClients { get; set; } = Environment.ProcessorCount * 1024;
+        public int ClientReceiveTimeout { get; set; } = 5000;
+        public int ClientSendTimeout { get; set; } = 5000;
 
         public bool Running { get { return Listener?.Running == true; } }
 
         private Tcp.Server Listener;
-        private CancellationTokenSource Cancel;
+        private SemaphoreSlim sem;
 
         public Server(string hostname) : base(hostname) { }
 
@@ -32,22 +22,19 @@ namespace Poly.Net.Http {
         private void Init() {
             Listener = new Tcp.Server(Port);
             Listener.OnClientConnected += OnClientConnected;
-
-            Cancel = new CancellationTokenSource();
+            sem = new SemaphoreSlim(Environment.ProcessorCount);
         }
 
         private void Dispose() {
             Listener?.Stop();
-            Cancel?.Cancel();
-            Cancel = null;
             Listener = null;
         }
 
-        public virtual void Start() {
+        public virtual bool Start() {
             if (Listener == null) Init();
 
             Ready();
-            Listener.Start();
+            return Listener.Start();
         }
 
         public virtual void Stop() {

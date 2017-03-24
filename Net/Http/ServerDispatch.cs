@@ -7,6 +7,9 @@ namespace Poly.Net.Http {
 
     public partial class Server {
         private async void OnClientConnected(Client client) {
+            client.SendTimeout = ClientSendTimeout;
+            client.ReceiveTimeout = ClientReceiveTimeout;
+
             var packet = new Packet();
             var request = new Request(client, packet, this);
             var finalizer = default(Task<bool>);

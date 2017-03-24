@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Poly {
     using Data;
+    
     public partial class Matcher {
         bool IsAnything;
         Block[] Blocks;

@@ -7,16 +7,32 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Irc {
-    public class Conversation : jsComplex {
-        public string Name, Topic, Key;
-        public jsObject Users, Modes;
+    public class Conversation : JSON {
+        public string Name { 
+            get { return Get<string>("Name"); }
+            set { Set("Name", value); }
+        }
 
+        public string Topic { 
+            get { return Get<string>("Topic"); }
+            set { Set("Topic", value); }
+        }
 
-        public Conversation(string Name) {
-            this.Name = Name;
+        public JSON Users { 
+            get { return Get<JSON>("Users"); }
+            set { Set("Users", value); }
+        }
+
+        public JSON Modes { 
+            get { return Get<JSON>("Modes"); }
+            set { Set("Modes", value); }
+        }
+
+        public Conversation(string name) {
+            Name = name;
             Topic = string.Empty;
-            Users = new jsObject();
-            Modes = new jsObject();
+            Users = new JSON();
+            Modes = new JSON();
         }
 
 

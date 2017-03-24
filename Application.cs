@@ -1,22 +1,24 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 using Poly.Data;
 
-namespace Poly {
+namespace Poly
+{
     public partial class App {
         public static bool Running;
-		public static jsObject GlobalContext;
-		public static Event.Engine Commands;
-
+		public static Event.Engine<Event.Handler> Commands;
+        
         public static readonly string NewLine = "\r\n";
 
         static App() {
             Running = false;
-            GlobalContext = new jsObject();
-            Commands = new Event.Engine();
+            Commands = new Event.Engine<Event.Handler>();
+            
+            Commands.Register("Log.Level^=^{Level}^", Event.Wrapper((string Level) => {
+                Log.Level = (Log.Levels)Enum.Parse(typeof(Log.Levels), Level);
+                return Level;
+            }));
         }
 
         public static string Query(string Question) {
@@ -24,45 +26,37 @@ namespace Poly {
             return Console.ReadLine();
         }
 
-        public static void Init(int LogLevel = Log.Levels.None) {
-            if (LogLevel != Log.Levels.None) {
-                Log.Active = true;
-                Log.Level = LogLevel;
+        public static void Init(params string[] Commands) { 
+            Log.Active = Running = true;
+
+            Log.Info("Application initializing... MAKE POLYSCRIPT GREAT AGAIN");
+
+            foreach (var cmd in Commands) {
+                var args = new JSON();
+                var f = App.Commands.GetHandler(cmd, args);
+
+                if (f != null) {
+                    f.Invoke(args);
+                    continue;
+                }
             }
 
-			App.Commands.Add("--log-level={Level}", Event.Wrapper((int Level) => {
-                Log.Level = Level;
-					return Level;
-				})
-			);
-            
-            Log.Info("Application initializing...");
-
-			Running = true;
             Log.Info("Application running...");
-		}
-
-        public static void Init(int LogLevel = Log.Levels.None, params string[] Commands) {
-            Init(LogLevel);
-
-            foreach (var Cmd in Commands) {
-                App.Commands.MatchAndInvoke(Cmd, GlobalContext);
-            }
         }
 
         public static void WaitforExit() {
-            var eng = new Script.Engine();
-
             while (Running) {
 				var Line = Console.ReadLine();
 
                 if (Line == null)
                     Task.Delay(500);
-                else if (Commands.MatchAndInvoke(Line, GlobalContext)) continue;
                 else {
-                    if (eng.Parse(Line)) {
-                        Console.WriteLine(eng.Evaluate(GlobalContext) ?? string.Empty);
-                        eng = new Script.Engine();
+                    var args = new JSON();
+                    var f = App.Commands.GetHandler(Line, args);
+
+                    if (f != null) {
+                        f.Invoke(args);
+                        continue;
                     }
                 }
 

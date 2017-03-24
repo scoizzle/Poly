@@ -6,15 +6,16 @@ using System.Threading.Tasks;
 
 namespace System {
     static class CharExtensions {
-        private static string HexAlph = "0123456789ABCDEF";
         public static string ToHexString(this char C) {
-            char[] Buf = new char[2];
-            byte CB = Convert.ToByte(C);
+            return ToHexString(Encoding.UTF8, C);
+        }
 
-            Buf[0] = HexAlph[CB >> 4];
-            Buf[1] = HexAlph[CB & 0xF];
+        public static string ToHexString(this char C, Encoding Enc) {
+            return ToHexString(Enc, C);
+        }
 
-            return new string(Buf);
+        public static string ToHexString(Encoding Encoding, params char[] Chars) {
+            return Encoding.GetBytes(Chars).ToHexString();
         }
 
         public static bool CompareWithoutCase(this char C, char S) {

@@ -7,16 +7,16 @@ using Poly.Data;
 
 namespace System {
     public static class StringIteration {
-        public static bool Consume(this String Text, String Part, ref int Index) {
-            if (!Text.Compare(Part, Index, false)) {
-                return false;
+        public static bool Consume(this string Text, string Part, ref int Index) {
+            if (string.Compare(Text, 0, Part, 0, Part.Length, StringComparison.Ordinal) == 0) { 
+                Index += Part.Length;
+                return true;
             }
 
-            Index += Part.Length;
-            return true;
+            return false;
         }
 
-        public static void Consume(this String Text, ref int Index, Func<char, bool> F) {
+        public static void Consume(this string Text, ref int Index, Func<char, bool> F) {
             if (Text == null || Index < 0 || Index > Text.Length)
                 return;
 
@@ -24,7 +24,7 @@ namespace System {
                 Index++;
         }
 
-        public static void ConsumeUntil(this String Text, ref int Index, Func<char, bool> f) {
+        public static void ConsumeUntil(this string Text, ref int Index, Func<char, bool> f) {
             if (Text == null || Index < 0 || Index > Text.Length)
                 return;
 
@@ -36,23 +36,23 @@ namespace System {
             }
         }
 
-        public static void ConsumeWhitespace(this String Text, ref int Index) {
+        public static void ConsumeWhitespace(this string Text, ref int Index) {
             Consume(Text, ref Index, char.IsWhiteSpace);
         }
 
-        public static void ConsumeAlpha(this String Text, ref int Index) {
+        public static void ConsumeAlpha(this string Text, ref int Index) {
             Consume(Text, ref Index, char.IsLetter);
         }
 
-        public static void ConsumeNumeric(this String Text, ref int Index) {
+        public static void ConsumeNumeric(this string Text, ref int Index) {
             Consume(Text, ref Index, char.IsNumber);
         }
 
-        public static void ConsumeAlphaNumeric(this String Text, ref int Index) {
+        public static void ConsumeAlphaNumeric(this string Text, ref int Index) {
             Consume(Text, ref Index, char.IsLetterOrDigit);
         }
 
-        public static void ConsumeBetween(this String Text, ref int Index, String Open, String Close) {
+        public static void ConsumeBetween(this string Text, ref int Index, string Open, string Close) {
             int X, Y, Z = 1;
 
             X = Text.Find(Open, Index);
@@ -79,7 +79,7 @@ namespace System {
             Index = Y + Close.Length;
         }
 
-        public static bool All(this String Text, int Start, int Stop, Func<char, bool> f) {
+        public static bool All(this string Text, int Start, int Stop, Func<char, bool> f) {
             if (string.IsNullOrEmpty(Text) || Start >= Stop || Start < 0 || Stop > Text.Length)
                 return false;
 

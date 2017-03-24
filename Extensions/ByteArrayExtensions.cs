@@ -1,13 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace System {
+    static class ByteArrayExtensions {
+        public static string ToHexString(this byte[] This) {
+            return GetHexString(This);
+        }
 
-namespace Poly {
-    static class ByteArray {
-        public static string ConvertToString(this byte[] This) {
-            return Encoding.UTF8.GetString(This);
+        public static string GetHexString(params byte[] This) {
+            var Length = This.Length;
+            var Buffer = new char[Length * 2];
+
+            for (int i = 0; i < Length; i ++) {
+                var idx = i * 2;
+
+                Buffer[idx]     = (char)('A' + This[i] >> 4);
+                Buffer[idx + 1] = (char)('A' + This[i] & 0xF);
+            }
+
+            return new string(Buffer);
         }
 
         public static int FindSubByteArray(this byte[] This, byte[] sub) {
@@ -19,7 +27,7 @@ namespace Poly {
         }
 
         public static int FindSubByteArray(this byte[] This, int index, byte[] sub, int subindex, int sublength) {
-            if (index < 0 || index > This.Length || sub == null || subindex < 0 || subindex + sublength > sub.Length)
+            if (This == null || index < 0 || index > This.Length || sub == null || subindex < 0 || index + sublength > This.Length)
                 return -1;
 
             for (; index < This.Length; index++) {

@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
     using Data;
-	using Script;
 
     public class Cache : KeyValueCollection<Cache.Item> {
         public const long DefaultMaxSize = 10000000;
@@ -137,12 +136,6 @@ namespace Poly.Net.Http {
             I.FileSize = I.Info.Length;
             I.LastWriteTime = I.Info.LastWriteTimeUtc.HttpTimeString();
 
-            foreach (var Pair in this) {
-                if (Pair.Value.Script?.Includes.ContainsKey(I.Info.FullName) == true) {
-                    Pair.Value.Script = null;
-                }
-            }
-
             Load(I);   
         }
 
@@ -167,11 +160,10 @@ namespace Poly.Net.Http {
         }
 
         string GetWWWName(string FullPath) {
-#if __MonoCS__
+            if (Path.DirectorySeparatorChar == '\\')
+                return FullPath.Substring(Directory.FullName.Length).Replace('\\', '/');
+            
             return FullPath.Substring(Directory.FullName.Length);
-#else
-            return FullPath.Substring(Directory.FullName.Length).Replace('\\', '/');
-#endif
         }
 
         public class Item {
@@ -181,7 +173,6 @@ namespace Poly.Net.Http {
             public bool IsCompressed;
             public string LastWriteTime, ContentType, FileExtension;
             public FileInfo Info;
-            public Engine Script;
 
             public Stream GetContent(bool CompressionEnabled) {
                 if (Buffer != null) {

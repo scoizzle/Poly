@@ -1,190 +1,235 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
-using Poly;
-using Poly.Data;
+namespace Poly.Net.Irc
+{
+    public partial class Client {
+        public async Task<bool> Connect(string Server, int Port) {
+            Disconnect();
+            Connection = new Tcp.Client();
 
-namespace Poly.Net.Irc {
-    public partial class Client : User {
-        public bool Connect() {
-            return Connect(Server, Port);
-        }
-
-        public bool Connect(string Server, int Port) {
-            Connection.ConnectAsync(Server, Port).Wait();
-
-            return Connection.Connected;
+            await Connection.Connect(Server, Port);
+            return await Connection.IsConnected();
         }
 
         public void Disconnect() {
-            if (Connection != null)
-                Connection.Dispose();
+            Connection?.Close();
+            Connection = null;
         }
 
         public async Task Start() {
-            Connection = new Tcp.Client();
-            Connect();
+            var Server = Config.Get<string>("Server");
+            var Port = Config.Get<int?>("Port") ?? 6667;
+            var Password = Config.Get<string>("Password");
+            
+            if (await Connect(Server, Port)) {
+                if (!string.IsNullOrEmpty(Password)) 
+                    await SendPass(Password);
 
-            await Task.Factory.StartNew(HandleBasicConnection);
-        }
+                await SendNick(Info.Nick);
+                await SendUser(Info.Ident, Info.Realname);
 
-        public async void Restart() {
-            Stop();
-            await Start();
+                await HandleBasicConnection();
+            }
         }
 
         public void Stop() {
             Disconnect();
-
-            Connection = null;
         }
 
-        public void Send(Packet Packet) {
-            if (Packet.Message.Contains(Environment.NewLine)) {
-                var Messages = Packet.Message.Split('\n');
-
-                foreach (var Msg in Messages) {
-                    Packet.Message = Msg;
-                    Send(Packet);
-                }
-            }
-            else {
-                Packet.Send(Connection);
-            }
+        public Task<bool> Send(Packet Packet) {
+            return Packet?.Send(Connection);
         }
 
-        public void SendPong(string Message) {
-            Send(new Packet(Packet.Pong, Message));
+        public Task<bool> SendPing(string Message) {
+            return Send(
+                new Packet(
+                    type: Packet.Ping, 
+                    msg: Message
+            ));
         }
 
-        public void SendUser(string Name, string RealName, bool Hidden = false) {
-            Packet.Send(Connection, Packet.User, RealName, new string[] {
-                Name, 
-                Hidden ? "8" : "0",
-                "*"
-            });
+
+        public Task<bool> SendPong(string Message) {
+            return Send(
+                new Packet(
+                    type: Packet.Pong, 
+                    msg: Message
+            ));
         }
 
-        public void SendPass(string Pass) {
-            Send(new Packet(Packet.Pass, string.Empty, Pass));
+        public Task<bool> SendUser(string Name, string RealName, bool Hidden = false) {
+            return Send(
+                new Packet(
+                    type: Packet.User,
+                    msg: RealName, 
+                    args: new []{ 
+                        Name, 
+                        Hidden ? "8" : "0", 
+                        "*" 
+            }));
         }
 
-        public void SendNick(string Nick) {
-            Send(new Packet(Packet.Nick, string.Empty, Nick));
+        public Task<bool> SendPass(string Pass) {
+            return Send(
+                new Packet(
+                    type: Packet.Pass, 
+                    args: Pass
+            ));
+        }
+        
+        public Task<bool> SendNick(string Nick) {
+            return Send(
+                new Packet(
+                    type: Packet.Nick, 
+                    args: Nick
+            ));
         }
 
-        public void SendOper(string Name, string Pass) {
-            Send(new Packet(Packet.Oper, Pass, Name));
+        public Task<bool> SendOper(string Name, string Pass) {
+            return Send(
+                new Packet(
+                    type: Packet.Oper, 
+                    args: Name,
+                    msg: Pass
+            ));
         }
 
-        public void SendTopic(string Convo, string Topic) {
-            Send(new Packet(Packet.Topic, Topic, Convo));
+        public Task<bool> SendTopic(string Convo, string Topic) {
+            return Send(
+                new Packet(
+                    type: Packet.Topic, 
+                    args: Convo,
+                    msg: Topic
+            ));
         }
 
-        public void JoinChannel(string Channel) {
-            JoinChannel(Channel, "");
+        public Task<bool> JoinChannel(string Channel, string Key) {
+            return Send(
+                new Packet(
+                    type: Packet.Join, 
+                    args: Channel,
+                    msg: Key
+            ));
+        }
+        
+        public Task<bool> PartChannel(string Channel, string Message) {
+            return Send(
+                new Packet(
+                    type: Packet.Part, 
+                    args: Channel,
+                    msg: Message
+            ));
         }
 
-        public void JoinChannel(string Channel, string Key = "") {
-            Send(new Packet(Packet.Join, Key, Channel));
-
-            if (!Conversations.ContainsKey(Channel))
-                Conversations.Set(Channel, new Conversation(Channel));
+        public Task<bool> QuitServer(string Message) {
+            return Send(
+                new Packet(
+                    type: Packet.Quit, 
+                    msg: Message
+            ));
         }
 
-		public void PartChannel(string Channel) {
-			PartChannel (Channel, "");
-		}
-
-        public void PartChannel(string Channel, string Message = "") {
-            Send(new Packet(Packet.Part, Message, Channel));
-
-            if (Conversations.ContainsKey(Channel))
-                Conversations.Remove(Channel);
+        public Task<bool> SendMessage(string Target, string Message) {
+            return Send(
+                new Packet(
+                    type: Packet.Msg,
+                    args: Target, 
+                    msg: Message
+            ));
         }
 
-        public void QuitServer(string Message = "") {
-            Send(new Packet(Packet.Quit, Message));
+        public Task<bool> SendMessage(User User, string Message) {
+            return SendMessage(User.Nick, Message);
         }
 
-        public void SendMessage(string Target, string Message) {
-            Send(new Packet(Packet.Msg, Message, Target));
+        public Task<bool> SendMessage(Conversation Conv, string Message) {
+            return SendMessage(Conv.Name, Message);
         }
 
-        public void SendMessage(Conversation Convo, string Message) {
-            SendMessage(Convo.Name, Message);
+        public Task<bool> SendNotice(string Target, string Message) {
+            return Send(
+                new Packet(
+                    type: Packet.Notice,
+                    args: Target, 
+                    msg: Message
+            ));
         }
 
-        public void SendMessage(User User, string Message) {
-            SendMessage(User.Nick, Message);
+        public Task<bool> SendNotice(User User, string Message) {
+            return SendMessage(User.Nick, Message);
         }
 
-        public void SendNotice(string Target, string Message) {
-            Send(new Packet(Packet.Notice, Message, Target));
+        public Task<bool> SendNotice(Conversation Conv, string Message) {
+            return SendMessage(Conv.Name, Message);
         }
 
-        public void SendNotice(Conversation Convo, string Message) {
-            SendNotice(Convo.Name, Message);
-        }
-
-        public void SendNotice(User User, string Message) {
-            SendNotice(User.Nick, Message);
-        }
-
-        public void SendCTCP(string Target, string Message) {
-            SendMessage(
-                Target,
-                '\x0001' + Message + '\x0001'
+        public Task<bool> SendCTCP(string Target, string Message) {
+            return Send(
+                new Packet(
+                    type: Packet.Msg,
+                    args: Target, 
+                    msg: Message) {
+                        IsCTCP = true
+                    }
             );
         }
 
-        public void SendCTCPReply(string Target, string Message) {
-            SendNotice(
-                Target,
-                '\x0001' + Message + '\x0001'
+        public Task<bool> SendCTCPReply(string Target, string Message) {
+            return Send(
+                new Packet(
+                    type: Packet.Notice,
+                    args: Target, 
+                    msg: Message) {
+                        IsCTCP = true
+                    }
             );
         }
 
-        public void SendAction(string Target, string Message) {
-            SendCTCP(Target, "ACTION " + Message);
+        public Task<bool> SendAction(string Target, string Message) {
+            return SendCTCP(Target, "ACTION " + Message);
         }
 
-        public void SendAction(Conversation Convo, string Message) {
-            SendAction(Convo.Name, Message);
+        public Task<bool> SendAction(User User, string Message) {
+            return SendAction(User.Nick, Message);
         }
 
-        public void SendAction(User User, string Message) {
-            SendAction(User.Nick, Message);
+        public Task<bool> SendAction(Conversation Conv, string Message) {
+            return SendAction(Conv.Name, Message);
         }
 
-        public void SendMode(string Target, string Modes) {
-            Send(new Packet(Packet.Mode, Modes, Target));
+        public Task<bool> SendMode(string Target, string Modes) {
+            return Send(
+                new Packet(
+                    type: Packet.Mode,
+                    args: Target, 
+                    msg: Modes
+            ));
         }
 
-        public void SendWho(string Search) {
-            Send(new Packet(Packet.Who, "", Search));
+        public Task<bool> SendWho(string Target) {
+            return Send(
+                new Packet(
+                    type: Packet.Who,
+                    args: Target
+            ));
         }
 
-        public void SendWhois(string Search) {
-            Send(new Packet(Packet.Whois, "", Search));
+        
+        public Task<bool> SendWhois(string Target) {
+            return Send(
+                new Packet(
+                    type: Packet.Whois,
+                    args: Target
+            ));
         }
 
-        public void SendWhowas(string Search) {
-            Send(new Packet(Packet.Whowas, "", Search));
-        }
-
-        public void RegisterConnection() {
-            if (!Connected)
-                return;
-
-            if (!string.IsNullOrEmpty(Password))
-                SendPass(Password);
-
-            SendNick(Nick);
-            SendUser(Ident, Realname);
+        
+        public Task<bool> SendWhowas(string Target) {
+            return Send(
+                new Packet(
+                    type: Packet.Whowas,
+                    args: Target
+            ));
         }
     }
 }

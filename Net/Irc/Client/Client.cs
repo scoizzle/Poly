@@ -9,48 +9,39 @@ using Poly.Data;
 using Poly.Net.Tcp;
 
 namespace Poly.Net.Irc {
-    public partial class Client : User {
-        public Tcp.Client Connection;
-        public Event.Engine Events;
+    public partial class Client {
+        protected Tcp.Client Connection;
+        protected KeyValueCollection<ManagedArray<EventHandler>> Events;
+        
+        public User Info;
 
-        public jsObject CharModes;
+        public User ServerUser;
+        public Conversation ServerConversation;
 
-        public jsObject<Conversation> Conversations;
-        public jsObject<User> Users;
+        public KeyValueCollection<User> Users;
+        public KeyValueCollection<Conversation> Conversations;
 
+        public JSON Config;
 
-        public Client() {
-            Events = new Event.Engine();
+        public Client(JSON cfg) {
+            Config = cfg;
 
-            Conversations = new jsObject<Conversation>();
-            Users = new jsObject<User>();
-            CharModes = new jsObject();
+            Events = new KeyValueCollection<ManagedArray<EventHandler>>();
+
+            Users = new KeyValueCollection<User>();
+            Conversations = new KeyValueCollection<Conversation>();
+
+            ServerUser = new User("IRC");
+            ServerConversation = new Conversation("Server");
+            Info = new User(Config.Get<JSON>("User"));
+
+            On(Packet.Ping, HandlePingPong);
+            On(Packet.Reply.OnConnected, HandleAutoJoin);
         }
         
         public bool Connected {
             get {
-                if (Connection != null)
-                    return Connection.Connected;
-
-                return false;
-            }
-        }
-
-        public string Server {
-            get {
-                return Get<string>("Server") ?? string.Empty;
-            }
-            set {
-                Set("Server", value);
-            }
-        }
-
-        public int Port {
-            get {
-                return Get<int?>("Port") ?? 6667;
-            }
-            set {
-                Set("Port", value);
+                return Connection?.Connected == true;
             }
         }
     }

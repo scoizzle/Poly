@@ -9,7 +9,7 @@ using Poly.Data;
 namespace Poly {
     public static class StringMatching {
         public static readonly char[] Tokens = new char[] {
-            '{', '[', '*', '?', '^', '\\', '`'
+            '{', '(', '*', '?', '^'
         };
 
         public delegate bool TestDelegate(char C);
@@ -75,25 +75,31 @@ namespace Poly {
             }
         }
 
-        public static jsObject Match(this String Data, String Wild, jsObject Storage = null, int Index = 0) {
+        public static JSON Match(this string Data, string Wild, JSON Storage = null) {
             if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
                 return null;
 
-            return GetMatcher(Wild).Match(Data, Storage, Index);
+            if (Storage == null) Storage = new JSON();
+
+            return GetMatcher(Wild).Match(Data, Storage);
         }
 
-        public static jsObject MatchAll(this String Data, String Wild, jsObject Storage = null, int Index = 0) {
+        public static JSON MatchAll(this string Data, string Wild, JSON Storage = null) {
             if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
                 return null;
 
-            return GetMatcher(Wild).MatchAll(Data, Storage, Index);
+            if (Storage == null) Storage = new JSON();
+
+            return GetMatcher(Wild).MatchAll(Data, Storage);
         }
 
-        public static jsObject MatchKeyValuePairs(this String Data, String Wild, jsObject Storage = null, int Index = 0) {
+        public static JSON MatchKeyValuePairs(this string Data, string Wild, JSON Storage = null) {
             if (string.IsNullOrEmpty(Data) || string.IsNullOrEmpty(Wild))
                 return null;
 
-            return GetMatcher(Wild).MatchKeyValuePairs(Data, Storage, Index);
+            if (Storage == null) Storage = new JSON();
+
+            return GetMatcher(Wild).MatchKeyValuePairs(Data, Storage);
         }
     }
 }

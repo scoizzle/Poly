@@ -5,7 +5,7 @@ namespace Poly.Net.Http {
     using Data;
 
 	public class Mime {
-		public static KeyValueCollection<string> Types = new KeyValueCollection<string> {
+		public static JSON<string> Types = new JSON<string> {
 			{ ".123", "application/vnd.lotus-1-2-3" },
 			{ ".3dml", "text/vnd.in3d.3dml" },
 			{ ".3g2", "video/3gpp2" },

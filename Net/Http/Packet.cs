@@ -11,10 +11,102 @@ using Poly.Data;
 namespace Poly.Net.Http {
     using Tcp;
 
-    public class Packet : jsComplex {
-        public static readonly Matcher RequestHeaderMatcher = new Matcher("{Type} {RawTarget} HTTP/1.1*"),
-                                       HeaderMatcher = new Matcher("\r\n{Key}: {Value:![\r]}"),
-                                       PathMatcher = new Matcher("/{Value:![/]}"),
+    public class Packet {
+        public static readonly byte[] DoubleNewLine = Encoding.UTF8.GetBytes("\r\n\r\n");
+
+        public string Method,
+                      Version,
+                      Target,
+                      Query;
+
+        public JSON<string> Headers;
+
+        public Packet() {
+            Headers = new JSON<string>();
+        }
+
+        public long ContentLength {
+            get {
+                return Convert.ToInt64(Headers["Content-Length"]);
+            }
+        }
+
+        public string Request {
+            get {
+                return Target + ((Query?.Length > 0) ? '?' + Query : string.Empty);
+            }
+            set {
+                var i = value.IndexOf('?');
+
+                if (i == -1) {
+                    Target = value;
+                    Query = string.Empty;
+                }
+                else {
+                    Target = value.Substring(0, i);
+                    Query = value.Substring(i + 1);
+                }
+            }
+        }
+
+        public async Task<bool> Receive(Client client) {
+            int x, y;
+            string headers, Key, Value;
+
+            if (!await client.ReadyToRead()) return false;
+            
+            try { headers = await client.ReceiveStringUntilConstrained(DoubleNewLine, Encoding.UTF8); }
+            catch { 
+                client.Close();
+                return false;
+            }
+
+            if (headers == null || headers.Length == 0)
+                return false;
+
+            y = headers.IndexOf(' ');
+            Method = headers.Substring(0, y);
+            x = y + 1;
+
+            y = headers.IndexOf(' ', x);
+            Request = headers.Substring(x, y - x);
+            x = y + 1;
+
+            y = headers.IndexOf('\r', x);
+            Version = headers.Substring(x, y - x);
+            x = y + 2;
+
+            while (x < headers.Length) {
+                y = headers.IndexOf(':', x);
+                if (y == -1) break;
+
+                Key = headers.Substring(x, y - x);
+
+                x = y + 2;
+                y = headers.IndexOf('\r', x);
+
+                if (y == -1)
+                    y = headers.Length;
+
+                Value = headers.Substring(x, y - x);
+                x = y + 2;
+
+                Headers.Set(Key, Value);
+            }
+
+            return true;
+        }
+
+        public void Reset() {
+            Method = Version = Target = Query = string.Empty;
+            Headers.Clear();
+        }
+    }
+}
+
+    /*public class Packet : jsComplex
+    {
+        public static readonly Matcher PathMatcher = new Matcher("/{Value:![/]}"),
                                        HostMatcher = new Matcher("{Hostname:![:]}[:{Port: Numeric -> Int}]"),
                                        QueryMembersMatcher = new Matcher("[&]{Key}={Value:!Whitespace,![&]}"),
                                        HeaderPropertiesMatcher = new Matcher("[; ]{Key}={Value:!Whitepsace}"),
@@ -25,50 +117,57 @@ namespace Poly.Net.Http {
 
         public int Port;
         public long ContentLength;
-        public new jsObject Get;
-        public jsObject Post, Cookies, Route, Headers;
-        public string RawTarget,
+        public new JSON Get;
+        public JSON Post, Cookies, Route, Headers;
+        public string Request,
                       Target,
-                      Type,
+                      Method,
                       Version,
                       Hostname,
-                      Connection, 
+                      Connection,
                       Query,
                       ContentType,
                       AcceptEncoding,
                       IfModifiedSince,
                       Boundary;
 
-        public Packet() {
-            Get = new jsObject();
-            Post = new jsObject();
-            Cookies = new jsObject();
-            Route = new jsObject();
-            Headers = new jsObject();
+        public Packet()
+        {
+            Get = new JSON();
+            Post = new JSON();
+            Cookies = new JSON();
+            Route = new JSON();
+            Headers = new JSON();
 
             ContentLength = 0;
-            RawTarget = Target = Type = Version = Hostname = Connection = Query = ContentType = AcceptEncoding = IfModifiedSince = Boundary = string.Empty;
+            Request = Target = Method = Version = Hostname = Connection = Query = ContentType = AcceptEncoding = IfModifiedSince = Boundary = string.Empty;
         }
 
-        public void ProcessHeaders() {
-            Headers.ForEach((key, value) => {
+        public void ProcessHeaders()
+        {
+            Headers.ForEach((key, value) =>
+            {
                 ParseHeader(this, key, value as string);
             });
-            
+
             QueryMembersMatcher.MatchAll(Query, Get);
             PathMatcher.MatchAllValues(Target, Route);
         }
 
-        public static bool Forward(Client In, Client Out) {
-            if (In.Connected && Out.Connected) {
+        public static bool Forward(Client In, Client Out)
+        {
+            if (In.Connected && Out.Connected)
+            {
                 var Stream = In.GetStreamer();
                 var Output = Out.GetStreamer();
 
                 var Headers = new StringBuilder();
                 long ContentLength = 0;
 
-                try {
-                    for (var c = 128; c != 0; c--) {
+                try
+                {
+                    for (var c = 128; c != 0; c--)
+                    {
                         var Line = In.ReceiveLine();
                         if (Line == null) return false;
 
@@ -91,7 +190,8 @@ namespace Poly.Net.Http {
             return true;
         }
 
-        public static bool Receive(Client client, Packet recv) {
+        public static bool Receive(Client client, Packet recv)
+        {
             string headers;
 
             try { headers = client.ReceiveStringUntil(DoubleNewLine, Encoding.UTF8); }
@@ -104,39 +204,74 @@ namespace Poly.Net.Http {
             return false;
         }
 
-        public static bool Parse(Packet recv, string headers) {
-            if (headers == null || headers.Length == 0)
-                return false;
+        public static bool Parse(Packet recv, string headers)
+        {
+            int x = 0, y = 0;
 
-            var i = headers.IndexOf('\r');
-            if (i == -1 ||
-                RequestHeaderMatcher.Match(headers, recv) == null ||
-                HeaderMatcher.MatchKeyValuePairs(headers, recv.Headers, i) == null) {
-                return false;
+            y = headers.IndexOf(' ', x);
+            recv.Method = headers.Substring(x, y - x);
+            x = y + 1;
+
+            y = headers.IndexOf(' ', x);
+            recv.Request = headers.Substring(x, y - x);
+            x = y + 1;
+
+            y = headers.IndexOf('\r', x);
+            recv.Version = headers.Substring(x, y - x);
+            x = y + 2;
+
+            while (x < headers.Length)
+            {
+                y = headers.IndexOf(':', x);
+                if (y == -1) break;
+
+                var Key = headers.Substring(x, y - x);
+
+                x = y + 2;
+                y = headers.IndexOf('\r', x);
+
+                if (y == -1)
+                    y = headers.Length;
+
+                var Value = headers.Substring(x, y - x);
+                x = y + 2;
+
+                recv.Headers.Set(Key, Value);
+                ParseMinimum(recv, Key, Value);
             }
-            else {
-                recv.Headers.ForEach((key, value) => {
-                    ParseMinimum(recv, key, value as string);
-                });
 
-                i = recv.RawTarget.IndexOf('?');
-                if (i == -1) {
-                    recv.Target = recv.RawTarget;
-                }
-                else {
-                    recv.Target = recv.RawTarget.Substring(0, i);
-                    recv.Query = recv.RawTarget.Substring(i + 1);
-                }
+            x = recv.Request.IndexOf('?');
+            if (x == -1)
+            {
+                recv.Target = recv.Request;
             }
-
+            else
+            {
+                recv.Target = recv.Request.Substring(0, x);
+                recv.Query = recv.Request.Substring(x + 1);
+            }
             return true;
         }
 
-        private static void ParseMinimum(Packet recv, string Key, string Value) {
-            switch (Key) {
+        private static void ParseMinimum(Packet recv, string Key, string Value)
+        {
+            switch (Key)
+            {
                 case "Host":
-                    HostMatcher.Match(Value, recv);
-                    return;
+                    {
+                        int index = Value.IndexOf(':');
+
+                        if (index > 0)
+                        {
+                            recv.Hostname = Value.Substring(0, index);
+                            int.TryParse(Value.Substring(index + 1), out recv.Port);
+                        }
+                        else
+                        {
+                            recv.Hostname = Value;
+                        }
+                        return;
+                    }
 
                 case "If-Modified-Since":
                     recv.IfModifiedSince = Value;
@@ -148,26 +283,30 @@ namespace Poly.Net.Http {
             }
         }
 
-        private static void ParseHeader(Packet recv, string Key, string Value) {
-            switch (Key) {
-				case "Content-Length":
-					long.TryParse(Value, out recv.ContentLength);
-					return;
+        private static void ParseHeader(Packet recv, string Key, string Value)
+        {
+            switch (Key)
+            {
+                case "Content-Length":
+                    long.TryParse(Value, out recv.ContentLength);
+                    return;
 
-				case "Content-Type":
+                case "Content-Type":
                     MultipartBoundaryMatcher.Match(Value, recv);
-					return;
-					
-				case "Cookie": 
-					HeaderPropertiesMatcher.MatchAll(Value, recv.Cookies);
-					return;
+                    return;
+
+                case "Cookie":
+                    HeaderPropertiesMatcher.MatchAll(Value, recv.Cookies);
+                    return;
             }
         }
 
-        public override bool TryGet(string Key, out object Value) {
-            switch (Key) {
+        public override bool TryGet(string Key, out object Value)
+        {
+            switch (Key)
+            {
                 default:
-                return base.TryGet(Key, out Value);
+                    return base.TryGet(Key, out Value);
 
                 case "Port": Value = Port; break;
                 case "ContentLength": Value = ContentLength; break;
@@ -176,9 +315,9 @@ namespace Poly.Net.Http {
                 case "Cookies": Value = Cookies; break;
                 case "Route": Value = Route; break;
                 case "Headers": Value = Headers; break;
-                case "RawTarget": Value = RawTarget; break;
+                case "Request": Value = Request; break;
                 case "Target": Value = Target; break;
-                case "Type": Value = Type; break;
+                case "Method": Value = Method; break;
                 case "Version": Value = Version; break;
                 case "Hostname": Value = Hostname; break;
                 case "Connection": Value = Connection; break;
@@ -191,19 +330,21 @@ namespace Poly.Net.Http {
             return true;
         }
 
-        public override void AssignValue(string Key, object Value) {
-            switch (Key) {
+        public override void AssignValue(string Key, object Value)
+        {
+            switch (Key)
+            {
                 default: base.AssignValue(Key, Value); break;
                 case "Port": Port = Convert.ToInt32(Value); break;
                 case "ContentLength": ContentLength = Convert.ToInt64(Value); break;
-                case "Get": Get = Value as jsObject; break;
-                case "Post": Post = Value as jsObject; break;
-                case "Cookies": Cookies = Value as jsObject; break;
-                case "Route": Route = Value as jsObject; break;
-                case "Headers": Headers = Value as jsObject; break;
-                case "RawTarget": RawTarget = Value?.ToString(); break;
+                case "Get": Get = Value as JSON; break;
+                case "Post": Post = Value as JSON; break;
+                case "Cookies": Cookies = Value as JSON; break;
+                case "Route": Route = Value as JSON; break;
+                case "Headers": Headers = Value as JSON; break;
+                case "Request": Request = Value?.ToString(); break;
                 case "Target": Target = Value?.ToString(); break;
-                case "Type": Type = Value?.ToString(); break;
+                case "Method": Method = Value?.ToString(); break;
                 case "Version": Version = Value?.ToString(); break;
                 case "Hostname": Hostname = Value?.ToString(); break;
                 case "Connection": Connection = Value?.ToString(); break;
@@ -216,3 +357,4 @@ namespace Poly.Net.Http {
         }
     }
 }
+*/

@@ -1,0 +1,35 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core", "Core\Core.csproj", "{4D98970F-2066-4AAB-B1B0-A99BFA8B1364}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpServer", "HttpServer\HttpServer.csproj", "{001BD0D8-D9D7-4C0B-BE32-B82CB51750F2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4D98970F-2066-4AAB-B1B0-A99BFA8B1364}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4D98970F-2066-4AAB-B1B0-A99BFA8B1364}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4D98970F-2066-4AAB-B1B0-A99BFA8B1364}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4D98970F-2066-4AAB-B1B0-A99BFA8B1364}.Release|Any CPU.Build.0 = Release|Any CPU
+		{001BD0D8-D9D7-4C0B-BE32-B82CB51750F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{001BD0D8-D9D7-4C0B-BE32-B82CB51750F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{001BD0D8-D9D7-4C0B-BE32-B82CB51750F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{001BD0D8-D9D7-4C0B-BE32-B82CB51750F2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(MonoDevelopProperties) = preSolution
+		Policies = $0
+		$0.VersionControlPolicy = $1
+		$1.inheritsSet = Mono
+		$1.CommitMessageStyle = $2
+		$2.LastFilePostfix = "@:\n  "
+		$2.IncludeDirectoryPaths = True
+		$2.Wrap = False
+		$0.DotNetNamingPolicy = $3
+		$3.DirectoryNamespaceAssociation = PrefixedHierarchical
+		$3.ResourceNamePolicy = FileFormatDefault
+	EndGlobalSection
+EndGlobal

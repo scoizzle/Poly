@@ -4,15 +4,6 @@ using System.Linq;
 
 namespace Poly.Data {
     public partial class JSON {
-        public delegate bool ParserDelegate<T>(string Text, out T Value);
-        public delegate object WrapperDelegate(string Text);
-
-        public static KeyValueCollection<WrapperDelegate> Parsers;
-
-        public static Func<JSON> NewObject = () => { return new JSON(); },
-                                     NewArray = () => { return new JSON { IsArray = true }; };
-
-
         new public object Get(string Key) {
             return Get(Key.Split(KeySeperatorCharacter));
         }
@@ -21,21 +12,22 @@ namespace Poly.Data {
             int i = 0;
 			int len = Keys.Length;
 
-            object Value;
+            object Value = null;
             JSON Current = this;
 
-			do {
-				if (Current.TryGet(Keys[i], out Value)) {
-					if (len - i == 1)
-						break;
+			while (i < len) { 
+                if (Current == null)
+                    return null;
 
-					if (Value is JSON)
-						Current = Value as JSON;
-					else
-						return null;
-				}
-			}
-			while (++i < len);
+                if (!Current.TryGet(Keys[i], out Value))
+					return null;
+				
+				if (i == len)
+					break;
+				
+				Current = Value as JSON;
+				i++;
+			};
 
             return Value;
         }
@@ -47,48 +39,27 @@ namespace Poly.Data {
         public T Get<T>(params string[] Key) {
             var Value = Get(Key);
 
-            if (Value != null) {
-                if (Value is T)
-                    return (T)(Value);
-
-                if (Value is string) { 
-                    var Delegate = Parsers[typeof(T).Name];
-
-                    if (Delegate != null) {
-                        Value = Delegate(Value as string);
-
-                        Set(Key, Value);
-
-                        return (T)(Value);
-                    }
-                }
-            }
-
-            return default(T);
-        }
+			try {
+				return (T)(Value);
+			}
+			catch { }
+			return default(T);
+		}
 
         public T Get<T>(IEnumerable<string> Key) {
             var Value = Get(Key.ToArray());
 
-            if (Value != null) {
-                if (Value is T)
-                    return (T)(Value);
 
-                if (Value is string) {
-                    var Delegate = Parsers[typeof(T).Name];
-
-                    if (Delegate != null) {
-                        Value = Delegate(Value as string);
-
-                        Set(Key, Value);
-
-                        return (T)(Value);
-                    }
-                }
-            }
-
-            return default(T);
+			try {
+				return (T)(Value);
+			}
+			catch { }
+			return default(T);
         }
+
+		public void Set<T>(string Key, T[] Values) {
+			AssignValue(Key, NewArray(Values));
+		}
 
         new public void Set(string Key, object Value) {
             AssignValue(Key, Value);
@@ -141,31 +112,16 @@ namespace Poly.Data {
         public virtual bool TryGet<T>(string Key, out T Value) {
             object Val;
 
-            if (TryGet(Key, out Val)) {
-                if (Val is T) {
-                    Value = (T)(Val);
-                    return true;
-                }
-                else
-                if (Val is string) {
-                    var Delegate = Parsers[typeof(T).Name];
+			if (TryGet(Key, out Val)) {
+				try {
+					Value = (T)(Val);
+					return true;
+				}
+				catch { }
+			}
 
-                    if (Delegate != null) {
-                        Val = Delegate(Val as string);
-
-                        Set(Key, Val);
-                        Value = (T)(Val);
-                        return true;
-                    }
-                }
-            }
-
-            Value = default(T);
-            return false;
-        }
-
-        public T GetValue<T>(string Key) where T : class {
-            return base[Key] as T;
+			Value = default(T);
+			return false;
         }
 
         public virtual void AssignValue(string Key, object Value) {

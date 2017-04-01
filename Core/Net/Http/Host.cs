@@ -1,6 +1,9 @@
-﻿using path = System.IO.Path;
+﻿using System.Linq;
+using path = System.IO.Path;
 
 namespace Poly.Net.Http {
+	using Data;
+
     public class Host {
         public Matcher Matcher;
         public string Path, DefaultDocument, DefaultExtension;
@@ -13,16 +16,15 @@ namespace Poly.Net.Http {
 
         public Event.Engine<Request.Handler> Handlers;
         public Cache Cache;
-        
-        public Host(string hostName) {
-            Name = hostName;
-            Path = "WWW";
-            DefaultDocument = "/index.htm";
-            DefaultExtension = "htm";
-            Handlers = new Event.Engine<Request.Handler>();
-            Compressable = new string[0];
-        }
 
+		public Host(string hostName) {
+			Name = hostName;
+			Path = "WWW";
+			DefaultDocument = "/index.htm";
+			DefaultExtension = "htm";
+			Handlers = new Event.Engine<Request.Handler>();
+			Compressable = new string[0];
+		}
         public void Ready() {
             Path = path.GetFullPath(Path);
             Cache = new Cache(Path, Compressable);
@@ -42,6 +44,6 @@ namespace Poly.Net.Http {
 
         public override string ToString() {
             return Name;
-        }
+		}
     }
 }

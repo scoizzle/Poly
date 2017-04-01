@@ -1,43 +1,28 @@
 ﻿namespace Poly.Http {
+	using Net.Http;
+    using Data;
+
     class Program : App {
-        public static void Main(string[] args) {
-            var Server = new Net.Http.Server("*");
+		public static Server WebServer;
+		public static void Main(string[] args) {
+			Init(args);
 
-            Commands.Register("-host={0}", js => {
-                return Server.Name = js.Get<string>("0");
+			WebServer = new Server("*");
+
+            WebServer.On("/echo/{msg -> UrlDescape}", (request) =>
+            {
+                return Result.Send(
+                    client: request.Client,
+                    status: Result.Ok,
+                    content: request.Arguments["msg"] as string,
+                    headers: new KeyValueCollection<string> {
+                        { "Content-Type", "text/html" }
+                    }
+                );
             });
 
-            Commands.Register("-port={0 -> int}", js => {
-                return Server.Port = js.Get<int>("0");
-            });
+			WebServer.Start();
 
-            Commands.Register("-path={0}", js => {
-                return Server.Path = js.Get<string>("0");
-            });
-
-            Commands.Register("-stop", js => {
-                Server.Stop();
-                return null;
-            });
-            
-            Commands.Register("-start", js => {
-                Server.Start();
-                return null;
-            });
-
-            Commands.Register("-restart", js => {
-                Server.Restart();
-                return null;
-            });
-
-            Commands.Register("--exit", js => {
-                Server.Stop();
-                App.Exit(0);
-                return null;
-            });
-
-            Init(args);
-            Server.Start();
             WaitforExit();
         }
     }

@@ -36,6 +36,7 @@ namespace Poly {
             { "Descape", StringConversions.Descape },
             { "UrlEscape", StringConversions.UriEscape },
             { "UrlDescape", StringConversions.UriDescape },
+            { "HtmlDescape", StringConversions.HtmlDescape },
             { "MD5", StringConversions.MD5 },
             { "SHA1", StringConversions.SHA1 },
             { "SHA256", StringConversions.SHA256 },

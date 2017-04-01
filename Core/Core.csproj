@@ -4,6 +4,7 @@
     <OutputType>Library</OutputType>
     <TargetFramework>netcoreapp1.1</TargetFramework>
     <SynchReleaseVersion>false</SynchReleaseVersion>
+    <RootNamespace>Poly</RootNamespace>
   </PropertyGroup>
 
   <ProjectExtensions>

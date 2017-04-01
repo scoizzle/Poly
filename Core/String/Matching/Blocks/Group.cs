@@ -64,7 +64,7 @@ namespace Poly {
             }
             
             private bool __Default(string Data, ref int Index, ref int BlockIndex, Action<string, object> Store) {
-                var Storage = new JSON<object>();
+				var Storage = new KeyValueCollection<object>();
                 var Start = Index;
                 var Result = Matcher.Match(Blocks, Data, ref Index, Storage.Set);
 
@@ -78,7 +78,7 @@ namespace Poly {
             }
 
             private bool __MatchAll(string Data, ref int Index, ref int BlockIndex, Action<string, object> Store) {
-                var Storage = new JSON<object>();
+				var Storage = new KeyValueCollection<object>();
                 var Result = Matcher.Match(Blocks, Data, ref Index, Storage.Set);
 
                 if (Result) {

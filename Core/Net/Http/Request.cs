@@ -4,7 +4,7 @@ using Poly.Data;
 using Poly.Net.Tcp;
 
 namespace Poly.Net.Http {
-    public partial class Request {
+    public class Request {
         public delegate Task<bool> Handler(Request Req);
 
         public Host Host;
@@ -33,6 +33,14 @@ namespace Poly.Net.Http {
             HeadersOnly = Packet.Method.Compare("HEAD", 0);
             CompressionEnabled = (Packet.Headers["Accept-Encoding"] as string)?.Find("gzip") != -1;
         }
+
+		public Task<bool> Send(string Status) {
+			return Result.Send(Client, Status);
+		}
+
+		public Task<bool> Send(string Status, string Content) {
+			return Result.Send(Client, Status, Content);
+		}
 
         public Task<bool> SendFile(string FileName) {
             Cache.Item Cached;

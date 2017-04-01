@@ -46,55 +46,55 @@ namespace Poly.Net.Http {
 
         public static async Task<bool> Send(
             Client client, 
-            string Status, 
-            Stream Content = null, 
-            KeyValueCollection<string> Headers = null, 
-            KeyValueCollection<string> Cookies = null
+            string status, 
+            Stream content = null, 
+            KeyValueCollection<string> headers = null, 
+            KeyValueCollection<string> cookies = null
         ) {
-            return await client.Send(GetResponseString(Status, Content?.Length ?? 0, Headers, Cookies)) &&
-                   await client.Send(Content);
+            return await client.Send(GetResponseString(status, content?.Length ?? 0, headers, cookies)) &&
+                   await client.Send(content);
         }
         
         public static Task<bool> Send(
             Client client, 
-            string Status, 
-            string ContentString,
-            KeyValueCollection<string> Headers = null, 
-            KeyValueCollection<string> Cookies = null
+            string status, 
+            string content,
+            KeyValueCollection<string> headers = null, 
+            KeyValueCollection<string> cookies = null
         ) {
-            return Send(client, Status, Encoding.UTF8.GetBytes(ContentString), Headers, Cookies);
+            return Send(client, status, Encoding.UTF8.GetBytes(content), headers, cookies);
         }
 
         public static async Task<bool> Send(
             Client client, 
-            string Status, 
-            byte[] Content, 
-            KeyValueCollection<string> Headers = null, 
-            KeyValueCollection<string> Cookies = null
+            string status, 
+            byte[] content, 
+            KeyValueCollection<string> headers = null, 
+            KeyValueCollection<string> cookies = null
         ) {
-            return await client.Send(GetResponseString(Status, Content?.Length ?? 0, Headers, Cookies)) &&
-                   await client.Send(Content);
+            return await client.Send(GetResponseString(status, content?.Length ?? 0, headers, cookies)) &&
+                   await client.Send(content);
         }
 
         private static string GetResponseString(
-            string Status,
+            string status,
             long ContentLength = 0, 
-            KeyValueCollection<string> Headers = null, 
-            KeyValueCollection<string> Cookies = null
+            KeyValueCollection<string> headers = null, 
+            KeyValueCollection<string> cookies = null
         ) {
             var Output = new StringBuilder();
 
-            Output.Append("HTTP/1.1 ").Append(Status).Append(App.NewLine)
+            Output.Append("HTTP/1.1 ").Append(status).Append(App.NewLine)
                   .Append("Date: ").Append(DateTime.UtcNow.HttpTimeString()).Append(App.NewLine)
                   .Append("Content-Length: ").Append(ContentLength).Append(App.NewLine);
 
-            if (Headers != null)
-            foreach (var Pair in Headers) {
+            if (headers != null)
+            foreach (var Pair in headers) {
                 Output.Append(Pair.Key).Append(": ").Append(Pair.Value).Append(App.NewLine);
             }
 
-            if (Cookies != null)
-            foreach (var Obj in Cookies) {
+            if (cookies != null)
+            foreach (var Obj in cookies) {
                 Output.Append("Set-Cookie: ").Append(Obj.Key).Append("=").Append(Obj.Value).Append(App.NewLine);
             }
 

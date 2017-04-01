@@ -3,7 +3,7 @@ using Poly.Net.Http;
 using System;
 using System.Diagnostics;
 
-namespace Poly.Test {
+namespace Poly.Testing {
     public partial class Tests {
         /*
         1.  Launcher.exe begins generating local MD5 list (async, background)
@@ -27,25 +27,25 @@ namespace Poly.Test {
                 Log.Debug("New connection from: {0}", Request.Client.RemoteIPEndPoint);
 
                 return Result.Send(Request.Client, Result.Ok,
-                    ContentString: "<a href=\"/Launch/%2FSuccess%2F/\">Click to Launch!</a>");
+                    content: "<a href=\"/Launch/%2FSuccess%2F/\">Click to Launch!</a>");
             });
 
             server.On("/Update/Manifest/", (Request) => {
                 return Result.Send(Request.Client, Result.Ok,
-                    ContentString: "Yay!");
+                    content: "Yay!");
             });
 
             server.On("/Success/", (Request) => {
                 Log.Debug("Game launched!");
                 return Result.Send(Request.Client, Result.Ok,
-                    ContentString: "Yay!");
+                    content: "Yay!");
             });
 
             server.On("/Launch/{redir}/", (Request) => {
                 Log.Debug("Launching game...");
 
                 return Result.Send(Request.Client, Result.Found, 
-                    Headers: new KeyValueCollection<string> {
+                    headers: new KeyValueCollection<string> {
                         { "Location", Request.Arguments.Get<string>("redir").UriDescape() }
                     });
             });

@@ -1,15 +1,7 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-
-using Poly;
-using Poly.Data;
-using Poly.Net.Tcp;
+﻿using Poly.Data;
 
 namespace Poly.Net.Irc {
-    public partial class Client {
+	public partial class Client {
         protected Tcp.Client Connection;
         protected KeyValueCollection<ManagedArray<EventHandler>> Events;
         
@@ -33,7 +25,8 @@ namespace Poly.Net.Irc {
 
             ServerUser = new User("IRC");
             ServerConversation = new Conversation("Server");
-            Info = new User(Config.Get<JSON>("User"));
+
+			Info = Config.Get<JSON>("User");
 
             On(Packet.Ping, HandlePingPong);
             On(Packet.Reply.OnConnected, HandleAutoJoin);

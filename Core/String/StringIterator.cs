@@ -5,7 +5,7 @@ using System.Linq;
 namespace Poly {
     public class StringIterator {
         struct Segment {
-            public int Index, LastIndex;
+			public int Index, LastIndex, Offset;
         }
 
         Segment Section;
@@ -78,17 +78,16 @@ namespace Poly {
         }
 
         public bool IsAt(char C) {
-            if (IsDone()) return false;
-            return String[Index] == C;
+            return Current == C;
         }
 
         public bool IsAt(char C, bool IgnoreCase) {
             if (IsDone()) return false;
 
             if (IgnoreCase)
-                return char.ToLower(String[Index]) == char.ToLower(C);
-            else
-                return String[Index] == C;
+                return char.ToLower(Current) == char.ToLower(C);
+			
+            return Current == C;
         }
 
         public bool IsAt(string str) {
@@ -449,60 +448,65 @@ namespace Poly {
         }
 
         public string Extract(char End) {
-            var Start = Index;
+			if (SelectSection(End)) {
+				var Result = ToString();
 
-            if (Goto(End)) {
-                var Result = Substring(Start, Index - Start);
-                Consume(End);
-                return Result;
-            }
+				ConsumeSection();
 
-            return null;
+				return Result;
+			}
+			return null;
         }
 
-        public string Extract(char Open, char Close) {
-            if (Consume(Open)) {
-                var Start = Index;
+		public string Extract(char Open, char Close) {
+			if (SelectSection(Open, Close)) {
+				var Result = ToString();
 
-                if (Goto(Open, Close)) {
-                    var Result = Substring(Start, Index - Start);
-                    Consume(Close);
-                    return Result;
-                }
-            }
-            Index -= 1;
-            return null;
-        }
+				ConsumeSection();
 
-        public string Extract(string End) {
-            var Start = Index;
+				return Result;
+			}
+			return null;
+		}
 
-            if (Goto(End)) {
-                var Result = Substring(Start, Index - Start);
-                Consume(End);
-                return Result;
-            }
+		public string Extract(string End) {
+			if (SelectSection(End)) {
+				var Result = ToString();
 
-            return null;
-        }
+				ConsumeSection();
 
-        public string Extract(string Open, string Close) {
-            if (Consume(Open)) {
-                var Start = Index;
+				return Result;
+			}
+			return null;
+		}
 
-                if (Goto(Open, Close)) {
-                    var Result = Substring(Start, Index - Start);
-                    Consume(Close);
-                    return Result;
-                }
-            }
+		public string Extract(string Open, string Close) {
+			if (SelectSection(Open, Close)) {
+				var Result = ToString();
 
-            Index -= Open.Length;
-            return null;
-        }
+				ConsumeSection();
+
+				return Result;
+			}
+			return null;
+		}
+
+		public bool SelectSection(char Next) {
+			PushSection(1);
+
+			var Start = Index;
+			if (Goto(Next)) {
+				LastIndex = Index;
+				Index = Start;
+				return true;
+			}
+
+			PopSection();
+			return false;
+		}
 
         public bool SelectSection(char Open, char Close) {
-            PushSection();
+            PushSection(1);
 
             if (Consume(Open)) {
                 var Start = Index;
@@ -516,10 +520,24 @@ namespace Poly {
 
             PopSection();
             return false;
-        }
+		}
+
+		public bool SelectSection(string Next) {
+			PushSection(Next.Length);
+
+			var Start = Index;
+			if (Goto(Next)) {
+				LastIndex = Index;
+				Index = Start;
+				return true;
+			}
+
+			PopSection();
+			return false;
+		}
         
         public bool SelectSection(string Open, string Close) {
-            PushSection();
+			PushSection(Close.Length);
 
             if (Consume(Open)) {
                 var Start = Index;
@@ -581,14 +599,19 @@ namespace Poly {
         
         public void PushSection() {
             PushSection(Index, LastIndex);
-        }
+		}
 
-        public void PushSection(int index, int lastIndex) {
+		public void PushSection(int offset) {
+			PushSection(Index, LastIndex, offset);
+		}
+
+		public void PushSection(int index, int lastIndex, int offset = 0) {
             Segments.Push(Section);
 
-            Section = new Segment{ 
+            Section = new Segment { 
                 Index = index,
-                LastIndex = lastIndex
+				LastIndex = lastIndex,
+				Offset = offset
             };
         }
 
@@ -597,12 +620,12 @@ namespace Poly {
         }
 
         public void ConsumeSection() {
-            var index = Index;
+			var index = LastIndex + Section.Offset;
             PopSection();
             Index = index;
         }
 
-        public StringIterator Clone() {
+		public StringIterator Clone() {
 			return new StringIterator (String, Index, LastIndex);
 		}
 

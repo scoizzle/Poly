@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Poly.Test {
+namespace Poly.Testing {
     public partial class Tests {
 
         public static void MatchingPerformance() {

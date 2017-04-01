@@ -1,15 +1,12 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Net.Tcp;
+    using Tcp;
 
     public partial class Server {
-        private async void OnClientConnected(Client client) {
-            client.SendTimeout = ClientSendTimeout;
-            client.ReceiveTimeout = ClientReceiveTimeout;
-
+        async Task OnClientConnected(Client client) {
             var packet = new Packet();
             var request = new Request(client, packet, this);
             var finalizer = default(Task<bool>);
@@ -28,7 +25,9 @@ namespace Poly.Net.Http {
                         }
                     }
                     catch (IOException) { break; }
-                    catch (Exception) { }
+					catch (Exception) {
+						finalizer = Result.Send(client, Result.InternalError);
+					}
                     finally {
                         sem.Release();
                     }
@@ -41,31 +40,27 @@ namespace Poly.Net.Http {
             while (Running && await client.IsConnected());
         }
 
-        private Task<bool> OnClientRequest(Request request) {
-            var Target = request.Packet.Request;
+		Task<bool> OnClientRequest(Request request) {
+			var Target = request.Packet.Target;
             var EXT = Target.GetFileExtension();
 
             Request.Handler f;
             Cache.Item Cached;
 
-            if (EXT.Length != 0 &&
-               (f = Handlers.GetHandler(EXT)) != null) {
+			if (Handlers.TryGetHandler(EXT, out f))
                 return f(request);
-            }
-            else
-            if ((f = Handlers.GetHandler(Target, request.Arguments)) != null) {
-                return f(request);
-            }
-            else {
-                Target = request.Host.GetFullPath(Target);
 
-                if ((Cached = Cache.Get(Target)) != null) {
-                    return request.SendFile(Cached);
-                }
-                else {
-                    return Result.Send(request.Client, Result.NotFound);
-                }
+			if (Handlers.TryGetHandler(Target, request.Arguments, out f))
+                return f(request);
+
+            Target = request.Host.GetFullPath(Target);
+
+            if ((Cached = Cache.Get(Target)) != null) {
+                return request.SendFile(Cached);
             }
+
+            return Result.Send(request.Client, Result.NotFound);
+            
         }
     }
 }

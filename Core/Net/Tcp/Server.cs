@@ -11,7 +11,7 @@ namespace Poly.Net.Tcp {
         public int Port { get; private set; }
         public bool Running { get { return Active; } }
 
-        public delegate void OnClientConnectDelegate(Client Client);
+        public delegate Task OnClientConnectDelegate(Client Client);
         public event OnClientConnectDelegate OnClientConnected;
 
         public Task ListenerTask { get; private set; }
@@ -30,7 +30,7 @@ namespace Poly.Net.Tcp {
             try {
                 base.Start();
 
-                Log.Info("Now listening on port {0}", Port);
+                Log.Debug("Now listening on port {0}", Port);
             }
             catch (Exception Error) {
                 Log.Error("Couldn't begin accepting connections on port {0}", Port);
@@ -38,7 +38,7 @@ namespace Poly.Net.Tcp {
                 return false;
             }
         
-            StartAcceptTask();
+            ListenerTask = StartAcceptTask();
             return true;
         }
 
@@ -47,9 +47,10 @@ namespace Poly.Net.Tcp {
             base.Stop();
         }
 
-        private async void StartAcceptTask() {
+        async Task StartAcceptTask() {
+			Task lastStarted;
             while (Active) {
-                try { OnClientConnected(new Client(await AcceptSocketAsync())); }
+                try { lastStarted = OnClientConnected(new Client(await AcceptSocketAsync())); }
                 catch (OperationCanceledException) { }
                 catch (SocketException) { }
 

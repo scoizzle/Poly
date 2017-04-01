@@ -6,49 +6,60 @@ using Poly;
 using Poly.Data;
 
 namespace Poly.Net.Irc {
-    public class User : JSON {
+    public class User {
         public static Matcher Fmt = new Matcher("{Nick:![!]}(!{Ident}@{Host})?");
 
+		JSON js;
+
 		public string Nick { 
-            get { return Get<string>("Nick"); }
-            set { Set("Nick", value); }
+            get { return js.Get<string>("Nick"); }
+			set { js.Set("Nick", value); }
         }		
 
 		public string Ident { 
-            get { return Get<string>("Ident"); }
-            set { Set("Ident", value); }
+            get { return js.Get<string>("Ident"); }
+			set { js.Set("Ident", value); }
         }
 
 		public string Host { 
-            get { return Get<string>("Host"); }
-            set { Set("Host", value); }
+            get { return js.Get<string>("Host"); }
+			set { js.Set("Host", value); }
         }		
 
 		public string Realname { 
-            get { return Get<string>("Realname"); }
-            set { Set("Realname", value); }
+            get { return js.Get<string>("Realname"); }
+			set { js.Set("Realname", value); }
         }
         
         public JSON Modes { 
-            get { return Get<JSON>("Modes"); }
-            set { Set("Modes", value); }
+            get { return js.Get<JSON>("Modes"); }
+			set { js.Set("Modes", value); }
         }
 
         public User() {
             Nick = Ident = Host = Realname = string.Empty;
             Modes = new JSON();
+			js = new JSON();
         }
 
         public User(string Raw) : this() {
-            Fmt.Match(Raw, this);
+			Fmt.Match(Raw, js);
         }
 
-        public User(JSON Obj) {
-            Obj.CopyTo(this);
-        }
+		public User(JSON json) {
+			js = json;
+		}
 
         public override string ToString() {
-            return Fmt.Template(this);
+            return Fmt.Template(js);
         }
+
+		public static implicit operator JSON(User user) {
+			return user.js;
+		}
+
+		public static implicit operator User(JSON json) {
+			return new User(json);
+		}
     }
 }

@@ -7,7 +7,7 @@ using System.Net.Sockets;
 
 namespace Poly.Net.Tcp {
     public class MultiPortServer {
-        public Dictionary<int, Tcp.Server> Listeners = new Dictionary<int, Server>();
+        public Dictionary<int, Server> Listeners = new Dictionary<int, Server>();
 
         public event Server.OnClientConnectDelegate OnClientConnect;
 

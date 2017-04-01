@@ -11,14 +11,12 @@ namespace Poly.Data {
         }
 
         public static JSON Parse(string Text, int Index, int Length) {
-            var It = new StringIterator(Text, Index, Length);
-            object Result;
+			var js = new JSON();
 
-            if ((Result = _Object(It)) != null ||
-                (Result = _Array(It)) != null)
-                return Result as JSON;
+			if (Parse(Text, Index, Length, js))
+				return js;
 
-            return null;
+			return null;
         }
 
         public static bool Parse(string Text, JSON Storage) {
@@ -34,82 +32,75 @@ namespace Poly.Data {
 
             if (_Object(It, Storage) != null)
                 return true;
-            else
+			
             if (_Array(It, Storage) != null)
                 return true;
-            else
-                return false;
+			
+            return false;
         }
 
-        private static Func<char, bool>[] WhitespaceFuncs = new Func<char, bool>[] {
-            char.IsWhiteSpace, c => c == ','
-        };
+		static Func<char, bool>[] WhitepsaceFuncs = {
+			char.IsWhiteSpace, c => c == ','
+		};
 
-        private static JSON _Object(StringIterator It) {
-            return _Object(It, new JSON());
-        }
-            
-        private static JSON _Object(StringIterator It, JSON Storage) {
-            if (It.Consume('{')) {
-                It.Consume(WhitespaceFuncs);
-                var Start = It.Index;
+		static bool _getValue(StringIterator It, out object Value) {
+			return (Value = _Object(It)) != null ||
+				   (Value = _Array(It)) != null ||
+				   (Value = _String(It)) != null ||
+				   (Value = _Boolean(It)) != null ||
+				   (Value = _Number(It)) != null ||
+				   _NullLitteral(It);
+		}
 
-                if (It.Goto('{', '}')) {
-                    var Data = It.Clone(Start, It.Index);
+		static JSON _Object(StringIterator It, JSON Storage = null) {
+			if (It.SelectSection('{', '}')) {
+				if (Storage == null) Storage = new JSON();
+				It.ConsumeWhitespace();
 
-                    while (!Data.IsDone()) {
-                        Data.Consume(WhitespaceFuncs);
+				while (!It.IsDone()) {
+					var Pair = _KeyValuePair(It);
 
-                        var Pair = _KeyValuePair(Data);
+					if (Pair == null) return null;
 
-                        if (Pair == null)
-                            return null;
+					Storage.Set(Pair);
 
-                        Storage.Set(Pair);
-                        Data.Consume(WhitespaceFuncs);
-                    }
+					if (!It.Consume(WhitepsaceFuncs))
+						break;
+				}
 
-                    It.Consume('}');
-                    return Storage;
-                }
-            }
-            return null;
-        }
+				It.ConsumeSection();
+				return Storage;
+			}
 
-        private static JSON _Array(StringIterator It) {
-            return _Array(It, new JSON() { IsArray = true });
+			return null;
         }
 
-        private static JSON _Array(StringIterator It, JSON Storage) {
-            if (It.Consume('[')) {
-                It.Consume(WhitespaceFuncs);
-                var Start = It.Index;
+		static JSON _Array(StringIterator It, JSON Storage = null) {
+			if (It.SelectSection('[', ']')) {
+				if (Storage == null) Storage = new JSON();
+				It.ConsumeWhitespace();
 
-                if (It.Goto('[', ']')) {
-                    var Data = It.Clone(Start, It.Index);
+				while (!It.IsDone()) {
+					object Value;
+					if (_getValue(It, out Value)) Storage.Add(Value);
+					else {
+						Log.Error("JSON Failed to parse ", It);
+						return null;
+					}
 
-                    while (!Data.IsDone()) {
-                        Data.Consume(WhitespaceFuncs);
+					if (!It.Consume(WhitepsaceFuncs))
+						break;
+				}
 
-                        object Value;
-                        if (_getValue(Data, out Value)) Storage.Add(Value);
-                        else {
-                            Log.Error("JSON Failed to parse ", Data);
-                            return null;
-                        }
+				It.ConsumeSection();
+				Storage.IsArray = true;
+				return Storage;
+			}
 
-                        Data.Consume(WhitespaceFuncs);
-                    }
-
-                    It.Consume(']');
-                    Storage.IsArray = true;
-                    return Storage;
-                }
-            }
-            return null;
+			return null;
         }
 
-        private static KeyValuePair _KeyValuePair(StringIterator It) {
+        static KeyValuePair _KeyValuePair(StringIterator It) {
             var Key = _String(It);
 
             if (Key == null)
@@ -129,67 +120,62 @@ namespace Poly.Data {
             return null;
         }
 
-        private static bool _getValue(StringIterator It, out object Value) {
-            return (Value = _Object(It)) != null ||
-                   (Value = _Array(It)) != null ||
-                   (Value = _String(It)) != null ||
-                   (Value = _Number(It)) != null ||
-                   (Value = _Boolean(It)) != null ||
-                   _IsNullLitteral(It);
+        static object _Number(StringIterator It) {
+			var Start = It.Index;
+			bool isFloatPoint = false;
+
+			It.Consume("-");
+
+			if (It.Consume(char.IsDigit))
+				if (It.Consume('.')) {
+					isFloatPoint = true;
+					It.Consume(char.IsDigit);
+				}
+
+			if (It.Consume('e') || It.Consume('E')) {
+				if (!It.Consume('-'))
+					It.Consume('+');
+
+				It.Consume(char.IsDigit);
+			}
+
+			var str = It.Substring(Start, It.Index - Start);
+
+			if (isFloatPoint) {
+				float flt;
+				double dbl;
+
+				if (float.TryParse(str, out flt))
+					return flt;
+
+				if (double.TryParse(str, out dbl))
+					return dbl;
+			}
+			else {
+				int n;
+				long lng;
+
+				if (int.TryParse(str, out n))
+					return n;
+
+				if (long.TryParse(str, out lng))
+					return lng;
+			}
+
+			return str;
+		}
+
+		static string _String(StringIterator It) {
+			return It.Extract('"', '"') ?? It.Extract('\'', '\'');
+		}
+
+        static bool? _Boolean(StringIterator It) {
+			if (It.Consume("true")) return true;
+			if (It.Consume("false")) return false;
+			return null;
         }
 
-        private static string _String(StringIterator It) {
-            if (It.IsAt('"')) {
-                return It.Extract('"', '"');
-            }
-            else if (It.IsAt('\'')) {
-                return It.Extract('\'', '\'');
-            }
-            return null;
-        }
-
-        private static object _Number(StringIterator It) {
-            var Begin = It.Index;
-
-            It.Consume("-");
-
-            if (It.Consume(char.IsDigit))
-                if (It.Consume('.'))
-                    It.Consume(char.IsDigit);
-
-            if (It.Consume('e') || It.Consume('E')) {
-                if (!It.Consume('-'))
-                    It.Consume('+');
-
-                It.Consume(char.IsDigit);
-            }
-
-            if (It.Index > Begin) {
-                object Result;
-                string Sub = It.Substring(Begin, It.Index - Begin);
-                
-                foreach (var Pair in Parsers) {
-                    Result = Pair.Value(Sub);
-
-                    if (Result != null)
-                        return Result;
-                }
-            }
-
-            It.Index = Begin;
-            return null;
-        }
-
-        private static object _Boolean(StringIterator It) {
-            if (It.Consume("true"))
-                return true;
-            else if (It.Consume("false"))
-                return false;
-
-            return null;
-        }
-
-        private static bool _IsNullLitteral(StringIterator It) {
+        static bool _NullLitteral(StringIterator It) {
             return It.Consume("null");
         }
     }

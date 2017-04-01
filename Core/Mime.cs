@@ -19,7 +19,7 @@ namespace Poly {
             return string.Empty;
         }
         
-        public static JSON<string> List = new JSON <string>{
+		public static KeyValueCollection<string> List = new KeyValueCollection <string>{
 			{ ".123", "application/vnd.lotus-1-2-3" },
 			{ ".3dml", "text/vnd.in3d.3dml" },
 			{ ".3g2", "video/3gpp2" },

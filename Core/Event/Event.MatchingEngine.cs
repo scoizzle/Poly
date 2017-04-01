@@ -22,32 +22,52 @@ namespace Poly {
                 );
             }
 
-            public T GetHandler(string Data) {
-                if (Data == null) return default(T);
-                
-                var Len = Handlers.Count;
-                for (int i = 0; i < Len; i++) {
-                    var I = Handlers.Elements[i];
-
-                    if (I.Key.Compare(Data))
-                        return I.Value;
-                }
-                return default(T);
+			public T GetHandler(string Data) {
+				T Handler;
+				TryGetHandler(Data, out Handler);
+				return Handler;
             }
 
             public T GetHandler(string Data, JSON Args) {
-                var Len = Handlers.Count;
-                for (int i = 0; i < Len; i++) {
-                    var I = Handlers.Elements[i];
-                    var R = I.Key.Match(Data, Args);
-
-                    if (R == null)
-                        continue;
-                    
-                    return I.Value;
-                }
-                return default(T);
+				T Handler;
+				TryGetHandler(Data, Args, out Handler);
+				return Handler;
             }
+
+			public bool TryGetHandler(string Data, out T handler) {
+				if (!string.IsNullOrEmpty(Data)) {
+					var Len = Handlers.Count;
+					for (int i = 0; i < Len; i++) {
+						var I = Handlers.Elements[i];
+
+						if (I.Key.Compare(Data)) {
+							handler = I.Value;
+							return true;
+						}
+					}
+				}
+
+				handler = default(T);
+				return false;
+			}
+
+			public bool TryGetHandler(string Data, JSON Args, out T handler) {
+				if (!string.IsNullOrEmpty(Data)) {
+					var Len = Handlers.Count;
+					for (int i = 0; i < Len; i++) {
+						var I = Handlers.Elements[i];
+						var R = I.Key.Match(Data, Args);
+
+						if (R != null) {
+							handler = I.Value;
+							return true;
+						}
+					}
+				}
+
+				handler = default(T);
+				return false;
+			}
         }
     }
 }

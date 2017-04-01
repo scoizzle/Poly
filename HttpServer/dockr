@@ -1,0 +1,10 @@
+if [ $1 == "run" ]
+then
+    docker build -t polyhttp . && \
+        docker run polyhttp -d -p 80:80 -name "polyhttp" -rm
+fi
+
+if [ $1 == "kill" ]
+then
+    docker kill polyhttp && docker rm polyhttp
+fi

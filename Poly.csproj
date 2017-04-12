@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>netcoreapp1.1</TargetFramework>
+    <SynchReleaseVersion>false</SynchReleaseVersion>
+    <RootNamespace>Poly</RootNamespace>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <PackageId>Poly</PackageId>
+    <Authors>Scot 'Scoizzle' Murphy</Authors>
+    <Company />
+    <Product>Poly</Product>
+    <Description>Poly is an application development extension providing multiple classes for improving developer life.</Description>
+    <Copyright>Scot 'Scoizzle' Murphy</Copyright>
+    <PackageProjectUrl>http://github.com/scoizzle/Poly/</PackageProjectUrl>
+    <RepositoryUrl>http://github.com/scoizzle/Poly/</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseUrl>If you make money with Poly, I make money.</PackageLicenseUrl>
+  </PropertyGroup>
+
+  <ProjectExtensions>
+    <MonoDevelop>
+      <Properties>
+        <Policies>
+          <VersionControlPolicy inheritsSet="Mono">
+            <CommitMessageStyle LastFilePostfix=":&#xA;  " Wrap="False" />
+          </VersionControlPolicy>
+        </Policies>
+      </Properties>
+    </MonoDevelop>
+  </ProjectExtensions>
+</Project>

@@ -8,63 +8,26 @@ namespace Poly.Net.Http {
 	public partial class Server {
         public delegate void Handler(Request In, Response Out, JSON Args);
 
-        public static Serializer<Server> Serializer = new Serializer<Server>();
-
 		private Tcp.Server Listener;
         private SemaphoreSlim Semaphore;
-        private int MaxConcurrentWorkers;
         private Event.Engine<Handler> RequestHandlers;
+        private Cache Cache;
 
-        private bool Running {
+        public bool Running {
             get {
                 return Listener?.Running == true;
             }
         }
-        
-        public Host Host;
 
-        public Cache Cache;
-
-        public int Port {
-            get {
-                return Listener?.Port ?? 80;
-            }
-            set {
-                Listener?.Stop();
-
-                Listener = new Tcp.Server(value);
-                Listener.OnClientConnected += OnClientConnected;
-            }
-        }
-
-        public int Concurrency {
-            get {
-                return MaxConcurrentWorkers;
-            }
-            set {
-                MaxConcurrentWorkers = value;
-                Semaphore = new SemaphoreSlim(value);
-            }
-        }
-
-        public bool UseStaticFiles {
-            get {
-                return Cache.Active;
-            }
-            set {
-                Cache.Active = value;
-            }
-        }
+        public Configuration Config;
 
         public Server() {
             RequestHandlers = new Event.Engine<Handler>();
             Cache = new Cache(this);
-            Concurrency = Environment.ProcessorCount;
         }
 
-        public Server(string hostname, int port) : this() {
-            Host = new Host(hostname);
-            Port = port;
+        public Server(Configuration config) : this() {
+            Config = config;
 		}
 
         ~Server() { 
@@ -72,15 +35,23 @@ namespace Poly.Net.Http {
 		}
 
         public virtual bool Start() {
-            Cache.Server = this;
+            if (Config == null) throw new NullReferenceException(
+                "Must initialize the server configuration!"
+                );
+
             Cache.Start();
-            return Listener?.Start() == true;
+
+            Semaphore = new SemaphoreSlim(Config.Concurrency);
+            Listener = new Tcp.Server(Config.Port);
+            Listener.OnClientConnected += OnClientConnected;
+
+            return Listener.Start();
         }
 
         public virtual void Stop() {
             Cache.Stop();
             Listener?.Stop();
-            Listener = null;
+            Semaphore?.Dispose();
         }
 
         public virtual void Restart() {

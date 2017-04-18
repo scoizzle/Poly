@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
@@ -8,13 +9,17 @@ namespace Poly.Net.Http {
 
     public partial class Server {
         async Task OnClientConnected(Client client) {
+            Host        host = Config.Host;
+            Matcher     matcher = host.Matcher;
+            Boolean     use_static_files = Config.Cache.UseStaticFiles;
+
             Request     request = new Request(client);
             Response    response = new Response(client);
             JSON        arguments = new JSON();
 
             do {
                 if (!await request.Receive())
-                    return;
+                    break;
 
                 Semaphore.Wait();
 
@@ -23,7 +28,7 @@ namespace Poly.Net.Http {
                         "Host",
                         out string hostname);
 
-                if (hostname_found && Host.Matcher.Compare(hostname)) {
+                if (hostname_found && matcher.Compare(hostname)) {
                     try {
                         var handler_found =
                             RequestHandlers.TryGetHandler(
@@ -35,8 +40,8 @@ namespace Poly.Net.Http {
                             handler(request, response, arguments);
                         }
                         else {
-                            if (UseStaticFiles) {
-                                var file_name = Host.GetDocumentName(request.Target);
+                            if (use_static_files) {
+                                var file_name = host.GetDocumentName(request.Target);
 
                                 var cached_found =
                                     Cache.TryGetValue(
@@ -44,6 +49,8 @@ namespace Poly.Net.Http {
                                         out Cache.Item cached);
 
                                 if (cached_found) {
+                                    response.Vary = "Accept-Encoding";
+
                                     if (cached.LastWriteTimeUtc.Compare(request.LastModified)) {
                                         response.Status = Result.NotModified;
                                     }

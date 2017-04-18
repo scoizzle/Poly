@@ -27,10 +27,17 @@ namespace Poly.Net.Http {
         }
 
         public string GetDocumentName(string Target) {
-            if (Target == null || Target.Length == 0 || Target == "/")
-                Target = DefaultDocument;
-            else if (Target[Target.Length - 1] == '/')
-                Target = Target + DefaultDocument;
+            if (Target == null || Target.Length == 0)
+                return null;
+
+            var length = Target.Length;
+
+            if (length == 1 && Target[0] == '/')
+                return DefaultDocument;
+
+            if (Target[length - 1] == '/')
+                return string.Concat(Target, DefaultDocument);
+
             return Target;
         }
 

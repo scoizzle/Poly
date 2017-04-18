@@ -29,7 +29,7 @@ namespace Poly
         public static void Init(params string[] Commands) { 
             Log.Active = Running = true;
 
-            Log.Info("Application initializing... MAKE POLYSCRIPT GREAT AGAIN");
+            Log.Info("Application initializing...");
 
             foreach (var cmd in Commands) {
                 var args = new JSON();

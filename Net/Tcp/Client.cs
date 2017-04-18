@@ -6,7 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.Security;
-using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text;
@@ -28,8 +28,19 @@ namespace Poly.Net.Tcp {
 
         public Client(Socket sock) {
             Socket = sock;
+
+            Socket.ReceiveTimeout = 5000;
+            Socket.SendTimeout = 5000;
+
             Stream = new NetworkStream(sock);
             Buffer = new byte[DefaultBufferSize];
+        }
+
+        public Client(Socket sock, bool secure) : this(sock) {
+            if (secure) {
+                Secure = true;
+                Stream = SecureStream = new SslStream(Stream);
+            }
         }
 
         ~Client() {
@@ -37,12 +48,14 @@ namespace Poly.Net.Tcp {
         }
 
         public Socket Socket { get; protected set; }
-        public NetworkStream Stream { get; protected set; }
+        public Stream Stream { get; protected set; }
+        public SslStream SecureStream { get; protected set; }
 
         public long TotalBytesConsumed { get; private set; }
 
         public int Position { get; private set; }
         public int Length { get; private set; }
+        public bool Secure { get; private set; }
 
         public int Available { get { return Length - Position; } }
 
@@ -79,11 +92,32 @@ namespace Poly.Net.Tcp {
 
         public async Task<bool> Connect(string host, int port) {
             try {
-                var addrs = await Dns.GetHostAddressesAsync(host);
-                await Connect(addrs.FirstOrDefault(), port);
+                var get_addresses = Dns.GetHostAddressesAsync(host);
+                var addresses = await get_addresses;
 
-                if (Socket.Connected) {
-                    Stream = new NetworkStream(Socket);
+                if (addresses.Length == 0) return false;
+                var get_connection = Connect(
+                    new IPEndPoint(
+                        addresses.First(),
+                        port
+                ));
+
+                var connected = await get_connection;
+                if (connected) {
+                    if (Secure) {
+                        SecureStream = new SslStream(
+                            new NetworkStream(Socket),
+                            false,
+                            new RemoteCertificateValidationCallback(
+                                SecureValidationCallback
+                        ));
+
+                        var get_authentication = SecureStream.AuthenticateAsClientAsync(host);
+                        await get_authentication;
+
+                        Stream = SecureStream;
+                    }
+
                     return true;
                 }
             }
@@ -92,18 +126,8 @@ namespace Poly.Net.Tcp {
             return false;
         }
 
-        public async Task<bool> Connect(IPAddress addr, int port) {
-            try {
-                await Socket.ConnectAsync(addr, port);
-
-                if (Socket.Connected) {
-                    Stream = new NetworkStream(Socket);
-                    return true;
-                }
-            }
-            catch { }
-            
-            return false;
+        public Task<bool> Connect(IPAddress addr, int port) {
+            return Connect(new IPEndPoint(addr, port));
         }
 
         public void Close() {
@@ -367,6 +391,10 @@ namespace Poly.Net.Tcp {
         private void Consume(int len) {
             Position += len;
             TotalBytesConsumed += len;
+        }
+
+        private static bool SecureValidationCallback(object sender, X509Certificate cert, X509Chain chain, SslPolicyErrors errors) {
+            return errors != SslPolicyErrors.None;
         }
     }
 }

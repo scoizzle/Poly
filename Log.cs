@@ -8,9 +8,10 @@ using System.Threading.Tasks;
 using System.Diagnostics;
 
 namespace Poly {
+    using Data;
+
 	public class Log {
 		public enum Levels {
-			None = -1,
 			Fatal,
 			Error,
 			Warning,
@@ -18,111 +19,112 @@ namespace Poly {
 			Debug
 		};
 
-		public static bool Active;
-		public static Levels Level;
+		public static bool Active = true;
+		public static Levels Level = Levels.Fatal;
 		public static Action<string> Handler = Console.WriteLine;
 
-		public static void Debug(object Message) {
-			if (Level <= Levels.Debug) {
-				Print("[DEBUG] ", Message);
-			}
+        public static void Print(Levels level, params object[] messages) {
+            if (Active && Level <= level) {
+                var Output = new StringBuilder();
+
+                Output.Append('[').Append(level.ToString().ToUpper()).Append("] ");
+
+                foreach (var message in messages)
+                    Output.Append(message);
+
+                Handler(Output.ToString());
+            }
+        }
+
+
+        public static void Print(Levels level, string format, params object[] args) {
+            if (Active && Level <= level) {
+                var Output = new StringBuilder();
+
+                Output.Append('[').Append(level.ToString().ToUpper()).Append("] ");
+                Output.AppendFormat(format, args);
+
+                Handler(Output.ToString());
+            }
+        }
+
+
+        public static void Debug(object message) {
+            Print(Levels.Debug, message);
 		}
 
-		public static void Debug(string Format, params object[] Args) {
-			Debug(string.Format(Format, Args) as object);
-		}
+		public static void Debug(string format, params object[] args) {
+            Print(Levels.Debug, format, args);
+        }
 
-		public static void Info(object Message) {
-			if (Level <= Levels.Info) {
-				Print("[INFO] ", Message);
-			}
-		}
+        public static void Info(object message) {
+            Print(Levels.Info, message);
+        }
 
-		public static void Info(string Format, params object[] Args) {
-			if (Args.Length == 0)
-				Info(Format as object);
-			else
-				Info(string.Format(Format, Args) as object);
-		}
+        public static void Info(string format, params object[] args) {
+            Print(Levels.Info, format, args);
+        }
 
-		public static void Warning(object Message) {
-			if (Level <= Levels.Warning) {
-				Print("[WARNING] ", Message);
-			}
-		}
+        public static void Warning(object message) {
+            Print(Levels.Warning, message);
+        }
 
-		public static void Warning(string Format, params object[] Args) {
-			Warning(string.Format(Format, Args) as object);
-		}
+        public static void Warning(string format, params object[] args) {
+            Print(Levels.Warning, format, args);
+        }
 
-		public static void Error(object Message) {
-			if (Level <= Levels.Error) {
-				Print("[ERROR] ", Message);
-			}
-		}
+        public static void Error(object message) {
+            Print(Levels.Error, message);
+        }
 
-		public static void Error(string Format, params object[] Args) {
-			Error(string.Format(Format, Args) as object);
-		}
+        public static void Error(string format, params object[] args) {
+            Print(Levels.Error, format, args);
+        }
 
-		public static void Fatal(object Message) {
-			if (Level <= Levels.Fatal) {
-				Print("[FATAL] ", Message);
-			}
-			App.Exit(-1);
-		}
+        public static void Fatal(object message) {
+            Print(Levels.Fatal, message);
+        }
 
-		public static void Fatal(string Format, params object[] Args) {
-			Fatal(string.Format(Format, Args) as object);
-		}
+        public static void Fatal(string format, params object[] args) {
+            Print(Levels.Fatal, format, args);
+        }
 
-		public static void Print(params object[] Messages) {
-			if (!Active)
-				return;
-
-			Handler(string.Concat(Messages));
-		}
-
-		public static Task Benchmark(string Name, int Iterations, Action Todo) {
+		public static void Benchmark(string Name, int Iterations, Action Todo) {
 			GC.Collect();
 			GC.WaitForPendingFinalizers();
 			GC.Collect();
 
 			Todo();
+            
+			var watch = new Stopwatch();
 
-			return Task.Run(() => {
-				var watch = new Stopwatch();
+			int i = 0;
+			for (; i < Iterations; i++) {
+				watch.Start();
+				Todo();
+				watch.Stop();
+			}
 
-				int i = 0;
-				for (; i < Iterations; i++) {
-					watch.Start();
-					Todo();
-					watch.Stop();
-				}
-
-				Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
-			});
+			Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
 		}
 
-		public static Task Benchmark(string Name, int Iterations, Action<int> Todo) {
+		public static void Benchmark(string Name, int Iterations, Action<int> Todo) {
 			GC.Collect();
 			GC.WaitForPendingFinalizers();
 			GC.Collect();
 
 			Todo(0);
+            
+			var watch = new Stopwatch();
 
-			return Task.Factory.StartNew(() => {
-				var watch = new Stopwatch();
+			int i = 0;
+			for (; i < Iterations; i++) {
+				watch.Start();
+				Todo(i);
+				watch.Stop();
+			}
 
-				int i = 0;
-				for (; i < Iterations; i++) {
-					watch.Start();
-					Todo(i);
-					watch.Stop();
-				}
-
-				Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
-			});
+			Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
 		}
 	}
 }

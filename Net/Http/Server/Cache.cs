@@ -2,12 +2,23 @@
 using System.Linq;
 using System.IO;
 using System.IO.Compression;
-using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
     using Data;
 
     public class Cache : KeyValueCollection<Cache.Item> {
+        public class Configuration {
+            public bool UseStaticFiles = false;
+
+            public string[] Compressable = {
+                ".htm",
+                ".css",
+                ".js",
+                ".ico",
+                ".svg"
+            };
+        }
+
         public struct Item {
             public FileInfo Info;
             public MemoryStream Stream;
@@ -17,25 +28,16 @@ namespace Poly.Net.Http {
                           LastWriteTimeUtc;
         }
 
-        protected internal bool Active { get; set; }
-
-        protected internal long CurrentSize {
+        public long CurrentSize {
             get {
                 return Values.Sum(v => v.ContentLength);
             }
         }
 
-        public string[] Compressable = {
-            ".htm",
-            ".css",
-            ".js",
-            ".ico",
-            ".svg"
-        };
-
-        internal Server Server;
+        Server Server;
         DirectoryInfo Info;
         FileSystemWatcher Watcher;
+        Configuration Config;
 
         public Cache() { }
 
@@ -44,7 +46,8 @@ namespace Poly.Net.Http {
         }
 
         public void Start() {
-            Info = Server.Host?.DocumentPath;
+            Config = Server.Config?.Cache;
+            Info = Server.Config?.Host?.DocumentPath;
 
             if (Info?.Exists == true) {
                 Watcher = new FileSystemWatcher(Info.FullName);
@@ -52,7 +55,7 @@ namespace Poly.Net.Http {
                 Watcher.Changed += Changed;
                 Watcher.Renamed += Renamed;
                 Watcher.Deleted += Deleted;
-                Watcher.EnableRaisingEvents = Active;
+                Watcher.EnableRaisingEvents = Config.UseStaticFiles;
 
                 Load(Info);
             }
@@ -75,7 +78,7 @@ namespace Poly.Net.Http {
         }
 
         bool ShouldLoad(string fileExtension) {
-            return Compressable.Contains(fileExtension);
+            return Config.Compressable.Contains(fileExtension);
         }
 
         string GetWWWName(string FullPath) {

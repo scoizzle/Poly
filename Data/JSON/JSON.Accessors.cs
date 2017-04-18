@@ -107,8 +107,10 @@ namespace Poly.Data {
 
         public virtual bool TryGet<T>(string Key, out T Value) {
 			if (TryGet(Key, out object Val)) {
-                if (Val is T value)
+                if (Val is T value) {
                     Value = value;
+                    return true;
+                }
 			}
 
 			Value = default(T);

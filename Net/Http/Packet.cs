@@ -23,12 +23,8 @@ namespace Poly.Net.Http {
         }
 
         public string Date {
-            get {
-                return Headers["Date"];
-            }
-            set {
-                Headers["Date"] = value;
-            }
+            get { return Headers["Date"]; }
+            set { Headers["Date"] = value; }
         }
 
         public long ContentLength {
@@ -43,13 +39,14 @@ namespace Poly.Net.Http {
             }
         }
 
+        public string Vary {
+            get { return Headers["Vary"]; }
+            set { Headers["Vary"] = value; }
+        }
+
         public string ContentType {
-            get {
-                return Headers["Content-Type"];
-            }
-            set {
-                Headers["Content-Type"] = value;
-            }
+            get { return Headers["Content-Type"]; }
+            set { Headers["Content-Type"] = value; }
         }
 
         public string LastModified {

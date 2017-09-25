@@ -37,14 +37,14 @@ namespace Poly.Net.Tcp {
             try {
                 base.Start();
 
-                Log.Debug("Now listening on port {0}", Port);
+                Log.Info("Now listening on port {0}", Port);
             }
             catch (Exception Error) {
                 Log.Error("Couldn't begin accepting connections on port {0}", Port);
                 Log.Error(Error);
                 return false;
             }
-        
+
             ListenerTask = StartAcceptTask();
             return true;
         }
@@ -55,7 +55,7 @@ namespace Poly.Net.Tcp {
         }
 
         async Task StartAcceptTask() {
-			Task lastStarted;
+            Task lastStarted;
             while (Active) {
                 try {
                     var accept_socket = AcceptSocketAsync();
@@ -64,14 +64,10 @@ namespace Poly.Net.Tcp {
                     var client = new Client(socket, Secure);
 
                     if (Secure) {
-                        var authentication = client.SecureStream.AuthenticateAsServerAsync(Certificate);
-
-                        await authentication;
+                        await client.SecureStream.AuthenticateAsServerAsync(Certificate);
                     }
 
-                    lastStarted = OnClientConnected(
-                        client
-                        );
+                    lastStarted = OnClientConnected(client);
                 }
                 catch (OperationCanceledException) { }
                 catch (SocketException) { }

@@ -7,43 +7,38 @@ using System.Threading.Tasks;
 
 namespace Poly.Data {
     public partial class KeyValueCollection<T> {
-        public IEnumerable<string> Keys
+        public IEnumerable<string> Keys { 
+            get {
+                return from pair in KeyValuePairs select pair.Key;
+            }
+        }
+
+        public IEnumerable<T> Values {
+            get {
+                return from pair in KeyValuePairs select pair.Value;
+            }
+        }
+
+        public IEnumerable<KeyValueCollection<T>.KeyValuePair> KeyValuePairs
         {
             get
             {
-                foreach (var group in List) {
-                    foreach (var pair in group.List) {
-                        yield return pair.Key;
+                var list = List;
+                var count = list.Count;
+
+                for (var i = 0; i < count; i++) {
+                    var collection = list[i];
+                    var collection_list = collection.List;
+                    var collection_count = collection_list.Count;
+
+                    for (var j = 0; j < collection_count; j++) {
+                        yield return collection_list[j];
                     }
                 }
             }
         }
 
-        public IEnumerable<T> Values
-        {
-            get
-            {
-                foreach (var group in List) {
-                    foreach (var pair in group.List) {
-                        yield return pair.Value;
-                    }
-                }
-            }
-        }
-
-        public IEnumerable<KeyValuePair> KeyValuePairs
-        {
-            get
-            {
-                foreach (var group in List) {
-                    foreach (var pair in group.List) {
-                        yield return pair;
-                    }
-                }
-            }
-        }
-
-        public IEnumerator<KeyValuePair> GetEnumerator() {
+        public IEnumerator<KeyValueCollection<T>.KeyValuePair> GetEnumerator() {
             return new Enumerator(this);
         }
 
@@ -51,59 +46,43 @@ namespace Poly.Data {
             return (IEnumerator)new Enumerator(this);
         }
         
-        public struct Enumerator : IEnumerator<KeyValuePair> {
-            int indexMajor, indexMinor;
-            KeyValueCollection<T> list;
-            PairCollection pc;
+        public struct Enumerator : IEnumerator<KeyValueCollection<T>.KeyValuePair> {
+            int Index, Count;
+            KeyValuePair[] Pairs;
+            KeyValueCollection<T> Collection;
 
             public KeyValuePair Current { get; private set; }
             object IEnumerator.Current { get { return Current; } }
 
-            internal Enumerator(KeyValueCollection<T> Coll) {
-                indexMajor = indexMinor = 0;
-                Current = null;
+            internal Enumerator(KeyValueCollection<T> collection) {
+                Collection = collection;
 
-                list = Coll;
+                Pairs = collection.KeyValuePairs.ToArray();
+                Count = Pairs.Length;
 
-                if (Coll.Count == 0) pc = null;
+                if (Count > 0){
+                    Current = Pairs[0];
+                    Index = 1;
+                }
                 else {
-                    pc = list.List.Elements[indexMinor];
+                    Current = default(KeyValuePair);
+                    Index = 0;
                 }
             }
 
             public void Dispose() { }
 
             public bool MoveNext() {
-                if (pc == null) return false;
-
-                if (indexMinor < pc.List.Count) {
-                    Current = pc.List.Elements[indexMinor];
-                    indexMinor++;
+                if (Index < Count) {
+                    Current = Pairs[Index++];
                     return true;
                 }
-
-                indexMinor = 0;
-                indexMajor++;
                 
-                if (indexMajor < list.List.Count) {
-                    pc = list.List.Elements[indexMajor];
-
-                    if (pc != null) {
-                        Current = pc.List.Elements[indexMinor];
-                        indexMinor++;
-                        return true;
-                    }
-                }
-
-                Current = null;
                 return false;
             }
 
             void IEnumerator.Reset() {
-                indexMajor = indexMinor = 0;
-                Current = null;
-                list = null;
-                pc = null;
+                Index = 0;
             }
         }
     }

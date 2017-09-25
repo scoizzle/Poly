@@ -1,182 +1,143 @@
 ﻿using System;
+using System.Text;
+using System.Linq;
 
 namespace Poly.Data {
-    public partial class JSON {
-        public static JSON Parse(string Text) {
-            return Parse(Text, 0, Text.Length);
-        }
+	public partial class JSON {
+		public static Serializer<JSON> Serializer;
 
-        public static JSON Parse(string Text, int Index) {
-            return Parse(Text, Index, Text.Length);
-        }
-
-        public static JSON Parse(string Text, int Index, int Length) {
-			var js = new JSON();
-
-			if (Parse(Text, Index, Length, js))
-				return js;
-
-			return null;
-        }
-
-        public static bool Parse(string Text, JSON Storage) {
-            return Parse(Text, 0, Text.Length, Storage);
-        }
-
-        public static bool Parse(string Text, int Index, JSON Storage) {
-            return Parse(Text, Index, Text.Length, Storage);
-        }
-
-        public static bool Parse(string Text, int Index, int Length, JSON Storage) {
-            var It = new StringIterator(Text, Index, Length);
-
-            if (_Object(It, Storage) != null)
-                return true;
-			
-            if (_Array(It, Storage) != null)
-                return true;
-			
-            return false;
-        }
-
-		static Func<char, bool>[] WhitepsaceFuncs = {
-			char.IsWhiteSpace, c => c == ','
-		};
-
-		static bool _getValue(StringIterator It, out object Value) {
-			return (Value = _Object(It)) != null ||
-				   (Value = _Array(It)) != null ||
-				   (Value = _String(It)) != null ||
-				   (Value = _Boolean(It)) != null ||
-				   (Value = _Number(It)) != null ||
-				   _NullLitteral(It);
+		static JSON() {
+			Serializer = new Serializer<JSON>(Serialize, Deserialize);
 		}
 
-		static JSON _Object(StringIterator It, JSON Storage = null) {
-			if (It.SelectSection('{', '}')) {
-				if (Storage == null) Storage = new JSON();
-				It.ConsumeWhitespace();
+		public static implicit operator JSON(string Text) {
+			return Serializer.Deserialize(Text);
+		}
 
-				while (!It.IsDone()) {
-					var Pair = _KeyValuePair(It);
+		static bool Serialize(StringBuilder json, JSON obj) {
+			if (obj == null)
+				return false;
+				
+			if (obj.IsArray) {
+				json.Append('[');
 
-					if (Pair == null) return null;
+				var elements = obj.Values.ToArray();
+				var lastIndex = elements.Length - 1;
 
-					Storage.Set(Pair);
+				for (int i = 0; i <= lastIndex; i++) {
+					var element = elements[i];
 
-					if (!It.Consume(WhitepsaceFuncs))
-						break;
+					if (element == null) 
+						continue;
+
+					var serial = Data.Serializer.GetCached(element.GetType());
+
+					if (!serial.SerializeObject(json, element))
+						return false;
+
+					if (i != lastIndex)
+						json.Append(',');
 				}
 
-				It.ConsumeSection();
-				return Storage;
-			}
-
-			return null;
-        }
-
-		static JSON _Array(StringIterator It, JSON Storage = null) {
-			if (It.SelectSection('[', ']')) {
-				if (Storage == null) Storage = new JSON();
-				It.ConsumeWhitespace();
-
-				while (!It.IsDone()) {
-					object Value;
-					if (_getValue(It, out Value)) Storage.Add(Value);
-					else {
-						Log.Error("JSON Failed to parse ", It);
-						return null;
-					}
-
-					if (!It.Consume(WhitepsaceFuncs))
-						break;
-				}
-
-				It.ConsumeSection();
-				Storage.IsArray = true;
-				return Storage;
-			}
-
-			return null;
-        }
-
-        static KeyValuePair _KeyValuePair(StringIterator It) {
-            var Key = _String(It);
-
-            if (Key == null)
-                return null;
-
-            It.ConsumeWhitespace();
-
-            if (It.Consume(':')) {
-                It.ConsumeWhitespace();
-                object Value;
-
-                if (_getValue(It, out Value))
-                    return new KeyValuePair(Key, Value);
-            }
-
-            Log.Error("Failed to parse {0}", It);
-            return null;
-        }
-
-        static object _Number(StringIterator It) {
-			var Start = It.Index;
-			bool isFloatPoint = false;
-
-			It.Consume("-");
-
-			if (It.Consume(char.IsDigit))
-				if (It.Consume('.')) {
-					isFloatPoint = true;
-					It.Consume(char.IsDigit);
-				}
-
-			if (It.Consume('e') || It.Consume('E')) {
-				if (!It.Consume('-'))
-					It.Consume('+');
-
-				It.Consume(char.IsDigit);
-			}
-
-			var str = It.Substring(Start, It.Index - Start);
-
-			if (isFloatPoint) {
-				float flt;
-				double dbl;
-
-				if (float.TryParse(str, out flt))
-					return flt;
-
-				if (double.TryParse(str, out dbl))
-					return dbl;
+				json.Append(']');
+				return true;
 			}
 			else {
-				int n;
-				long lng;
+				json.Append('{');
 
-				if (int.TryParse(str, out n))
-					return n;
+				var elements = obj.KeyValuePairs.ToArray();
+				var lastIndex = elements.Length - 1;
 
-				if (long.TryParse(str, out lng))
-					return lng;
+				for (int i = 0; i <= lastIndex; i++) {
+					var element = elements[i];
+
+					if (element.Value == null) 
+						continue;
+
+					var serial = Data.Serializer.GetCached(element.Value.GetType());
+
+					json.Append('"').Append(element.Key).Append("\":");
+
+					if (!serial.SerializeObject(json, element.Value))
+						return false;
+
+					if (i != lastIndex)
+						json.Append(',');
+				}
+
+				json.Append('}');
+				return true;
+			}
+		}
+
+		static bool Deserialize(StringIterator json, out JSON obj) {
+			if (json.SelectSection('{', '}')) {
+				obj = new JSON();
+            	var String = Data.Serializer.String;
+
+            	while (!json.IsDone) {
+            		json.ConsumeWhitespace();
+
+	            	if (!String.TryDeserialize(json, out string key))
+	            		return false;
+
+	            	json.ConsumeWhitespace();
+
+            		if (!json.Consume(':'))
+            			return false;
+
+	            	json.ConsumeWhitespace();
+
+	            	if (!DeserializeValue(json, out object value))
+	            		return false;
+
+	            	obj.Add(key, value);
+
+	            	json.ConsumeWhitespace();
+
+	            	if (!json.Consume(','))
+	            		break;
+	            }
+
+	            json.ConsumeSection();
+	           	return true;
+			}
+			else
+			if (json.SelectSection('[', ']')) {
+				obj = new JSON();
+				obj.IsArray = true;
+
+            	while (!json.IsDone) {
+	            	json.ConsumeWhitespace();
+
+	            	if (!DeserializeValue(json, out object value))
+	            		return false;
+
+	            	obj.Add(obj.Count.ToString(), value);
+
+	            	json.ConsumeWhitespace();
+
+	            	if (!json.Consume(','))
+	            		break;
+	            }
+
+	            json.ConsumeSection();
+	           	return true;
 			}
 
-			return str;
+			obj = null;
+			return false;
 		}
 
-		static string _String(StringIterator It) {
-			return It.Extract('"', '"') ?? It.Extract('\'', '\'');
+		static bool DeserializeValue(StringIterator json, out object obj) {
+			return 
+				Serializer.DeserializeObject(json, out obj) ||
+				Data.Serializer.Bool.DeserializeObject(json, out obj) ||
+				Data.Serializer.String.DeserializeObject(json, out obj) ||
+				Data.Serializer.Int.DeserializeObject(json, out obj) ||
+				Data.Serializer.Long.DeserializeObject(json, out obj) ||
+				Data.Serializer.Float.DeserializeObject(json, out obj) ||
+				Data.Serializer.Double.DeserializeObject(json, out obj);
 		}
-
-        static bool? _Boolean(StringIterator It) {
-			if (It.Consume("true")) return true;
-			if (It.Consume("false")) return false;
-			return null;
-        }
-
-        static bool _NullLitteral(StringIterator It) {
-            return It.Consume("null");
-        }
-    }
+	}
 }

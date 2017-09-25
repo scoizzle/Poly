@@ -18,22 +18,36 @@ namespace Poly.Net.Tcp {
 	using Http;
 
 	public class Client {
-        public static readonly byte[] NewLineBytes = Encoding.UTF8.GetBytes(App.NewLine);
-        public static readonly byte[] EmptyBytes = new byte[0];
-        public static int DefaultBufferSize = 8 * 1024;
+        public static readonly byte[] NewLineBytes  = App.NewLineBytes;
+        public static int DefaultBufferSize         = 1024 * 16;
 
-        protected byte[] Buffer;
-        
-        public Client() : this(new Socket(SocketType.Stream, ProtocolType.Tcp)) { }
+        protected MemoryBuffer In, Out;
 
-        public Client(Socket sock) {
+        public Socket Socket { get; protected set; }
+        public Stream Stream { get; protected set; }
+        public SslStream SecureStream { get; protected set; }
+
+        public bool Secure { get; private set; }
+        public bool AutoFlush { get; set; }
+
+        public IPEndPoint LocalIPEndPoint { get { return Socket?.LocalEndPoint as IPEndPoint; } }
+		public IPEndPoint RemoteIPEndPoint { get { return Socket?.RemoteEndPoint as IPEndPoint; } }
+
+        public bool Connected {
+            get { return Socket?.Connected == true; }
+        }
+
+        public Client() {
+        }
+
+        public Client(Socket sock) : this() {
             Socket = sock;
-
-            Socket.ReceiveTimeout = 5000;
-            Socket.SendTimeout = 5000;
-
             Stream = new NetworkStream(sock);
-            Buffer = new byte[DefaultBufferSize];
+            
+            Socket.NoDelay = true;
+
+            In = new MemoryBuffer(DefaultBufferSize);
+            Out = new MemoryBuffer(DefaultBufferSize);
         }
 
         public Client(Socket sock, bool secure) : this(sock) {
@@ -47,36 +61,10 @@ namespace Poly.Net.Tcp {
             Socket?.Dispose();
         }
 
-        public Socket Socket { get; protected set; }
-        public Stream Stream { get; protected set; }
-        public SslStream SecureStream { get; protected set; }
-
-        public long TotalBytesConsumed { get; private set; }
-
-        public int Position { get; private set; }
-        public int Length { get; private set; }
-        public bool Secure { get; private set; }
-
-        public int Available { get { return Length - Position; } }
-
-        public int ReceiveTimeout {
-            get { return Socket?.ReceiveTimeout ?? 5000; }
-            set { Socket.ReceiveTimeout = Stream.ReadTimeout = value; }
-        }
-
-        public int SendTimeout {
-            get { return Socket?.SendTimeout ?? 5000; }
-            set { Socket.SendTimeout = value; }
-        }
-
-        public IPEndPoint LocalIPEndPoint { get { return Socket?.LocalEndPoint as IPEndPoint; } }
-		public IPEndPoint RemoteIPEndPoint { get { return Socket?.RemoteEndPoint as IPEndPoint; } }
-
-        public bool Connected {
-            get { return Socket?.Connected == true; }
-        }
-        
         public async Task<bool> Connect(EndPoint ep) {
+            if (Socket == null)
+                Socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+
             try {
                 await Socket.ConnectAsync(ep);
 
@@ -131,266 +119,554 @@ namespace Poly.Net.Tcp {
         }
 
         public void Close() {
-            Socket.Shutdown(SocketShutdown.Both);
+            In = null;
+            Out = null;
+
+            Socket?.Dispose();
         }
 
-        public async Task<bool> IsConnected() {
-            return Socket.Connected && await Send(EmptyBytes);
+        public bool Send() {
+            return Out.Write(Stream);
         }
         
-        public async Task<bool> ReadyToRead() {
-            if (Available == 0) await UpdateBuffer();
-            return Available > 0;
+        public Task<bool> SendAsync() {
+            return Out.WriteAsync(Stream);
         }
 
-        public async Task<bool> Send(Stream Content) {
-            try {
-                await Content.CopyToAsync(Stream, DefaultBufferSize);
-                return true;
-            }
-            catch (Exception) { return false; }
-        }
+        public bool Send(Stream Content) {
+            var length = Content.Length;
+            while (length > 0) {
+                var chunk = Out.Remaining > length ?
+                    length :
+                    Out.Remaining;
 
-        public async Task<bool> Send(byte[] bytes, int index = 0, int length = -1) {
-            if (Stream == null) return false;
-            if (length == -1) length = bytes.Length;
-
-            try {
-                await Stream.WriteAsync(bytes, index, length);
-                return true;
-            }
-            catch { return false; }
-        }
-
-        public Task<bool> Send(string str) {
-            return Send(str, Encoding.UTF8);
-		}
-
-		public Task<bool> Send(string str, Encoding enc) {
-            return Send(enc.GetBytes(str));
-        }
-
-        public Task<bool> SendLine() {
-            return Send(App.NewLine);
-        }
-
-        public Task<bool> SendLine(string Line) {
-            return Send(string.Concat(Line, App.NewLine));
-        }
-
-        public Task<bool> SendLine(string Line, Encoding enc) {
-            return Send(string.Concat(Line, App.NewLine), enc);
-        }
-
-        public bool Consume(byte[] chain) {
-            if (Available == 0) return false;
-
-            var Len = chain.Length;
-            var b = Buffer;
-
-            for (var i = 0; i < Len; i++) {
-                if (b[Position + i] != chain[i])
+                if (!Out.Read(Content, (int)chunk)) {
                     return false;
+                }
+                
+                length -= chunk;
+
+                if (Out.Remaining == 0 || AutoFlush == true)
+                if (!Out.Write(Stream)) {
+                    return false;
+                }
             }
 
-            Consume(Len);
             return true;
         }
 
-        public async Task<bool> Receive(Stream Storage, long Length) {
-            if (Stream == null) return false;
-            var B = Buffer;
-            var Len = 0;
+        public async Task<bool> SendAsync(Stream Content) {
+            var length = Content.Length;
+            while (length > 0) {
+                var chunk = Out.Remaining > length ?
+                    length :
+                    Out.Remaining;
 
-            try {
-                while (Length > 0) {
-                    if (Available == 0) await UpdateBuffer();
-
-                    Len = (int)(Math.Min(Length, Available));
-                    await Storage.WriteAsync(B, Position, Len);
-
-                    Length -= Len;
-                    Consume(Len);
+                if (!await Out.ReadAsync(Content, (int)chunk)) {
+                    return false;
                 }
+                
+                length -= chunk;
 
-                await Storage.FlushAsync();
-                return true;
+                if (Out.Remaining == 0 || AutoFlush == true)
+                if (!await Out.WriteAsync(Stream)) {
+                    return false;
+                }
             }
-            catch (Exception) { return false; }
+
+            return true;
         }
 
-        public async Task<bool> ReceiveUntil(Stream Storage, byte[] Chain, long MaxLength = long.MaxValue) {
-            if (Stream == null) return false;
-            if (Available <= 0 && !await UpdateBuffer()) return false;
+        public bool Send(byte[] content, int index = 0, int length = -1) {
+            if (length == -1)
+                length = content.Length;
 
-            var B = Buffer;
-            var S = Position;
-            var P = Position;
-            var A = Available;
-            var L = Length;
+            while (length > 0) {
+                var chunk = Out.Remaining > length ?
+                    length :
+                    Out.Remaining;
 
-            var l = Chain.Length;
-            var c = B[P];
-            var i = 0;
+                if (!Out.Read(content, index, chunk)) {
+                    return false;
+                }
 
-            try {
-                while (c >= 0) {
-                    if (Chain[i] == c) {
-                        if (++i == l) {
-                            await Storage.WriteAsync(B, S, P - S);
-                            await Storage.FlushAsync();
+                index += chunk;
+                length -= chunk;
 
-                            Position = P;
-                            return true;
-                        }
-                    }
-                    else { i = 0; }
-                    
-                    if (P == Length) {
-                        await Storage.WriteAsync(B, S, L - S);
-                        await UpdateBuffer();
-
-                        Consume(Available);
-
-                        S = 0;
-                        P = Position;
-                        L = Length;
-                        A = Available;
-                    }
-                    else {
-                        P++;
-                    }
-
-                    c = B[P];
-                    if (MaxLength-- == 0) return false;
+                if (Out.Remaining == 0 || AutoFlush == true)
+                if (!Out.Write(Stream)) {
+                    return false;
                 }
             }
-            catch (Exception) { 
-                Consume(L - P); 
+
+            return true;
+        }
+
+        public async Task<bool> SendAsync(byte[] content, int index = 0, int length = -1) {
+            if (length == -1)
+                length = content.Length;
+
+            while (length > 0) {
+                var chunk = Out.Remaining > length ?
+                    length :
+                    Out.Remaining;
+
+                if (!Out.Read(content, index, chunk)) {
+                    return false;
+                }
+
+                index += chunk;
+                length -= chunk;
+
+                if (Out.Remaining == 0 || AutoFlush == true)
+                if (!await Out.WriteAsync(Stream)) {
+                    return false;
+                }
             }
+
+            return true;
+        }
+
+        public bool Send(string str) {
+            return Send(App.Encoding.GetBytes(str));
+        }
+
+		public Task<bool> SendAsync(string str) {
+            return SendAsync(App.Encoding.GetBytes(str));
+        }
+
+        public bool SendLine(string line) {
+            return Send(string.Concat(line, App.NewLine));
+        }
+
+        public Task<bool> SendLineAsync(string line) {
+            return SendAsync(string.Concat(line, App.NewLine));
+        }
+
+        public bool Send(MemoryBuffer buffer) {
+            return Send(buffer.Array, buffer.Position, buffer.Available);
+        }
+
+        public bool Receive() {
+            return In.Read(Stream);
+        }
+
+        public Task<bool> ReceiveAsync() {
+            return In.ReadAsync(Stream);
+        }
+
+        public bool Receive(Stream storage, long length) {
+            if (In.Available == 0) {
+                var recv = Receive();
+
+                if (!recv)
+                    return false;
+            }
+
+            do {
+                var chunk = In.Available > length ?
+                    length :
+                    In.Available;
+
+                var write = In.Write(storage, (int)chunk);
+                if (!write)
+                    return false;
+
+                length -= chunk;
+
+                var recv = Receive();
+                if (!recv)
+                    return false;
+            }
+            while (length > 0);
+
+            return true;
+        }
+
+        public async Task<bool> ReceiveAsync(Stream storage, long length) {
+            if (In.Available == 0) {
+                var recv = ReceiveAsync();
+
+                if (!await recv)
+                    return false;
+            }
+
+            do {
+                var chunk = In.Available > length ?
+                    length :
+                    In.Available;
+
+                var write = In.WriteAsync(storage, (int)chunk);
+                if (!await write)
+                    return false;
+
+                length -= chunk;
+
+                var recv = ReceiveAsync();
+                if (!await recv)
+                    return false;
+            }
+            while (length > 0);
+
+            return true;
+        }
+
+        public bool Receive(byte[] bytes, int index = 0, int length = -1) {
+            if (length == -1)
+                length = bytes.Length;
+
+            if (In.Available == 0) {
+                var recv = Receive();
+
+                if (!recv)
+                    return false;
+            }
+
+            do {
+                var chunk = In.Available > length ?
+                    length :
+                    In.Available;
+
+                var write = In.Write(bytes, index, chunk);
+                if (!write)
+                    return false;
+
+                length -= chunk;
+                index += chunk;
+
+                var recv = Receive();
+                if (!recv)
+                    return false;
+            }
+            while (length > 0);
+
+            return true;
+        }
+
+        public async Task<bool> ReceiveAsync(byte[] bytes, int index = 0, int length = -1) {
+            if (length == -1)
+                length = bytes.Length;
+
+            if (In.Available == 0) {
+                var recv = ReceiveAsync();
+
+                if (!await recv)
+                    return false;
+            }
+
+            do {
+                var chunk = In.Available > length ?
+                    length :
+                    In.Available;
+
+                var write = In.Write(bytes, index, chunk);
+                if (!write)
+                    return false;
+
+                length -= chunk;
+                index += chunk;
+
+                var recv = ReceiveAsync();
+                if (!await recv)
+                    return false;
+            }
+            while (length > 0);
+
+            return true;
+        }
+
+        public bool ReceiveUntil(Stream storage, byte[] chain, long maxLength = long.MaxValue) {
+            if (In.Available == 0) {
+                var recv = Receive();
+
+                if (!recv)
+                    return false;
+            }
+
+            var buffer = In;
+            var array = buffer.Array;
+
+            var arrayStart = buffer.Position;
+            var arrayIndex = arrayStart;
+            var arrayLength = buffer.Length;
+
+            var chainIndex = 0;
+            var chainLength = chain.Length;
+
+            var lastWasPartial = false;
+
+            do {
+                var compare = array.CompareSubByteArray(arrayIndex, chain, chainIndex, chainLength);
+
+                if (compare == true) { // Found chain
+                    buffer.Write(storage, arrayIndex - arrayStart);
+                    buffer.Consume(chainLength);
+                    return true;
+                }
+                else
+                if (compare == false) { // Partial Match
+                    if (lastWasPartial) {
+                        arrayIndex++;
+                    }
+                    else {
+                        buffer.Write(storage, arrayIndex - arrayStart);
+                        buffer.Rebase();
+
+                        Receive();
+
+                        arrayIndex = 0;
+                        arrayStart = buffer.Position;
+                        arrayLength = buffer.Length;
+
+                        lastWasPartial = true;
+                    }
+                }
+                else 
+                if (compare == null) // No match.
+                    arrayIndex++;
+
+                if (arrayIndex == arrayLength) {
+                    buffer.Write(storage);
+                    Receive();
+
+                    arrayIndex = 0;
+                    arrayStart = arrayIndex;
+                    arrayLength = buffer.Length;
+                }
+            }
+            while (--maxLength > 0);
+
             return false;
         }
 
-        public async Task<bool> ReceiveUntilConstrained(Stream Storage, byte[] Chain, long MaxLength = long.MaxValue) {
-            if (Stream == null) return false;
-            if (Available <= 0 && !await UpdateBuffer()) return false;
+        public async Task<bool> ReceiveUntilAsync(Stream storage, byte[] chain, long maxLength = long.MaxValue) {
+            if (In.Available == 0) {
+                var recv = ReceiveAsync();
 
-            var B = Buffer;
-            var S = Position;
-            var P = Position;
-            var A = Available;
-            var L = Length;
-
-            try {
-                var l = Chain.Length;
-                var i = Buffer.FindSubByteArray(Position, Chain, 0, l);
-
-                if (i == -1) {
-                    RebaseBuffer();
-                    await AppendBuffer();
-
-                    i = Buffer.FindSubByteArray(A, Chain, 0, l);
-                    P = Position;
-                }
-
-                L = i - P;
-                if (i == -1 || L > MaxLength) return false;
-
-                await Storage.WriteAsync(Buffer, Position, L);
-                await Storage.FlushAsync();
-                Consume(L + Chain.Length);
-                return true;
+                if (!await recv)
+                    return false;
             }
-            catch (Exception) { return false; }            
+
+            var buffer = In;
+            var array = buffer.Array;
+
+            var arrayStart = buffer.Position;
+            var arrayIndex = arrayStart;
+            var arrayLength = buffer.Length;
+
+            var chainIndex = 0;
+            var chainLength = chain.Length;
+
+            var lastWasPartial = false;
+
+            do {
+                var compare = array.CompareSubByteArray(arrayIndex, chain, chainIndex, chainLength);
+
+                if (compare == true) { // Found chain
+                    await buffer.WriteAsync(storage, arrayIndex - arrayStart);
+                    buffer.Consume(chainLength);
+                    return true;
+                }
+                else
+                if (compare == false) { // Partial Match
+                    if (lastWasPartial) {
+                        arrayIndex++;
+                    }
+                    else {
+                        await buffer.WriteAsync(storage, arrayIndex - arrayStart);
+                        buffer.Rebase();
+
+                        await ReceiveAsync();
+
+                        arrayIndex = 0;
+                        arrayStart = buffer.Position;
+                        arrayLength = buffer.Length;
+
+                        lastWasPartial = true;
+                    }
+                }
+                else 
+                if (compare == null) // No match.
+                    arrayIndex++;
+
+                if (arrayIndex == arrayLength) {
+                    await buffer.WriteAsync(storage);
+                    await ReceiveAsync();
+
+                    arrayIndex = 0;
+                    arrayStart = arrayIndex;
+                    arrayLength = buffer.Length;
+                }
+            }
+            while (--maxLength > 0);
+
+            return false;
         }
 
-        public Task<string> ReceiveString(int ByteLength) {
-            return ReceiveString(ByteLength, Encoding.UTF8);
+        public bool ReceiveUntilConstrained(Stream storage, byte[] chain, int maxLength = int.MaxValue) {
+            if (In.Available == 0) {
+                var recv = Receive();
+
+                if (!recv)
+                    return false;
+            }
+
+            var buffer = In;
+            var array = buffer.Array;
+            var position = buffer.Position;
+
+            var i = array.FindSubByteArray(position, chain);
+
+            if (i == -1 && buffer.Remaining > 0) {
+                buffer.Rebase();
+
+                Receive();
+
+                position = buffer.Position;
+                i = array.FindSubByteArray(position, chain);
+            }
+
+            if (i == -1 || i - position > maxLength)
+                return false;
+            
+            if (!In.Write(storage, i - position))
+                return false;
+
+            In.Consume(chain.Length);
+            return true;
         }
 
-        public async Task<string> ReceiveString(int ByteLength, Encoding enc) {
+        public async Task<bool> ReceiveUntilConstrainedAsync(Stream storage, byte[] chain, int maxLength = int.MaxValue) {
+            if (In.Available == 0) {
+                var recv = ReceiveAsync();
+
+                if (!await recv)
+                    return false;
+            }
+
+            var buffer = In;
+            var array = buffer.Array;
+            var position = buffer.Position;
+
+            var i = array.FindSubByteArray(position, chain);
+
+            if (i == -1 && buffer.Remaining > 0) {
+                buffer.Rebase();
+
+                await ReceiveAsync();
+
+                position = buffer.Position;
+                i = array.FindSubByteArray(position, chain);
+            }
+
+            if (i == -1 || i - position > maxLength)
+                return false;
+            
+            if (!await In.WriteAsync(storage, i - position))
+                return false;
+
+            In.Consume(chain.Length);
+            return true;
+        }
+
+        public string ReceiveString(int ByteLength) {
             var Storage = new MemoryStream(ByteLength);
 
-            if (await Receive(Storage, ByteLength))
-                return enc.GetString(Storage.ToArray());
+            if (Receive(Storage, ByteLength))
+                return App.Encoding.GetString(Storage.ToArray());
 
             return null;
         }
 
-        public async Task<string> ReceiveStringUntil(byte[] chain, Encoding enc) {
-            var Out = new MemoryStream();
+        public async Task<string> ReceiveStringAsync(int ByteLength) {
+            var Storage = new MemoryStream(ByteLength);
 
-            if (await ReceiveUntil(Out, chain))
-                return enc.GetString(Out.ToArray());
-
-            return null;
-        }
-
-        public Task<string> ReceiveStringUntilConstrained(byte[] chain) {
-            return ReceiveStringUntilConstrained(chain, Encoding.UTF8);
-        }
-
-        public async Task<string> ReceiveStringUntilConstrained(byte[] chain, Encoding enc) {
-            var Out = new MemoryStream();
-
-            if (await ReceiveUntilConstrained(Out, chain))
-                return enc.GetString(Out.ToArray());
+            if (await ReceiveAsync(Storage, ByteLength))
+                return App.Encoding.GetString(Storage.ToArray());
 
             return null;
         }
 
-		public Task<string> ReceiveLine() {
-			return ReceiveLine(Encoding.UTF8);
-		}
+        public string ReceiveStringUntil(byte[] chain) {
+            var buffer = new MemoryStream();
 
-		public Task<string> ReceiveLine(Encoding enc) {
-            return ReceiveStringUntil(NewLineBytes, enc);
-		}
+            if (ReceiveUntil(buffer, chain))
+                return App.Encoding.GetString(buffer.ToArray());
 
-		public Task<string> ReceiveLineConstrained() {
-			return ReceiveLineConstrained(Encoding.UTF8);
-		}
-
-		public Task<string> ReceiveLineConstrained(Encoding enc) {
-            return ReceiveStringUntilConstrained(NewLineBytes, enc);
-		}
-        
-        private async Task<bool> UpdateBuffer() {
-            try {
-                Length = await Stream.ReadAsync(Buffer, 0, Buffer.Length);
-                Position = 0;
-            }
-            catch {
-                Position = Length = 0;
-            }
-
-            return Length > 0;
+            return null;
         }
 
-        private async Task AppendBuffer() {
-            try {
-                Length = await Stream.ReadAsync(Buffer, Position, Buffer.Length - Position);
-                Position = 0;
+        public async Task<string> ReceiveStringUntilAsync(byte[] chain) {
+            var buffer = new MemoryStream();
+
+            if (await ReceiveUntilAsync(buffer, chain))
+                return App.Encoding.GetString(buffer.ToArray());
+
+            return null;
+        }
+
+        public string ReceiveStringUntilConstrained(byte[] chain) {
+            if (In.Available == 0) {
+                var recv = Receive();
+
+                if (!recv)
+                    return null;
             }
-            catch { }
+
+            var buffer = In;
+            var array = buffer.Array;
+            var position = buffer.Position;
+
+            var i = array.FindSubByteArray(position, chain);
+
+            if (i == -1)
+                return null;
+
+            var length = i - position;
+            var result = App.Encoding.GetString(array, position, length);
+
+            In.Consume(length + chain.Length);
+            return result;
         }
 
-        private void RebaseBuffer() {
-            if (Available > 0) {
-                Array.Copy(Buffer, Position, Buffer, 0, Available);
-                Length = Available;
-                Position = 0;
+        public async Task<string> ReceiveStringUntilConstrainedAsync(byte[] chain) {
+            if (In.Available == 0) {
+                var recv = ReceiveAsync();
+
+                if (!await recv)
+                    return null;
             }
+
+            var buffer = In;
+            var array = buffer.Array;
+            var position = buffer.Position;
+
+            var i = array.FindSubByteArray(position, chain);
+
+            if (i == -1)
+                return null;
+
+            var length = i - position;
+            var result = App.Encoding.GetString(array, position, length);
+
+            In.Consume(length + chain.Length);
+            return result;
         }
 
-        private void ResetBuffer() {
-            Position = Length = 0;
-            Array.Clear(Buffer, 0, Buffer.Length);
+        public string ReceiveLine() {
+            return ReceiveStringUntil(NewLineBytes);
         }
 
-        private void Consume(int len) {
-            Position += len;
-            TotalBytesConsumed += len;
+		public Task<string> ReceiveLineAsync() {
+            return ReceiveStringUntilAsync(NewLineBytes);
+		}
+
+		public string ReceiveLineConstrained() {
+            return ReceiveStringUntilConstrained(NewLineBytes);
+        }
+
+        public Task<string> ReceiveLineConstrainedAsync() {
+            return ReceiveStringUntilConstrainedAsync(NewLineBytes);
         }
 
         private static bool SecureValidationCallback(object sender, X509Certificate cert, X509Chain chain, SslPolicyErrors errors) {

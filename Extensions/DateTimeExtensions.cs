@@ -8,7 +8,7 @@ using Poly.Data;
 
 namespace System {
     public static class HttpExtensions {
-        public static string HttpTimeString(this DateTime Time) {
+        public static string ToHttpTimeString(this DateTime Time) {
             return Time.ToString("ddd, dd MMM yyy hh:mm:ss") + " GMT";
         }
     }

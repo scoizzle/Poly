@@ -7,39 +7,43 @@ using System.Threading.Tasks;
 
 namespace Poly.Data {
     public partial class KeyValueCollection<T> {
-        public void Add(string Key, T Value) {
-            var Coll = GetCollection(Key.Length);
+        public bool Add(string key, T value) {
+            PairCollection collection;
+            KeyValuePair   pair;
 
-            if (Coll != null) {
-                var S = GetStorageFromCollection(Coll, Key);
-
-                if (S != null) {
-                    throw new ArgumentException("An element with the same key already exists.");
+            if (TryGetCollection(key.Length, out collection)) {
+                if (TryGetStorage(collection, key, out pair)) {
+                    return false;
                 }
 
-                Coll.List.Add(new KeyValuePair(Key, Value));
+                pair = new KeyValuePair(key, value);
+                collection.List.Add(pair);
                 Count++;
             }
             else {
-                List.Add(Coll = new PairCollection(Key.Length));
-                Coll.List.Add(new KeyValuePair(Key, Value));
-                Count++;
-                return;
+                pair = new KeyValuePair(key, value);
+                collection = new PairCollection(key.Length);
+
+                collection.List.Add(pair);
+                List.Add(collection);
+                Count ++;
             }
+            
+            return true;
         }
 
-        public bool Remove(string Key) {
-            var Coll = GetCollection(Key.Length);
+        public bool Remove(string key) {
+            PairCollection collection;
+            KeyValuePair   pair;
 
-            if (Coll != null) {
-                var S = GetStorageFromCollection(Coll, Key);
-
-                if (S != null) {
-                    Coll.List.Remove(S);
-                    Count--;
+            if (TryGetCollection(key.Length, out collection)) {
+                if (TryGetStorage(collection, key, out pair)) {
+                    collection.List.Remove(pair);
+                    Count --;
                     return true;
                 }
             }
+
             return false;
         }
 
@@ -48,15 +52,12 @@ namespace Poly.Data {
             Count = 0;
         }
 
-        public bool ContainsKey(string Key) {
-            var Coll = GetCollection(Key.Length);
+        public bool ContainsKey(string key) {
+            PairCollection collection;
+            KeyValuePair   pair;
 
-            if (Coll == null)
-                return false;
-
-            var Len = Coll.List.Count;
-            for (int i = 0; i < Len; i++) {
-                if (string.Compare(Coll.List.Elements[i].Key, Key, StringComparison.Ordinal) == 0) {
+            if (TryGetCollection(key.Length, out collection)) {
+                if (TryGetStorage(collection, key, out pair)) {
                     return true;
                 }
             }
@@ -64,128 +65,119 @@ namespace Poly.Data {
             return false;
         }
 
-        public bool TryGetValue(string Key, out T Value) {
-            var Coll = GetCollection(Key.Length);
+        public T Get(string key) {
+            return TryGetValue(key, out T value) ? value 
+                                                 : default(T);
+        }
 
-            if (Coll != null) {
-                return TryGetValueFromCollection(Coll, Key, out Value);
+        public void Set(string key, T value) {
+            PairCollection collection;
+            KeyValuePair   pair;
+
+            if (TryGetCollection(key.Length, out collection)) {
+                if (TryGetStorage(collection, key, out pair)) {
+                    pair.Value = value;
+                }
+                else {
+                    pair = new KeyValuePair(key, value);
+                    collection.List.Add(pair);
+                    Count++;
+                }
+            }
+            else {
+                pair = new KeyValuePair(key, value);
+                collection = new PairCollection(key.Length);
+
+                collection.List.Add(pair);
+                List.Add(collection);
+                Count ++;
+            }
+        }
+
+        public KeyValuePair GetStorage(string key) {
+            PairCollection collection;
+            KeyValuePair   pair;
+
+            if (TryGetCollection(key.Length, out collection)) {
+                if (TryGetStorage(collection, key, out pair)) {
+                    return pair;
+                }
+                else {
+                    pair = new KeyValuePair(key, default(T));
+                    collection.List.Add(pair);
+                    Count++;
+                    return pair;
+                }
+            }
+            else {
+                pair = new KeyValuePair(key, default(T));
+                collection = new PairCollection(key.Length);
+
+                collection.List.Add(pair);
+                List.Add(collection);
+                Count ++;
+                return pair;
+            }
+        }
+
+        public CachedValue<U> GetCachedStorage<U>(string key, TryConvert<T, U> read, TryConvert<U, T> write) {
+            return new CachedValue<U>(GetStorage(key), read, write);
+        }
+
+        public bool TryGetValue(string key, out T value) {
+            PairCollection      collection;
+
+            if (TryGetCollection(key.Length, out collection)) {
+                return TryGetValue(collection, key, out value);
             }
 
-            Value = default(T);
+            value = default(T);
             return false;
         }
 
-        public T Get(string Key) {
-            var Coll = GetCollection(Key.Length);
+        private bool TryGetValue(PairCollection collection, string key, out T value) {
+            if (TryGetStorage(collection, key, out KeyValuePair pair)) {
+                value = pair.Value;
+                return true;
+            }
 
-            if (Coll != null)
-                return GetValueFromCollection(Coll, Key);
-
-            return default(T);
+            value = default(T);
+            return false;
         }
 
-        public void Set(string Key, T Value) {
-            if (Key == null)
-                return;
+        private bool TryGetStorage(PairCollection collection, string key, out KeyValuePair pair) {
+            var list = collection.List;
+            var length = collection.Length;
+            var len = list.Count;
 
-            var Coll = GetCollection(Key.Length);
+            for (int i = 0; i < len; i++) {
+                var element = list[i];
 
-            if (Coll == null) {
-                List.Add(Coll = new PairCollection(Key.Length));
-                Coll.List.Add(new KeyValuePair(Key, Value));
-                Count++;
-                return;
-            }
-
-            var Storage = GetStorageFromCollection(Coll, Key);
-
-            if (Storage == null) {
-                Count++;
-                Coll.List.Add(new KeyValuePair(Key, Value));
-            }
-            else {
-                Storage.Value = Value;
-            }
-        }
-
-        internal void Set(KeyValuePair Pair) {
-            if (Pair == null)
-                return;
-
-            var Len = Pair.Key.Length;
-            var Coll = GetCollection(Len);
-
-            if (Coll == null) {
-                List.Add(Coll = new PairCollection(Len));
-                Coll.List.Add(Pair);
-                Count++;
-                return;
-            }
-
-            var Storage = GetStorageFromCollection(Coll, Pair.Key);
-
-            if (Storage == null) {
-                Count++;
-                Coll.List.Add(Pair);
-            }
-            else {
-                Storage.Value = Pair.Value;
-            }
-        }
-
-        private KeyValuePair GetStorageFromCollection(PairCollection Coll, string Key) {
-            var Len = Coll.List.Count;
-            for (int i = 0; i < Len; i++) {
-                var Item = Coll.List.Elements[i];
-
-                if (Item == null) {
-                    Coll.List.RemoveAt(i--);
-                    Len--;
-                    continue;
-                }
-
-                if (string.Compare(Item.Key, Key, StringComparison.Ordinal) == 0) {
-                    return Item;
-                }
-            }
-            return null;
-        }
-
-        private T GetValueFromCollection(PairCollection Coll, string Key) {
-            var Len = Coll.List.Count;
-            for (int i = 0; i < Len; i++) {
-                var Item = Coll.List.Elements[i];
-
-                if (string.Compare(Item.Key, Key, StringComparison.Ordinal) == 0) {
-                    return Item.Value;
-                }
-            }
-
-            return default(T);
-        }
-
-        private bool TryGetValueFromCollection(PairCollection Coll, string Key, out T Value) {
-            var Len = Coll.List.Count;
-            for (int i = 0; i < Len; i++) {
-                var Item = Coll.List.Elements[i];
-
-                if (string.Compare(Item.Key, Key, StringComparison.Ordinal) == 0) {
-                    Value = Item.Value;
+                if (StringExtensions.Compare(element.Key, 0, key, 0, length)) {
+                    pair = element;
                     return true;
                 }
             }
 
-            Value = default(T);
+            pair = default(KeyValuePair);
             return false;
         }
 
-        private PairCollection GetCollection(int Length) {
-            var Len = List.Count;
-            for (int i = 0; i < Len; i++) {
-                if (List[i].Len == Length)
-                    return List[i];
+        private bool TryGetCollection(int length, out PairCollection collection) {
+            var list = List;
+            var len = list.Count;
+
+            for (int i = 0; i < len; i++) {
+                var element = list[i];
+
+                if (element.Length == length) {
+                    collection = element;
+                    return true;
+                }
             }
-            return null;
+
+            collection = default(PairCollection);
+            return false;
         }
     }
 }

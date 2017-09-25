@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 using System.Threading.Tasks;
 
 using Poly.Data;
@@ -8,14 +9,17 @@ namespace Poly
     public partial class App {
         public static bool Running;
 		public static Event.Engine<Event.Handler> Commands;
-        
-        public static readonly string NewLine = "\r\n";
+
+        public static Encoding Encoding             = Encoding.UTF8;
+        public static readonly string NewLine       = "\r\n";
+        public static readonly byte[] NewLineBytes  = Encoding.GetBytes(NewLine);
 
         static App() {
             Running = false;
+            Log.Level = Log.Levels.Debug;
+
             Commands = new Event.Engine<Event.Handler>();
-            
-            Commands.Register("Log.Level^=^{Level}^", Event.Wrapper((string Level) => {
+            Commands.Add("Log.Level^=^{Level}^", Event.Wrapper((string Level) => {
                 Log.Level = (Log.Levels)Enum.Parse(typeof(Log.Levels), Level);
                 return Level;
             }));
@@ -69,7 +73,6 @@ namespace Poly
 
             Running = false;
             Task.Delay(1000);
-            Environment.Exit(0);
 		}
 	}
 }

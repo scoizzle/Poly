@@ -30,7 +30,7 @@
             if (This == null || index < 0 || index > This.Length || sub == null || subindex < 0 || index + sublength > This.Length)
                 return -1;
 
-            for (; index < This.Length; index++) {
+            for (; index + sublength < This.Length; index++) {
                 if (This[index] == sub[subindex]) {
                     bool found = true;
 
@@ -49,28 +49,27 @@
             return -1;
         }
 
-        public static bool CompareSubByteArray(this byte[] This, int index, byte[] sub) {
+        public static bool? CompareSubByteArray(this byte[] This, int index, byte[] sub) {
             return CompareSubByteArray(This, index, sub, 0, sub.Length);
         }
 
-        public static bool CompareSubByteArray(this byte[] This, int index, byte[] sub, int subindex, int sublength) {
+        public static bool? CompareSubByteArray(this byte[] This, int index, byte[] sub, int subindex, int sublength) {
             if (index < 0 || index > This.Length || sub == null || subindex < 0 || subindex + sublength > sub.Length)
-                return false;
+                return null;
             
             if (This[index] == sub[subindex]) {
-                bool found = true;
+                while (This[index++] == sub[subindex++]) {
+                    if (subindex == sublength)
+                        return true;
 
-                for (var si = 1; si < sublength; si++) {
-                    if (This[index + si] != sub[subindex + si]) {
-                        found = false;
+                    if (index >= This.Length)
                         break;
-                    }
                 }
 
-                return found;
+                return false;
             }
 
-            return false;
+            return null;
         }
     }
 }

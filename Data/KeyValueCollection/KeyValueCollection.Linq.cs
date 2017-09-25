@@ -11,16 +11,27 @@ namespace Poly.Data {
             return Values.Contains(Val);
         }
 
-        public void ForEach(Action<string, T> action) {
-            var c = List.Count;
-            for (int x = 0; x < c; x++) {
-                var l = List[x].List;
-                var lc = l.Count;
-
-                for (int y = 0; y < lc; y++) {
-                    var i = l[y];
-                    action(i.Key, i.Value);
+        public bool TryFind(out KeyValuePair pair, Func<string, T, bool> action) {
+            foreach (var item in KeyValuePairs) {
+                if (action(item.Key, item.Value)) {
+                    pair = item;
+                    return true;
                 }
+            }
+
+            pair = default(KeyValuePair);
+            return false;
+        }
+
+        public void ForEach(Action<KeyValuePair> action) {
+            foreach (var pair in KeyValuePairs) {
+                action(pair);
+            }
+        }
+
+        public void ForEach(Action<string, T> action) {
+            foreach (var pair in KeyValuePairs) {
+                action(pair.Key, pair.Value);
             }
         }
     }

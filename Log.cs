@@ -10,21 +10,21 @@ using System.Diagnostics;
 namespace Poly {
     using Data;
 
-	public class Log {
-		public enum Levels {
-			Fatal,
-			Error,
-			Warning,
-			Info,
-			Debug
-		};
+    public class Log {
+        public enum Levels {
+            Fatal,
+            Error,
+            Warning,
+            Info,
+            Debug
+        };
 
-		public static bool Active = true;
-		public static Levels Level = Levels.Fatal;
-		public static Action<string> Handler = Console.WriteLine;
+        public static bool Active = true;
+        public static Levels Level = Levels.Fatal;
+        public static Action<string> Handler = Console.WriteLine;
 
         public static void Print(Levels level, params object[] messages) {
-            if (Active && Level <= level) {
+            if (Active && Level >= level) {
                 var Output = new StringBuilder();
 
                 Output.Append('[').Append(level.ToString().ToUpper()).Append("] ");
@@ -38,7 +38,10 @@ namespace Poly {
 
 
         public static void Print(Levels level, string format, params object[] args) {
-            if (Active && Level <= level) {
+            if (args.Length == 0)
+                Print(level, new object[] { format });
+            else
+            if (Active && Level >= level) {
                 var Output = new StringBuilder();
 
                 Output.Append('[').Append(level.ToString().ToUpper()).Append("] ");
@@ -48,12 +51,13 @@ namespace Poly {
             }
         }
 
-
+        [Conditional("DEBUG")]
         public static void Debug(object message) {
             Print(Levels.Debug, message);
-		}
+        }
 
-		public static void Debug(string format, params object[] args) {
+        [Conditional("DEBUG")]
+        public static void Debug(string format, params object[] args) {
             Print(Levels.Debug, format, args);
         }
 
@@ -89,42 +93,45 @@ namespace Poly {
             Print(Levels.Fatal, format, args);
         }
 
-		public static void Benchmark(string Name, int Iterations, Action Todo) {
-			GC.Collect();
-			GC.WaitForPendingFinalizers();
-			GC.Collect();
 
-			Todo();
-            
-			var watch = new Stopwatch();
+        [Conditional("RELEASE")]
+        public static void Benchmark(string Name, int Iterations, Action Todo) {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
 
-			int i = 0;
-			for (; i < Iterations; i++) {
-				watch.Start();
-				Todo();
-				watch.Stop();
-			}
+            Todo();
 
-			Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
-		}
+            var watch = new Stopwatch();
 
-		public static void Benchmark(string Name, int Iterations, Action<int> Todo) {
-			GC.Collect();
-			GC.WaitForPendingFinalizers();
-			GC.Collect();
+            int i = 0;
+            for (; i < Iterations; i++) {
+                watch.Start();
+                Todo();
+                watch.Stop();
+            }
 
-			Todo(0);
-            
-			var watch = new Stopwatch();
+            Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
+        }
 
-			int i = 0;
-			for (; i < Iterations; i++) {
-				watch.Start();
-				Todo(i);
-				watch.Stop();
-			}
+        [Conditional("RELEASE")]
+        public static void Benchmark(string Name, int Iterations, Action<int> Todo) {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
 
-			Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
-		}
-	}
+            Todo(0);
+
+            var watch = new Stopwatch();
+
+            int i = 0;
+            for (; i < Iterations; i++) {
+                watch.Start();
+                Todo(i);
+                watch.Stop();
+            }
+
+            Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
+        }
+    }
 }

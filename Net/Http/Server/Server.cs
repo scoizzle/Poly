@@ -5,13 +5,13 @@ using System.Threading.Tasks;
 namespace Poly.Net.Http {
     using Data;
 
-	public partial class Server {
-        public delegate void Handler(Request In, Response Out, JSON Args);
+    public partial class Server {
+        public delegate bool Handler(Connection connection, Request request, out Response response);
 
-		private Tcp.Server Listener;
-        private SemaphoreSlim Semaphore;
-        private Event.Engine<Handler> RequestHandlers;
-        private Cache Cache;
+        Tcp.Server Listener;
+        KeyValueCollection<Handler> Handlers;
+        Cache Cache;
+        Handler ProcessRequest;
 
         public bool Running {
             get {
@@ -22,36 +22,39 @@ namespace Poly.Net.Http {
         public Configuration Config;
 
         public Server() {
-            RequestHandlers = new Event.Engine<Handler>();
-            Cache = new Cache(this);
+            Handlers = new KeyValueCollection<Handler>();
         }
 
         public Server(Configuration config) : this() {
             Config = config;
-		}
+        }
 
-        ~Server() { 
+        ~Server() {
             Stop();
-		}
+        }
 
         public virtual bool Start() {
-            if (Config == null) throw new NullReferenceException(
-                "Must initialize the server configuration!"
-                );
+            if (Config == null) return false;
 
-            Cache.Start();
+            if (Config.UseStaticFiles)
+                Cache = new Cache(this);
 
-            Semaphore = new SemaphoreSlim(Config.Concurrency);
+            if (Config.VerifyHost)
+                ProcessRequest = VerifyHost;
+            else
+                ProcessRequest = HandleRequest;
+
             Listener = new Tcp.Server(Config.Port);
-            Listener.OnClientConnected += OnClientConnected;
+            Listener.OnClientConnected += OnConnected;
 
             return Listener.Start();
         }
 
         public virtual void Stop() {
-            Cache.Stop();
-            Listener?.Stop();
-            Semaphore?.Dispose();
+            Handlers.Clear();
+
+            Cache = null;
+            Listener = null;
         }
 
         public virtual void Restart() {
@@ -59,8 +62,12 @@ namespace Poly.Net.Http {
             Start();
         }
 
-        public void On(string Path, Handler Handler) {
-            RequestHandlers.Register(Path, Handler);
+        public void On(string path, Handler handler) {
+            Handlers.Set(path, handler);
+        }
+
+        public void RemoveHandler(string path) {
+            Handlers.Remove(path);
         }
     }
 }

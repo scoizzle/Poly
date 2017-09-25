@@ -46,11 +46,7 @@ namespace Poly.Data {
         public void CopyTo(ManagedArray<T> destination) {
             destination.ValidateSizeForInsert(count + destination.count);
 
-            var start = destination.count;
-            for (int i = 0; i < count; i++) {
-                destination.Elements[destination.count + i] = Elements[i];
-            }
-
+            Array.Copy(Elements, 0, destination.Elements, destination.count, count);
             destination.count += count;
         }
 
@@ -60,42 +56,53 @@ namespace Poly.Data {
             count++;
         }
 
+        public void Add(T[] value) {
+            var length = value.Length;
+            ValidateSizeForInsert(count + length);
+
+            Array.Copy(value, 0, Elements, count, length);
+            count += length;
+        }
+
         public void Remove(T value) {
             RemoveAt(IndexOf(value));
         }
 
-        public void RemoveAt(int Index) {
+        public bool RemoveAt(int Index) {
             if (Index < 0 || Index >= count)
-                return;
+                return false;
 
-            var Last = count - 1;
-            for (var i = Index; i < Last; i++) {
-                Elements[i] = Elements[i + 1];
+            if (Index == count - 1) {
+                Elements[Index] = default(T);
+                count--;
+                return true;
             }
 
-            Elements[Last] = default(T);
+            var End = count;
+            var Post = End - Index - 1;
+            
+            Array.Copy(Elements, Index + 1, Elements, Index, Post);
+
+            Elements[End] = default(T);
             count--;
+            return true;
         }
 
-        public void RemoveAt(int Index, int Length) {
-            if (Index < 0 || Index >= count || Index + Length > count)
+        public void RemoveAt(int Index, int Count) {
+            if (Index < 0 || Count <= 0 || Index + Count > count)
                 return;
-            
-            var Last = count - Length;
-            var i = Index;
 
-            for (; i < Last; i++) {
-                Elements[i] = Elements[i + Length];
-            }
+            var to_move = count - Count;
+            var chunk_end = Index + Count;
 
-            Array.Clear(Elements, Index, Count - Index);
-            count -= Length;
+            Array.Copy(Elements, chunk_end, Elements, Index, to_move - Index);
+            Array.Clear(Elements, count, Elements.Length - count);
+
+            count = to_move;
         }
 
         public void Clear() {
-            for (var i = 0; i < count; i++) {
-                Elements[i] = default(T);
-            }
+            Array.Clear(Elements, 0, count);
             count = 0;
         }
 
@@ -105,6 +112,11 @@ namespace Poly.Data {
                     return i;
             }
             return -1;
+        }
+
+        public void Constrain() {
+            if (count < Elements.Length)
+                Array.Resize(ref Elements, count);
         }
 
         private void ValidateSizeForInsert() {

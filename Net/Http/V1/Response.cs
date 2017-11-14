@@ -1,15 +1,24 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace Poly.Net.Http.V1 {
     using HeaderCollection = Data.KeyValueCollection<string>;
 
-    public class Response : Http.Response {
-        public Result Status { get; set; }
+	public class Response : Http.Response {
+		public Http.Connection Connection { get; set; }
 
-        HeaderCollection.KeyValuePair date;
-        public string Date {
+		public Result Status { get; set; }
+
+        HeaderCollection.CachedValue<DateTime> date;
+        public DateTime Date {
             get { return date.Value; }
             set { date.Value = value; }
+        }
+
+        HeaderCollection.CachedValue<DateTime> last_modified;
+        public DateTime LastModified {
+            get { return last_modified.Value; }
+            set { last_modified.Value = value; }
         }
 
         HeaderCollection.KeyValuePair content_type;
@@ -24,16 +33,16 @@ namespace Poly.Net.Http.V1 {
             set { content_encoding.Value = value; }
         }
 
+        HeaderCollection.KeyValuePair expires;
+        public string Expires {
+            get { return expires.Value; }
+            set { expires.Value = value; }
+        }
+
         HeaderCollection.KeyValuePair transfer_encoding;
         public string TransferEncoding {
             get { return transfer_encoding.Value; }
             set { transfer_encoding.Value = value; }
-        }
-
-        HeaderCollection.KeyValuePair last_modified;
-        public string LastModified {
-            get { return last_modified.Value; }
-            set { last_modified.Value = value; }
         }
 
         HeaderCollection.CachedValue<long> content_length;
@@ -45,16 +54,40 @@ namespace Poly.Net.Http.V1 {
         public Stream Body { get; set; }
         public HeaderCollection Headers { get; set; }
 
-        public Response(Result status, HeaderCollection headers) {
+        public Response(Http.Connection connection, Result status, HeaderCollection headers, Stream body) {
+            Connection = connection;
             Status = status;
             Headers = headers;
+            Body = body;
 
-            date = headers.GetStorage("Date");
             content_type = headers.GetStorage("Content-Type");
             content_encoding = headers.GetStorage("Content-Encoding");
+            expires = headers.GetStorage("Expires");
             transfer_encoding = headers.GetStorage("Transfer-Encoding");
-            last_modified = headers.GetStorage("Last-Modified");
 
+
+            date = headers.GetCachedStorage(
+                "Date",
+                (string str, out DateTime time) => {
+                    time = str.FromHttpTimeString();
+                    return true;
+                },
+                (DateTime time, out string str) => {
+                    str = time.ToHttpTimeString();
+                    return true;
+                });
+
+            last_modified = headers.GetCachedStorage(
+                "Last-Modified",
+                (string str, out DateTime time) => {
+                    time = str.FromHttpTimeString();
+                    return true;
+                },
+                (DateTime time, out string str) => {
+                    str = time.ToHttpTimeString();
+                    return true;
+                });
+            
             content_length = headers.GetCachedStorage(
                 "Content-Length",
                 long.TryParse,
@@ -63,7 +96,7 @@ namespace Poly.Net.Http.V1 {
                     return true;
                 });
 
-            content_length.Value = 0;
+            content_length.Value = body?.Length ?? 0;
         }
     }
 }

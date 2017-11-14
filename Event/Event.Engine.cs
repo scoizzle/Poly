@@ -6,50 +6,18 @@ namespace Poly {
     using Data;
 
     public partial class Event {
-        public class Engine<T> : KeyValueCollection<Engine<T>.Group> {
-            public struct Group {
-                public Matcher  Matcher;
-                public T        Handler;
+        public class Engine<T> : KeyValueCollection<(Matcher Matcher, T Handler)> {
+            public void On(string event_name, T handler) {
+                Set(event_name, (new Matcher(event_name), handler));
             }
 
-            public void Add(string eventName, T handler) {
-                Add(eventName, new Group {
-                    Matcher = new Matcher(eventName),
-                    Handler = handler
-                });
-            }
-
-            public void Set(string eventName, T handler) {
-                Set(eventName, new Group {
-                    Matcher = new Matcher(eventName),
-                    Handler = handler
-                });
-            }
-
-            public T GetHandler(string Data) {
-                T Handler;
-                TryGetHandler(Data, out Handler);
-                return Handler;
-            }
-
-            public T GetHandler(string Data, JSON Args) {
-                T Handler;
-                TryGetHandler(Data, Args, out Handler);
-                return Handler;
-            }
-
-            public bool TryGetHandler(string Data, out T handler) {
-                if (!string.IsNullOrEmpty(Data)) {
-                    var found = 
-                        TryFind(
-                            out KeyValuePair item, 
-                            (key, group) => {
-                                return group.Matcher.Compare(Data);
-                        });
-
-                    if (found) {
-                        handler = item.Value.Handler;
-                        return true;
+            public bool TryGetHandler(string data, out T handler) {
+                if (!string.IsNullOrEmpty(data)) {
+                    foreach (var pair in this) {
+                        if (pair.Value.Matcher.Compare(data)) {
+                            handler = pair.Value.Handler;
+                            return true;
+                        }
                     }
                 }
 
@@ -57,22 +25,22 @@ namespace Poly {
                 return false;
             }
 
-            public bool TryGetHandler(string Data, JSON Args, out T handler) {
-                if (!string.IsNullOrEmpty(Data)) {
-                    var found = 
-                        TryFind(
-                            out KeyValuePair item, 
-                            (key, group) => {
-                                return group.Matcher.Extract(Data, Args.Set);
-                        });
+            public bool TryGetHandler(string data, out T handler, out JSON arguments) {
+				if (!string.IsNullOrEmpty(data)) {
+					arguments = new JSON();
 
-                    if (found) {
-                        handler = item.Value.Handler;
-                        return true;
-                    }
-                }
+					foreach (var pair in this) {
+                        if (pair.Value.Matcher.Extract(data, arguments.TrySet)) {
+                            handler = pair.Value.Handler;
+							return true;
+						}
+
+                        arguments.Clear();
+					}
+				}
 
                 handler = default(T);
+                arguments = null;
                 return false;
             }
         }

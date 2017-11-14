@@ -49,11 +49,6 @@ namespace Poly.Net.Tcp {
             return true;
         }
 
-        new public void Stop() {
-            Server.Dispose();
-            base.Stop();
-        }
-
         async Task StartAcceptTask() {
             Task lastStarted;
             while (Active) {

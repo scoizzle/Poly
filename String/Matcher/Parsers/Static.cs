@@ -97,7 +97,6 @@ namespace Poly.String.Matcher.Parsers {
 
 				it.Offset = it.Index;
 				it.Index = start;
-				it.LastIndex = stop;
 				return true;
 			};
 		}

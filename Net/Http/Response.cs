@@ -1,17 +1,23 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace Poly.Net.Http {
     using HeaderCollection = Data.KeyValueCollection<string>;
 
-    public interface Response {
-        Result Status { get; set; }
+	public interface Response {
+        Connection Connection { get; set; }
 
-        string Date { get; set; }
+        DateTime Date { get; set; }
+        DateTime LastModified { get; set; }
+
+		Result Status { get; set; }
+
         string ContentType { get; set; }
         string ContentEncoding { get; set; }
+        string Expires { get; set; }
         string TransferEncoding { get; set; }
-        string LastModified { get; set; }
         long ContentLength { get; set; }
+
         Stream Body { get; set; }
         HeaderCollection Headers { get; set; }
     }

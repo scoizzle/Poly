@@ -67,19 +67,21 @@ namespace Poly.Net.Http {
         }
 
         void Load(FileInfo file) {
-            var www = GetWWWName(file);
-            var handler = GetHandler(file);
-            
-            Server.On(
-                www, 
-                handler
-                );
+            if (file.Exists) {
+                var www = GetWWWName(file);
+                var handler = GetHandler(file);
 
-            if (IsDefaultDocument(file))
                 Server.On(
-                    GetWWWPath(file),
+                    www,
                     handler
                     );
+
+                if (IsDefaultDocument(file))
+                    Server.On(
+                        GetWWWPath(file),
+                        handler
+                        );
+            }
         }
 
         Server.Handler GetHandler(FileInfo info) {
@@ -90,46 +92,42 @@ namespace Poly.Net.Http {
         Server.Handler HandleFile(FileInfo info) {
             var mime        = GetMIME(info.Extension);
             var length      = info.Length;
-            var date        = info.LastWriteTimeUtc.ToHttpTimeString();
+            var date        = info.LastWriteTimeUtc;
 
-            return (Connection connection, Request request, out Response response) => {
-                if (request.LastModified.Compare(date)) {
-                    connection.New(out response, Result.NotModified);
+            return (Request request) => {
+                if (request.LastModified == date) {
+                    return request.Send(Result.NotModified);
                 }
                 else {
-                    connection.New(out response, Result.Ok);
-
-                    response.Body = OpenFile(info);
-                    response.ContentLength = length;
-                    response.LastModified = date;
-                    response.ContentType = mime;
+					return request.Send(Result.Ok, _ => {
+						_.Body = OpenFile(info);
+						_.ContentLength = length;
+						_.LastModified = date;
+						_.ContentType = mime;
+                    });
                 }
-
-                return true;
             };
         }
 
         Server.Handler HandleFile_Cached(FileInfo info) {
             var mime        = GetMIME(info.Extension);
             var length      = info.Length;
-            var date        = info.LastWriteTimeUtc.ToHttpTimeString();
+            var date        = info.LastWriteTimeUtc;
             var content     = File.ReadAllBytes(info.FullName);
 
-            return (Connection connection, Request request, out Response response) => {
-                if (request.LastModified.Compare(date)) {
-                    connection.New(out response, Result.NotModified);
-                }
-                else {
-                    connection.New(out response, Result.Ok);
-
-                    response.Body = new MemoryStream(content, false);
-                    response.ContentLength = length;
-                    response.LastModified = date;
-                    response.ContentType = mime;
-                }
-
-                return true;
-            };
+            return (Request request) => {
+                if (request.LastModified == date) {
+					return request.Send(Result.NotModified);
+				}
+				else {
+					return request.Send(Result.Ok, _ => {
+						_.Body = new MemoryStream(content, false);
+						_.ContentLength = length;
+						_.LastModified = date;
+						_.ContentType = mime;
+					});
+				}
+			};
         }
     }
 }

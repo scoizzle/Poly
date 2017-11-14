@@ -6,10 +6,10 @@ namespace Poly.Net.Http {
     using Data;
 
     public partial class Server {
-        public delegate bool Handler(Connection connection, Request request, out Response response);
+        public delegate Response Handler(Request request);
 
         Tcp.Server Listener;
-        KeyValueCollection<Handler> Handlers;
+        Event.Engine<Handler> Handlers;
         Cache Cache;
         Handler ProcessRequest;
 
@@ -22,7 +22,7 @@ namespace Poly.Net.Http {
         public Configuration Config;
 
         public Server() {
-            Handlers = new KeyValueCollection<Handler>();
+            Handlers = new Event.Engine<Handler>();
         }
 
         public Server(Configuration config) : this() {
@@ -39,6 +39,9 @@ namespace Poly.Net.Http {
             if (Config.UseStaticFiles)
                 Cache = new Cache(this);
 
+            if (Config.UseAppRoutes)
+                Controller.RegisterAllHandlers(this);
+
             if (Config.VerifyHost)
                 ProcessRequest = VerifyHost;
             else
@@ -51,6 +54,7 @@ namespace Poly.Net.Http {
         }
 
         public virtual void Stop() {
+            Listener?.Stop();
             Handlers.Clear();
 
             Cache = null;
@@ -63,7 +67,7 @@ namespace Poly.Net.Http {
         }
 
         public void On(string path, Handler handler) {
-            Handlers.Set(path, handler);
+            Handlers.On(path, handler);
         }
 
         public void RemoveHandler(string path) {

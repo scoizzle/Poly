@@ -5,7 +5,6 @@ namespace Poly {
     using Poly.String.Matcher;
 
 	public class Matcher {
-
         ExtractDelegate Extracter;
         TemplateDelegate Templater;
 
@@ -22,8 +21,7 @@ namespace Poly {
             var it = new StringIterator(data);
 
             if (Extracter(it, set)) {
-                it.ConsumeSection();
-                return it.IsDone;
+                return it.Offset >= it.LastIndex;
             }
 
             return false;

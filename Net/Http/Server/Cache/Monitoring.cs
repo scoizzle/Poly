@@ -16,6 +16,8 @@ namespace Poly.Net.Http {
             Watcher.Changed             += Changed;
             Watcher.Renamed             += Renamed;
             Watcher.Deleted             += Deleted;
+
+            Watcher.IncludeSubdirectories = true;
             Watcher.EnableRaisingEvents = true;
         }
         
@@ -24,7 +26,6 @@ namespace Poly.Net.Http {
         }
 
         void Changed(object sender, FileSystemEventArgs e) {
-            Server.RemoveHandler(GetWWWName(e.FullPath));
             Load(new FileInfo(e.FullPath));
         }
 

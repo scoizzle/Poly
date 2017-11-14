@@ -94,6 +94,32 @@ namespace Poly.Data {
             }
         }
 
+		public bool TrySet(string key, T value) {
+			PairCollection collection;
+			KeyValuePair pair;
+
+			if (TryGetCollection(key.Length, out collection)) {
+				if (TryGetStorage(collection, key, out pair)) {
+					pair.Value = value;
+				}
+				else {
+					pair = new KeyValuePair(key, value);
+					collection.List.Add(pair);
+					Count++;
+				}
+			}
+			else {
+				pair = new KeyValuePair(key, value);
+				collection = new PairCollection(key.Length);
+
+				collection.List.Add(pair);
+				List.Add(collection);
+				Count++;
+			}
+
+            return true;
+		}
+
         public KeyValuePair GetStorage(string key) {
             PairCollection collection;
             KeyValuePair   pair;

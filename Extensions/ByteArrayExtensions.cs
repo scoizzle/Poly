@@ -1,5 +1,19 @@
 ﻿namespace System {
-    static class ByteArrayExtensions {
+    using Text;
+    using IO;
+
+    public static class ByteArrayExtensions {
+        public static Stream GetStream(this byte[] This, bool writable = false) {
+            return new MemoryStream(This, writable);
+        }
+
+        public static string GetString(this byte[] This) {
+            return GetString(This, Poly.App.Encoding);
+        }
+        public static string GetString(this byte[] This, Encoding enc) {
+            return enc.GetString(This);
+        }
+
         public static string ToHexString(this byte[] This) {
             return GetHexString(This);
         }

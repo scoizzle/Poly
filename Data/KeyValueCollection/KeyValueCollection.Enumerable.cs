@@ -19,7 +19,7 @@ namespace Poly.Data {
             }
         }
 
-        public IEnumerable<KeyValueCollection<T>.KeyValuePair> KeyValuePairs
+        public IEnumerable<KeyValuePair> KeyValuePairs
         {
             get
             {
@@ -38,15 +38,15 @@ namespace Poly.Data {
             }
         }
 
-        public IEnumerator<KeyValueCollection<T>.KeyValuePair> GetEnumerator() {
+        public IEnumerator<KeyValuePair> GetEnumerator() {
             return new Enumerator(this);
         }
 
         IEnumerator IEnumerable.GetEnumerator() {
-            return (IEnumerator)new Enumerator(this);
+            return new Enumerator(this);
         }
         
-        public struct Enumerator : IEnumerator<KeyValueCollection<T>.KeyValuePair> {
+        public struct Enumerator : IEnumerator<KeyValuePair> {
             int Index, Count;
             KeyValuePair[] Pairs;
             KeyValueCollection<T> Collection;
@@ -60,14 +60,8 @@ namespace Poly.Data {
                 Pairs = collection.KeyValuePairs.ToArray();
                 Count = Pairs.Length;
 
-                if (Count > 0){
-                    Current = Pairs[0];
-                    Index = 1;
-                }
-                else {
-                    Current = default(KeyValuePair);
-                    Index = 0;
-                }
+                Current = default(KeyValuePair);
+                Index = 0;
             }
 
             public void Dispose() { }

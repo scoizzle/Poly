@@ -1,10 +1,25 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace Poly.Net.Http.V1 {
     using Data;
     using HeaderCollection = Data.KeyValueCollection<string>;
 
     public class Request : Http.Request {
+        public Http.Connection Connection { get; set; }
+
+        HeaderCollection.CachedValue<DateTime> date;
+        public DateTime Date {
+            get { return date.Value; }
+            set { date.Value = value; }
+        }
+
+        HeaderCollection.CachedValue<DateTime> last_modified;
+        public DateTime LastModified {
+            get { return last_modified.Value; }
+            set { last_modified.Value = value; }
+        }
+
         public string Method { get; set; }
         public string Target { get; set; }
 
@@ -26,12 +41,6 @@ namespace Poly.Net.Http.V1 {
             set { content_encoding.Value = value; }
         }
 
-        HeaderCollection.KeyValuePair last_modified;
-        public string LastModified {
-            get { return last_modified.Value; }
-            set { last_modified.Value = value; }
-        }
-
         HeaderCollection.CachedValue<long> content_length;
         public long ContentLength {
             get { return content_length.Value; }
@@ -41,13 +50,17 @@ namespace Poly.Net.Http.V1 {
         public Stream Body { get; set; }
 
         public HeaderCollection Headers { get; set; }
-        public HeaderCollection Arguments { get; set; }
-        
-        public Request(string method, string target, HeaderCollection headers) {
+        public JSON Arguments { get; set; }
+
+        public Request(Http.Connection connection, string method, string target, HeaderCollection headers, Stream body) {
+            Connection = connection;
+			Method = method;
+			Target = target;
+			Headers = headers;
+
             authority = headers.GetStorage("Host");
             content_type = headers.GetStorage("Content-Type");
             content_encoding = headers.GetStorage("Content-Encoding");
-            last_modified = headers.GetStorage("last-modified");
             content_length = headers.GetCachedStorage(
                 "Content-Length",
                 long.TryParse,
@@ -55,12 +68,31 @@ namespace Poly.Net.Http.V1 {
                     str = l.ToString();
                     return true;
                 });
+            
+            date = headers.GetCachedStorage(
+                "Date",
+                (string str, out DateTime time) => {
+                    time = str.FromHttpTimeString();
+                    return true;
+                },
+                (DateTime time, out string str) => {
+                    str = time.ToHttpTimeString();
+                    return true;
+                });
 
-			Method = method;
-			Target = target;
-			Headers = headers;
+            last_modified = headers.GetCachedStorage(
+                "Last-Modified",
+                (string str, out DateTime time) => {
+                    time = str.FromHttpTimeString();
+                    return true;
+                },
+                (DateTime time, out string str) => {
+                    str = time.ToHttpTimeString();
+                    return true;
+                });
 
-            Arguments = new KeyValueCollection<string>();
+			Arguments = new JSON();
+			content_length.Value = body?.Length ?? 0;
         }
     }
 }

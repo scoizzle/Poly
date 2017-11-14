@@ -1,13 +1,15 @@
 using System;
 using System.IO;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
+    using Data;
 	using Tcp;
 
 	public partial class Server {
-		async Task OnConnected(Client client) {
+        async Task OnConnected(Client client) {
 			Connection connection = new V1.Connection(client);
 
 			try {
@@ -15,9 +17,9 @@ namespace Poly.Net.Http {
 					var receive = connection.Receive(out Request request);
 					if (!receive)
 						break;
-
-					var process = ProcessRequest(connection, request, out Response response);
-                    if (!process)
+                    
+                    var response = ProcessRequest(request);
+                    if (response == null)
                         connection.New(out response, Result.InternalError);
 
 					var send = connection.Send(response);
@@ -27,32 +29,37 @@ namespace Poly.Net.Http {
 					await Task.Yield();
 				}
 			}
-			catch (Exception Error) {
-				Log.Debug(Error);
+            catch (SocketException) { }
+            catch (IOException) { }
+			catch (Exception error) {
+				Log.Debug(error);
 			}
 
 			client.Close();
 		}
 
-		bool VerifyHost(Connection connection, Request request, out Response response) {
+        Response VerifyHost(Request request) {
 			if (Config.Host.Matcher.Compare(request.Authority))
-				return HandleRequest(connection, request, out response);
+                return HandleRequest(request);
 
-			response = null;
-			return false;
+            request.Connection.New(out Response response, Result.BadRequest);
+            return response;
 		}
 
-		bool HandleRequest(Connection connection, Request request, out Response response) {
+		Response HandleRequest(Request request) {
 			var handler_found =
-				Handlers.TryGetValue(
-					request.Target,
-					out Handler handler);
+                Handlers.TryGetHandler(
+                    request.Target,
+					out Handler handler,
+                    out JSON arguments);
 
-			if (handler_found)
-				return handler(connection, request, out response);
+            if (handler_found) {
+                request.Arguments = arguments;
+                return handler(request);
+			}
 
-            connection.New(out response, Result.NotFound);
-			return true;
+            request.Connection.New(out Response response, Result.NotFound);
+			return response;
 		}
 	}
 }

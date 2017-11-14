@@ -120,6 +120,9 @@ namespace Poly.Data {
 
                 obj = (T)CreateInstance();
 
+                if (json.IsDone)
+                    return true;
+
                 do {
                     json.ConsumeWhitespace();
 
@@ -164,25 +167,28 @@ namespace Poly.Data {
 
                 var list = new ManagedArray<object>();
 
-                do {
-                    json.ConsumeWhitespace();
+                if (!json.IsDone) {
+                    do {
+                        json.ConsumeWhitespace();
 
-                    if (serializer.DeserializeObject(json, out object element))
-                        list.Add(element);
-                    else
-                        goto formatException;
+                        if (serializer.DeserializeObject(json, out object element))
+                            list.Add(element);
+                        else
+                            goto formatException;
 
-                    if (!json.Consume(',')) {
-                        json.ConsumeSection();
-                        break;
+                        if (!json.Consume(',')) {
+                            json.ConsumeSection();
+                            break;
+                        }
                     }
+                    while (!json.IsDone);
                 }
-                while (!json.IsDone);
 
                 var count = list.Count;
                 var array = Array.CreateInstance(elementType, count);
 
-                Array.Copy(list.Elements, array, count);
+                if (count > 0)
+                    Array.Copy(list.Elements, array, count);
 
                 obj = (T)(object)(array);
                 return true;

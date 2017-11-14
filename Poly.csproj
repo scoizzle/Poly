@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Library</OutputType>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <SynchReleaseVersion>true</SynchReleaseVersion>
+    <SynchReleaseVersion>false</SynchReleaseVersion>
     <RootNamespace>Poly</RootNamespace>
     <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
     <PackageId>Poly</PackageId>
@@ -15,8 +15,12 @@
     <PackageProjectUrl>http://github.com/scoizzle/Poly/</PackageProjectUrl>
     <RepositoryUrl>http://github.com/scoizzle/Poly/</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageLicenseUrl>If you make money with Poly, I make money.</PackageLicenseUrl>
+    <PackageLicenseUrl>http://You.Make.Money/I.Make.Money</PackageLicenseUrl>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackOnBuild>true</PackOnBuild>
+    <Owners>Scot 'Scoizzle' Murphy</Owners>
+    <ReleaseVersion>1.0.1</ReleaseVersion>
+    <PackageVersion>1.0.1</PackageVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="String\Matcher\Block.cs" />
@@ -24,5 +28,6 @@
   <ItemGroup>
     <Folder Include="Net\Http\V2\Frame\" />
     <Folder Include="Net\Http\V2\Frames\" />
+    <Folder Include="Net\Http\Form\" />
   </ItemGroup>
 </Project>

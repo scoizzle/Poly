@@ -1,13 +1,30 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.IO;
 using System.Net.Security;
 
 using Poly;
 using Poly.Data;
 
 namespace System {
-    public static class StringConversions {
+	public static class StringConversions {
+		public static byte[] GetBytes(this string This) {
+            return GetBytes(This, App.Encoding);
+		}
+
+        public static byte[] GetBytes(this string This, Encoding enc) {
+            return enc.GetBytes(This);
+		}
+
+		public static Stream GetStream(this string This) {
+            return GetStream(This, App.Encoding);
+		}
+
+        public static Stream GetStream(this string This, Encoding enc) {
+            return new MemoryStream(GetBytes(This, enc), false);
+        }
+
         public static void TryEscapeCharacter(StringBuilder output, char character) {
             switch (character) {
                 case '\r': output.Append("\\r"); break;
@@ -124,10 +141,6 @@ namespace System {
                     This
                 )
             );
-        }
-
-        public static byte[] ToByteArray(this string This, Encoding enc = null) {
-            return (enc ?? App.Encoding).GetBytes(This);
         }
     }
 }

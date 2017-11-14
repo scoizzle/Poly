@@ -13,15 +13,14 @@ namespace Poly.Net.Http.V1 {
         
         public string Version = HTTP1_1;
 
-        public Connection() { }
         public Connection(Tcp.Client client) : base(client) { }
 
-        public override void New(out Http.Request request, string method, string target, KeyValueCollection<string> headers) {
-            request = new Request(method, target, headers ?? new KeyValueCollection<string>());
+        public override void New(out Http.Request request, string method, string target, KeyValueCollection<string> headers, Stream body) {
+            request = new Request(this, method, target, headers ?? new KeyValueCollection<string>(), body);
         }
 
-        public override void New(out Http.Response response, Result status, KeyValueCollection<string> headers) {
-            response = new Response(status, headers ?? new KeyValueCollection<string>());
+        public override void New(out Http.Response response, Result status, KeyValueCollection<string> headers, Stream body) {
+            response = new Response(this, status, headers ?? new KeyValueCollection<string>(), body);
         }
 
         public override bool Send(Http.Request request) {
@@ -33,13 +32,13 @@ namespace Poly.Net.Http.V1 {
 
             PrintHeaders(text, request.Headers);
 
-            var send_headers = Client.Send(text.ToString());
+            var send_headers = Client.Write(text.ToString());
 
             if (!send_headers)
                 return false;
 
             if (request.ContentLength > 0) {
-                var send_body = Client.Send(request.Body);
+                var send_body = Client.Write(request.Body);
 
                 if (!send_body)
                     return false;
@@ -48,7 +47,7 @@ namespace Poly.Net.Http.V1 {
                     fs.Close();
             }
 
-            var flush = Client.Send();
+            var flush = Client.Write();
             return flush;
         }
 
@@ -58,16 +57,16 @@ namespace Poly.Net.Http.V1 {
             text.Append(Version).Append(' ')
                 .Append(response.Status.GetString()).Append(App.NewLine);
 
-            response.Date = DateTime.UtcNow.ToHttpTimeString();
+            response.Date = DateTime.UtcNow;
             PrintHeaders(text, response.Headers);
 
-            var send_headers = Client.Send(text.ToString());
+            var send_headers = Client.Write(text.ToString());
 
             if (!send_headers)
                 return false;
 
             if (response.ContentLength > 0) {
-                var send_body = Client.Send(response.Body);
+                var send_body = Client.Write(response.Body);
 
                 if (!send_body)
                     return false;
@@ -76,12 +75,12 @@ namespace Poly.Net.Http.V1 {
                     fs.Close();
             }
 
-            var flush = Client.Send();
+            var flush = Client.Write();
             return flush;
         }
 
         public override bool Receive(out Http.Request request) {
-            var headers = Client.ReceiveStringUntilConstrained(DoubleNewLine);
+            var headers = Client.ReadStringUntilConstrained(DoubleNewLine);
 
             if (!string.IsNullOrEmpty(headers)) {
                 var text = new StringIterator(headers);
@@ -94,7 +93,8 @@ namespace Poly.Net.Http.V1 {
                     var header_collection = new KeyValueCollection<string>();
 
                     if (ParseHeaders(text, header_collection)) {
-                        New(out request, method, target, header_collection);
+                        New(out request, method, target, header_collection, null);
+                        request.Date = DateTime.UtcNow;
                         Version = version;
                         return true;
                     }
@@ -106,7 +106,7 @@ namespace Poly.Net.Http.V1 {
         }
 
         public override bool Receive(out Http.Response response) {
-            var headers = Client.ReceiveStringUntilConstrained(DoubleNewLine);
+            var headers = Client.ReadStringUntilConstrained(DoubleNewLine);
 
             if (!string.IsNullOrEmpty(headers)) {
                 var text = new StringIterator(headers);
@@ -120,7 +120,7 @@ namespace Poly.Net.Http.V1 {
                         var header_collection = new KeyValueCollection<string>();
 
                         if (ParseHeaders(text, header_collection)) {
-                            New(out response, (Result)(status_value), header_collection);
+                            New(out response, (Result)(status_value), header_collection, null);
                             Version = version;
                             return true;
                         }

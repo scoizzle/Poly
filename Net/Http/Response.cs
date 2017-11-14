@@ -1,38 +1,24 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System.IO;
 
 namespace Poly.Net.Http {
-    using Tcp;
+    using HeaderCollection = Data.KeyValueCollection<string>;
 
-    public class Response : Packet {
-        public string Status;
+	public interface Response {
+        Connection Connection { get; set; }
 
-        public Response(Client client) : base(client) {
-            Status = Result.Ok;
-        }
+        DateTime Date { get; set; }
+        DateTime LastModified { get; set; }
 
-        public override void Reset() {
-            Status = string.Empty;
+		Result Status { get; set; }
 
-            base.Reset();
-        }
+        string ContentType { get; set; }
+        string ContentEncoding { get; set; }
+        string Expires { get; set; }
+        string TransferEncoding { get; set; }
+        long ContentLength { get; set; }
 
-        internal override bool ParseHeaders(StringIterator It) {
-            Version = It.Extract(' ');
-            Status = It.Extract(App.NewLine);
-
-            if (Version == null || Status == null)
-                return false;
-
-            return base.ParseHeaders(It);
-        }
-
-        internal override void GenerateHeaders(StringBuilder Output) {
-            Output.Append(Version).Append(' ')
-                  .Append(Status).Append(App.NewLine);
-
-            base.GenerateHeaders(Output);
-        }
+        Stream Body { get; set; }
+        HeaderCollection Headers { get; set; }
     }
 }

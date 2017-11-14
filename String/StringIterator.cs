@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Poly {
     public class StringIterator {
@@ -13,19 +12,24 @@ namespace Poly {
 
         public string String;
 
-        public int Index { 
-            get { return Section.Index; }
-            set { Section.Index = value; }
+        public StringIterator(string str) {
+            String = str;
+            Segments = new Stack<Segment>();
+            Section = new Segment
+            {
+                Index = 0,
+                LastIndex = str?.Length ?? 0
+            };
         }
 
-        public int LastIndex {
-            get { return Section.LastIndex; }
-            set { Section.LastIndex = value; }
+        public StringIterator(string str, int lastIndex) {
+            String = str;
+            Segments = new Stack<Segment>();
+            Section = new Segment {
+                Index = 0,
+                LastIndex = lastIndex
+            };
         }
-
-        public StringIterator(string String) : this(String, String.Length) { }
-
-        public StringIterator(string String, int lastIndex) : this(String, 0, lastIndex) { }
 
         public StringIterator(string str, int index, int lastIndex) {
             String = str;
@@ -44,241 +48,201 @@ namespace Poly {
 
         public char Current {
             get {
-                if (Index < 0 || IsDone())
-                    return char.MinValue;
+                if (Index < 0 || IsDone)
+                    return default(char);
 
                 return String[Index];
             }
         }
 
-        public int Length { get { return LastIndex - Index; } }
+        public char Previous {
+            get {
+                if (Index <= 0)
+                    return default(char);
 
-        public int Find(char C) {
-            if (IsDone()) return -1;
-            return String.IndexOf(C, Index, Length);
+                return String[Index - 1];
+            }
         }
 
-        public int Find(string Str) {
-			var Res = String.Find(Str, Index, LastIndex);
-
-            if (Res > LastIndex)
-                return -1;
-
-            return Res;
+        public char Last {
+            get {
+                return String[LastIndex - 1];
+            }
         }
 
-        public int Find(char Open, char Close) {
-            var Start = Index;
-            var Stop = LastIndex;
+        public int Length { 
+            get { return LastIndex - Index; } 
+        }
 
-            if (String.FindMatchingBrackets(Open, Close, ref Start, ref Stop, false))
-                return Stop;
+        public int Index { 
+            get { return Section.Index; }
+            set { Section.Index = value; }
+        }
 
-            return -1;
+        public int LastIndex {
+            get { return Section.LastIndex; }
+            set { Section.LastIndex = value; }
+        }
+
+        public int Offset {
+            get { return Section.Offset; }
+            set { Section.Offset = value; }
+        }
+
+        public bool IsDone {
+            get { return Index >= LastIndex; }
+            set { if (value) Index = LastIndex; }
+        }
+
+        public void Consume() {
+            Index++;
+        }
+
+        public void Consume(int count) {
+            Index += count;
+        }
+
+        public bool Consume(char character) {
+            return StringIteration.Consume(String, ref Section.Index, character);
+        }
+
+        public bool Consume(string text) {
+            return StringIteration.Consume(String, ref Section.Index, text, 0, text.Length);
+        }
+
+        public bool Consume(StringIterator It) {
+            return StringIteration.Consume(String, ref Section.Index, It.String, It.Index, It.Length);
+        }
+
+        public bool Consume(Func<char, bool> possible) {
+            return StringIteration.Consume(String, ref Section.Index, Section.LastIndex, possible);
+        }
+
+		public bool Consume(params Func<char, bool>[] possible) {
+            return StringIteration.Consume(String, ref Section.Index, Section.LastIndex, possible);
+		}
+
+        public bool ConsumeUntil(Func<char, bool> possible) {
+            return StringIteration.ConsumeUntil(String, ref Section.Index, Section.LastIndex, possible);
+        }
+
+        public bool ConsumeUntil(params Func<char, bool>[] possible) {
+            return StringIteration.ConsumeUntil(String, ref Section.Index, Section.LastIndex, possible);
         }
 
         public bool IsAt(char C) {
             return Current == C;
         }
 
-        public bool IsAt(char C, bool IgnoreCase) {
-            if (IsDone()) return false;
-
-            if (IgnoreCase)
-                return char.ToLower(Current) == char.ToLower(C);
-			
-            return Current == C;
-        }
-
         public bool IsAt(string str) {
-            return string.Compare(String, Index, str, 0, str.Length, StringComparison.Ordinal) == 0;
-        }
-
-        public bool IsAt(string str, bool IgnoreCase) {
-            if (IgnoreCase)
-                return string.Compare(String, Index, str, 0, str.Length, StringComparison.OrdinalIgnoreCase) == 0;
-            else
-                return string.Compare(String, Index, str, 0, str.Length, StringComparison.Ordinal) == 0;
+            if (Length < str.Length) return false;
+            return String.Compare(Index, str, 0, str.Length);
         }
         
+        public bool IsAt(StringIterator It) {
+            if (Length < It.Length) return false;
+            return String.Compare(Index, It.String, It.Index, It.Length);
+        }
 
-        public bool IsAt(StringIterator It, bool IgnoreCase) {
-            if (IgnoreCase)
-                return string.Compare(String, Index, It.String, 0, It.Length, StringComparison.OrdinalIgnoreCase) == 0;
-            else
-                return string.Compare(String, Index, It.String, 0, It.Length, StringComparison.Ordinal) == 0;
+        public bool IsAt(Func<char, bool> possible) {
+            if (IsDone) return false;
+            return possible(Current);
+        }
+
+        public bool IsAt(params Func<char, bool>[] possible) {
+            if (IsDone) return false;
+            var current = Current;
+
+            for (var i = 0; i < possible.Length; i++) {
+                if (possible[i](current)) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public bool IsAfter(char C) {
-            return this[Index - 1] == C;
+            return Previous == C;
         }
 
-        public bool IsAfter(char C, int Index) {
-            return this[Index - 1] == C;
+        public bool EndsWith(string Str) {
+            if (Str.Length > String.Length || string .IsNullOrEmpty(Str))
+                return false;
+
+            var l = Str.Length;
+            var i = LastIndex - l - 1;
+
+            return string.Compare(String, i, Str, 0, l, StringComparison.Ordinal) == 0;
         }
 
-        public bool Consume(char C) {
-            if (IsAt(C)) {
-                Tick();
-                return true;
-            }
-
-            return false;
-        }
-
-        public bool Consume(string Str) {
-            if (IsAt(Str)) {
-                Index += Str.Length;
-                return true;
-            }
-
-            return false;
-        }
-
-        public bool Consume(StringIterator It, bool IgnoreCase) {
-            var le = It.Length;
-            var i = Index;
-
-            if (IgnoreCase && string.Compare(String, i, It.String, 0, le, StringComparison.OrdinalIgnoreCase) == 0) {
-                Index = i + le;
-                return true;             
-            }
-            else if (string.Compare(String, i, It.String, 0, le, StringComparison.Ordinal) == 0) {
-                Index = i + le;
-                return true;
-            }
-            return false;
-        }
-
-		public bool Consume(params Func<char, bool>[] Possible) {
-            var i = Index;
-            var s = Index;
-            var l = LastIndex;
-            var S = String;
-
-            while (i < l && Possible.Any(S[i]))
-                i++;
-
-            if (i > s && i <= l) {
-                Index = i;
-                return true;
-            }
-
-            return false;
-		}
-        
-        public bool ConsumeUntil(char chr) {
-            var i = Index;
-            var l = LastIndex;
-
-            while (i < l) {
-                var c = String[i];
-                if (c == chr) {
-                    Index = i;
-                    return true;
+        public bool EndsWith(StringIterator It) {
+            for (int i = 1; i <= LastIndex - Index && i <= It.LastIndex - It.Index; i ++) {
+                if (this[LastIndex - i] != It[It.LastIndex - i]) {
+                    return false;
                 }
-                i++;
             }
-
-            return false;
+            return true;
         }
 
-        public bool ConsumeUntil(string str) {
-            var i = Index;
-            var l = LastIndex;
-            var le = str.Length;
-            var S = String;
+        public string Extract(char character) {
+            var start = Index;
 
-            while (i < l) {
-                i = S.IndexOf(str[0], i);
-
-                if (i == -1) break;
-
-                if (string.Compare(S, i, str, 0, le, StringComparison.Ordinal) == 0) {
-                    Index = i;
-                    return true;
-                }
-
-                i++;
+            if (Goto(character)) {
+                var sub_string = Substring(start, Index - start);
+                Consume();
+                return sub_string;
             }
-
-            return false;
-        }
-
-        public bool ConsumeUntil(Func<char, bool> f) {
-            var i = Index;
-            var s = Index;
-            var l = LastIndex;
-            var S = String;
-
-            while (i < l && !f(S[i]))
-                i++;
-
-            if (i > s && i <= l) {
-                Index = i;
-                return true;
-            }
-
-            return false;
-        }
-
-        public string ExtractUntil(char Token) {
-            var i = Index;
-            var f = Find(Token);
-
-            if (f == -1) return null;
-            else Index = f;
-
-            return String.Substring(i, f - i);
-        }
-
-        public string ExtractUntil(string Token) {
-            var i = Index;
-            var f = Find(Token);
-
-            if (f == -1) return null;
-            else Index = f;
-
-            return String.Substring(i, f - i);
-        }
-
-        public string ExtractUntil(params Func<char, bool>[] Possible) {
-            var i = Index;
-            var s = Index;
-            var l = LastIndex;
-            var S = String;
-
-            while (i < l && !Possible.Any(S[i]))
-                i++;
-
-            if (i > s && i <= l) {
-                Index = i;
-                return S.Substring(s, i - s);
-            }
-
+            
             return null;
         }
 
-        public string ExtractUntilAndConsume(char Token) {
-            var str = ExtractUntil(Token);
+        public string Extract(string text) {
+            var start = Index;
 
-            if (str != null) {
-                Consume(Token);
-                return str;
+            if (Goto(text)) {
+                var sub_string = Substring(start, Index - start);
+                Consume(text.Length);
+                return sub_string;
             }
-
+            
             return null;
         }
 
-        public string ExtractUntilAndConsume(string Token) {
-            var str = ExtractUntil(Token);
+        public string ExtractUntil(char character) {
+            var start = Index;
 
-            if (str != null) {
-                Consume(Token);
-                return str;
-            }
-
+            if (Goto(character))
+                return Substring(start, Index - start);
+            
             return null;
+        }
+
+        public string ExtractUntil(string text) {
+            var start = Index;
+
+            if (Goto(text))
+                return Substring(start, Index - start);
+            
+            return null;
+        }
+
+        public string ExtractUntil(params Func<char, bool>[] possible) {
+            var start = Index;
+
+            if (ConsumeUntil(possible))
+                return Substring(start, Index - start);
+            
+            return null;
+        }
+
+        public int Find(char C) {
+            if (IsDone) return -1;
+            return String.IndexOf(C, Index, Length);
+        }
+
+        public int Find(string Str) {
+            return String.Find(Index, LastIndex, Str, 0, Str.Length);
         }
 
         public bool Goto(char C) {
@@ -291,32 +255,6 @@ namespace Poly {
             return true;
         }
 
-        public bool Goto(char Open, char Close) {
-            var Start = Index;
-            var Count = 1;
-
-            do {
-                if (IsAt('\\'))
-                    continue;
-
-                if (IsAt(Close)) {
-                    Count--;
-
-                    if (Count == 0) {
-                        return true;
-                    }
-                }
-                else if (IsAt(Open))
-                    Count++;
-
-                Tick();
-            }
-            while (!IsDone());
-
-            Index = Start;
-            return false;
-        }
-
         public bool Goto(string str) {
             var Next = Find(str);
 
@@ -327,169 +265,53 @@ namespace Poly {
             return true;
         }
 
-        public bool Goto(string Open, string Close) {
-            var Start = Index;
-            var Count = 1;
+        public bool GotoFirstPossible(out char found, params char[] characters) {
+            var start = Index;
 
-            do {
-                if (IsAt('\\'))
+            while (!IsDone) {
+                if (IsAt('\\')) {
+                    Consume();
                     continue;
-
-                if (IsAt(Close)) {
-                    Count--;
-
-                    if (Count == 0) {
-                        return true;
-                    }
                 }
-                else if (IsAt(Open))
-                    Count++;
 
-                Tick();
+                for (var i = 0; i < characters.Length; i++) {
+                    found = characters[i];
+
+                    if (IsAt(found))
+                        return true;
+                }
+
+                Consume();
             }
-            while (!IsDone());
 
-            Index = Start;
+            found = default(char);
+            Index = start;
             return false;
         }
 
-        public bool Goto(StringIterator It, int Length, bool IgnoreCase) {
-            int i = String.IndexOf(It.Current, Index);
+        public bool GotoFirstPossible(out string found, params string[] strings) {
+            var start = Index;
 
-            if (i == -1)
-                return false;
-
-            do {
-                if (It.IsAt('\\'))
-                    It.Tick();
-
-                if (String[i] == It[It.Index]) {
-                    if (String.Compare(i, It.String, It.Index, Length, IgnoreCase)) {
-                        Index = i;
-                        return true;
-                    }
+            while (!IsDone) {
+                if (IsAt('\\')) {
+                    Consume();
+                    continue;
                 }
+
+                for (var i = 0; i < strings.Length; i++) {
+                    found = strings[i];
+
+                    if (IsAt(found))
+                        return true;
+                }
+
+                Consume();
             }
-            while (i++ + Length < String.Length);
+
+            found = default(string);
+            Index = start;
             return false;
         }
-
-        public char GotoFirstPossible(params char[] Chars) {
-            var Start = Index;
-
-            while (!IsDone()) {
-                var c = Chars.FirstOrDefault(IsAt);
-
-                if (c != default(char)) {
-                    if (!IsAfter('\\'))
-                        return c;
-                }
-
-                Tick();
-            }
-
-            Index = Start;
-            return default(char);
-        }
-
-        public string GotoFirstPossible(params string[] Chars) {
-            var Start = Index;
-
-            while (!IsDone()) {
-                var c = Chars.FirstOrDefault(IsAt);
-
-                if (c != null) {
-                    if (!IsAfter('\\'))
-                        return c;
-                }
-
-                Tick();
-            }
-
-            Index = Start;
-            return null;
-        }
-
-        public bool EndsWith(string Str) {
-			if (Str.Length > String.Length || string .IsNullOrEmpty(Str))
-				return false;
-
-            var l = Str.Length;
-            var i = LastIndex - l - 1;
-
-            return string.Compare(String, i, Str, 0, l, StringComparison.Ordinal) == 0;
-		}
-
-        public bool EndsWith(StringIterator It) {
-            for (int i = 1; i <= LastIndex - Index && i <= It.LastIndex - It.Index; i ++) {
-                if (this[LastIndex - i] != It[It.LastIndex - i]) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        public bool IsDone() {
-            return Index >= LastIndex;
-        }
-
-        public string Substring(int Index) {
-            if (Index < 0 || Index > LastIndex)
-                return null;
-
-            return String.Substring(Index, LastIndex - Index);
-        }
-
-        public string Substring(int Index, int Length) {
-            if (Index < 0 || Index + Length > this.LastIndex)
-                return null;
-
-            return String.Substring(Index, Length);
-        }
-
-        public string Extract(char End) {
-			if (SelectSection(End)) {
-				var Result = ToString();
-
-				ConsumeSection();
-
-				return Result;
-			}
-			return null;
-        }
-
-		public string Extract(char Open, char Close) {
-			if (SelectSection(Open, Close)) {
-				var Result = ToString();
-
-				ConsumeSection();
-
-				return Result;
-			}
-			return null;
-		}
-
-		public string Extract(string End) {
-			if (SelectSection(End)) {
-				var Result = ToString();
-
-				ConsumeSection();
-
-				return Result;
-			}
-			return null;
-		}
-
-		public string Extract(string Open, string Close) {
-			if (SelectSection(Open, Close)) {
-				var Result = ToString();
-
-				ConsumeSection();
-
-				return Result;
-			}
-			return null;
-		}
 
 		public bool SelectSection(char Next) {
 			PushSection(1);
@@ -505,23 +327,6 @@ namespace Poly {
 			return false;
 		}
 
-        public bool SelectSection(char Open, char Close) {
-            PushSection(1);
-
-            if (Consume(Open)) {
-                var Start = Index;
-
-                if (Goto(Open, Close)) {
-                    LastIndex = Index;
-                    Index = Start;
-                    return true;
-                }
-            }
-
-            PopSection();
-            return false;
-		}
-
 		public bool SelectSection(string Next) {
 			PushSection(Next.Length);
 
@@ -535,19 +340,41 @@ namespace Poly {
 			PopSection();
 			return false;
 		}
+
+        public bool SelectSection(char Open, char Close) {
+            if (!IsAt(Open))
+                return false;
+                
+            PushSection(1);
+
+            var start = Index;
+            var stop = LastIndex;
+
+            if (String.FindMatchingBrackets(Open, Close, ref start, ref stop, false)) {
+                Index = start;
+                LastIndex = stop;
+                return true;
+            }
+
+            PopSection();
+            return false;
+        }
         
         public bool SelectSection(string Open, string Close) {
+            if (!IsAt(Open))
+                return false;
+                
 			PushSection(Close.Length);
 
-            if (Consume(Open)) {
-                var Start = Index;
+            var start = Index;
+            var stop = LastIndex;
 
-                if (Goto(Open, Close)) {
-                    LastIndex = Index;
-                    Index = Start;
-                    return true;
-                }
+            if (String.FindMatchingBrackets(Open, Close, ref start, ref stop, false)) {
+                Index = start;
+                LastIndex = stop;
+                return true;
             }
+
 
             PopSection();
             return false;
@@ -567,11 +394,11 @@ namespace Poly {
             return false;
         }
         
-        public bool SelectSection<T>(Func<T, bool> Consume) where T : StringIterator {
+        public bool SelectSection(Func<StringIterator, bool> Consume) {
             PushSection();
 
             var Start = Index;
-            if (Consume(this as T)) {
+            if (Consume(this)) {
                 LastIndex = Index;
                 Index = Start;
                 return true;
@@ -581,11 +408,11 @@ namespace Poly {
             return false;
         }
         
-        public bool SelectSection<T>(Action<T> Consume) where T : StringIterator {
+        public bool SelectSection(Action<StringIterator> Consume) {
             PushSection();
 
             var Start = Index;
-            Consume(this as T);
+            Consume(this);
 
             if (Index > Start) {
                 LastIndex = Index;
@@ -614,7 +441,7 @@ namespace Poly {
 				Offset = offset
             };
         }
-
+        
         public void PopSection() {
             if (Segments.Count > 0)
                 Section = Segments.Pop();
@@ -628,40 +455,80 @@ namespace Poly {
             Index = index;
         }
 
-		public StringIterator Clone(int Index, int Length) {
-			return new StringIterator (String, Index, Length);
-		}
-
-        public void Tick() {
-            Index++;
-        }
-
         public bool ConsumeWhitespace() {
             return Consume(char.IsWhiteSpace);
         }
 
-        public void ConsumeNumericValue() {
-            Consume("-");
+        public bool ConsumeIntegerNumeric() {
+            Consume('+');
+            Consume('-');
 
             if (Consume(char.IsDigit))
-                if (Consume('.')) {
-                    Consume(char.IsDigit);
-                }
+                return !IsAt('.');
+
+            return false;
+        }
+
+        public bool ConsumeFloatingNumeric() {
+            Consume("-");
+
+            if (!Consume(char.IsDigit)) {
+                return false;
+            }
+
+            if (Consume('.')) {
+                if (!Consume(char.IsDigit))
+                    return false;
+            }
 
             if (Consume('e') || Consume('E')) {
-                if (!Consume('-'))
-                    Consume('+');
+                Consume('+');
+                Consume('-');
 
-                Consume(char.IsDigit);
+                if (!Consume(char.IsDigit))
+                    return false;
             }
+
+            return true;
+        }
+
+        public string Substring(int Index) {
+            if (Index < 0 || Index > LastIndex)
+                return null;
+
+            return String.Substring(Index, LastIndex - Index);
+        }
+
+        public string Substring(int Index, int Length) {
+            if (Index < 0 || Index + Length > String.Length)
+                return null;
+
+            return String.Substring(Index, Length);
+        }
+
+        public StringIterator Clone(int index, int lastIndex) {
+            return new StringIterator(String, index, lastIndex);
         }
 
         public override string ToString() {
+            if (String == null)
+                return string.Empty;
+
+            if (Index == 0 && LastIndex == String.Length)
+                return String;
+
+            if (IsDone)
+                return string.Empty;
+
             return String.Substring(Index, LastIndex - Index);
         }
 
         public static implicit operator StringIterator(string str) {
-            return new StringIterator(str);
+            return new StringIterator(str, 0, str?.Length ?? 0);
+        }
+
+        public static implicit operator string(StringIterator it) {
+            return it.ToString();
         }
     }
 }

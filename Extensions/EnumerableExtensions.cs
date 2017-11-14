@@ -20,6 +20,11 @@ namespace System {
             return This.Any(f => f(_t));
         }
 
+        public static void ForEach<TK, TV>(this IDictionary<TK, TV> This, Action<TK, TV> method) {
+            foreach (var pair in This)
+                method(pair.Key, pair.Value);
+        }
+
         public static IEnumerable<T> Slice<T>(this IEnumerable<T> This, int Index, int Count) {
             var Array = This.ToArray();
             var End = Index + Count;

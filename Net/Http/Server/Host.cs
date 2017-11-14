@@ -4,8 +4,8 @@ namespace Poly.Net.Http {
     using Data;
 
     public class Host {
-        internal Matcher Matcher;
-        internal FileSystem.DirectoryInfo DocumentPath;
+        public Matcher Matcher;
+        public FileSystem.DirectoryInfo DocumentPath;
 
         public string Name {
             get { return Matcher.Format; }
@@ -17,8 +17,7 @@ namespace Poly.Net.Http {
             set { DocumentPath = new FileSystem.DirectoryInfo(value); }
         }
 
-        public string DefaultDocument = "/index.htm", 
-                      DefaultExtension = ".htm";
+        public string DefaultDocument = "index.htm";
 
         public Host() { }
 
@@ -32,9 +31,6 @@ namespace Poly.Net.Http {
 
             var length = Target.Length;
 
-            if (length == 1 && Target[0] == '/')
-                return DefaultDocument;
-
             if (Target[length - 1] == '/')
                 return string.Concat(Target, DefaultDocument);
 
@@ -42,7 +38,7 @@ namespace Poly.Net.Http {
         }
 
         public string GetFullPath(string www) {
-            return DocumentPath?.FullName ?? string.Empty + www;
+            return (DocumentPath?.FullName ?? string.Empty) + www;
         }
     }
 }

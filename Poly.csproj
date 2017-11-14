@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>netcoreapp1.1</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <SynchReleaseVersion>false</SynchReleaseVersion>
     <RootNamespace>Poly</RootNamespace>
     <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
@@ -15,18 +15,19 @@
     <PackageProjectUrl>http://github.com/scoizzle/Poly/</PackageProjectUrl>
     <RepositoryUrl>http://github.com/scoizzle/Poly/</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageLicenseUrl>If you make money with Poly, I make money.</PackageLicenseUrl>
+    <PackageLicenseUrl>http://You.Make.Money/I.Make.Money</PackageLicenseUrl>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackOnBuild>true</PackOnBuild>
+    <Owners>Scot 'Scoizzle' Murphy</Owners>
+    <ReleaseVersion>1.0.1</ReleaseVersion>
+    <PackageVersion>1.0.1</PackageVersion>
   </PropertyGroup>
-
-  <ProjectExtensions>
-    <MonoDevelop>
-      <Properties>
-        <Policies>
-          <VersionControlPolicy inheritsSet="Mono">
-            <CommitMessageStyle LastFilePostfix=":&#xA;  " Wrap="False" />
-          </VersionControlPolicy>
-        </Policies>
-      </Properties>
-    </MonoDevelop>
-  </ProjectExtensions>
+  <ItemGroup>
+    <Compile Remove="String\Matcher\Block.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Net\Http\V2\Frame\" />
+    <Folder Include="Net\Http\V2\Frames\" />
+    <Folder Include="Net\Http\Form\" />
+  </ItemGroup>
 </Project>

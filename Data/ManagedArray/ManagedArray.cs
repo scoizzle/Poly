@@ -7,22 +7,21 @@ using System.Threading.Tasks;
 
 namespace Poly.Data {
     public class ManagedArray<T> : IEnumerable<T> {
-        private int count;
         public T[] Elements;
 
-        public int Count { get { return count; } }
+        public int Count { get; private set; }
 
         public T this[int index]
         {
             get
             {
-                if (index >= 0 && index < count)
+                if (index >= 0 && index < Count)
                     return Elements[index];
                 return default(T);
             }
             set
             {
-                if (index >= 0 && index < count)
+                if (index >= 0 && index < Count)
                     Elements[index] = value;
             }
         }
@@ -35,80 +34,92 @@ namespace Poly.Data {
 
         public ManagedArray(T[] baseArray) {
             Elements = baseArray;
-            count = Elements.Length;
+            Count = Elements.Length;
         }
 
         public ManagedArray(ManagedArray<T> Base) {
-            Elements = new T[Base.count == 0 ? 4 : Base.count];
+            Elements = new T[Base.Count == 0 ? 4 : Base.Count];
             Base.CopyTo(this);
         }
 
         public void CopyTo(ManagedArray<T> destination) {
-            destination.ValidateSizeForInsert(count + destination.count);
+            destination.ValidateSizeForInsert(Count + destination.Count);
 
-            var start = destination.count;
-            for (int i = 0; i < count; i++) {
-                destination.Elements[destination.count + i] = Elements[i];
-            }
-
-            destination.count += count;
+            Array.Copy(Elements, 0, destination.Elements, destination.Count, Count);
+            destination.Count += Count;
         }
 
         public void Add(T value) {
             ValidateSizeForInsert();
-            Elements[count] = value;
-            count++;
+            Elements[Count] = value;
+            Count++;
+        }
+
+        public void Add(T[] value) {
+            var length = value.Length;
+            ValidateSizeForInsert(Count + length);
+
+            Array.Copy(value, 0, Elements, Count, length);
+            Count += length;
         }
 
         public void Remove(T value) {
             RemoveAt(IndexOf(value));
         }
 
-        public void RemoveAt(int Index) {
-            if (Index < 0 || Index >= count)
-                return;
+        public bool RemoveAt(int Index) {
+            if (Index < 0 || Index >= Count)
+                return false;
 
-            var Last = count - 1;
-            for (var i = Index; i < Last; i++) {
-                Elements[i] = Elements[i + 1];
+            if (Index == Count - 1) {
+                Elements[Index] = default(T);
+                Count--;
+                return true;
             }
 
-            Elements[Last] = default(T);
-            count--;
+            var End = Count;
+            var Post = End - Index - 1;
+            
+            Array.Copy(Elements, Index + 1, Elements, Index, Post);
+
+            Elements[End] = default(T);
+            Count--;
+            return true;
         }
 
-        public void RemoveAt(int Index, int Length) {
-            if (Index < 0 || Index >= count || Index + Length > count)
+        public void RemoveAt(int Index, int Count) {
+            if (Index < 0 || Count <= 0 || Index + Count > Count)
                 return;
-            
-            var Last = count - Length;
-            var i = Index;
 
-            for (; i < Last; i++) {
-                Elements[i] = Elements[i + Length];
-            }
+            var to_move = Count - Count;
+            var chunk_end = Index + Count;
 
-            Array.Clear(Elements, Index, Count - Index);
-            count -= Length;
+            Array.Copy(Elements, chunk_end, Elements, Index, to_move - Index);
+            Array.Clear(Elements, Count, Elements.Length - Count);
+
+            Count = to_move;
         }
 
         public void Clear() {
-            for (var i = 0; i < count; i++) {
-                Elements[i] = default(T);
-            }
-            count = 0;
+            Array.Clear(Elements, 0, Count);
+            Count = 0;
         }
 
         public int IndexOf(T value) {
-            for (var i = 0; i < count; i++) {
+            for (var i = 0; i < Count; i++) {
                 if (Elements[i].Equals(value))
                     return i;
             }
             return -1;
         }
 
+        public void Constrain() {
+            if (Count < Elements.Length)
+                Array.Resize(ref Elements, Count);
+        }
+
         private void ValidateSizeForInsert() {
-            if (Elements.Length <= count + 1)
+            if (Elements.Length <= Count + 1)
                 Array.Resize(ref Elements, Elements.Length * 2);
         }
 
@@ -134,7 +145,7 @@ namespace Poly.Data {
 
             internal Enumerator(ManagedArray<T> array) {
                 index = 0;
-                len = array.count;
+                len = array.Count;
                 Current = default(T);
 
                 list = array.Elements;

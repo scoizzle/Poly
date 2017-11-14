@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace System {
     static class CharExtensions {
         public static string ToHexString(this char C) {
-            return ToHexString(Encoding.UTF8, C);
+            return ToHexString(Poly.App.Encoding, C);
         }
 
         public static string ToHexString(this char C, Encoding Enc) {
@@ -18,7 +18,7 @@ namespace System {
             return Encoding.GetBytes(Chars).ToHexString();
         }
 
-        public static bool CompareWithoutCase(this char C, char S) {
+        public static bool CompareInvariant(this char C, char S) {
             if (C == S)
                 return true;
 

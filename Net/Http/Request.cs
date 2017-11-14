@@ -1,72 +1,47 @@
 ﻿using System;
 using System.IO;
-using System.Text;
 
 namespace Poly.Net.Http {
-    using Tcp;
+    using Data;
 
-    public class Request : Packet {
-        public string Method,
-                      Target,
-                      Query;
+    public interface Request {
+        Connection Connection { get; set; }
 
-        public bool HeadersOnly;
-        
-        public Request(Client client) : base(client) {
-            Body.Content = new MemoryStream();
-        }
-        
-        public string Item {
-            get {
-                return Target + ((Query?.Length > 0) ? '?' + Query : string.Empty);
-            }
-            set {
-                var i = value.IndexOf('?');
+        DateTime Date { get; set; }
+        DateTime LastModified { get; set; }
 
-                if (i == -1) {
-                    Target = value;
-                    Query = string.Empty;
-                }
-                else {
-                    Target = value.Substring(0, i);
-                    Query = value.Substring(i + 1);
-                }
-            }
-        }
+        string Method { get; set; }
+        string Target { get; set; }
+        string Authority { get; set; }
+        string ContentType { get; set; }
+        string ContentEncoding { get; set; }
+        long ContentLength { get; set; }
 
-        public override void Reset() {
-            Method = Target = Query = string.Empty;
-            HeadersOnly = false;
+        Stream Body { get; set; }
 
-            base.Reset();
-        }
-
-        internal override bool ParseHeaders(StringIterator It) {
-            Method = It.Extract(' ');
-            Target = It.Extract(' ');
-            Version = It.Extract(App.NewLine);
-
-            if (Method == null || Item == null || Version == null)
-                return false;
-
-            Item = Target;
-
-            if (base.ParseHeaders(It)) {
-                if (Headers.TryGetValue("Accept-Encoding", out string AcceptEncoding))
-                    Gzip = AcceptEncoding.Find("gzip") != -1;
-
-                HeadersOnly = Method.Compare("HEAD");
-                return true;
-            }
-            return false;
-        }
-
-        internal override void GenerateHeaders(StringBuilder Output) {
-            Output.Append(Method).Append(' ')
-                  .Append(Item).Append(' ')
-                  .Append(Version).Append(App.NewLine);
-
-            base.GenerateHeaders(Output);
-        }
+        KeyValueCollection<string> Headers { get; set; }
+        JSON Arguments { get; set; }
     }
+
+	public static class RequestExtensions {
+		public static Response Send(this Request This, Result status) {
+			This.Connection.New(out Response response, status);
+			return response;
+		}
+
+		public static Response Send(this Request This, Result status, Stream body) {
+			This.Connection.New(out Response response, status, null, body);
+			return response;
+		}
+
+		public static Response Send(this Request This, Result status, string content) {
+            return Send(This, status, content.GetStream());
+		}
+
+        public static Response Send(this Request This, Result status, Action<Response> modifier) {
+			This.Connection.New(out Response response, status);
+            modifier(response);
+			return response;
+		}
+	}
 }

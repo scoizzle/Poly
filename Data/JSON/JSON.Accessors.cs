@@ -4,121 +4,94 @@ using System.Linq;
 
 namespace Poly.Data {
     public partial class JSON {
-        public object Get(params string[] Keys) {
-            int i = 0;
-			int len = Keys.Length;
-
-            object Value = null;
-            JSON Current = this;
-
-			while (i < len) { 
-                if (Current == null)
-                    return null;
-
-                if (!Current.TryGet(Keys[i], out Value))
-					return null;
-				
-				if (i == len)
-					break;
-				
-				Current = Value as JSON;
-				i++;
-			}
-
-            return Value;
-        }
-        
-        public T Get<T>(string Key) {
-            return Get<T>(Key.Split(KeySeperatorCharacter));
+        new public object Get(string key_list) {
+            return Get(key_list.Split(KeySeperatorCharacter));
         }
 
-        public T Get<T>(params string[] Key) {
-            var Value = Get(Key);
+        public object Get(IEnumerable<string> key_list) {
+            var keys = key_list.ToArray();
+            var lastIndex = keys.Length - 1;
 
-			try {
-				return (T)(Value);
-			}
-			catch { }
-			return default(T);
-		}
+            object value = null;
+            JSON current = this;
 
-        public T Get<T>(IEnumerable<string> Key) {
-            var Value = Get(Key.ToArray());
+            for (var i = 0; i <= lastIndex; i++) {
+                if (current == null)
+                    break;
 
+                if (!current.TryGetValue(keys[i], out value))
+                    break;
 
-			try {
-				return (T)(Value);
-			}
-			catch { }
-			return default(T);
+                if (i == lastIndex)
+                    return value;
+            }
+
+            return null;
         }
 
-		public void Set<T>(string Key, T[] Values) {
-			AssignValue(Key, NewArray(Values));
-		}
-
-        new public void Set(string Key, object Value) {
-            AssignValue(Key, Value);
+        public T Get<T>(string key_list) {
+            return Get<T>(key_list.Split(KeySeperatorCharacter));
         }
 
-        public void Set(IEnumerable<string> Keys, object Value) {
-            object Object;
-            JSON Current = this;
-            int I = 1, Len = Keys.Count();
+        public T Get<T>(IEnumerable<string> key_list) {
+            var obj = Get(key_list);
 
-            foreach (var K in Keys) {
-                if (I++ == Len)
-                    Current.AssignValue(K, Value);
-                else if (Current.TryGet(K, out Object)) {
-                    if (Object is JSON Next)
-                        Current = Next;
-                    else break;
+            if (obj is T value) {
+                return value;
+            }
+
+            return default(T);
+        }
+
+        public bool TryGet(string key_list, out object value) {            
+            value = Get(key_list);
+            return value != null;
+        }
+
+        new public bool Set(string key_list, object value) {
+            return Set(key_list.Split(KeySeperatorCharacter), value);
+        }
+
+        public bool Set(IEnumerable<string> key_list, object value) {
+            var keys = key_list.ToArray();
+            var lastIndex = keys.Length - 1;
+
+            JSON current = this;
+
+            for (var i = 0; i <= lastIndex; i++) {
+                var key = keys[i];
+
+                if (i == lastIndex) {
+                    current[key] = value;
+                    return true;
+                }
+
+                if (current.TryGetValue(key, out object raw)) {
+                    if (raw is JSON next)
+                        current = next;
+                    else 
+                        return false;
                 }
                 else {
-                    Current.AssignValue(K, Current = new JSON());
+                    var next = new JSON();
+                    current.Add(key, next);
+                    current = next;
                 }
             }
+
+            return false;
         }
 
-        public void Set(string[] Keys, object Value) {
-            int i = 0;
-            object Object;
-            JSON Current = this;
-
-            do {
-                if (Keys.Length - i == 1) {
-                    Current.AssignValue(Keys[i], Value);
-                }
-                else if (Current.TryGet(Keys[i], out Object)) {
-                    if (Object is JSON Next)
-                        Current = Next;
-                    else break;
-                }
-                else {
-                    Current.AssignValue(Keys[i], Current = new JSON());
-                }
-            }
-            while (++i < Keys.Length);
-        }
-
-        public virtual bool TryGet(string Key, out object Value) {
-            return TryGetValue(Key, out Value);
-        }
-
-        public virtual bool TryGet<T>(string Key, out T Value) {
-			if (TryGet(Key, out object Val)) {
+        public bool TryGetValue<T>(string Key, out T Value) {
+            if (base.TryGetValue(Key, out object Val)) {
                 if (Val is T value) {
                     Value = value;
                     return true;
                 }
-			}
+            }
 
-			Value = default(T);
-			return false;
-        }
-
-        public virtual void AssignValue(string Key, object Value) {
-            base[Key] = Value;
+            Value = default(T);
+            return false;
         }
     }
 }

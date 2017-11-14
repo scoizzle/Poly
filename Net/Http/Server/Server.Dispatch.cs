@@ -1,129 +1,65 @@
 using System;
 using System.IO;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
     using Data;
-    using Tcp;
+	using Tcp;
 
-    public partial class Server {
-        async Task OnClientConnected(Client client) {
-            Host        host = Config.Host;
-            Matcher     matcher = host.Matcher;
-            Boolean     use_static_files = Config.Cache.UseStaticFiles;
+	public partial class Server {
+        async Task OnConnected(Client client) {
+			Connection connection = new V1.Connection(client);
 
-            Request     request = new Request(client);
-            Response    response = new Response(client);
-            JSON        arguments = new JSON();
+			try {
+				while (Running && client.Connected) {
+					var receive = connection.Receive(out Request request);
+					if (!receive)
+						break;
+                    
+                    var response = ProcessRequest(request);
+                    if (response == null)
+                        connection.New(out response, Result.InternalError);
 
-            do {
-                if (!await request.Receive())
-                    break;
+					var send = connection.Send(response);
+					if (!send)
+						break;
 
-                Semaphore.Wait();
+					await Task.Yield();
+				}
+			}
+            catch (SocketException) { }
+            catch (IOException) { }
+			catch (Exception error) {
+				Log.Debug(error);
+			}
 
-                var hostname_found =
-                    request.Headers.TryGetValue(
-                        "Host",
-                        out string hostname);
+			client.Close();
+		}
 
-                if (hostname_found && matcher.Compare(hostname)) {
-                    try {
-                        var handler_found =
-                            RequestHandlers.TryGetHandler(
-                                request.Target,
-                                arguments,
-                                out Handler handler);
+        Response VerifyHost(Request request) {
+			if (Config.Host.Matcher.Compare(request.Authority))
+                return HandleRequest(request);
 
-                        if (handler_found) {
-                            handler(request, response, arguments);
-                        }
-                        else {
-                            if (use_static_files) {
-                                var file_name = host.GetDocumentName(request.Target);
+            request.Connection.New(out Response response, Result.BadRequest);
+            return response;
+		}
 
-                                var cached_found =
-                                    Cache.TryGetValue(
-                                        file_name,
-                                        out Cache.Item cached);
+		Response HandleRequest(Request request) {
+			var handler_found =
+                Handlers.TryGetHandler(
+                    request.Target,
+					out Handler handler,
+                    out JSON arguments);
 
-                                if (cached_found) {
-                                    response.Vary = "Accept-Encoding";
+            if (handler_found) {
+                request.Arguments = arguments;
+                return handler(request);
+			}
 
-                                    if (cached.LastWriteTimeUtc.Compare(request.LastModified)) {
-                                        response.Status = Result.NotModified;
-                                    }
-                                    else {
-                                        response.Content = Cache.GetStream(cached);
-                                        response.ContentType = cached.ContentType;
-                                        response.ContentLength = cached.ContentLength;
-                                        response.LastModified = cached.LastWriteTimeUtc;
-                                    }
-                                }
-                                else {
-                                    response.Status = Result.NotFound;
-                                }
-                            }
-                            else {
-                                response.Status = Result.NotFound;
-                            }
-                        }
-                    }
-                    catch (IOException) {
-                        break;
-                    }
-                    catch (Exception Error) {
-                        response.Reset();
-                        response.Status = Result.InternalError;
-
-                        Log.Debug(Error.ToString());
-                    }
-                }
-                else {
-                    response.Status = Result.BadRequest;
-                }
-                
-                Semaphore.Release();
-
-                if (!await Finish(request, response))
-                    break;
-
-                request.Reset();
-                response.Reset();
-                arguments.Clear();
-            }
-            while (Running && await client.IsConnected());
-        }
-
-        async Task<bool> Finish(Request request, Response response) {
-            response.Version = request.Version;
-            response.Date = DateTime.UtcNow.HttpTimeString();
-
-            bool send_body =
-                !request.HeadersOnly &&
-                response.Body.HasContent;
-
-            if (send_body) {
-                response.Content.Position = 0;
-                response.ContentLength = response.Content.Length;
-            }
-            else {
-                response.ContentLength = 0;
-            }
-
-            var send_headers = response.Send();
-
-            if (!await send_headers)
-                return false;
-
-            if (send_body) {
-                var send_content = response.Body.Send();
-
-                return await send_content;
-            }
-
-            return true;
-        }
-    }
+            request.Connection.New(out Response response, Result.NotFound);
+			return response;
+		}
+	}
 }

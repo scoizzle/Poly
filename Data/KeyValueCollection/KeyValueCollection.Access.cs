@@ -1,15 +1,10 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace Poly.Data {
 
-namespace Poly.Data {
     public partial class KeyValueCollection<T> {
+
         public bool Add(string key, T value) {
             PairCollection collection;
-            KeyValuePair   pair;
+            KeyValuePair pair;
 
             if (TryGetCollection(key.Length, out collection)) {
                 if (TryGetStorage(collection, key, out pair)) {
@@ -26,20 +21,20 @@ namespace Poly.Data {
 
                 collection.List.Add(pair);
                 List.Add(collection);
-                Count ++;
+                Count++;
             }
-            
+
             return true;
         }
 
         public bool Remove(string key) {
             PairCollection collection;
-            KeyValuePair   pair;
+            KeyValuePair pair;
 
             if (TryGetCollection(key.Length, out collection)) {
                 if (TryGetStorage(collection, key, out pair)) {
                     collection.List.Remove(pair);
-                    Count --;
+                    Count--;
                     return true;
                 }
             }
@@ -52,9 +47,14 @@ namespace Poly.Data {
             Count = 0;
         }
 
+        public void CopyTo(KeyValueCollection<T> target) {
+            foreach (var pair in this)
+                target.Set(pair.Key, pair.value);
+        }
+
         public bool ContainsKey(string key) {
             PairCollection collection;
-            KeyValuePair   pair;
+            KeyValuePair pair;
 
             if (TryGetCollection(key.Length, out collection)) {
                 if (TryGetStorage(collection, key, out pair)) {
@@ -66,13 +66,13 @@ namespace Poly.Data {
         }
 
         public T Get(string key) {
-            return TryGetValue(key, out T value) ? value 
+            return TryGetValue(key, out T value) ? value
                                                  : default(T);
         }
 
         public void Set(string key, T value) {
             PairCollection collection;
-            KeyValuePair   pair;
+            KeyValuePair pair;
 
             if (TryGetCollection(key.Length, out collection)) {
                 if (TryGetStorage(collection, key, out pair)) {
@@ -90,39 +90,39 @@ namespace Poly.Data {
 
                 collection.List.Add(pair);
                 List.Add(collection);
-                Count ++;
+                Count++;
             }
         }
 
-		public bool TrySet(string key, T value) {
-			PairCollection collection;
-			KeyValuePair pair;
+        public bool TrySet(string key, T value) {
+            PairCollection collection;
+            KeyValuePair pair;
 
-			if (TryGetCollection(key.Length, out collection)) {
-				if (TryGetStorage(collection, key, out pair)) {
-					pair.Value = value;
-				}
-				else {
-					pair = new KeyValuePair(key, value);
-					collection.List.Add(pair);
-					Count++;
-				}
-			}
-			else {
-				pair = new KeyValuePair(key, value);
-				collection = new PairCollection(key.Length);
+            if (TryGetCollection(key.Length, out collection)) {
+                if (TryGetStorage(collection, key, out pair)) {
+                    pair.Value = value;
+                }
+                else {
+                    pair = new KeyValuePair(key, value);
+                    collection.List.Add(pair);
+                    Count++;
+                }
+            }
+            else {
+                pair = new KeyValuePair(key, value);
+                collection = new PairCollection(key.Length);
 
-				collection.List.Add(pair);
-				List.Add(collection);
-				Count++;
-			}
+                collection.List.Add(pair);
+                List.Add(collection);
+                Count++;
+            }
 
             return true;
-		}
+        }
 
         public KeyValuePair GetStorage(string key) {
             PairCollection collection;
-            KeyValuePair   pair;
+            KeyValuePair pair;
 
             if (TryGetCollection(key.Length, out collection)) {
                 if (TryGetStorage(collection, key, out pair)) {
@@ -141,7 +141,7 @@ namespace Poly.Data {
 
                 collection.List.Add(pair);
                 List.Add(collection);
-                Count ++;
+                Count++;
                 return pair;
             }
         }
@@ -151,13 +151,13 @@ namespace Poly.Data {
         }
 
         public bool TryGetValue(string key, out T value) {
-            PairCollection      collection;
+            PairCollection collection;
 
             if (TryGetCollection(key.Length, out collection)) {
                 return TryGetValue(collection, key, out value);
             }
 
-            value = default(T);
+            value = default;
             return false;
         }
 
@@ -167,7 +167,7 @@ namespace Poly.Data {
                 return true;
             }
 
-            value = default(T);
+            value = default;
             return false;
         }
 
@@ -177,15 +177,15 @@ namespace Poly.Data {
             var len = list.Count;
 
             for (int i = 0; i < len; i++) {
-                var element = list[i];
+                var element = list.Elements[i];
 
-                if (StringExtensions.Compare(element.Key, 0, key, 0, length)) {
+                if (CompareStrings(element.Key, 0, key, 0, length)) {
                     pair = element;
                     return true;
                 }
             }
 
-            pair = default(KeyValuePair);
+            pair = default;
             return false;
         }
 
@@ -194,7 +194,7 @@ namespace Poly.Data {
             var len = list.Count;
 
             for (int i = 0; i < len; i++) {
-                var element = list[i];
+                var element = list.Elements[i];
 
                 if (element.Length == length) {
                     collection = element;
@@ -202,7 +202,7 @@ namespace Poly.Data {
                 }
             }
 
-            collection = default(PairCollection);
+            collection = default;
             return false;
         }
     }

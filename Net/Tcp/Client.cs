@@ -1,55 +1,37 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
+using Poly.Data;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
 using System.Net.Security;
+using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
 using System.Threading.Tasks;
-using System.Text;
 
-using Poly;
-using Poly.Data;
+namespace Poly.Net {
 
-namespace Poly.Net.Tcp {
-	using Http;
+    public partial class TcpClient : MemoryBufferedStream {
+        public TcpClient(Socket socket) : base(new NetworkStream(socket)) {
+            Socket = socket;
+            Socket.NoDelay = true;
+        }
 
-    public class Client : MemoryBufferedStream {
+        ~TcpClient() {
+            Socket?.Dispose();
+        }
+
         public bool Secure { get; private set; }
 
         public Socket Socket { get; protected set; }
-        public SslStream SecureStream { get; protected set; }
 
         public IPEndPoint LocalIPEndPoint { get { return Socket?.LocalEndPoint as IPEndPoint; } }
-		public IPEndPoint RemoteIPEndPoint { get { return Socket?.RemoteEndPoint as IPEndPoint; } }
+        public IPEndPoint RemoteIPEndPoint { get { return Socket?.RemoteEndPoint as IPEndPoint; } }
+
+        public int Available { get => In.Available + Socket.Available; }
 
         public bool Connected {
             get { return Socket?.Connected == true; }
         }
 
-        public Client(Socket sock) : base(new NetworkStream(sock)){
-            Socket = sock;
-            Socket.NoDelay = true;
-        }
-
-        public Client(Socket sock, bool secure) : this(sock) {
-            if (secure) {
-                Secure = true;
-                Stream = SecureStream = new SslStream(Stream);
-            }
-        }
-
-        ~Client() {
-            Socket?.Dispose();
-        }
-
         public async Task<bool> Connect(EndPoint ep) {
-            if (Socket == null)
-                Socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
-
             try {
                 await Socket.ConnectAsync(ep);
 
@@ -75,36 +57,15 @@ namespace Poly.Net.Tcp {
                         port
                 ));
 
-                var connected = await get_connection;
-                if (connected) {
-                    if (Secure) {
-                        SecureStream = new SslStream(
-                            new NetworkStream(Socket),
-                            false,
-                            new RemoteCertificateValidationCallback(
-                                SecureValidationCallback
-                        ));
-
-                        var get_authentication = SecureStream.AuthenticateAsClientAsync(host);
-                        await get_authentication;
-
-                        Stream = SecureStream;
-                    }
-
-                    return true;
-                }
+                return await get_connection;
             }
             catch { }
-            
+
             return false;
         }
 
         public Task<bool> Connect(IPAddress addr, int port) {
             return Connect(new IPEndPoint(addr, port));
-        }
-
-        static bool SecureValidationCallback(object sender, X509Certificate cert, X509Chain chain, SslPolicyErrors errors) {
-            return errors != SslPolicyErrors.None;
         }
     }
 }

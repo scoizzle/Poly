@@ -1,20 +1,19 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-using Poly;
-
 namespace Poly.Net {
+
     using Data;
 
     public class UrlQuery : KeyValueCollection<string> {
-        static Serializer<UrlQuery> Serializer = new Serializer<UrlQuery>(
+
+        public static Serializer<UrlQuery> Serializer = new Serializer<UrlQuery>(
             Serialize,
             Deserialize
             );
 
-        static bool Serialize(StringBuilder it, UrlQuery query) {
+        private static bool Serialize(StringBuilder it, UrlQuery query) {
             var pairs = query.KeyValuePairs.ToArray();
             var last = pairs.Length - 1;
 
@@ -34,16 +33,16 @@ namespace Poly.Net {
             return true;
         }
 
-
-        static bool Deserialize(StringIterator it, out UrlQuery query) {
+        private static bool Deserialize(StringIterator it, out UrlQuery query) {
             query = new UrlQuery();
 
             while (it.SelectSection('=')) {
-                var key = it;
+                string key = it;
                 it.ConsumeSection();
                 it.SelectSection('&');
 
-                var value = it;
+                string value = it;
+                it.ConsumeSection();
 
                 query.Set(key, value);
 
@@ -55,8 +54,8 @@ namespace Poly.Net {
             return false;
         }
 
-        public static bool Parse(string text, out UrlQuery query) {
-            return Deserialize(text, out query);
+        public static UrlQuery Parse(string text) {
+            return Serializer.Deserialize(text);
         }
 
         public override string ToString() {

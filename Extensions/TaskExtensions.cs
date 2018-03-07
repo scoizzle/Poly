@@ -1,34 +1,45 @@
 ﻿namespace System {
-    using Threading;
-    using Threading.Tasks;
+    using System.Threading.Tasks;
 
-    static class PolyTaskExtensions {
-        public static bool TimeoutAfter(this Task task, TimeSpan timeout) {
-            if (task.Wait(timeout))
+    public static class TaskExtensions {
+        public static Task TimeoutAfter(this Task task, TimeSpan time, Action callback) {
+            Task.Delay(time).ContinueWith(_ => {
+                if (!task.IsCompleted)
+                    callback();
+            });
+
+            return task;
+        }
+
+        public static Task<T> TimeoutAfter<T>(this Task<T> task, TimeSpan time, Action callback) {
+            Task.Delay(time).ContinueWith(_ => {
+                if (!task.IsCompleted)
+                    callback();
+            });
+
+            return task;
+        }
+
+        public static bool CatchException(this Task task) {
+            if (task.IsFaulted) {
+                try { throw task.Exception; }
+                catch (Exception error) {
+                    Poly.Log.Error(error);
+                }
                 return true;
-
+            }
             return false;
         }
 
-        public static TResult TimeoutAfter<TResult>(this Task<TResult> task, TimeSpan timeout) {
-            if (task.Wait(timeout))
-                return task.Result;
-
-            return default(TResult);
-        }
-
-        public static bool TimeoutAfter(this Task task, int timeout) {
-            if (task.Wait(timeout))
+        public static bool CatchException<T>(this Task<T> task) {
+            if (task.IsFaulted) {
+                try { throw task.Exception; }
+                catch (Exception error) {
+                    Poly.Log.Error(error);
+                }
                 return true;
-
+            }
             return false;
-        }
-
-        public static TResult TimeoutAfter<TResult>(this Task<TResult> task, int timeout) {
-            if (task.Wait(timeout))
-                return task.Result;
-
-            return default(TResult);
         }
     }
 }

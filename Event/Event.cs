@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
-using Poly.Data;
+﻿using Poly.Data;
 
 namespace Poly {
+
     public partial class Event {
+
         public delegate object Handler(JSON Args);
 
         public static object Invoke(Handler Func, JSON Args) {

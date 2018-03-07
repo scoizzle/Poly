@@ -1,15 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace System {
 
-using Poly;
-using Poly.Data;
-
-namespace System {
     public static class StringIteration {
+
         public static bool Consume(this string This, ref int index, char character) {
             if (StringExtensions.Compare(This, index, character)) {
-                index ++;
+                index++;
                 return true;
             }
             return false;
@@ -17,6 +12,23 @@ namespace System {
 
         public static bool Consume(this string This, ref int index, string sub_string, int sub_index, int length) {
             if (StringExtensions.Compare(This, index, sub_string, sub_index, length)) {
+                index += length;
+                return true;
+            }
+
+            return false;
+        }
+
+        public static bool ConsumeIgnoreCase(this string This, ref int index, char character) {
+            if (StringExtensions.CompareIgnoreCase(This, index, character)) {
+                index++;
+                return true;
+            }
+            return false;
+        }
+
+        public static bool ConsumeIgnoreCase(this string This, ref int index, string sub_string, int sub_index, int length) {
+            if (StringExtensions.CompareIgnoreCase(This, index, sub_string, sub_index, length)) {
                 index += length;
                 return true;
             }
@@ -41,7 +53,7 @@ namespace System {
             do {
                 valid = f(This[position]);
             }
-            while (valid && position++ < last_index);
+            while (valid && ++position < last_index);
 
             if (position != start) {
                 index = position;

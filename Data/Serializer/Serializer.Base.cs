@@ -1,15 +1,16 @@
 using System;
-using System.Linq;
-using System.Reflection;
 using System.Text;
 
 namespace Poly.Data {
+
     public partial class Serializer {
+
         public delegate object SerializeObjectDelegate(object obj);
+
         public delegate void DeserializeObjectDelegate(object obj, object val);
 
-        public Type                         Type;
-        public KeyValueCollection<Member>   Members;
+        public Type Type;
+        public KeyValueCollection<Member> Members;
 
         public Serializer(Type type) {
             Type = type;

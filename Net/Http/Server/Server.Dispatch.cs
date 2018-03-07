@@ -1,65 +1,86 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Poly.Net.Http {
+namespace Poly.Net {
     using Data;
-	using Tcp;
+    using Http;
 
-	public partial class Server {
-        async Task OnConnected(Client client) {
-			Connection connection = new V1.Connection(client);
+    public partial class HttpServer {
+        internal int reading, writing, processing;
+        internal int active { get => reading + writing + processing; }
+        
+        private void OnClientConnect(TcpClient client) {
+            var connection = new Http.V1.Connection(client);
+            var context = new Context(connection);
+            
+            BeginReadRequest(connection, context);
+        }
 
-			try {
-				while (Running && client.Connected) {
-					var receive = connection.Receive(out Request request);
-					if (!receive)
-						break;
-                    
-                    var response = ProcessRequest(request);
-                    if (response == null)
-                        connection.New(out response, Result.InternalError);
+        private void Disconnect(Connection connection) {
+            connection.Client.Dispose();
+        }
 
-					var send = connection.Send(response);
-					if (!send)
-						break;
+        private void BeginReadRequest(Connection connection, Context context) {
+            Interlocked.Increment(ref reading);
+            
+            connection
+                .ReadRequestAsync(context.Request)
+                .ContinueWith(_ => EndReadRequest(connection, context, _));
+        }
 
-					await Task.Yield();
-				}
-			}
-            catch (SocketException) { }
-            catch (IOException) { }
-			catch (Exception error) {
-				Log.Debug(error);
-			}
+        private void EndReadRequest(Connection connection, Context context, Task<bool> read_request) {
+            Interlocked.Decrement(ref reading);
 
-			client.Close();
-		}
+            if (read_request.IsFaulted) {
+                HandleError(read_request);
+                Disconnect(connection);
+            }
+            else
+            if (read_request.IsCompleted && read_request.Result) {
+                ProcessRequest(connection, context);
+            }
+        }
 
-        Response VerifyHost(Request request) {
-			if (Config.Host.Matcher.Compare(request.Authority))
-                return HandleRequest(request);
+        private void ProcessRequest(Connection connection, Context context) {
+            Interlocked.Increment(ref processing);
 
-            request.Connection.New(out Response response, Result.BadRequest);
-            return response;
-		}
+            handle_request(context).
+                ContinueWith(_ => BeginSendResponse(connection, context));
+        }
 
-		Response HandleRequest(Request request) {
-			var handler_found =
-                Handlers.TryGetHandler(
-                    request.Target,
-					out Handler handler,
-                    out JSON arguments);
+        private void BeginSendResponse(Connection connection, Context context) {
+            Interlocked.Decrement(ref processing);
+            Interlocked.Increment(ref writing);
 
-            if (handler_found) {
-                request.Arguments = arguments;
-                return handler(request);
-			}
+            connection
+                .WriteResponseAsync(context.Response)
+                .ContinueWith(_ => EndSendResponse(connection, context, _));
+        }
 
-            request.Connection.New(out Response response, Result.NotFound);
-			return response;
-		}
-	}
+        private void EndSendResponse(Connection connection, Context context, Task<bool> send_response) {
+            Interlocked.Decrement(ref writing);
+
+            if (send_response.IsFaulted) {
+                HandleError(send_response);
+                Disconnect(connection);
+            }
+            else
+            if (send_response.IsCompleted && send_response.Result) {
+                context.Reset();
+                BeginReadRequest(connection, context);
+            }
+        }
+
+        private void HandleError(Task<bool> failed_task) {
+            try {
+                throw failed_task.Exception;
+            }
+            catch (Exception error) {
+                Log.Debug(error.Message);
+            }
+        }
+    }
 }

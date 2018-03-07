@@ -1,44 +1,31 @@
 ﻿using FileSystem = System.IO;
 
-namespace Poly.Net.Http {
-    using Data;
+namespace Poly.Net {
 
-    public class Host {
-        public Matcher Matcher;
-        public FileSystem.DirectoryInfo DocumentPath;
+    public partial class HttpServer {
 
-        public string Name {
-            get { return Matcher.Format; }
-            set { Matcher = new Matcher(value); }
-        }
+        public class Host {
+            public Matcher Matcher;
+            public FileSystem.DirectoryInfo DocumentPath;
 
-        public string Path {
-            get { return DocumentPath.FullName; }
-            set { DocumentPath = new FileSystem.DirectoryInfo(value); }
-        }
+            public string Name {
+                get { return Matcher.Format; }
+                set { Matcher = new Matcher(value); }
+            }
 
-        public string DefaultDocument = "index.htm";
+            public string Path {
+                get { return DocumentPath.FullName; }
+                set { DocumentPath = new FileSystem.DirectoryInfo(value); }
+            }
 
-        public Host() { }
+            public string DefaultDocument = "index.htm";
 
-        public Host(string name) {
-            Name = name;
-        }
+            public Host() {
+            }
 
-        public string GetDocumentName(string Target) {
-            if (Target == null || Target.Length == 0)
-                return null;
-
-            var length = Target.Length;
-
-            if (Target[length - 1] == '/')
-                return string.Concat(Target, DefaultDocument);
-
-            return Target;
-        }
-
-        public string GetFullPath(string www) {
-            return (DocumentPath?.FullName ?? string.Empty) + www;
+            public Host(string name) {
+                Name = name;
+            }
         }
     }
 }

@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Library</OutputType>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <OutputType>Library</OutputType>
     <SynchReleaseVersion>false</SynchReleaseVersion>
     <RootNamespace>Poly</RootNamespace>
     <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
@@ -21,6 +21,14 @@
     <Owners>Scot 'Scoizzle' Murphy</Owners>
     <ReleaseVersion>1.0.1</ReleaseVersion>
     <PackageVersion>1.0.1</PackageVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="String\Matcher\Block.cs" />

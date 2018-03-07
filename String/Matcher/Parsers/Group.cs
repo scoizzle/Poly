@@ -1,33 +1,20 @@
-﻿using System;
-using System.Text;
+﻿using System.Text;
 
 namespace Poly.String.Matcher.Parsers {
+
     public static class Group {
-        static ExtractDelegate Handler(ExtractDelegate group) {
-            return (it, set) => {
-                if (group(it, set)) {
-                    it.Offset = it.Index;
-                    return true;
-                }
 
-                return false;
-            };
+        private static ExtractDelegate Handler(ExtractDelegate group) {
+            return group;
         }
 
-        static ExtractDelegate Handler(ExtractDelegate group, ExtractDelegate next) {
-            return (it, set) => group(it, set) && next(it, set);
-        }
+        private static ExtractDelegate Handler(ExtractDelegate group, ExtractDelegate next) =>
+            (it, set) => group(it, set) && next(it, set);
 
-        static ExtractDelegate OptionalHandler(ExtractDelegate group) {
-            return (it, set) => {
-                if (group(it, set))
-                    it.Offset = it.Index;
+        private static ExtractDelegate OptionalHandler(ExtractDelegate group) =>
+            (it, set) => group(it, set) || true;
 
-                return true;
-            };
-        }
-
-        static ExtractDelegate OptionalHandler(ExtractDelegate group, ExtractDelegate next) {
+        private static ExtractDelegate OptionalHandler(ExtractDelegate group, ExtractDelegate next) {
             return (it, set) => {
                 var start = it.Index;
 
@@ -39,9 +26,9 @@ namespace Poly.String.Matcher.Parsers {
             };
         }
 
-        static Matcher.TemplateDelegate Templater(Matcher.TemplateDelegate group) => group;
+        private static Matcher.TemplateDelegate Templater(Matcher.TemplateDelegate group) => group;
 
-        static Matcher.TemplateDelegate OptionalTemplater(Matcher.TemplateDelegate group) {
+        private static Matcher.TemplateDelegate OptionalTemplater(Matcher.TemplateDelegate group) {
             return (it, get) => {
                 var sub = new StringBuilder();
 
@@ -52,12 +39,12 @@ namespace Poly.String.Matcher.Parsers {
             };
         }
 
-        static Matcher.TemplateDelegate OptionalTemplater(Matcher.TemplateDelegate group, Matcher.TemplateDelegate next) {
+        private static Matcher.TemplateDelegate OptionalTemplater(Matcher.TemplateDelegate group, Matcher.TemplateDelegate next) {
             return (it, get) => {
                 var sub = new StringBuilder();
 
-				if (group(sub, get)) {
-					it.Append(sub);
+                if (group(sub, get)) {
+                    it.Append(sub);
                     return true;
                 }
 
@@ -65,7 +52,7 @@ namespace Poly.String.Matcher.Parsers {
             };
         }
 
-        static bool parse_internal(
+        private static bool parse_internal(
             ExtractDelegate group_goto,
             ExtractDelegate group_extract,
             Matcher.TemplateDelegate group_template,
@@ -77,7 +64,6 @@ namespace Poly.String.Matcher.Parsers {
             ExtractDelegate next_goto,
             ExtractDelegate next_extract,
             Matcher.TemplateDelegate next_template) {
-
             if (has_next) {
                 if (optional) {
                     go_to = OptionalHandler(group_goto, next_goto);
@@ -181,80 +167,79 @@ namespace Poly.String.Matcher.Parsers {
             out Matcher.TemplateDelegate template,
             ExtractDelegate goto_next,
             ExtractDelegate extract_next,
-            Matcher.TemplateDelegate template_next) 
-        {
-			if (it.SelectSection('(', ')')) {
-				var index = it.Index;
-				var last_index = it.LastIndex;
+            Matcher.TemplateDelegate template_next) {
+            if (it.SelectSection('(', ')')) {
+                var index = it.Index;
+                var last_index = it.LastIndex;
 
-				it.ConsumeSection();
-				var optional = it.Consume('?');
+                it.ConsumeSection();
+                var optional = it.Consume('?');
 
-				var has_next = Parser.Parse(
-					it,
-					out ExtractDelegate next_goto,
-					out ExtractDelegate next_extract,
+                var has_next = Parser.Parse(
+                    it,
+                    out ExtractDelegate next_goto,
+                    out ExtractDelegate next_extract,
                     out Matcher.TemplateDelegate next_template,
                     goto_next,
                     extract_next,
                     template_next);
 
-				it.Index = index;
-				it.LastIndex = last_index;
+                it.Index = index;
+                it.LastIndex = last_index;
 
-				if (has_next) {
-					var parse_group = Parser.Parse(
-						it,
-						out ExtractDelegate parsed_goto,
-						out ExtractDelegate parsed_extract,
-						out Matcher.TemplateDelegate parsed_template,
-						next_goto,
-						next_extract,
-						next_template);
+                if (has_next) {
+                    var parse_group = Parser.Parse(
+                        it,
+                        out ExtractDelegate parsed_goto,
+                        out ExtractDelegate parsed_extract,
+                        out Matcher.TemplateDelegate parsed_template,
+                        next_goto,
+                        next_extract,
+                        next_template);
 
-					return parse_internal(
-						parsed_goto,
+                    return parse_internal(
+                        parsed_goto,
 
-						parsed_extract,
-						parsed_template,
-						optional,
-						out go_to,
-						out extract,
-						out template,
-						true,
-						next_goto,
-						next_extract,
-						next_template);
-				}
-				else {
-					var parse_group = Parser.Parse(
-						it,
-						out ExtractDelegate parsed_goto,
-						out ExtractDelegate parsed_extract,
-						out Matcher.TemplateDelegate parsed_template,
-						goto_next,
-						extract_next,
-						template_next);
+                        parsed_extract,
+                        parsed_template,
+                        optional,
+                        out go_to,
+                        out extract,
+                        out template,
+                        true,
+                        next_goto,
+                        next_extract,
+                        next_template);
+                }
+                else {
+                    var parse_group = Parser.Parse(
+                        it,
+                        out ExtractDelegate parsed_goto,
+                        out ExtractDelegate parsed_extract,
+                        out Matcher.TemplateDelegate parsed_template,
+                        goto_next,
+                        extract_next,
+                        template_next);
 
-					return parse_internal(
-						parsed_goto,
-						parsed_extract,
-						parsed_template,
-						optional,
-						out go_to,
-						out extract,
-						out template,
-						true,
-						goto_next,
-					    extract_next,
-					    template_next);
-				}
-			}
+                    return parse_internal(
+                        parsed_goto,
+                        parsed_extract,
+                        parsed_template,
+                        optional,
+                        out go_to,
+                        out extract,
+                        out template,
+                        true,
+                        goto_next,
+                        extract_next,
+                        template_next);
+                }
+            }
 
-			go_to = null;
-			extract = null;
-			template = null;
-			return false;
+            go_to = null;
+            extract = null;
+            template = null;
+            return false;
         }
     }
 }

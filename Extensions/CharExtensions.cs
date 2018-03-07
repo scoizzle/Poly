@@ -1,25 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text;
 
 namespace System {
-    static class CharExtensions {
-        public static string ToHexString(this char C) {
-            return ToHexString(Poly.App.Encoding, C);
-        }
 
-        public static string ToHexString(this char C, Encoding Enc) {
-            return ToHexString(Enc, C);
-        }
+    internal static class CharExtensions {
 
-        public static string ToHexString(Encoding Encoding, params char[] Chars) {
-            return Encoding.GetBytes(Chars).ToHexString();
-        }
+        public static string ToHexString(this char C) =>
+            ToHexString(Poly.App.Encoding, C);
+
+        public static string ToHexString(this char C, Encoding Enc) =>
+            ToHexString(Enc, C);
+
+        public static string ToHexString(Encoding Encoding, params char[] Chars) =>
+            Encoding.GetBytes(Chars).ToHexString();
+
+        public static bool Compare(this char C, char S) =>
+            (C - S) == 0;
 
         public static bool CompareInvariant(this char C, char S) {
-            if (C == S)
+            if (Compare(C, S))
                 return true;
 
             if (C >= 'A' && C <= 'Z') {

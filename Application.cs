@@ -1,37 +1,24 @@
-﻿using System;
+﻿using Poly.Data;
+using System;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
 
-using Poly.Data;
+namespace Poly {
 
-namespace Poly
-{
     public partial class App {
         public static bool Running;
-		public static Event.Engine<Event.Handler> Commands;
+        public static Event.Engine<Event.Handler> Commands;
 
-        public static Encoding Encoding             = Encoding.UTF8;
-        public static readonly string NewLine       = "\r\n";
-        public static readonly byte[] NewLineBytes  = Encoding.GetBytes(NewLine);
+        public static Encoding Encoding = Encoding.UTF8;
+        public static readonly string NewLine = "\r\n";
+        public static readonly byte[] NewLineBytes = Encoding.GetBytes(NewLine);
 
         static App() {
-            Running = false;
-            Log.Level = Log.Levels.Debug;
-
             Commands = new Event.Engine<Event.Handler>();
-            Commands.On("Log.Level^=^{Level}^", Event.Wrapper((string Level) => {
-                Log.Level = (Log.Levels)Enum.Parse(typeof(Log.Levels), Level);
-                return Level;
-            }));
         }
 
-        public static string Query(string Question) {
-            Console.Write(Question);
-            return Console.ReadLine();
-        }
-
-        public static void Init(params string[] Commands) { 
-            Log.Active = Running = true;
+        public static void Init(params string[] Commands) {
+            Running = true;
 
             Log.Info("Application initializing...");
 
@@ -46,19 +33,20 @@ namespace Poly
 
         public static void WaitforExit() {
             while (Running) {
-				var input = Console.ReadLine();
+                var input = Console.ReadLine();
 
-				if (Commands.TryGetHandler(input, out Event.Handler handler, out JSON arguments)) {
-					handler(arguments);
-				}
+                if (Commands.TryGetHandler(input, out Event.Handler handler, out JSON arguments)) {
+                    handler(arguments);
+                }
+
+                Thread.Sleep(200);
             }
         }
 
-		public static void Exit(int Status = 0) {
+        public static void Exit(int Status = 0) {
             Log.Info("Applcation Exiting...");
 
             Running = false;
-            Task.Delay(1000);
-		}
-	}
+        }
+    }
 }

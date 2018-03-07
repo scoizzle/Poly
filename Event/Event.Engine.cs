@@ -1,45 +1,58 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Poly {
+
     using Data;
 
     public partial class Event {
-        public class Engine<T> : KeyValueCollection<(Matcher Matcher, T Handler)> {
-            public void On(string event_name, T handler) {
-                Set(event_name, (new Matcher(event_name), handler));
-            }
+
+        public class Engine<T> : ManagedArray<(Matcher Matcher, T Handler)> {
+
+            public void On(string event_name, T handler) =>
+                Add((new Matcher(event_name), handler));
+
+            public void Add(string event_name, T handler) =>
+                Add((new Matcher(event_name), handler));
+
+            public void Remove(string event_name) =>
+                RemoveWhere(_ => StringExtensions.Compare(_.Matcher.Format, event_name));
 
             public bool TryGetHandler(string data, out T handler) {
                 if (!string.IsNullOrEmpty(data)) {
-                    foreach (var pair in this) {
-                        if (pair.Value.Matcher.Compare(data)) {
-                            handler = pair.Value.Handler;
+                    var items = Elements;
+                    var count = Count;
+
+                    for (var i = 0; i < count; i++) {
+                        var item = items[i];
+
+                        if (item.Matcher.Compare(data)) {
+                            handler = item.Handler;
                             return true;
                         }
                     }
                 }
 
-                handler = default(T);
+                handler = default;
                 return false;
             }
 
             public bool TryGetHandler(string data, out T handler, out JSON arguments) {
-				if (!string.IsNullOrEmpty(data)) {
-					arguments = new JSON();
+                if (!string.IsNullOrEmpty(data)) {
+                    arguments = new JSON();
 
-					foreach (var pair in this) {
-                        if (pair.Value.Matcher.Extract(data, arguments.TrySet)) {
-                            handler = pair.Value.Handler;
-							return true;
-						}
+                    var items = Elements;
+                    var count = Count;
+                    for (var i = 0; i < count; i++) {
+                        var item = items[i];
 
-                        arguments.Clear();
-					}
-				}
+                        if (item.Matcher.Extract(data, arguments.TrySet)) {
+                            handler = item.Handler;
+                            return true;
+                        }
+                    }
+                }
 
-                handler = default(T);
+                handler = default;
                 arguments = null;
                 return false;
             }

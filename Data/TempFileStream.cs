@@ -1,7 +1,7 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 
 namespace Poly.Data {
+
     public class TempFileStream : Stream {
         public FileInfo Info { get; private set; }
         public FileStream Base { get; private set; }
@@ -14,8 +14,8 @@ namespace Poly.Data {
 
         public override long Length { get { return Base.Length; } }
 
-        public override long Position { 
-            get { return Base.Position; } 
+        public override long Position {
+            get { return Base.Position; }
             set { Base.Position = value; }
         }
 

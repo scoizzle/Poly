@@ -2,7 +2,9 @@
 using System.Reflection;
 
 namespace Poly {
+
     public partial class Event {
+
         public static string[] GetArgumentNames(MethodInfo Info) {
             var Args = Info.GetParameters();
             var Names = new string[Args.Length];
@@ -19,9 +21,9 @@ namespace Poly {
                 return null;
 
             return (Args) => {
-				if (Func == null)
-					return null;
-				
+                if (Func == null)
+                    return null;
+
                 for (int i = 0; i < ArgPairs.Length / 2; i += 2) {
                     Args[ArgPairs[i].ToString()] = ArgPairs[i + 1];
                 }

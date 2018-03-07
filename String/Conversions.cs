@@ -1,25 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.IO;
-using System.Net.Security;
-
-using Poly;
+﻿using Poly;
 using Poly.Data;
+using System.IO;
+using System.Text;
 
 namespace System {
-	public static class StringConversions {
-		public static byte[] GetBytes(this string This) {
+
+    public static class StringConversions {
+
+        public static byte[] GetBytes(this string This) {
             return GetBytes(This, App.Encoding);
-		}
+        }
 
         public static byte[] GetBytes(this string This, Encoding enc) {
             return enc.GetBytes(This);
-		}
+        }
 
-		public static Stream GetStream(this string This) {
+        public static Stream GetStream(this string This) {
             return GetStream(This, App.Encoding);
-		}
+        }
 
         public static Stream GetStream(this string This, Encoding enc) {
             return new MemoryStream(GetBytes(This, enc), false);
@@ -33,9 +31,8 @@ namespace System {
                 case '\f': output.Append("\\f"); break;
                 case '\"': output.Append("\\\""); break;
                 case '\\': output.Append("\\\\"); break;
+                default: output.Append(character); break;
             }
-
-            output.Append(character);
         }
 
         public static void TryDescapeCharacter(StringBuilder output, char character) {
@@ -45,11 +42,10 @@ namespace System {
                 case 't': output.Append("\t"); break;
                 case 'f': output.Append("\f"); break;
                 case '"': output.Append("\""); break;
+                default: output.Append(character); break;
             }
-
-            output.Append(character);
         }
-        
+
         public static string Escape(this string This) {
             var output = new StringBuilder();
 
@@ -100,7 +96,7 @@ namespace System {
                 App.Encoding.GetBytes(
                     This
                 )
-            );
+            ).ToHexString();
         }
 
         public static string SHA1(this string This) {
@@ -108,7 +104,7 @@ namespace System {
                 App.Encoding.GetBytes(
                     This
                 )
-            );
+            ).ToHexString();
         }
 
         public static string SHA256(this string This) {
@@ -116,7 +112,7 @@ namespace System {
                 App.Encoding.GetBytes(
                     This
                 )
-            );
+            ).ToHexString();
         }
 
         public static string SHA512(this string This) {
@@ -124,7 +120,7 @@ namespace System {
                 App.Encoding.GetBytes(
                     This
                 )
-            );
+            ).ToHexString();
         }
 
         public static string Base64Encode(this string This) {

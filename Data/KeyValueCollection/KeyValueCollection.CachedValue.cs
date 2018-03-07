@@ -1,40 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace Poly.Data {
 
-namespace Poly.Data {
     public delegate bool TryConvert<From, To>(From from, out To to);
 
     public partial class KeyValueCollection<T> {
-        public struct CachedValue<U> {
-            private T old;
+
+        public class CachedValue<U> {
             private U cached;
 
-            public KeyValuePair     Pair;
+            public KeyValuePair Pair;
             public TryConvert<T, U> Read;
             public TryConvert<U, T> Write;
 
-            public U Value { 
-                get {
-                    if (Object.ReferenceEquals(old, Pair.Value))
-                        return cached;
+            public bool HasValue { get; private set; }
 
-                    if (Read(Pair.Value, out U result)) {
-                        cached = result;
-                        old = Pair.Value;
-                    }
-
-                    return default(U);
-                }
-
-                set {
-                    cached = value;
-
-                    Pair.Value = old = Write(value, out T result) ? result
-                                                                  : default(T);
-                }
+            public U Value {
+                get => cached;
+                set => UpdateValue(value);
             }
 
             public CachedValue(KeyValuePair pair, TryConvert<T, U> read, TryConvert<U, T> write) {
@@ -42,13 +23,39 @@ namespace Poly.Data {
                 Read = read;
                 Write = write;
 
-                old = default(T);
-                cached = default(U);
+                pair.OnSet = OnPairValueSet;
+
+                cached = default;
+                HasValue = false;
             }
 
-			public override string ToString() {
+            private void OnPairValueSet(T old_value, T new_value) {
+                if (Read(new_value, out U result)) {
+                    cached = result;
+                    HasValue = true;
+                }
+                else {
+                    cached = default;
+                    HasValue = false;
+                }
+            }
+
+            private void UpdateValue(U value) {
+                if (Write(value, out T result)) {
+                    cached = value;
+                    Pair.value = result;
+                    HasValue = true;
+                }
+                else {
+                    cached = default;
+                    Pair.value = default;
+                    HasValue = false;
+                }
+            }
+
+            public override string ToString() {
                 return Pair.ToString();
-			}
+            }
         }
     }
 }

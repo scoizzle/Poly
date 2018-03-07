@@ -1,8 +1,10 @@
 ﻿namespace System {
-    using Text;
+
     using IO;
+    using Text;
 
     public static class ByteArrayExtensions {
+
         public static Stream GetStream(this byte[] This, bool writable = false) {
             return new MemoryStream(This, writable);
         }
@@ -10,6 +12,7 @@
         public static string GetString(this byte[] This) {
             return GetString(This, Poly.App.Encoding);
         }
+
         public static string GetString(this byte[] This, Encoding enc) {
             return enc.GetString(This);
         }
@@ -22,68 +25,85 @@
             var Length = This.Length;
             var Buffer = new char[Length * 2];
 
-            for (int i = 0; i < Length; i ++) {
+            for (int i = 0; i < Length; i++) {
                 var idx = i * 2;
 
-                Buffer[idx]     = (char)('A' + This[i] >> 4);
+                Buffer[idx] = (char)('A' + This[i] >> 4);
                 Buffer[idx + 1] = (char)('A' + This[i] & 0xF);
             }
 
             return new string(Buffer);
         }
 
-        public static int FindSubByteArray(this byte[] This, byte[] sub) {
-            return FindSubByteArray(This, 0, sub, 0, sub.Length);
-        }
+        public static int FindSubByteArray(this byte[] This, int index, int last_index, byte[] sub, int sub_index, int length) {
+            var last_possible_index = last_index - length;
 
-        public static int FindSubByteArray(this byte[] This, int index, byte[] sub) {
-            return FindSubByteArray(This, index, sub, 0, sub.Length);
-        }
+            while (index++ < last_possible_index) {
+                if (This[index] == sub[sub_index]) {
+                    var x = index + 1;
+                    var y = sub_index + 1;
+                    var f = true;
 
-        public static int FindSubByteArray(this byte[] This, int index, byte[] sub, int subindex, int sublength) {
-            if (This == null || index < 0 || index > This.Length || sub == null || subindex < 0 || index + sublength > This.Length)
-                return -1;
-
-            for (; index + sublength < This.Length; index++) {
-                if (This[index] == sub[subindex]) {
-                    bool found = true;
-
-                    for (var si = 1; si < sublength; si++) {
-                        if (This[index + si] != sub[subindex + si]) {
-                            found = false;
+                    while (x < last_possible_index) {
+                        if (This[x] != sub[y]) {
+                            f = false;
                             break;
                         }
+
+                        x++;
+                        y++;
                     }
 
-                    if (found)
+                    if (f)
                         return index;
+
+                    index++;
                 }
             }
 
             return -1;
         }
 
-        public static bool? CompareSubByteArray(this byte[] This, int index, byte[] sub) {
-            return CompareSubByteArray(This, index, sub, 0, sub.Length);
-        }
+        public static bool? CompareSubByteArray(this byte[] This, int index, int last_index, byte[] sub, int sub_index, int length) {
+            var last_possible_index = last_index - length;
 
-        public static bool? CompareSubByteArray(this byte[] This, int index, byte[] sub, int subindex, int sublength) {
-            if (index < 0 || index > This.Length || sub == null || subindex < 0 || subindex + sublength > sub.Length)
-                return null;
-            
-            if (This[index] == sub[subindex]) {
-                while (This[index++] == sub[subindex++]) {
-                    if (subindex == sublength)
+            if (This[index] == sub[sub_index]) {
+                var x = index + 1;
+                var y = sub_index + 1;
+
+                while (x != last_possible_index) {
+                    if (This[x] != sub[y])
+                        return false;                    
+
+                    x++;
+                    y++;
+
+                    if (y == length)
                         return true;
-
-                    if (index >= This.Length)
-                        break;
                 }
-
-                return false;
             }
 
             return null;
+        }
+
+        public static bool CopyTo(this byte[] from, int index, byte[] to, int to_index, int count) {
+            if (from.Length < index + count)
+                return false;
+
+            if (to.Length < to_index + count)
+                return false;
+
+            var x = index;
+            var y = to_index;
+
+            for (int i = 0; i < count; i++) {
+                to[y] = from[x];
+
+                x++;
+                y++;
+            }
+
+            return true;
         }
     }
 }

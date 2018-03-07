@@ -1,33 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace Poly.Net {
 
-namespace Poly.Net.Http {
     using Data;
 
-    public partial class Server {
+    public partial class HttpServer {
+
         public class Configuration {
             public static Serializer<Configuration> Serializer = new Serializer<Configuration>();
 
             public Host Host;
 
             public int Port = 80;
-
-            /* Wait this amount of seconds before closing the clients connection */
-            public int KeepAliveTimeout = 60;
-
-            internal int KeepAliveTimeoutMiliseconds {
-                get {
-                    return KeepAliveTimeout * 1000;
-                }
-            }
-            
-            /* Enables the file information and in-memory-compressed-file cache */
-            /* Only pre-compressed items are store in memory currently */
-            public bool UseStaticFiles = false;
-
-            /* Enabled the use of MVC Application routes based on the Controller class */
-            public bool UseAppRoutes = false;
 
             /* Monitor Host DocumentPath for file changes */
             /* Set to false if you run inside a container :) */
@@ -44,16 +26,23 @@ namespace Poly.Net.Http {
             /* Default is 5 MB */
             public long MaxRequestBodySize = 0x500000;
 
+            /* Maximum lifetime of a cached resource in seconds */
+            /* Default is 5 minutes */
+            public int CacheResourceMaxAge = 60 * 5;
+
             /* List of file extensions to pre-load in memory */
+
             public string[] Cacheable = {
                 ".htm",
                 ".css",
                 ".js",
                 ".ico",
-                ".svg"
+                ".svg",
+                ".map"
             };
 
             /* List of file extensions to pre-compress in memory */
+
             public string[] Compressable = {
                 ".htm",
                 ".css",

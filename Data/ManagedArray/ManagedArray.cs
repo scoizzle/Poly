@@ -2,31 +2,26 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Poly.Data {
-    public class ManagedArray<T> : IEnumerable<T> {
+
+    public partial class ManagedArray<T> : IList<T>, IEnumerable<T> {
         public T[] Elements;
 
         public int Count { get; private set; }
 
-        public T this[int index]
-        {
-            get
-            {
-                if (index >= 0 && index < Count)
-                    return Elements[index];
-                return default(T);
-            }
-            set
-            {
+        public bool IsReadOnly => false;
+
+        public T this[int index] {
+            get => (index >= 0 && index < Count) ? Elements[index] : default;
+            set {
                 if (index >= 0 && index < Count)
                     Elements[index] = value;
             }
         }
 
-        public ManagedArray() : this(4) { }
+        public ManagedArray() : this(4) {
+        }
 
         public ManagedArray(int baseLength) {
             Elements = new T[baseLength];
@@ -42,11 +37,22 @@ namespace Poly.Data {
             Base.CopyTo(this);
         }
 
+        public bool Contains(T item) {
+            return IndexOf(item) >= 0;
+        }
+
         public void CopyTo(ManagedArray<T> destination) {
             destination.ValidateSizeForInsert(Count + destination.Count);
 
             Array.Copy(Elements, 0, destination.Elements, destination.Count, Count);
             destination.Count += Count;
+        }
+
+        public void CopyTo(T[] array, int arrayIndex) {
+            if (array == null || arrayIndex < 0 || arrayIndex >= array.Length || arrayIndex + Count >= array.Length)
+                return;
+
+            Array.Copy(Elements, 0, array, arrayIndex, Count);
         }
 
         public void Add(T value) {
@@ -63,41 +69,89 @@ namespace Poly.Data {
             Count += length;
         }
 
-        public void Remove(T value) {
-            RemoveAt(IndexOf(value));
+        public void Insert(int index, T value) {
+            if (index < 0)
+                return;
+
+            if (index > Elements.Length) {
+                ValidateSizeForInsert(index + 1);
+                Elements[index] = value;
+            }
+            else {
+                ValidateSizeForInsert();
+                Array.Copy(Elements, index, Elements, index + 1, Count - index);
+                Elements[index] = value;
+                Count++;
+            }
         }
 
-        public bool RemoveAt(int Index) {
-            if (Index < 0 || Index >= Count)
-                return false;
+        public bool Remove(T value) {
+            return TryRemoveAt(IndexOf(value));
+        }
 
-            if (Index == Count - 1) {
-                Elements[Index] = default(T);
-                Count--;
-                return true;
+        public void RemoveAt(int index) {
+            TryRemoveAt(index);
+        }
+
+        public void RemoveAt(params int[] indicies) =>
+            RemoveAt(indicies, 0, indicies.Length);
+        
+        public void RemoveAt(int[] indicies, int index, int count) {
+            if (index < 0 || index + count > indicies.Length)
+                return;
+
+            while (index < count)
+                Elements[indicies[index++]] = default;
+
+            for (int i = 0; i < Elements.Length - 2; i++) {
+                if (Equals(Elements[i], default(T)))
+                    Elements[i] = Elements[i + 1];
             }
 
-            var End = Count;
-            var Post = End - Index - 1;
-            
-            Array.Copy(Elements, Index + 1, Elements, Index, Post);
+            Count -= count;
+        }
 
-            Elements[End] = default(T);
-            Count--;
+
+        public bool TryRemoveAt(int index) {
+            if (index < 0 || index >= Count)
+                return false;
+
+            if (index == Count - 1) {
+                Elements[index] = default;
+                Count--;
+            }
+            else {
+                var End = Count;
+                var Post = End - index - 1;
+
+                Array.Copy(Elements, index + 1, Elements, index, Post);
+
+                Elements[End] = default;
+                Count--;
+            }
+
             return true;
         }
 
-        public void RemoveAt(int Index, int Count) {
-            if (Index < 0 || Count <= 0 || Index + Count > Count)
-                return;
+        public bool TryRemoveAt(int index, int count) {
+            if (index < 0 || count <= 0 || index + count > Count)
+                return false;
 
-            var to_move = Count - Count;
-            var chunk_end = Index + Count;
+            var to_move = Count - count - index;
+            var last_index = index + count;
 
-            Array.Copy(Elements, chunk_end, Elements, Index, to_move - Index);
-            Array.Clear(Elements, Count, Elements.Length - Count);
+            Array.Copy(Elements, last_index, Elements, index, to_move);
+            Array.Clear(Elements, index + to_move, Count - count);
 
-            Count = to_move;
+            Count -= count;
+            return true;
+        }
+
+        public void RemoveWhere(Func<T, bool> selector) {
+            for (var i = 0; i < Count; i++) {
+                if (selector(Elements[i]))
+                    TryRemoveAt(i);
+            }
         }
 
         public void Clear() {
@@ -137,37 +191,28 @@ namespace Poly.Data {
         }
 
         public struct Enumerator : IEnumerator<T> {
-            int index, len;
-            T[] list;
+            private int index, len;
+            private T[] list;
 
-            public T Current { get; private set; }
+            public T Current { get => list[index]; }
             object IEnumerator.Current { get { return Current; } }
 
             internal Enumerator(ManagedArray<T> array) {
-                index = 0;
+                index = -1;
                 len = array.Count;
-                Current = default(T);
 
                 list = array.Elements;
             }
 
-            public void Dispose() { }
+            public void Dispose() {
+            }
 
             public bool MoveNext() {
-                if (index < len) {
-                    Current = list[index];
-                    index++;
-                    return true;
-                }
-                else {
-                    Current = default(T);
-                    return false;
-                }
+                return ++index < len;
             }
 
             void IEnumerator.Reset() {
-                index = 0;
-                Current = default(T);
+                index = -1;
             }
         }
     }

@@ -1,23 +1,37 @@
-using System.IO;
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Data;
+    public interface Connection {
+        TcpClient Client { get; set; }
 
-    public abstract class Connection {
-		public Tcp.Client Client;
+        bool ReadRequest(Request request);
+        bool ReadResponse(Response response);
 
-        protected Connection() { }
-		protected Connection(Tcp.Client client) {
-			Client = client;
-		}
+        bool WriteRequest(Request request);
+        bool WriteResponse(Response response);
 
-        public abstract void New(out Request request, string method = null, string target = null, KeyValueCollection<string> headers = null, Stream body = null);
-        public abstract void New(out Response response, Result status = Result.Invalid, KeyValueCollection<string> headers = null, Stream body = null);
-		
-		public abstract bool Send(Request request);
-		public abstract bool Send(Response response);
+        Task<bool> ReadRequestAsync(Request request, CancellationToken cancellation_token);
+        Task<bool> ReadResponseAsync(Response response, CancellationToken cancellation_token);
 
-		public abstract bool Receive(out Request request);
-		public abstract bool Receive(out Response response);
-	}
+        Task<bool> WriteRequestAsync(Request request, CancellationToken cancellation_token);
+        Task<bool> WriteResponseAsync(Response response, CancellationToken cancellation_token);
+    }
+
+    public static class ConnectionExtensions {
+        public static Task<bool> ReadRequestAsync(this Connection connection, Request request) =>
+            connection.ReadRequestAsync(request, CancellationToken.None);
+
+        public static Task<bool> ReadResponseAsync(this Connection connection, Response response) =>
+            connection.ReadResponseAsync(response, CancellationToken.None);
+
+        public static Task<bool> WriteRequestAsync(this Connection connection, Request request) =>
+            connection.WriteRequestAsync(request, CancellationToken.None);
+
+        public static Task<bool> WriteResponseAsync(this Connection connection, Response response) =>
+            connection.WriteResponseAsync(response, CancellationToken.None);
+    }
 }

@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Linq;
-
-using Poly;
-using Poly.Data;
+﻿using System.Text;
 
 namespace System {
     public static class StringExtensions {
@@ -12,7 +6,7 @@ namespace System {
             if (index < 0 || index >= This.Length)
                 return false;
 
-            return This[index] == character;
+            return CharExtensions.Compare(This[index], character);
         }
 
         public static bool Compare(this string This, string sub_string) {
@@ -33,7 +27,7 @@ namespace System {
             if (sub_index < 0 || sub_index >= sub_string.Length)
                 return false;
 
-            return This[index] == sub_string[sub_index];
+            return CharExtensions.Compare(This[index], sub_string[sub_index]);
         }
 
         public static bool Compare(this string This, int index, string sub_string, int sub_index, int length) {
@@ -52,7 +46,7 @@ namespace System {
                 return false;
 
             do {
-                if (This[index] != sub_string[sub_index])
+                if (!CharExtensions.Compare(This[index], sub_string[sub_index]))
                     return false;
 
                 index++;
@@ -96,14 +90,14 @@ namespace System {
 
             var last_index = index + length;
 
-            if (This.Length <= last_index)
+            if (This.Length < last_index)
                 return false;
 
-            if (sub_string.Length <= sub_index + length)
+            if (sub_string.Length < sub_index + length)
                 return false;
 
             do {
-                if (CharExtensions.CompareInvariant(This[index], sub_string[sub_index]))
+                if (!CharExtensions.CompareInvariant(This[index], sub_string[sub_index]))
                     return false;
 
                 index++;
@@ -124,7 +118,7 @@ namespace System {
         public static int Find(this string This, int index, string sub_string) {
             if (This == null || sub_string == null)
                 return -1;
-                
+
             return Find(This, index, This.Length, sub_string, 0, sub_string.Length);
         }
 
@@ -140,13 +134,19 @@ namespace System {
 
             while (index <= last_possible_index) {
                 var found = true;
+                var index_pos = index;
+                var sub_pos = sub_index;
 
-                for (var offset = 0; offset < sub_length; offset++) {
-                    if (This[index + offset] != sub_string[sub_index + offset]) {
+                do {
+                    if (!CharExtensions.Compare(This[index_pos], sub_string[sub_pos])) {
                         found = false;
                         break;
                     }
+
+                    index_pos++;
+                    sub_pos++;
                 }
+                while (sub_pos < sub_length);
 
                 if (found)
                     return index;
@@ -161,7 +161,7 @@ namespace System {
             if (This == null)
                 return false;
 
-            var length = 
+            var length =
                 last_index < This.Length ? last_index
                                          : This.Length;
 
@@ -178,22 +178,22 @@ namespace System {
             for (var position = index + 1; position < length; position++) {
                 var character = This[position];
 
-                if (character == close) {
+                if (CharExtensions.Compare(character, close)) {
                     if (--count == 0) {
                         if (include_selectors) {
                             last_index = position + 1;
                         }
                         else {
                             last_index = position;
-                            index ++;
+                            index++;
                         }
 
                         return true;
                     }
                 }
-                else 
-                if (character == open) {
-                    count ++;
+                else
+                if (CharExtensions.Compare(character, open)) {
+                    count++;
                 }
             }
 
@@ -232,15 +232,15 @@ namespace System {
                         }
                         else {
                             last_index = position;
-                            index ++;
+                            index++;
                         }
 
                         return true;
                     }
                 }
-                else 
+                else
                 if (Compare(This, position, open, 0, open_length)) {
-                    count ++;
+                    count++;
                 }
             }
 
@@ -263,6 +263,15 @@ namespace System {
                 return null;
 
             return This.Substring(0, character);
+        }
+
+        public static string Until(this string This, string sub_string) {
+            var idx = This.Find(sub_string);
+
+            if (idx == -1)
+                return null;
+
+            return This.Substring(0, idx);
         }
     }
 }

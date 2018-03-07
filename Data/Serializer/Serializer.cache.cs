@@ -1,9 +1,8 @@
 using System;
-using System.Linq;
-using System.Reflection;
 using System.Text;
 
 namespace Poly.Data {
+
     public partial class Serializer {
         public static KeyValueCollection<Serializer> Cache = new KeyValueCollection<Serializer>();
 
@@ -14,7 +13,7 @@ namespace Poly.Data {
         public static Serializer GetCached(Type type) {
             if (Cache.TryGetValue(type.Name, out Serializer serializer))
                 return serializer;
-                
+
             return Activator.CreateInstance(typeof(Serializer<>).MakeGenericType(type)) as Serializer;
         }
 
@@ -28,45 +27,45 @@ namespace Poly.Data {
         }
 
         public static Serializer<bool> Bool = new Serializer<bool>(
-                    (StringBuilder  it, bool b) => { 
-                        it.Append(b ? "true" : "false"); return true; 
-                        },
+                    (StringBuilder it, bool b) => {
+                        it.Append(b ? "true" : "false"); return true;
+                    },
                     (StringIterator it, out bool b) => {
-                        if (it.Consume("true")) { b = true; return true; }
-                        if (it.Consume("false")) { b = false; return true; }
+                        if (it.ConsumeIgnoreCase("true")) { b = true; return true; }
+                        if (it.ConsumeIgnoreCase("false")) { b = false; return true; }
                         return b = false;
-                        });
+                    });
 
         public static Serializer<string> String = new Serializer<string>(
-                    (StringBuilder  it, string str) => {
-                        it.Append('"').Append(str).Append('"'); return true; 
-                        },
+                    (StringBuilder it, string str) => {
+                        it.Append('"').Append(str).Append('"'); return true;
+                    },
                     (StringIterator it, out string str) => {
-                        if (it.SelectSection('"', '"')) { 
+                        if (it.SelectSection('"', '"')) {
                             str = it;
                             it.ConsumeSection();
                             return true;
-                            }
+                        }
                         str = null;
                         return false;
-                        });
+                    });
 
-        public static Serializer<byte>   Byte = IntegerSerializer<byte>(byte.TryParse);
+        public static Serializer<byte> Byte = IntegerSerializer<byte>(byte.TryParse);
         public static Serializer<ushort> UShort = IntegerSerializer<ushort>(ushort.TryParse);
-        public static Serializer<uint>   UInt = IntegerSerializer<uint>(uint.TryParse);
-        public static Serializer<ulong>  ULong = IntegerSerializer<ulong>(ulong.TryParse);
+        public static Serializer<uint> UInt = IntegerSerializer<uint>(uint.TryParse);
+        public static Serializer<ulong> ULong = IntegerSerializer<ulong>(ulong.TryParse);
 
-        public static Serializer<sbyte>  SByte = IntegerSerializer<sbyte>(sbyte.TryParse);
-        public static Serializer<short>  Short = IntegerSerializer<short>(short.TryParse);
-        public static Serializer<int>    Int = IntegerSerializer<int>(int.TryParse);
-        public static Serializer<long>   Long = IntegerSerializer<long>(long.TryParse);
+        public static Serializer<sbyte> SByte = IntegerSerializer<sbyte>(sbyte.TryParse);
+        public static Serializer<short> Short = IntegerSerializer<short>(short.TryParse);
+        public static Serializer<int> Int = IntegerSerializer<int>(int.TryParse);
+        public static Serializer<long> Long = IntegerSerializer<long>(long.TryParse);
 
-        public static Serializer<float>  Float = FloatingSerializer<float>(float.TryParse);
+        public static Serializer<float> Float = FloatingSerializer<float>(float.TryParse);
         public static Serializer<double> Double = FloatingSerializer<double>(double.TryParse);
-        
-        delegate bool TryParseDelegate<T>(string str, out T value);
 
-        static Serializer<T> IntegerSerializer<T>(TryParseDelegate<T> parse) {
+        private delegate bool TryParseDelegate<T>(string str, out T value);
+
+        private static Serializer<T> IntegerSerializer<T>(TryParseDelegate<T> parse) {
             return new Serializer<T>(
                 (StringBuilder json, T obj) => {
                     json.Append(obj);
@@ -78,7 +77,7 @@ namespace Poly.Data {
                             json.ConsumeSection();
                             return true;
                         }
-                        
+
                         json.PopSection();
                     }
                     obj = default(T);
@@ -86,7 +85,7 @@ namespace Poly.Data {
                 });
         }
 
-        static Serializer<T> FloatingSerializer<T>(TryParseDelegate<T> parse) {
+        private static Serializer<T> FloatingSerializer<T>(TryParseDelegate<T> parse) {
             return new Serializer<T>(
                 (StringBuilder json, T obj) => {
                     json.Append(obj);

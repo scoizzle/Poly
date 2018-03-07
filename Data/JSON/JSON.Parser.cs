@@ -1,143 +1,139 @@
-﻿using System;
+﻿using System.Linq;
 using System.Text;
-using System.Linq;
 
 namespace Poly.Data {
-	public partial class JSON {
-		public static Serializer<JSON> Serializer;
 
-		static JSON() {
-			Serializer = new Serializer<JSON>(Serialize, Deserialize);
-		}
+    public partial class JSON {
+        public static Serializer<JSON> Serializer = new Serializer<JSON>(Serialize, Deserialize);
 
-		public static implicit operator JSON(string Text) {
-			return Serializer.Deserialize(Text);
-		}
+        public static implicit operator JSON(string Text) {
+            return Serializer.Deserialize(Text);
+        }
 
-		static bool Serialize(StringBuilder json, JSON obj) {
-			if (obj == null)
-				return false;
-				
-			if (obj.IsArray) {
-				json.Append('[');
+        private static bool Serialize(StringBuilder json, JSON obj) {
+            if (obj == null)
+                return false;
 
-				var elements = obj.Values.ToArray();
-				var lastIndex = elements.Length - 1;
+            if (obj.IsArray) {
+                json.Append('[');
 
-				for (int i = 0; i <= lastIndex; i++) {
-					var element = elements[i];
+                var elements = obj.Values.ToArray();
+                var lastIndex = elements.Length - 1;
 
-					if (element == null) 
-						continue;
+                for (int i = 0; i <= lastIndex; i++) {
+                    var element = elements[i];
 
-					var serial = Data.Serializer.GetCached(element.GetType());
+                    if (element == null)
+                        continue;
 
-					if (!serial.SerializeObject(json, element))
-						return false;
+                    var serial = Data.Serializer.GetCached(element.GetType());
 
-					if (i != lastIndex)
-						json.Append(',');
-				}
+                    if (!serial.SerializeObject(json, element))
+                        return false;
 
-				json.Append(']');
-				return true;
-			}
-			else {
-				json.Append('{');
+                    if (i != lastIndex)
+                        json.Append(',');
+                }
 
-				var elements = obj.KeyValuePairs.ToArray();
-				var lastIndex = elements.Length - 1;
+                json.Append(']');
+                return true;
+            }
+            else {
+                json.Append('{');
 
-				for (int i = 0; i <= lastIndex; i++) {
-					var element = elements[i];
+                var elements = obj.KeyValuePairs.ToArray();
+                var lastIndex = elements.Length - 1;
 
-					if (element.Value == null) 
-						continue;
+                for (int i = 0; i <= lastIndex; i++) {
+                    var element = elements[i];
 
-					var serial = Data.Serializer.GetCached(element.Value.GetType());
+                    if (element.Value == null)
+                        continue;
 
-					json.Append('"').Append(element.Key).Append("\":");
+                    var serial = Data.Serializer.GetCached(element.Value.GetType());
 
-					if (!serial.SerializeObject(json, element.Value))
-						return false;
+                    json.Append('"').Append(element.Key).Append("\":");
 
-					if (i != lastIndex)
-						json.Append(',');
-				}
+                    if (!serial.SerializeObject(json, element.Value))
+                        return false;
 
-				json.Append('}');
-				return true;
-			}
-		}
+                    if (i != lastIndex)
+                        json.Append(',');
+                }
 
-		static bool Deserialize(StringIterator json, out JSON obj) {
-			if (json.SelectSection('{', '}')) {
-				obj = new JSON();
-            	var String = Data.Serializer.String;
+                json.Append('}');
+                return true;
+            }
+        }
 
-            	while (!json.IsDone) {
-            		json.ConsumeWhitespace();
+        private static bool Deserialize(StringIterator json, out JSON obj) {
+            if (json.SelectSection('{', '}')) {
+                obj = new JSON();
+                var String = Data.Serializer.String;
 
-	            	if (!String.TryDeserialize(json, out string key))
-	            		return false;
+                while (!json.IsDone) {
+                    json.ConsumeWhitespace();
 
-	            	json.ConsumeWhitespace();
+                    if (!String.TryDeserialize(json, out string key))
+                        return false;
 
-            		if (!json.Consume(':'))
-            			return false;
+                    json.ConsumeWhitespace();
 
-	            	json.ConsumeWhitespace();
+                    if (!json.Consume(':'))
+                        return false;
 
-	            	if (!DeserializeValue(json, out object value))
-	            		return false;
+                    json.ConsumeWhitespace();
 
-	            	obj.Add(key, value);
+                    if (!DeserializeValue(json, out object value))
+                        return false;
 
-	            	json.ConsumeWhitespace();
+                    obj.Add(key, value);
 
-	            	if (!json.Consume(','))
-	            		break;
-	            }
+                    json.ConsumeWhitespace();
 
-	            json.ConsumeSection();
-	           	return true;
-			}
-			else
-			if (json.SelectSection('[', ']')) {
-				obj = new JSON();
-				obj.IsArray = true;
+                    if (!json.Consume(','))
+                        break;
+                }
 
-            	while (!json.IsDone) {
-	            	json.ConsumeWhitespace();
+                json.ConsumeSection();
+                return true;
+            }
+            else
+            if (json.SelectSection('[', ']')) {
+                obj = new JSON();
+                obj.IsArray = true;
 
-	            	if (!DeserializeValue(json, out object value))
-	            		return false;
+                while (!json.IsDone) {
+                    json.ConsumeWhitespace();
 
-	            	obj.Add(obj.Count.ToString(), value);
+                    if (!DeserializeValue(json, out object value))
+                        return false;
 
-	            	json.ConsumeWhitespace();
+                    obj.Add(obj.Count.ToString(), value);
 
-	            	if (!json.Consume(','))
-	            		break;
-	            }
+                    json.ConsumeWhitespace();
 
-	            json.ConsumeSection();
-	           	return true;
-			}
+                    if (!json.Consume(','))
+                        break;
+                }
 
-			obj = null;
-			return false;
-		}
+                json.ConsumeSection();
+                return true;
+            }
 
-		static bool DeserializeValue(StringIterator json, out object obj) {
-			return 
-				Serializer.DeserializeObject(json, out obj) ||
-				Data.Serializer.Bool.DeserializeObject(json, out obj) ||
-				Data.Serializer.String.DeserializeObject(json, out obj) ||
-				Data.Serializer.Int.DeserializeObject(json, out obj) ||
-				Data.Serializer.Long.DeserializeObject(json, out obj) ||
-				Data.Serializer.Float.DeserializeObject(json, out obj) ||
-				Data.Serializer.Double.DeserializeObject(json, out obj);
-		}
-	}
+            obj = null;
+            return false;
+        }
+
+        private static bool DeserializeValue(StringIterator json, out object obj) {
+            return
+                Serializer.DeserializeObject(json, out obj) ||
+                Data.Serializer.Bool.DeserializeObject(json, out obj) ||
+                Data.Serializer.String.DeserializeObject(json, out obj) ||
+                Data.Serializer.Int.DeserializeObject(json, out obj) ||
+                Data.Serializer.Long.DeserializeObject(json, out obj) ||
+                Data.Serializer.Float.DeserializeObject(json, out obj) ||
+                Data.Serializer.Double.DeserializeObject(json, out obj);
+        }
+    }
 }

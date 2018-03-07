@@ -1,15 +1,17 @@
 using System;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 
 namespace Poly.Data {
+
     public class Serializer<T> : Serializer {
+
         public delegate bool SerializeDelegate(StringBuilder json, T obj);
+
         public delegate bool DeserializeDelegate(StringIterator json, out T obj);
 
-        public SerializeDelegate    TrySerialize;
-        public DeserializeDelegate  TryDeserialize;
+        public SerializeDelegate TrySerialize;
+        public DeserializeDelegate TryDeserialize;
 
         public Serializer() : base(typeof(T)) {
             if (Type.IsArray) {
@@ -25,6 +27,13 @@ namespace Poly.Data {
         public Serializer(SerializeDelegate serialize, DeserializeDelegate deserialize) : base(typeof(T)) {
             TrySerialize = serialize;
             TryDeserialize = deserialize;
+        }
+
+        public Serializer(string match_string, params Serializer[] dependencies) : base(typeof(T)) {
+            var matcher = new Matcher(match_string);
+
+            TrySerialize = matcher.Template;
+            TryDeserialize = matcher.Extract;
         }
 
         public string Serialize(T obj) {
@@ -60,7 +69,7 @@ namespace Poly.Data {
             return false;
         }
 
-        SerializeDelegate DefaultSerializeObject() {
+        private SerializeDelegate DefaultSerializeObject() {
             var members = Members.Values.ToArray();
             var lastIndex = members.Length - 1;
 
@@ -87,7 +96,7 @@ namespace Poly.Data {
             };
         }
 
-        SerializeDelegate DefaultSerializeArray() {
+        private SerializeDelegate DefaultSerializeArray() {
             var serializer = GetCached(Type.GetElementType());
 
             return (StringBuilder json, T obj) => {
@@ -111,7 +120,7 @@ namespace Poly.Data {
             };
         }
 
-        DeserializeDelegate DefaultDeserializeObject() {
+        private DeserializeDelegate DefaultDeserializeObject() {
             return (StringIterator json, out T obj) => {
                 if (!json.SelectSection('{', '}')) {
                     obj = default(T);
@@ -139,11 +148,11 @@ namespace Poly.Data {
 
                     json.ConsumeWhitespace();
 
-                    if (!member.Serializer.DeserializeObject(json, out object value)) 
+                    if (!member.Serializer.DeserializeObject(json, out object value))
                         return false;
 
                     member.Set(obj, value);
-                        
+
                     json.ConsumeWhitespace();
 
                     if (!json.Consume(',')) {
@@ -157,7 +166,7 @@ namespace Poly.Data {
             };
         }
 
-        DeserializeDelegate DefaultDeserializeArray() {
+        private DeserializeDelegate DefaultDeserializeArray() {
             var elementType = Type.GetElementType();
             var serializer = GetCached(elementType);
 
@@ -193,7 +202,7 @@ namespace Poly.Data {
                 obj = (T)(object)(array);
                 return true;
 
-            formatException:
+                formatException:
                 throw new FormatException($"Unable to deserialize {json} into {elementType.Name}");
             };
         }

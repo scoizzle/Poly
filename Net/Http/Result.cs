@@ -1,17 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace Poly.Net.Http {
 
-namespace Poly.Net.Http {
     public enum Result {
         Invalid,
-        
+
         // Informational
         Continue = 100,
+
         SwitchingProtocols,
 
         // Success
         Ok = 200,
+
         Created,
         Accepted,
         PartialInfo,
@@ -21,6 +20,7 @@ namespace Poly.Net.Http {
 
         // Redirects
         MultipleChoices = 300,
+
         MovedPermanently,
         Found,
         SeeOther,
@@ -30,6 +30,7 @@ namespace Poly.Net.Http {
 
         // Client Error
         BadRequest = 400,
+
         Unauthorized,
         PaymentRequired,
         Forbidden,
@@ -51,6 +52,7 @@ namespace Poly.Net.Http {
 
         // Server Error
         InternalError = 500,
+
         NotImplemented,
         BadGateway,
         ServiceUnavailable,
@@ -59,6 +61,7 @@ namespace Poly.Net.Http {
     }
 
     public static class ResultExtensions {
+
         public static string GetString(this Result This) {
             return string.Concat(
                 GetCode(This),
@@ -74,7 +77,7 @@ namespace Poly.Net.Http {
         public static string GetPhrase(this Result This) {
             switch (This) {
                 case Result.Continue: return "Continue";
-                case Result.SwitchingProtocols: return "Switching Protocols"; 
+                case Result.SwitchingProtocols: return "Switching Protocols";
 
                 case Result.Ok: return "Ok";
                 case Result.Created: return "Created";

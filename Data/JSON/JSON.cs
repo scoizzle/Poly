@@ -1,33 +1,26 @@
-﻿using System.Collections;
+﻿using System.Text;
 
 namespace Poly.Data {
+    using Collections;
 
     public partial class JSON : KeyValueCollection<object> {
-        public char KeySeperatorCharacter = '.';
+        public bool IsArray;
+        public char KeySeperatorCharacter;
 
-        public bool IsArray = false;
-
+        public JSON() {
+            IsArray = false;
+            KeySeperatorCharacter = '.';
+        }
+        
         public void Add(object obj) {
             Add(Count.ToString(), obj);
         }
 
-        public void Add(IEnumerable Elements) {
-            foreach (var e in Elements)
-                Add(e);
-        }
-
         public override string ToString() {
-            return Serializer.Serialize(this);
-        }
-
-        public static JSON operator +(JSON Js, object Obj) {
-            Js.Add(Obj);
-            return Js;
-        }
-
-        public static JSON operator -(JSON Js, string Key) {
-            Js.Remove(Key);
-            return Js;
+            var output = new StringBuilder();
+            if (Serialize(output, this))
+                return output.ToString();
+            return null;
         }
     }
 }

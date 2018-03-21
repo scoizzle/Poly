@@ -7,6 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 
 namespace Poly.Net {
+    using IO;
 
     public partial class TcpClient : MemoryBufferedStream {
         public TcpClient(Socket socket) : base(new NetworkStream(socket)) {

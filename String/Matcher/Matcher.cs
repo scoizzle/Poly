@@ -29,7 +29,7 @@ namespace Poly {
         public bool Extract(string data, out JSON storage) {
             storage = new JSON();
 
-            return Extract(data, storage.Set);
+            return Extract(data, storage.TrySet);
         }
 
         public bool Extract(string data, SetDelegate set) =>
@@ -94,7 +94,7 @@ namespace Poly {
             var serializer = Serializer.GetCached<T>();
 
             return (string key, out object value) => {
-                return serializer.GetMemberValue(storage, key, out value);
+                return serializer.TypeInfo.GetMemberValue(storage, key, out value);
             };
         }
 
@@ -102,19 +102,19 @@ namespace Poly {
             var serializer = Serializer.GetCached<T>();
 
             return (string key, object value) => {
-                return serializer.SetMemberValue(storage, key, value);
+                return serializer.TypeInfo.SetMemberValue(storage, key, value);
             };
         }
 
         public static GetDelegate GetMemberValue<T>(Serializer serializer, T storage) {
             return (string key, out object value) => {
-                return serializer.GetMemberValue(storage, key, out value);
+                return serializer.TypeInfo.GetMemberValue(storage, key, out value);
             };
         }
 
         public static SetDelegate SetMemberValue<T>(Serializer serializer, T storage) {
             return (string key, object value) => {
-                return serializer.SetMemberValue(storage, key, value);
+                return serializer.TypeInfo.SetMemberValue(storage, key, value);
             };
         }
     }

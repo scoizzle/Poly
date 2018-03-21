@@ -19,29 +19,26 @@ namespace Poly.Net {
             BeginReadRequest(connection, context);
         }
 
-        private void Disconnect(Connection connection) {
-            connection.Client.Dispose();
+        private void Disconnect(Context context) {
+            context.Cancellation.Cancel();
+            context.Connection.Client.Close();
         }
 
         private void BeginReadRequest(Connection connection, Context context) {
             Interlocked.Increment(ref reading);
             
             connection
-                .ReadRequestAsync(context.Request)
+                .ReadRequestAsync(context.Request, context.Cancellation.Token)
                 .ContinueWith(_ => EndReadRequest(connection, context, _));
         }
 
         private void EndReadRequest(Connection connection, Context context, Task<bool> read_request) {
             Interlocked.Decrement(ref reading);
 
-            if (read_request.IsFaulted) {
-                HandleError(read_request);
-                Disconnect(connection);
-            }
-            else
-            if (read_request.IsCompleted && read_request.Result) {
-                ProcessRequest(connection, context);
-            }
+            if (read_request.CatchException() || !read_request.Result)
+                Disconnect(context);
+            
+            ProcessRequest(connection, context);
         }
 
         private void ProcessRequest(Connection connection, Context context) {
@@ -56,30 +53,19 @@ namespace Poly.Net {
             Interlocked.Increment(ref writing);
 
             connection
-                .WriteResponseAsync(context.Response)
+                .WriteResponseAsync(context.Response, context.Cancellation.Token)
                 .ContinueWith(_ => EndSendResponse(connection, context, _));
         }
 
         private void EndSendResponse(Connection connection, Context context, Task<bool> send_response) {
             Interlocked.Decrement(ref writing);
 
-            if (send_response.IsFaulted) {
-                HandleError(send_response);
-                Disconnect(connection);
+            if (send_response.CatchException() || !send_response.Result) {
+                Disconnect(context);
             }
-            else
-            if (send_response.IsCompleted && send_response.Result) {
+            else {
                 context.Reset();
                 BeginReadRequest(connection, context);
-            }
-        }
-
-        private void HandleError(Task<bool> failed_task) {
-            try {
-                throw failed_task.Exception;
-            }
-            catch (Exception error) {
-                Log.Debug(error.Message);
             }
         }
     }

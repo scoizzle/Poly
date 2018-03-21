@@ -5,13 +5,13 @@ using System.IO;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Data;
+    using Collections;
 
     public partial class CacheModule : HttpServer.Module {
         private MatchingCollection<Item> cached_responses;
 
         internal CacheModule(HttpServer http_server) {
-            cached_responses = new MatchingCollection<Item>();
+            cached_responses = new MatchingCollection<Item>('/');
         }
 
         public HttpServer.RequestHandler Build(HttpServer.RequestHandler next) =>

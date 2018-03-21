@@ -92,7 +92,7 @@ namespace System {
         }
 
         public static string MD5(this string This) {
-            return Hash.ToMD5(
+            return Hashing.GetMD5(
                 App.Encoding.GetBytes(
                     This
                 )
@@ -100,7 +100,7 @@ namespace System {
         }
 
         public static string SHA1(this string This) {
-            return Hash.ToSHA1(
+            return Hashing.GetSHA1(
                 App.Encoding.GetBytes(
                     This
                 )
@@ -108,7 +108,7 @@ namespace System {
         }
 
         public static string SHA256(this string This) {
-            return Hash.ToSHA256(
+            return Hashing.GetSHA256(
                 App.Encoding.GetBytes(
                     This
                 )
@@ -116,7 +116,7 @@ namespace System {
         }
 
         public static string SHA512(this string This) {
-            return Hash.ToSHA512(
+            return Hashing.GetSHA512(
                 App.Encoding.GetBytes(
                     This
                 )

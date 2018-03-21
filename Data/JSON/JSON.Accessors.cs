@@ -1,31 +1,29 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Poly.Data {
-
     public partial class JSON {
-
         new public object Get(string key_list) {
             return Get(key_list.Split(KeySeperatorCharacter));
         }
 
-        public object Get(string[] key_list) {
-            var lastIndex = key_list.Length - 1;
+        public object Get(IEnumerable<string> key_list) {
+            var keys = key_list.ToArray();
+            var lastIndex = keys.Length - 1;
 
             object value = null;
             JSON current = this;
 
             for (var i = 0; i <= lastIndex; i++) {
-                if (!current.TryGetValue(key_list[i], out value))
+                if (current == null)
+                    break;
+
+                if (!current.TryGetValue(keys[i], out value))
                     break;
 
                 if (i == lastIndex)
                     return value;
-
-                if (value is JSON next)
-                    current = next;
-                else
-                    break;
             }
 
             return null;
@@ -35,14 +33,14 @@ namespace Poly.Data {
             return Get<T>(key_list.Split(KeySeperatorCharacter));
         }
 
-        public T Get<T>(string[] key_list) {
+        public T Get<T>(IEnumerable<string> key_list) {
             var obj = Get(key_list);
 
             if (obj is T value) {
                 return value;
             }
 
-            return default;
+            return default(T);
         }
 
         public bool TryGet(string key_list, out object value) {
@@ -81,6 +79,18 @@ namespace Poly.Data {
                 }
             }
 
+            return false;
+        }
+
+        public bool TryGetValue<T>(string Key, out T Value) {
+            if (base.TryGetValue(Key, out object Val)) {
+                if (Val is T value) {
+                    Value = value;
+                    return true;
+                }
+            }
+
+            Value = default(T);
             return false;
         }
     }

@@ -160,7 +160,6 @@ namespace Poly.String.Matcher.Parsers {
             switch (c) {
                 case '*':
                 case '^':
-                case '[':
                 case '{':
                 case '(':
                     return true;

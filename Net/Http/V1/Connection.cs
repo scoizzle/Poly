@@ -6,10 +6,11 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http.V1 {
-    using Data;
+    using Collections;
 
     public class Connection : Http.Connection {
-        private static readonly byte[] DoubleNewLine = Encoding.UTF8.GetBytes("\r\n\r\n");
+        private const string NewLine = "\r\n";
+        private static readonly byte[] DoubleNewLineBytes = Encoding.UTF8.GetBytes("\r\n\r\n");
 
         public const string HTTP_VERSION = "HTTP/1.1";
 
@@ -24,7 +25,7 @@ namespace Poly.Net.Http.V1 {
 
             text.Append(request.Method).Append(' ')
                 .Append(request.Path).Append(' ')
-                .Append(HTTP_VERSION).Append(App.NewLine);
+                .Append(HTTP_VERSION).Append(NewLine);
 
             SetVersionSpecificHeaders(request);
             PrintHeaders(text, request.Headers);
@@ -58,7 +59,7 @@ namespace Poly.Net.Http.V1 {
             var text = new StringBuilder();
 
             text.Append(HTTP_VERSION).Append(' ')
-                .Append(response.Status.GetString()).Append(App.NewLine);
+                .Append(response.Status.GetString()).Append(NewLine);
 
             response.Headers.Date = DateTime.UtcNow;
 
@@ -91,7 +92,7 @@ namespace Poly.Net.Http.V1 {
         }
 
         public bool ReadRequest(Request request) {
-            var headers = Client.ReadStringUntilConstrained(DoubleNewLine, App.Encoding);
+            var headers = Client.ReadStringUntilConstrained(DoubleNewLineBytes, App.Encoding);
 
             if (headers == null) {
                 Log.Debug("Failed to receive HTTP header string.");
@@ -102,7 +103,7 @@ namespace Poly.Net.Http.V1 {
 
             var method = text.Extract(' ');
             var target = text.Extract(' ');
-            var version = text.Extract(App.NewLine);
+            var version = text.Extract(NewLine);
 
             if (method == null || target == null || version == null) {
                 Log.Debug("Failed to parse HTTP1.1 request line.");
@@ -122,7 +123,7 @@ namespace Poly.Net.Http.V1 {
         }
 
         public bool ReadResponse(Response response) {
-            var headers = Client.ReadStringUntilConstrained(DoubleNewLine, App.Encoding);
+            var headers = Client.ReadStringUntilConstrained(DoubleNewLineBytes, App.Encoding);
 
             if (headers == null) {
                 Log.Debug("Failed to receive HTTP header string.");
@@ -132,7 +133,7 @@ namespace Poly.Net.Http.V1 {
             var text = new StringIterator(headers);
             var version = text.Extract(' ');
             var status_code = text.Extract(' ');
-            var status_phrase = text.Extract(App.NewLine);
+            var status_phrase = text.Extract(NewLine);
 
             if (version == null || status_code == null || status_phrase == null) {
                 Log.Debug("Failed to parse HTTP1.1 response line.");
@@ -160,7 +161,7 @@ namespace Poly.Net.Http.V1 {
 
             text.Append(request.Method).Append(' ')
                 .Append(request.Path).Append(' ')
-                .Append(HTTP_VERSION).Append(App.NewLine);
+                .Append(HTTP_VERSION).Append(NewLine);
 
             SetVersionSpecificHeaders(request);
             PrintHeaders(text, request.Headers);
@@ -196,7 +197,7 @@ namespace Poly.Net.Http.V1 {
             var text = new StringBuilder();
 
             text.Append(HTTP_VERSION).Append(' ')
-                .Append(response.Status.GetString()).Append(App.NewLine);
+                .Append(response.Status.GetString()).Append(NewLine);
 
             response.Headers.Date = DateTime.UtcNow;
 
@@ -231,7 +232,7 @@ namespace Poly.Net.Http.V1 {
         }
 
         public Task<bool> ReadRequestAsync(Request request, CancellationToken cancellation_token) =>
-            Client.ReadStringUntilConstrainedAsync(DoubleNewLine, App.Encoding, cancellation_token).
+            Client.ReadStringUntilConstrainedAsync(DoubleNewLineBytes, App.Encoding, cancellation_token).
                 ContinueWith(_ => {
                     if (_.IsFaulted)
                         return false;
@@ -247,7 +248,7 @@ namespace Poly.Net.Http.V1 {
 
                     var method = text.Extract(' ');
                     var target = text.Extract(' ');
-                    var version = text.Extract(App.NewLine);
+                    var version = text.Extract(NewLine);
 
                     if (method == null || target == null || version == null) {
                         Log.Debug("Failed to parse HTTP1.1 request line.");
@@ -267,7 +268,7 @@ namespace Poly.Net.Http.V1 {
                 });
 
         public Task<bool> ReadResponseAsync(Response response, CancellationToken cancellation_token) =>
-            Client.ReadStringUntilConstrainedAsync(DoubleNewLine, App.Encoding, cancellation_token).
+            Client.ReadStringUntilConstrainedAsync(DoubleNewLineBytes, App.Encoding, cancellation_token).
                 ContinueWith(_ => {
                     if (_.IsFaulted)
                         return false;
@@ -281,7 +282,7 @@ namespace Poly.Net.Http.V1 {
                     var text = new StringIterator(headers);
                     var version = text.Extract(' ');
                     var status_code = text.Extract(' ');
-                    var status_phrase = text.Extract(App.NewLine);
+                    var status_phrase = text.Extract(NewLine);
 
                     if (version == null || status_code == null || status_phrase == null) {
                         Log.Debug("Failed to parse HTTP1.1 response line.");
@@ -341,9 +342,9 @@ namespace Poly.Net.Http.V1 {
                     text.Append(pair.Key)
                         .Append(": ")
                         .Append(pair.Value)
-                        .Append(App.NewLine);
+                        .Append(NewLine);
 
-            text.Append(App.NewLine);
+            text.Append(NewLine);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -354,7 +355,7 @@ namespace Poly.Net.Http.V1 {
                 if (key == null)
                     return false;
 
-                var value = text.Extract(App.NewLine);
+                var value = text.Extract(NewLine);
 
                 if (value == null) {
                     value = text.ToString();

@@ -1,7 +1,7 @@
 ﻿using System;
 
 namespace Poly.Net.Http {
-    using Data;
+    using Collections;
 
     public class Headers : KeyValueCollection<string> {
         private CachedValue<DateTime> date;
@@ -37,10 +37,13 @@ namespace Poly.Net.Http {
                 HttpExtensions.TryToHttpTimeString
                 );
 
-            content_length = GetCachedStorage<long>(
+            content_length = GetCachedStorage(
                 "Content-Length",
                 long.TryParse,
-                ObjectExtensions.TryToString
+                (long value, out string text) => {
+                    text = value.ToString();
+                    return true;
+                }
                 );
 
             content_type = GetStorage("Content-Type");

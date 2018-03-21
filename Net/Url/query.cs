@@ -3,7 +3,7 @@ using System.Linq;
 using System.Text;
 
 namespace Poly.Net {
-
+    using Collections;
     using Data;
 
     public class UrlQuery : KeyValueCollection<string> {

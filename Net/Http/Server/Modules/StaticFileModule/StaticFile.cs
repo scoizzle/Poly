@@ -4,7 +4,7 @@ using System.Text;
 using System.IO;
 
 namespace Poly.Net.Http {
-    using Data;
+    using Collections;
 
     public partial class StaticFileModule : HttpServer.Module {
         private HttpServer server;
@@ -17,7 +17,7 @@ namespace Poly.Net.Http {
             host = server.Config.Host;
             document_path = host.DocumentPath;
 
-            files = new MatchingCollection<HttpServer.RequestHandler>();
+            files = new MatchingCollection<HttpServer.RequestHandler>('/');
             Load(document_path);
         }
 

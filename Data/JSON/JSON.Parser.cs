@@ -2,13 +2,11 @@
 using System.Text;
 
 namespace Poly.Data {
-
     public partial class JSON {
         public static Serializer<JSON> Serializer = new Serializer<JSON>(Serialize, Deserialize);
 
-        public static implicit operator JSON(string Text) {
-            return Serializer.Deserialize(Text);
-        }
+        public static implicit operator JSON(string text) =>
+            Deserialize(text, out JSON value) ? value : default;
 
         private static bool Serialize(StringBuilder json, JSON obj) {
             if (obj == null)
@@ -69,12 +67,11 @@ namespace Poly.Data {
         private static bool Deserialize(StringIterator json, out JSON obj) {
             if (json.SelectSection('{', '}')) {
                 obj = new JSON();
-                var String = Data.Serializer.String;
 
                 while (!json.IsDone) {
                     json.ConsumeWhitespace();
 
-                    if (!String.TryDeserialize(json, out string key))
+                    if (!Data.Serializer.String.TryDeserialize(json, out string key))
                         return false;
 
                     json.ConsumeWhitespace();
@@ -128,8 +125,8 @@ namespace Poly.Data {
         private static bool DeserializeValue(StringIterator json, out object obj) {
             return
                 Serializer.DeserializeObject(json, out obj) ||
-                Data.Serializer.Bool.DeserializeObject(json, out obj) ||
                 Data.Serializer.String.DeserializeObject(json, out obj) ||
+                Data.Serializer.Boolean.DeserializeObject(json, out obj) ||
                 Data.Serializer.Int.DeserializeObject(json, out obj) ||
                 Data.Serializer.Long.DeserializeObject(json, out obj) ||
                 Data.Serializer.Float.DeserializeObject(json, out obj) ||

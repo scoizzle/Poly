@@ -5,13 +5,13 @@ using System.IO;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Data;
+    using Collections;
 
     public partial class RoutingModule : HttpServer.Module {
         MatchingCollection<HttpServer.RequestHandler> route_handlers;
 
         internal RoutingModule(HttpServer http_server) {
-            route_handlers = new MatchingCollection<HttpServer.RequestHandler>();
+            route_handlers = new MatchingCollection<HttpServer.RequestHandler>('/');
         }
 
         public void Add(string path, HttpServer.RequestHandler handler) =>
@@ -29,10 +29,7 @@ namespace Poly.Net.Http {
                         return true;
                     });
 
-                if (handler == null)
-                    return next(context);
-
-                return handler(context);
+                return (handler ?? next)(context);
             };
     }
 

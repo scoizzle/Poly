@@ -87,6 +87,9 @@
         }
 
         public static bool CopyTo(this byte[] from, int index, byte[] to, int to_index, int count) {
+            if (from == null || to == null)
+                return false;
+
             if (from.Length < index + count)
                 return false;
 

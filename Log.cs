@@ -20,7 +20,7 @@ namespace Poly {
                     time.ToString("yyyy-MM-dd hh:mm:ss"),
                     level,
                     message,
-                    App.NewLine
+                    Environment.NewLine
             ));
 
         private static void Print(string level, DateTime time, string format, params object[] args) =>
@@ -30,7 +30,7 @@ namespace Poly {
                     time.ToString("yyyy-MM-dd hh:mm:ss"),
                     level,
                     string.Format(format, args),
-                    App.NewLine
+                    Environment.NewLine
             ));
 
         [Conditional("DEBUG")]

@@ -47,22 +47,44 @@ namespace Poly.Collections {
         public struct Enumerator : IEnumerator<KeyValuePair> {
             private int Index, Count;
             private KeyValuePair[] Pairs;
+            private KeyArrayPair CurrentArray;
 
-            public KeyValuePair Current { get { return Pairs[Index]; } }
+            public KeyValuePair Current { get; private set; }
             object IEnumerator.Current { get { return Current; } }
 
             internal Enumerator(KeyValueCollection<T> collection) {
                 Pairs = collection.KeyValuePairs.ToArray();
                 Count = Pairs.Length;
 
+                CurrentArray = default;
+                Current = default;
                 Index = -1;
             }
 
-            public void Dispose() {
-            }
+            public void Dispose() { }
 
             public bool MoveNext() {
-                return (++Index < Count);
+                if (CurrentArray != null) {
+                    if (CurrentArray.Next())
+                        return true;
+
+                    CurrentArray = null;
+                }
+
+                var not_out_of_bounds = (++Index < Count);
+
+                if (not_out_of_bounds) {
+                    var next = Pairs[Index];
+
+                    if (next is KeyArrayPair array && array.Next()) {
+                        CurrentArray = array;
+                    }
+
+                    Current = next;
+                    return true;
+                }
+
+                return false;
             }
 
             void IEnumerator.Reset() {

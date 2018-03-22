@@ -4,12 +4,12 @@ namespace Poly.Net.Http {
 
     public class Request {
         public string Method, Path, Authority, Scheme;
-        public Headers Headers;
+        public HeaderStorage Headers;
 
         public Stream Body;
 
         public Request() {
-            Headers = new Headers();
+            Headers = new HeaderStorage();
             Headers.ContentLength = 0;
         }
 

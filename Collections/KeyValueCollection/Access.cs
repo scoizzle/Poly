@@ -1,42 +1,29 @@
 ﻿namespace Poly.Collections {
 
     public partial class KeyValueCollection<T> {
-
         public bool Add(string key, T value) {
-            PairCollection collection;
-            KeyValuePair pair;
-
-            if (TryGetCollection(key.Length, out collection)) {
-                if (TryGetStorage(collection, key, out pair)) {
-                    return false;
+            if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair)) {
+                if (pair is KeyArrayPair array) {
+                    array.Values.Add(value);
+                    return true;
                 }
 
-                pair = new KeyValuePair(key, value);
-                collection.List.Add(pair);
-                Count++;
-            }
-            else {
-                pair = new KeyValuePair(key, value);
-                collection = new PairCollection(key.Length);
-
-                collection.List.Add(pair);
-                List.Add(collection);
-                Count++;
+                return false;
             }
 
+            ValidateCollection(key, ref collection);
+
+            pair = new KeyValuePair(key, value);
+            collection.List.Add(pair);
+            Count++;
             return true;
         }
 
         public bool Remove(string key) {
-            PairCollection collection;
-            KeyValuePair pair;
-
-            if (TryGetCollection(key.Length, out collection)) {
-                if (TryGetStorage(collection, key, out pair)) {
-                    collection.List.Remove(pair);
-                    Count--;
-                    return true;
-                }
+            if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair)) {
+                collection.List.Remove(pair);
+                Count--;
+                return true;
             }
 
             return false;
@@ -52,117 +39,68 @@
                 target.Set(pair.Key, pair.value);
         }
 
-        public bool ContainsKey(string key) {
-            PairCollection collection;
-            KeyValuePair pair;
+        public bool ContainsKey(string key) =>
+            TryGetStorage(key, out PairCollection collection, out KeyValuePair pair);
 
-            if (TryGetCollection(key.Length, out collection)) {
-                if (TryGetStorage(collection, key, out pair)) {
-                    return true;
-                }
-            }
+        public T Get(string key) =>
+            TryGetStorage(key, out PairCollection collection, out KeyValuePair pair) ?
+                pair.value : default;
 
-            return false;
-        }
-
-        public T Get(string key) {
-            return TryGetValue(key, out T value) ? value
-                                                 : default(T);
-        }
-
-        public void Set(string key, T value) {
-            PairCollection collection;
-            KeyValuePair pair;
-
-            if (TryGetCollection(key.Length, out collection)) {
-                if (TryGetStorage(collection, key, out pair)) {
-                    pair.Value = value;
-                }
-                else {
-                    pair = new KeyValuePair(key, value);
-                    collection.List.Add(pair);
-                    Count++;
-                }
-            }
-            else {
-                pair = new KeyValuePair(key, value);
-                collection = new PairCollection(key.Length);
-
-                collection.List.Add(pair);
-                List.Add(collection);
-                Count++;
-            }
-        }
+        public void Set(string key, T value) =>
+            TrySet(key, value);
 
         public bool TrySet(string key, T value) {
-            PairCollection collection;
-            KeyValuePair pair;
-
-            if (TryGetCollection(key.Length, out collection)) {
-                if (TryGetStorage(collection, key, out pair)) {
-                    pair.Value = value;
-                }
-                else {
-                    pair = new KeyValuePair(key, value);
-                    collection.List.Add(pair);
-                    Count++;
-                }
-            }
-            else {
-                pair = new KeyValuePair(key, value);
-                collection = new PairCollection(key.Length);
-
-                collection.List.Add(pair);
-                List.Add(collection);
-                Count++;
+            if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair)) {
+                pair.Value = value;
+                return true;
             }
 
+            ValidateCollection(key, ref collection);
+
+            pair = new KeyValuePair(key, value);
+            collection.List.Add(pair);
+            Count++;
             return true;
         }
 
         public KeyValuePair GetStorage(string key) {
-            PairCollection collection;
-            KeyValuePair pair;
-
-            if (TryGetCollection(key.Length, out collection)) {
-                if (TryGetStorage(collection, key, out pair)) {
-                    return pair;
-                }
-                else {
-                    pair = new KeyValuePair(key, default(T));
-                    collection.List.Add(pair);
-                    Count++;
-                    return pair;
-                }
-            }
-            else {
-                pair = new KeyValuePair(key, default(T));
-                collection = new PairCollection(key.Length);
-
-                collection.List.Add(pair);
-                List.Add(collection);
-                Count++;
+            if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair))
                 return pair;
-            }
+            
+            ValidateCollection(key, ref collection);
+
+            pair = new KeyValuePair(key, default);
+            collection.List.Add(pair);
+            Count++;
+            return pair;
+        }
+
+        public KeyArrayPair GetArrayStorage(string key) {
+            if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair) && pair is KeyArrayPair array)
+                return array;
+            
+            ValidateCollection(key, ref collection);
+
+            array = new KeyArrayPair(key);
+            collection.List.Add(array);
+            Count++;
+            return array;
         }
 
         public CachedValue<U> GetCachedStorage<U>(string key, TryConvert<T, U> read, TryConvert<U, T> write) {
-            return new CachedValue<U>(GetStorage(key), read, write);
+            if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair))
+                return new CachedValue<U>(key, pair.value, read, write);
+            
+            ValidateCollection(key, ref collection);
+
+            var cached = new CachedValue<U>(key, read, write);
+            collection.List.Add(cached);
+            Count++;
+            return cached;
         }
 
         public bool TryGetValue(string key, out T value) {
-            PairCollection collection;
-
-            if (TryGetCollection(key.Length, out collection)) {
-                return TryGetValue(collection, key, out value);
-            }
-
-            value = default;
-            return false;
-        }
-
-        private bool TryGetValue(PairCollection collection, string key, out T value) {
-            if (TryGetStorage(collection, key, out KeyValuePair pair)) {
+            if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair)) {
                 value = pair.Value;
                 return true;
             }
@@ -171,9 +109,17 @@
             return false;
         }
 
+        private bool TryGetStorage(string key, out PairCollection collection, out KeyValuePair pair) {
+            if (TryGetCollection(key.Length, out collection))
+                return TryGetStorage(collection, key, out pair);
+
+            pair = default;
+            return false;
+        }
+
         private bool TryGetStorage(PairCollection collection, string key, out KeyValuePair pair) {
-            var list = collection.List;
             var length = collection.Length;
+            var list = collection.List;
             var len = list.Count;
 
             for (int i = 0; i < len; i++) {
@@ -204,6 +150,20 @@
 
             collection = default;
             return false;
+        }
+
+        private void ValidateCollection(string key, ref PairCollection collection) =>
+            ValidateCollection(key.Length, ref collection);
+
+        private void ValidateCollection(int length, ref PairCollection collection) {
+            if (collection != null)
+                return;
+
+            if (TryGetCollection(length, out collection))
+                return;
+
+            collection = new PairCollection(length);
+            List.Add(collection);
         }
     }
 }

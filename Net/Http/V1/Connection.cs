@@ -337,7 +337,7 @@ namespace Poly.Net.Http.V1 {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void PrintHeaders(StringBuilder text, KeyValueCollection<string> headers) {
-            foreach (var pair in headers.KeyValuePairs)
+            foreach (var pair in headers)
                 if (pair.Key != null && pair.value != null)
                     text.Append(pair.Key)
                         .Append(": ")
@@ -362,7 +362,8 @@ namespace Poly.Net.Http.V1 {
                     text.IsDone = true;
                 }
                 
-                headers.Set(key, value);
+                if (!headers.Add(key, value))
+                    return false;
             }
 
             return true;

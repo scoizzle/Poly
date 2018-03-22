@@ -2,7 +2,7 @@
 
     public partial class KeyValueCollection<T> {
 
-        private struct PairCollection {
+        private class PairCollection {
             public int Length;
             public ManagedArray<KeyValuePair> List;
 

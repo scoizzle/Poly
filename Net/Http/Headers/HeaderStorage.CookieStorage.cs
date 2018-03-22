@@ -5,18 +5,11 @@ namespace Poly.Net.Http {
 
     public partial class HeaderStorage {
         public class CookieStorage : KeyValueCollection<Cookie> {
-            HeaderStorage.KeyValuePair cookie, set_cookie;
+            HeaderStorage.KeyArrayPair cookie, set_cookie;
 
             public CookieStorage(HeaderStorage headers) {
-                cookie = headers.GetStorage("Cookie");
-
-                cookie.OnGet = cookie_get;
-                cookie.OnSet = cookie_set;
-
-                set_cookie = headers.GetStorage("Set-Cookie");
-
-                set_cookie.OnGet = set_cookie_get;
-                set_cookie.OnSet = set_cookie_set;
+                cookie = headers.GetArrayStorage("Cookie");
+                set_cookie = headers.GetArrayStorage("Set-Cookie");
             }
 
             public bool Add(Cookie cookie) {

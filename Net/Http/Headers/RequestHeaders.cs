@@ -39,34 +39,34 @@ namespace Poly.Net.Http {
         CachedValue<long> content_length;
 
         public RequestHeaders() {
-            accept = GetStorage("accept");
-            accept_charset = GetStorage("accept-charset");
-            accept_encoding = GetStorage("accept-encoding");
-            accept_language = GetStorage("accept-language");
-            access_control_request_method = GetStorage("access-control-request-method");
-            authorization = GetStorage("authorization");
-            cache_control = GetStorage("cache-control");
-            connection = GetStorage("connection");
-            content_type = GetStorage("content-type");
-            expect = GetStorage("expect");
-            forwarded = GetStorage("forwarded");
-            from = GetStorage("from");
-            host = GetStorage("host");
-            if_match = GetStorage("if-match");
-            if_none_match = GetStorage("if-none-match");
-            if_range = GetStorage("if-range");
-            if_unmodified_since = GetStorage("if-unmodified-since");
-            max_forwards = GetStorage("max-forwards");
-            origin = GetStorage("origin");
-            pragma = GetStorage("pragma");
-            proxy_authorization = GetStorage("proxy-authorization");
-            range = GetStorage("range");
-            referer = GetStorage("referer");
-            te = GetStorage("te");
-            upgrade = GetStorage("upgrade");
-            user_agent = GetStorage("user-agent");
-            via = GetStorage("via");
-            warning = GetStorage("warning");
+            accept = GetStorage("Accept");
+            accept_charset = GetStorage("Accept-Charset");
+            accept_encoding = GetStorage("Accept-Encoding");
+            accept_language = GetStorage("Accept-Language");
+            access_control_request_method = GetStorage("Access-Control-Request-Method");
+            authorization = GetStorage("Authorization");
+            cache_control = GetStorage("Cache-Control");
+            connection = GetStorage("Connection");
+            content_type = GetStorage("Content-Type");
+            expect = GetStorage("Expect");
+            forwarded = GetStorage("Forwarded");
+            from = GetStorage("From");
+            host = GetStorage("Host");
+            if_match = GetStorage("If-Match");
+            if_none_match = GetStorage("If-None-Match");
+            if_range = GetStorage("If-Range");
+            if_unmodified_since = GetStorage("If-Unmodified-Since");
+            max_forwards = GetStorage("Max-Forwards");
+            origin = GetStorage("Origin");
+            pragma = GetStorage("Pragma");
+            proxy_authorization = GetStorage("Proxy-Authorization");
+            range = GetStorage("Range");
+            referer = GetStorage("Referer");
+            te = GetStorage("TE");
+            upgrade = GetStorage("Upgrade");
+            user_agent = GetStorage("User-Agent");
+            via = GetStorage("Via");
+            warning = GetStorage("Warning");
 
             date = GetCachedStorage<DateTime>(
                 "Date",

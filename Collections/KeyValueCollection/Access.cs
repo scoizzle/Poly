@@ -11,11 +11,7 @@
                 return false;
             }
 
-            ValidateCollection(key, ref collection);
-
-            pair = new KeyValuePair(key, value);
-            collection.List.Add(pair);
-            Count++;
+            SetStorage(key, new KeyValuePair(key, value));
             return true;
         }
 
@@ -46,6 +42,10 @@
             TryGetStorage(key, out PairCollection collection, out KeyValuePair pair) ?
                 pair.value : default;
 
+        public KeyArrayPair GetArray(string key) =>
+            TryGetStorage(key, out PairCollection collection, out KeyValuePair pair) && pair is KeyArrayPair array ?
+                array : default;
+
         public void Set(string key, T value) =>
             TrySet(key, value);
 
@@ -55,48 +55,29 @@
                 return true;
             }
 
-            ValidateCollection(key, ref collection);
-
-            pair = new KeyValuePair(key, value);
-            collection.List.Add(pair);
-            Count++;
+            SetStorage(key, new KeyValuePair(key, value));
             return true;
         }
 
         public KeyValuePair GetStorage(string key) {
             if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair))
                 return pair;
-            
-            ValidateCollection(key, ref collection);
 
-            pair = new KeyValuePair(key, default);
-            collection.List.Add(pair);
-            Count++;
-            return pair;
+            return SetStorage(key, new KeyValuePair(key, default));
         }
 
         public KeyArrayPair GetArrayStorage(string key) {
             if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair) && pair is KeyArrayPair array)
                 return array;
-            
-            ValidateCollection(key, ref collection);
 
-            array = new KeyArrayPair(key);
-            collection.List.Add(array);
-            Count++;
-            return array;
+            return SetStorage(key, new KeyArrayPair(key));
         }
 
         public CachedValue<U> GetCachedStorage<U>(string key, TryConvert<T, U> read, TryConvert<U, T> write) {
             if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair))
-                return new CachedValue<U>(key, pair.value, read, write);
-            
-            ValidateCollection(key, ref collection);
+                return pair as CachedValue<U>;
 
-            var cached = new CachedValue<U>(key, read, write);
-            collection.List.Add(cached);
-            Count++;
-            return cached;
+            return SetStorage(key, new CachedValue<U>(key, read, write));
         }
 
         public bool TryGetValue(string key, out T value) {
@@ -107,6 +88,15 @@
 
             value = default;
             return false;
+        }
+
+        protected T SetStorage<T>(string key, T storage) where T : KeyValuePair {
+            PairCollection collection = null;
+            ValidateCollection(key, ref collection);
+
+            collection.List.Add(storage);
+            Count++;
+            return storage;
         }
 
         private bool TryGetStorage(string key, out PairCollection collection, out KeyValuePair pair) {

@@ -54,7 +54,7 @@
                 }
                 else {
                     cached = default;
-                    _ = default;
+                    value = default;
                     HasValue = false;
                 }
             }

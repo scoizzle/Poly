@@ -311,7 +311,6 @@ namespace Poly.Net.Http.V1 {
             var headers = request.Headers;
 
             request.Authority = headers.Get("Host");
-
             request.Scheme = "http"; // Not yet supporing https/h2
         }
 
@@ -324,7 +323,7 @@ namespace Poly.Net.Http.V1 {
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void GetVersionSpecificHeaders(Response response) {
-            // var headers = response.Headers;
+            var headers = response.Headers;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

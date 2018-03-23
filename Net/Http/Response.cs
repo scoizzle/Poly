@@ -5,13 +5,13 @@ namespace Poly.Net.Http {
     public class Response {
         public Result Status;
 
-        public Headers Headers;
+        public ResponseHeaders Headers;
 
         public Stream Body;
 
         public Response(Result status) {
             Status = status;
-            Headers = new Headers();
+            Headers = new ResponseHeaders();
             Headers.ContentLength = 0;
         }
 

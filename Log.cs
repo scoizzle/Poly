@@ -112,7 +112,7 @@ namespace Poly {
 
             var watch = new Stopwatch();
 
-            int i = 0;
+            int i = 1;
             for (; i < Iterations; i++) {
                 watch.Start();
                 Todo(i);

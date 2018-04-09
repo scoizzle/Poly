@@ -2,7 +2,7 @@
 
 namespace System {
 
-    internal static class CharExtensions {
+    public  static class CharExtensions {
 
         public static string ToHexString(this char C) =>
             ToHexString(Poly.App.Encoding, C);
@@ -16,7 +16,7 @@ namespace System {
         public static bool Compare(this char C, char S) =>
             (C - S) == 0;
 
-        public static bool CompareInvariant(this char C, char S) {
+        public static bool CompareIgnoreCase(this char C, char S) {
             if (Compare(C, S))
                 return true;
 

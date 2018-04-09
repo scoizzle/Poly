@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Net;
 using System.Net.Sockets;
-using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net {
@@ -25,7 +23,7 @@ namespace Poly.Net {
                 Log.Debug($"Now listening on port {LocalEndpoint}");
             }
             catch (Exception Error) {
-                Log.Debug($"Couldn't begin accepting connections on port {LocalEndpoint}");
+                Log.Error($"Couldn't begin accepting connections on port {LocalEndpoint}");
                 Log.Error(Error);
                 return false;
             }

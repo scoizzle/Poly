@@ -1,19 +1,23 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Data;
-
     public partial class SessionModule : HttpServer.Module {
         internal static object SessionItemKey = new object();
 
         internal SessionModule(HttpServer http_server) { }
 
+        public string SessionCookieName { get; set; }
+
         public HttpServer.RequestHandler Build(HttpServer.RequestHandler next) =>
             async context => {
+                var cookie = context.Request.Headers.Cookies[SessionCookieName];
+
+                if (cookie != null) {
+                    if (ActiveSessions.TryGetValue(Guid.Parse(cookie.Value), out Session session)) {
+                        context.Items[SessionItemKey] = session;
+                    }
+                }
+
                 // Check for session cookie, check for existing session;
                 // if it exists, aquire it's storage and add it to the items list;
                 // otherwise create new session and set the response cookie

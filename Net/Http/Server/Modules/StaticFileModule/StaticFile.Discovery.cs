@@ -1,12 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using System.IO;
 
 
 namespace Poly.Net.Http {
-    using Data;
-
     public partial class StaticFileModule : HttpServer.Module {
         private bool IsDefaultDocument(FileInfo info) =>
             host.DefaultDocument.Compare(info.Name);        

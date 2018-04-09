@@ -94,38 +94,31 @@ namespace Poly.IO {
 
             try {
                 stream.Read(Array, length, count);
+
+                if (read == count) {
+                    Length = length + count;
+                    return true;
+                }
+
+                count -= read;
+                length += read;
+
+                do {
+                    stream.Read(Array, length, count);
+
+                    if (read == 0)
+                        break;
+
+                    count -= read;
+                    length += read;
+                }
+                while (count != 0);
             }
             catch (NullReferenceException) { }
             catch (IOException error) {
                 Log.Error(error);
                 return false;
             }
-
-            if (read == count) {
-                Length = length + count;
-                return true;
-            }
-
-            count -= read;
-            length += read;
-
-            do {
-                try {
-                    stream.Read(Array, length, count);
-                }
-                catch (NullReferenceException) { }
-                catch (IOException error) {
-                    Log.Error(error);
-                    return false;
-                }
-
-                if (read == 0)
-                    break;
-
-                count -= read;
-                length += read;
-            }
-            while (count != 0);
 
             if (count == 0) {
                 Length = length;
@@ -345,12 +338,12 @@ namespace Poly.IO {
                     if (_.CatchException() || _.IsCanceled || cancellation_token.IsCancellationRequested)
                         tcs.SetResult(false);
                     else
-                    if (_.Result) 
+                    if (_.Result)
                         CopyWrite(tcs, In, Out, cancellation_token);
-                    else 
+                    else
                         tcs.SetResult(true);
                 });
-        
+
         private void CopyWrite(TaskCompletionSource<bool> tcs, Stream In, Stream Out, CancellationToken cancellation_token) =>
             WriteAsync(Out, cancellation_token).
                 ContinueWith(_ => {

@@ -37,7 +37,7 @@ namespace Poly.Net.Http.V1 {
                 return false;
             }
 
-            var length = request.Headers.ContentLength.Value;
+            var length = request.Headers.ContentLength;
 
             if (length > 0) {
                 var send_body = Client.Write(request.Body);
@@ -174,7 +174,7 @@ namespace Poly.Net.Http.V1 {
                 return Task.FromResult(false);
             }
 
-            var length = request.Headers.ContentLength.Value;
+            var length = request.Headers.ContentLength;
 
             if (length == 0)
                 return Client.WriteAsync(cancellation_token);
@@ -361,7 +361,7 @@ namespace Poly.Net.Http.V1 {
                     text.IsDone = true;
                 }
                 
-                if (!headers.Add(key, value))
+                if (!headers.TrySet(key, value))
                     return false;
             }
 

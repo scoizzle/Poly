@@ -90,22 +90,23 @@
             if (from == null || to == null)
                 return false;
 
-            if (from.Length < index + count)
-                return false;
-
-            if (to.Length < to_index + count)
-                return false;
-
             var x = index;
             var y = to_index;
+            var x_max = index + count;
+            var y_max = to_index + count;
 
-            for (int i = 0; i < count; i++) {
+            if (from.Length < x_max)
+                return false;
+
+            if (to.Length < y_max)
+                return false;
+
+            do {
                 to[y] = from[x];
-
                 x++;
                 y++;
             }
-
+            while (x != x_max);
             return true;
         }
     }

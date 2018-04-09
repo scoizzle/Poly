@@ -1,9 +1,6 @@
 using System;
-using System.Text;
 
 namespace Poly.Data {
-    using Collections;
-
     public partial class Serializer {
         public static Serializer GetCached(string name) =>
             TypeInformation.Get(name)?.Serializer;

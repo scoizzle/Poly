@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Reflection;
 
 namespace Poly.Data {
@@ -29,7 +30,7 @@ namespace Poly.Data {
             }
 
             public static Member[] GetMembers(Type type) {
-                return GetMemberList(type).ToArray();
+                return GetMemberList(type).Elements.ToArray();
             }
 
             private static ManagedArray<Member> GetMemberList(Type type) {
@@ -53,7 +54,7 @@ namespace Poly.Data {
                 var parent = info.BaseType;
 
                 if (parent != null) {
-                    members.Add(GetMemberList(parent));
+                    members.Add(GetMemberList(parent).Elements.ToArray());
                 }
 
                 return members;

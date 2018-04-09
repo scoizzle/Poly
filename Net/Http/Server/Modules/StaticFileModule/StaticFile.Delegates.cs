@@ -1,13 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using System.IO;
 using System.Threading.Tasks;
 
 
 namespace Poly.Net.Http {
-    using Data;
-
     public partial class StaticFileModule : HttpServer.Module {
         private Stream OpenFile(FileInfo info) =>
             File.Open(info.FullName, FileMode.Open, FileAccess.Read, FileShare.Read);

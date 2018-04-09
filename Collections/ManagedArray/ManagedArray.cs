@@ -1,95 +1,87 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Poly.Collections {
 
     public partial class ManagedArray<T> : IList<T>, IEnumerable<T> {
-        public T[] Elements;
+        int count, length;
+        T[] elements;
 
-        public int Count { get; private set; }
+        public ManagedArray(int len) {
+            count = 0;
+            length = len;
+            elements = new T[len];
+        }
+
+        public ManagedArray() : this(4) { }
+        
+        public T this[int index] {
+            get => Get(index);
+            set => Set(index, value);
+        }
+
+        public int Count => count;
+        public int Length => length;
 
         public bool IsReadOnly => false;
 
-        public T this[int index] {
-            get => (index >= 0 && index < Count) ? Elements[index] : default;
-            set {
-                if (index >= 0 && index < Count)
-                    Elements[index] = value;
+        public T Get(int index) {
+            if (index >= 0 && index < elements.Length)
+                return elements[index];
+
+            return default;
+        }
+        
+        public bool Set(int index, T value) {
+            if (index >= 0 && index < elements.Length) {
+                elements[index] = value;
+                return true;
             }
-        }
 
-        public ManagedArray() : this(4) {
-        }
-
-        public ManagedArray(int baseLength) {
-            Elements = new T[baseLength];
-        }
-
-        public ManagedArray(T[] baseArray) {
-            Elements = baseArray;
-            Count = Elements.Length;
-        }
-
-        public ManagedArray(ManagedArray<T> Base) {
-            Elements = new T[Base.Count == 0 ? 4 : Base.Count];
-            Base.CopyTo(this);
+            return false;
         }
 
         public bool Contains(T item) {
             return IndexOf(item) >= 0;
         }
 
-        public void CopyTo(ManagedArray<T> destination) {
-            destination.ValidateSizeForInsert(Count + destination.Count);
-
-            Array.Copy(Elements, 0, destination.Elements, destination.Count, Count);
-            destination.Count += Count;
-        }
-
-        public void CopyTo(T[] array, int arrayIndex) {
-            if (array == null || arrayIndex < 0 || arrayIndex >= array.Length || arrayIndex + Count >= array.Length)
-                return;
-
-            Array.Copy(Elements, 0, array, arrayIndex, Count);
-        }
-
         public void Add(T value) {
             ValidateSizeForInsert();
-            Elements[Count] = value;
-            Count++;
+            Set(count++, value);
         }
 
         public void Add(T[] value) {
             var length = value.Length;
             ValidateSizeForInsert(Count + length);
 
-            Array.Copy(value, 0, Elements, Count, length);
-            Count += length;
+            Array.Copy(value, 0, elements, count, length);
+            count += length;
         }
 
-        public void Add(ManagedArray<T> values) {
-            var length = values.Count;
-            ValidateSizeForInsert(Count + length);
+        public void Clear() {
+            Array.Clear(elements, 0, count);
+            count = 0;
+        }
 
-            Array.Copy(values.Elements, 0, Elements, Count, length);
-            Count += length;
+        public void CopyTo(T[] array, int arrayIndex) {
+            Array.Copy(elements, 0, array, arrayIndex, count);
         }
 
         public void Insert(int index, T value) {
             if (index < 0)
                 return;
 
-            if (index > Elements.Length) {
-                ValidateSizeForInsert(index + 1);
-                Elements[index] = value;
+            if (index > length) {
+                ValidateSizeForInsert(index);
+                Set(index, value);
             }
             else {
-                ValidateSizeForInsert();
-                Array.Copy(Elements, index, Elements, index + 1, Count - index);
-                Elements[index] = value;
-                Count++;
+                ValidateSizeForInsert(count + 1);
+                Migrate(from: index, to: index + 1, count: count - index);
+
+                Set(index, value);
+                count++;
             }
         }
 
@@ -101,132 +93,61 @@ namespace Poly.Collections {
             TryRemoveAt(index);
         }
 
-        public void RemoveAt(params int[] indicies) =>
-            RemoveAt(indicies, 0, indicies.Length);
-        
-        public void RemoveAt(int[] indicies, int index, int count) {
-            if (index < 0 || index + count > indicies.Length)
-                return;
-
-            while (index < count)
-                Elements[indicies[index++]] = default;
-
-            for (int i = 0; i < Elements.Length - 2; i++) {
-                if (Equals(Elements[i], default(T)))
-                    Elements[i] = Elements[i + 1];
-            }
-
-            Count -= count;
-        }
-
-
-        public bool TryRemoveAt(int index) {
-            if (index < 0 || index >= Count)
-                return false;
-
-            if (index == Count - 1) {
-                Elements[index] = default;
-                Count--;
-            }
-            else {
-                var End = Count;
-                var Post = End - index - 1;
-
-                Array.Copy(Elements, index + 1, Elements, index, Post);
-
-                Elements[End] = default;
-                Count--;
-            }
-
-            return true;
-        }
+        public bool TryRemoveAt(int index) =>
+            TryRemoveAt(index, 1);
 
         public bool TryRemoveAt(int index, int count) {
-            if (index < 0 || count <= 0 || index + count > Count)
+            var present = this.count;
+            if (index < 0 || count <= 0 || index + count > present)
                 return false;
 
-            var to_move = Count - count - index;
-            var last_index = index + count;
-
-            Array.Copy(Elements, last_index, Elements, index, to_move);
-            Array.Clear(Elements, index + to_move, Count - count);
-
-            Count -= count;
-            return true;
-        }
-
-        public void RemoveWhere(Func<T, bool> selector) {
-            for (var i = 0; i < Count; i++) {
-                if (selector(Elements[i]))
-                    TryRemoveAt(i);
+            var endOfSegment = index + count;
+            if (endOfSegment != present) {
+                var elementsRightOfSegment = present - count - index;
+                Migrate(from: endOfSegment, to: index, count: elementsRightOfSegment);
             }
-        }
 
-        public void Clear() {
-            Array.Clear(Elements, 0, Count);
-            Count = 0;
+            this.count -= count;
+            return true;
         }
 
         public int IndexOf(T value) {
-            for (var i = 0; i < Count; i++) {
-                if (Elements[i].Equals(value))
-                    return i;
-            }
-            return -1;
-        }
-
-        public void Constrain() {
-            if (Count < Elements.Length)
-                Array.Resize(ref Elements, Count);
+            return IndexOf(_ => Equals(_, value));
         }
 
         private void ValidateSizeForInsert() {
-            if (Elements.Length <= Count + 1)
-                Array.Resize(ref Elements, Elements.Length * 2);
+            if (Count < Length)
+                return;
+
+            length *= 2;
+            Array.Resize(ref elements, length);            
         }
 
-        private void ValidateSizeForInsert(int newLen) {
-            if (Elements.Length <= newLen)
-                Array.Resize(ref Elements, newLen);
-        }
-
-        public T[] ToArray() {
-            Constrain();
-            return Elements;
-        }
-
-        public IEnumerator<T> GetEnumerator() {
-            return new Enumerator(this);
-        }
-
-        IEnumerator IEnumerable.GetEnumerator() {
-            return (IEnumerator)new Enumerator(this);
-        }
-
-        public struct Enumerator : IEnumerator<T> {
-            private int index, len;
-            private T[] list;
-
-            public T Current { get => list[index]; }
-            object IEnumerator.Current { get { return Current; } }
-
-            internal Enumerator(ManagedArray<T> array) {
-                index = -1;
-                len = array.Count;
-
-                list = array.Elements;
-            }
-
-            public void Dispose() {
-            }
-
-            public bool MoveNext() {
-                return ++index < len;
-            }
-
-            void IEnumerator.Reset() {
-                index = -1;
+        private void ValidateSizeForInsert(int minimumIndex) {
+            if (minimumIndex > length) {
+                Array.Resize(ref elements, minimumIndex);
+                length = minimumIndex;
             }
         }
+
+        private void Migrate(int from, int to, int count) {
+            Array.Copy(elements, from, elements, to, count);
+        }
+
+        public IEnumerable<T> Elements {
+            get {
+                var elements = this.elements;
+                var elements_length = Count;
+
+                for (var i = 0; i < elements.Length && i < elements_length; ++i)
+                    yield return elements[i];
+            }
+        }
+
+        public IEnumerator<T> GetEnumerator() =>
+            Elements.GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() =>
+            Elements.GetEnumerator();
     }
 }

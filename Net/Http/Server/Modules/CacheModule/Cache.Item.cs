@@ -1,12 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using System.IO;
-using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Data;
-
     public partial class CacheModule : HttpServer.Module {
         class Item {
             public byte[] Content;

@@ -1,13 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.IO;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Data;
-
     public partial class StatisticsModule : HttpServer.Module {
         int  rps, current_rps;
         long bps, current_bps;

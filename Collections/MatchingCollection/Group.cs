@@ -25,38 +25,11 @@ namespace Poly.Collections {
                 get => Items.Select(_ => _.Value);
             }
 
-            public IEnumerator<Item> GetEnumerator() {
-                return new Enumerator(this);
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() {
-                return new Enumerator(this);
-            }
-
-            public struct Enumerator : IEnumerator<Item> {
-                private int Index, Count;
-                private Item[] Elements;
-
-                public Item Current { get { return Elements[Index]; } }
-                object IEnumerator.Current { get { return Current; } }
-
-                internal Enumerator(Group collection) {
-                    Elements = collection.Items.ToArray();
-                    Index = -1;
-                    Count = Elements.Length;
-                }
-
-                public void Dispose() {
-                }
-
-                public bool MoveNext() {
-                    return (++Index < Count);
-                }
-
-                void IEnumerator.Reset() {
-                    Index = -1;
-                }
-            }
+            public IEnumerator<Item> GetEnumerator() =>
+                Items.Elements.GetEnumerator();
+            
+            IEnumerator IEnumerable.GetEnumerator() =>
+                Items.Elements.GetEnumerator();
         }
     }
 }

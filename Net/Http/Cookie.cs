@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace Poly.Net.Http {
+    using Collections;
+
     public class Cookie {
         public string Name { get; set; }
         public string Value { get; set; }

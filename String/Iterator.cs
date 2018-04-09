@@ -453,7 +453,7 @@ namespace Poly {
             while (start < end);
 
             for (var index = list.Count - 1; index >= 0; index--)
-                Segments.Push(list.Elements[index]);
+                Segments.Push(list[index]);
 
             PopSection();
         }
@@ -490,7 +490,7 @@ namespace Poly {
             while (start < end);
 
             for (var index = list.Count - 1; index >= 0; index--)
-                Segments.Push(list.Elements[index]);
+                Segments.Push(list[index]);
 
             PopSection();
         }

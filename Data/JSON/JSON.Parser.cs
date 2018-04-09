@@ -15,7 +15,7 @@ namespace Poly.Data {
             if (obj.IsArray) {
                 json.Append('[');
 
-                var elements = obj.Values.ToArray();
+                var elements = obj.KeyValuePairs.ToArray();
                 var lastIndex = elements.Length - 1;
 
                 for (int i = 0; i <= lastIndex; i++) {
@@ -24,9 +24,10 @@ namespace Poly.Data {
                     if (element == null)
                         continue;
 
-                    var serial = Data.Serializer.GetCached(element.GetType());
+                    var value = element.Value;
+                    var serial = Data.Serializer.GetCached(value.GetType());
 
-                    if (!serial.SerializeObject(json, element))
+                    if (!serial.SerializeObject(json, value))
                         return false;
 
                     if (i != lastIndex)
@@ -45,14 +46,15 @@ namespace Poly.Data {
                 for (int i = 0; i <= lastIndex; i++) {
                     var element = elements[i];
 
-                    if (element.Value == null)
+                    if (element == null)
                         continue;
 
-                    var serial = Data.Serializer.GetCached(element.Value.GetType());
+                    var value = element.Value;
+                    var serial = Data.Serializer.GetCached(value.GetType());
 
                     json.Append('"').Append(element.Key).Append("\":");
 
-                    if (!serial.SerializeObject(json, element.Value))
+                    if (!serial.SerializeObject(json, value))
                         return false;
 
                     if (i != lastIndex)

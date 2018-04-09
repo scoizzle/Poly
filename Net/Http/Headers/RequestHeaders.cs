@@ -68,27 +68,13 @@ namespace Poly.Net.Http {
             via = GetStorage("Via");
             warning = GetStorage("Warning");
 
-            date = GetCachedStorage<DateTime>(
-                "Date",
-                HttpExtensions.TryFromHttpTimeString,
-                HttpExtensions.TryToHttpTimeString
-                );
+            date = Http.GetStorage.DateTime(this, "date");
 
-            if_modified_since = GetCachedStorage<DateTime>(
-                "If-Modified-Since",
-                HttpExtensions.TryFromHttpTimeString,
-                HttpExtensions.TryToHttpTimeString
-                );
+            if_modified_since = Http.GetStorage.DateTime(this, "If-Modified-Since");
 
-            content_length = GetCachedStorage(
-                "Content-Length",
-                long.TryParse,
-                (long value, out string text) => {
-                    text = value.ToString();
-                    return true;
-                });
+            content_length = Http.GetStorage.Long(this, "Content-Length");
 
-            Cookie = new RequestCookieStorage(this);
+            Cookies = new RequestCookieStorage(this);
         }
 
         public string Accept {
@@ -141,7 +127,7 @@ namespace Poly.Net.Http {
             set => content_type.value = value;
         }
 
-        public RequestCookieStorage Cookie { get; private set; }
+        public RequestCookieStorage Cookies { get; private set; }
 
         public DateTime Date {
             get => date.Value;

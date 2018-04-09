@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.IO;
+﻿using System.IO;
 
 
 namespace Poly.Net.Http {
-    using Data;
-
     public partial class StaticFileModule : HttpServer.Module {
         private FileSystemWatcher Watcher;
 

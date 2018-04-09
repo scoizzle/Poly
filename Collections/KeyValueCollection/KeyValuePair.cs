@@ -9,21 +9,27 @@ namespace Poly.Collections {
 
             public readonly string Key;
 
+            public Func<T> OnGet;
+            public Action<T> OnSet;
+
             public T Value {
-                get => Get();
-                set => Set(value);
+                get => OnGet();
+                set => OnSet(value);
             }
 
             public KeyValuePair(string k, T v) {
                 Key = k;
                 value = v;
+
+                OnGet = DefaultGet();
+                OnSet = DefaultSet();
             }
 
-            public virtual T Get() =>
-                value;
+            Func<T> DefaultGet() =>
+                () => value;
 
-            public virtual void Set(T _) =>
-                value = _;
+            Action<T> DefaultSet() =>
+                _ => value = _;
         }
     }
 }

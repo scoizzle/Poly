@@ -62,14 +62,14 @@ namespace Poly.Data {
         }
 
         private SerializeDelegate DefaultSerializeObject() {
-            var members = TypeInfo.Members.Values.ToArray();
+            var members = TypeInfo.Members.ToArray();
             var lastIndex = members.Length - 1;
 
             return (StringBuilder json, T obj) => {
                 json.Append('{');
 
                 for (var i = 0; i <= lastIndex; i++) {
-                    var member = members[i];
+                    var member = members[i].Value;
 
                     json.Append('"').Append(member.Name).Append("\":");
 
@@ -189,7 +189,7 @@ namespace Poly.Data {
                 var array = Array.CreateInstance(elementType, count);
 
                 if (count > 0)
-                    Array.Copy(list.Elements, array, count);
+                    list.CopyTo(array as object[], 0);
 
                 obj = (T)(object)(array);
                 return true;

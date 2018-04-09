@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.IO;
-using System.Threading.Tasks;
-
-namespace Poly.Net.Http {
+﻿namespace Poly.Net.Http {
     using Collections;
 
     public partial class RoutingModule : HttpServer.Module {

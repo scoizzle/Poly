@@ -4,11 +4,6 @@ using System.Linq;
 namespace Poly.Collections {
 
     public partial class KeyValueCollection<T> {
-
-        public bool ContainsValue(T Val) {
-            return Values.Contains(Val);
-        }
-
         public void All(Action<KeyValuePair> action) {
             foreach (var pair in KeyValuePairs) {
                 action(pair);

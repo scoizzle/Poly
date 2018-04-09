@@ -1,10 +1,9 @@
 ﻿namespace Poly.Collections {
 
     public partial class KeyValueCollection<T> {
-
-        private class PairCollection {
-            public int Length;
-            public ManagedArray<KeyValuePair> List;
+        public class PairCollection {
+            public readonly int Length;
+            public readonly ManagedArray<KeyValuePair> List;
 
             public PairCollection(int length) {
                 Length = length;

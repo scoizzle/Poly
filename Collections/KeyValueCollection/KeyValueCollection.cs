@@ -5,10 +5,8 @@ namespace Poly.Collections {
 
     public partial class KeyValueCollection<T> : IEnumerable<KeyValueCollection<T>.KeyValuePair> {
         private ManagedArray<PairCollection> List;
-
-        public delegate bool StringComparisonDelegate(string text, int index, string sub, int sub_index, int length);
-
-        public StringComparisonDelegate CompareStrings = StringExtensions.Compare;
+        
+        public Func<string, string, bool> CompareStrings = StringExtensions.Compare;
 
         public int Count { get; private set; }
 
@@ -21,7 +19,7 @@ namespace Poly.Collections {
                 Add(get_key(item), item);
         }
 
-        public KeyValueCollection(StringComparisonDelegate string_compare) {
+        public KeyValueCollection(Func<string, string, bool> string_compare) {
             List = new ManagedArray<PairCollection>();
             CompareStrings = string_compare;
         }

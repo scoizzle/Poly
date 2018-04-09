@@ -1,4 +1,6 @@
-﻿namespace Poly.Collections {
+﻿using System;
+
+namespace Poly.Collections {
 
     public partial class KeyValueCollection<T> {
         public bool Add(string key, T value) {
@@ -14,6 +16,9 @@
             SetStorage(key, new KeyValuePair(key, value));
             return true;
         }
+
+        public bool Add(T value, Func<T, string> get_name) =>
+            Add(get_name(value), value);
 
         public bool Remove(string key) {
             if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair)) {
@@ -31,7 +36,7 @@
         }
 
         public void CopyTo(KeyValueCollection<T> target) {
-            foreach (var pair in this)
+            foreach (var pair in KeyValuePairs)
                 target.Set(pair.Key, pair.value);
         }
 
@@ -75,9 +80,9 @@
 
         public CachedValue<U> GetCachedStorage<U>(string key, TryConvert<T, U> read, TryConvert<U, T> write) {
             if (TryGetStorage(key, out PairCollection collection, out KeyValuePair pair))
-                return pair as CachedValue<U>;
+                return default;
 
-            return SetStorage(key, new CachedValue<U>(key, read, write));
+            return new CachedValue<U>(pair, read, write);
         }
 
         public bool TryGetValue(string key, out T value) {
@@ -113,9 +118,9 @@
             var len = list.Count;
 
             for (int i = 0; i < len; i++) {
-                var element = list.Elements[i];
+                var element = list[i];
 
-                if (CompareStrings(element.Key, 0, key, 0, length)) {
+                if (CompareStrings(element.Key, key)) {
                     pair = element;
                     return true;
                 }
@@ -130,7 +135,7 @@
             var len = list.Count;
 
             for (int i = 0; i < len; i++) {
-                var element = list.Elements[i];
+                var element = list[i];
 
                 if (element.Length == length) {
                     collection = element;

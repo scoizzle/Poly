@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-namespace System {
+﻿namespace System {
     public static class StringExtensions {
         public static bool Compare(this string This, int index, char character) {
             if (index < 0 || index >= This.Length)
@@ -9,12 +7,60 @@ namespace System {
             return CharExtensions.Compare(This[index], character);
         }
 
-        public static bool Compare(this string This, string sub_string) {
-            return Compare(This, 0, sub_string, 0, sub_string.Length);
+        public static bool Compare(this string left, string right) {
+            if (left == null || right == null)
+                return false;
+
+            if (left.Length != right.Length)
+                return false;
+
+            var last_left = left.Length;
+            var last_right = right.Length;
+
+            if (last_left != last_right)
+                return false;
+
+            for (int index_left = 0, index_right = 0; 
+                index_left < last_left && index_right < last_right;
+                ++index_left, ++index_right) {
+
+                var c_left = left[index_left];
+                var c_right = right[index_right];
+
+                if (c_left - c_right != 0)
+                    return false;
+            }
+
+            return true;
         }
 
         public static bool Compare(this string This, int index, string sub_string) {
-            return Compare(This, index, sub_string, 0, sub_string.Length);
+            if (This == null || sub_string == null)
+                return false;
+
+            if (index < 0)
+                return false;
+
+            var length = sub_string.Length;
+            var last_index = index + length;
+            var sub_index = 0;
+
+            if (This.Length < last_index)
+                return false;
+
+            if (sub_string.Length < length)
+                return false;
+
+            do {
+                if (!CharExtensions.Compare(This[index], sub_string[sub_index]))
+                    return false;
+
+                index++;
+                sub_index++;
+            }
+            while (index < last_index);
+
+            return true;
         }
 
         public static bool Compare(this string This, int index, string sub_string, int sub_index) {
@@ -61,11 +107,31 @@ namespace System {
             if (index < 0 || index >= This.Length)
                 return false;
 
-            return CharExtensions.CompareInvariant(This[index], character);
+            return CharExtensions.CompareIgnoreCase(This[index], character);
         }
 
         public static bool CompareIgnoreCase(this string This, string sub_string) {
-            return CompareIgnoreCase(This, 0, sub_string, 0, sub_string.Length);
+            if (This == null || sub_string == null)
+                return false;
+
+            var length = sub_string.Length;
+            var last_index = length;
+            var index = 0;
+            var sub_index = 0;
+
+            if (This.Length != last_index)
+                return false;
+
+            do {
+                if (!CharExtensions.CompareIgnoreCase(This[index], sub_string[sub_index]))
+                    return false;
+
+                index++;
+                sub_index++;
+            }
+            while (index < last_index);
+
+            return true;
         }
 
         public static bool CompareIgnoreCase(this string This, int index, string sub_string, int sub_index) {
@@ -78,7 +144,7 @@ namespace System {
             if (sub_index < 0 || sub_index >= sub_string.Length)
                 return false;
 
-            return CharExtensions.CompareInvariant(This[index], sub_string[sub_index]);
+            return CharExtensions.CompareIgnoreCase(This[index], sub_string[sub_index]);
         }
 
         public static bool CompareIgnoreCase(this string This, int index, string sub_string, int sub_index, int length) {
@@ -97,7 +163,7 @@ namespace System {
                 return false;
 
             do {
-                if (!CharExtensions.CompareInvariant(This[index], sub_string[sub_index]))
+                if (!CharExtensions.CompareIgnoreCase(This[index], sub_string[sub_index]))
                     return false;
 
                 index++;

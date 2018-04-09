@@ -1,25 +1,23 @@
 ﻿using System;
-using System.IO;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poly.Net {
-    using Data;
     using Http;
 
     public partial class HttpServer {
-        internal int reading, writing, processing;
-        internal int active { get => reading + writing + processing; }
+        internal int active, reading, writing, processing;
         
         private void OnClientConnect(TcpClient client) {
             var connection = new Http.V1.Connection(client);
             var context = new Context(connection);
-            
+
+            Interlocked.Increment(ref active);
             BeginReadRequest(connection, context);
         }
 
         private void Disconnect(Context context) {
+            Interlocked.Decrement(ref active);
             context.Cancellation.Cancel();
             context.Connection.Client.Close();
         }
@@ -37,8 +35,8 @@ namespace Poly.Net {
 
             if (read_request.CatchException() || !read_request.Result)
                 Disconnect(context);
-            
-            ProcessRequest(connection, context);
+            else
+                ProcessRequest(connection, context);
         }
 
         private void ProcessRequest(Connection connection, Context context) {

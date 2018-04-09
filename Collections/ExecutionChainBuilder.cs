@@ -12,7 +12,7 @@ namespace Poly.Collections {
             var current = _default_;
 
             for (var index = Count - 1; index >= 0; --index)
-                current = Elements[index](current);
+                current = this[index](current);
 
             return current;
         }

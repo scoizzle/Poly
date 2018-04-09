@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
 namespace Poly.Net {
-    using Data;
-    using Http;
-
     public partial class HttpServer {
         private TcpServer tcp_listener;
         private RequestHandler handle_request;

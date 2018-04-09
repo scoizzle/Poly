@@ -1,6 +1,6 @@
 ﻿namespace System {
 
-    public static class HttpExtensions {
+    public static class DateTimeExtensions {
         public static DateTime FromHttpTimeString(this string text) {
             return DateTime.ParseExact(text, "r", Globalization.DateTimeFormatInfo.CurrentInfo);
         }

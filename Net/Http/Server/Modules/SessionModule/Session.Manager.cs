@@ -1,12 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
-    using Data;
-
     public partial class SessionModule {
         static Dictionary<Guid, Session> ActiveSessions = new Dictionary<Guid, Session>();
 

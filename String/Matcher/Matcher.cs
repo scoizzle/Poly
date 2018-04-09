@@ -99,10 +99,10 @@ namespace Poly {
         }
 
         public static SetDelegate SetMemberValue<T>(T storage) {
-            var serializer = Serializer.GetCached<T>();
+            var typeInfo = TypeInformation.Get<T>();
 
             return (string key, object value) => {
-                return serializer.TypeInfo.SetMemberValue(storage, key, value);
+                return typeInfo.SetMemberValue(storage, key, value);
             };
         }
 

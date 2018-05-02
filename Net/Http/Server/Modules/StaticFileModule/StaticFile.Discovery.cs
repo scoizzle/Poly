@@ -14,7 +14,7 @@ namespace Poly.Net.Http {
             info.DirectoryName.Substring(document_path.FullName.Length - 1).Replace('\\', '/');        
 
         private string GetMIME(string extension) =>
-            Mime.Types[extension] ?? "application/octet-stream";
+            Mime.Types.TryGetValue(extension, out string mime) ? mime : "application/octet-stream";
 
         private void Load(DirectoryInfo directory) {
             foreach (var file in directory.EnumerateFiles())

@@ -1,9 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
 namespace Poly.Data {
-    using Collections;
 
     public partial class TypeInformation { 
         public class Member {
@@ -29,34 +29,24 @@ namespace Poly.Data {
                 Serializer = Serializer.GetCached(info.PropertyType);
             }
 
-            public static Member[] GetMembers(Type type) {
-                return GetMemberList(type).Elements.ToArray();
-            }
-
-            private static ManagedArray<Member> GetMemberList(Type type) {
+            public static Dictionary<string, Member> GetMembers(Type type) {
                 var info = type.GetTypeInfo();
                 var fields = info.GetFields();
                 var props = info.GetProperties();
-                var members = new ManagedArray<Member>(fields.Length + props.Length);
+                var members = new Dictionary<string, Member>(fields.Length + props.Length);
 
                 foreach (var item in fields) {
                     if (!item.IsStatic && item.IsPublic && !item.IsLiteral) {
-                        members.Add(new Member(item));
+                        members.Add(item.Name, new Member(item));
                     }
                 }
 
                 foreach (var item in props) {
                     if (item.CanRead && item.CanWrite) {
-                        members.Add(new Member(item));
+                        members.Add(item.Name, new Member(item));
                     }
                 }
-
-                var parent = info.BaseType;
-
-                if (parent != null) {
-                    members.Add(GetMemberList(parent).Elements.ToArray());
-                }
-
+                
                 return members;
             }
         }

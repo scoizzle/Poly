@@ -6,39 +6,16 @@ namespace Poly.Net.Http {
     using Data;
     using Collections;
 
-    public class ResponseCookieStorage : ResponseHeaders.KeyArrayPair {
-        public KeyValueCollection<Cookie> Storage;
+    public class SetCookieHeader : Header {
+        public Dictionary<string, Cookie> Storage;
 
-        public ResponseCookieStorage(ResponseHeaders headers) : base("Set-Cookie") {
-            SetStorage(headers);
-
-            Storage = new KeyValueCollection<Cookie>();
+        public SetCookieHeader() : base("Set-Cookie") {
+            Storage = new Dictionary<string, Cookie>();
         }
 
         public Cookie this[string key] {
             get => Storage[key];
             set => Storage[key] = value;
-        }
-
-        public bool Add(Cookie cookie) =>
-            Storage.Add(cookie.Name, cookie);
-
-
-        //public override string Value {
-        //    get => default;
-        //    set {
-        //        var it = new StringIterator(value);
-        //        it.SelectSplitSections("; ");
-
-        //        if (TryDeserialize(it, out Cookie cookie))
-        //            Storage.Set(cookie.Name, cookie);
-        //    }
-        //}
-
-        public override IEnumerable<RequestHeaders.KeyValuePair> GetEnumerator() {
-            foreach (var cookie in Storage) {
-                yield return new RequestHeaders.KeyValuePair(Key, Serialize(cookie.Value));
-            }
         }
 
         public static string Serialize(Cookie cookie) {

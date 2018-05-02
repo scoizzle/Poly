@@ -1,4 +1,7 @@
-﻿namespace Poly.Net.Http {
+﻿using System;
+using System.Threading.Tasks;
+
+namespace Poly.Net.Http {
     using Collections;
 
     public partial class RoutingModule : HttpServer.Module {
@@ -46,5 +49,26 @@
 
         public static void Route(this HttpServer server, string path, HttpServer.RequestHandler handler) =>
             GetRoutingModule(server).Add(path, handler);
+            
+            
+        public delegate string RequestStringHandler(HttpServer.Context context);
+        public static void Route(this HttpServer server, string path, RequestStringHandler handler) =>
+            GetRoutingModule(server).Add(path, _ => {
+                var output = handler(_);
+
+                if (string.IsNullOrEmpty(output)) {
+                    _.Response.Status = Result.NoContent;
+                }
+                else {
+                    var stream = output.GetStream();
+
+                    _.Response.Status = Result.Ok;
+
+                    _.Response.Body = stream;
+                    _.Response.Headers.ContentLength = stream.Length;
+                }
+
+                return Task.CompletedTask;
+            });
     }
 }

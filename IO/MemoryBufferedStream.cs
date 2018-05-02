@@ -67,100 +67,26 @@ namespace Poly.IO {
 
         public bool Read(Stream stream) =>
             In.Copy(Stream, stream);
-        
-        public bool ReadUntil(byte[] chain, Stream storage, long maxLength = long.MaxValue) {
-            if (In.Available == 0) {
-                var recv = Read();
 
-                if (!recv)
-                    return false;
-            }
+        public Task<T> ReadUntilConstrained<T>(byte[] chain, Func<ArraySegment<byte>, T> on_found, CancellationToken cancellation_token) =>
+            AwaitDataAvailable(cancellation_token).
+                ContinueWith(_ => {
+                    if (_.CatchException() || !_.Result)
+                        return default(T);
+                    
+                    var chain_length = chain.Length;
 
-            var buffer = In;
-            var array = buffer.Array;
+                    var position = In.Position;
+                    var length = In.Length;
 
-            var arrayStart = buffer.Position;
-            var arrayIndex = arrayStart;
-            var arrayLength = buffer.Length;
+                    var index = In.FindSubByteArray(chain, position);
 
-            var chainIndex = 0;
-            var chainLength = chain.Length;
+                    if (index == -1)
+                        return default;
 
-            var lastWasPartial = false;
-
-            do {
-                var compare = array.CompareSubByteArray(arrayIndex, arrayLength, chain, chainIndex, chainLength);
-
-                if (compare == true) { // Found chain
-                    buffer.Write(storage, arrayIndex - arrayStart);
-                    buffer.Consume(chainLength);
-                    return true;
-                }
-                else
-                if (compare == false) { // Partial Match
-                    if (lastWasPartial) {
-                        arrayIndex++;
-                    }
-                    else {
-                        buffer.Write(storage, arrayIndex - arrayStart);
-                        buffer.Rebase();
-
-                        Read();
-
-                        arrayIndex = 0;
-                        arrayStart = buffer.Position;
-                        arrayLength = buffer.Length;
-
-                        lastWasPartial = true;
-                    }
-                }
-                else
-                if (compare == null) // No match.
-                    arrayIndex++;
-
-                if (arrayIndex == arrayLength) {
-                    buffer.Write(storage);
-                    Read();
-
-                    arrayIndex = 0;
-                    arrayStart = arrayIndex;
-                    arrayLength = buffer.Length;
-                }
-            }
-            while (--maxLength > 0);
-
-            return false;
-        }
-
-        public bool ReadUntilConstrained(byte[] chain, Stream storage) =>
-            ReadUntilConstrained(chain, _ => {
-                try {
-                    storage.Write(_.Array, _.Offset, _.Count);
-                    return true;
-                }
-                catch (Exception error) {
-                    Log.Error(error);
-                    return false;
-                }
-            });
-
-        public T ReadUntilConstrained<T>(byte[] chain, Func<ArraySegment<byte>, T> on_found) {
-            if (In.Available == 0)
-                if (!Read())
-                    return default;
-
-            var chain_length = chain.Length;
-
-            var position = In.Position;
-            var length = In.Length;
-            var index = In.Array.FindSubByteArray(position, length, chain, 0, chain_length);
-
-            if (index == -1)
-                return default;
-
-            In.Consume(index - length + chain_length);
-            return on_found(new ArraySegment<byte>(In.Array, position, index - position));
-        }
+                    In.Consume(index - length + chain_length);
+                    return on_found(new ArraySegment<byte>(In.Array, position, index - position));
+                });
 
         public bool Write() =>
             Out.Write(Stream);
@@ -183,86 +109,21 @@ namespace Poly.IO {
         public Task<bool> ReadAsync(Stream storage, CancellationToken cancellation_token) =>
             In.CopyAsync(Stream, storage, cancellation_token);
 
-        public async Task<bool> ReadUntilAsync(byte[] chain, Stream storage, long maxLength = long.MaxValue) {
-            if (In.Available == 0) {
-                var recv = ReadAsync();
+        public Task<T> ReadUntilConstrainedAsync<T>(byte[] chain, Func<ArraySegment<byte>, T> on_found, CancellationToken cancellation_token) {
+            return AwaitDataAvailable(cancellation_token).
+                ContinueWith(_ => {
+                    if (_.CatchException())
+                        return default(T);
 
-                if (!await recv)
-                    return false;
-            }
+                    var position = In.Position;
+                    var index = In.FindSubByteArray(chain, position);
 
-            var buffer = In;
-            var array = buffer.Array;
-
-            var arrayStart = buffer.Position;
-            var arrayIndex = arrayStart;
-            var arrayLength = buffer.Length;
-
-            var chainIndex = 0;
-            var chainLength = chain.Length;
-
-            var lastWasPartial = false;
-
-            do {
-                var compare = array.CompareSubByteArray(arrayIndex, arrayLength, chain, chainIndex, chainLength);
-
-                if (compare == true) { // Found chain
-                    await buffer.WriteAsync(storage, arrayIndex - arrayStart);
-                    buffer.Consume(chainLength);
-                    return true;
-                }
-                else
-                if (compare == false) { // Partial Match
-                    if (lastWasPartial) {
-                        arrayIndex++;
-                    }
-                    else {
-                        await buffer.WriteAsync(storage, arrayIndex - arrayStart);
-                        buffer.Rebase();
-
-                        await ReadAsync();
-
-                        arrayIndex = 0;
-                        arrayStart = buffer.Position;
-                        arrayLength = buffer.Length;
-
-                        lastWasPartial = true;
-                    }
-                }
-                else
-                if (compare == null) // No match.
-                    arrayIndex++;
-
-                if (arrayIndex == arrayLength) {
-                    await buffer.WriteAsync(storage);
-                    await ReadAsync();
-
-                    arrayIndex = 0;
-                    arrayStart = arrayIndex;
-                    arrayLength = buffer.Length;
-                }
-            }
-            while (--maxLength > 0);
-
-            return false;
-        }
-
-        public async Task<T> ReadUntilConstrainedAsync<T>(byte[] chain, Func<ArraySegment<byte>, T> on_found, CancellationToken cancellation_token) {
-            if (In.Available == 0)
-                if (!await ReadAsync(cancellation_token))
-                    return default;
-
-            var chain_length = chain.Length;
-
-            var position = In.Position;
-            var length = In.Length;
-            var index = In.Array.FindSubByteArray(position, length, chain, 0, chain_length);
-
-            if (index == -1)
-                return default;
-
-            In.Consume(index + chain_length - position);
-            return on_found(new ArraySegment<byte>(In.Array, position, index - position));
+                    if (index == -1)
+                        return default(T);
+                    
+                    In.Consume(index + chain.Length - position);
+                    return on_found(new ArraySegment<byte>(In.Array, position, index - position));
+                });
         }
 
         public Task<bool> WriteAsync() =>
@@ -276,5 +137,11 @@ namespace Poly.IO {
 
         public Task<bool> WriteAsync(Stream stream, CancellationToken cancellation_token) =>
             Out.CopyAsync(stream, Stream, cancellation_token);
+
+        public Task<bool> AwaitDataAvailable(CancellationToken cancellation_token) =>
+            In.Available != 0 ? Task.FromResult(true) : ReadAsync(cancellation_token);
+        
+        public Task<bool> AwaitDataAvailable(int minLength, CancellationToken cancellation_token) =>
+            In.Available >= minLength ? Task.FromResult(true) : ReadAsync(cancellation_token);
     }
 }

@@ -23,11 +23,11 @@ namespace Poly.Net {
         public IPEndPoint LocalIPEndPoint { get { return Socket?.LocalEndPoint as IPEndPoint; } }
         public IPEndPoint RemoteIPEndPoint { get { return Socket?.RemoteEndPoint as IPEndPoint; } }
 
-        public int Available { get => In.Available + Socket.Available; }
-
-        public bool Connected {
-            get { return Socket?.Connected == true; }
-        }
+        public int Available => In.Available + Socket.Available;
+        
+        public bool Connected => Socket?.Connected == true;
+        
+        public bool HasDataAvailable => Socket.Available > 0; 
 
         public async Task<bool> Connect(EndPoint ep) {
             try {

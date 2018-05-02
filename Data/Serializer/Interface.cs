@@ -2,6 +2,8 @@
 using System.Text;
 
 namespace Poly.Data {
+    public delegate bool TryConvert<From, To>(From from, out To to);
+    
     public abstract partial class Serializer {
         public Serializer(Type type) {
             Type = type;

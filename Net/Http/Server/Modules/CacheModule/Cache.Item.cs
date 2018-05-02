@@ -15,9 +15,9 @@ namespace Poly.Net.Http {
                 to_cache.Body.Read(Content, 0, Content.Length);
 
                 ContentType = to_cache.Headers.ContentType;
-                ContentLength = to_cache.Headers.ContentLength ?? 0;
-                LastModified = to_cache.Headers.LastModified;
-                Expires = to_cache.Headers.Expires;
+                ContentLength = to_cache.Headers.ContentLength;
+                LastModified = to_cache.Headers.LastModified.Value;
+                Expires = to_cache.Headers.Expires.Value;
             }
 
             public void CopyTo(Response response) {

@@ -12,9 +12,11 @@ namespace Poly.Net {
         public HttpServer(Configuration config) {
             Config = config;
             Modules = new ModuleManager(this);
+
+            update_rps();
         }
 
-        public bool Running { get => tcp_listener?.Running == true; }
+        public bool Running { get => tcp_listener?.Active == true; }
 
         public Configuration Config { get; set; }
 

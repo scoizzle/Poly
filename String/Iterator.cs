@@ -5,7 +5,6 @@ namespace Poly {
     using Collections;
 
     public class StringIterator {
-
         private class Segment {
             public int Index, LastIndex, Offset;
 
@@ -424,7 +423,7 @@ namespace Poly {
             var end = LastIndex;
 
             var current_segment_count = Segments.Count;
-            var list = new ManagedArray<Segment>();
+            var list = new List<Segment>();
 
             do {
                 var next = String.IndexOf(seperator, start, end - start);
@@ -461,7 +460,7 @@ namespace Poly {
         public void SelectSplitSections(string seperator) {
             var start = Index;
             var end = LastIndex;
-            var list = new ManagedArray<Segment>();
+            var list = new List<Segment>();
 
             do {
                 var next = String.Find(start, end, seperator, 0, seperator.Length);
@@ -522,6 +521,18 @@ namespace Poly {
             var index = LastIndex + Section.Offset;
             PopSection();
             Index = index;
+        }
+
+        public IEnumerable<string> EnumerateSections() {
+            do {
+                yield return ToString();
+
+                if (IsLastSection)
+                    break;
+
+                ConsumeSection();
+            }
+            while (!IsDone);
         }
 
         public bool ConsumeWhitespace() {

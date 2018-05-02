@@ -1,9 +1,9 @@
-﻿namespace Poly {
-    using Collections;
+﻿using System.Collections.Generic;
 
+namespace Poly {
     public class Mime {
 
-        public static KeyValueCollection<string> Types = new KeyValueCollection<string> {
+        public static Dictionary<string, string> Types = new Dictionary<string, string> {
             { ".7z", "application/x-7z-compressed" },
             { ".aac", "audio/x-aac" },
             { ".bin", "application/octet-stream" },

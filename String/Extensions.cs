@@ -8,30 +8,15 @@
         }
 
         public static bool Compare(this string left, string right) {
-            if (left == null || right == null)
-                return false;
-
-            if (left.Length != right.Length)
-                return false;
-
-            var last_left = left.Length;
-            var last_right = right.Length;
-
-            if (last_left != last_right)
-                return false;
-
-            for (int index_left = 0, index_right = 0; 
-                index_left < last_left && index_right < last_right;
-                ++index_left, ++index_right) {
-
-                var c_left = left[index_left];
-                var c_right = right[index_right];
-
-                if (c_left - c_right != 0)
-                    return false;
+            if (left.Length == right.Length) {
+                for (var i = 0; i < left.Length && i < right.Length; i++) {
+                    if (left[i] != right[i]) {
+                        return false;
+                    }
+                }
+                return true;
             }
-
-            return true;
+            return false;
         }
 
         public static bool Compare(this string This, int index, string sub_string) {

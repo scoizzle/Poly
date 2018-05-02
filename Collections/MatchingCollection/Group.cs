@@ -7,13 +7,13 @@ namespace Poly.Collections {
         public class Group : IEnumerable<Item> {
             internal Matcher Matcher;
 
-            internal ManagedArray<Group> Groups;
-            internal ManagedArray<Item> Items;
+            internal List<Group> Groups;
+            internal List<Item> Items;
 
             public Group(string format) {
                 Matcher = new Matcher(format);
-                Groups = new ManagedArray<Group>();
-                Items = new ManagedArray<Item>();
+                Groups = new List<Group>();
+                Items = new List<Item>();
             }
 
 
@@ -26,10 +26,10 @@ namespace Poly.Collections {
             }
 
             public IEnumerator<Item> GetEnumerator() =>
-                Items.Elements.GetEnumerator();
+                Items.GetEnumerator();
             
             IEnumerator IEnumerable.GetEnumerator() =>
-                Items.Elements.GetEnumerator();
+                Items.GetEnumerator();
         }
     }
 }

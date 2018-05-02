@@ -3,43 +3,45 @@ using System.Linq;
 
 namespace Poly.Data {
     public partial class JSON {
-        new public object Get(string key_list) {
-            return Get(key_list.Split(KeySeperatorCharacter));
+        new public object this[string key] {
+            get => Get(key);
+            set => Set(key, value);
         }
 
-        public object Get(IEnumerable<string> key_list) {
-            var keys = key_list.ToArray();
-            var lastIndex = keys.Length - 1;
+        public object Get(string key_list) {
+            var it = new StringIterator(key_list);
+            it.SelectSplitSections(KeySeperatorCharacter);
 
+            return Get(it);
+        }
+
+        public object Get(StringIterator it) {
             object value = null;
             JSON current = this;
 
-            for (var i = 0; i <= lastIndex; i++) {
-                if (current == null)
+            do {
+                if (!current.TryGetValue(it, out value))
                     break;
 
-                if (!current.TryGetValue(keys[i], out value))
-                    break;
-
-                if (i == lastIndex)
+                if (it.IsLastSection)
                     return value;
+
+                it.ConsumeSection();
             }
+            while (!it.IsDone);
 
             return null;
         }
 
         public T Get<T>(string key_list) {
-            return Get<T>(key_list.Split(KeySeperatorCharacter));
+            var it = new StringIterator(key_list);
+            it.SelectSplitSections(KeySeperatorCharacter);
+
+            return Get<T>(it);
         }
 
-        public T Get<T>(IEnumerable<string> key_list) {
-            var obj = Get(key_list);
-
-            if (obj is T value) {
-                return value;
-            }
-
-            return default(T);
+        public T Get<T>(StringIterator it) {
+            return Get(it) is T value ? value : default;
         }
 
         public bool TryGet(string key_list, out object value) {
@@ -47,36 +49,39 @@ namespace Poly.Data {
             return value != null;
         }
 
-        new public bool Set(string key_list, object value) {
-            return Set(key_list.Split(KeySeperatorCharacter), value);
+        public bool TrySet(string key_list, object value) {
+            var it = new StringIterator(key_list);
+            it.SelectSplitSections(KeySeperatorCharacter);
+
+            return Set(it, value);
         }
 
-        public bool Set(IEnumerable<string> key_list, object value) {
-            var keys = key_list.ToArray();
-            var lastIndex = keys.Length - 1;
-
+        public bool Set(StringIterator it, object value) {
             JSON current = this;
 
-            for (var i = 0; i <= lastIndex; i++) {
-                var key = keys[i];
+            do {
+                var key = it.ToString();
 
-                if (i == lastIndex) {
+                if (it.IsLastSection) {
                     current[key] = value;
                     return true;
                 }
 
-                if (current.TryGetValue(key, out object raw)) {
-                    if (raw is JSON next)
+                if (current.TryGetValue(key, out object obj)) {
+                    if (obj is JSON next) {
                         current = next;
-                    else
-                        return false;
+                    }
+                    else return false;
                 }
                 else {
                     var next = new JSON();
                     current.Add(key, next);
                     current = next;
                 }
+
+                it.ConsumeSection();
             }
+            while (!it.IsDone);
 
             return false;
         }

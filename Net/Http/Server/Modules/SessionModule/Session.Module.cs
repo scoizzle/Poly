@@ -10,13 +10,12 @@ namespace Poly.Net.Http {
 
         public HttpServer.RequestHandler Build(HttpServer.RequestHandler next) =>
             async context => {
-                var cookie = context.Request.Headers.Cookies[SessionCookieName];
-
-                if (cookie != null) {
-                    if (ActiveSessions.TryGetValue(Guid.Parse(cookie.Value), out Session session)) {
-                        context.Items[SessionItemKey] = session;
-                    }
-                }
+                //var cookie = context.Request.Headers.Cookies[SessionCookieName];
+                //if (cookie != null) {
+                //    if (ActiveSessions.TryGetValue(Guid.Parse(cookie.Value), out Session session)) {
+                //        context.Items[SessionItemKey] = session;
+                //    }
+                //}
 
                 // Check for session cookie, check for existing session;
                 // if it exists, aquire it's storage and add it to the items list;

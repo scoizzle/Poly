@@ -1,10 +1,10 @@
-﻿namespace System {
+﻿using Poly.Data;
 
+namespace System {
     using IO;
     using Text;
 
     public static class ByteArrayExtensions {
-
         public static Stream GetStream(this byte[] This, bool writable = false) {
             return new MemoryStream(This, writable);
         }
@@ -35,55 +35,70 @@
             return new string(Buffer);
         }
 
-        public static int FindSubByteArray(this byte[] This, int index, int last_index, byte[] sub, int sub_index, int length) {
-            var last_possible_index = last_index - length;
+        public static int IndexOf(this byte[] left, byte bit, int index) {
+            if (left == null || index < 0 || index > left.Length)
+                return -1;
 
-            while (index++ < last_possible_index) {
-                if (This[index] == sub[sub_index]) {
-                    var x = index + 1;
-                    var y = sub_index + 1;
-                    var f = true;
-
-                    while (x < last_possible_index) {
-                        if (This[x] != sub[y]) {
-                            f = false;
-                            break;
-                        }
-
-                        x++;
-                        y++;
-                    }
-
-                    if (f)
-                        return index;
-
-                    index++;
-                }
-            }
-
+            for (; index < left.Length; index ++)
+                if (left[index] == bit)
+                    return index;
+                    
             return -1;
         }
 
-        public static bool? CompareSubByteArray(this byte[] This, int index, int last_index, byte[] sub, int sub_index, int length) {
-            var last_possible_index = last_index - length;
+        public static bool CompareSubByteArray(this byte[] left, int leftIndex, byte[] right, int rightIndex, int length) {
+            if (left == null || right == null || length < 1)
+                return false;
 
-            if (This[index] == sub[sub_index]) {
-                var x = index + 1;
-                var y = sub_index + 1;
+            if (leftIndex < 0 || leftIndex + length > left.Length)
+                return false;
 
-                while (x != last_possible_index) {
-                    if (This[x] != sub[y])
-                        return false;                    
+            if (rightIndex < 0 || rightIndex + length > right.Length)
+                return false;
 
-                    x++;
-                    y++;
+            do {
+                if (left[leftIndex++] != right[rightIndex++])
+                    return false;
+            }
+            while (--length > 0);
 
-                    if (y == length)
-                        return true;
-                }
+            return true;
+        }
+
+        public static bool? CompareSubByteArrayPartial(this byte[] left, int leftIndex, byte[] right, int rightIndex, int length) {
+            if (left == null || right == null || length < 1)
+                return null;
+
+            if (leftIndex < 0 || leftIndex + length > left.Length)
+                return null;
+
+            if (rightIndex < 0 || rightIndex + length > right.Length)
+                return null;
+
+            if (left[leftIndex++] != right[rightIndex++])
+                return null;
+
+            while (--length > 0) {
+                if (left[leftIndex++] != right[rightIndex++])
+                    return false;
             }
 
-            return null;
+            return true;
+        }
+
+        public static int FindSubByteArray(this byte[] left, byte[] right, int index, int lastIndex) {
+            if (left == null || right == null)
+                return -1;
+
+            while ((index = IndexOf(left, right[0], index)) != -1 && index < lastIndex) {
+                if (CompareSubByteArray(left, index, right, 0, right.Length)) {
+                    return index;
+                }
+
+                index++;
+            }
+
+            return -1;
         }
 
         public static bool CopyTo(this byte[] from, int index, byte[] to, int to_index, int count) {

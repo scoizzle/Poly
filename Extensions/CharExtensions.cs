@@ -1,8 +1,9 @@
 ﻿using System.Text;
 
 namespace System {
+    using Text;
 
-    public  static class CharExtensions {
+    public static class CharExtensions {
 
         public static string ToHexString(this char C) =>
             ToHexString(Poly.App.Encoding, C);
@@ -13,20 +14,20 @@ namespace System {
         public static string ToHexString(Encoding Encoding, params char[] Chars) =>
             Encoding.GetBytes(Chars).ToHexString();
 
-        public static bool Compare(this char C, char S) =>
-            (C - S) == 0;
+        public static bool Compare(this char left, char right) =>
+            (left - right) == 0;
 
-        public static bool CompareIgnoreCase(this char C, char S) {
-            if (Compare(C, S))
+        public static bool CompareIgnoreCase(this char left, char right) {
+            if (Compare(left, right))
                 return true;
 
-            if (C >= 'A' && C <= 'Z') {
-                if (S >= 'a' && S <= 'z')
-                    return C - 'A' == S - 'a';
+            if (left >= 'A' && left <= 'Z') {
+                if (right >= 'a' && right <= 'z')
+                    return left - 'A' == right - 'a';
             }
             else {
-                if (S >= 'A' && S <= 'Z')
-                    return C - 'a' == S - 'A';
+                if (right >= 'A' && right <= 'Z')
+                    return left - 'a' == right - 'A';
             }
 
             return false;

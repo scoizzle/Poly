@@ -5,11 +5,8 @@ namespace Poly.Net.Http {
     public interface Connection {
         TcpClient Client { get; set; }
 
-        bool ReadRequest(Request request);
-        bool ReadResponse(Response response);
-
-        bool WriteRequest(Request request);
-        bool WriteResponse(Response response);
+        bool Connected { get; }
+        bool HasDataAvailable { get; }
 
         Task<bool> ReadRequestAsync(Request request, CancellationToken cancellation_token);
         Task<bool> ReadResponseAsync(Response response, CancellationToken cancellation_token);

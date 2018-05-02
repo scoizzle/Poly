@@ -1,4 +1,6 @@
-﻿namespace Poly.Collections {
+﻿using System.Linq;
+
+namespace Poly.Collections {
     using Data;
     using String.Matcher;
 

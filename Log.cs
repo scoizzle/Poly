@@ -59,12 +59,6 @@ namespace Poly {
         public static void Error(Exception error) =>
             Print("ERROR", DateTime.UtcNow, error.Message);
 
-        public static void Fatal(string format, params object[] args) =>
-            Print("FATAL", DateTime.UtcNow, format, args);
-
-        public static void Fatal(Exception error) =>
-            Print("FATAL", DateTime.UtcNow, error.Message);
-
         [Conditional("RELEASE")]
         public static void Benchmark(string name, System.Action action) {
             GC.Collect();

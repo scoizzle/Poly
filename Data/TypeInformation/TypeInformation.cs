@@ -11,7 +11,7 @@ namespace Poly.Data {
 
         internal TypeInformation(Type type) {
             Type = type;
-            Members = new KeyValueCollection<Member>(Member.GetMembers(type), _ => _.Name);
+            Members = Member.GetMembers(type);
 
             Cache.Set(type.FullName, this);
         }
@@ -22,7 +22,7 @@ namespace Poly.Data {
 
         public Serializer Serializer { get; internal set; }
 
-        public KeyValueCollection<Member> Members { get; private set; }
+        public Dictionary<string, Member> Members { get; private set; }
 
         public object CreateInstance(params object[] args) =>
             Activator.CreateInstance(Type, args);

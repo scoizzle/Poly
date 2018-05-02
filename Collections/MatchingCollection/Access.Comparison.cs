@@ -1,4 +1,6 @@
-﻿namespace Poly.Collections {
+﻿using System.Linq;
+
+namespace Poly.Collections {
 
     public partial class MatchingCollection<T> {
 
@@ -74,7 +76,7 @@
                     return true;
                 }
 
-                var next = current.Groups.SingleOrDefault(_ => _.Matcher.Compare(it));
+                var next = current.Groups.FirstOrDefault(_ => _.Matcher.Compare(it));
 
                 if (next == null) {
                     group = null;
@@ -99,7 +101,7 @@
                     return true;
                 }
 
-                var next = current.Groups.SingleOrDefault(_ => _.Matcher.Compare(it));
+                var next = current.Groups.FirstOrDefault(_ => _.Matcher.Compare(it));
 
                 if (next == null) {
                     next = new Group(it);
@@ -116,7 +118,7 @@
         }
 
         private bool TryGetStorage(StringIterator it, Group group, out Item item) {
-            var element = group.Items.SingleOrDefault(_ => _.Matcher.Compare(it));
+            var element = group.Items.FirstOrDefault(_ => _.Matcher.Compare(it));
 
             if (element is Item result) {
                 item = result;

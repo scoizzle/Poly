@@ -4,44 +4,51 @@ using System.Net.Sockets;
 using System.Threading.Tasks;
 
 namespace Poly.Net {
+    public partial class TcpServer {
+        TcpListener listener;
 
-    public class TcpServer : TcpListener {
         public TcpServer(int port) : this(IPAddress.Any, port) { }
 
-        public TcpServer(IPAddress addr, int port) : base(addr, port) { }
+        public TcpServer(IPAddress addr, int port) { 
+            listener = new TcpListener(addr, port);
+        }
 
+        public bool Active { get; private set; }
+        
         public Action<TcpClient> OnAcceptClient { get; set; }
 
-        public bool Running { get => Active; }
+        public EndPoint LocalEndpoint { get => listener?.LocalEndpoint; }
 
-        new public bool Start() {
+        public bool Start() {
             if (Active) return true;
 
             try {
-                base.Start();
+                listener.Start();
                 StartAcceptSocket();
                 Log.Debug($"Now listening on port {LocalEndpoint}");
+
+                return Active = true;
             }
             catch (Exception Error) {
                 Log.Error($"Couldn't begin accepting connections on port {LocalEndpoint}");
                 Log.Error(Error);
-                return false;
-            }
 
-            return true;
+                return Active = false;
+            }
         }
 
-        new public void Stop() {
+        public void Stop() {
             Log.Debug($"Shutting down on port {LocalEndpoint}");
-            base.Stop();
+            listener.Stop();
+            Active = false;
         }
         
         private void StartAcceptSocket() {
-            AcceptSocketAsync().ContinueWith(EndAcceptSocket);
+            listener.AcceptSocketAsync().ContinueWith(EndAcceptSocket);
         }
 
         private void EndAcceptSocket(Task<Socket> accept_socket) {
-            if (accept_socket.IsFaulted)
+            if (accept_socket.CatchException())
                 return;
 
             if (accept_socket.IsCompleted) {

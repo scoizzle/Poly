@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Poly.Net {
     using Collections;
@@ -10,11 +11,11 @@ namespace Poly.Net {
 
         public class ModuleManager {
             private HttpServer server;
-            private ManagedArray<Module> modules;
+            private List<Module> modules;
 
             internal ModuleManager(HttpServer http_server) {
                 server = http_server;
-                modules = new ManagedArray<Module>();
+                modules = new List<Module>();
                 UpdateRequestHandler();
             }
 

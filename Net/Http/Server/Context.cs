@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 
 namespace Poly.Net {
@@ -14,19 +15,27 @@ namespace Poly.Net {
 
             public Dictionary<object, object> Items;
 
+            public PerformanceCounter Timer { get; private set; }
+
             public Context(Connection connection) {
                 Connection = connection;
+
+                Timer = new PerformanceCounter();
+                Request = new Request(Timer);
+                Response = new Response(Timer);
+
                 Items = new Dictionary<object, object>();
-                Request = new Request();
-                Response = new Response(Result.NotFound);
                 Cancellation = new CancellationTokenSource();
             }
 
             public void Reset() {
-                Request = new Request();
-                Response = new Response(Result.NotFound);
+                Request.Reset();
+                Response.Reset();
+                
                 Cancellation = new CancellationTokenSource();
+
                 Items.Clear();
+                Timer.Clear();
             }
         }
     }

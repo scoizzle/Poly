@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -12,7 +13,7 @@ namespace Poly.Data {
         public SerializeDelegate TrySerialize;
         public DeserializeDelegate TryDeserialize;
 
-        public Serializer() : base(typeof(T)) {       
+        public Serializer() : base(typeof(T)) {
             if (Type.IsArray) {
                 TrySerialize = DefaultSerializeArray();
                 TryDeserialize = DefaultDeserializeArray();
@@ -166,7 +167,7 @@ namespace Poly.Data {
                 if (!json.SelectSection('[', ']'))
                     goto formatException;
 
-                var list = new ManagedArray<object>();
+                var list = new List<object>();
 
                 if (!json.IsDone) {
                     do {

@@ -1,9 +1,10 @@
 ﻿using System.Text;
+using System.Collections.Generic;
 
 namespace Poly.Data {
     using Collections;
 
-    public partial class JSON : KeyValueCollection<object> {
+    public partial class JSON : Dictionary<string, object> {
         public bool IsArray;
         public char KeySeperatorCharacter;
 

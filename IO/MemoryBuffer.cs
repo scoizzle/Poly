@@ -13,9 +13,9 @@ namespace Poly.IO {
 
         public readonly int Size;
 
-        public int Available { get => Length - Position; }
-        public int Remaining { get => Size - Length; }
-        public int Unallocated { get => Size - Available; }
+        public int Available => Length - Position;
+        public int Remaining => Size - Length;
+        public int Unallocated => Size - Available;
 
         public MemoryBuffer(int size) {
             Array = new byte[size];
@@ -35,9 +35,8 @@ namespace Poly.IO {
             if (Available < length) return false;
 
             var position = Position;
-            var last_index = position + length;
 
-            if (Array.CompareSubByteArray(position, last_index, chain, 0, length) == true) {
+            if (Array.CompareSubByteArrayPartial(position, chain, 0, length) == true) {
                 Consume(length);
                 return true;
             }
@@ -61,6 +60,17 @@ namespace Poly.IO {
 
         public void Reset() {
             Position = Length = 0;
+        }
+
+        public int FindSubByteArray(byte[] chain) {
+            return Array.FindSubByteArray(chain, Position, Length);
+        }
+
+        public int FindSubByteArray(byte[] chain, int position) {
+            if (position < Position || position > Length)
+                return -1;
+                
+            return Array.FindSubByteArray(chain, position, Length);
         }
 
         public bool Read(Stream stream) {

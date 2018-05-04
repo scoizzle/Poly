@@ -10,10 +10,10 @@ namespace Poly.Data {
             public Node Root;
             public Dictionary<TValue, Node> Dictionary;
 
-            private Tree() {
+            public Tree() {
                 Dictionary = new Dictionary<TValue, Node>();
+                Root = new Node();
             }
-
 
             public Tree(Dictionary<TValue, TPriority> counts) : this() {
                 var queue = new PriorityQueue<TPriority, Node>();
@@ -39,6 +39,37 @@ namespace Poly.Data {
                 }
 
                 Build(queue);
+            }
+
+            public Tree(IEnumerable<(IEnumerable<bool> Path, TValue Value)> leafs) : this() {
+                foreach (var leaf in leafs)
+                    AddLeaf(leaf.Path, leaf.Value);
+            }
+            
+            public void AddLeaf(IEnumerable<bool> path, TValue value) {
+                if (Dictionary.ContainsKey(value))
+                    throw new ArgumentException("An element with the same key already exists in the Tree");
+                    
+                var current = Root;
+                var route = path.GetEnumerator();
+
+                while (route.MoveNext()) {
+                    if (route.Current) {
+                        if (current.Right == null) 
+                            current.Right = new Node { Parent = current, IsRight = true };                        
+
+                        current = current.Right;
+                    }
+                    else {
+                        if (current.Left == null) 
+                            current.Left = new Node { Parent = current };                        
+
+                        current = current.Left;
+                    }
+                }
+
+                current.Value = value;
+                Dictionary[value] = current;
             }
 
             private void Build(PriorityQueue<TPriority, Node> queue) {

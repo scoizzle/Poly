@@ -9,6 +9,9 @@ namespace Poly.Data {
             public bool IsRight;
             public bool IsLeaf => Left == null && Right == null;
             public bool IsRoot => Parent == null;
+
+            public override string ToString() =>
+                $"{Priority}: {Value}";
         }   
     }
 }

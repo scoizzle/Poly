@@ -17,6 +17,11 @@ namespace Poly.Data {
              : this(new Tree(new FrequencyCounter(values).Counts)) {
         }
 
+        public HuffmanEncoding(IEnumerable<(IEnumerable<bool> Path, TValue Value)> leafs) 
+            : this (new Tree(leafs)) {
+
+        }
+
         static Func<TPriority, TPriority, TPriority> AddPriority = MakeAdd();
         static Func<TPriority, TPriority> IncPriority = MakeIncrement();
 

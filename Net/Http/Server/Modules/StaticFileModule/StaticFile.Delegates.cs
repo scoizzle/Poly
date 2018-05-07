@@ -17,7 +17,7 @@ namespace Poly.Net.Http {
                 var response = context.Response;
                 var headers = response.Headers;
                 
-                response.Status = Result.Ok;
+                response.Status = Status.Ok;
                 response.Body = OpenFile(file);
 
                 headers.ContentLength = length;

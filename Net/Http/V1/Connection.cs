@@ -24,14 +24,13 @@ namespace Poly.Net.Http.V1 {
             Client = client;
         }
 
-        public Task<bool> WriteRequestAsync(Request request, CancellationToken cancellation_token) {
+        public async Task<bool> WriteRequestAsync(Request request, CancellationToken cancellation_token) {
+            var timer = request.Timer.Start("WriteRequestAsync");
+
             var text = new StringBuilder();
-
-            text.Append(request.Method).Append(' ')
-                .Append(request.Path).Append(' ')
-                .Append(HTTP_VERSION).Append(NewLine);
-
             SetVersionSpecificHeaders(request);
+
+            PrintRequestLine(text, request);
             PrintHeaders(text, request.Headers);
 
             var header_string = text.ToString();
@@ -39,39 +38,41 @@ namespace Poly.Net.Http.V1 {
 
             if (!send_headers) {
                 Log.Debug("Failed to send HTTP header string.");
-                return Task.FromResult(false);
+                timer.Stop();
+                return false;
             }
 
             var length = request.Headers.ContentLength;
 
-            if (length == 0)
-                return Client.WriteAsync(cancellation_token);
+            if (length == 0) {
+                send_headers = await Client.WriteAsync(cancellation_token);
 
-            return Client.WriteAsync(request.Body, cancellation_token).
-                ContinueWith(_ => {
-                    if (_.IsFaulted || !_.Result) {
-                        Log.Debug("Failed to send HTTP response body.");
-                        return false;
-                    }
+                timer.Stop();
+                return send_headers;
+            }
 
-                    if (request.Body is FileStream fs)
-                        fs.Close();
+            var send_body = await Client.WriteAsync(request.Body, cancellation_token);
 
-                    return true;
-                });
+            if (!send_body) {
+                Log.Debug("Failed to send HTTP request body.");
+                timer.Stop();
+                return false;
+            }
+            
+            if (request.Body is FileStream fs)
+                fs.Close();
+
+            timer.Stop();
+            return true;
         }
 
-        public Task<bool> WriteResponseAsync(Response response, CancellationToken cancellation_token) {
+        public async Task<bool> WriteResponseAsync(Response response, CancellationToken cancellation_token) {
             var timer = response.Timer.Start("WriteResponseAsync");
 
             var text = new StringBuilder();
-
-            text.Append(HTTP_VERSION).Append(' ')
-                .Append(response.Status.GetString()).Append(NewLine);
-
-            response.Headers.Date = DateTime.UtcNow;
-
             SetVersionSpecificHeaders(response);
+            
+            PrintResponseLine(text, response);
             PrintHeaders(text, response.Headers);
 
             var header_string = text.ToString();
@@ -80,117 +81,86 @@ namespace Poly.Net.Http.V1 {
             if (!send_headers) {
                 Log.Debug("Failed to send HTTP header string.");
                 timer.Stop();
-                return Task.FromResult(false);
+                return false;
             }
 
             var length = response.Headers.ContentLength;
 
             if (length == 0) {
+                send_headers = await Client.WriteAsync(cancellation_token);
+
                 timer.Stop();
-                return Client.WriteAsync(cancellation_token);
+                return send_headers;
             }
 
-            return Client.WriteAsync(response.Body, cancellation_token).
-                ContinueWith(_ => {
-                    if (_.IsFaulted || !_.Result) {
-                        Log.Debug("Failed to send HTTP response body.");
-                        timer.Stop();
-                        return false;
-                    }
+            var send_body = await Client.WriteAsync(response.Body, cancellation_token);
 
-                    if (response.Body is FileStream fs)
-                        fs.Close();
+            if (!send_body) {
+                Log.Debug("Failed to send HTTP response body.");
+                timer.Stop();
+                return false;
+            }
+            
+            if (response.Body is FileStream fs)
+                fs.Close();
 
-                    timer.Stop();
-                    return true;
-                });
+            timer.Stop();
+            return true;
         }
 
-        public Task<bool> ReadRequestAsync(Request request, CancellationToken cancellation_token) {
+        public async Task<bool> ReadRequestAsync(Request request, CancellationToken cancellation_token) {
             var read_timer = request.Timer.Start("ReadRequestAsync");
 
-            return 
-                Client.ReadStringUntilConstrainedAsync(DoubleNewLineBytes, App.Encoding, cancellation_token).
-                    ContinueWith(_ => {
-                        read_timer.Stop();
+            var recv_timer = request.Timer.Start("ReadRequestAsync_Recv");
+            var headers = await Client.ReadStringUntilConstrainedAsync(DoubleNewLineBytes, App.Encoding, cancellation_token);
+            recv_timer.Stop();
 
-                        if (_.CatchException())
-                            return false;
+            if (headers == null) {
+                read_timer.Stop();
+                Log.Debug("Failed to receive HTTP header string.");
+                return false;
+            }
 
-                        var headers = _.Result;
+            var parse_timer = request.Timer.Start("ReadRequestAsync_Parse");
+            var text = new StringIterator(headers);
 
-                        if (headers == null) {
-                            Log.Debug("Failed to receive HTTP header string.");
-                            return false;
-                        }
+            var parse_headers = ParseRequestLine(text, request) && ParseHeaders(text, request.Headers);
+            parse_timer.Stop();
 
-                        var parse_timer = request.Timer.Start("ReadRequestAsync_Parse");
-                        var text = new StringIterator(headers);
+            if (parse_headers) GetVersionSpecificHeaders(request);
+            else Log.Debug("Failed to parse headers.");
 
-                        var method = text.Extract(' ');
-                        var target = text.Extract(' ');
-                        var version = text.Extract(NewLine);
-
-                        if (method == null || target == null || version == null) {
-                            Log.Debug("Failed to parse HTTP1.1 request line.");
-                            parse_timer.Stop();
-                            return false;
-                        }
-
-                        if (!ParseHeaders(text, request.Headers)) {
-                            Log.Debug("Failed to parse headers.");
-                            parse_timer.Stop();
-                            return false;
-                        }
-
-                        request.Method = method;
-                        request.Path = target;
-
-                        GetVersionSpecificHeaders(request);
-                        parse_timer.Stop();
-                        return true;
-                    });
+            read_timer.Stop();
+            return parse_headers;
         }
 
-        public Task<bool> ReadResponseAsync(Response response, CancellationToken cancellation_token) =>
-            Client.ReadStringUntilConstrainedAsync(DoubleNewLineBytes, App.Encoding, cancellation_token).
-                ContinueWith(_ => {
-                    if (_.IsFaulted)
-                        return false;
+        public async Task<bool> ReadResponseAsync(Response response, CancellationToken cancellation_token) {
+            var read_timer = response.Timer.Start("ReadResponseAsync");
 
-                    var headers = _.Result;
-                    if (headers == null) {
-                        Log.Debug("Failed to receive HTTP header string.");
-                        return false;
-                    }
+            var recv_timer = response.Timer.Start("ReadResponseAsync_Recv");
+            var headers = await Client.ReadStringUntilConstrainedAsync(DoubleNewLineBytes, App.Encoding, cancellation_token);
+            recv_timer.Stop();
 
-                    var text = new StringIterator(headers);
-                    var version = text.Extract(' ');
-                    var status_code = text.Extract(' ');
-                    var status_phrase = text.Extract(NewLine);
+            if (headers == null) {
+                read_timer.Stop();
+                Log.Debug("Failed to receive HTTP header string.");
+                return false;
+            }
 
-                    if (version == null || status_code == null || status_phrase == null) {
-                        Log.Debug("Failed to parse HTTP1.1 response line.");
-                        return false;
-                    }
+            var parse_timer = response.Timer.Start("ReadResponseAsync_Parse");
+            var text = new StringIterator(headers);
+            
+            var parse_headers = ParseResponseLine(text, response) && ParseHeaders(text, response.Headers);
+            parse_timer.Stop();
 
-                    if (!int.TryParse(status_code, out int status_value)) {
-                        Log.Debug("Failed to parse response numeric status.");
-                        return false;
-                    }
+            if (parse_headers) GetVersionSpecificHeaders(response);
+            else Log.Debug("Failed to parse headers.");
 
-                    if (!ParseHeaders(text, response.Headers)) {
-                        Log.Debug("Failed to parse headers.");
-                        return false;
-                    }
+            read_timer.Stop();
+            return parse_headers;
+        }
 
-                    response.Status = (Result)(status_value);
-
-                    GetVersionSpecificHeaders(response);
-                    return true;
-                });
-
-        // Method, Path, Authority, Scheme;
+        // Method, Path, Authority, Scheme;        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void GetVersionSpecificHeaders(Request request) {
             var headers = request.Headers;
@@ -215,7 +185,18 @@ namespace Poly.Net.Http.V1 {
         private static void SetVersionSpecificHeaders(Response response) {
             var headers = response.Headers;
 
-            headers.Deserialize("Connection", "keep-alive");
+            response.Headers.Date = DateTime.UtcNow;
+        }
+
+        private static void PrintRequestLine(StringBuilder text, Request request) {
+            text.Append(request.Method).Append(' ')
+                .Append(request.Path).Append(' ')
+                .Append(HTTP_VERSION).Append(NewLine);
+        }
+
+        private static void PrintResponseLine(StringBuilder text, Response response) {
+            text.Append(HTTP_VERSION).Append(' ')
+                .AppendStatus(response.Status).Append(NewLine);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -233,6 +214,34 @@ namespace Poly.Net.Http.V1 {
             }
 
             text.Append(NewLine);
+        }
+
+        private static bool ParseRequestLine(StringIterator text, Request request) {
+            var method = text.Extract(' ');
+            var target = text.Extract(' ');
+            var version = text.Extract(NewLine);
+
+            if (method == null || target == null || version == null)
+                return false;
+            
+            request.Method = method;
+            request.Path = target;
+            return true;
+        }
+
+        private static bool ParseResponseLine(StringIterator text, Response response) {
+            var version = text.Extract(' ');
+            var status_code = text.Extract(' ');
+            var status_phrase = text.Extract(NewLine);
+
+            if (version == null || status_code == null || status_phrase == null) 
+                return false;
+
+            if (!int.TryParse(status_code, out int status_value))
+                return false;
+
+            response.Status = (Status)(status_value);
+            return true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

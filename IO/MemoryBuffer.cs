@@ -36,7 +36,7 @@ namespace Poly.IO {
 
             var position = Position;
 
-            if (Array.CompareSubByteArrayPartial(position, chain, 0, length) == true) {
+            if (Array.CompareSubByteArray(position, chain, 0, length)) {
                 Consume(length);
                 return true;
             }
@@ -138,8 +138,7 @@ namespace Poly.IO {
             return false;
         }
 
-        public bool Read(params byte[] buffer) =>
-            Read(buffer, 0, buffer.Length);
+        public bool Read(params byte[] buffer) => Read(buffer, 0, buffer.Length);
 
         public bool Read(byte[] buffer, int index, int count) {
             if (count > Unallocated)
@@ -149,7 +148,6 @@ namespace Poly.IO {
                 Rebase();
 
             var length = Length;
-
             buffer.CopyTo(index, Array, length, count);
             Length = length + count;
             return true;
@@ -226,141 +224,46 @@ namespace Poly.IO {
             return true;
         }
 
-        public Task<bool> ReadAsync(Stream stream) =>
-            ReadAsync(stream, CancellationToken.None);
+        public Task<bool> ReadAsync(Stream stream) => ReadAsync(stream, CancellationToken.None);
 
-        public Task<bool> ReadAsync(Stream stream, CancellationToken cancellation_token) {
-            try {
-                return stream.
-                    ReadAsync(Array, Length, Remaining, cancellation_token).
-                    ContinueWith(_ => {
-                        if (_.CatchException() || _.IsCanceled || cancellation_token.IsCancellationRequested)
-                            return false;
+        public async Task<bool> ReadAsync(Stream stream, CancellationToken cancellation_token) {
+            var read = 0;
 
-                        var read = _.Result;
-
-                        if (read == 0)
-                            return false;
-
-                        Length += read;
-                        return true;
-                    });
-            }
-            catch (NullReferenceException) { }
-            catch (IOException) { }
-            catch (Exception error) {
-                Log.Error(error);
-            }
-
-            return Task.FromResult(false);
-        }
-
-        public Task<bool> ReadAsync(Stream stream, int count, CancellationToken cancellation_token) {
-            if (count > Remaining)
-                return Task.FromResult(false);
-
-            try {
-                return stream.
-                    ReadAsync(Array, Length, count, cancellation_token).
-                    ContinueWith(_ => {
-                        if (_.CatchException() || _.IsCanceled || cancellation_token.IsCancellationRequested)
-                            return false;
-
-                        var read = _.Result;
-
-                        if (read == 0)
-                            return false;
-
-                        Length += read;
-                        return true;
-                    });
-            }
-            catch (NullReferenceException) { }
-            catch (IOException) { }
-            catch (Exception error) {
-                Log.Error(error);
-            }
-
-            return Task.FromResult(false);
-        }
-
-        public Task<bool> WriteAsync(Stream stream) =>
-            WriteAsync(stream, CancellationToken.None);
-
-        public Task<bool> WriteAsync(Stream stream, CancellationToken cancellation_token) {
-            try {
-                return stream.
-                    WriteAsync(Array, Position, Available, cancellation_token).
-                    ContinueWith(_ => {
-                        if (_.CatchException() || _.IsCanceled || cancellation_token.IsCancellationRequested)
-                            return false;
-
-                        Reset();
-                        return true;
-                    });
-            }
-            catch (NullReferenceException) { }
-            catch (IOException) { }
-            catch (Exception error) {
-                Log.Error(error);
-            }
-
-            return Task.FromResult(false);
-        }
+            try { read = await stream.ReadAsync(Array, Length, Remaining, cancellation_token); }
+            catch (Exception error) { Log.Error(error); return false; }
             
-
-        public Task<bool> WriteAsync(Stream stream, int count) =>
-            WriteAsync(stream, count, CancellationToken.None);
-
-        public Task<bool> WriteAsync(Stream stream, int count, CancellationToken cancellation_token) {
-            if (count > Available)
-                return Task.FromResult(false);
-
-            try {
-                return stream.
-                    WriteAsync(Array, Position, count, cancellation_token).
-                    ContinueWith(_ => {
-                        if (_.CatchException() || _.IsCanceled || cancellation_token.IsCancellationRequested)
-                            return false;
-
-                        Reset();
-                        return true;
-                    });
-            }
-            catch (NullReferenceException) { }
-            catch (IOException) { }
-            catch (Exception error) {
-                Log.Error(error);
-            }
-
-            return Task.FromResult(false);
+            Length += read;
+            return read != 0;
         }
 
-        public Task<bool> CopyAsync(Stream In, Stream Out, CancellationToken cancellation_token) {
-            var tcs = new TaskCompletionSource<bool>();
-            CopyRead(tcs, In, Out, cancellation_token);
-            return tcs.Task;
+        public Task<bool> WriteAsync(Stream stream) => WriteAsync(stream, CancellationToken.None);
+
+        public async Task<bool> WriteAsync(Stream stream, CancellationToken cancellation_token) {
+            try { await stream.WriteAsync(Array, Position, Available, cancellation_token); }
+            catch (Exception error) { Log.Error(error); return false; } 
+            
+            Reset();
+            return true;
         }
 
-        private void CopyRead(TaskCompletionSource<bool> tcs, Stream In, Stream Out, CancellationToken cancellation_token) =>
-            ReadAsync(In, cancellation_token).
-                ContinueWith(_ => {
-                    if (_.CatchException() || _.IsCanceled || cancellation_token.IsCancellationRequested)
-                        tcs.SetResult(false);
-                    else
-                    if (_.Result)
-                        CopyWrite(tcs, In, Out, cancellation_token);
-                    else
-                        tcs.SetResult(true);
-                });
+        public async Task<bool> CopyAsync(Stream In, Stream Out, CancellationToken cancellation_token) {
+            var read = 0;
 
-        private void CopyWrite(TaskCompletionSource<bool> tcs, Stream In, Stream Out, CancellationToken cancellation_token) =>
-            WriteAsync(Out, cancellation_token).
-                ContinueWith(_ => {
-                    if (_.CatchException() || _.IsCanceled || cancellation_token.IsCancellationRequested || !_.Result)
-                        tcs.SetResult(false);
-                    else
-                        CopyRead(tcs, In, Out, cancellation_token);
-                });
+            try { 
+                do {
+                    read = await In.ReadAsync(Array, Length, Remaining, cancellation_token);
+                    if (read == 0) break;
+                    else Length += read;
+
+                    await Out.WriteAsync(Array, Position, Available, cancellation_token);
+                    Reset();
+                }
+                while (true);
+            }
+            catch (IOException error) { Log.Debug(error); return false; }
+            catch (Exception error) { Log.Error(error); return false; }
+
+            return true;
+        }
     }
 }

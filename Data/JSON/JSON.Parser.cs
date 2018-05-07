@@ -28,7 +28,7 @@ namespace Poly.Data {
                     if (!serial.SerializeObject(json, value))
                         return false;
 
-                    if (i++ != l)
+                    if (++i != l)
                         json.Append(',');
                 }
 
@@ -53,7 +53,7 @@ namespace Poly.Data {
                     if (!serial.SerializeObject(json, value))
                         return false;
 
-                    if (i++ != l)
+                    if (++i != l)
                         json.Append(',');
                 }
 

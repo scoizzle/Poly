@@ -57,12 +57,12 @@ namespace Poly.Net.Http {
                 var output = handler(_);
 
                 if (string.IsNullOrEmpty(output)) {
-                    _.Response.Status = Result.NoContent;
+                    _.Response.Status = Status.NoContent;
                 }
                 else {
                     var stream = output.GetStream();
 
-                    _.Response.Status = Result.Ok;
+                    _.Response.Status = Status.Ok;
 
                     _.Response.Body = stream;
                     _.Response.Headers.ContentLength = stream.Length;

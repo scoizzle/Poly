@@ -37,13 +37,13 @@ namespace Poly.Data {
 
                 foreach (var item in fields) {
                     if (!item.IsStatic && item.IsPublic && !item.IsLiteral) {
-                        members.Add(item.Name, new Member(item));
+                        members[item.Name] = new Member(item);
                     }
                 }
 
                 foreach (var item in props) {
                     if (item.CanRead && item.CanWrite) {
-                        members.Add(item.Name, new Member(item));
+                        members[item.Name] = new Member(item);
                     }
                 }
                 

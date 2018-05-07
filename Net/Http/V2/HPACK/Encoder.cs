@@ -6,7 +6,6 @@ namespace Poly.Net.Http.V2.HPACK {
     using Collections;
 
     public class Encoder {
-
         private enum BitTypes : byte {
             FieldLiteral = 0,
             NeverIndexedFieldLiteral = 16,
@@ -110,7 +109,7 @@ namespace Poly.Net.Http.V2.HPACK {
                 result = App.Encoding.GetString(bytes, bytes_index, length);
             }
 
-            Log.Debug("Decode_String: Huffman = {0} Length = {1} Value = {2}", huffman, length, result);
+            Log.Debug("Decode_String: Huffman = {0} Length = {1} Value = {2}", huffman, result.Length, result);
 
             bytes_index += length;
             return result;

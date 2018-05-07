@@ -190,7 +190,7 @@ namespace Poly.Data {
                 var array = Array.CreateInstance(elementType, count);
 
                 if (count > 0)
-                    list.CopyTo(array as object[], 0);
+                    Array.Copy(list.ToArray(), array, count);
 
                 obj = (T)(object)(array);
                 return true;

@@ -39,7 +39,7 @@ namespace Poly.IO {
             Stream.SetLength(value);
 
         public override int Read(byte[] buffer, int index, int count) =>
-            In.Read(buffer, index, count) ? count : -1;
+            In.Read(buffer, index, count) ? count : 0;
 
         public override void Write(byte[] buffer, int offset, int count) =>
             Out.Read(buffer, offset, count);
@@ -48,7 +48,7 @@ namespace Poly.IO {
             Out.WriteAsync(Stream, cancellation_token).ContinueWith(_ => Stream.FlushAsync(cancellation_token));
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellation_token) =>
-            Task.FromResult(Out.Read(buffer, offset, count) ? count : -1);
+            Task.FromResult(In.Read(buffer, offset, count) ? count : 0);
 
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellation_token) =>
             Task.FromResult(Out.Write(buffer, offset, count));
@@ -112,7 +112,7 @@ namespace Poly.IO {
         public Task<T> ReadUntilConstrainedAsync<T>(byte[] chain, Func<ArraySegment<byte>, T> on_found, CancellationToken cancellation_token) {
             return AwaitDataAvailable(cancellation_token).
                 ContinueWith(_ => {
-                    if (_.CatchException())
+                    if (!_.Result)
                         return default(T);
 
                     var position = In.Position;

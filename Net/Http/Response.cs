@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace Poly.Net.Http {
     public class Response {
-        public Result Status;
+        public Status Status;
 
         public ResponseHeaders Headers;
 
@@ -11,27 +11,27 @@ namespace Poly.Net.Http {
 
         public PerformanceCounter Timer { get; private set; }
 
-        public Response() : this(Result.NotFound, new PerformanceCounter()) { }
+        public Response() : this(Status.NotFound, new PerformanceCounter()) { }
 
-        public Response(PerformanceCounter timer) : this(Result.NotFound, timer) { }
+        public Response(PerformanceCounter timer) : this(Status.NotFound, timer) { }
 
-        public Response(Result status) : this(status, new PerformanceCounter()) { }
+        public Response(Status status) : this(status, new PerformanceCounter()) { }
 
-        public Response(Result status, PerformanceCounter timer) {
+        public Response(Status status, PerformanceCounter timer) {
             Status = status;
             Timer = timer;
             Headers = new ResponseHeaders();
         }
 
-        public Response(Result status, Stream body) : this(status, body, new PerformanceCounter()) { }
+        public Response(Status status, Stream body) : this(status, body, new PerformanceCounter()) { }
 
-        public Response(Result status, Stream body, PerformanceCounter timer) : this(status, timer) {
+        public Response(Status status, Stream body, PerformanceCounter timer) : this(status, timer) {
             Body = body;
             Headers.ContentLength = Body.Length;
         }
 
         public void Reset() {
-            Status = Result.NotFound;
+            Status = Status.NotFound;
             Headers.Reset();
             Body = null;
         }

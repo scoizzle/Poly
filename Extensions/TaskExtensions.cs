@@ -34,9 +34,7 @@
         public static bool CatchException<T>(this Task<T> task) {
             if (task.IsFaulted) {
                 try { throw task.Exception; }
-                catch (Exception error) {
-                    Poly.Log.Error(error);
-                }
+                catch (Exception error) { Poly.Log.Error(error); }
                 return true;
             }
             return false;

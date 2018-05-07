@@ -25,7 +25,7 @@ namespace Poly.Net.Http {
                 }
 
                 if (context.Request.Headers.IfModifiedSince == cached.LastModified) {
-                    context.Response.Status = Result.NotModified;
+                    context.Response.Status = Status.NotModified;
                     context.Response.Headers.ContentLength = 0;
                     return;
                 }

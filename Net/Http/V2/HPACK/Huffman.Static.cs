@@ -14,8 +14,7 @@ namespace Poly.Net.Http.V2.HPACK {
 
         private static IEnumerable<bool> GetPath(int route, byte nbits) {
             while (nbits-- > 0) {
-                var mask = (1 << nbits);
-                yield return (route & mask) == mask;
+                yield return (route & (1 << nbits)) != 0;
             }
         }
 

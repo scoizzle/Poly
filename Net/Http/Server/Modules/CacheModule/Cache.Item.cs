@@ -21,7 +21,7 @@ namespace Poly.Net.Http {
             }
 
             public void CopyTo(Response response) {
-                response.Status = Result.Ok;
+                response.Status = Status.Ok;
                 response.Body = new MemoryStream(Content, false);
                 response.Headers.ContentLength = ContentLength;
                 response.Headers.ContentType = ContentType;

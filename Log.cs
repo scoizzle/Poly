@@ -29,7 +29,7 @@ namespace Poly {
                     " ",
                     time.ToString("yyyy-MM-dd hh:mm:ss"),
                     level,
-                    string.Format(format, args),
+                    args.Length == 0 ? format : string.Format(format, args),
                     Environment.NewLine
             ));
 

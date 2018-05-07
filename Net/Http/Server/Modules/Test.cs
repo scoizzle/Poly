@@ -8,7 +8,7 @@ namespace Poly.Net.Http {
 
         public HttpServer.RequestHandler Build(HttpServer.RequestHandler next) {
             return context => {
-                context.Response.Status = Result.Ok;
+                context.Response.Status = Status.Ok;
                 context.Response.Body = new MemoryStream(ModuleSpecificData, false);
                 context.Response.Headers.ContentLength = context.Response.Body.Length;
 

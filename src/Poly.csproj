@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <SynchReleaseVersion>false</SynchReleaseVersion>
+    <RootNamespace>Poly</RootNamespace>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <PackageId>Poly</PackageId>
+    <Authors>Scot 'Scoizzle' Murphy</Authors>
+    <Company />
+    <Product>Poly</Product>
+    <Description>Poly is an application development extension providing multiple classes for improving developer life.</Description>
+    <Copyright>Scot 'Scoizzle' Murphy</Copyright>
+    <PackageProjectUrl>http://github.com/scoizzle/Poly/</PackageProjectUrl>
+    <RepositoryUrl>http://github.com/scoizzle/Poly/</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseUrl>http://You.Make.Money/I.Make.Money</PackageLicenseUrl>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackOnBuild>true</PackOnBuild>
+    <Owners>Scot 'Scoizzle' Murphy</Owners>
+    <ReleaseVersion>1.0.1</ReleaseVersion>
+    <PackageVersion>1.0.1</PackageVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+</Project>

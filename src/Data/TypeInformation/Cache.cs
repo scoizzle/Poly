@@ -17,7 +17,7 @@ namespace Poly.Data {
                 if (type == null)
                     return default;
 
-                if (!Cache.TryGetValue(type, out TypeInformation info)) {
+                if (!TryGetValue(type, out TypeInformation info)) {
                     info = new TypeInformation(type);
                     Add(type, info);
                 }

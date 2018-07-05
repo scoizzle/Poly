@@ -161,12 +161,12 @@ namespace Poly.Data {
             return false;
         }
 
-        private Serializer<string> String { get; } = Get<string>();
-        private Serializer Bool { get; } = Get<bool>();
-        private Serializer Int { get; } = Get<int>();
-        private Serializer Long { get; } = Get<long>();
-        private Serializer Float { get; } = Get<float>();
-        private Serializer Double { get; } = Get<double>();
+        private Serializer<string> String = Get<string>();
+        private Serializer Bool = Get<bool>();
+        private Serializer Int = Get<int>();
+        private Serializer Long = Get<long>();
+        private Serializer Float = Get<float>();
+        private Serializer Double = Get<double>();
 
         internal bool DeserializeValue(StringIterator json, out object obj) =>
             DeserializeObject(json, out obj) ||

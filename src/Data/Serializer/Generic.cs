@@ -9,8 +9,6 @@ namespace Poly.Data {
     public abstract class Serializer<T> : Serializer {
         protected Serializer() : base(TypeInformation.Get<T>()) { }
 
-        protected Serializer(bool register) : base(TypeInformation.Get<T>(), register) { }
-
         public string Serialize(T obj) {
             var output = new StringBuilder();
 

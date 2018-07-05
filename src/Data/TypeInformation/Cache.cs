@@ -4,21 +4,26 @@ using System.Collections.Generic;
 namespace Poly.Data {
 
     public partial class TypeInformation {
-        public static Dictionary<Type, TypeInformation> Cache;
-
-        static TypeInformation() {
-            Cache = new Dictionary<Type, TypeInformation>();
-        }
+        private static readonly Registry Cache = new Registry();
 
         public static TypeInformation Get(Type type) =>
-            type == null ? null :
-            Cache.TryGetValue(type, out TypeInformation info) ?
-                info : new TypeInformation(type);
+            Cache.Get(type);
 
         public static TypeInformation Get<T>() =>
-            Get(typeof(T));
-            
-        public static TypeInformation Get(string name) =>
-            Get(Type.GetType(name));
+            Cache.Get(typeof(T));
+
+        private class Registry : Dictionary<Type, TypeInformation> {
+            public TypeInformation Get(Type type) {
+                if (type == null)
+                    return default;
+
+                if (!Cache.TryGetValue(type, out TypeInformation info)) {
+                    info = new TypeInformation(type);
+                    Add(type, info);
+                }
+
+                return info;
+            }
+        }
     }
 }

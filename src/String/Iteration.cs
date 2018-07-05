@@ -1,7 +1,8 @@
-﻿namespace System {
+﻿using System;
+
+namespace Poly {
 
     public static class StringIteration {
-
         public static bool Consume(this string This, ref int index, char character) {
             if (StringExtensions.Compare(This, index, character)) {
                 index++;

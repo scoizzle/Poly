@@ -1,11 +1,8 @@
-using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Linq;
 
-namespace Poly.Net.Http {
-    using Data;
-
+namespace Poly.Net.Http
+{
     public class Header {
         public Header(string key) {
             Key = key;

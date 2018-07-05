@@ -3,9 +3,7 @@ namespace Poly {
     using System.Text;
 
     public partial class Matcher {
-        public class RawStringSerializer : Serializer<string> {
-            public RawStringSerializer() : base(false) { }
-            
+        public sealed class RawStringSerializer : Serializer<string> {
             public override bool Deserialize(StringIterator json, out string obj) {
                 obj = json.ToString();
                 return true;

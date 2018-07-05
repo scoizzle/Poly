@@ -10,21 +10,17 @@ namespace Poly.Net.Http.V1 {
     using Collections;
 
     public class Connection : Http.Connection {
-        private const string NewLine = "\r\n";
-        private static readonly byte[] DoubleNewLineBytes = Encoding.UTF8.GetBytes("\r\n\r\n");
-
-        public const string HTTP_VERSION = "HTTP/1.1";
-
+        const string CRLF = "\r\n";
+        const string Version = "HTTP/1.1";
+        static readonly byte[] DoubleCRLF = Encoding.ASCII.GetBytes(CRLF + CRLF);
+        
         public TcpClient Client { get; set; }
-
-        public bool Connected { get => Client?.Connected ?? false; }
-        public bool HasDataAvailable { get => Client?.Available > 0; }
 
         public Connection(TcpClient client) {
             Client = client;
         }
 
-        public async Task<bool> WriteRequestAsync(Request request, CancellationToken cancellation_token) {
+        public async Task<bool> WriteRequest(Request request, CancellationToken cancellation_token) {
             var timer = request.Timer.Start("WriteRequestAsync");
 
             var text = new StringBuilder();
@@ -34,7 +30,7 @@ namespace Poly.Net.Http.V1 {
             PrintHeaders(text, request.Headers);
 
             var header_string = text.ToString();
-            var send_headers = Client.Write(header_string, App.Encoding);
+            var send_headers = Client.Write(header_string, Encoding.ASCII);
 
             if (!send_headers) {
                 Log.Debug("Failed to send HTTP header string.");
@@ -58,15 +54,12 @@ namespace Poly.Net.Http.V1 {
                 timer.Stop();
                 return false;
             }
-            
-            if (request.Body is FileStream fs)
-                fs.Close();
 
             timer.Stop();
             return true;
         }
 
-        public async Task<bool> WriteResponseAsync(Response response, CancellationToken cancellation_token) {
+        public async Task<bool> WriteResponse(Response response, CancellationToken cancellation_token) {
             var timer = response.Timer.Start("WriteResponseAsync");
 
             var text = new StringBuilder();
@@ -76,7 +69,7 @@ namespace Poly.Net.Http.V1 {
             PrintHeaders(text, response.Headers);
 
             var header_string = text.ToString();
-            var send_headers = Client.Write(header_string, App.Encoding);
+            var send_headers = Client.Write(header_string, Encoding.ASCII);
 
             if (!send_headers) {
                 Log.Debug("Failed to send HTTP header string.");
@@ -100,19 +93,16 @@ namespace Poly.Net.Http.V1 {
                 timer.Stop();
                 return false;
             }
-            
-            if (response.Body is FileStream fs)
-                fs.Close();
 
             timer.Stop();
             return true;
         }
 
-        public async Task<bool> ReadRequestAsync(Request request, CancellationToken cancellation_token) {
+        public async Task<bool> ReadRequest(Request request, CancellationToken cancellation_token) {
             var read_timer = request.Timer.Start("ReadRequestAsync");
 
             var recv_timer = request.Timer.Start("ReadRequestAsync_Recv");
-            var headers = await Client.ReadStringUntilConstrainedAsync(DoubleNewLineBytes, App.Encoding, cancellation_token);
+            var headers = await Client.ReadStringUntilConstrainedAsync(DoubleCRLF, Encoding.ASCII, cancellation_token);
             recv_timer.Stop();
 
             if (headers == null) {
@@ -133,12 +123,11 @@ namespace Poly.Net.Http.V1 {
             read_timer.Stop();
             return parse_headers;
         }
-
-        public async Task<bool> ReadResponseAsync(Response response, CancellationToken cancellation_token) {
+        public async Task<bool> ReadResponse(Response response, CancellationToken cancellation_token) {
             var read_timer = response.Timer.Start("ReadResponseAsync");
 
             var recv_timer = response.Timer.Start("ReadResponseAsync_Recv");
-            var headers = await Client.ReadStringUntilConstrainedAsync(DoubleNewLineBytes, App.Encoding, cancellation_token);
+            var headers = await Client.ReadStringUntilConstrainedAsync(DoubleCRLF, Encoding.ASCII, cancellation_token);
             recv_timer.Stop();
 
             if (headers == null) {
@@ -191,12 +180,12 @@ namespace Poly.Net.Http.V1 {
         private static void PrintRequestLine(StringBuilder text, Request request) {
             text.Append(request.Method).Append(' ')
                 .Append(request.Path).Append(' ')
-                .Append(HTTP_VERSION).Append(NewLine);
+                .Append(Version).Append(CRLF);
         }
 
         private static void PrintResponseLine(StringBuilder text, Response response) {
-            text.Append(HTTP_VERSION).Append(' ')
-                .AppendStatus(response.Status).Append(NewLine);
+            text.Append(Version).Append(' ')
+                .AppendStatus(response.Status).Append(CRLF);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -209,17 +198,17 @@ namespace Poly.Net.Http.V1 {
                     text.Append(key)
                         .Append(": ")
                         .Append(value)
-                        .Append(NewLine);
+                        .Append(CRLF);
                 }
             }
 
-            text.Append(NewLine);
+            text.Append(CRLF);
         }
 
         private static bool ParseRequestLine(StringIterator text, Request request) {
             var method = text.Extract(' ');
             var target = text.Extract(' ');
-            var version = text.Extract(NewLine);
+            var version = text.Extract(CRLF);
 
             if (method == null || target == null || version == null)
                 return false;
@@ -232,12 +221,12 @@ namespace Poly.Net.Http.V1 {
         private static bool ParseResponseLine(StringIterator text, Response response) {
             var version = text.Extract(' ');
             var status_code = text.Extract(' ');
-            var status_phrase = text.Extract(NewLine);
+            var status_phrase = text.Extract(CRLF);
 
             if (version == null || status_code == null || status_phrase == null) 
                 return false;
 
-            if (!int.TryParse(status_code, out int status_value))
+            if (!status_code.TryParse(out uint status_value))
                 return false;
 
             response.Status = (Status)(status_value);
@@ -252,7 +241,7 @@ namespace Poly.Net.Http.V1 {
                 if (key == null)
                     return false;
 
-                var value = text.Extract(NewLine);
+                var value = text.Extract(CRLF);
 
                 if (value == null) {
                     value = text.ToString();

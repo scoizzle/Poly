@@ -27,6 +27,10 @@ namespace Poly.Data {
                 if (it.IsLastSection)
                     return value;
 
+                if (value is JSON next) 
+                    current = next;
+                else break;
+
                 it.ConsumeSection();
             }
             while (!it.IsDone);
@@ -55,15 +59,7 @@ namespace Poly.Data {
             it.SelectSplitSections(KeySeperatorCharacter);
 
             return Set(it, value);
-        }
-
-        internal bool TrySerialize(StringBuilder it, string key_list) =>
-            TryGet(key_list, out object val) &&
-            Data.Serializer.Get(val.GetType()).SerializeObject(it, val);
-
-        internal bool TryDeserialize(StringIterator it, string key_list) =>
-            Serializer.DeserializeValue(it, out object obj) &&
-            TrySet(key_list, obj);            
+        }            
 
         public bool Set(StringIterator it, object value) {
             JSON current = this;
@@ -106,7 +102,7 @@ namespace Poly.Data {
             Value = default(T);
             return false;
         }
-
+        
         private void AssignValue(string key, object value) {
             base[key] = value;
         }

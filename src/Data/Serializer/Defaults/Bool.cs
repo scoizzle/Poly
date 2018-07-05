@@ -2,7 +2,7 @@ using System.Text;
 using System.Linq;
 
 namespace Poly.Data {
-    public class Bool : Serializer<bool> {
+    public class BooleanSerializer : Serializer<bool> {
         public override bool Serialize(StringBuilder json, bool value) {
             json.Append(value ? "true" : "false"); 
             return true;

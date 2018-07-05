@@ -1,8 +1,6 @@
 ﻿using System.Text;
 
-namespace System {
-    using Text;
-
+namespace Poly {
     public static class Character {
 
         public static string ToHexString(this char C) =>

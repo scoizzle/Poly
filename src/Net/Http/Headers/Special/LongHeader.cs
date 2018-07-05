@@ -16,7 +16,7 @@ namespace Poly.Net.Http {
             new [] { Value.ToString() };
 
         public override void Deserialize(string value) =>
-            Value = long.TryParse(value, out long result) ?
+            Value = value.TryParse(out long result) ?
                 result : default;
 
         public override void Reset() =>

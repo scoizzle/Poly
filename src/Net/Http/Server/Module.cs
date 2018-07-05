@@ -38,16 +38,12 @@ namespace Poly.Net {
             }
 
             private void UpdateRequestHandler() {
-                server.handle_request = Build();
-            }
-
-            private RequestHandler Build() {
                 var execution_chain = new ExecutionChain<RequestHandler>(context => Task.CompletedTask);
 
                 foreach (var mod in modules)
                     execution_chain.Add(mod.Build);
 
-                return execution_chain.Build();
+                server.handle_request = execution_chain.Build();
             }
         }        
     }

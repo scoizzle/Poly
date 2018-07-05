@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace Poly.Collections {
     public class ExecutionChain<T> : List<Func<T,T>> {
-        public T _default_;
+        T _default_;
 
         public ExecutionChain(T default_handler) {
             _default_ = default_handler;

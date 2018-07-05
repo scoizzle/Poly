@@ -14,9 +14,20 @@ namespace Poly.Net.Http {
         }
 
         public Cookie this[string key] {
-            get => Storage[key];
+            get => Storage.TryGetValue(key, out Cookie value) ? value : default;
             set => Storage[key] = value;
         }
+
+        public override IEnumerable<string> Serialize() =>
+            Storage.TrySelect(pair => Serialize(pair.Value));
+
+        public override void Deserialize(string value) {
+            if (TryDeserialize(value, out Cookie cookie))
+                Storage.Add(cookie.Name, cookie);
+        }
+        
+        public override void Reset() =>
+            Storage.Clear();
 
         public static string Serialize(Cookie cookie) {
             var result = new StringBuilder();
@@ -54,51 +65,60 @@ namespace Poly.Net.Http {
             return result.ToString();
         }
 
-        public bool TryDeserialize(StringIterator it, out Cookie cookie) {
-            if (it.SelectSection('=')) {
-                var key = it.ToString();
-                it.ConsumeSection();
-                var value = it.ToString();
+        public static bool TryDeserialize(StringIterator it, out Cookie cookie) {
+            it.SelectSplitSections("; ");
 
-                cookie = new Cookie { Name = key, Value = value };
-                it.ConsumeSection();
+            if (!it.SelectSection("="))
+                goto format_error;
+            
+            cookie = new Cookie();
+            it.ConsumeSection(out cookie.Name);
+            it.ConsumeSection(out cookie.Value);
 
-                while (!it.IsDone) {
-                    if (it.SelectSection('=')) {
-                        if (it.ConsumeIgnoreCase("domain")) {
-                            it.ConsumeSection();
-                            cookie.Domain = it.ToString();
-                        }
-                        else
-                        if (it.ConsumeIgnoreCase("path")) {
-                            it.ConsumeSection();
-                            cookie.Path = it.ToString();
-                        }
-                        else
-                        if (it.ConsumeIgnoreCase("expires")) {
-                            it.ConsumeSection();
-                            cookie.Expires = it.ToString().FromHttpTimeString();
-                        }
-                        else break;
-                    }
-                    else {
-                        if (it.ConsumeIgnoreCase("HttpOnly")) {
-                            cookie.HttpOnly = true;
-                        }
-                        else
-                        if (it.ConsumeIgnoreCase("Secure")) {
-                            cookie.Secure = true;
-                        }
-                        else break;
-                    }
+            while (!it.IsDone) {
+                if (!it.SelectSection("="))
+                    goto format_error;
 
-                    if (it.IsLastSection)
-                        return true;
-
+                if (it.ConsumeIgnoreCase("Domain")) {
                     it.ConsumeSection();
+                    cookie.Domain = it.ToString();
                 }
-            }
+                else
+                if (it.ConsumeIgnoreCase("Path")) {
+                    it.ConsumeSection();
+                    cookie.Path = it.ToString();
+                }
+                else
+                if (it.ConsumeIgnoreCase("Expires")) {
+                    it.ConsumeSection();
+                    cookie.Expires = it.ToString().FromHttpTimeString();
+                }
+                else
+                if (it.ConsumeIgnoreCase("Max-Age")) {
+                    it.ConsumeSection();
 
+                    if (!it.Consume(out uint seconds))
+                        goto format_error;
+
+                    cookie.Expires = DateTime.Now.AddSeconds(seconds);
+                }
+                else
+                if (it.ConsumeIgnoreCase("HttpOnly")) {
+                    cookie.HttpOnly = true;
+                }
+                else
+                if (it.ConsumeIgnoreCase("Secure")) {
+                    cookie.Secure = true;
+                }
+                else goto format_error;
+
+                it.ConsumeSection();
+            }
+            while (!it.IsLastSection);
+
+            return true;
+
+        format_error:
             cookie = default;
             return false;
         }

@@ -11,18 +11,18 @@ namespace Poly.Net.Http {
             public DateTime Expires;
 
             public Item(Response to_cache) {
-                Content = new byte[to_cache.Body.Length];
-                to_cache.Body.Read(Content, 0, Content.Length);
-
                 ContentType = to_cache.Headers.ContentType;
                 ContentLength = to_cache.Headers.ContentLength;
                 LastModified = to_cache.Headers.LastModified.Value;
                 Expires = to_cache.Headers.Expires.Value;
+                
+                Content = new byte[ContentLength];
+                to_cache.Body.Read(Content, 0, Content.Length);
             }
 
             public void CopyTo(Response response) {
                 response.Status = Status.Ok;
-                response.Body = new MemoryStream(Content, false);
+                response.Body = Content.GetStream();
                 response.Headers.ContentLength = ContentLength;
                 response.Headers.ContentType = ContentType;
                 response.Headers.LastModified = LastModified;

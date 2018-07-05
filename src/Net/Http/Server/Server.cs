@@ -2,10 +2,11 @@
 
 namespace Poly.Net {
     public partial class HttpServer {
-        private TcpServer tcp_listener;
-        private RequestHandler handle_request;
 
         public delegate Task RequestHandler(Context context);
+
+        TcpServer tcp_listener;
+        RequestHandler handle_request;
 
         public HttpServer() : this(new Configuration()) { }
 

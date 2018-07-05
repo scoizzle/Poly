@@ -9,30 +9,34 @@ namespace Poly.Net.Http {
 
         public Stream Body;
 
-        public PerformanceCounter Timer { get; private set; }
+        public PerformanceTimer Timer { get; private set; }
 
-        public Response() : this(Status.NotFound, new PerformanceCounter()) { }
+        public Response() : this(Status.NotFound, new PerformanceTimer()) { }
 
-        public Response(PerformanceCounter timer) : this(Status.NotFound, timer) { }
+        public Response(PerformanceTimer timer) : this(Status.NotFound, timer) { }
 
-        public Response(Status status) : this(status, new PerformanceCounter()) { }
+        public Response(Status status) : this(status, new PerformanceTimer()) { }
 
-        public Response(Status status, PerformanceCounter timer) {
+        public Response(Status status, PerformanceTimer timer) {
             Status = status;
             Timer = timer;
             Headers = new ResponseHeaders();
         }
 
-        public Response(Status status, Stream body) : this(status, body, new PerformanceCounter()) { }
+        public Response(Status status, Stream body) : this(status, body, new PerformanceTimer()) { }
 
-        public Response(Status status, Stream body, PerformanceCounter timer) : this(status, timer) {
+        public Response(Status status, Stream body, PerformanceTimer timer) : this(status, timer) {
             Body = body;
-            Headers.ContentLength = Body.Length;
+            Headers.ContentLength = body.Length;
         }
 
         public void Reset() {
             Status = Status.NotFound;
             Headers.Reset();
+            
+            if (Body is FileStream fs)
+                fs.Close();
+
             Body = null;
         }
     }

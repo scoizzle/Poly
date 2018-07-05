@@ -58,20 +58,15 @@ namespace Poly.IO {
             }
         }
 
-        public void Reset() {
+        public void Reset() =>
             Position = Length = 0;
-        }
 
-        public int FindSubByteArray(byte[] chain) {
-            return Array.FindSubByteArray(Position, Length, chain, 0, chain.Length);
-        }
+        public int FindSubByteArray(byte[] chain) =>
+            Array.FindSubByteArray(Position, Length, chain, 0, chain.Length);
 
-        public int FindSubByteArray(byte[] chain, int position) {
-            if (position < Position || position > Length)
-                return -1;
-
-            return Array.FindSubByteArray(position, Length, chain, 0, chain.Length);
-        }
+        public int FindSubByteArray(byte[] chain, int position) => 
+            position < Position || position > Length ? -1 :
+                Array.FindSubByteArray(position, Length, chain, 0, chain.Length);
 
         public bool Read(Stream stream) {
             if (Unallocated == 0)
@@ -224,10 +219,11 @@ namespace Poly.IO {
             return true;
         }
 
-        public Task<bool> ReadAsync(Stream stream) => ReadAsync(stream, CancellationToken.None);
+        public Task<bool> ReadAsync(Stream stream) => 
+            ReadAsync(stream, CancellationToken.None);
 
         public async Task<bool> ReadAsync(Stream stream, CancellationToken cancellation_token) {
-            var read = 0;
+            int read;
 
             try { read = await stream.ReadAsync(Array, Length, Remaining, cancellation_token); }
             catch (Exception error) { Log.Error(error); return false; }
@@ -247,7 +243,7 @@ namespace Poly.IO {
         }
 
         public async Task<bool> CopyAsync(Stream In, Stream Out, CancellationToken cancellation_token) {
-            var read = 0;
+            int read;
 
             try { 
                 do {
@@ -259,6 +255,31 @@ namespace Poly.IO {
                     Reset();
                 }
                 while (true);
+            }
+            catch (IOException error) { Log.Debug(error); return false; }
+            catch (Exception error) { Log.Error(error); return false; }
+
+            return true;
+        }
+
+        public async Task<bool> CopyAsync(Stream In, Stream Out, long length, CancellationToken cancellation_token) {
+            int read, to_read, to_write;
+
+            try { 
+                do {
+                    to_read = (int)(Math.Min(Remaining, length));
+
+                    read = await In.ReadAsync(Array, Length, to_read, cancellation_token);
+                    if (read == 0) break;
+                    else Length += read;
+
+                    to_write = (int)(Math.Min(Available, length));
+                    await Out.WriteAsync(Array, Position, to_write, cancellation_token);
+
+                    length -= to_write;
+                    Reset();
+                }
+                while (length != 0);
             }
             catch (IOException error) { Log.Debug(error); return false; }
             catch (Exception error) { Log.Error(error); return false; }

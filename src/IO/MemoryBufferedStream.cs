@@ -88,6 +88,11 @@ namespace Poly.IO {
 
         public Task<bool> ReadAsync(Stream storage, CancellationToken cancellation_token) =>
             In.CopyAsync(Stream, storage, cancellation_token);
+        public Task<bool> ReadAsync(Stream storage, long length) =>
+            In.CopyAsync(Stream, storage, length, CancellationToken.None);
+
+        public Task<bool> ReadAsync(Stream storage, long length, CancellationToken cancellation_token) =>
+            In.CopyAsync(Stream, storage, length, cancellation_token);
 
         public async Task<T> ReadUntilConstrainedAsync<T>(byte[] chain, Func<byte[], int, int, T> on_found, CancellationToken cancellation_token) {
             if (!await DataAvailableAsync(cancellation_token))
@@ -114,6 +119,12 @@ namespace Poly.IO {
 
         public Task<bool> WriteAsync(Stream stream, CancellationToken cancellation_token) =>
             Out.CopyAsync(stream, Stream, cancellation_token);
+
+        public Task<bool> WriteAsync(Stream stream, long count) =>
+            Out.CopyAsync(stream, Stream, count, CancellationToken.None);
+
+        public Task<bool> WriteAsync(Stream stream, long count, CancellationToken cancellation_token) =>
+            Out.CopyAsync(stream, Stream, count, cancellation_token);
 
         public Task<bool> DataAvailableAsync(CancellationToken cancellation_token) =>
             In.Available != 0 ? Task.FromResult(true) : ReadAsync(cancellation_token);

@@ -11,25 +11,36 @@ namespace Poly.Net.Http {
         }
 
         public Cookie this[string key] {
-            get => Storage[key];
+            get => Storage.TryGetValue(key, out Cookie value) ? value : default;
             set => Storage[key] = value;
         }
 
-        public static string Serialize(Cookie cookie) {
-            return $"{cookie.Name}={cookie.Value}";
-        }
+        public override IEnumerable<string> Serialize() =>
+            Storage.TrySelect(pair => $"{pair.Key}={pair.Value.Value}");
 
-        public bool TryDeserialize(StringIterator it, out Cookie cookie) {
-            if (it.SelectSection('=')) {
-                var key = it.ToString();
-                it.ConsumeSection();
-                var value = it.ToString();
+        public override void Deserialize(string value) =>
+            TryDeserialize(value);
 
-                cookie = new Cookie { Name = key, Value = value };
-                return true;
+        public override void Reset() =>
+            Storage.Clear();
+
+        public bool TryDeserialize(StringIterator it) {
+            it.SelectSplitSections("; ");
+
+            do {
+                if (!it.SelectSection('='))
+                    goto format_error;
+
+                it.ConsumeSection(out string key);
+                it.ConsumeSection(out string value);
+
+                Storage.Add(key, new Cookie { Name = key, Value = value });
             }
+            while (!it.IsDone);
 
-            cookie = default;
+            return true;
+            
+        format_error:
             return false;
         }
     }

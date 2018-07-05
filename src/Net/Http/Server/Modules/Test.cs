@@ -8,9 +8,11 @@ namespace Poly.Net.Http {
 
         public HttpServer.RequestHandler Build(HttpServer.RequestHandler next) {
             return context => {
+                var stream = ModuleSpecificData.GetStream();
+
                 context.Response.Status = Status.Ok;
-                context.Response.Body = new MemoryStream(ModuleSpecificData, false);
-                context.Response.Headers.ContentLength = context.Response.Body.Length;
+                context.Response.Body = stream;
+                context.Response.Headers.ContentLength = stream.Length;
 
                 return Task.CompletedTask;
             };

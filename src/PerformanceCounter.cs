@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Poly {
-    public class PerformanceCounter : Dictionary<string, Stopwatch> {
+    public class PerformanceTimer : Dictionary<string, Stopwatch> {
         public Stopwatch Start(string name) {
             if (!TryGetValue(name, out Stopwatch watch)) {
                 watch = new Stopwatch();

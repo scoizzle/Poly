@@ -5,12 +5,12 @@ namespace Poly {
         public static Dictionary<string, string> Types = new Dictionary<string, string> {
             { ".7z", "application/x-7z-compressed" },
             { ".aac", "audio/x-aac" },
-            { ".bin", "application/octet-stream" },
+            { ".bin", OctetStream },
             { ".bz", "application/x-bzip" },
             { ".bz2", "application/x-bzip2" },
             { ".css", "text/css" },
             { ".csv", "text/csv" },
-            { ".dmg", "application/octet-stream" },
+            { ".dmg", OctetStream },
             { ".doc", "application/msword" },
             { ".docm", "application/vnd.ms-word.document.macroenabled.12" },
             { ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
@@ -30,8 +30,8 @@ namespace Poly {
             { ".jpgv", "video/jpeg" },
             { ".jpm", "video/jpm" },
             { ".js", "application/javascript" },
-            { ".json", "application/json" },
-            { ".log", "text/plain" },
+            { ".json", JSON },
+            { ".log", PlainText },
             { ".m1v", "video/mpeg" },
             { ".m21", "application/mp21" },
             { ".m2a", "audio/mpeg" },
@@ -69,7 +69,7 @@ namespace Poly {
             { ".pptm", "application/vnd.ms-powerpoint.presentation.macroenabled.12" },
             { ".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
             { ".psd", "image/vnd.adobe.photoshop" },
-            { ".txt", "text/plain" },
+            { ".txt", PlainText },
             { ".wav", "audio/x-wav" },
             { ".weba", "audio/webm" },
             { ".webm", "video/webm" },
@@ -91,5 +91,9 @@ namespace Poly {
             { ".xml", "application/xml" },
             { ".zip", "application/zip" },
         };
+
+        public const string JSON = "application/json";
+        public const string PlainText = "text/plain";
+        public const string OctetStream = "application/octet-stream";
     }
 }

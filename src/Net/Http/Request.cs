@@ -7,13 +7,13 @@ namespace Poly.Net.Http {
         public string Method, Path, Authority, Scheme;
         public RequestHeaders Headers;
 
-        public PerformanceCounter Timer { get; private set; }
+        public PerformanceTimer Timer { get; private set; }
 
         public Stream Body;
 
-        public Request() : this(new PerformanceCounter()) { }
+        public Request() : this(new PerformanceTimer()) { }
 
-        public Request(PerformanceCounter timer) {
+        public Request(PerformanceTimer timer) {
             Headers = new RequestHeaders();
             Timer = timer;
         }
@@ -26,6 +26,11 @@ namespace Poly.Net.Http {
         public void Reset() {
             Method = Path = Authority = Scheme = null;
             Headers.Reset();
+
+            if (Body is FileStream fs)
+                fs.Close();
+            
+            Body = null;
         }
     }
 }

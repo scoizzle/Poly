@@ -1,11 +1,11 @@
-﻿using Poly;
-using Poly.Data;
+﻿using System;
 using System.IO;
 using System.Text;
 
-namespace System {
+namespace Poly {
+    using Data;
 
-    public static class StringConversions {
+    public static class StringConversion {
         public static byte[] GetBytes(this string This) {
             return GetBytes(This, App.Encoding);
         }

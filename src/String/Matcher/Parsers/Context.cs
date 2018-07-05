@@ -5,18 +5,18 @@ namespace Poly {
     using Data;
 
     public partial class Matcher {
-        class Context 
-            : Stack<(_CompareDelegate Compare,
-                    _CompareDelegate GotoCompare,
-                    _ExtractDelegate Extract,
-                    _ExtractDelegate GotoExtract,
-                    _TemplateDelegate Template)> {
+        class Context : Stack<(
+            _CompareDelegate Compare,
+            _CompareDelegate GotoCompare,
+            _ExtractDelegate Extract,
+            _ExtractDelegate GotoExtract,
+            _TemplateDelegate Template)> {
 
             public TypeInformation Type;
 
             public int MinimumLength;
 
-            public Context(Type type) { 
+            public Context(Type type) {
                 Type = TypeInformation.Get(type);
 
                 Push(DefaultCompare, DefaultExtract, DefaultTemplate);

@@ -1,8 +1,8 @@
-﻿using Poly.Data;
+﻿using System.IO;
+using System.Text;
 
-namespace System {
-    using IO;
-    using Text;
+namespace Poly {
+    using Data;
 
     public static class ByteArrayExtensions {
         public static Stream GetStream(this byte[] This, bool writable = false) =>

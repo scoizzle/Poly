@@ -17,22 +17,13 @@ namespace Poly.Net.Http {
                 new [] { Value?.ToString("r") } :
                 Enumerable.Empty<string>();
 
-        public override void Deserialize(string value) {
-            var parse = DateTime.TryParseExact(
-                        value, 
-                        "r", 
-                        CultureInfo.CurrentCulture, 
-                        DateTimeStyles.None, 
-                        out DateTime result);
+        public override void Deserialize(string value) =>
+            Value = 
+                DateTime.TryParseExact(value, "r", CultureInfo.CurrentCulture, DateTimeStyles.None, out DateTime result) ?
+                    result :
+                    default;
 
-            if (parse)
-                Value = result;
-            else
-                Value = default;
-        }
-
-        public override void Reset() {
+        public override void Reset() =>
             Value = default;
-        }
     }
 }

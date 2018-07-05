@@ -1,13 +1,15 @@
-﻿namespace System {
+﻿using System;
+
+namespace Poly {
 
     public static class DateTimeExtensions {
         public static DateTime FromHttpTimeString(this string text) {
-            return DateTime.ParseExact(text, "r", Globalization.DateTimeFormatInfo.CurrentInfo);
+            return DateTime.ParseExact(text, "r", System.Globalization.DateTimeFormatInfo.CurrentInfo);
         }
 
         public static bool TryFromHttpTimeString(string text, out DateTime date_time) {
             try {
-                date_time = DateTime.ParseExact(text, "r", Globalization.DateTimeFormatInfo.CurrentInfo);
+                date_time = DateTime.ParseExact(text, "r", System.Globalization.DateTimeFormatInfo.CurrentInfo);
                 return true;
             }
             catch {

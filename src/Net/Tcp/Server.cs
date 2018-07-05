@@ -52,12 +52,10 @@ namespace Poly.Net {
                 return;
 
             if (accept_socket.IsCompleted) {
-                var client = new TcpClient(accept_socket.Result);
-                OnAcceptClient(client);
+                OnAcceptClient(new TcpClient(accept_socket.Result));
 
-                if (Active) {
+                if (Active) 
                     StartAcceptSocket();
-                }
             }
         }
     }

@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Linq;
 
 namespace Poly.Data {
-    using Collections;
+    using Collections;  
 
     public partial class TypeInformation {
         public readonly Type Type;
@@ -13,8 +13,6 @@ namespace Poly.Data {
         private TypeInformation(Type type) {
             Type = type;
             Members = Member.GetMembers(type);
-
-            Cache[type] = this;
         }
 
         public object CreateInstance(params object[] args) =>
@@ -42,19 +40,19 @@ namespace Poly.Data {
             return true;
         }
 
-        public static IEnumerable<TypeInfo> GetAllDefinedTypes() =>
-            Assembly.GetEntryAssembly()
-                    .GetReferencedAssemblies()
-                    .Select(Assembly.Load)
-                    .SelectMany(_ => _.DefinedTypes);
+        public static IEnumerable<TypeInfo> GetAllDefinedTypes(Assembly assembly) =>
+            assembly.ExportedTypes.TrySelect(type => type.GetTypeInfo());
 
-        public static IEnumerable<TypeInfo> GetTypesInheriting<T>() =>
-            GetAllDefinedTypes().Where(_ => typeof(T).IsAssignableFrom(_) && _ != typeof(T));
+        public static IEnumerable<TypeInfo> GetTypesInheriting(Assembly assembly, Type type) =>
+            GetAllDefinedTypes(assembly)
+                .Where(type_info => type.IsAssignableFrom(type_info) && type_info != type);
+            
+        public static IEnumerable<TypeInfo> GetTypesImplementing(Assembly assembly, Type type) =>
+            GetAllDefinedTypes(assembly)
+                .Where(type_info => type_info.ImplementedInterfaces.Contains(type));
 
-        public static IEnumerable<TypeInfo> GetTypesImplementing<T>() =>
-            GetAllDefinedTypes().Where(_ => _.ImplementedInterfaces.Contains(typeof(T)));
-
-        public static IEnumerable<TypeInfo> GetTypesWithAttribute<T>() =>
-            GetAllDefinedTypes().Where(_ => _.GetCustomAttributes(typeof(T), true).Length > 0);
+        public static IEnumerable<TypeInfo> GetTypesWithAttribute(Assembly assembly, Type type)=>
+            GetAllDefinedTypes(assembly)
+                .Where(type_info => type_info.GetCustomAttributes(type, true).Length > 0);
     }
 }

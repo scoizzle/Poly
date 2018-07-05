@@ -17,7 +17,7 @@ namespace Poly.Net {
 
             while (Running && client.Connected) {
                 client_began_reading(context);
-                var read = await connection.ReadRequestAsync(context.Request, context.Cancellation.Token);
+                var read = await connection.ReadRequest(context.Request, context.Cancellation.Token);
 
                 client_ended_reading(context);
                 if (!read) break;
@@ -27,7 +27,7 @@ namespace Poly.Net {
                 client_ended_processing(context);
 
                 client_began_writing(context);
-                var write = await connection.WriteResponseAsync(context.Response, context.Cancellation.Token);
+                var write = await connection.WriteResponse(context.Response, context.Cancellation.Token);
 
                 client_ended_writing(context);
                 if (!write) break;

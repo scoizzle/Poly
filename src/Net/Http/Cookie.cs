@@ -16,5 +16,12 @@ namespace Poly.Net.Http {
 
         public bool HttpOnly;
         public bool Secure;
+
+        public Cookie() { }
+
+        public Cookie(string name, string value) {
+            Name = name;
+            Value = value;
+        }
     }
 }

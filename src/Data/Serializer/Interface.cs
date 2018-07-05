@@ -3,12 +3,9 @@ using System.Text;
 
 namespace Poly.Data {
     public abstract partial class Serializer {
-        public Serializer(TypeInformation info, bool register = true) {
+        public Serializer(TypeInformation info) {
             Type = info.Type;
             TypeInfo = info;
-
-            if (register)
-                Cache.Register(info.Type, this);
         }
 
         public Type Type { get; }

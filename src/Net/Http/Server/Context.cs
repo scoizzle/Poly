@@ -15,12 +15,12 @@ namespace Poly.Net {
 
             public Dictionary<object, object> Items;
 
-            public PerformanceCounter Timer { get; private set; }
+            public PerformanceTimer Timer { get; private set; }
 
             public Context(Connection connection) {
                 Connection = connection;
 
-                Timer = new PerformanceCounter();
+                Timer = new PerformanceTimer();
                 Request = new Request(Timer);
                 Response = new Response(Timer);
 

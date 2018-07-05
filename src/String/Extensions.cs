@@ -1,4 +1,4 @@
-﻿namespace System {
+﻿namespace Poly {
     public static class StringExtensions {
         public static bool BoundsCheck(this string This, int index) =>
             This != null && index >= 0 && index < This.Length;

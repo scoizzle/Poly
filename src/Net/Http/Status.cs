@@ -104,7 +104,7 @@ namespace Poly.Net.Http {
 
                 case Status.BadRequest: return "Bad Request";
                 case Status.Unauthorized: return "Unauthorized";
-                case Status.PaymentRequired: return "PaymentRequired";
+                case Status.PaymentRequired: return "Payment Required";
                 case Status.Forbidden: return "Forbidden";
                 case Status.NotFound: return "Not Found";
                 case Status.MethodNotAllowed: return "Method Not Allowed";

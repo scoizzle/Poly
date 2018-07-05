@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -27,43 +28,39 @@ namespace Poly.Net {
         
         public bool Connected => Socket?.Connected == true;
         
-        public bool HasDataAvailable => Socket.Available > 0; 
+        public bool HasDataAvailable => Available > 0; 
 
-        public async Task<bool> Connect(EndPoint ep) {
-            try {
-                await Socket.ConnectAsync(ep);
+        public Task<bool> Connect(EndPoint ep) {
+            var completion_source = new TaskCompletionSource<bool>();
 
-                if (Socket.Connected) {
-                    Stream = new NetworkStream(Socket);
-                    return true;
-                }
-            }
-            catch { }
+            Socket.ConnectAsync(ep).ContinueWith(connect_async => {
+                if (connect_async.CatchException())
+                    completion_source.SetResult(false);
 
-            return false;
+                completion_source.SetResult(Socket.Connected);
+            });
+
+            return completion_source.Task;
         }
 
         public async Task<bool> Connect(string host, int port) {
             try {
-                var get_addresses = Dns.GetHostAddressesAsync(host);
-                var addresses = await get_addresses;
+                var host_addresses = await Dns.GetHostAddressesAsync(host);
 
-                if (addresses.Length == 0) return false;
-                var get_connection = Connect(
-                    new IPEndPoint(
-                        addresses.First(),
-                        port
-                ));
+                foreach (var address in host_addresses) {
+                    var connect = await Connect(new IPEndPoint(address, port));
 
-                return await get_connection;
+                    if (connect)
+                        return true;
+                }
+
+                return false;
             }
-            catch { }
+            catch (Exception error) { 
+                Log.Debug(error);
+            }
 
             return false;
-        }
-
-        public Task<bool> Connect(IPAddress addr, int port) {
-            return Connect(new IPEndPoint(addr, port));
         }
     }
 }

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Poly.Net.Http {
     public partial class SessionModule {
@@ -18,6 +20,15 @@ namespace Poly.Net.Http {
 
             ActiveSessions.Add(identifier, session);
             return session;
+        }
+
+        static void PruneInactiveSessions() {
+            var expired = ActiveSessions.Where(pair => (DateTime.UtcNow - pair.Value.LastAccessTime).TotalMinutes > 1);
+
+            foreach (var to_remove in expired)
+                ActiveSessions.Remove(to_remove.Key);
+
+            Task.Delay(TimeSpan.FromMinutes(1)).ContinueWith(_ => PruneInactiveSessions());
         }
     }
 }

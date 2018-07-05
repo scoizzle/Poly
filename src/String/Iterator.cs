@@ -80,9 +80,8 @@ namespace Poly {
             set { if (value) Index = LastIndex; }
         }
 
-        public bool IsLastSection {
-            get { return Segments.Count == 0; }
-        }
+        public bool IsLastSection =>
+            Segments.Count == 0;
 
         public virtual void Reset() {
             Segments.Clear();

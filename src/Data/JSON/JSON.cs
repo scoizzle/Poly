@@ -24,7 +24,12 @@ namespace Poly.Data {
                 return output.ToString();
             return null;
         }
-        
+
+        public static JSON Parse(string text) =>
+            Serializer.Deserialize(text, out JSON obj) ? obj : default;
+
+        public static bool TryParse(string text, out JSON json) =>
+            Serializer.Deserialize(text, out json);
 
         public static JSONSerializer Serializer = new JSONSerializer();
 

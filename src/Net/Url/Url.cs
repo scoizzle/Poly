@@ -13,10 +13,8 @@ namespace Poly.Net {
         public UrlQuery Query;
         public string Fragment;
 
-        public override string ToString() {
-            var text = new StringBuilder();
-            return UrlSerializer.Matcher.Template(text, this) ? text.ToString() : default;
-        }
+        public override string ToString() =>
+            UrlSerializer.Matcher.Template(this, out string text) ? text : default;
 
         public static Url Parse(string text) =>
             UrlSerializer.Matcher.Extract(text, out Url value) ? value : default;

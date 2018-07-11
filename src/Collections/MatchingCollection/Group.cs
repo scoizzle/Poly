@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 
 namespace Poly.Collections {
+    using String;
+    
     public partial class MatchingCollection<T> {
         public class Group : IEnumerable<Item> {
             internal Matcher Matcher;

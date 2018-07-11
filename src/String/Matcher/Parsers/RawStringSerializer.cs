@@ -1,8 +1,8 @@
-namespace Poly {
+namespace Poly.String {
     using Data;
     using System.Text;
 
-    public partial class Matcher {
+    public partial class Matcher<T> {
         public sealed class RawStringSerializer : Serializer<string> {
             public override bool Deserialize(StringIterator json, out string obj) {
                 obj = json.ToString();

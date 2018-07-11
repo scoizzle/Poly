@@ -1,24 +1,17 @@
 ﻿using System.Text;
 
-namespace Poly.String.Matcher.Parsers {
-    public delegate bool GetDelegate(string key, out object value);
-
-    public delegate bool SetDelegate(string key, object value);
-
-    public delegate bool ExtractDelegate(StringIterator it, SetDelegate set);
-
-    public delegate bool TemplateDelegate(StringBuilder it, GetDelegate get);
-}
-
-namespace Poly {
+namespace Poly.String {
     using Data;
 
-    public partial class Matcher {
+    public partial class Matcher<T> {
+        public delegate bool CompareDelegate(StringIterator it);
 
-        public delegate bool _CompareDelegate(StringIterator it);
+        public delegate bool ExtractDelegate(StringIterator it, T obj);
 
-        public delegate bool _ExtractDelegate(StringIterator it, object obj);
+        public delegate bool TemplateDelegate(StringBuilder it, T obj);
+        
+        public delegate bool RawExtractDelegate(StringIterator it, TrySetMemberDelegate set);
 
-        public delegate bool _TemplateDelegate(StringBuilder it, object obj);
+        public delegate bool RawTemplateDelegate(StringBuilder it, TryGetMemberDelegate get);
     }
 }

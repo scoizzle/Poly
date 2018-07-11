@@ -5,12 +5,12 @@ namespace Poly.Net {
     public partial class HttpServer {
 
         public class Host {
-            public Matcher Matcher;
+            public String.Matcher Matcher;
             public FileSystem.DirectoryInfo DocumentPath;
 
             public string Name {
                 get { return Matcher.Format; }
-                set { Matcher = new Matcher(value); }
+                set { Matcher = new String.Matcher(value); }
             }
 
             public string Path {

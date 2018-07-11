@@ -5,7 +5,7 @@ using System.Linq;
 namespace Poly.Data {
     public class Object<T> : Serializer<T> {
         Serializer<string> String;
-        Dictionary<string, TypeInformation.Member> Members;
+        Dictionary<string, Member> Members;
 
         public Object() {
             Members = TypeInfo.Members;
@@ -47,7 +47,7 @@ namespace Poly.Data {
                 if (!String.Deserialize(json, out string name))
                     return false;
 
-                if (!Members.TryGetValue(name, out TypeInformation.Member member))
+                if (!Members.TryGetValue(name, out Member member))
                     return false;
 
                 json.ConsumeWhitespace();
@@ -83,7 +83,7 @@ namespace Poly.Data {
                 if (!String.Deserialize(json, out string name))
                     return false;
 
-                if (!Members.TryGetValue(name, out TypeInformation.Member member))
+                if (!Members.TryGetValue(name, out Member member))
                     return false;
 
                 json.ConsumeWhitespace();

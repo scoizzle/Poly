@@ -1,151 +1,95 @@
 ﻿using System.Text;
 
-namespace Poly {
+namespace Poly.String {
     using Data;
-    using Poly.String.Matcher.Parsers;
 
-    public partial class Matcher {
-        private ExtractDelegate Extracter;
-        private TemplateDelegate Templater;
+    public partial class Matcher<T> {
+        protected CompareDelegate comparer;
+        protected ExtractDelegate extracter;
+        protected TemplateDelegate templater;
 
-
-        private TypeInformation TypeInfo;
-
-        private _CompareDelegate _Comparer;
-        private _ExtractDelegate _Extracter;
-        private _TemplateDelegate _Template;
+        protected RawExtractDelegate raw_extracter;
+        protected RawTemplateDelegate raw_templater;
 
         public readonly string Format;
+        public readonly TypeInformation TypeInfo;
 
         public Matcher(string format) {
-            if (string.IsNullOrEmpty(format)) {
-                Extracter = (it, set) => it.IsDone;
-                Templater = (it, get) => true;
-            }
-            else {
-                Format = format;
-                Parser.Parse(format, out _, out Extracter, out Templater);
-            }
-        }
-
-        public bool Parse<T>(string format) {        
-            var ctx = new Context(typeof(T));
-
-            if (!Parse(format, ctx))
-                return false;
-
-            var final = ctx.Pop();
-
-            _Comparer = final.Compare;
-            _Extracter = final.Extract;
-            _Template = final.Template;
+            Format = format;
             TypeInfo = TypeInformation.Get<T>();
-            return true;
-        }
-        
-        public bool _Compare(string data) {
-            return _Comparer(data);
+
+            Parse(format, out comparer, out extracter, out raw_extracter, out templater, out raw_templater);
         }
 
-        public bool _Extract<T>(string data, out T value) {
-            value = TypeInfo.CreateInstance<T>();
-            return _Extracter(data, value);
-        }
+        public bool Compare(string text) => 
+            comparer(text);
 
-        public bool Compare(string data) => Extract(data, (_, __) => true);
+        public bool Compare(StringIterator it) => 
+            comparer(it);
 
-        public bool Compare(StringIterator it) => Extract(it, (_, __) => true);
+        public bool Extract(string text, T obj) => 
+            extracter(text, obj);
 
-        public bool Extract(string data, out JSON storage) {
-            storage = new JSON();
+        public bool Extract(StringIterator it, T obj) => 
+            extracter(it, obj);
 
-            return Extract(data, storage.TrySet);
-        }
+        public bool Extract(string text, out T obj) =>
+            extracter(text, obj = TypeInfo.CreateInstance<T>());
 
-        public bool Extract(string data, SetDelegate set) =>
-            Extracter(new StringIterator(data), set);
+        public bool Extract(StringIterator it, out T obj) =>
+            extracter(it, obj = TypeInfo.CreateInstance<T>());
 
-        public bool Extract(StringIterator it, SetDelegate set) =>
-            Extracter(it, set);
+        public bool Extract(string text, TrySetMemberDelegate set) =>
+            raw_extracter(text, set);
 
-        public bool Extract<T>(string data, out T result) {
-            return Extract<T>(data, out result, Serializer.Get<T>());
-        }
+        public bool Extract(StringIterator it, TrySetMemberDelegate set) =>
+            raw_extracter(it, set);
 
-        public bool Extract<T>(string data, out T result, Serializer<T> serializer) {
-            result = (T)serializer.TypeInfo.CreateInstance();
-            var set = SetMemberValue<T>(serializer, result);
+        public bool Template(StringBuilder output, T obj) =>
+            templater(output, obj);
 
-            return Extract(data, set);
-        }
-
-        public bool Extract<T>(StringIterator it, out T result) {
-            return Extract(it, out result, Serializer.Get<T>());
-        }
-
-        public bool Extract<T>(StringIterator it, out T result, Serializer<T> serializer) {
-            result = (T)serializer.TypeInfo.CreateInstance();
-            var set = SetMemberValue(serializer, result);
-
-            return Extracter(it, set);
-        }
-
-        public bool Template(GetDelegate get, out string result) {
+        public bool Template(T obj, out string text) {
             var output = new StringBuilder();
-            if (Templater(output, get)) {
-                result = output.ToString();
+
+            if (templater(output, obj)) {
+                text = output.ToString();
                 return true;
             }
-            result = null;
+
+            text = default;
             return false;
         }
 
-        public bool Template(JSON storage, out string result) {
-            return Template(storage.TryGet, out result);
-        }
+        public bool Template(StringBuilder output, TryGetMemberDelegate get) =>
+            raw_templater(output, get);
 
-        public bool Template<T>(T storage, out string result) {
-            return Template<T>(storage, out result, Serializer.Get<T>());
-        }
+        protected virtual bool Parse(
+            string text, 
+            out CompareDelegate compare, 
+            out ExtractDelegate extract, 
+            out RawExtractDelegate raw_extract, 
+            out TemplateDelegate template,
+            out RawTemplateDelegate raw_template
+        ) {
+            var context = new Context(TypeInfo);
 
-        public bool Template<T>(T storage, out string result, Serializer<T> serializer) {
-            return Template(GetMemberValue(serializer, storage), out result);
-        }
+            if (Parse(text, context)) {
+                var delegates = context.Pop();
 
-        public bool Template<T>(StringBuilder text, T storage) {
-            return Templater(text, GetMemberValue(Serializer.Get<T>(), storage));
-        }
+                compare = delegates.Compare;
+                extract = delegates.Extract;
+                raw_extract = delegates.RawExtract;
+                template = delegates.Template;
+                raw_template = delegates.RawTemplate;
+                return true;
+            }
 
-        public bool Template<T>(StringBuilder text, T storage, Serializer<T> serializer) {
-            return Templater(text, GetMemberValue(serializer, storage));
-        }
-
-        public static GetDelegate GetMemberValue<T>(T storage) {
-            var serializer = Serializer.Get<T>();
-
-            return (string key, out object value) => {
-                return serializer.TypeInfo.GetMemberValue(storage, key, out value);
-            };
-        }
-
-        public static SetDelegate SetMemberValue<T>(T storage) {
-            var typeInfo = TypeInformation.Get<T>();
-
-            return (string key, object value) => {
-                return typeInfo.SetMemberValue(storage, key, value);
-            };
-        }
-
-        public static GetDelegate GetMemberValue<T>(Serializer serializer, T storage) {
-            return (string key, out object value) => {
-                return serializer.TypeInfo.GetMemberValue(storage, key, out value);
-            };
-        }
-
-        public static SetDelegate SetMemberValue<T>(Serializer serializer, T storage) {
-            return (string key, object value) => {
-                return serializer.TypeInfo.SetMemberValue(storage, key, value);
-            };
+            compare = default;
+            extract = default;
+            raw_extract = default;
+            template = default;
+            raw_template = default;
+            return false;
         }
     }
 }

@@ -1,4 +1,6 @@
 ﻿namespace Poly.Collections {
+    using String;
+    
     public partial class MatchingCollection<T> {
         public class Item {
             public Matcher Matcher;

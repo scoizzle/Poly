@@ -1,21 +1,19 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 
 namespace Poly.Collections {
     using Data;
-    using String.Matcher.Parsers;
+    using String;
 
     public partial class MatchingCollection<T> {
-        public T Get(string key, SetDelegate set) {
+        public T Get(string key, TrySetMemberDelegate set) {
             var it = new StringIterator(key);
             it.SelectSplitSections(KeySeperatorCharacter);
 
             return TryGetItem(it, out T value, set) ? value : default;
         }
 
-        public T Get<C>(string key, Serializer<C> serializer, C context) =>
-            Get(key, Matcher.SetMemberValue(serializer, context));
-
-        private bool TryGetGroup(StringIterator it, out Group group, SetDelegate set) {
+        private bool TryGetGroup(StringIterator it, out Group group, TrySetMemberDelegate set) {
             Group current = storage;
 
             do {
@@ -40,7 +38,7 @@ namespace Poly.Collections {
             return false;
         }
 
-        private bool TryGetStorage(StringIterator it, Group group, out Item item, SetDelegate set) {
+        private bool TryGetStorage(StringIterator it, Group group, out Item item, TrySetMemberDelegate set) {
             var element = group.Items.SingleOrDefault(_ => _.Matcher.Extract(it, set));
 
             if (element is Item result) {
@@ -52,7 +50,7 @@ namespace Poly.Collections {
             return false;
         }
 
-        private bool TryGetItem(StringIterator it, out T value, SetDelegate set) {
+        private bool TryGetItem(StringIterator it, out T value, TrySetMemberDelegate set) {
             if (TryGetGroup(it, out Group group, set)) {
                 if (TryGetStorage(it, group, out Item item, set)) {
                     value = item.Value;

@@ -55,7 +55,7 @@ namespace Poly.Net {
                 "{Fragment}" +
             ")?";
 
-        public static Matcher Matcher = new Matcher(MatchString);
+        public static String.Matcher<Url> Matcher = new String.Matcher<Url>(MatchString);
 
         public override bool Serialize(StringBuilder json, Url value) =>
             Matcher.Template(json, value);

@@ -18,8 +18,8 @@ namespace Poly.Net.Http {
         public override IEnumerable<string> Serialize() =>
             Storage.TrySelect(pair => $"{pair.Key}={pair.Value.Value}");
 
-        public override void Deserialize(string value) =>
-            TryDeserialize(value);
+        public override void Deserialize(StringIterator value) =>
+            TryDeserialize(value.Clone());
 
         public override void Reset() =>
             Storage.Clear();
@@ -31,8 +31,8 @@ namespace Poly.Net.Http {
                 if (!it.SelectSection('='))
                     goto format_error;
 
-                it.ConsumeSection(out string key);
-                it.ConsumeSection(out string value);
+                it.ExtractSection(out string key);
+                it.ExtractSection(out string value);
 
                 Storage.Add(key, new Cookie { Name = key, Value = value });
             }

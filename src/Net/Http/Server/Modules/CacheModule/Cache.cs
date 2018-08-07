@@ -17,7 +17,7 @@ namespace Poly.Net.Http {
 
         private void cleanup_expired_responses() {
             var now = DateTime.UtcNow;
-            var expired = cached_responses.Where(_ => now > _.Value.Expires);
+            var expired = cached_responses.Where(_ => now > _.Value.Expires).ToArray();
 
             foreach (var pair in expired)
                 cached_responses.Remove(pair.Key);

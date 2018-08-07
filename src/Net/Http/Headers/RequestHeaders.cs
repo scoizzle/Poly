@@ -23,7 +23,6 @@ namespace Poly.Net.Http {
         Header origin;
         Header pragma;
         Header proxy_authorization;
-        Header range;
         Header referer;
         Header te;
         Header upgrade;
@@ -35,6 +34,7 @@ namespace Poly.Net.Http {
         DateTimeHeader if_modified_since;
 
         LongHeader content_length;
+
 
         public RequestHeaders() {
             accept = Add("Accept");
@@ -58,7 +58,6 @@ namespace Poly.Net.Http {
             origin = Add("Origin");
             pragma = Add("Pragma");
             proxy_authorization = Add("Proxy-Authorization");
-            range = Add("Range");
             referer = Add("Referer");
             te = Add("TE");
             upgrade = Add("Upgrade");
@@ -70,7 +69,9 @@ namespace Poly.Net.Http {
             if_modified_since = Add(new DateTimeHeader("If-Modified-Since"));
             
             content_length = Add(new LongHeader("Content-Length"));
+
             Cookies = Add(new CookieHeader());
+            Range = Add(new RangeHeader());
         }
         
         public string Accept {
@@ -195,10 +196,7 @@ namespace Poly.Net.Http {
             set => proxy_authorization.Value = value;
         }
 
-        public string Range {
-            get => range.Value;
-            set => range.Value = value;
-        }
+        public RangeHeader Range { get; private set; }
 
         public string Referer {
             get => referer.Value;

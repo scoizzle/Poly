@@ -21,8 +21,8 @@ namespace Poly.Net.Http {
         public override IEnumerable<string> Serialize() =>
             Storage.TrySelect(pair => Serialize(pair.Value));
 
-        public override void Deserialize(string value) {
-            if (TryDeserialize(value, out Cookie cookie))
+        public override void Deserialize(StringIterator value) {
+            if (TryDeserialize(value.Clone(), out Cookie cookie))
                 Storage.Add(cookie.Name, cookie);
         }
         
@@ -72,47 +72,42 @@ namespace Poly.Net.Http {
                 goto format_error;
             
             cookie = new Cookie();
-            it.ConsumeSection(out cookie.Name);
-            it.ConsumeSection(out cookie.Value);
+            it.ExtractSection(out cookie.Name);
+            it.ExtractSection(out cookie.Value);
 
             while (!it.IsDone) {
                 if (!it.SelectSection("="))
                     goto format_error;
 
-                if (it.ConsumeIgnoreCase("Domain")) {
-                    it.ConsumeSection();
-                    cookie.Domain = it.ToString();
+                if (it.ConsumeSectionIgnoreCase("Domain")) {
+                    it.ExtractSection(out cookie.Domain);
                 }
                 else
-                if (it.ConsumeIgnoreCase("Path")) {
-                    it.ConsumeSection();
-                    cookie.Path = it.ToString();
+                if (it.ConsumeSectionIgnoreCase("Path")) {
+                    it.ExtractSection(out cookie.Path);
                 }
                 else
-                if (it.ConsumeIgnoreCase("Expires")) {
-                    it.ConsumeSection();
-                    cookie.Expires = it.ToString().FromHttpTimeString();
-                }
-                else
-                if (it.ConsumeIgnoreCase("Max-Age")) {
-                    it.ConsumeSection();
+                if (it.ConsumeSectionIgnoreCase("Expires")) {
+                    it.ExtractSection(out string expires);
 
-                    if (!it.Consume(out uint seconds))
+                    cookie.Expires = expires.FromHttpTimeString();
+                }
+                else
+                if (it.ConsumeSectionIgnoreCase("Max-Age")) {
+                    if (!it.ExtractSection(out uint seconds))
                         goto format_error;
 
                     cookie.Expires = DateTime.Now.AddSeconds(seconds);
                 }
                 else
-                if (it.ConsumeIgnoreCase("HttpOnly")) {
+                if (it.ConsumeSectionIgnoreCase("HttpOnly")) {
                     cookie.HttpOnly = true;
                 }
                 else
-                if (it.ConsumeIgnoreCase("Secure")) {
+                if (it.ConsumeSectionIgnoreCase("Secure")) {
                     cookie.Secure = true;
                 }
                 else goto format_error;
-
-                it.ConsumeSection();
             }
             while (!it.IsLastSection);
 

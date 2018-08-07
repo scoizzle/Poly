@@ -17,8 +17,8 @@ namespace Poly.Net.Http
                 Enumerable.Empty<string>() :
                 new [] { Value };
         
-        public virtual void Deserialize(string value) =>
-            Value = string.IsNullOrEmpty(Value) ? value : string.Join(", ", Value, value);
+        public virtual void Deserialize(StringIterator value) =>
+            Value = string.IsNullOrEmpty(Value) ? value.ToString() : string.Join(", ", Value, value);
 
         public virtual void Reset() =>
             Value = default;

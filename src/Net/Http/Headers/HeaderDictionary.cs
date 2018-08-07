@@ -30,7 +30,7 @@ namespace Poly.Net.Http {
         public IEnumerable<string> Serialize(string key) =>
             GetOrAdd(key).Serialize();
 
-        public void Deserialize(string key, string value) =>
+        public void Deserialize(string key, StringIterator value) =>
             GetOrAdd(key).Deserialize(value);
 
         public void Reset() {

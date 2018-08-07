@@ -7,12 +7,15 @@ namespace Poly.Data {
     using Collections;  
 
     public partial class TypeInformation {
-        public readonly Type Type;
-        public readonly Dictionary<string, Member> Members;
+        private Dictionary<string, Member> member_list;
 
-        private TypeInformation(Type type) {
+        public readonly Type Type;
+
+        private TypeInformation(Type type) =>
             Type = type;
-            Members = Member.GetMembers(type);
+        
+        public Dictionary<string, Member> Members {
+            get => member_list ?? (member_list = Member.GetMembers(Type));
         }
 
         public object CreateInstance(params object[] args) =>

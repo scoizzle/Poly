@@ -9,7 +9,7 @@ namespace Poly.Data {
 
         public Object() {
             Members = TypeInfo.Members;
-            String = Get<string>();
+            String = Serializer.Get<string>();
         }
 
         public override bool Serialize(StringBuilder json, T obj) {

@@ -11,13 +11,12 @@ namespace Poly.Net {
         private async void OnClientConnect(TcpClient client) {
             await Task.Yield();
             client_connected();
-
-            var connection = new Http.V1.Connection(client);
-            var context = new Context(connection);
+            
+            var context = new Context(new Http.V1.Connection(client));
 
             while (Running && client.Connected) {
                 client_began_reading(context);
-                var read = await connection.ReadRequest(context.Request, context.Cancellation.Token);
+                var read = await context.ReadRequest();
 
                 client_ended_reading(context);
                 if (!read) break;
@@ -27,7 +26,7 @@ namespace Poly.Net {
                 client_ended_processing(context);
 
                 client_began_writing(context);
-                var write = await connection.WriteResponse(context.Response, context.Cancellation.Token);
+                var write = await context.WriteResponse();
 
                 client_ended_writing(context);
                 if (!write) break;

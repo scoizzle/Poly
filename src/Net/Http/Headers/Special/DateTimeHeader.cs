@@ -17,7 +17,7 @@ namespace Poly.Net.Http {
                 new [] { Value?.ToString("r") } :
                 Enumerable.Empty<string>();
 
-        public override void Deserialize(string value) =>
+        public override void Deserialize(StringIterator value) =>
             Value = 
                 DateTime.TryParseExact(value, "r", CultureInfo.CurrentCulture, DateTimeStyles.None, out DateTime result) ?
                     result :

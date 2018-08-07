@@ -123,6 +123,14 @@ namespace Poly.Net.Http.V1 {
             read_timer.Stop();
             return parse_headers;
         }
+
+        public async Task<bool> ReadRequestPayload(Request request, CancellationToken cancellation_token) {
+            var read_timer = request.Timer.Start("ReadRequestPayload");
+            var read = await Client.ReadAsync(request.Body, request.Headers.ContentLength, cancellation_token);
+            read_timer.Stop();
+            return read;
+        }
+
         public async Task<bool> ReadResponse(Response response, CancellationToken cancellation_token) {
             var read_timer = response.Timer.Start("ReadResponseAsync");
 
@@ -147,6 +155,13 @@ namespace Poly.Net.Http.V1 {
 
             read_timer.Stop();
             return parse_headers;
+        }
+
+        public async Task<bool> ReadResponsePayload(Response response, CancellationToken cancellation_token) {
+            var read_timer = response.Timer.Start("ReadResponsePayload");
+            var read = await Client.ReadAsync(response.Body, response.Headers.ContentLength, cancellation_token);
+            read_timer.Stop();
+            return read;
         }
 
         // Method, Path, Authority, Scheme;        
@@ -177,12 +192,14 @@ namespace Poly.Net.Http.V1 {
             response.Headers.Date = DateTime.UtcNow;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void PrintRequestLine(StringBuilder text, Request request) {
             text.Append(request.Method).Append(' ')
                 .Append(request.Path).Append(' ')
                 .Append(Version).Append(CRLF);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void PrintResponseLine(StringBuilder text, Response response) {
             text.Append(Version).Append(' ')
                 .AppendStatus(response.Status).Append(CRLF);
@@ -220,15 +237,12 @@ namespace Poly.Net.Http.V1 {
 
         private static bool ParseResponseLine(StringIterator text, Response response) {
             var version = text.Extract(' ');
-            var status_code = text.Extract(' ');
+            var status_code = text.Extract(out uint status_value);
             var status_phrase = text.Extract(CRLF);
 
-            if (version == null || status_code == null || status_phrase == null) 
+            if (version == null || !status_code || status_phrase == null) 
                 return false;
-
-            if (!status_code.TryParse(out uint status_value))
-                return false;
-
+                
             response.Status = (Status)(status_value);
             return true;
         }
@@ -238,17 +252,12 @@ namespace Poly.Net.Http.V1 {
             while (!text.IsDone) {
                 var key = text.Extract(": ");
 
-                if (key == null)
+                if (key == null || text.IsDone)
                     return false;
 
-                var value = text.Extract(CRLF);
-
-                if (value == null) {
-                    value = text.ToString();
-                    text.IsDone = true;
-                }
-                
-                headers.Deserialize(key, value);
+                text.SelectSection(CRLF);
+                headers.Deserialize(key, text);
+                text.ConsumeSection();
             }
 
             return true;

@@ -13,8 +13,6 @@ namespace Poly.Net {
         public HttpServer(Configuration config) {
             Config = config;
             Modules = new ModuleManager(this);
-
-            update_rps();
         }
 
         public bool Running { get => tcp_listener?.Active == true; }
@@ -29,6 +27,7 @@ namespace Poly.Net {
 
             tcp_listener = new TcpServer(Config.Port);
             tcp_listener.OnAcceptClient += OnClientConnect;
+            update_rps();
 
             return tcp_listener.Start();
         }

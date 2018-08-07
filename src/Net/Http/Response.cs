@@ -5,11 +5,11 @@ namespace Poly.Net.Http {
     public class Response {
         public Status Status;
 
-        public ResponseHeaders Headers;
+        public readonly ResponseHeaders Headers;
 
         public Stream Body;
 
-        public PerformanceTimer Timer { get; private set; }
+        public readonly PerformanceTimer Timer;
 
         public Response() : this(Status.NotFound, new PerformanceTimer()) { }
 
@@ -23,21 +23,12 @@ namespace Poly.Net.Http {
             Headers = new ResponseHeaders();
         }
 
-        public Response(Status status, Stream body) : this(status, body, new PerformanceTimer()) { }
-
-        public Response(Status status, Stream body, PerformanceTimer timer) : this(status, timer) {
-            Body = body;
-            Headers.ContentLength = body.Length;
-        }
-
         public void Reset() {
             Status = Status.NotFound;
             Headers.Reset();
             
             if (Body is FileStream fs)
                 fs.Close();
-
-            Body = null;
         }
     }
 }

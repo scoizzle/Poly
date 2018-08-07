@@ -20,7 +20,6 @@ namespace Poly.Net.Http {
         Header content_disposition;
         Header content_encoding;
         Header content_language;
-        Header content_range;
         Header content_type;
         Header etag;
         Header link;
@@ -64,7 +63,6 @@ namespace Poly.Net.Http {
             content_disposition = Add("Content-Disposition");
             content_encoding = Add("Content-Encoding");
             content_language = Add("Content-Language");
-            content_range = Add("Content-Range");
             content_type = Add("Content-Type");
             etag = Add("Etag");
             link = Add("Link");
@@ -90,7 +88,9 @@ namespace Poly.Net.Http {
             last_modified = Add(new DateTimeHeader("Last-Modified"));
 
             content_length = Add(new LongHeader("Content-Length"));
+
             Cookies = Add(new SetCookieHeader());
+            ContentRange = Add(new ContentRangeHeader());
         }
 
         public string AccessControlAllowOrigin {
@@ -178,10 +178,7 @@ namespace Poly.Net.Http {
             set => content_length.Value = value;
         }
 
-        public string ContentRange {
-            get => content_range.Value;
-            set => content_range.Value = value;
-        }
+        public ContentRangeHeader ContentRange { get; private set; }
 
         public string ContentType {
             get => content_type.Value;

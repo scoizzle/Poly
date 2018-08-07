@@ -34,7 +34,7 @@ namespace Poly.Net.Http {
     }
 
     public static class SessionContextExtensions {
-        public static SessionModule.Session GetSession(this HttpServer.Context context) =>
+        public static SessionModule.Session GetSession(this Context context) =>
             context.Items.TryGetValue(SessionModule.SessionItemKey, out object session) ? session as SessionModule.Session : default;        
     }
 }

@@ -95,5 +95,8 @@ namespace Poly {
         public const string JSON = "application/json";
         public const string PlainText = "text/plain";
         public const string OctetStream = "application/octet-stream";
+        public const string UrlEncodedForm = "application/x-www-form-urlencoded";
+        public const string MultipartFormData = "multipart/form-data; boundary=";
+        public const string MultipartByteRanges = "multipart/byteranges; boundary=";
     }
 }

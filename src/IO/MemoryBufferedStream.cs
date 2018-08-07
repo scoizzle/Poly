@@ -20,6 +20,7 @@ namespace Poly.IO {
         public override bool CanWrite => Stream.CanWrite;
         public override bool CanTimeout => Stream.CanTimeout;
         public override long Length => Stream.Length;
+
         public override long Position {
             get => Stream.Position;
             set => Stream.Position = value;
@@ -88,6 +89,7 @@ namespace Poly.IO {
 
         public Task<bool> ReadAsync(Stream storage, CancellationToken cancellation_token) =>
             In.CopyAsync(Stream, storage, cancellation_token);
+            
         public Task<bool> ReadAsync(Stream storage, long length) =>
             In.CopyAsync(Stream, storage, length, CancellationToken.None);
 

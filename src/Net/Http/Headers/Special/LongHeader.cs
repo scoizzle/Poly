@@ -15,8 +15,8 @@ namespace Poly.Net.Http {
         public override IEnumerable<string> Serialize() =>
             new [] { Value.ToString() };
 
-        public override void Deserialize(string value) =>
-            Value = value.TryParse(out long result) ?
+        public override void Deserialize(StringIterator value) =>
+            Value = value.Extract(out long result) ?
                 result : default;
 
         public override void Reset() =>

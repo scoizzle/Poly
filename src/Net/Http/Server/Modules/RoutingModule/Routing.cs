@@ -51,7 +51,7 @@ namespace Poly.Net.Http {
             GetRoutingModule(server).Add(path, handler);
             
             
-        public delegate string RequestStringHandler(HttpServer.Context context);
+        public delegate string RequestStringHandler(Context context);
         public static void Route(this HttpServer server, string path, RequestStringHandler handler) =>
             GetRoutingModule(server).Add(path, _ => {
                 var output = handler(_);

@@ -242,7 +242,7 @@
 
             public static bool Parse(StringIterator it, Context context) {
                 if (it.SelectSection(_ => SelectStatic(_))) {
-                    it.ConsumeSection(out string text);
+                    it.ExtractSection(out string text);
                     text = text.Descape();
 
                     var is_optional = it.Consume('?');

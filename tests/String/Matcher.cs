@@ -22,7 +22,7 @@ namespace Poly.UnitTests {
 
         [Fact]
         public void CustomClass() {
-            var fmt = "/{controller}/({method}/?)?";
+            var fmt = "/{controller}/({method}/)?";
             var matcher = new String.Matcher<Route>(fmt);
 
             Assert.True(matcher.Compare("/user/"));

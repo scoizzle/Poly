@@ -39,7 +39,7 @@ namespace Poly.String {
 
             public static bool Parse(StringIterator it, Context context) {
                 if (it.SelectSection('(', ')')) {
-                    it.ConsumeSection(out int index, out int last_index);
+                    it.ExtractSection(out int index, out int last_index);
 
                     var is_optional = it.Consume('?');
 

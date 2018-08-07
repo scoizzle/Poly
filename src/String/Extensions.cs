@@ -116,6 +116,31 @@
             return true;
         }
 
+        public static bool Compare(this string This, int index, int last_index, string sub_string, int sub_index, int sub_last_index) {
+            if (This == null || sub_string == null)
+                return false;
+
+            if (index < 0 || sub_index < 0)
+                return false;
+
+            if (This.Length < last_index || sub_string.Length < sub_last_index)
+                return false;
+
+            if ((last_index - index) != (sub_last_index - sub_index))
+                return false;
+
+            do {
+                if (!Character.Compare(This[index], sub_string[sub_index]))
+                    return false;
+
+                index++;
+                sub_index++;
+            }
+            while (index < last_index);
+
+            return true;
+        }
+
         public static bool CompareIgnoreCase(this string This, int index, char character) {
             if (index < 0 || index >= This.Length)
                 return false;
@@ -173,6 +198,31 @@
                 return false;
 
             if (sub_string.Length < sub_index + length)
+                return false;
+
+            do {
+                if (!Character.CompareIgnoreCase(This[index], sub_string[sub_index]))
+                    return false;
+
+                index++;
+                sub_index++;
+            }
+            while (index < last_index);
+
+            return true;
+        }
+
+        public static bool CompareIgnoreCase(this string This, int index, int last_index, string sub_string, int sub_index, int sub_last_index) {
+            if (This == null || sub_string == null)
+                return false;
+
+            if (index < 0 || sub_index < 0)
+                return false;
+
+            if (This.Length < last_index || sub_string.Length < sub_last_index)
+                return false;
+
+            if ((last_index - index) != (sub_last_index - sub_index))
                 return false;
 
             do {

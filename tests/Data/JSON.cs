@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+
 using Xunit;
 using Xunit.Abstractions;
 
@@ -14,6 +16,7 @@ namespace Poly.UnitTests {
         }
 
         [Fact]
+        [Conditional("RELEASE")]
         public void Parse_Performance() {
             Log.Benchmark("Data.JSON.TryParse", 1000000, () => Data.JSON.TryParse(TestData, out Data.JSON _));
         }

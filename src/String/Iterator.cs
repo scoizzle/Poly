@@ -198,6 +198,118 @@ namespace Poly {
             return null;
         }
 
+        public bool Extract(out sbyte value) {
+            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
+                if (String.TryParse(Index, LastIndex, out value)) {
+                    ConsumeSection();
+                    return true;
+                }
+
+                PopSection();
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool Extract(out byte value) {
+            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
+                if (String.TryParse(Index, LastIndex, out value)) {
+                    ConsumeSection();
+                    return true;
+                }
+
+                PopSection();
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool Extract(out short value) {
+            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
+                if (String.TryParse(Index, LastIndex, out value)) {
+                    ConsumeSection();
+                    return true;
+                }
+
+                PopSection();
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool Extract(out ushort value) {
+            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
+                if (String.TryParse(Index, LastIndex, out value)) {
+                    ConsumeSection();
+                    return true;
+                }
+
+                PopSection();
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool Extract(out int value) {
+            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
+                if (String.TryParse(Index, LastIndex, out value)) {
+                    ConsumeSection();
+                    return true;
+                }
+
+                PopSection();
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool Extract(out uint value) {
+            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
+                if (String.TryParse(Index, LastIndex, out value)) {
+                    ConsumeSection();
+                    return true;
+                }
+
+                PopSection();
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool Extract(out long value) {
+            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
+                if (String.TryParse(Index, LastIndex, out value)) {
+                    ConsumeSection();
+                    return true;
+                }
+
+                PopSection();
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool Extract(out ulong value) {
+            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
+                if (String.TryParse(Index, LastIndex, out value)) {
+                    ConsumeSection();
+                    return true;
+                }
+
+                PopSection();
+            }
+
+            value = default;
+            return false;
+        }
+
         public string ExtractUntil(char character) {
             var start = Index;
 
@@ -500,15 +612,13 @@ namespace Poly {
             PopSection();
         }
 
-        public void PushSection() {
-            PushSection(Index, LastIndex);
-        }
+        public void PushSection() =>
+            PushSection(Index, LastIndex, 0);
 
-        public void PushSection(int offset) {
+        public void PushSection(int offset) =>
             PushSection(Index, LastIndex, offset);
-        }
 
-        public void PushSection(int index, int last_index, int offset = 0) {
+        public void PushSection(int index, int last_index, int offset) {
             Segments.Push(new Segment(this));
 
             Index = index;
@@ -529,7 +639,25 @@ namespace Poly {
             Index = index;
         }
 
-        public void ConsumeSection(out string text) {
+        public bool ConsumeSection(string section) {
+            if (String.Compare(Index, LastIndex, section, 0, section.Length)) {
+                ConsumeSection();
+                return true;
+            }
+
+            return false;
+        }
+
+        public bool ConsumeSectionIgnoreCase(string section) {
+            if (String.CompareIgnoreCase(Index, LastIndex, section, 0, section.Length)) {
+                ConsumeSection();
+                return true;
+            }
+
+            return false;
+        }
+
+        public void ExtractSection(out string text) {
             text = ToString();
             
             var index = LastIndex + Offset;
@@ -537,7 +665,7 @@ namespace Poly {
             Index = index;
         }
 
-        public void ConsumeSection(out int index, out int last_index) {
+        public void ExtractSection(out int index, out int last_index) {
             index = Index;
             last_index = LastIndex;
             
@@ -546,18 +674,89 @@ namespace Poly {
             Index = next;
         }
 
-        public IEnumerable<string> EnumerateSections() {
-            do {
-                yield return ToString();
-
-                if (IsLastSection)
-                    break;
-
+        public bool ExtractSection(out sbyte value) {
+            if (String.TryParse(Index, LastIndex, out value)) {
                 ConsumeSection();
+                return true;
             }
-            while (!IsDone);
+
+            value = default;
+            return false;
+        }
+        
+        public bool ExtractSection(out byte value) {
+            if (String.TryParse(Index, LastIndex, out value)) {
+                ConsumeSection();
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool ExtractSection(out short value) {
+            if (String.TryParse(Index, LastIndex, out value)) {
+                ConsumeSection();
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool ExtractSection(out ushort value) {
+            if (String.TryParse(Index, LastIndex, out value)) {
+                ConsumeSection();
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool ExtractSection(out int value) {
+            if (String.TryParse(Index, LastIndex, out value)) {
+                ConsumeSection();
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool ExtractSection(out uint value) {
+            if (String.TryParse(Index, LastIndex, out value)) {
+                ConsumeSection();
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool ExtractSection(out long value) {
+            if (String.TryParse(Index, LastIndex, out value)) {
+                ConsumeSection();
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+        
+        public bool ExtractSection(out ulong value) {
+            if (String.TryParse(Index, LastIndex, out value)) {
+                ConsumeSection();
+                return true;
+            }
+
+            value = default;
+            return false;
         }
 
+        public IEnumerable<string> EnumerateSections() =>
+            Segments.TrySelect(section => String.Substring(section.Index, section.LastIndex));
+            
         public bool ConsumeWhitespace() {
             return Consume(char.IsWhiteSpace);
         }
@@ -569,118 +768,6 @@ namespace Poly {
             if (Consume(char.IsDigit))
                 return !IsAt('.');
 
-            return false;
-        }
-
-        public bool Consume(out sbyte value) {
-            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
-                if (String.TryParse(Index, LastIndex, out value)) {
-                    ConsumeSection();
-                    return true;
-                }
-
-                PopSection();
-            }
-
-            value = default;
-            return false;
-        }
-        
-        public bool Consume(out byte value) {
-            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
-                if (String.TryParse(Index, LastIndex, out value)) {
-                    ConsumeSection();
-                    return true;
-                }
-
-                PopSection();
-            }
-
-            value = default;
-            return false;
-        }
-        
-        public bool Consume(out short value) {
-            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
-                if (String.TryParse(Index, LastIndex, out value)) {
-                    ConsumeSection();
-                    return true;
-                }
-
-                PopSection();
-            }
-
-            value = default;
-            return false;
-        }
-        
-        public bool Consume(out ushort value) {
-            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
-                if (String.TryParse(Index, LastIndex, out value)) {
-                    ConsumeSection();
-                    return true;
-                }
-
-                PopSection();
-            }
-
-            value = default;
-            return false;
-        }
-        
-        public bool Consume(out int value) {
-            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
-                if (String.TryParse(Index, LastIndex, out value)) {
-                    ConsumeSection();
-                    return true;
-                }
-
-                PopSection();
-            }
-
-            value = default;
-            return false;
-        }
-        
-        public bool Consume(out uint value) {
-            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
-                if (String.TryParse(Index, LastIndex, out value)) {
-                    ConsumeSection();
-                    return true;
-                }
-
-                PopSection();
-            }
-
-            value = default;
-            return false;
-        }
-        
-        public bool Consume(out long value) {
-            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
-                if (String.TryParse(Index, LastIndex, out value)) {
-                    ConsumeSection();
-                    return true;
-                }
-
-                PopSection();
-            }
-
-            value = default;
-            return false;
-        }
-        
-        public bool Consume(out ulong value) {
-            if (SelectSection(_ => _.ConsumeIntegerNumeric())) {
-                if (String.TryParse(Index, LastIndex, out value)) {
-                    ConsumeSection();
-                    return true;
-                }
-
-                PopSection();
-            }
-
-            value = default;
             return false;
         }
 
@@ -722,29 +809,20 @@ namespace Poly {
             return String.Substring(Index, Length);
         }
 
-        public StringIterator Clone(int index, int lastIndex) {
-            return new StringIterator(String, index, lastIndex);
-        }
+        public override string ToString() =>
+            String is null || IsDone ? 
+                string.Empty :
+                String.Substring(Index, LastIndex - Index);
 
-        public override string ToString() {
-            if (String == null)
-                return string.Empty;
+        public StringIterator Clone() =>
+            new StringIterator(String, Index, LastIndex);
 
-            if (Index == 0 && LastIndex == String.Length)
-                return String;
+        public static implicit operator StringIterator(string text) =>
+            text is null ? 
+                new StringIterator(string.Empty) : 
+                new StringIterator(text, 0, text.Length);
 
-            if (IsDone)
-                return string.Empty;
-
-            return String.Substring(Index, LastIndex - Index);
-        }
-
-        public static implicit operator StringIterator(string str) {
-            return new StringIterator(str, 0, str?.Length ?? 0);
-        }
-
-        public static implicit operator string(StringIterator it) {
-            return it.ToString();
-        }
+        public static implicit operator string(StringIterator it) =>
+            it?.ToString();
     }
 }

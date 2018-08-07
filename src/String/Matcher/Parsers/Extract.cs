@@ -75,10 +75,13 @@ namespace Poly.String {
 
             public static bool Parse(StringIterator it, Context context) {
                 if (it.SelectSection('{', '}')) {
-                    it.ConsumeSection(out string name);
+                    it.ExtractSection(out string name);
 
                     var is_optional = it.Consume('?');
                     var is_member = context.GetMember(name, out Member member);
+
+                    if (!is_member)
+                        return false;
                     
                     var serializer = member.Type == typeof(string) ? 
                         RawStringSerializer.Singleton : 

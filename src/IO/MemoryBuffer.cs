@@ -266,6 +266,13 @@ namespace Poly.IO {
             int read, to_read, to_write;
 
             try { 
+                if (Available >= length) {
+                    to_write = (int)(Math.Min(Available, length));
+                    await Out.WriteAsync(Array, Position, to_write, cancellation_token);
+                    Reset();
+                    return true;
+                }
+
                 do {
                     to_read = (int)(Math.Min(Remaining, length));
 

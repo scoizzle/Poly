@@ -3,19 +3,19 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 
-namespace Poly.Net {
-    public partial class TcpServer {
+namespace Poly.Net.Tcp {
+    public partial class Server {
         TcpListener listener;
 
-        public TcpServer(int port) : this(IPAddress.Any, port) { }
+        public Server(int port) : this(IPAddress.Any, port) { }
 
-        public TcpServer(IPAddress addr, int port) { 
+        public Server(IPAddress addr, int port) { 
             listener = new TcpListener(addr, port);
         }
 
         public bool Active { get; private set; }
         
-        public Action<TcpClient> OnAcceptClient { get; set; }
+        public Action<Client> OnAcceptClient { get; set; }
 
         public EndPoint LocalEndpoint { get => listener?.LocalEndpoint; }
 
@@ -52,7 +52,7 @@ namespace Poly.Net {
                 return;
 
             if (accept_socket.IsCompleted) {
-                OnAcceptClient(new TcpClient(accept_socket.Result));
+                OnAcceptClient(new Client(accept_socket.Result));
 
                 if (Active) 
                     StartAcceptSocket();

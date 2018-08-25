@@ -1,19 +1,36 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 
-namespace Poly.Net {
+namespace Poly.Net.Tcp {
     using IO;
 
-    public partial class TcpClient : MemoryBufferedStream {
-        public TcpClient(Socket socket) : base(new NetworkStream(socket)) {
+    public partial class Client : MemoryBufferedStream {
+        public Client() {
+            Socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+        }
+
+        public Client(Socket socket) : base(new NetworkStream(socket)) {
             Socket = socket;
             Socket.NoDelay = true;
         }
 
-        ~TcpClient() {
+        public Client(EndPoint ep) : this() {
+            Connect(ep);
+        }
+
+        public Client(IPAddress ip, int port) : this() {
+            Connect(ip, port);
+        }
+
+        public Client(string host_name, int port) : this() {
+            Connect(host_name, port);
+        }
+
+        ~Client() {
             Socket?.Dispose();
         }
 
@@ -30,35 +47,26 @@ namespace Poly.Net {
         
         public bool HasDataAvailable => Available > 0; 
 
-        public Task<bool> Connect(EndPoint ep) {
-            var completion_source = new TaskCompletionSource<bool>();
+        public Task<bool> Connect(EndPoint ep) =>
+            Socket.ConnectAsync(ep)
+                .ContinueWith(connect => {
+                    if (connect.CatchException() || !Socket.Connected)
+                        return false;
+                        
+                    Stream = new NetworkStream(Socket);
+                    return true;
+                });
 
-            Socket.ConnectAsync(ep).ContinueWith(connect_async => {
-                if (connect_async.CatchException())
-                    completion_source.SetResult(false);
+        public Task<bool> Connect(IPAddress ip, int port) =>
+            Connect(new IPEndPoint(ip, port));
 
-                completion_source.SetResult(Socket.Connected);
-            });
+        public Task<bool> Connect(string host_name, int port) =>
+            Connect(Dns.GetHostAddressesAsync(host_name), port);
 
-            return completion_source.Task;
-        }
-
-        public async Task<bool> Connect(string host, int port) {
-            try {
-                var host_addresses = await Dns.GetHostAddressesAsync(host);
-
-                foreach (var address in host_addresses) {
-                    var connect = await Connect(new IPEndPoint(address, port));
-
-                    if (connect)
-                        return true;
-                }
-
-                return false;
-            }
-            catch (Exception error) { 
-                Log.Debug(error);
-            }
+        private async Task<bool> Connect(Task<IPAddress[]> dns, int port) {
+            foreach (var addr in await dns)
+                if (await Connect(addr, port))
+                    return true;
 
             return false;
         }

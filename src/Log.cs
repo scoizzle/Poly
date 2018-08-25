@@ -5,32 +5,36 @@ using System.IO;
 namespace Poly {
 
     public class Log {
-        public static Action<string> Write = (str) => { };
+        public static Action<string> WriteLine = (str) => { };
+
+        public static void To(Action<string> method) =>
+            WriteLine = method;
 
         public static void ToConsole() =>
-            Write = str => { Console.Write(str); };
+            To(Console.WriteLine);
 
         public static void ToFile(string file_name) =>
-            Write = str => { File.AppendAllText(file_name, str); };
+            To(str => { File.AppendAllText(file_name, str + Environment.NewLine); });
+
+        private static void Print(string format, params object[] args) =>
+            WriteLine(args.Length == 0 ? format : string.Format(format, args));
 
         private static void Print(string level, DateTime time, string message) =>
-            Write(
+            WriteLine(
                 string.Join(
                     " ",
                     time.ToString("yyyy-MM-dd hh:mm:ss"),
                     level,
-                    message,
-                    Environment.NewLine
+                    message
             ));
 
         private static void Print(string level, DateTime time, string format, params object[] args) =>
-            Write(
+            WriteLine(
                 string.Join(
                     " ",
                     time.ToString("yyyy-MM-dd hh:mm:ss"),
                     level,
-                    args.Length == 0 ? format : string.Format(format, args),
-                    Environment.NewLine
+                    args.Length == 0 ? format : string.Format(format, args)
             ));
 
         [Conditional("DEBUG")]
@@ -59,6 +63,16 @@ namespace Poly {
         public static void Error(Exception error) =>
             Print("ERROR", DateTime.UtcNow, error.Message);
 
+        public static void Benchmark(string name, Stopwatch watch) =>
+            Print(
+                "BENCH", 
+                DateTime.UtcNow, 
+                "{0} Time Elapsed {1} ms ({2} iterations/sec)", 
+                    name, 
+                    watch.Elapsed.TotalMilliseconds, 
+                    1000 / watch.Elapsed.TotalMilliseconds
+            );
+
         [Conditional("RELEASE")]
         public static void Benchmark(string name, System.Action action) {
             GC.Collect();
@@ -73,11 +87,11 @@ namespace Poly {
             action();
             watch.Stop();
 
-            Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec)", name, watch.Elapsed.TotalMilliseconds, 1000 / watch.Elapsed.TotalMilliseconds);
+            Benchmark(name, watch);
         }
 
         [Conditional("RELEASE")]
-        public static void Benchmark(string Name, int Iterations, Action Todo) {
+        public static void Benchmark(string name, int iterations, Action Todo) {
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
@@ -87,17 +101,17 @@ namespace Poly {
             var watch = new Stopwatch();
 
             int i = 0;
-            for (; i < Iterations; i++) {
+            for (; i < iterations; i++) {
                 watch.Start();
                 Todo();
                 watch.Stop();
             }
 
-            Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
+            Benchmark(name, watch);
         }
 
         [Conditional("RELEASE")]
-        public static void Benchmark(string Name, int Iterations, Action<int> Todo) {
+        public static void Benchmark(string name, int iterations, Action<int> Todo) {
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
@@ -107,13 +121,13 @@ namespace Poly {
             var watch = new Stopwatch();
 
             int i = 1;
-            for (; i < Iterations; i++) {
+            for (; i < iterations; i++) {
                 watch.Start();
                 Todo(i);
                 watch.Stop();
             }
 
-            Console.WriteLine("{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration", Name, watch.Elapsed.TotalMilliseconds, i / watch.Elapsed.TotalSeconds, watch.Elapsed.TotalMilliseconds / i);
+            Benchmark(name, watch);
         }
     }
 }

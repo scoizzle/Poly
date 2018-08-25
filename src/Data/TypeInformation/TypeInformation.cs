@@ -15,7 +15,7 @@ namespace Poly.Data {
             Type = type;
         
         public Dictionary<string, Member> Members {
-            get => member_list ?? (member_list = Member.GetMembers(Type));
+            get => member_list ?? (member_list = Member.GetMemberList(Type));
         }
 
         public object CreateInstance(params object[] args) =>

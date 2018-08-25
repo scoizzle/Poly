@@ -35,29 +35,21 @@ namespace Poly.Data {
             Serializer = serializer;
         }
 
-        public static Dictionary<string, Member> GetMembers(Type type) {
-            var members = new Dictionary<string, Member>();
+        private static IEnumerable<Member> GetFields(Type type) =>
+            from field in type.GetFields()
+                where !field.IsStatic && field.IsPublic && !field.IsLiteral
+                    select new Member(field);
 
-            if (type == null)
-                return members;
+                
+        private static IEnumerable<Member> GetProperties(Type type) =>
+            from prop in type.GetProperties()
+                where prop.CanRead && prop.CanWrite
+                    select new Member(prop);
 
-            var info = type.GetTypeInfo();
-            var fields = info.GetFields();
-            var props = info.GetProperties();
+        private static IEnumerable<Member> GetMembers(Type type) =>
+            Enumerable.Concat(GetFields(type), GetProperties(type));
 
-            foreach (var item in fields) {
-                if (!item.IsStatic && item.IsPublic && !item.IsLiteral) {
-                    members[item.Name] = new Member(item);
-                }
-            }
-
-            foreach (var item in props) {
-                if (item.CanRead && item.CanWrite) {
-                    members[item.Name] = new Member(item);
-                }
-            }
-            
-            return members;
-        }
+        public static Dictionary<string, Member> GetMemberList(Type type) =>
+            GetMembers(type).ToDictionary(member => member.Name);
     }
 }

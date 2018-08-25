@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace Poly {
     public class PerformanceTimer : Dictionary<string, Stopwatch> {
@@ -18,5 +19,8 @@ namespace Poly {
             if (TryGetValue(name, out Stopwatch watch))
                 watch.Stop();
         }
+
+        public TimeSpan TotalTime =>
+            new TimeSpan(Values.Sum(ts => ts.ElapsedTicks));
     }
 }

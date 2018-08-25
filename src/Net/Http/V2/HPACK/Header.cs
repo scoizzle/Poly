@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 
 namespace Poly.Net.Http.V2.HPACK {
 
@@ -13,8 +14,8 @@ namespace Poly.Net.Http.V2.HPACK {
             Value = value;
             
             Size =
-                App.Encoding.GetByteCount(key) +
-                App.Encoding.GetByteCount(value) +
+                Encoding.ASCII.GetByteCount(key) +
+                Encoding.ASCII.GetByteCount(value) +
                 32;
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace Poly.Net.Http.V2.HPACK {
     using Collections;
@@ -87,7 +88,7 @@ namespace Poly.Net.Http.V2.HPACK {
             }
             else {
                 result.AddRange(Encode(text.Length, 7));
-                result.AddRange(App.Encoding.GetBytes(text));
+                result.AddRange(Encoding.ASCII.GetBytes(text));
             }
         }
 
@@ -106,7 +107,7 @@ namespace Poly.Net.Http.V2.HPACK {
                     result = new string(un_huffed);
             }
             else {
-                result = App.Encoding.GetString(bytes, bytes_index, length);
+                result = Encoding.ASCII.GetString(bytes, bytes_index, length);
             }
 
             Log.Debug("Decode_String: Huffman = {0} Length = {1} Value = {2}", huffman, result.Length, result);

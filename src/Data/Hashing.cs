@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 
 namespace Poly.Data {
 
-    public class Hashing {
+    public static class Hashing {
         private static HashAlgorithm md5 = MD5.Create();
         private static HashAlgorithm sha256 = SHA256.Create();
         private static HashAlgorithm sha512 = SHA512.Create();

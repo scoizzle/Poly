@@ -3,20 +3,13 @@
 namespace Poly {
 
     public static class DateTimeExtensions {
-        public static DateTime FromHttpTimeString(this string text) {
-            return DateTime.ParseExact(text, "r", System.Globalization.DateTimeFormatInfo.CurrentInfo);
-        }
+        public static DateTime FromHttpTimeString(this string text) =>
+            TryFromHttpTimeString(text, out DateTime date_time) ?
+                date_time :
+                default;
 
-        public static bool TryFromHttpTimeString(string text, out DateTime date_time) {
-            try {
-                date_time = DateTime.ParseExact(text, "r", System.Globalization.DateTimeFormatInfo.CurrentInfo);
-                return true;
-            }
-            catch {
-                date_time = default;
-                return false;
-            }
-        }
+        public static bool TryFromHttpTimeString(string text, out DateTime date_time) =>
+            DateTime.TryParseExact(text, "r", System.Globalization.DateTimeFormatInfo.CurrentInfo, System.Globalization.DateTimeStyles.None, out date_time);
 
         public static DateTime ToHttpTime(this DateTime Time) {
             return new DateTime(Time.Year, Time.Month, Time.Day, Time.Hour, Time.Minute, Time.Second, DateTimeKind.Utc);

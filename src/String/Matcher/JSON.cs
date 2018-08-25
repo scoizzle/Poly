@@ -12,9 +12,10 @@ namespace Poly.String {
             out ExtractDelegate extract, 
             out RawExtractDelegate raw_extract, 
             out TemplateDelegate template,
-            out RawTemplateDelegate raw_template
+            out RawTemplateDelegate raw_template,
+            out int min_length
         ) {
-            var context = new GenericContext(TypeInfo);
+            var context = new JSONContext(TypeInfo);
 
             if (Parse(text, context)) {
                 var delegates = context.Pop();
@@ -24,6 +25,7 @@ namespace Poly.String {
                 raw_extract = delegates.RawExtract;
                 template = delegates.Template;
                 raw_template = delegates.RawTemplate;
+                min_length = context.MinimumLength;
                 return true;
             }
 
@@ -32,11 +34,12 @@ namespace Poly.String {
             raw_extract = default;
             template = default;
             raw_template = default;
+            min_length = int.MaxValue;
             return false;
         }
 
-        protected class GenericContext : Context {
-            public GenericContext(TypeInformation type) : base(type) { }
+        protected class JSONContext : Context {
+            public JSONContext(TypeInformation type) : base(type) { }
 
             public override bool GetMember(string name, out Member member) {
                 member = new Member(

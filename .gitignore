@@ -2,6 +2,8 @@
 *.suo
 *.user
 *.sln.docstates
+*.vs
+*.vscode
 
 # Build results
 [Bb]in/
@@ -21,5 +23,7 @@ Desktop.ini
 # Recycle Bin used on file shares
 $RECYCLE.BIN/
 
-# Mac crap
+# macOS specific files
 .DS_Store
+
+Poly.Benchmarks/BenchmarkDotNet.Artifacts/

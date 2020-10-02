@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <OutputType>Library</OutputType>
+    <SynchReleaseVersion>false</SynchReleaseVersion>
+    <RootNamespace>Poly</RootNamespace>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <PackageId>Poly</PackageId>
+    <Authors>Scot 'Scoizzle' Murphy</Authors>
+    <Company />
+    <Product>Poly</Product>
+    <Description>Poly is an application development extension providing multiple classes for improving developer life.</Description>
+    <Copyright>Scot 'Scoizzle' Murphy</Copyright>
+    <PackageProjectUrl>http://github.com/scoizzle/Poly/</PackageProjectUrl>
+    <RepositoryUrl>http://github.com/scoizzle/Poly/</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseUrl>http://You.Make.Money/I.Make.Money</PackageLicenseUrl>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackOnBuild>true</PackOnBuild>
+    <Owners>Scot 'Scoizzle' Murphy</Owners>
+    <ReleaseVersion>1.0.1</ReleaseVersion>
+    <PackageVersion>1.0.1</PackageVersion>
+    <Version>1.0</Version>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <LangVersion>preview</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <LangVersion>preview</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Memory" Version="4.5.4" />
+    <PackageReference Include="System.Reflection.Emit.ILGeneration" Version="4.7.0" />
+    <PackageReference Include="System.Reflection.Emit.Lightweight" Version="4.7.0" />
+  </ItemGroup>
+</Project>

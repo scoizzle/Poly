@@ -5,6 +5,8 @@ using Xunit;
 
 namespace Poly.Data {
     public class DynamicBufferTests {
+        static readonly Memory<byte> data = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF };
+
         [Fact]
         public void BoundsSanityChecks() {
             var owner = MemoryPool<byte>.Shared.Rent(1);
@@ -40,11 +42,30 @@ namespace Poly.Data {
         {
             var owner = MemoryPool<byte>.Shared.Rent(8);
             var buffer = new DynamicBuffer<byte>(owner.Memory);
-            
-            var value = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF };
 
-            Assert.True(buffer.Write(value.AsSpan()));
-            Assert.True(buffer.Write(value.AsSpan()));
+            Assert.True(buffer.Write(data));
+            Assert.True(buffer.Write(data));
+
+            Assert.True(buffer.Read(data.Span, data.Length));
+        }
+
+        [Fact]
+        public void FillAndDrainBufferTest() {
+            Span<byte> chunk = stackalloc byte[4];
+
+            var owner = MemoryPool<byte>.Shared.Rent(Environment.SystemPageSize);
+            var buffer = new DynamicBuffer<byte>(owner.Memory);
+
+            var chunksToBeWritten = Environment.SystemPageSize / data.Length;
+
+            for (var i = 0; i < chunksToBeWritten; i++)
+                buffer.Write(data);
+
+            for (var i = 0; i < chunksToBeWritten; i++) {
+                Assert.True(buffer.Read(chunk, 4), "Failed to read chunk from dynamic buffer");
+
+                Assert.True(buffer.Write(data), "Failed to write chunk to dynamic buffer");
+            }
         }
     }
 }

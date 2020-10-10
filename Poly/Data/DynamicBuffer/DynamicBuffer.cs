@@ -4,10 +4,13 @@ namespace Poly.Data {
     public partial struct DynamicBuffer<T> {
         public DynamicBuffer(Memory<T> buffer) {
             Buffer = buffer;
+            Size = buffer.Length;
             Offset = Count = 0;
         }
 
         Memory<T> Buffer { get; }
+
+        public int Size { get; }
 
         public int Offset { get; private set; }
 

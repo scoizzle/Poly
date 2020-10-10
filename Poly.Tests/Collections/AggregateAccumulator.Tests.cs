@@ -12,14 +12,14 @@ namespace Poly.Collections {
         public void Add() {
             accumulator.Clear();
             accumulator.Add(_ => _ + 1);
-            Assert.Equal(1, accumulator.Value);
+            Assert.Equal(1, accumulator.Result);
         }
 
         [Fact]
         public void Subtract() {
             accumulator.Clear();
             accumulator.Add(_ => _ - 1);
-            Assert.Equal(-1, accumulator.Value);
+            Assert.Equal(-1, accumulator.Result);
         }
     }
 }

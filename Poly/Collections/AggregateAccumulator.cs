@@ -9,6 +9,6 @@ namespace Poly.Collections {
 
         public T Default { get; }
 
-        public T Value => this.Aggregate(Default, (value, function) => function(value));
+        public T Result => this.Aggregate(Default, (value, function) => function(value));
     }
 }

@@ -7,10 +7,15 @@ namespace Poly.IO
 {
     public partial class MemoryBufferedStream : Stream
     {
+        IMemoryOwner<byte> inBufferOwner, outBufferOwner;
+
         public MemoryBufferedStream(int inMinimumSize = 4096, int outMinimumSize = 4096)
         {
-            In = new DynamicBuffer<byte>(ArrayPool<byte>.Shared.Rent(inMinimumSize));
-            Out = new DynamicBuffer<byte>(ArrayPool<byte>.Shared.Rent(outMinimumSize));
+            inBufferOwner = MemoryPool<byte>.Shared.Rent(inMinimumSize);
+            outBufferOwner = MemoryPool<byte>.Shared.Rent(outMinimumSize);
+            
+            In = new DynamicBuffer<byte>(inBufferOwner.Memory);
+            Out = new DynamicBuffer<byte>(outBufferOwner.Memory);
         }
         
         public DynamicBuffer<byte> In { get; }

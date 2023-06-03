@@ -1,5 +1,4 @@
 using System;
-using System.Buffers;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,6 +9,9 @@ namespace Poly.IO
 {
     public partial class MemoryBufferedStream
     {
+        public void Write(byte[] buffer)
+            => Out.Write(buffer);
+
         public override void Write(byte[] buffer, int index, int count)
             => Out.Write(buffer, index, count);
 
@@ -23,7 +25,7 @@ namespace Poly.IO
 
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> memory, CancellationToken cancellationToken = default)
             => Out.Write(memory.Span)
-             ? default(ValueTask)
+             ? default
              : default;
 
         public ValueTask<bool> WriteAsync(CancellationToken cancellationToken = default)

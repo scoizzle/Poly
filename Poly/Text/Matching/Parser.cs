@@ -1,8 +1,8 @@
-using System;
 using System.Linq;
 using System.Collections.Generic;
 
-namespace Poly.Text.Matching {
+namespace Poly.Text.Matching
+{
     using Expressions;
 
     public static class Parser {

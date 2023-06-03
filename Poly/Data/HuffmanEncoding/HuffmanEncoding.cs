@@ -14,6 +14,9 @@ namespace Poly.Data {
         public IEnumerable<bool> Encode(TValue value) =>
             tree.Encode(value);
 
+        public IEnumerable<bool> Encode(IEnumerable<TValue> values) => 
+            tree.Encode(values);
+
         public IEnumerable<TValue> Decode(IEnumerable<bool> encoded) =>
             tree.Decode(encoded);
 

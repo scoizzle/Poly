@@ -73,9 +73,8 @@ namespace Poly
             return false;
         }
 
-        /* Future work, must improve accuracy of mantissa
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out double value)
+        public static unsafe bool TryParse_(this string text, ref int index, int lastIndex, out double value)
         {
             if (!Iteration.BoundsCheck(text, index, lastIndex))
                 goto failure;
@@ -83,10 +82,10 @@ namespace Poly
             char character;
 
             var fraction = 0L;
-            var fraction_sign = 1L;
+            var fraction_sign = 0L;
             var fraction_decimal_digits = 0;
 
-            var exponent = 0;
+            var exponent = 0L;
             var exponent_sign = 1;
 
             var offset = index;
@@ -95,7 +94,7 @@ namespace Poly
             {
                 if (text[offset] == '-')
                 {
-                    fraction_sign = -1L;
+                    fraction_sign = 1L << 64;
                     offset++;
                 }
 
@@ -106,7 +105,7 @@ namespace Poly
                     if ((character ^ '0') > 9)
                         break;
 
-                    fraction = checked(fraction * 10) + (int)(character - '0');
+                    fraction = checked(fraction * 10) + (character - '0');
                     offset++;
                 }
 
@@ -121,13 +120,11 @@ namespace Poly
                         if ((character ^ '0') > 9)
                             break;
 
-                        fraction = checked(fraction * 10) + (int)(character - '0');
+                        fraction = checked(fraction * 10) + (character - '0');
                         fraction_decimal_digits++;
                         offset++;
                     }
                 }
-
-                fraction *= fraction_sign;
 
                 if (offset < lastIndex && (text[offset] == 'e' || text[offset] == 'E'))
                 {
@@ -152,7 +149,7 @@ namespace Poly
                         if ((character ^ '0') > 9)
                             break;
 
-                        exponent = checked(exponent * 10) + (int)(character - '0');
+                        exponent = checked(exponent * 10) + (character - '0');
                         offset++;
                     }
 
@@ -162,7 +159,9 @@ namespace Poly
                     exponent *= exponent_sign;
                 }
 
-                value = validPowersOf10[308 - fraction_decimal_digits + exponent] * fraction;
+
+                fraction = fraction_sign | exponent << 23 | (fraction - 1 * 1 << 23);
+                value = *(float*)&fraction;
                 index = offset;
                 return true;
             }
@@ -172,7 +171,5 @@ namespace Poly
             value = double.NaN;
             return false;
         }
-
-        */
     }
 }

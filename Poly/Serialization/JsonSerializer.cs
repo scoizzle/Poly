@@ -1,27 +1,33 @@
-using System;
+namespace Poly.Serialization;
 
-namespace Poly.Serialization {
-    public static class JsonSerializer {
-        public static string Serialize<T>(T obj) {
-            if (obj is null) throw new ArgumentNullException(nameof(obj));
+using Poly.Reflection;
 
-            var typeInterface = Reflection.TypeInterface<T>.Get();
-            var writer = new Serialization.JsonWriter();
+public static class JsonSerializer {
+    public static string? Serialize<T>(T obj) {
+        Guard.IsNotNull(obj);
 
-            if (!typeInterface.Serialize(writer, obj)) return default;
-            
-            return writer.Text.ToString();
-        }
+        using var _ = Activities.Source.StartActivity();
 
-        public static T Deserialize<T>(string text) {
-            if (text is null) throw new ArgumentNullException(nameof(text));
+        var writer = new JsonWriter();
+        var typeInterface = TypeInterfaceRegistry.Get<T>()!;
+        var serializationDelegate = typeInterface.Serialize;
 
-            var typeInterface = Reflection.TypeInterface<T>.Get();
-            var reader = new Serialization.JsonReader(text);
+        return serializationDelegate(writer, obj)
+            ? writer.Text.ToString()
+            : default;
+    }
 
-            if (typeInterface.Deserialize(reader, out var obj)) return obj;
+    public static T? Deserialize<T>(string text) {
+        Guard.IsNotNullOrEmpty(text);
 
-            return default;
-        }
+        using var _ = Activities.Source.StartActivity();
+
+        var reader = new JsonReader(text);
+        var typeInterface = TypeInterfaceRegistry.Get<T>()!;
+        var deserializationDelegate = typeInterface.Deserialize;
+
+        return deserializationDelegate(reader, out var obj)
+            ? obj
+            : default;
     }
 }

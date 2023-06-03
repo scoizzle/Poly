@@ -1,17 +1,15 @@
 using System;
 using System.Buffers;
 
-using System.Collections.Generic;
-
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Engines;
 
-namespace Poly.Data {
+namespace Poly.Data
+{
     public class DynamicBufferBenchmarks {
         static readonly Memory<byte> data = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF };
 
         [Benchmark]
-        public void FillBufferTest() {
+        public static void FillBufferTest() {
             var owner = MemoryPool<byte>.Shared.Rent(Environment.SystemPageSize);
             var buffer = new DynamicBuffer<byte>(owner.Memory);
 
@@ -22,7 +20,7 @@ namespace Poly.Data {
         }
 
         [Benchmark]
-        public void FillAndDrainBufferTest() {
+        public static void FillAndDrainBufferTest() {
             Span<byte> chunk = stackalloc byte[4];
 
             var owner = MemoryPool<byte>.Shared.Rent(Environment.SystemPageSize);

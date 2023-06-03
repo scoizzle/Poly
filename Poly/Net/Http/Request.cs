@@ -1,6 +1,5 @@
-﻿using System.IO;
-
-namespace Poly.Net.Http {
+﻿namespace Poly.Net.Http
+{
     public struct RequestHeaderCollection { 
 
     }

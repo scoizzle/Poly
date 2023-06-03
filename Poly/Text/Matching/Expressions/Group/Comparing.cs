@@ -1,7 +1,7 @@
-using System;
 using System.Linq;
 
-namespace Poly.Text.Matching.Expressions {
+namespace Poly.Text.Matching.Expressions
+{
     public partial class Group {
         public override TryCompareDelegate Goto()
             => gotoView(Members, Optional, Next);

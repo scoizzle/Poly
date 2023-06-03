@@ -6,10 +6,9 @@ using System.Text;
 
 namespace Poly
 {
-    public static class Conversion
+    public static partial class Conversion
     {
-        public static Stream GetStream(this string This, Encoding encoding)
-            => new MemoryStream(encoding.GetBytes(This), false);
+        public static Stream GetStream(this string This, Encoding encoding) => new MemoryStream(encoding.GetBytes(This), false);
 
         public static IEnumerable<char> Escape(this string This, int offset, int count)
         {
@@ -87,10 +86,10 @@ namespace Poly
         }
 
         public static string Escape(this string This) =>
-            string.Concat(Escape(This, 0, This.Length));
+            string.Concat(This.Escape(0, This.Length));
 
         public static string Descape(this string This) =>
-            string.Concat(Descape(This, 0, This.Length));
+            string.Concat(This.Descape(0, This.Length));
 
         public static string HtmlEscape(this string This)
             => Uri.EscapeDataString(This);
@@ -98,8 +97,11 @@ namespace Poly
         public static string UriEscape(this string This)
             => Uri.EscapeDataString(This);
 
+        [GeneratedRegex("%([A-Fa-f\\d]{2})")]
+        private static partial Regex HexCodeRegex();
+
         public static string HtmlDescape(this string This)
-            => System.Text.RegularExpressions.Regex.Replace(This.Replace("+", " "), "%([A-Fa-f\\d]{2})", a => Convert.ToChar(Convert.ToInt32(a.Groups[1].Value, 16)).ToString());
+            => HexCodeRegex().Replace(This.Replace("+", " "), a => Convert.ToChar(Convert.ToInt32(a.Groups[1].Value, 16)).ToString());
 
         public static string UriDescape(this string This)
             => Uri.UnescapeDataString(This);

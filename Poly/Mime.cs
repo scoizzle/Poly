@@ -2,7 +2,8 @@
 
 namespace Poly {
     public static class Mime {
-        public static Dictionary<string, string> Types = new Dictionary<string, string> {
+        public static readonly Dictionary<string, string> Types = new()
+        {
             { ".7z", "application/x-7z-compressed" },
             { ".aac", "audio/x-aac" },
             { ".bin", OctetStream },

@@ -2,14 +2,14 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text;
 
 namespace Poly.Data
 {
     public static partial class DynamicBufferExtensions
     {
         public static async ValueTask<bool> ReadAsync(
-            this Stream stream, DynamicBuffer<byte> buffer,
+            this Stream stream, 
+            DynamicBuffer<byte> buffer,
             CancellationToken cancellationToken = default)
         {
             if (!buffer.EnsureWriteableCapacity())
@@ -31,9 +31,10 @@ namespace Poly.Data
         }
 
         public static async ValueTask<bool> ReadAsync(
-            this Stream stream, DynamicBuffer<byte> buffer, int count,
-            CancellationToken cancellationToken = default
-            )
+            this Stream stream, 
+            DynamicBuffer<byte> buffer,
+            int count,
+            CancellationToken cancellationToken = default)
         {
             if (!buffer.EnsureWriteableCapacity(count))
                 return false;
@@ -41,7 +42,7 @@ namespace Poly.Data
             try
             {
                 do {
-                    var read = await stream.ReadAsync(buffer.Writable.Slice(0, count), cancellationToken);
+                    var read = await stream.ReadAsync(buffer.Writable[..count], cancellationToken);
 
                     if (read == 0 || !buffer.Commit(read))
                         return false;
@@ -58,7 +59,8 @@ namespace Poly.Data
         }
 
         public static async ValueTask<bool> WriteAsync(
-            this Stream stream, DynamicBuffer<byte> buffer,
+            this Stream stream,
+            DynamicBuffer<byte> buffer,
             CancellationToken cancellationToken = default)
         {
             try {
@@ -73,14 +75,16 @@ namespace Poly.Data
         }
 
         public static async ValueTask<bool> WriteAsync(
-            this Stream stream, DynamicBuffer<byte> buffer, int count,
+            this Stream stream, 
+            DynamicBuffer<byte> buffer, 
+            int count,
             CancellationToken cancellationToken = default)
         {
-            if (buffer.Available < count)
+            if (buffer.Count < count)
                 return false;
 
             try {
-                await stream.WriteAsync(buffer.Readable.Slice(0, count), cancellationToken);
+                await stream.WriteAsync(buffer.Readable[..count], cancellationToken);
                 return buffer.Consume(count);
             }
             catch (Exception error)
@@ -90,7 +94,9 @@ namespace Poly.Data
         }
 
         public static async ValueTask<bool> CopyAsync(
-            this DynamicBuffer<byte> buffer, Stream In, Stream Out,
+            this DynamicBuffer<byte> buffer, 
+            Stream In, 
+            Stream Out,
             CancellationToken cancellationToken = default
             )
         {
@@ -108,13 +114,15 @@ namespace Poly.Data
 
         public static async ValueTask<bool> CopyAsync(
             this DynamicBuffer<byte> buffer,
-            Stream In, Stream Out, long length,
+            Stream In, 
+            Stream Out, 
+            long length,
             CancellationToken cancellationToken = default
             )
         {
             do
             {
-                var to_read = (int)(Math.Min(buffer.RemainingLength, length));
+                var to_read = (int)Math.Min(buffer.RemainingLength, length);
 
                 if (!await ReadAsync(In, buffer, to_read, cancellationToken))
                     return true;

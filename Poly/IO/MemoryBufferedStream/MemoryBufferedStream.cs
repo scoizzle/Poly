@@ -7,7 +7,7 @@ namespace Poly.IO
 {
     public partial class MemoryBufferedStream : Stream
     {
-        IMemoryOwner<byte> inBufferOwner, outBufferOwner;
+        private readonly IMemoryOwner<byte> inBufferOwner, outBufferOwner;
 
         public MemoryBufferedStream(int inMinimumSize = 4096, int outMinimumSize = 4096)
         {
@@ -17,29 +17,24 @@ namespace Poly.IO
             In = new DynamicBuffer<byte>(inBufferOwner.Memory);
             Out = new DynamicBuffer<byte>(outBufferOwner.Memory);
         }
-        
-        public DynamicBuffer<byte> In { get; }
-        
-        public DynamicBuffer<byte> Out { get; }
 
         public MemoryBufferedStream(Stream stream, int inMinimumSize = -1, int outMinimumSize = -1)
              : this(inMinimumSize, outMinimumSize)
             => Stream = stream;
 
-        public override bool CanRead
-            => Stream.CanRead;
+        public DynamicBuffer<byte> In { get; }
+        
+        public DynamicBuffer<byte> Out { get; }
 
-        public override bool CanSeek
-            => Stream.CanSeek;
+        public override bool CanRead => Stream.CanRead;
 
-        public override bool CanWrite
-            => Stream.CanWrite;
+        public override bool CanSeek => Stream.CanSeek;
 
-        public override bool CanTimeout
-            => Stream.CanTimeout;
+        public override bool CanWrite => Stream.CanWrite;
 
-        public override long Length
-            => Stream.Length;
+        public override bool CanTimeout => Stream.CanTimeout;
+
+        public override long Length => Stream.Length;
 
         public override long Position
         {
@@ -49,20 +44,17 @@ namespace Poly.IO
 
         public Stream Stream { get; protected set; }
 
-        public override void Flush()
-            => Stream.Flush();
+        public override void Flush() => Stream.Flush();
 
-        public override long Seek(long offset, SeekOrigin origin)
-            => Stream.Seek(offset, origin);
+        public override long Seek(long offset, SeekOrigin origin) => Stream.Seek(offset, origin);
 
-        public override void SetLength(long value)
-            => Stream.SetLength(value);
+        public override void SetLength(long value) => Stream.SetLength(value);
 
-        public override void Close() =>
+        public override void Close() {
             Stream.Close();
 
-        public void RebaseBuffers() { In.Rebase(); Out.Rebase(); }
-
-        public void ResetBuffers() { In.Reset(); Out.Reset(); }
+            In.Clear();
+            Out.Clear();
+        }
     }
 }

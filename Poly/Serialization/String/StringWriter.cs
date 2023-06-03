@@ -1,8 +1,10 @@
 using System;
+using System.Buffers;
+using System.Numerics;
 using System.Text;
 
 namespace Poly.Serialization {
-    public class StringWriter : WriterInterface
+    public class StringWriter : IDataWriter
     {
         public StringWriter() {
             Text = new StringBuilder();
@@ -30,10 +32,13 @@ namespace Poly.Serialization {
         public bool BeginMember(StringView name)
             => true;
 
-        public bool BeginMember(SerializeDelegate serialize, object name)
+        public bool BeginMember(SerializeObjectDelegate serialize, object name)
             => true;
 
         public bool BeginMember<T>(SerializeDelegate<T> serialize, T name)
+            => true;
+            
+        public bool BeginMember<TWriter, T>(SerializeDelegate<TWriter, T> serialize, in T name) where TWriter : class, IDataWriter
             => true;
         
         public bool EndValue()
@@ -141,16 +146,46 @@ namespace Poly.Serialization {
             return true;
         }
 
-        public bool DateTime(DateTime value)
+        public bool DateTime(in DateTime value)
         {
             Text.Append(value);
             return true;
         }
 
-        public bool TimeSpan(TimeSpan value)
+        public bool TimeSpan(in TimeSpan value)
         {
             Text.Append(value);
             return true;
+        }
+
+        public bool String(in ReadOnlySpan<char> value)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool String(in ReadOnlySequence<char> value)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool Number<T>(in T value) where T : INumber<T>
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool BeginMember(ReadOnlySpan<char> value)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool BeginMember<T>(SerializeDelegate<T> serializer, in T name)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool BeginValue()
+        {
+            throw new NotImplementedException();
         }
     }
 }

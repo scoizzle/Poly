@@ -1,6 +1,3 @@
-using System;
-using System.Linq;
-
 namespace Poly
 {
     public static partial class StringFloat64Parser

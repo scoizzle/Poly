@@ -11,12 +11,12 @@ namespace Poly
             if (location == -1)
             {
                 section = default;
-                return false;
+                return false; 
             }
 
             section = includeBraces ?
-                view.Clone(lastIndex: location + 1) :
-                view.Clone(index: view.Index + 1, lastIndex: location);
+                new StringView(view.String, view.Index, location + 1) :
+                new StringView(view.String, view.Index + 1, location);
 
             view.Index = location + 1;
             return true;

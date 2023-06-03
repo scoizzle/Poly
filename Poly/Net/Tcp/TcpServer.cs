@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading.Tasks;
 
-namespace Poly.Net.Tcp {
+namespace Poly.Net.Tcp
+{
     public partial class TcpServer {
-        IEnumerable<IPEndPoint> requestedEndpoints;
+        readonly IEnumerable<IPEndPoint> requestedEndpoints;
+        
         IEnumerable<TcpListener> listeners;
 
         public TcpServer(int port)
@@ -72,7 +73,7 @@ namespace Poly.Net.Tcp {
         private async void AcceptSocketsAsync(TcpListener tcp) {
             Log.Debug($"Now accepting connections on port {tcp.LocalEndpoint}");
 
-            while (Active) {
+            do {
                 try {
                     var socket = await tcp.AcceptSocketAsync();
                     var client = new TcpClient(socket);
@@ -83,6 +84,7 @@ namespace Poly.Net.Tcp {
                     Log.Error(error);
                 }
             }
+            while (Active);
         }
     }
 }

@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 
-namespace Poly.Data {
+namespace Poly.Data
+{
     public partial class HuffmanEncoding<TPriority, TValue> {
         private class Node {
             public TPriority Priority { get; set; }
@@ -15,19 +14,27 @@ namespace Poly.Data {
 
             public bool[] Path { get; private set; }
 
+            public IEnumerable<bool> PathEnum { get; private set; }
+
+            public long EncodedPath { get; private set; }
+            public byte EncodedPathSize { get; private set; }
+
             public bool IsRoot => Parent == null;
             public bool IsLeaf => Left == null && Right == null;
 
             public void UpdatePath() {
                 if (!IsRoot) throw new InvalidOperationException("Path update must be initiated from root element.");
 
+                EncodedPath = 0;
+                EncodedPathSize = 0;
+
+                Left?.UpdatePath(EncodedPath, EncodedPathSize, false);
+                Right?.UpdatePath(EncodedPath, EncodedPathSize, true);
+
                 Path = Array.Empty<bool>();
 
-                if (Left != null)
-                    Left.UpdatePath(Path, false);
-
-                if (Right != null)
-                    Right.UpdatePath(Path, true);
+                Left?.UpdatePath(Path, false);
+                Right?.UpdatePath(Path, true);
             }
 
             private void UpdatePath(bool[] parentPath, bool isRight)
@@ -37,11 +44,35 @@ namespace Poly.Data {
                 Array.Copy(parentPath, Path, parentPath.Length);
                 Path[parentPath.Length] = isRight;
 
-                if (Left != null)
-                    Left.UpdatePath(Path, false);
+                Left?.UpdatePath(Path, false);
+                Right?.UpdatePath(Path, true);
+            }
 
-                if (Right != null)
-                    Right.UpdatePath(Path, true);
+            private void UpdatePath(long parentPath, byte parentPathSize, bool isRight)
+            {
+                if (isRight) {
+                    EncodedPath = parentPath | (0b1000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000 >> parentPathSize);
+                }
+                else {
+                    EncodedPath = parentPath;
+                }
+
+                EncodedPathSize = (byte)(parentPathSize + 1);
+
+                PathEnum = GetPathEnumerator(EncodedPath, EncodedPathSize);
+
+                Left?.UpdatePath(EncodedPath, EncodedPathSize, false);
+                Right?.UpdatePath(EncodedPath, EncodedPathSize, true);
+            }
+
+            private static IEnumerable<bool> GetPathEnumerator(long path, byte depth) {
+                var mask = 0b1000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000;
+
+                for (var i = 0; i < depth; i++) {
+                    yield return (path & mask) != 0;
+
+                    mask >>= 1;
+                }
             }
         }
     }   

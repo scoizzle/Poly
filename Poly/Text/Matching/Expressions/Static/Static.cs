@@ -41,18 +41,11 @@ namespace Poly.Text.Matching.Expressions {
 
         static bool IsToken(char c)
         {
-            switch (c)
+            return c switch
             {
-                case '*':
-                case '^':
-                case '{':
-                case '(':
-                case '?':
-                case '[':
-                    return true;
-            }
-
-            return false;
+                '*' or '^' or '{' or '(' or '?' or '[' => true,
+                _ => false,
+            };
         }
     }
 }

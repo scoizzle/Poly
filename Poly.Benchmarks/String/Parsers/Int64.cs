@@ -1,11 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Engines;
 
-namespace Benchmarks.String.Parsers {
+namespace Benchmarks.String.Parsers
+{
     [MemoryDiagnoser]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class Int64Parser {

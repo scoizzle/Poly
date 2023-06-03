@@ -1,6 +1,5 @@
-using System;
-
-namespace Poly.Text.Matching.Expressions {
+namespace Poly.Text.Matching.Expressions
+{
     public partial class Extraction : Expression {
         public Extraction(string name, bool optional = false, int minimumLength = 0)
              : base(optional, minimumLength)

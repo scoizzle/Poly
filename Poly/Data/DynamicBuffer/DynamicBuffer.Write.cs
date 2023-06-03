@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Poly.Data
 {
-    public partial struct DynamicBuffer<T>
+    public partial class DynamicBuffer<T>
     {
         public bool Write(T value)
         {

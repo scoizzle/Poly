@@ -1,6 +1,5 @@
-using System;
-
-namespace Poly.Text.Matching.Expressions {
+namespace Poly.Text.Matching.Expressions
+{
     public partial class Static {
         public override TryCompareDelegate Goto() =>
             gotoView(Value, Optional, Next);

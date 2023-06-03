@@ -1,9 +1,11 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
 
+using System.Net;
+
 namespace Poly.Net.Http {    
-    public interface ConnectionInterface {
-        ValueTask<bool> Open();
+    public interface IConnectionInterface {
+        ValueTask<bool> Open(EndPoint endPoint);
         ValueTask Close();
         
         ValueTask<bool> ReadRequest(RequestInterface request, CancellationToken cancellationToken = default);

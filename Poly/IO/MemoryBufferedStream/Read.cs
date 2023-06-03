@@ -25,11 +25,11 @@ namespace Poly.IO
              : 0;
 
         public async ValueTask<bool> DataAvailableAsync(CancellationToken cancellationToken = default)
-            => In.Available > 0 
+            => In.Count > 0 
             || await Stream.ReadAsync(In, cancellationToken);
 
         public async ValueTask<bool> DataAvailableAsync(int count, CancellationToken cancellationToken = default)
-            => In.Available >= count 
+            => In.Count >= count 
             || await Stream.ReadAsync(In, count, cancellationToken);
 
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default)

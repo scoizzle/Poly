@@ -1,69 +1,65 @@
-using System;
+namespace Poly;
 
-namespace Poly
+public partial struct StringView : IComparable<StringView>
 {
-    public partial struct StringView
+    public static readonly StringView Empty = new(string.Empty);
+
+    public int Index, LastIndex;
+
+    public readonly string String;
+
+    public StringView(string str) : this(str, 0, str?.Length ?? 0) { }
+
+    public StringView(string str, int index, int lastIndex)
     {
-        public static readonly StringView Empty = new StringView(string.Empty);
+        Guard.IsNotNull(str);
+        Guard.IsInRange(index, 0, lastIndex);
+        Guard.IsInRange(lastIndex, index, str.Length + 1);
 
-        public int Index, LastIndex;
+        (String, Index, LastIndex) = (str, index, lastIndex);
+    }
 
-        public readonly string String;
+    public bool IsDone => Index >= LastIndex;
 
-        public StringView(string str) : this(str, 0, str?.Length ?? 0) { }
+    public bool IsValid => Iteration.BoundsCheck(String, Index, LastIndex);
 
-        public StringView(string str, int index, int lastIndex)
+    public char this[int index] =>
+        Iteration.BoundsCheck(String, index, LastIndex)
+            ? String[index]
+            : default;
+
+    public char Current => this[Index];
+
+    public char Next => this[Index + 1];
+
+    public char Previous => this[Index - 1];
+
+    public int Length => LastIndex - Index;
+
+    public override int GetHashCode() => unchecked((Length << 16) + (Current << 8) + Next);
+
+    public override string ToString() => 
+        IsValid ?
+            String[Index..LastIndex] :
+            default;
+
+    public ReadOnlySpan<char> AsSpan() => String.AsSpan(Index, Length);
+
+    public int CompareTo(StringView other)
+    {
+        if (ReferenceEquals(String, other.String))
         {
-            String = str ?? throw new ArgumentNullException(nameof(str));
-
-            Index = index;
-            LastIndex = lastIndex;
+            return (Index, LastIndex) == (other.Index, other.LastIndex)
+                ? 0
+                : -1;
         }
 
-        public bool IsDone
-            => Index >= LastIndex;
-
-        public bool IsValid
-            => Iteration.BoundsCheck(String, Index, LastIndex);
-
-        public char this[int index]
-            => Iteration.BoundsCheck(String, index, LastIndex) ?
-                String[index] :
-                default;
-
-        public char Current
-            => this[Index];
-
-        public char Next
-            => this[Index + 1];
-
-        public char Previous
-            => this[Index - 1];
-
-        public int Length
-            => LastIndex - Index;
-
-        public override int GetHashCode()
-            => (Length << 16)
-             + (Current << 8)
-             + (Next);
-
-        public override string ToString()
-            => IsValid ?
-                String[Index..LastIndex] :
-                default;
-
-        public StringView Clone(int? index = default, int? lastIndex = default)
-            => new StringView(
-                String,
-                index ?? Index,
-                lastIndex ?? LastIndex
-                );
-
-        public ReadOnlySpan<char> AsSpan()
-            => String.AsSpan(Index, Length);
-
-        public static implicit operator StringView(string text)
-            => new StringView(text);
+        return Length == other.Length
+            ? string.Compare(String, Index, other.String, other.Index, Length)
+            : -1;
     }
+
+    public static implicit operator StringView(string text) => new(text);
+
+    public static implicit operator StringView(ReadOnlyMemory<char> text) => new(text.ToString());
 }

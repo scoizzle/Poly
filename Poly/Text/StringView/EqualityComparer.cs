@@ -15,16 +15,16 @@ namespace Poly {
         public int GetHashCode(StringView obj)
             => obj.GetHashCode();
 
-        public static readonly StringViewEqualityComparer Ordinal = new StringViewEqualityComparer(StringComparison.Ordinal);
+        public static readonly StringViewEqualityComparer Ordinal = new(StringComparison.Ordinal);
 
-        public static readonly StringViewEqualityComparer OrdinalIgnoreCase = new StringViewEqualityComparer(StringComparison.OrdinalIgnoreCase);
+        public static readonly StringViewEqualityComparer OrdinalIgnoreCase = new(StringComparison.OrdinalIgnoreCase);
 
-        public static readonly StringViewEqualityComparer CurrentCulture = new StringViewEqualityComparer(StringComparison.CurrentCulture);
+        public static readonly StringViewEqualityComparer CurrentCulture = new(StringComparison.CurrentCulture);
 
-        public static readonly StringViewEqualityComparer CurrentCultureIgnoreCase = new StringViewEqualityComparer(StringComparison.CurrentCultureIgnoreCase);
+        public static readonly StringViewEqualityComparer CurrentCultureIgnoreCase = new(StringComparison.CurrentCultureIgnoreCase);
 
-        public static readonly StringViewEqualityComparer InvariantCulture = new StringViewEqualityComparer(StringComparison.InvariantCulture);
+        public static readonly StringViewEqualityComparer InvariantCulture = new(StringComparison.InvariantCulture);
 
-        public static readonly StringViewEqualityComparer InvariantCultureIgnoreCase = new StringViewEqualityComparer(StringComparison.InvariantCultureIgnoreCase);
+        public static readonly StringViewEqualityComparer InvariantCultureIgnoreCase = new(StringComparison.InvariantCultureIgnoreCase);
     }
 }

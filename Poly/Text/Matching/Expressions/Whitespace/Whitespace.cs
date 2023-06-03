@@ -1,8 +1,5 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
-namespace Poly.Text.Matching.Expressions {
+namespace Poly.Text.Matching.Expressions
+{
     public partial class Whitespace : Expression {
         public Whitespace(bool optional = false, int minimumLength = 0) : base(optional, minimumLength)
         { }

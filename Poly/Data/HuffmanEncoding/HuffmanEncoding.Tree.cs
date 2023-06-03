@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using Poly.Collections;
 
-namespace Poly.Data {
+namespace Poly.Data
+{
     public partial class HuffmanEncoding<TPriority, TValue> {
         private class Tree {
             readonly Node root;
@@ -21,7 +17,11 @@ namespace Poly.Data {
                 if (!valid_value)
                     throw new ArgumentException(nameof(value));
 
-                return current.Path;
+                return current.PathEnum;
+            }
+
+            public IEnumerable<bool> Encode(IEnumerable<TValue> values) {
+                return values.SelectMany<TValue, bool>(Encode);
             }
             
             public IEnumerable<TValue> Decode(IEnumerable<bool> encoded) {
@@ -57,19 +57,19 @@ namespace Poly.Data {
 
         Tree BuildTree(Dictionary<TValue, TPriority> frequencies) {
             var parent = default(Node);
-            var queue = new PriorityQueue<TPriority, Node>();
+            var queue = new PriorityQueue<Node, TPriority>();
             var nodes = new Dictionary<TValue, Node>();
 
             foreach (var pair in frequencies) {
                 var node = new Node { Priority = pair.Value, Value = pair.Key };
 
-                queue.Enqueue(pair.Value, node);
+                queue.Enqueue(node, pair.Value);
                 nodes.Add(pair.Key, node);
             }
 
             while (queue.Count > 1) {
-                queue.TryDequeue(out var leftPriority, out var left);
-                queue.TryDequeue(out var rightPriority, out var right);
+                queue.TryDequeue(out var left, out var leftPriority);
+                queue.TryDequeue(out var right, out var rightPriority);
 
                 parent = new Node {
                     Priority = Add(leftPriority, rightPriority),
@@ -80,7 +80,7 @@ namespace Poly.Data {
                 left.Parent = parent;
                 right.Parent = parent;
 
-                queue.Enqueue(parent.Priority, parent);
+                queue.Enqueue(parent, parent.Priority);
             }
 
             parent.UpdatePath();

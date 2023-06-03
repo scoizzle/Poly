@@ -1,8 +1,8 @@
-using System;
 using BenchmarkDotNet.Attributes;
 
-namespace Poly.Text.Matching.Benchmarks {
-    
+namespace Poly.Text.Matching.Benchmarks
+{
+
     public class UrlMatcherBenchmarks {
         private Expression expression;
         private TryCompareDelegate compare;
@@ -10,7 +10,7 @@ namespace Poly.Text.Matching.Benchmarks {
         [GlobalSetup]
         public void Setup()
         {
-            Parser.TryParse(new StringView(UrlMatchString), out expression);
+            _ = Parser.TryParse(new StringView(UrlMatchString), out expression);
             compare = expression.Compare();
         }
 

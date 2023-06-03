@@ -4,8 +4,8 @@ using Xunit;
 
 namespace Poly.Data {
     public class HuffmanEncodingTests {
-        static char[] dataset = new [] { 'a', 'a', 'b', 'b', 'b', 'c' };
-        static HuffmanEncoding<char> encoding = new HuffmanEncoding<char>(dataset);
+        static readonly char[] dataset = new [] { 'a', 'a', 'b', 'b', 'b', 'c' };
+        static readonly HuffmanEncoding<char> encoding = new(dataset);
 
         [Fact]
         public void EncodeSingleCharacter()

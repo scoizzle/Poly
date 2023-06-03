@@ -1,7 +1,7 @@
 using System;
 
 namespace Poly.Data {
-    public partial struct DynamicBuffer<T> {
+    public partial class DynamicBuffer<T> {
         public DynamicBuffer(Memory<T> buffer) {
             Buffer = buffer;
             Size = buffer.Length;
@@ -69,7 +69,9 @@ namespace Poly.Data {
         }
 
         public bool EnsureWriteableCapacity(int n = 1)
-        {   
+        {   if (n < 0) return false;
+            if (n == 0) return true;
+            
             if (Count == 0 && Offset > 0) {
                 Reset();
                 return n <= Buffer.Length;
@@ -95,6 +97,12 @@ namespace Poly.Data {
 
             Offset = 0;
             return true;
+        }
+
+        public void Clear() {
+            Reset();
+
+            Buffer.Span.Clear();
         }
     }
 }

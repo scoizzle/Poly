@@ -9,8 +9,10 @@ namespace Poly
             => TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
             
         public static bool TryParse(this string text, ref int index, int lastIndex, out int value) {
-            if (!Iteration.BoundsCheck(text, index, lastIndex))
-                goto failure;
+            if (!Iteration.BoundsCheck(text, index, lastIndex)) {
+                value = default;
+                return false;
+            }
 
             int offset = index;
             int result = 0;
@@ -20,31 +22,33 @@ namespace Poly
             if (negative)
                 offset++;
 
-            try {
-                while (offset < lastIndex) {
-                    var digit = text[offset] - '0';
+            while (offset < lastIndex) {
+                var digit = text[offset] - '0';
 
-                    if (digit < 0 || digit > 9)
-                        break;
+                if (digit < 0 || digit > 9)
+                    break;
 
-                    result = checked(result * 10) + digit;
-                    offset++;
+                var next = result * 10 + digit;
+
+                if (next < result) {
+                    value = default;
+                    return false;
                 }
 
-                if (offset < lastIndex && text[offset] == '.')
-                    goto failure;
-
-                index = offset;
-                value = negative ? -result : result;
-                return true;
+                result = next;
+                offset++;
             }
-            catch { }
 
-        failure:
-            value = default;
-            return false;
+            if (offset < lastIndex && text[offset] == '.') {
+                value = default;
+                return false;
+            }
+
+            index = offset;
+            value = negative ? -result : result;
+            return true;
         }
-
+        
         public static bool TryParse(this string This, out uint value) =>
             TryParse(This, 0, This?.Length ?? -1, out value);
 
@@ -52,35 +56,39 @@ namespace Poly
             TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
         public static bool TryParse(this string text, ref int index, int lastIndex, out uint value) {
-            if (!Iteration.BoundsCheck(text, index, lastIndex))
-                goto failure;
+            if (!Iteration.BoundsCheck(text, index, lastIndex)) {
+                value = default;
+                return false;
+            }
 
             int offset = index;
             uint result = 0;
 
-            try {
-                while (offset < lastIndex) {
-                    var character = text[offset];
+            while (offset < lastIndex) {
+                var digit = text[offset] - '0';
 
-                    if (character < '0' || character > '9')
-                        break;
+                if (digit < 0 || digit > 9)
+                    break;
 
-                    result = checked(result * 10) + (uint)(character - '0');
-                    offset++;
+                var next = (uint)(result * 10 + digit);
+
+                if (next < result) {
+                    value = default;
+                    return false;
                 }
 
-                if (offset < lastIndex && text[offset] == '.')
-                    goto failure;
-
-                index = offset;
-                value = result;
-                return true;
+                result = next;
+                offset++;
             }
-            catch { }
 
-        failure:
-            value = default;
-            return false;
+            if (offset < lastIndex && text[offset] == '.') {
+                value = default;
+                return false;
+            }
+
+            index = offset;
+            value = result;
+            return true;
         }
     }
 }

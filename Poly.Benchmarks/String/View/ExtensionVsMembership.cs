@@ -1,12 +1,11 @@
-using System;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 
-namespace Poly.Text.View.Benchmarks {
+namespace Poly.Text.View.Benchmarks
+{
     [SimpleJob(RunStrategy.Throughput)]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class StringViewBenchmarks {
-
         [Benchmark]
         public void StringConsume() {
             var view = new StringView("aaaaa");
@@ -18,7 +17,7 @@ namespace Poly.Text.View.Benchmarks {
             view.Consume('a');
         }
 
-        [Benchmark]
+        // [Benchmark]
         public void SpanConsume() {
             var view = new StringView("aaaaa");
 

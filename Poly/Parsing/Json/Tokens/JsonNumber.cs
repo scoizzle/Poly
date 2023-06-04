@@ -5,7 +5,7 @@ namespace Poly.Parsing.Json;
 public record JsonNumberParser
     : Grammar<char, JsonTokenType>.ITokenParser 
 {    
-    const char Negatative = '-';
+    const char Negative = '-';
     const char Positive = '+';
     const char Period = '.';
     const char Exponent = 'e';
@@ -20,7 +20,7 @@ public record JsonNumberParser
         var reader = new SequenceReader<char>(sequence);
         var begin = reader.Position;
 
-        reader.IsNext(Negatative, advancePast: true);
+        reader.IsNext(Negative, advancePast: true);
         
         if (reader.AdvancePastAny(ValidCharacters) == 0)
         {
@@ -38,7 +38,7 @@ public record JsonNumberParser
         if (reader.IsNext(Exponent, advancePast: true) ||
             reader.IsNext(ExponentUpper, advancePast: true))
         {
-            reader.IsNext(Negatative, advancePast: true);
+            reader.IsNext(Negative, advancePast: true);
             reader.IsNext(Positive, advancePast: true);
         
             if (reader.AdvancePastAny(ValidCharacters) == 0)

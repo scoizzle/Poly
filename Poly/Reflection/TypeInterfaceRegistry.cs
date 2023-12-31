@@ -5,37 +5,41 @@ namespace Poly.Reflection;
 public static class TypeInterfaceRegistry {
     static readonly ConcurrentDictionary<Type, ISystemTypeInterface> _registered = new();
 
-    static TypeInterfaceRegistry() => RegisterTypesFromAssembly(typeof(ISystemTypeInterface).Assembly);
+    static TypeInterfaceRegistry() => AppDomain
+        .CurrentDomain
+        .GetAssemblies()
+        .ForEach(RegisterTypesFromAssembly);
 
     public static void RegisterTypesFromAssembly(Assembly asm) => asm
         .GetTypesImplementing(typeof(ISystemTypeInterface))
-        .Where(t => !t.IsGenericType && t.DeclaredConstructors.Any(c => c.GetParameters().Length == 0))
+        .Where(t => !t.IsGenericType)
+        .Where(t => t.DeclaredConstructors.Any(c => c.GetParameters().Length == 0))
         .Select(t => Activator.CreateInstance(t) as ISystemTypeInterface)
         .ForEach(Register!);
 
     public static void Register(ISystemTypeInterface value) {
-        if (value is null) throw new ArgumentNullException(nameof(value));
-        if (value.Type is null) throw new NullReferenceException("TypeInterface must define a valid Type before registration.");
+        Guard.IsNotNull(value);
+        Guard.IsNotNull(value.Type);
 
         _registered[value.Type] = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    public static ISystemTypeInterface<T>? Get<T>()
-        => TryGet<T>(out var value) 
+    public static ISystemTypeInterface<T>? Get<T>() => 
+        TryGet<T>(out var value) 
             ? value 
             : default;
 
-    public static ITypeInterface? Get(Type type)
-        => TryGet(type, out var value) 
+    public static ITypeInterface? Get(Type type) => 
+        TryGet(type, out var value) 
             ? value 
             : default;
 
     public static bool TryGet(Type type, out ISystemTypeInterface value)
     {
-        static ISystemTypeInterface GetInterface(Type t) {
+        static ISystemTypeInterface? GetInterface(Type t) {
             return TryGetInterface(t, out var v)
                 ? v
-                : ThrowHelper.ThrowArgumentException<ISystemTypeInterface>();
+                : default;
         };
 
         value = _registered.GetOrAdd(
@@ -58,11 +62,16 @@ public static class TypeInterfaceRegistry {
         return false;
     }
 
-    private static bool TryGetInterface(Type type, [NotNullWhen(true)] out ISystemTypeInterface? value)
-        => TryGetArrayInterface(type, out value)
-        || TryGetDictionaryInterface(type, out value)
-        || TryGetListInterface(type, out value)
-        || TryGetGenericObjectInterface(type, out value);
+    private static bool TryGetInterface(
+        Type type, 
+        [NotNullWhen(true)] out ISystemTypeInterface? value) 
+    {
+        return 
+            TryGetArrayInterface(type, out value) ||
+            TryGetDictionaryInterface(type, out value) ||
+            TryGetListInterface(type, out value) ||
+            TryGetGenericObjectInterface(type, out value);
+    }
 
     private static bool TryGetGenericObjectInterface(Type type, out ISystemTypeInterface? value) {
         var generic = typeof(Core.CoreType<>).MakeGenericType(type);
@@ -79,16 +88,7 @@ public static class TypeInterfaceRegistry {
         var elementType = type.GetElementType();
         Guard.IsNotNull(elementType);
 
-        var systemTypeInterfaceForElement = typeof(ISystemTypeInterface<>).MakeGenericType(elementType);
-        if (!TryGet(elementType, out var elementTypeInterface))
-        {
-            value = default;
-            return false;
-        }
-
-        Guard.IsAssignableToType(elementTypeInterface, systemTypeInterfaceForElement);
-
-        var generic = typeof(Core.Array<,>).MakeGenericType(elementType, elementTypeInterface.GetType());
+        var generic = typeof(Core.Array<>).MakeGenericType(elementType);
         value = Activator.CreateInstance(generic) as ISystemTypeInterface;
         return true;        
     }
@@ -104,24 +104,7 @@ public static class TypeInterfaceRegistry {
         var keyType = genericArguments[0];
         var valueType = genericArguments[1];
 
-        var systemTypeInterfaceForKey = typeof(ISystemTypeInterface<>).MakeGenericType(keyType);
-        if (!TryGet(keyType, out var keyTypeInterface))
-        {
-            value = default;
-            return false;
-        }
-
-        var systemTypeInterfaceForValue = typeof(ISystemTypeInterface<>).MakeGenericType(valueType);
-        if (!TryGet(valueType, out var valueTypeInterface))
-        {
-            value = default;
-            return false;
-        }
-
-        Guard.IsAssignableToType(keyTypeInterface, systemTypeInterfaceForKey);
-        Guard.IsAssignableToType(valueTypeInterface, systemTypeInterfaceForValue);
-
-        var generic = typeof(Core.DictionaryTypeInterface<,,,,>).MakeGenericType(type, keyType, systemTypeInterfaceForKey, valueType, systemTypeInterfaceForValue);
+        var generic = typeof(Core.DictionaryTypeInterface<,,>).MakeGenericType(type, keyType, valueType);
         value = Activator.CreateInstance(generic) as ISystemTypeInterface;
         return true;        
     }
@@ -133,18 +116,8 @@ public static class TypeInterfaceRegistry {
         }
 
         var elementType = genericArguments[0];
-
-        var systemTypeInterfaceForElement = typeof(ISystemTypeInterface<>).MakeGenericType(elementType);
-
-        if (!TryGet(elementType, out var elementTypeInterface))
-        {
-            value = default;
-            return false;
-        }
-
-        Guard.IsAssignableToType(elementTypeInterface, systemTypeInterfaceForElement);
         
-        var generic = typeof(Core.ListTypeInterface<,,>).MakeGenericType(type, elementType, elementTypeInterface.GetType());
+        var generic = typeof(Core.ListTypeInterface<,>).MakeGenericType(type, elementType);
         value = Activator.CreateInstance(generic) as ISystemTypeInterface;
         return true;
     }

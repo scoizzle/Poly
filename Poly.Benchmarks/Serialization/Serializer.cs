@@ -48,11 +48,12 @@ namespace Poly.Serialization.Benchmarks
     }
     
     [MemoryDiagnoser]
+    [MinColumn, MaxColumn, MeanColumn]
     public class SerializationBenchmarks 
     { 
         public static readonly string JsonText = JsonConvert.SerializeObject(test);
 
-        public static readonly ITypeInterface typeInterface = TypeInterfaceRegistry.Get<TestClass>();
+        public static readonly ISystemTypeInterface<TestClass> typeInterface = TypeInterfaceRegistry.Get<TestClass>();
 
         public static readonly SerializeObjectDelegate serializeDelegate = typeInterface.SerializeObject;
         
@@ -77,35 +78,41 @@ namespace Poly.Serialization.Benchmarks
             return test;
         }
 
+        [GlobalSetup]
+        public void Setup()
+        {
+            
+        }
+
         // [Benchmark]
         // public void Newtonsoft_Serialize() {
         //     _ = JsonConvert.SerializeObject(test);
         // }
 
-        [Benchmark]
-        public void Newtonsoft_Deserialize() {
-            _ = JsonConvert.DeserializeObject<TestClass>(JsonText);
-        }
+        //[Benchmark]
+        //public void Newtonsoft_Deserialize() {
+        //    _ = JsonConvert.DeserializeObject<TestClass>(JsonText);
+        //}
 
         // [Benchmark]
         // public void SystemTextJson_Serialize() {
         //     _ = System.Text.Json.JsonSerializer.Serialize<TestClass>(test);
         // }
 
-        [Benchmark]
-        public void SystemTextJson_Deserialize() {
-            _ = System.Text.Json.JsonSerializer.Deserialize<TestClass>(JsonText);
-        }
+        //[Benchmark]
+        //public void SystemTextJson_Deserialize() {
+        //    _ = System.Text.Json.JsonSerializer.Deserialize<TestClass>(JsonText);
+        //}
 
         // [Benchmark]
         // public void SystemTextJson_Serialize_SourceGeneration() {
         //     _ = System.Text.Json.JsonSerializer.Serialize<TestClass>(test);
         // }
 
-        [Benchmark]
-        public void SystemTextJson_Deserialize_SourceGeneration() {
-            _ = System.Text.Json.JsonSerializer.Deserialize(JsonText, SourceGenerationContext.Default.TestClass);
-        }
+        // [Benchmark]
+        // public void SystemTextJson_Deserialize_SourceGeneration() {
+        //     _ = System.Text.Json.JsonSerializer.Deserialize(JsonText, SourceGenerationContext.Default.TestClass);
+        // }
 
 
         // [Benchmark]
@@ -113,10 +120,10 @@ namespace Poly.Serialization.Benchmarks
         //     _ = JsonSerializer.Serialize<TestClass>(test);
         // }
         
-        [Benchmark]
-        public void Poly_TypeInterface_Deserialize() {
-            _ = JsonSerializer.Deserialize<TestClass>(JsonText);
-        }
+        // [Benchmark]
+        // public void Poly_TypeInterface_Deserialize() {
+        //     _ = JsonSerializer.Deserialize<TestClass>(JsonText);
+        // }
 
         // [Benchmark]
         // public void Poly_CachedTypeInterface_Serialize()
@@ -140,11 +147,19 @@ namespace Poly.Serialization.Benchmarks
         // }
 
         [Benchmark]
-        public void Poly_Pipelines_Deserialize()
+        public void Poly_CachedTypeInterface_Slice_Deserialize()
         {
-            var sequence = new ReadOnlySequence<char>(JsonText.AsMemory());
-            var reader = new JsonReaderPipelines(sequence);
+            var reader = new JsonReaderSlice(JsonText);
             typeInterface.DeserializeObject(reader, out _);
         }
+
+
+        // [Benchmark]
+        // public void Poly_Pipelines_Deserialize()
+        // {
+        //     var sequence = new ReadOnlySequence<char>(JsonText.AsMemory());
+        //     var reader = new JsonReaderPipelines(sequence);
+        //     typeInterface.DeserializeObject(reader, out _);
+        // }
     }
 }

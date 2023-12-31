@@ -2,17 +2,13 @@ using Poly.Serialization;
 
 namespace Poly.Reflection.Core;
 
-internal class DictionaryTypeInterface<TDictionary, TKey, TKeyInterface, TValue, TValueInterface> : ISystemTypeInterface<TDictionary> 
-    where TDictionary : IDictionary<TKey, TValue> 
-    where TKeyInterface : ISystemTypeInterface<TKey>
-    where TValueInterface : ISystemTypeInterface<TValue>
+internal class DictionaryTypeInterface<TDictionary, TKey, TValue> : ISystemTypeInterface<TDictionary>
+    where TDictionary : IDictionary<TKey, TValue>
 {
     public DictionaryTypeInterface() {
         Type = typeof(TDictionary);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, TDictionary>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, TDictionary>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<TDictionary>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<TDictionary>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -21,83 +17,75 @@ internal class DictionaryTypeInterface<TDictionary, TKey, TKeyInterface, TValue,
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<TDictionary> Serialize { get; }
-
-    public DeserializeDelegate<TDictionary> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, TDictionary> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
+    public bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out TDictionary? result) where TReader : class, IDataReader
     {
-        var deserializeKey = TKeyInterface.GetDeserializationDelegate<TReader>();
-        var deserializeValue = TValueInterface.GetDeserializationDelegate<TReader>();
+		using var _ = Instrumentation.AddEvent();
 
-        return (TReader reader, [NotNullWhen(true)] out TDictionary? result) => 
-        {
-            Guard.IsNotNull(reader);
-
-            if (reader.BeginObject())
-            {
-                var instance = Activator.CreateInstance(typeof(TDictionary));
-                Guard.IsNotNull(instance);
-
-                result = (TDictionary)instance;
-
-                while (!reader.IsDone)
-                {
-                    if (!reader.BeginMember(deserializeKey, out var key))
-                        return false;
-
-                    if (!deserializeValue(reader, out var value))
-                        return false;
-
-                    result.Add(key, value);
-
-                    if (!reader.EndValue())
-                        break;
-                }
-
-                return reader.EndObject();
-            }
-
+        if (reader is null) {
             result = default;
-            return reader.Null();
-        };
-    }
-        
-    public static SerializeDelegate<TWriter, TDictionary> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-    {
-        var serializeKey = TKeyInterface.GetSerializationDelegate<TWriter>();
-        var serializeValue = TValueInterface.GetSerializationDelegate<TWriter>();
+            return false;
+        }
 
-        return (TWriter writer, TDictionary value) => {
-            if (writer is null) return false;
-            if (value is null) return writer.Null();
-                
-            if (!writer.BeginObject()) return false;
+        if (reader.BeginObject())
+        {
+            var instance = Activator.CreateInstance(typeof(TDictionary));
+            Guard.IsNotNull(instance);
 
-            foreach (var pair in value)
+            result = (TDictionary)instance;
+
+            while (!reader.IsDone)
             {
-                if (!writer.BeginMember(serializeKey, pair.Key))
+                if (!reader.BeginMember<TReader, TKey>(KeyTypeInterface.Deserialize, out var key) || key is null)
                     return false;
 
-                if (!serializeValue(writer, pair.Value))
+                if (!ValueTypeInterface.Deserialize(reader, out var value))
                     return false;
 
-                if (!writer.EndValue())
+                result.Add(key, value);
+
+                if (!reader.EndValue())
                     break;
             }
 
-            return writer.EndObject();
-        };
+            return reader.EndObject();
+        }
+
+        result = default;
+        return reader.Null();
+    }
+        
+    public bool Serialize<TWriter>(TWriter writer, TDictionary value) where TWriter : class, IDataWriter
+    {
+		using var _ = Instrumentation.AddEvent();
+        Guard.IsNotNull(writer);
+
+        if (value is null) return writer.Null();
+            
+        if (!writer.BeginObject()) return false;
+
+        foreach (var pair in value)
+        {
+            if (!writer.BeginMember<TWriter, TKey>(KeyTypeInterface.Serialize, pair.Key))
+                return false;
+
+            if (!ValueTypeInterface.Serialize(writer, pair.Value))
+                return false;
+
+            if (!writer.EndValue())
+                break;
+        }
+
+        return writer.EndObject();
     }
 
 
-    static readonly ISystemTypeInterface<TKey> KeyInterface = TypeInterfaceRegistry.Get<TKey>()!;
+    static readonly ISystemTypeInterface<TKey> KeyTypeInterface = TypeInterfaceRegistry.Get<TKey>()!;
 
-    static readonly ISystemTypeInterface<TValue> ValueInterface = TypeInterfaceRegistry.Get<TValue>()!;
+    static readonly ISystemTypeInterface<TValue> ValueTypeInterface = TypeInterfaceRegistry.Get<TValue>()!;
 
     public bool TryGetMemberInterface(StringView name, out IMemberInterface? member) {
-        if (KeyInterface.Deserialize(new Serialization.StringReader(name), out var key)) {
-            member = new DictionaryTypeMemberInterface<TKey, TValue>(key, ValueInterface);
+        if (KeyTypeInterface.Deserialize(new Serialization.StringReader(name), out var key)) {
+            member = new DictionaryTypeMemberInterface<TKey, TValue>(key, ValueTypeInterface);
             return true;
         }
 

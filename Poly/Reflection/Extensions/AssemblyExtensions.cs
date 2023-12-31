@@ -3,6 +3,20 @@ using System.Reflection;
 namespace Poly.Reflection;
 
 public static class AssemblyExtensions {
+    public static string GetAssemblyVersionString(this Assembly assembly) {
+        var versionAttributeString = assembly
+            .GetCustomAttribute<AssemblyVersionAttribute>()?.Version;
+
+        return versionAttributeString ?? string.Empty;
+    }
+
+    public static Version? GetAssemblyVersion(this Assembly assembly) {
+        return Version.TryParse(GetAssemblyVersionString(assembly), out var version)
+            ? version
+            : default;
+    }
+        
+        
     public static IEnumerable<TypeInfo> GetAllDefinedTypes(this Assembly assembly) 
         => assembly
             .DefinedTypes

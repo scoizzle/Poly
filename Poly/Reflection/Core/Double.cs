@@ -6,10 +6,8 @@ internal class Float64 : ISystemTypeInterface<double>
 {
     public Float64() {
         Type = typeof(double);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, double>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, double>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<double>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<double>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -18,13 +16,17 @@ internal class Float64 : ISystemTypeInterface<double>
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<double> Serialize { get; }
+    public bool Deserialize<TReader>(TReader reader, out double value) where TReader : class, IDataReader
+	{
+		using var _ = Instrumentation.AddEvent();
 
-    public DeserializeDelegate<double> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, double> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out double value) => reader.Float64(out value);
+		return reader.Float64(out value);
+	}
         
-    public static SerializeDelegate<TWriter, double> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, double value) => writer.Number(value);
+    public bool Serialize<TWriter>(TWriter writer, double value) where TWriter : class, IDataWriter
+	{
+		using var _ = Instrumentation.AddEvent();
+
+		return writer.Number(value);
+	}
 }

@@ -6,10 +6,8 @@ internal class Int8 : ISystemTypeInterface<sbyte>
 {
     public Int8() {
         Type = typeof(sbyte);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, sbyte>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, sbyte>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<sbyte>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<sbyte>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -18,13 +16,17 @@ internal class Int8 : ISystemTypeInterface<sbyte>
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<sbyte> Serialize { get; }
+    public bool Deserialize<TReader>(TReader reader, out sbyte value) where TReader : class, IDataReader
+	{
+		using var _ = Instrumentation.AddEvent();
 
-    public DeserializeDelegate<sbyte> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, sbyte> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out sbyte value) => reader.Int8(out value);
+		return reader.Int8(out value);
+	}
         
-    public static SerializeDelegate<TWriter, sbyte> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, sbyte value) => writer.Number(value);
+    public bool Serialize<TWriter>(TWriter writer, sbyte value) where TWriter : class, IDataWriter
+	{
+		using var _ = Instrumentation.AddEvent();
+
+		return writer.Number(value);
+	}
 }

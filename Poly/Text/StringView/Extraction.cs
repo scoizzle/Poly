@@ -25,6 +25,73 @@ namespace Poly
         public static bool ExtractStringLiteral(ref this StringView view, out StringView section, bool includeQuotes = false)
             => ExtractBetween(ref view, '"', '"', out section, includeQuotes);
 
+        public static ReadOnlySpan<char> ExtractAsSpan(ref this StringView view, int length) {
+            if (!Iteration.BoundsCheck(view.String, view.Index, view.LastIndex, length)) {
+                return ReadOnlySpan<char>.Empty;
+            }
+            
+            try {
+                return view.AsSpan(length: length);
+            }
+            finally {
+                view.Consume(length);
+            }
+        }
+
+        public static ReadOnlySpan<char> ExtractWhileAsSpan(ref this StringView view, Func<char, bool> predicate) {
+            var index = view.Index;
+
+            while (Iteration.Consume(view.String, ref index, view.LastIndex, out char chr) && predicate(chr));
+
+            try {
+                return view.AsSpan(length: index - view.Index);
+            }
+            catch { 
+                return ReadOnlySpan<char>.Empty;
+            }
+            finally {
+                view.Index = index;
+            }
+        }
+
+        public static ReadOnlySpan<char> ExtractUntilCharOrEndAsSpan(ref this StringView view, ReadOnlySpan<char> characters, bool inclusive = true) {
+            var indexOfCharacter = view.IndexOfAny(characters);
+
+            if (indexOfCharacter == -1)
+                indexOfCharacter = view.LastIndex;
+
+            // Include character in returned span
+            if (inclusive)
+                indexOfCharacter ++;
+
+            try {
+                return view.AsSpan(length: indexOfCharacter - view.Index);
+            }
+            catch { 
+                return ReadOnlySpan<char>.Empty;
+            }
+            finally {
+                view.Index = indexOfCharacter;
+            }
+        }
+
+        public static ReadOnlySpan<char> ExtractStringLiteralAsSpan(ref this StringView view) {
+            
+            var location = Searching.FindMatchingBracket(view.String, view.Index, view.LastIndex, '"', '"');
+
+            if (location == -1)
+            {
+                return ReadOnlySpan<char>.Empty;
+            }
+
+            try {
+                return view.AsSpan(view.Index + 1, location - view.Index);
+            }
+            finally {
+                view.Index = location + 1;
+            }
+        }
+
         public static bool Extract(ref this StringView view, out sbyte value)
             => StringInt8Parser.TryParse(view.String, ref view.Index, view.LastIndex, out value);
 

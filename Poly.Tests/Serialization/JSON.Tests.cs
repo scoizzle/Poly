@@ -75,6 +75,41 @@ namespace Poly.Serialization.JSON
             return test;
         }
 
+        // [Fact]
+        // public void ITokenReader_Read_All_Tokens()
+        // {
+        //     var tabs = 0;
+        //     var builder = new StringBuilder();
+        //     var tokenReader = new JsonStringTokenReader(JsonText);
+
+        //     output.WriteLine(string.Empty);
+
+        //     while (tokenReader.TryReadToken(out var result)) {
+        //         tabs = result.Token switch {
+        //             JsonToken.EndObject or JsonToken.EndArray => tabs - 1,
+        //             _ => tabs
+        //         };
+
+        //         builder
+        //             .Append(' ', tabs * 2)
+        //             .Append(result.Token.ToString());
+
+        //         output.WriteLine(builder.ToString());
+
+        //         builder.Clear();
+
+        //         tabs = result.Token switch {
+        //             JsonToken.BeginObject or JsonToken.BeginArray => tabs + 1,
+        //             _ => tabs
+        //         };
+        //     }
+
+        //     if (!tokenReader.IsDone)
+        //         output.WriteLine(tokenReader.ToString());
+
+        //     Assert.True(tokenReader.IsDone, "TokenReader.IsDone should be true after reading all tokens.");
+        // }
+
         [Fact]
         public void Serialize()
         {

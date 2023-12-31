@@ -6,10 +6,8 @@ internal class UInt64 : ISystemTypeInterface<ulong>
 {
     public UInt64() {
         Type = typeof(ulong);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, ulong>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, ulong>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<ulong>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<ulong>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -18,13 +16,17 @@ internal class UInt64 : ISystemTypeInterface<ulong>
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<ulong> Serialize { get; }
+    public bool Deserialize<TReader>(TReader reader, out ulong value) where TReader : class, IDataReader
+    {
+        using var _ = Instrumentation.AddEvent();
 
-    public DeserializeDelegate<ulong> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, ulong> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out ulong value) => reader.UInt64(out value);
+        return reader.UInt64(out value);
+    }
         
-    public static SerializeDelegate<TWriter, ulong> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, ulong value) => writer.Number(value);
+    public bool Serialize<TWriter>(TWriter writer, ulong value) where TWriter : class, IDataWriter 
+    {
+        using var _ = Instrumentation.AddEvent();
+        
+        return writer.Number(value);
+    }
 }

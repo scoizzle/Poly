@@ -3,7 +3,7 @@ using System.Buffers;
 namespace Poly.Parsing.Json;
 
 public record JsonNumberParser
-    : Grammar<char, JsonTokenType>.ITokenParser 
+    : Grammar<char, JsonToken>.ITokenParser 
 {    
     const char Negative = '-';
     const char Positive = '+';
@@ -13,7 +13,7 @@ public record JsonNumberParser
 
     static readonly char[] ValidCharacters = "0123456789".ToCharArray();
     
-    public Grammar<char, JsonTokenType>.TokenParsingResult Parse(
+    public Grammar<char, JsonToken>.TokenParsingResult Parse(
         ref ReadOnlySequence<char> sequence)
     {
         
@@ -24,14 +24,14 @@ public record JsonNumberParser
         
         if (reader.AdvancePastAny(ValidCharacters) == 0)
         {
-            return Grammar<char, JsonTokenType>.TokenParsingResult.Failure;
+            return Grammar<char, JsonToken>.TokenParsingResult.Failure;
         }
 
         if (reader.IsNext(Period, advancePast: true))
         {
             if (reader.AdvancePastAny(ValidCharacters) == 0)
             {
-                return Grammar<char, JsonTokenType>.TokenParsingResult.Failure;
+                return Grammar<char, JsonToken>.TokenParsingResult.Failure;
             }
         }
 
@@ -43,7 +43,7 @@ public record JsonNumberParser
         
             if (reader.AdvancePastAny(ValidCharacters) == 0)
             {
-                return Grammar<char, JsonTokenType>.TokenParsingResult.Failure;
+                return Grammar<char, JsonToken>.TokenParsingResult.Failure;
             }
         }
         
@@ -53,9 +53,9 @@ public record JsonNumberParser
 
         sequence = sequence.Slice(end);
 
-        return new Grammar<char, JsonTokenType>.TokenParsingResult(
+        return new Grammar<char, JsonToken>.TokenParsingResult(
             Success: true,
-            Token: JsonTokenType.Number,
+            Token: JsonToken.Number,
             Segment: num
         );
     }

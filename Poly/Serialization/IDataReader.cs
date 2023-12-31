@@ -21,9 +21,7 @@ public static class DeserializeDelegateExtensions
             }
 
             obj = default;
-            reader.Null();
-
-            return false;
+            return reader.Null();
         };
 }
 

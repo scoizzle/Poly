@@ -6,10 +6,8 @@ internal class TimeSpan : ISystemTypeInterface<System.TimeSpan>
 {
     public TimeSpan() {
         Type = typeof(System.TimeSpan);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, System.TimeSpan>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, System.TimeSpan>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<System.TimeSpan>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<System.TimeSpan>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -18,13 +16,17 @@ internal class TimeSpan : ISystemTypeInterface<System.TimeSpan>
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<System.TimeSpan> Serialize { get; }
+    public bool Deserialize<TReader>(TReader reader, out System.TimeSpan value) where TReader : class, IDataReader
+	{
+		using var _ = Instrumentation.AddEvent();
 
-    public DeserializeDelegate<System.TimeSpan> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, System.TimeSpan> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out System.TimeSpan value) => reader.TimeSpan(out value);
+		return reader.TimeSpan(out value);
+	}
         
-    public static SerializeDelegate<TWriter, System.TimeSpan> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, System.TimeSpan value) => writer.TimeSpan(value);
+    public bool Serialize<TWriter>(TWriter writer, System.TimeSpan value) where TWriter : class, IDataWriter
+	{
+		using var _ = Instrumentation.AddEvent();
+
+		return writer.TimeSpan(value);
+	}
 }

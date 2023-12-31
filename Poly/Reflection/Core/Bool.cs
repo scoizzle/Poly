@@ -6,10 +6,8 @@ internal class Boolean : ISystemTypeInterface<bool>
 {
     public Boolean() {
         Type = typeof(bool);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, bool>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, bool>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<bool>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<bool>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -18,13 +16,17 @@ internal class Boolean : ISystemTypeInterface<bool>
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<bool> Serialize { get; }
+    public bool Deserialize<TReader>(TReader reader, out bool value) where TReader : class, IDataReader
+	{
+		using var _ = Instrumentation.AddEvent();
 
-    public DeserializeDelegate<bool> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, bool> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out bool value) => reader.Boolean(out value);
+		return reader.Boolean(out value);
+	}
         
-    public static SerializeDelegate<TWriter, bool> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, bool value) => writer.Boolean(value);
+    public bool Serialize<TWriter>(TWriter writer, bool value) where TWriter : class, IDataWriter
+	{
+		using var _ = Instrumentation.AddEvent();
+
+		return writer.Boolean(value);
+	}
 }

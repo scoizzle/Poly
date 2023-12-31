@@ -6,10 +6,8 @@ internal class UInt16 : ISystemTypeInterface<ushort>
 {
     public UInt16() {
         Type = typeof(ushort);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, ushort>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, ushort>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<ushort>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<ushort>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -17,14 +15,17 @@ internal class UInt16 : ISystemTypeInterface<ushort>
     public SerializeObjectDelegate SerializeObject { get; }
 
     public DeserializeObjectDelegate DeserializeObject { get; }
+    public bool Deserialize<TReader>(TReader reader, out ushort value) where TReader : class, IDataReader
+	{
+		using var _ = Instrumentation.AddEvent();
 
-    public SerializeDelegate<ushort> Serialize { get; }
-
-    public DeserializeDelegate<ushort> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, ushort> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out ushort value) => reader.UInt16(out value);
+		return reader.UInt16(out value);
+	}
         
-    public static SerializeDelegate<TWriter, ushort> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, ushort value) => writer.Number(value);
+    public bool Serialize<TWriter>(TWriter writer, ushort value) where TWriter : class, IDataWriter
+	{
+		using var _ = Instrumentation.AddEvent();
+
+		return writer.Number(value);
+	}
 }

@@ -6,10 +6,8 @@ internal class DateTime : ISystemTypeInterface<System.DateTime>
 {
     public DateTime() {
         Type = typeof(System.DateTime);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, System.DateTime>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, System.DateTime>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<System.DateTime>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<System.DateTime>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -18,13 +16,17 @@ internal class DateTime : ISystemTypeInterface<System.DateTime>
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<System.DateTime> Serialize { get; }
+    public bool Deserialize<TReader>(TReader reader, out System.DateTime value) where TReader : class, IDataReader
+	{
+		using var _ = Instrumentation.AddEvent();
 
-    public DeserializeDelegate<System.DateTime> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, System.DateTime> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out System.DateTime value) => reader.DateTime(out value);
+		return reader.DateTime(out value);
+	}
         
-    public static SerializeDelegate<TWriter, System.DateTime> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, System.DateTime value) => writer.DateTime(value);
+    public bool Serialize<TWriter>(TWriter writer, System.DateTime value) where TWriter : class, IDataWriter
+	{
+		using var _ = Instrumentation.AddEvent();
+
+		return writer.DateTime(value);
+	}
 }

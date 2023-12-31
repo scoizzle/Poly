@@ -6,10 +6,8 @@ internal class Decimal : ISystemTypeInterface<decimal>
 {
     public Decimal() {
         Type = typeof(decimal);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, decimal>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, decimal>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<decimal>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<decimal>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -18,13 +16,17 @@ internal class Decimal : ISystemTypeInterface<decimal>
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<decimal> Serialize { get; }
+    public bool Deserialize<TReader>(TReader reader, out decimal value) where TReader : class, IDataReader
+	{
+		using var _ = Instrumentation.AddEvent();
 
-    public DeserializeDelegate<decimal> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, decimal> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out decimal value) => reader.Decimal(out value);
+		return reader.Decimal(out value);
+	}
         
-    public static SerializeDelegate<TWriter, decimal> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, decimal value) => writer.Number(value);
+    public bool Serialize<TWriter>(TWriter writer, decimal value) where TWriter : class, IDataWriter
+	{
+		using var _ = Instrumentation.AddEvent();
+
+		return writer.Number(value);
+	}
 }

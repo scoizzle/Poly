@@ -1,60 +1,79 @@
 namespace Poly.Data;
 
-public static class BitArray
-{
-    const byte InitialBitMask = 0b10000000;
+public readonly struct BitArray : IEnumerable<bool> {
+    readonly byte[] array;
 
-    public static IEnumerable<byte> GetBytes(IEnumerable<bool> bits, bool filler)
-    {
-        var result = default(byte);
-        var bitmask = InitialBitMask;
+    public BitArray(byte[] data) => array = data;
 
-        foreach (var bit in bits)
-        {
-            if (bit) {
-                result |= bitmask;
-            }
-            
-            bitmask >>= 1;
+    public BitArray(int bitCapacity) => Array.Resize(ref array, CalculateArraySize(bitCapacity));
 
-            if (bitmask == 0)
-            {
-                yield return result;
+    public int BitCapacity => array.Length * 8;
 
-                result = default;
-                bitmask = InitialBitMask;
-            }
+    public readonly bool this[int bitPosition] {
+        get {
+            var (idx, mask) = CalculateArrayIndex(bitPosition);
+
+            Guard.IsBetweenOrEqualTo(idx, 0, array.Length);
+
+            return mask == (array[idx] & mask);
         }
+        set {
+            var (idx, mask) = CalculateArrayIndex(bitPosition);
 
-        if (filler && bitmask != 0)
-        {
-            do
-            {
-                result |= bitmask;
-                bitmask >>= 1;
+            Guard.IsBetweenOrEqualTo(idx, 0, array.Length);
+
+            if (value) {
+                array[idx] |= mask; 
             }
-            while (bitmask != 0);
-
-            yield return result;
+            else {
+                array[idx] &= (byte)~mask;
+            }
         }
     }
 
-    public static bool TryGetBits(
-        this byte b, 
-        Span<bool> bits) 
+    public void Toggle(int bitPosition) {
+        var (idx, mask) = CalculateArrayIndex(bitPosition);
+
+        Guard.IsBetweenOrEqualTo(idx, 0, array.Length);
+
+        array[idx] ^= mask;
+    }
+
+    static int CalculateArraySize(int numberOfBits) => (numberOfBits / 8) + (numberOfBits % 8 > 0 ? 1 : 0);
+
+    static byte CalculateBitMask(int bitPosition) => (byte)(0b10000000 >> bitPosition);
+
+    static (int ByteIndex, byte BitMask) CalculateArrayIndex(int bitPosition) {
+        var byteNumber = bitPosition / 8;
+        var bitNumber = bitPosition % 8;
+
+        if (byteNumber > 0 && bitNumber > 3)
+            byteNumber--;
+
+        var bitMask = CalculateBitMask(bitNumber);
+
+        return (byteNumber, bitMask);
+    }
+
+    public IEnumerator<bool> GetEnumerator() => new Enumerator(this);
+
+    IEnumerator IEnumerable.GetEnumerator() => new Enumerator(this);
+
+    struct Enumerator : IEnumerator<bool>
     {
-        if (bits.Length < 8)
-            return false;
+        int bitIndex;
+        BitArray array;
 
-        bits[0] = (b & 0b10000000) != 0;
-        bits[1] = (b & 0b01000000) != 0;
-        bits[2] = (b & 0b00100000) != 0;
-        bits[3] = (b & 0b00010000) != 0;
-        bits[4] = (b & 0b00001000) != 0;
-        bits[5] = (b & 0b00000100) != 0;
-        bits[6] = (b & 0b00000010) != 0;
-        bits[7] = (b & 0b00000001) != 0;
+        public Enumerator(BitArray array) => this.array = array;
+        
+        public bool Current { get; private set; }
 
-        return true;
+        public void Dispose() => array = default;
+
+        public bool MoveNext() => Current = array[bitIndex++];
+
+        public void Reset() => bitIndex = default;
+
+        readonly object IEnumerator.Current => Current;
     }
 }

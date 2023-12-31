@@ -47,6 +47,29 @@ namespace Poly
             return -1;
         }
 
+        public static int IndexOfAny(this string This, int index, int lastIndex, ReadOnlySpan<char> characters)
+        {
+            if (!Iteration.BoundsCheck(This, index, lastIndex))
+                return -1;
+
+            var idx = lastIndex;
+
+            foreach (var chr in characters)
+            {
+                var next = This.IndexOf(chr, index, idx - index);
+
+                if (next == -1)
+                    continue;
+
+                if (next < idx)
+                    idx = next;
+            }
+
+            return idx == lastIndex 
+                ? -1
+                : idx;
+        }
+
         public static IEnumerable<int> FindAll(this string This, int index, int lastIndex, char character)
         {
             if (Iteration.BoundsCheck(This, index, lastIndex))

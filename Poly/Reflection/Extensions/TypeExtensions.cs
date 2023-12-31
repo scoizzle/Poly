@@ -5,6 +5,9 @@ public static class TypeExtensions {
         this Type type,
              Type interfaceType)
     {
+        Guard.IsNotNull(type);
+        Guard.IsNotNull(interfaceType);
+        
         return type
             .GetInterfaces()
             .Contains(interfaceType);
@@ -12,21 +15,28 @@ public static class TypeExtensions {
 
     public static bool ImplementsGenericInterface(
         this Type type, 
-             Type interfaceType, 
-         out Type[] genericArguments)
+        Type interfaceType, 
+        [NotNullWhen(true)] out Type[]? genericArguments)
     {
-        if (interfaceType.IsGenericType)
-        {
-            foreach (var implType in type.GetInterfaces())
-            {
-                if (implType.IsGenericType && implType.GetGenericTypeDefinition() == interfaceType)
-                {
-                    genericArguments = implType.GetGenericArguments();
-                    return true;
-                }
-            }
-        }
+        Guard.IsNotNull(type);
+        Guard.IsNotNull(interfaceType);
 
+        if (!interfaceType.IsGenericType)
+            goto failure;
+
+        var implType = type
+            .GetInterfaces()
+            .Where(t => t.IsGenericType)
+            .Where(t => t.GetGenericTypeDefinition() == interfaceType)
+            .FirstOrDefault();
+
+        if (implType is null)
+            goto failure;
+
+        genericArguments = implType.GetGenericArguments();
+        return true;
+
+    failure:
         genericArguments = default;
         return false;
     }

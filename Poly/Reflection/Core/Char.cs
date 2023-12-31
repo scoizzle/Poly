@@ -6,10 +6,8 @@ internal class Char : ISystemTypeInterface<char>
 {
     public Char() {
         Type = typeof(char);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, char>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, char>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<char>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<char>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -18,13 +16,17 @@ internal class Char : ISystemTypeInterface<char>
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<char> Serialize { get; }
+    public bool Deserialize<TReader>(TReader reader, out char value) where TReader : class, IDataReader
+	{
+		using var _ = Instrumentation.AddEvent();
 
-    public DeserializeDelegate<char> Deserialize { get; }
-
-    public static DeserializeDelegate<TReader, char> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, out char value) => reader.Char(out value);
+		return reader.Char(out value);
+	}
         
-    public static SerializeDelegate<TWriter, char> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, char value) => writer.Char(value);
+    public bool Serialize<TWriter>(TWriter writer, char value) where TWriter : class, IDataWriter
+	{
+		using var _ = Instrumentation.AddEvent();
+
+		return writer.Char(value);
+	}
 }

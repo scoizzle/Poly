@@ -10,22 +10,22 @@ public partial struct StringView : IComparable<StringView>
 
     public StringView(string str) : this(str, 0, str?.Length ?? 0) { }
 
-    public StringView(string str, int index, int lastIndex)
+    public StringView(string str, int Begin, int End)
     {
         Guard.IsNotNull(str);
-        Guard.IsInRange(index, 0, lastIndex);
-        Guard.IsInRange(lastIndex, index, str.Length + 1);
+        Guard.IsInRange(Begin, 0, End);
+        Guard.IsInRange(End, Begin, str.Length + 1);
 
-        (String, Index, LastIndex) = (str, index, lastIndex);
+        (String, Index, LastIndex) = (str, Begin, End);
     }
 
     public bool IsDone => Index >= LastIndex;
 
     public bool IsValid => Iteration.BoundsCheck(String, Index, LastIndex);
 
-    public char this[int index] =>
-        Iteration.BoundsCheck(String, index, LastIndex)
-            ? String[index]
+    public char this[int Begin] =>
+        Iteration.BoundsCheck(String, Begin, LastIndex)
+            ? String[Begin]
             : default;
 
     public char Current => this[Index];
@@ -38,12 +38,12 @@ public partial struct StringView : IComparable<StringView>
 
     public override int GetHashCode() => unchecked((Length << 16) + (Current << 8) + Next);
 
-    public override string ToString() => 
+    public override string ToString() =>
         IsValid ?
             String[Index..LastIndex] :
             default;
 
-    public ReadOnlySpan<char> AsSpan() => String.AsSpan(Index, Length);
+    public ReadOnlySpan<char> AsSpan(int? Begin = default, int? length = default) => String.AsSpan(Begin ?? Index, length ?? Length);
 
     public int CompareTo(StringView other)
     {

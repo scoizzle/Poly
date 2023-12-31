@@ -16,12 +16,12 @@ namespace Poly.Data {
 
         public int Count { get; private set; }
 
-        public T this[int index]
+        public T? this[int index]
             => index >= 0 && index < Count
              ? Buffer.Span[Offset + index]
              : default;
 
-        public T Current
+        public T? Current
             => this[0];
 
         public bool IsEmpty

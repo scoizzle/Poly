@@ -67,7 +67,7 @@ namespace Poly.Net.Http {
     }
 
     public static class ResultExtensions {
-        public static string GetString(this Status status) => status switch
+        public static string? GetString(this Status status) => status switch
         {
             Status.Continue => "100 Continue",
             Status.SwitchingProtocols => "101 Switching Protocols",
@@ -111,7 +111,7 @@ namespace Poly.Net.Http {
             Status.ServiceUnavailable => "503 Service Unavailable",
             Status.GatewayTimeout => "504 Gateway Timeout",
             Status.VersionNotSupported => "505 Version Not Supported",
-            _ => null,
+            _ => $"{(int)status} Unknown",
         };
     }
 }

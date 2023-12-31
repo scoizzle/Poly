@@ -1,5 +1,4 @@
 using Poly.Serialization;
-
 namespace Poly.Reflection.Core;
 
 internal class CoreType<T> : ISystemTypeInterface<T> where T : class
@@ -19,10 +18,8 @@ internal class CoreType<T> : ISystemTypeInterface<T> where T : class
     public CoreType()
     {
         Type = typeof(T);
-        Serialize = GetSerializationDelegate<IDataWriter>().ToGenericDelegate<IDataWriter, T>();
-        Deserialize = GetDeserializationDelegate<IDataReader>().ToGenericDelegate<IDataReader, T>();
-        SerializeObject = Serialize.ToObjectDelegate();
-        DeserializeObject = Deserialize.ToObjectDelegate();
+        SerializeObject = new SerializeDelegate<T>(Serialize).ToObjectDelegate();
+        DeserializeObject = new DeserializeDelegate<T>(Deserialize).ToObjectDelegate();
     }
 
     public Type Type { get; }
@@ -31,10 +28,6 @@ internal class CoreType<T> : ISystemTypeInterface<T> where T : class
 
     public DeserializeObjectDelegate DeserializeObject { get; }
 
-    public SerializeDelegate<T> Serialize { get; }
-
-    public DeserializeDelegate<T> Deserialize { get; }
-
     public static bool TryGetMemberInterface(
             StringView name, 
         out IMemberInterface? member) 
@@ -42,76 +35,71 @@ internal class CoreType<T> : ISystemTypeInterface<T> where T : class
         return _memberDictionary.TryGetValue(name, out member);
     }
 
-    public static SerializeDelegate<TWriter, T> GetSerializationDelegate<TWriter>() where TWriter : class, IDataWriter
-        => (TWriter writer, T obj) =>
+    public bool Serialize<TWriter>(TWriter writer, T obj) where TWriter : class, IDataWriter
+    {
+        Guard.IsNotNull(writer);
+
+        if (obj is null) return writer.Null();
+
+        if (!writer.BeginObject()) return false;
+
+        foreach (var member in _memberInterfaces)
         {
-            using var _ = Activities.Source.StartActivity();
+            if (!writer.BeginMember(member.Name))
+                return false;
 
-            if (writer is null) return false;
-            if (obj is null) return writer.Null();
-
-            if (!writer.BeginObject()) return false;
-
-            foreach (var member in _memberInterfaces)
+            if (!member.TryGetValue(obj, out var value) || value is null)
             {
-                if (!writer.BeginMember(member.Name))
+                if (!writer.Null())
+                    return false;
+            }
+            else
+            {
+                if (!member.Serialize(writer, value))
+                    return false;
+            }
+
+            if (!writer.EndValue())
+                break;
+        }
+
+        return writer.EndObject();
+    }
+
+    public bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out T? obj) where TReader : class, IDataReader
+    {
+        Guard.IsNotNull(reader);
+        
+        if (reader is null) { obj = default; return false; }
+
+        if (reader.BeginObject())
+        {
+            obj = Activator.CreateInstance(typeof(T)) as T;
+
+            Guard.IsNotNull(obj);
+
+            while (!reader.IsDone)
+            {
+                if (!reader.BeginMember(out var name))
                     return false;
 
-                if (!member.TryGetValue(obj, out var value) || value is null)
-                {
-                    if (!writer.Null())
-                        return false;
-                }
-                else
-                {
-                    if (!member.Serialize(writer, value))
-                        return false;
-                }
+                if (!_memberDictionary.TryGetValue(name, out IMemberInterface? member))
+                    return false;
 
-                if (!writer.EndValue())
+                if (!member.Deserialize(reader, out object? value))
+                    return false;
+
+                if (!member.TrySetValue(obj, value))
+                    return false;
+
+                if (!reader.EndValue())
                     break;
             }
 
-            return writer.EndObject();
-        };
+            return reader.EndObject();
+        }
 
-    public static DeserializeDelegate<TReader, T> GetDeserializationDelegate<TReader>() where TReader : class, IDataReader
-        => (TReader reader, [NotNullWhen(true)] out T? obj) =>
-        {
-            using var _ = Activities.Source.StartActivity();
-
-            Guard.IsNotNull(reader);
-            
-            if (reader is null) { obj = default; return false; }
-
-            if (reader.BeginObject())
-            {
-                obj = Activator.CreateInstance(typeof(T)) as T;
-
-                Guard.IsNotNull(obj);
-
-                while (!reader.IsDone)
-                {
-                    if (!reader.BeginMember(out var name))
-                        return false;
-
-                    if (!_memberDictionary.TryGetValue(name, out IMemberInterface? member))
-                        return false;
-
-                    if (!member.Deserialize(reader, out object? value))
-                        return false;
-
-                    if (!member.TrySetValue(obj, value))
-                        return false;
-
-                    if (!reader.EndValue())
-                        break;
-                }
-
-                return reader.EndObject();
-            }
-
-            obj = default;
-            return reader.Null();
-        };
+        obj = default;
+        return reader.Null();
+    }
 }

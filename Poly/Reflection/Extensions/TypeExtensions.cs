@@ -1,22 +1,23 @@
 namespace Poly.Reflection;
 
-public static class TypeExtensions {
+public static class TypeExtensions
+{
     public static bool ImplementsInterface(
         this Type type,
              Type interfaceType)
     {
         Guard.IsNotNull(type);
         Guard.IsNotNull(interfaceType);
-        
+
         return type
             .GetInterfaces()
             .Contains(interfaceType);
     }
 
     public static bool ImplementsGenericInterface(
-        this Type type, 
-        Type interfaceType, 
-        [NotNullWhen(true)] out Type[]? genericArguments)
+        this Type type,
+        Type interfaceType,
+        [NotNullWhen(returnValue: true)] out Type[]? genericArguments)
     {
         Guard.IsNotNull(type);
         Guard.IsNotNull(interfaceType);

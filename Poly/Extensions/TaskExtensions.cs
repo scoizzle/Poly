@@ -10,10 +10,12 @@ public static class TaskExtensions
         this Task task,
         Action<Exception>? errorHandler = default)
     {
-        try {
+        try
+        {
             await task;
         }
-        catch (Exception error) {
+        catch (Exception error)
+        {
             errorHandler?.Invoke(error);
         }
     }

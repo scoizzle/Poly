@@ -1,6 +1,6 @@
 namespace Poly.Serialization;
 
-public delegate bool SerializeObjectDelegate(IDataWriter writer, object value);
+public delegate bool SerializeFromObjectDelegate(IDataWriter writer, object value);
 public delegate bool SerializeDelegate<T>(IDataWriter writer, T value);
 public delegate bool SerializeDelegate<TSerializer, TValue>(TSerializer writer, TValue value) where TSerializer : IDataWriter;
 
@@ -9,8 +9,8 @@ public static class SerializeDelegateExtensions
     public static SerializeDelegate<TValue> ToGenericDelegate<TWriter, TValue>(this SerializeDelegate<IDataWriter, TValue> @delegate) where TWriter : IDataWriter
         => (IDataWriter writer, TValue value) => @delegate(writer, value);
 
-        
-    public static SerializeObjectDelegate ToObjectDelegate<TValue>(this SerializeDelegate<TValue> @delegate)
+
+    public static SerializeFromObjectDelegate ToObjectDelegate<TValue>(this SerializeDelegate<TValue> @delegate)
         => (IDataWriter writer, object obj) =>
         {
             if (writer is null)
@@ -23,23 +23,23 @@ public static class SerializeDelegateExtensions
                 return @delegate(writer, typed);
 
             return false;
-        };    
+        };
 }
 
-public interface IDataWriter 
+public interface IDataWriter
 {
     bool Null();
     bool Boolean(bool value);
     bool Char(char value);
-    bool String(in ReadOnlySpan<char> value);
-    bool Number<T>(in T value) where T : INumber<T>;
+    bool String(string value);
+    bool StringView(StringView value);
+    bool Number<T>(T value) where T : INumber<T>;
 
     bool DateTime(in DateTime value);
     bool TimeSpan(in TimeSpan value);
 
-    bool BeginMember(ReadOnlySpan<char> value);
+    bool BeginMember(StringView value);
     bool BeginMember<T>(SerializeDelegate<T> serializer, in T name);
-    bool BeginMember<TWriter, T>(SerializeDelegate<TWriter, T> serializer, in T name) where TWriter : class, IDataWriter;
 
     bool BeginValue();
     bool EndValue();
@@ -49,4 +49,6 @@ public interface IDataWriter
 
     bool BeginArray();
     bool EndArray();
+
+    bool Write<T>(T value) where T : ISpanFormattable;
 }

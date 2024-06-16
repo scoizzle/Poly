@@ -1,18 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFramework>net7.0</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="BenchmarkDotNet" Version="0.13.5" />
-		<PackageReference Include="Microsoft.Extensions.Configuration" Version="7.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.1" />
-		<PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
-		<PackageReference Include="OpenTelemetry" Version="1.4.0" />
-		<PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.4.0" />
-		<PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.4.0" />
-		<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.4.0" />
-		<PackageReference Include="System.Text.Json" Version="7.0.1" />
+		<PackageReference Include="BenchmarkDotNet" Version="0.13.12" />
+		<PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="OpenTelemetry" Version="1.7.0" />
+		<PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.7.0" />
+		<PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.7.0" />
+		<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.7.0" />
+		<PackageReference Include="System.Text.Json" Version="8.0.2" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Poly\Poly.csproj" />

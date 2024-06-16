@@ -1,30 +1,13 @@
 using Poly.Serialization;
 
 namespace Poly.Reflection.Core;
-internal class Array<TElement> : ISystemTypeInterface<TElement[]>
+
+internal sealed class Array<TElement> : GenericReferenceTypeAdapterBase<TElement[]>
 {
-    public Array()
+    private static readonly ISystemTypeAdapter<TElement> s_ElementTypeInterface = TypeAdapterRegistry.Get<TElement>()!;
+
+    public override bool Deserialize(IDataReader reader, [NotNullWhen(true)] out TElement[]? value)
     {
-        Type = typeof(TElement[]);
-        ElementTypeInterface = TypeInterfaceRegistry.Get<TElement>()!;
-        SerializeObject = new SerializeDelegate<TElement[]>(Serialize).ToObjectDelegate();
-        DeserializeObject = new DeserializeDelegate<TElement[]>(Deserialize).ToObjectDelegate();
-    }
-
-    public Type Type { get; }
-
-    public ISystemTypeInterface<TElement> ElementTypeInterface { get; }
-
-    public SerializeObjectDelegate SerializeObject { get; }
-
-    public DeserializeObjectDelegate DeserializeObject { get; }
-
-    public bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out TElement[]? value) where TReader : class, IDataReader
-    {
-		using var _ = Instrumentation.AddEvent();
-
-        Guard.IsNotNull(reader);
-
         if (reader.BeginArray(out var numberOfMembers))
         {
             if (numberOfMembers.HasValue)
@@ -37,7 +20,7 @@ internal class Array<TElement> : ISystemTypeInterface<TElement[]>
                 {
                     ref var pos = ref value[memberNumber++];
 
-                    if (!ElementTypeInterface.Deserialize(reader, out pos))
+                    if (!s_ElementTypeInterface.Deserialize(reader, out pos))
                     {
                         value = default;
                         return false;
@@ -46,15 +29,16 @@ internal class Array<TElement> : ISystemTypeInterface<TElement[]>
                     if (!reader.EndValue())
                         break;
                 }
-                
+
                 return true;
             }
-            else {
+            else
+            {
                 var list = new List<TElement>();
 
                 while (!reader.IsDone)
                 {
-                    if (!ElementTypeInterface.Deserialize(reader, out var element))
+                    if (!s_ElementTypeInterface.Deserialize(reader, out var element))
                     {
                         value = default;
                         return false;
@@ -79,19 +63,15 @@ internal class Array<TElement> : ISystemTypeInterface<TElement[]>
         return reader.Null();
     }
 
-    public bool Serialize<TWriter>(TWriter writer, TElement[] value) where TWriter : class, IDataWriter
-    { 
-		using var _ = Instrumentation.AddEvent();
-
-        Guard.IsNotNull(writer);
-        
+    public override bool Serialize(IDataWriter writer, [NotNullWhen(returnValue: true)] TElement[]? value)
+    {
         if (value is null) return writer.Null();
 
         if (!writer.BeginArray()) return false;
 
         foreach (var element in value)
         {
-            if (!ElementTypeInterface.Serialize(writer, element))
+            if (!s_ElementTypeInterface.Serialize(writer, element))
                 return false;
 
             if (!writer.EndValue())

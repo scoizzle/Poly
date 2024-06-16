@@ -2,43 +2,22 @@ using Poly.Serialization;
 
 namespace Poly.Reflection.Core;
 
-internal class ListTypeInterface<TList, TElement> : ISystemTypeInterface<TList> 
-    where TList : IList<TElement> 
+internal sealed class ListTypeInterface<TList, TElement> : GenericReferenceTypeAdapterBase<TList>
+    where TList : class, IList<TElement>
 {
-    static readonly ISystemTypeInterface<TElement> ElementTypeInterface = TypeInterfaceRegistry.Get<TElement>()!;
+    private static readonly ISystemTypeAdapter<TElement> s_ElementTypeInterface = TypeAdapterRegistry.Get<TElement>()!;
 
-    public ListTypeInterface()
+    public override bool Deserialize(IDataReader reader, [NotNullWhen(true)] out TList? list)
     {
-        Type = typeof(TList);
-        SerializeObject = new SerializeDelegate<TList>(Serialize).ToObjectDelegate();
-        DeserializeObject = new DeserializeDelegate<TList>(Deserialize).ToObjectDelegate();
-    }
-
-    public Type Type { get; }
-
-    public SerializeObjectDelegate SerializeObject { get; }
-
-    public DeserializeObjectDelegate DeserializeObject { get; }
-
-    public bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out TList? list) where TReader : class, IDataReader
-    {
-		using var _ = Instrumentation.AddEvent();
-
-        if (reader is null) {
-            list = default;
-            return false;
-        }
-
         if (reader.BeginArray(out var __))
         {
             var instance = Activator.CreateInstance(typeof(TList));
             Guard.IsNotNull(instance);
-
             list = (TList)instance;
 
             while (!reader.IsDone)
             {
-                if (!ElementTypeInterface.Deserialize(reader, out var value))
+                if (!s_ElementTypeInterface.Deserialize(reader, out var value))
                     return false;
 
                 list.Add(value);
@@ -54,19 +33,15 @@ internal class ListTypeInterface<TList, TElement> : ISystemTypeInterface<TList>
         return reader.Null();
     }
 
-    public bool Serialize<TWriter>(TWriter writer, TList list) where TWriter : class, IDataWriter
-    { 
-		using var _ = Instrumentation.AddEvent();
-
-        Guard.IsNotNull(writer);
-        
+    public override bool Serialize(IDataWriter writer, TList? list)
+    {
         if (list is null) return writer.Null();
 
         if (!writer.BeginArray()) return false;
 
         foreach (var element in list)
         {
-            if (!ElementTypeInterface.Serialize(writer, element))
+            if (!s_ElementTypeInterface.Serialize(writer, element))
                 return false;
 
             if (!writer.EndValue())

@@ -1,138 +1,117 @@
 ﻿namespace Poly;
 
-public class Log {
-    public static Action<string> WriteLine = (str) => { };
+public enum LogLevel
+{
+    Trace = 0,
+    Debug = 1,
+    Information = 2,
+    Warning = 3,
+    Error = 4,
+    Critical = 5,
+    None = 6
+}
 
-    public static void To(Action<string> method) =>
-        WriteLine = method;
+public record struct LogEntry(
+    LogLevel Level,
+    DateTime EventDateTime,
+    FormattableString Message,
+    Exception? Exception = default)
+{
+    public LogEntry(LogLevel level, FormattableString message) : this(level, DateTime.UtcNow, message) { }
+}
 
-    public static void ToConsole() =>
-        To(Console.WriteLine);
+public static class Log
+{
+    internal delegate void LogEntryHandler(in LogEntry entry);
+    private static LogLevel s_currentLogLevel = LogLevel.None;
+    private static LogEntryHandler s_entryHandler { get; set; } = static (in LogEntry _) => { };
 
-    public static void ToFile(string file_name) =>
-        To(str => { File.AppendAllLines(file_name, new[] { str }); });
-
-    private static void Print(string format, params object[] args) =>
-        WriteLine(args.Length == 0 ? format : string.Format(format, args));
-
-    private static void Print(string level, DateTime time, string message) =>
-        WriteLine(
-            string.Join(
-                " ",
-                time.ToString("yyyy-MM-dd hh:mm:ss"),
-                level,
-                message
-        ));
-
-    private static void Print(string level, DateTime time, string format, params object[] args) =>
-        WriteLine(
-            string.Join(
-                " ",
-                time.ToString("yyyy-MM-dd hh:mm:ss"),
-                level,
-                args.Length == 0 ? format : string.Format(format, args)
-        ));
-
-    [Conditional("DEBUG")]
-    public static void Debug(string format, params object[] args) =>
-        Print("DEBUG", DateTime.UtcNow, format, args);
-
-    [Conditional("DEBUG")]
-    public static void Debug(Exception error) =>
-        Print("DEBUG", DateTime.UtcNow, error.Message);
-
-    public static void Info(string format, params object[] args) =>
-        Print("INFO ", DateTime.UtcNow, format, args);
-
-    public static void Info(Exception error) =>
-        Print("INFO ", DateTime.UtcNow, error.Message);
-
-    public static void Warning(string format, params object[] args) =>
-        Print("WARN ", DateTime.UtcNow, format, args);
-
-    public static void Warning(Exception error) =>
-        Print("WARN ", DateTime.UtcNow, error.Message);
-
-    public static void Error(string format, params object[] args) =>
-        Print("ERROR", DateTime.UtcNow, format, args);
-
-    public static void Error(Exception error) =>
-        Print("ERROR", DateTime.UtcNow, error.Message);
-
-    public static void Benchmark(string name, TimeSpan timeSpan) =>
-        Print(
-            "BENCH",
-            DateTime.UtcNow,
-            "{0} Time Elapsed {1} ms",
-                name,
-                timeSpan.TotalMilliseconds
-        );
-
-    public static void Benchmark(string name, int iterations, TimeSpan timeSpan) =>
-        Print(
-            "BENCH",
-            DateTime.UtcNow,
-            "{0} Time Elapsed {1} ms ({2} iterations/sec) ~ {3}ms / iteration",
-                name,
-                timeSpan.TotalMilliseconds,
-                iterations / timeSpan.TotalSeconds,
-                timeSpan.TotalMilliseconds / iterations
-        );
-
-    public static void Benchmark(string name, System.Action action)
+    static Log()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        var envLogLevel = Environment.GetEnvironmentVariable("LOGGING__LOGLEVEL__POLY");
 
-        action();
-
-        var watch = new Stopwatch();
-
-        watch.Start();
-        action();
-        watch.Stop();
-
-        Benchmark(name, watch.Elapsed);
+        if (Enum.TryParse<LogLevel>(envLogLevel, out var loggingLevel))
+            s_currentLogLevel = loggingLevel;
     }
 
-    public static void Benchmark(string name, int iterations, Action Todo)
+    public static void WriteToConsole()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        Todo();
-
-        var watch = new Stopwatch();
-
-        watch.Start();
-
-        for (int i = 0; i < iterations; i++)
-            Todo();
-
-        watch.Stop();
-
-        Benchmark(name, iterations, watch.Elapsed);
+        s_entryHandler = ConsoleEntryHandler;
     }
-    
-    public static void Benchmark(string name, int iterations, Action<int> Todo)
+
+    public static void SetLogLevel(LogLevel level)
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        s_currentLogLevel = level;
+    }
 
-        Todo(0);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Write(in LogEntry entry)
+    {
+        if (s_currentLogLevel > entry.Level)
+            return;
 
-        var watch = new Stopwatch();
+        s_entryHandler(in entry);
+    }
 
-        watch.Start();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Write(LogLevel level, FormattableString message)
+    {
+        LogEntry logEntry = new(level, DateTime.UtcNow, message);
 
-        for (int i = 1; i < iterations; i++)
-            Todo(i);
+        Write(in logEntry);
+    }
 
-        watch.Stop();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Write(LogLevel level, FormattableString message, DateTime eventDateTime)
+    {
+        LogEntry logEntry = new(level, DateTime.UtcNow, message);
 
-        Benchmark(name, iterations, watch.Elapsed);
+        Write(in logEntry);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Write(LogLevel level, FormattableString message, Exception? exception)
+    {
+        LogEntry logEntry = new(level, DateTime.UtcNow, message, exception);
+
+        Write(in logEntry);
+    }
+
+    public static void Trace(FormattableString message) => Write(LogLevel.Trace, message);
+    public static void Debug(FormattableString message) => Write(LogLevel.Debug, message);
+    public static void Info(FormattableString message) => Write(LogLevel.Information, message);
+    public static void Warning(FormattableString message) => Write(LogLevel.Warning, message);
+    public static void Error(FormattableString message, Exception? error = default) => Write(LogLevel.Error, message, error);
+    public static void Error(Exception error) => Write(LogLevel.Error, $"", error);
+    public static void Critical(FormattableString message) => Write(LogLevel.Critical, message);
+
+    private static void ConsoleEntryHandler(in LogEntry logEntry)
+    {
+        StringBuilder builder = new();
+
+        string levelDisplay = logEntry.Level switch
+        {
+            LogLevel.Trace => "[TRACE] ",
+            LogLevel.Debug => "[DEBUG] ",
+            LogLevel.Information => "[INFO]  ",
+            LogLevel.Warning => "[WARN]  ",
+            LogLevel.Error => "[ERROR] ",
+            LogLevel.Critical => "[CRIT]  ",
+            _ => throw new InvalidOperationException(),
+        };
+
+        Span<char> dateTimeDisplay = stackalloc char[42];
+        if (!logEntry.EventDateTime.TryFormat(dateTimeDisplay.Slice(1), out var charsWritten, "s"))
+            throw new Exception();
+
+        dateTimeDisplay[0] = '[';
+        dateTimeDisplay[40] = ']';
+        dateTimeDisplay[41] = ' ';
+
+        builder.Append(levelDisplay);
+        builder.Append(dateTimeDisplay);
+        builder.AppendFormat(logEntry.Message.Format, logEntry.Message.GetArguments());
+
+        Console.WriteLine(builder.ToString());
     }
 }

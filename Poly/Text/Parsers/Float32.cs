@@ -10,9 +10,11 @@ namespace Poly
         public static bool TryParse(this string text, int index, int lastIndex, out float value)
             => TryParse(text, ref index, lastIndex, out value)
             && index == lastIndex;
-        
-        public static bool TryParse(this string text, ref int index, int lastIndex, out float value) {            
-            if (!Iteration.BoundsCheck(text, index, lastIndex)) {
+
+        public static bool TryParse(this string text, ref int index, int lastIndex, out float value)
+        {
+            if (!StringIteration.BoundsCheck(text, index, lastIndex))
+            {
                 value = float.NaN;
                 return false;
             }
@@ -65,7 +67,8 @@ namespace Poly
                 }
             }
 
-            if (float.TryParse(text.AsSpan(index, offset - index), out value)) {
+            if (float.TryParse(text.AsSpan(index, offset - index), out value))
+            {
                 index = offset;
                 return true;
             }

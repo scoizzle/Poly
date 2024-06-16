@@ -3,23 +3,27 @@ using System.Buffers;
 using System.Numerics;
 using System.Text;
 
-namespace Poly.Serialization {
+namespace Poly.Serialization
+{
     public class StringWriter : IDataWriter
     {
-        public StringWriter() {
+        public StringWriter()
+        {
             Text = new StringBuilder();
         }
 
-        public StringWriter(int capacity) {
+        public StringWriter(int capacity)
+        {
             Text = new StringBuilder(capacity);
         }
 
-        public StringWriter(StringBuilder builder) {
+        public StringWriter(StringBuilder builder)
+        {
             Text = builder;
         }
 
         public StringBuilder Text { get; }
-        
+
         public bool BeginArray()
             => true;
 
@@ -32,15 +36,15 @@ namespace Poly.Serialization {
         public bool BeginMember(StringView name)
             => true;
 
-        public bool BeginMember(SerializeObjectDelegate serialize, object name)
+        public bool BeginMember(SerializeFromObjectDelegate serialize, object name)
             => true;
 
         public bool BeginMember<T>(SerializeDelegate<T> serialize, T name)
             => true;
-            
+
         public bool BeginMember<TWriter, T>(SerializeDelegate<TWriter, T> serialize, in T name) where TWriter : class, IDataWriter
             => true;
-        
+
         public bool EndValue()
             => true;
 
@@ -73,7 +77,7 @@ namespace Poly.Serialization {
             Text.Append(value);
             return true;
         }
-        
+
         public bool Int8(sbyte value)
         {
             Text.Append(value);
@@ -168,12 +172,7 @@ namespace Poly.Serialization {
             throw new NotImplementedException();
         }
 
-        public bool Number<T>(in T value) where T : INumber<T>
-        {
-            throw new NotImplementedException();
-        }
-
-        public bool BeginMember(ReadOnlySpan<char> value)
+        public bool Number<T>(T value) where T : INumber<T>
         {
             throw new NotImplementedException();
         }
@@ -184,6 +183,11 @@ namespace Poly.Serialization {
         }
 
         public bool BeginValue()
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool Write<T>(T value) where T : ISpanFormattable
         {
             throw new NotImplementedException();
         }

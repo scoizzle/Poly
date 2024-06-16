@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Library</OutputType>
@@ -26,25 +26,15 @@
     <Version>1.0</Version>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <LangVersion>latest</LangVersion>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <LangVersion>latest</LangVersion>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Common" Version="8.2.0" />
-    <PackageReference Include="CommunityToolkit.Diagnostics" Version="8.2.0" />
-    <PackageReference Include="stateless" Version="5.13.0" />
-    <PackageReference Include="System.IO.Pipelines" Version="7.0.0" />
+    <PackageReference Include="CommunityToolkit.Common" Version="8.2.2" />
+    <PackageReference Include="CommunityToolkit.Diagnostics" Version="8.2.2" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.1" />
+    <PackageReference Include="System.IO.Pipelines" Version="8.0.0" />
     <PackageReference Include="System.Memory" Version="4.5.5" />
     <PackageReference Include="System.Reflection.Emit.ILGeneration" Version="4.7.0" />
     <PackageReference Include="System.Reflection.Emit.Lightweight" Version="4.7.0" />
-		<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.4.0" />
-		<PackageReference Include="System.Threading.Tasks.Parallel" Version="4.3.0" />
+    <PackageReference Include="System.Threading.Tasks.Parallel" Version="4.3.0" />
   </ItemGroup>
 </Project>

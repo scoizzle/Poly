@@ -1,13 +1,16 @@
-namespace Poly {
-    public static class StringInt8Parser {
+namespace Poly
+{
+    public static class StringInt8Parser
+    {
         public static bool TryParse(this string text, out sbyte value)
             => TryParse(text, 0, text?.Length ?? -1, out value);
 
         public static bool TryParse(this string text, int index, int lastIndex, out sbyte value)
             => TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out sbyte value) {
-            if (!Iteration.BoundsCheck(text, index, lastIndex))
+        public static bool TryParse(this string text, ref int index, int lastIndex, out sbyte value)
+        {
+            if (!StringIteration.BoundsCheck(text, index, lastIndex))
                 goto failure;
 
             int offset = index;
@@ -18,8 +21,10 @@ namespace Poly {
             if (negative)
                 offset++;
 
-            try {
-                while (offset < lastIndex) {
+            try
+            {
+                while (offset < lastIndex)
+                {
                     var character = text[offset];
 
                     if (character < '0' || character > '9')
@@ -49,15 +54,18 @@ namespace Poly {
         public static bool TryParse(this string text, int index, int lastIndex, out byte value) =>
             TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out byte value) {
-            if (!Iteration.BoundsCheck(text, index, lastIndex))
+        public static bool TryParse(this string text, ref int index, int lastIndex, out byte value)
+        {
+            if (!StringIteration.BoundsCheck(text, index, lastIndex))
                 goto failure;
 
             int offset = index;
             byte result = 0;
 
-            try {
-                while (offset < lastIndex) {
+            try
+            {
+                while (offset < lastIndex)
+                {
                     var character = text[offset];
 
                     if (character < '0' || character > '9')

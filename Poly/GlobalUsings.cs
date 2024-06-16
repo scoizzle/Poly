@@ -16,5 +16,3 @@ global using System.Threading.Tasks;
 
 global using CommunityToolkit.Common;
 global using CommunityToolkit.Diagnostics;
-
-global using Stateless;

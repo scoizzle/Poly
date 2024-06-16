@@ -2,30 +2,11 @@ using Poly.Serialization;
 
 namespace Poly.Reflection.Core;
 
-internal class DictionaryTypeInterface<TDictionary, TKey, TValue> : ISystemTypeInterface<TDictionary>
-    where TDictionary : IDictionary<TKey, TValue>
+internal sealed class DictionaryTypeInterface<TDictionary, TKey, TValue> : GenericReferenceTypeAdapterBase<TDictionary>
+    where TDictionary : class, IDictionary<TKey, TValue>
 {
-    public DictionaryTypeInterface() {
-        Type = typeof(TDictionary);
-        SerializeObject = new SerializeDelegate<TDictionary>(Serialize).ToObjectDelegate();
-        DeserializeObject = new DeserializeDelegate<TDictionary>(Deserialize).ToObjectDelegate();
-    }
-
-    public Type Type { get; }
-
-    public SerializeObjectDelegate SerializeObject { get; }
-
-    public DeserializeObjectDelegate DeserializeObject { get; }
-
-    public bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out TDictionary? result) where TReader : class, IDataReader
+    public override bool Deserialize(IDataReader reader, [NotNullWhen(true)] out TDictionary? result)
     {
-		using var _ = Instrumentation.AddEvent();
-
-        if (reader is null) {
-            result = default;
-            return false;
-        }
-
         if (reader.BeginObject())
         {
             var instance = Activator.CreateInstance(typeof(TDictionary));
@@ -35,7 +16,7 @@ internal class DictionaryTypeInterface<TDictionary, TKey, TValue> : ISystemTypeI
 
             while (!reader.IsDone)
             {
-                if (!reader.BeginMember<TReader, TKey>(KeyTypeInterface.Deserialize, out var key) || key is null)
+                if (!reader.BeginMember<TKey>(KeyTypeInterface.Deserialize, out var key) || key is null)
                     return false;
 
                 if (!ValueTypeInterface.Deserialize(reader, out var value))
@@ -53,19 +34,16 @@ internal class DictionaryTypeInterface<TDictionary, TKey, TValue> : ISystemTypeI
         result = default;
         return reader.Null();
     }
-        
-    public bool Serialize<TWriter>(TWriter writer, TDictionary value) where TWriter : class, IDataWriter
-    {
-		using var _ = Instrumentation.AddEvent();
-        Guard.IsNotNull(writer);
 
+    public override bool Serialize(IDataWriter writer, TDictionary? value)
+    {
         if (value is null) return writer.Null();
-            
+
         if (!writer.BeginObject()) return false;
 
         foreach (var pair in value)
         {
-            if (!writer.BeginMember<TWriter, TKey>(KeyTypeInterface.Serialize, pair.Key))
+            if (!writer.BeginMember(KeyTypeInterface.Serialize, pair.Key))
                 return false;
 
             if (!ValueTypeInterface.Serialize(writer, pair.Value))
@@ -79,12 +57,14 @@ internal class DictionaryTypeInterface<TDictionary, TKey, TValue> : ISystemTypeI
     }
 
 
-    static readonly ISystemTypeInterface<TKey> KeyTypeInterface = TypeInterfaceRegistry.Get<TKey>()!;
+    static readonly ISystemTypeAdapter<TKey> KeyTypeInterface = TypeAdapterRegistry.Get<TKey>()!;
 
-    static readonly ISystemTypeInterface<TValue> ValueTypeInterface = TypeInterfaceRegistry.Get<TValue>()!;
+    static readonly ISystemTypeAdapter<TValue> ValueTypeInterface = TypeAdapterRegistry.Get<TValue>()!;
 
-    public bool TryGetMemberInterface(StringView name, out IMemberInterface? member) {
-        if (KeyTypeInterface.Deserialize(new Serialization.StringReader(name), out var key)) {
+    public bool TryGetMemberInterface(StringView name, out IMemberAdapter? member)
+    {
+        if (KeyTypeInterface.Deserialize(new Serialization.StringReader(name), out var key))
+        {
             member = new DictionaryTypeMemberInterface<TKey, TValue>(key, ValueTypeInterface);
             return true;
         }

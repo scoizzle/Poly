@@ -1,97 +1,88 @@
-﻿#nullable enable
-
-using System.Reflection;
+﻿using System.Reflection;
 using Poly.Serialization;
 
 namespace Poly.Reflection;
 
-public class CoreTypeMember : IMemberInterface
-{        
+[DebuggerDisplay("({TypeInterface.Type.Name}.{Name})")]
+public class CoreTypeMember : IMemberAdapter
+{
     private CoreTypeMember() { }
 
-    public required string Name { get; init; }
+    public required StringView Name { get; init; }
 
-    public required ITypeInterface TypeInterface { get; init; }
+    public required ITypeAdapter TypeInterface { get; init; }
 
     public required Func<object, object>? GetValueDelegate { get; init; }
-    
+
     public required Action<object, object>? SetValueDelegate { get; init; }
-
-    public required SerializeObjectDelegate Serialize { get; init; }
-
-    public required DeserializeObjectDelegate Deserialize { get; init; }
 
     public bool TryGetValue(object instance, out object? value)
     {
-        try {
-            value = GetValueDelegate?.Invoke(instance);
-            return true;
-        }
-        catch {
+        if (GetValueDelegate is null)
+        {
             value = default;
             return false;
         }
+
+        value = GetValueDelegate(instance);
+        return true;
     }
 
     public bool TrySetValue(object instance, object value)
     {
-        try {
-            SetValueDelegate?.Invoke(instance, value);
-            return true;
-        }
-        catch {
+        if (SetValueDelegate is null)
             return false;
-        }
+
+        SetValueDelegate(instance, value);
+        return true;
     }
 
-    public static IEnumerable<IMemberInterface> GetMemberInterfacesForType(
+    public static IEnumerable<IMemberAdapter> GetMemberInterfacesForType(
         Type type)
     {
-        foreach (var field in type.GetFields())
-        {
-            yield return From(field);
-        }
+        var fields = type.GetFields();
+        var properties = type.GetProperties();
+        var memberAdapters = new List<IMemberAdapter>();
 
-        foreach (var property in type.GetProperties())
-        {
-            yield return From(property);
-        }
+        memberAdapters.AddRange(fields.Select(From));
+        memberAdapters.AddRange(properties.Select(From));
+
+        return memberAdapters;
     }
 
     public static CoreTypeMember From(
         FieldInfo info)
     {
-        var typeInterface = TypeInterfaceRegistry.Get(info.FieldType);
+        var typeInterface = TypeAdapterRegistry.Get(info.FieldType);
 
-        return new CoreTypeMember {
+        return new CoreTypeMember
+        {
             Name = info.Name,
             TypeInterface = typeInterface!,
             GetValueDelegate = GetFieldReadMethod(info),
-            SetValueDelegate = GetFieldWriteMethod(info),
-            Serialize = typeInterface!.SerializeObject,
-            Deserialize = typeInterface!.DeserializeObject
-        };        
+            SetValueDelegate = GetFieldWriteMethod(info)
+        };
     }
 
     public static CoreTypeMember From(
         PropertyInfo info)
     {
-        var typeInterface = TypeInterfaceRegistry.Get(info.PropertyType);
+        var typeInterface = TypeAdapterRegistry.Get(info.PropertyType);
 
-        return new CoreTypeMember {
+        return new CoreTypeMember
+        {
             Name = info.Name,
             TypeInterface = typeInterface!,
             GetValueDelegate = GetPropertyReadMethod(info),
-            SetValueDelegate = GetPropertyWriteMethod(info),
-            Serialize = typeInterface!.SerializeObject,
-            Deserialize = typeInterface!.DeserializeObject
-        };        
+            SetValueDelegate = GetPropertyWriteMethod(info)
+        };
     }
 
     private static Func<object, object> GetFieldReadMethod(
         FieldInfo fieldInfo)
     {
-        if (fieldInfo.IsLiteral) {
+        if (fieldInfo.IsLiteral)
+        {
             var defaultValue = fieldInfo.GetRawConstantValue();
 
             return (obj) => { return defaultValue!; };
@@ -122,7 +113,7 @@ public class CoreTypeMember : IMemberInterface
     }
 
     private static Func<object, object>? GetPropertyReadMethod(
-        PropertyInfo propertyInfo) 
+        PropertyInfo propertyInfo)
     {
         if (!propertyInfo.CanRead)
             return default;
@@ -137,13 +128,13 @@ public class CoreTypeMember : IMemberInterface
         var This = Expression.Parameter(typeof(object), "this");
         var conv = Expression.Convert(This, propertyInfo.DeclaringType!);
         var prop = Expression.Call(isStatic ? default : conv, method!);
-        var box  = Expression.Convert(prop, typeof(object));
+        var box = Expression.Convert(prop, typeof(object));
 
         return Expression.Lambda<Func<object, object>>(box, This).Compile();
     }
 
     private static Action<object, object>? GetPropertyWriteMethod(
-        PropertyInfo propertyInfo) 
+        PropertyInfo propertyInfo)
     {
         if (!propertyInfo.CanWrite)
             return default;
@@ -156,11 +147,11 @@ public class CoreTypeMember : IMemberInterface
         var isStatic = method?.IsStatic == true;
 
         var This = Expression.Parameter(typeof(object), "this");
-        var value  = Expression.Parameter(typeof(object), "value");
-        var typedThis  = Expression.Convert(This, propertyInfo.DeclaringType!);
-        var typedValue  = Expression.Convert(value, propertyInfo.PropertyType);
+        var value = Expression.Parameter(typeof(object), "value");
+        var typedThis = Expression.Convert(This, propertyInfo.DeclaringType!);
+        var typedValue = Expression.Convert(value, propertyInfo.PropertyType);
         var prop = Expression.Call(isStatic ? default : typedThis, method!, typedValue);
 
-        return Expression.Lambda<Action<object, object>>(prop, new [] { This, value }).Compile();
+        return Expression.Lambda<Action<object, object>>(prop, new[] { This, value }).Compile();
     }
 }

@@ -1,7 +1,7 @@
 namespace Poly.Serialization;
 
-public delegate bool DeserializeObjectDelegate(IDataReader view, [NotNullWhen(true)] out object? value);
-public delegate bool DeserializeDelegate<T>(IDataReader view, [NotNullWhen(true)] out T? value);
+public delegate bool DeserializeToObjectDelegate(IDataReader view, [NotNullWhen(returnValue: true)] out object? value);
+public delegate bool DeserializeDelegate<T>(IDataReader view, [NotNullWhen(returnValue: true)] out T? value);
 public delegate bool DeserializeDelegate<TDeserializer, TValue>(TDeserializer view, [NotNullWhen(true)] out TValue? value) where TDeserializer : IDataReader;
 
 public static class DeserializeDelegateExtensions
@@ -9,8 +9,8 @@ public static class DeserializeDelegateExtensions
     public static DeserializeDelegate<TValue> ToGenericDelegate<TReader, TValue>(this DeserializeDelegate<IDataReader, TValue> @delegate) where TReader : IDataReader
         => (IDataReader reader, [NotNullWhen(true)] out TValue? value) => @delegate(reader, out value);
 
-    public static DeserializeObjectDelegate ToObjectDelegate<TValue>(this DeserializeDelegate<TValue> @delegate)
-        => (IDataReader reader, [NotNullWhen(true)] out object? obj) => 
+    public static DeserializeToObjectDelegate ToObjectDelegate<TValue>(this DeserializeDelegate<TValue> @delegate)
+        => (IDataReader reader, [NotNullWhen(true)] out object? obj) =>
         {
             if (reader is null) { obj = default; return false; }
 
@@ -25,9 +25,10 @@ public static class DeserializeDelegateExtensions
         };
 }
 
-public interface IDataReader {
+public interface IDataReader
+{
     bool IsDone { get; }
-        
+
     bool Null();
 
     bool Char(out char value);
@@ -55,7 +56,6 @@ public interface IDataReader {
 
     bool BeginMember(out StringView name);
     bool BeginMember<T>(DeserializeDelegate<T> serializer, out T name);
-    bool BeginMember<TReader, T>(DeserializeDelegate<TReader, T> serializer, out T? name) where TReader : class, IDataReader;
     bool EndValue();
 
     bool BeginObject();
@@ -63,4 +63,6 @@ public interface IDataReader {
 
     bool BeginArray(out int? numberOfMembers);
     bool EndArray();
+
+    bool Read<T>([NotNullWhen(returnValue: true)] out T? value) where T : ISpanParsable<T>;
 }

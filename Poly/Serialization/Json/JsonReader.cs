@@ -1,626 +1,92 @@
 namespace Poly.Serialization;
 
-using Poly.Parsing;
-using Poly.Parsing.Json;
-
-public record JsonReaderPipelines(in ReadOnlySequence<char> Sequence) : IDataReader
+public sealed class JsonReader(StringView view) : IDataReader
 {
-    readonly Grammar<char, JsonToken>.TokenParser _parser = GetParser(Sequence);
+    private readonly char[] EndOfMemberSearchChars = [',', '}', ']'];
 
-    public bool IsDone => _parser.IsDone;
+    public bool IsDone => view.IsEmpty;
 
     public bool BeginArray(out int? numberOfMembers)
     {
-        numberOfMembers = default;
+        view.Consume(char.IsWhiteSpace);
 
-        if (_parser.Current.Token != JsonToken.BeginArray)
+        if (!view.Consume('['))
+        {
+            numberOfMembers = default;
             return false;
+        }
 
-        _parser.MoveNext();
+        numberOfMembers = default;
         return true;
+    }
+
+    public bool EndArray()
+    {
+        view.Consume(char.IsWhiteSpace);
+
+        return view.Consume(']');
     }
 
     public bool BeginMember(out StringView name)
     {
-        name = default;
+        view.Consume(char.IsWhiteSpace);
 
-        if (_parser.Current.Token != JsonToken.String)
+        if (!view.ExtractAndConsumeStringLiteral(out var sub))
+        {
+            name = default;
             return false;
+        }
 
-        var nameSegment = _parser.Current.Segment;
-        
-        if (!_parser.MoveNext())
-            return false;
+        name = new StringView(sub.String, sub.Index, sub.LastIndex);
 
-        if (_parser.Current.Token != JsonToken.NameSeperator)
-            return false;
+        view.Consume(char.IsWhiteSpace);
 
-        name = nameSegment.ToString();
-
-        _parser.MoveNext();
-        return true;
+        return view.Consume(':');
     }
 
-    public bool BeginMember<T>(DeserializeDelegate<T> deserializer, out T name)
+    public bool BeginMember(DeserializeToObjectDelegate deserialize, out object name)
     {
-        if (deserializer(this, out name)) {
-            _parser.MoveNext();
-            return true;
-        }
+        view.Consume(char.IsWhiteSpace);
 
-        name = default;
-        return false;
-    }
-
-    public bool BeginMember<TReader, T>(DeserializeDelegate<TReader, T> deserialize, [NotNullWhen(true)] out T? name) where TReader : class, IDataReader
-    {
-        name = default;
-
-        if (_parser.Current.Token != JsonToken.String)
-            return false;
-
-        if (this is not TReader reader) return false;
-
-        if (!deserialize(reader, out name))
-            return false;
-        
-        if (!_parser.MoveNext())
-            return false;
-
-        if (_parser.Current.Token != JsonToken.NameSeperator)
-            return false;
-            
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool BeginObject()
-    {
-        if (_parser.Current.Token != JsonToken.BeginObject)
-            return false;
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool Boolean(out bool value)
-    {
-        if (_parser.Current.Token == JsonToken.TrueValue) {
-            value = true;
-
-            _parser.MoveNext();
-            return true;
-        }
-
-        if (_parser.Current.Token == JsonToken.FalseValue) {
-            value = false;
-
-            _parser.MoveNext();
-            return true;
-        }
-        
-        value = false;
-        return false;
-    }
-
-    public bool Char(out char value)
-    {
-        if (_parser.Current.Token != JsonToken.String)
+        if (view.ExtractAndConsumeStringLiteral(out var sub))
         {
-            value = default;
-            return false;
-        }
+            view.Consume(char.IsWhiteSpace);
 
-        var segment = _parser.Current.Segment;
-
-        if (segment.Length == 0)
-        {
-            value = default;
-            return false;
-        }
-
-        var firstCharacter = segment.FirstSpan[0];
-
-        if (segment.Length == 1)
-        {
-            value = firstCharacter;
-            return true;
-        }
-
-        if (firstCharacter != '\\') 
-        {
-            value = default;
-            return false;
-        }
-
-        value = segment.FirstSpan[1];
-
-        switch (value)
-        {
-            case '"':
-            case '\\':
-            case '/':
-            case 'b':
-            case 'f':
-            case 'n':
-            case 'r':
-            case 't':
-                return true;
-
-            case 'u':
+            if (view.Consume(':'))
             {
-                var reader = new SequenceReader<char>(segment.Slice(2));
+                var view = new StringView(sub.String, sub.Index, sub.LastIndex);
 
-                Span<char> hex = stackalloc char[4];
-
-                for (var i = 0; i < 4; i++)
-                {
-                    if (!reader.TryRead(out hex[i]))
-                        return false;
-                }
-
-                Span<byte> bytes = stackalloc byte[2];
-
-                bytes[1] = (byte)(hex[0] << 4 | hex[1] & 0xF);
-                bytes[0] = (byte)(hex[2] << 4 | hex[3] & 0xF);
-
-                var characterCount = Encoding.UTF8.GetChars(bytes, hex);
-
-                if (characterCount != 1)
-                    return false;
-
-                value = hex[0];
-                return true;
-            }
-
-            default:
-                return false;
-        }
-    }
-
-    public bool DateTime(out DateTime value)
-    {
-        if (_parser.Current.Token != JsonToken.String)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!System.DateTime.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool Decimal(out decimal value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!decimal.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool EndArray()
-    {
-        if (_parser.Current.Token != JsonToken.EndArray)
-            return false;
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool EndObject()
-    {
-        if (_parser.Current.Token != JsonToken.EndObject)
-            return false;
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool EndValue()
-    {
-        if (_parser.Current.Token == JsonToken.MemberSeperator)
-        {
-            _parser.MoveNext();
-            return true;
-        }
-
-        return false;
-    }
-
-    public bool Float32(out float value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!float.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool Float64(out double value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!double.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool Int16(out short value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!short.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool Int32(out int value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!int.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool Int64(out long value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!long.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool Int8(out sbyte value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!sbyte.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool Null()
-    {
-        if (_parser.Current.Token != JsonToken.NullValue)
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool String(out string value)
-    {
-        if (_parser.Current.Token != JsonToken.String)
-        {
-            value = default;
-            return false;
-        }
-
-        value = _parser.Current.Segment.ToString();
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool StringView(out StringView value)
-    {
-        if (_parser.Current.Token != JsonToken.String)
-        {
-            value = default;
-            return false;
-        }
-
-        value = _parser.Current.Segment.ToString();
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool TimeSpan(out TimeSpan value)
-    {
-        if (_parser.Current.Token != JsonToken.String)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!System.TimeSpan.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool UInt16(out ushort value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!ushort.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool UInt32(out uint value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!uint.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool UInt64(out ulong value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!ulong.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    public bool UInt8(out byte value)
-    {
-        if (_parser.Current.Token != JsonToken.Number)
-        {
-            value = default;
-            return false;
-        }
-
-        if (!byte.TryParse(_parser.Current.Segment.FirstSpan, out value))
-        {
-            return false;
-        }
-
-        _parser.MoveNext();
-        return true;
-    }
-
-    static Grammar<char, JsonToken>.TokenParser GetParser(in ReadOnlySequence<char> sequence)
-    {
-        var parser = JsonGrammar.Definition.ParseAllTokens(in sequence);
-
-        parser.MoveNext();
-
-        return parser;
-    }
-}
-
-public sealed class JsonReader : IDataReader
-{
-    StringView _stringView;
-
-    public JsonReader(string text) 
-        : this (new StringView(text)) 
-    { }
-
-    public JsonReader(StringView view)
-    {
-        _stringView = view;
-    }
-
-    public bool IsDone => _stringView.IsDone;
-
-    public bool BeginArray(out int? numberOfMembers)
-    {
-        _stringView.ConsumeWhitespace();
-
-        if (!_stringView.Consume('['))
-        {
-            numberOfMembers = default;
-            return false;
-        }
-
-        var entryPoint = _stringView.Index;
-
-        var count = 0;
-        var depth = 1;
-
-        while (!_stringView.IsDone) {
-            _stringView.ConsumeWhitespace();
-
-            if (_stringView.Consume(']') && --depth == 0)
-                break;
-
-            var parsedSomething = false;
-
-            switch (_stringView.Current) {
-                case 't':
-                case 'f':
-                    parsedSomething = _stringView.Extract(out bool _) && _stringView.ConsumeWhitespace();
-                    break;
-
-                case 'n':
-                    parsedSomething = _stringView.Consume("null") && _stringView.ConsumeWhitespace();
-                    break;
-
-                case '"':
-                    parsedSomething = _stringView.ExtractStringLiteral(out _, true) && _stringView.ConsumeWhitespace();
-                    break;
-
-                case '[':
-                    depth++;
-                    parsedSomething = _stringView.Consume() && _stringView.ConsumeWhitespace();
-                    break;
-
-                case '{':
-                    var closingCurlyBrace = _stringView.FindMatchingBracket('{', '}');
-
-                    if (closingCurlyBrace == -1)
-                        break;
-
-                    _stringView.Index = closingCurlyBrace + 1;
-                    _stringView.ConsumeWhitespace();
-
-                    parsedSomething = true;
-                    break;
-            }
-
-            if (!_stringView.Consume(',')) {
-                _stringView.ConsumeWhitespace();
-
-                if (_stringView.Current != ']') {
-                    numberOfMembers = default;
-                    return false;
-                }
-            }
-
-            if (parsedSomething) {
-                count++;
-                continue;
+                return deserialize(new StringReader(view), out name);
             }
         }
 
-        _stringView.Index = entryPoint;
-        numberOfMembers = count;
-        return true;
-    }
-    
-    public bool EndArray()
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Consume(']');
-    }
-
-    public bool BeginMember(out StringView name)
-    {
-        _stringView.ConsumeWhitespace();
-
-        if (!_stringView.ExtractStringLiteral(out name))
-            return false;
-
-        _stringView.ConsumeWhitespace();
-        
-        return _stringView.Consume(':');
-    }
-
-    public bool BeginMember(DeserializeObjectDelegate deserialize, out object name)
-    {
-        _stringView.ConsumeWhitespace();
-
-        if (_stringView.ExtractStringLiteral(out var sub)) {
-            _stringView.ConsumeWhitespace();
-
-            if (_stringView.Consume(':')) {
-                return deserialize(new StringReader(sub), out name);
-            }
-        }
-        
         name = default;
         return false;
     }
 
     public bool BeginMember<T>(DeserializeDelegate<T> deserialize, out T name)
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
-        if (_stringView.ExtractStringLiteral(out var sub)) {
-            _stringView.ConsumeWhitespace();
+        if (view.ExtractAndConsumeStringLiteral(out var sub))
+        {
+            view.Consume(char.IsWhiteSpace);
 
-            if (_stringView.Consume(':')) {
-                return deserialize(new StringReader(sub), out name);
+            if (view.Consume(':'))
+            {
+                var view = new StringView(sub.String, sub.Index, sub.LastIndex);
+
+                return deserialize(new StringReader(view), out name);
             }
         }
-        
+
         name = default;
         return false;
     }
 
     public bool BeginMember<TReader, T>(DeserializeDelegate<TReader, T> deserialize, [NotNullWhen(true)] out T? name) where TReader : class, IDataReader
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
         if (this is not TReader reader)
         {
@@ -630,51 +96,54 @@ public sealed class JsonReader : IDataReader
 
         if (deserialize(reader, out name))
         {
-            _stringView.ConsumeWhitespace();
+            view.Consume(char.IsWhiteSpace);
 
-            if (_stringView.Consume(':')) {
+            if (view.Consume(':'))
+            {
                 return true;
             }
         }
-        
+
         name = default;
         return false;
     }
 
     public bool EndValue()
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
-        return _stringView.Consume(',');
+        return view.Consume(',');
     }
 
     public bool BeginObject()
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
-        return _stringView.Consume('{');
+        return view.Consume('{');
     }
 
     public bool EndObject()
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
-        return _stringView.Consume('}');
+        return view.Consume('}');
     }
 
     public bool Null()
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
-        return _stringView.Consume("null");
+        return view.Consume("null");
     }
 
     public bool Char(out char value)
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
-        if (_stringView.ExtractStringLiteral(out var view) && view.Length == 1) {
-            value = view.Current;
+        if (view.ExtractStringLiteral(out var sub) && sub.Length == 1 && sub.First.HasValue)
+        {
+            view.Consume(sub.Length);
+            value = sub.First.Value;
             return true;
         }
 
@@ -684,7 +153,8 @@ public sealed class JsonReader : IDataReader
 
     public bool String(out string value)
     {
-        if (StringView(out var view)) {
+        if (StringView(out var view))
+        {
             value = view.ToString();
             return true;
         }
@@ -695,9 +165,11 @@ public sealed class JsonReader : IDataReader
 
     public bool StringView(out StringView value)
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
-        if (_stringView.ExtractStringLiteral(out value)) {
+        if (view.ExtractAndConsumeStringLiteral(out var sub))
+        {
+            value = new StringView(sub.String, sub.Index, sub.LastIndex);
             return true;
         }
 
@@ -707,292 +179,13 @@ public sealed class JsonReader : IDataReader
 
     public bool Boolean(out bool value)
     {
-        _stringView.ConsumeWhitespace();
+        view.Consume(char.IsWhiteSpace);
 
-        return _stringView.Extract(out value);
-    }
-
-    public bool Float32(out float value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-
-    }
-
-    public bool Float64(out double value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-    
-    public bool Decimal(out decimal value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool Int8(out sbyte value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool Int16(out short value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool Int32(out int value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool Int64(out long value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool UInt8(out byte value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool UInt16(out ushort value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool UInt32(out uint value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool UInt64(out ulong value)
-    {
-        _stringView.ConsumeWhitespace();
-
-        return _stringView.Extract(out value);
-    }
-
-    public bool DateTime(out DateTime value)
-    {
-        if (StringView(out var view)) {
-            return System.DateTime.TryParse(view.AsSpan(), out value);
-        }
-
-        value = default;
-        return false;
-    }
-
-    public bool TimeSpan(out TimeSpan value)
-    {
-        if (StringView(out var view)) {
-            return System.TimeSpan.TryParse(view.AsSpan(), out value);
-        }
-
-        value = default;
-        return false;
-    }
-}
-
-
-public sealed class JsonReaderSlice : IDataReader
-{
-    private static readonly char[] EndOfMemberSearchChars = { ',', '}', ']' };
-
-    StringSlice slice;
-
-    public JsonReaderSlice(StringSlice view)
-    {
-        slice = view;
-    }
-
-    public bool IsDone => !slice.IsEmpty;
-
-    public bool BeginArray(out int? numberOfMembers)
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        if (!slice.Consume('['))
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
         {
-            numberOfMembers = default;
-            return false;
-        }
-
-        numberOfMembers = default;
-        return true;
-    }
-    
-    public bool EndArray()
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        return slice.Consume(']');
-    }
-
-    public bool BeginMember(out StringView name)
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        if (!slice.ExtractStringLiteral(out var sub)){
-            name = default;
-            return false;
-        }
-
-        name = new StringView(sub.String, sub.Begin, sub.End);
-
-        slice.Consume(char.IsWhiteSpace);
-        
-        return slice.Consume(':');
-    }
-
-    public bool BeginMember(DeserializeObjectDelegate deserialize, out object name)
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        if (slice.ExtractStringLiteral(out var sub)) {
-            slice.Consume(char.IsWhiteSpace);
-
-            if (slice.Consume(':')) {
-                var view = new StringView(sub.String, sub.Begin, sub.End);
-
-                return deserialize(new StringReader(view), out name);
-            }
-        }
-        
-        name = default;
-        return false;
-    }
-
-    public bool BeginMember<T>(DeserializeDelegate<T> deserialize, out T name)
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        if (slice.ExtractStringLiteral(out var sub)) {
-            slice.Consume(char.IsWhiteSpace);
-
-            if (slice.Consume(':')) {
-                var view = new StringView(sub.String, sub.Begin, sub.End);
-
-                return deserialize(new StringReader(view), out name);
-            }
-        }
-        
-        name = default;
-        return false;
-    }
-
-    public bool BeginMember<TReader, T>(DeserializeDelegate<TReader, T> deserialize, [NotNullWhen(true)] out T? name) where TReader : class, IDataReader
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        if (this is not TReader reader)
-        {
-            name = default;
-            return false;
-        }
-
-        if (deserialize(reader, out name))
-        {
-            slice.Consume(char.IsWhiteSpace);
-
-            if (slice.Consume(':')) {
-                return true;
-            }
-        }
-        
-        name = default;
-        return false;
-    }
-
-    public bool EndValue()
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        return slice.Consume(',');
-    }
-
-    public bool BeginObject()
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        return slice.Consume('{');
-    }
-
-    public bool EndObject()
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        return slice.Consume('}');
-    }
-
-    public bool Null()
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        return slice.Consume("null");
-    }
-
-    public bool Char(out char value)
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        if (slice.ExtractStringLiteral(out var view) && view.Length == 1 && view.Current.HasValue) {
-            value = view.Current.Value;
-            return true;
-        }
-
-        value = default;
-        return false;
-    }
-
-    public bool String(out string value)
-    {
-        if (StringView(out var view)) {
-            value = view.ToString();
-            return true;
-        }
-
-        value = default;
-        return Null();
-    }
-
-    public bool StringView(out StringView value)
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        if (slice.ExtractStringLiteral(out var sub)) {
-            value = new StringView(sub.String, sub.Begin, sub.End);
-            return true;
-        }
-
-        value = default;
-        return false;
-    }
-
-    public bool Boolean(out bool value)
-    {
-        slice.Consume(char.IsWhiteSpace);
-
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1003,11 +196,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool Float32(out float value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1019,11 +214,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool Float64(out double value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1031,14 +228,16 @@ public sealed class JsonReaderSlice : IDataReader
         value = default;
         return false;
     }
-    
+
     public bool Decimal(out decimal value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1049,11 +248,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool Int8(out sbyte value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1064,11 +265,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool Int16(out short value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1079,11 +282,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool Int32(out int value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1094,11 +299,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool Int64(out long value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1109,11 +316,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool UInt8(out byte value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1124,11 +333,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool UInt16(out ushort value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1139,11 +350,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool UInt32(out uint value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1154,11 +367,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool UInt64(out ulong value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice[EndOfMemberSearchChars] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length);
+        if (view.ExtractUntilAny(EndOfMemberSearchChars) is StringView sub)
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length);
                 return true;
             }
         }
@@ -1169,11 +384,13 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool DateTime(out DateTime value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice['"', '"'] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length + 2);
+        if (view.ExtractStringLiteral(out var sub))
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length + 2);
                 return true;
             }
         }
@@ -1184,13 +401,37 @@ public sealed class JsonReaderSlice : IDataReader
 
     public bool TimeSpan(out TimeSpan value)
     {
-        slice.Consume(char.IsWhiteSpace);
+        view.Consume(char.IsWhiteSpace);
 
-        if (slice['"', '"'] is StringSlice sub) {
-            if (sub.TryParse(out value)) {
-                slice.Consume(sub.Length + 2);
+        if (view.ExtractStringLiteral(out var sub))
+        {
+            if (sub.TryParse(out value))
+            {
+                view.Consume(sub.Length + 2);
                 return true;
             }
+        }
+
+        value = default;
+        return false;
+    }
+
+    public bool Read<T>([NotNullWhen(returnValue: true)] out T? value) where T : ISpanParsable<T>
+    {
+        view.Consume(char.IsWhiteSpace);
+
+        StringView sub;
+
+        if (view.First == '"' && view.ExtractStringLiteral(out sub) && sub.TryParse(out value))
+        {
+            view.Consume(sub.Length + 2);
+            return true;
+        }
+        else
+        if (view.TryExtractUntilAny(values: EndOfMemberSearchChars, slice: out sub) && sub.TryParse(out value))
+        {
+            view.Consume(sub.Length);
+            return true;
         }
 
         value = default;

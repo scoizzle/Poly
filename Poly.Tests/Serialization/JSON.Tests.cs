@@ -5,9 +5,7 @@ using System.Collections.Generic;
 using Xunit;
 using Xunit.Abstractions;
 
-using Poly.Parsing;
 using Poly.Reflection;
-using Poly.Parsing.Json;
 using System.Linq;
 using System.Text;
 
@@ -45,7 +43,7 @@ namespace Poly.Serialization.JSON
     {
         private readonly ITestOutputHelper output;
 
-        public static readonly ISystemTypeInterface<TestClass> typeInterface = TypeInterfaceRegistry.Get<TestClass>();
+        public static readonly ISystemTypeAdapter<TestClass> typeInterface = TypeAdapterRegistry.Get<TestClass>();
 
         public static readonly TestClass test = CreateSerializationObject();
 
@@ -161,69 +159,6 @@ namespace Poly.Serialization.JSON
             Assert.Equal(test.Name, result.Name);
             Assert.Equal(test.Strings, result.Strings);
             Assert.Equal(test.Dictionary, result.Dictionary);
-        }
-
-        [Fact]
-        public void Poly_Serialize_Pipeline()
-        {
-            var writer = new JsonWriterPipelines();
-            typeInterface.Serialize(writer, test);
-            output.WriteLine(writer.ToString());
-        }
-
-        [Fact]
-        public void Poly_Deserialize_Pipeline()
-        {
-            var sequence = new ReadOnlySequence<char>(JsonText.AsMemory());
-            var writer = new JsonReaderPipelines(sequence);
-
-            typeInterface.Deserialize(writer, out var result);
-
-            Assert.Equal(test.Name, result.Name);
-            Assert.Equal(test.Strings, result.Strings);
-            Assert.Equal(test.Dictionary, result.Dictionary);
-        }
-
-        class Minor {
-            public bool True { get; set; }
-            public string Text { get; set; }
-        }
-
-        class Major {
-            public Minor[] Test { get; set; }
-        }
-
-        static string GetTestString(int minorInstances)
-        {
-            var minors = Enumerable
-                .Range(0, minorInstances)
-                .Select(i => new Minor { True = true, Text = "test" })
-                .ToArray();
-
-            
-            var m = new Major { Test = minors };
-            
-            return System.Text.Json.JsonSerializer.Serialize(m);
-        }
-
-
-        [Fact]
-        public void Ugh() {
-            var instance = GetTestString(100);
-            var sequence = new ReadOnlySequence<char>(instance.AsMemory());
-            var tokens = JsonGrammar.Definition.ParseAllTokens(sequence);
-
-            var builder = new StringBuilder();
-
-            foreach (var result in tokens)
-            {
-                if (!result.Success)
-                    throw new Exception();
-
-                builder.Append(result.Segment);
-            }
-
-            output.WriteLine(builder.ToString());
         }
     }
 }

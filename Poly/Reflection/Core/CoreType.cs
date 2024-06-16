@@ -1,41 +1,21 @@
 using Poly.Serialization;
 namespace Poly.Reflection.Core;
 
-internal class CoreType<T> : ISystemTypeInterface<T> where T : class
+internal sealed class CoreType<T> : GenericReferenceTypeAdapterBase<T> where T : class
 {
-    static readonly IMemberInterface[] _memberInterfaces;
-    static readonly Dictionary<StringView, IMemberInterface> _memberDictionary;
+    static readonly IMemberAdapter[] s_MemberInterfaces;
+    static readonly Dictionary<StringView, IMemberAdapter> s_MemberDictionary;
 
     static CoreType()
     {
-        _memberInterfaces = CoreTypeMember.GetMemberInterfacesForType(typeof(T)).ToArray();
-        _memberDictionary = new(StringViewEqualityComparer.Ordinal);
+        s_MemberInterfaces = CoreTypeMember.GetMemberInterfacesForType(typeof(T)).ToArray();
+        s_MemberDictionary = new Dictionary<StringView, IMemberAdapter>(StringViewEqualityComparer.Ordinal);
 
-        foreach (var member in _memberInterfaces)
-            _memberDictionary.Add(member.Name, member);
+        foreach (var member in s_MemberInterfaces)
+            s_MemberDictionary.Add(member.Name, member);
     }
 
-    public CoreType()
-    {
-        Type = typeof(T);
-        SerializeObject = new SerializeDelegate<T>(Serialize).ToObjectDelegate();
-        DeserializeObject = new DeserializeDelegate<T>(Deserialize).ToObjectDelegate();
-    }
-
-    public Type Type { get; }
-
-    public SerializeObjectDelegate SerializeObject { get; }
-
-    public DeserializeObjectDelegate DeserializeObject { get; }
-
-    public static bool TryGetMemberInterface(
-            StringView name, 
-        out IMemberInterface? member) 
-    {
-        return _memberDictionary.TryGetValue(name, out member);
-    }
-
-    public bool Serialize<TWriter>(TWriter writer, T obj) where TWriter : class, IDataWriter
+    public override bool Serialize(IDataWriter writer, T? obj)
     {
         Guard.IsNotNull(writer);
 
@@ -43,7 +23,7 @@ internal class CoreType<T> : ISystemTypeInterface<T> where T : class
 
         if (!writer.BeginObject()) return false;
 
-        foreach (var member in _memberInterfaces)
+        foreach (var member in s_MemberInterfaces)
         {
             if (!writer.BeginMember(member.Name))
                 return false;
@@ -55,7 +35,7 @@ internal class CoreType<T> : ISystemTypeInterface<T> where T : class
             }
             else
             {
-                if (!member.Serialize(writer, value))
+                if (!member.TypeInterface.Serialize(writer, value))
                     return false;
             }
 
@@ -66,11 +46,9 @@ internal class CoreType<T> : ISystemTypeInterface<T> where T : class
         return writer.EndObject();
     }
 
-    public bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out T? obj) where TReader : class, IDataReader
+    public override bool Deserialize(IDataReader reader, [NotNullWhen(true)] out T? obj)
     {
         Guard.IsNotNull(reader);
-        
-        if (reader is null) { obj = default; return false; }
 
         if (reader.BeginObject())
         {
@@ -83,10 +61,10 @@ internal class CoreType<T> : ISystemTypeInterface<T> where T : class
                 if (!reader.BeginMember(out var name))
                     return false;
 
-                if (!_memberDictionary.TryGetValue(name, out IMemberInterface? member))
+                if (!s_MemberDictionary.TryGetValue(name, out IMemberAdapter? member))
                     return false;
 
-                if (!member.Deserialize(reader, out object? value))
+                if (!member.TypeInterface.Deserialize(reader, out object? value))
                     return false;
 
                 if (!member.TrySetValue(obj, value))

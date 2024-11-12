@@ -1,5 +1,3 @@
-using System;
-
 namespace Poly
 {
     public static class StringFloat128Parser

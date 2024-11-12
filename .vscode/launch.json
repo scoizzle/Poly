@@ -1,19 +1,16 @@
 {
-   // Use IntelliSense to find out which attributes exist for C# debugging
-   // Use hover for the description of the existing attributes
-   // For further information visit https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md
-   "version": "0.2.0",
-   "configurations": [
+    "version": "0.2.0",
+    "configurations": [
         {
             "name": ".NET Core Launch (console)",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/Poly.Benchmarks/bin/Debug/net7.0/Poly.Benchmarks.dll",
-            "args": ["OTEL_COLLECTOR_ENDPOINT=http://localhost:4317"],
+            "program": "${workspaceFolder}/Poly.Benchmarks/bin/Debug/net8.0/Poly.Benchmarks.dll",
+            "args": [
+                "OTEL_COLLECTOR_ENDPOINT=http://localhost:4317"
+            ],
             "cwd": "${workspaceFolder}/Poly.Benchmarks",
-            // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "integratedTerminal",
             "stopAtEntry": false,
             "requireExactSource": false
@@ -23,6 +20,11 @@
             "type": "coreclr",
             "request": "attach",
             "processId": "${command:pickProcess}"
+        },
+        {
+            "name": "C#: Launch Startup Project",
+            "type": "dotnet",
+            "request": "launch"
         }
     ]
 }

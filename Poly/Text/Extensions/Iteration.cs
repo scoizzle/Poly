@@ -244,7 +244,8 @@ public static class StringIteration
 
         while (offset < lastIndex)
         {
-            if (!predicate(This[offset]))
+            var chr = This[offset];
+            if (!predicate(chr))
                 break;
 
             offset++;
@@ -338,6 +339,31 @@ public static class StringIteration
             offset++;
         }
 
+
+        if (offset == index)
+            return false;
+
+        index = offset;
+        return true;
+    }
+
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool ConsumeWhitespace(this string This, ref int index, int lastIndex)
+    {
+        if (!BoundsCheck(This, index, lastIndex))
+            return false;
+
+        var offset = index;
+
+        while (offset < lastIndex)
+        {
+            var chr = This[offset];
+            if (!char.IsWhiteSpace(chr))
+                break;
+
+            offset++;
+        }
 
         if (offset == index)
             return false;

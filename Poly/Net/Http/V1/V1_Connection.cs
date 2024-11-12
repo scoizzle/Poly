@@ -1,13 +1,13 @@
-using System.Threading;
-using System.Threading.Tasks;
 using System.Net;
 
 using Poly.Net.Tcp;
 
-namespace Poly.Net.Http.V1 {
+namespace Poly.Net.Http.V1
+{
     public class Connection : IConnectionInterface
     {
-        public Connection(TcpClient client) {
+        public Connection(TcpClient client)
+        {
             Client = client;
         }
 

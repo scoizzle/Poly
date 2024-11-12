@@ -6,10 +6,9 @@ using Newtonsoft.Json;
 using BenchmarkDotNet.Attributes;
 
 using Poly.Reflection;
-using BenchmarkDotNet.Jobs;
 using System.Linq;
-using System.Buffers;
 using System.Text.Json.Serialization;
+using CommunityToolkit.Diagnostics;
 
 namespace Poly.Serialization.Benchmarks.Deserializer
 {
@@ -51,13 +50,12 @@ namespace Poly.Serialization.Benchmarks.Deserializer
     [BaselineColumn]
     public class DeserializationBenchmarks
     {
-        public static readonly string JsonText = JsonConvert.SerializeObject(test);
+        public static readonly TestClass test = CreateSerializationObject();
+        public static readonly string JsonText = System.Text.Json.JsonSerializer.Serialize(test);
 
         public static readonly ISystemTypeAdapter<int> integerSystemTypeAdapter = TypeAdapterRegistry.Get<int>();
 
         public static readonly ISystemTypeAdapter<TestClass> typeInterface = TypeAdapterRegistry.Get<TestClass>();
-
-        public static readonly TestClass test = CreateSerializationObject();
 
         private static TestClass CreateSerializationObject()
         {
@@ -69,7 +67,7 @@ namespace Poly.Serialization.Benchmarks.Deserializer
                 Strings = new List<string>() { null, "Markus egger ]><[, (2nd)", null },
                 Address = new Address { Street = "fff Street", Entered = DateTime.Now.AddDays(20) },
                 Addresses = Enumerable
-                    .Range(0, 100)
+                    .Range(0, 1000)
                     .Select(i => new Address { Entered = DateTime.Now.AddDays(i), Street = $"{i} address" })
                     .ToList()
             };
@@ -79,32 +77,37 @@ namespace Poly.Serialization.Benchmarks.Deserializer
         [Benchmark]
         public void Newtonsoft_Deserialize()
         {
-            _ = JsonConvert.DeserializeObject<TestClass>(JsonText);
+            TestClass result = JsonConvert.DeserializeObject<TestClass>(JsonText);
+            Guard.IsNotNull(result);
         }
 
         [Benchmark(Baseline = true)]
         public void SystemTextJson_Deserialize()
         {
-            _ = System.Text.Json.JsonSerializer.Deserialize<TestClass>(JsonText);
+            TestClass result = System.Text.Json.JsonSerializer.Deserialize<TestClass>(JsonText);
+            Guard.IsNotNull(result);
         }
 
         [Benchmark]
         public void SystemTextJson_Deserialize_SourceGeneration()
         {
-            _ = System.Text.Json.JsonSerializer.Deserialize(JsonText, DeserializerSourceGenerationContext.Default.TestClass);
+            TestClass result = System.Text.Json.JsonSerializer.Deserialize(JsonText, DeserializerSourceGenerationContext.Default.TestClass);
+            Guard.IsNotNull(result);
         }
 
         [Benchmark]
         public void Poly_TypeInterface_Deserialize()
         {
-            _ = JsonSerializer.Deserialize<TestClass>(JsonText);
+            TestClass result = JsonSerializer.Deserialize<TestClass>(JsonText);
+            Guard.IsNotNull(result);
         }
 
         [Benchmark]
         public void Poly_CachedTypeInterface_Deserialize()
         {
             var reader = new JsonReader(JsonText);
-            typeInterface.Deserialize(reader, out object _);
+            typeInterface.Deserialize(reader, out TestClass result);
+            Guard.IsNotNull(result);
         }
     }
 }

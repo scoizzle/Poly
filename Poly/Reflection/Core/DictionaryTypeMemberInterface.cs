@@ -1,5 +1,3 @@
-using Poly.Serialization;
-
 namespace Poly.Reflection.Core;
 
 internal class DictionaryTypeMemberInterface<TKey, TValue> : IMemberAdapter

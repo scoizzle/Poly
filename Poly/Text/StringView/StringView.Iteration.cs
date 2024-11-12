@@ -146,6 +146,21 @@ public partial struct StringView
         return false;
     }
 
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool ConsumeWhitespace()
+    {
+        var (str, index, lastIndex) = this;
+
+        if (str.ConsumeWhitespace(ref index, lastIndex))
+        {
+            Index = index;
+            return true;
+        }
+
+        return false;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Goto(char character, StringComparison comparisonType = StringComparison.Ordinal)
     {

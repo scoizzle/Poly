@@ -1,21 +1,22 @@
-using System.Linq;
-
 namespace Poly.Text.Matching.Expressions
 {
-    public partial class Group {
+    public partial class Group
+    {
         public override TryCompareDelegate Goto()
             => gotoView(Members, Optional, Next);
 
-        public override TryCompareDelegate Compare() 
+        public override TryCompareDelegate Compare()
             => compare(Members, Optional, Next);
 
-        private static TryCompareDelegate gotoView(Expression[] members) {
+        private static TryCompareDelegate gotoView(Expression[] members)
+        {
             if (members.Length == 0)
                 return Evaluation.DefaultComparisonTrue;
 
             var firstGoto = members.First().Goto();
 
-            return (StringView view) => {
+            return (StringView view) =>
+            {
                 var index = view.Index;
 
                 if (!firstGoto(view))
@@ -26,7 +27,8 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate gotoView(Expression[] members, bool optional) {
+        private static TryCompareDelegate gotoView(Expression[] members, bool optional)
+        {
             if (!optional)
                 return gotoView(members);
 
@@ -35,7 +37,8 @@ namespace Poly.Text.Matching.Expressions
 
             var firstGoto = members.First().Goto();
 
-            return (StringView view) => {
+            return (StringView view) =>
+            {
                 var index = view.Index;
 
                 if (firstGoto(view))
@@ -45,7 +48,8 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate gotoView(Expression[] members, bool optional, Expression next) {
+        private static TryCompareDelegate gotoView(Expression[] members, bool optional, Expression next)
+        {
             if (!optional)
                 return gotoView(members);
 
@@ -58,10 +62,12 @@ namespace Poly.Text.Matching.Expressions
             var firstGoto = members.First().Goto();
             var nextGoto = next.Goto();
 
-            return (StringView view) => {
+            return (StringView view) =>
+            {
                 var index = view.Index;
 
-                if (firstGoto(view)) {
+                if (firstGoto(view))
+                {
                     view.Index = index;
                     return true;
                 }
@@ -70,7 +76,8 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate compare(Expression[] members) {
+        private static TryCompareDelegate compare(Expression[] members)
+        {
             if (members.Length == 0)
                 return Evaluation.DefaultComparisonTrue;
 
@@ -79,7 +86,8 @@ namespace Poly.Text.Matching.Expressions
             return (StringView view) => firstCompare(view);
         }
 
-        private static TryCompareDelegate compare(Expression[] members, bool optional) {
+        private static TryCompareDelegate compare(Expression[] members, bool optional)
+        {
             if (!optional)
                 return compare(members);
 
@@ -88,7 +96,8 @@ namespace Poly.Text.Matching.Expressions
 
             var firstCompare = members.First().Compare();
 
-            return (StringView view) => {
+            return (StringView view) =>
+            {
                 var index = view.Index;
 
                 if (firstCompare(view))
@@ -98,7 +107,8 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate compare(Expression[] members, bool optional, Expression next) {
+        private static TryCompareDelegate compare(Expression[] members, bool optional, Expression next)
+        {
             if (!optional)
                 return compare(members);
 
@@ -108,10 +118,12 @@ namespace Poly.Text.Matching.Expressions
             var firstCompare = members.First().Compare();
             var nextCompare = next.Compare();
 
-            return (StringView view) => {
+            return (StringView view) =>
+            {
                 var index = view.Index;
 
-                if (firstCompare(view)) {
+                if (firstCompare(view))
+                {
                     view.Index = index;
                     return true;
                 }

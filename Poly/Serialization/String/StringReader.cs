@@ -1,6 +1,3 @@
-using System;
-using Poly;
-
 namespace Poly.Serialization
 {
     public class StringReader : IDataReader
@@ -70,8 +67,11 @@ namespace Poly.Serialization
         bool IDataReader.TimeSpan(out TimeSpan value)
             => TimeSpan.TryParse(view.AsSpan(), out value);
 
-        public bool Read<T>(out T? value) where T : ISpanParsable<T>
-            => view.TryParse(out value);
+        public bool Read<T>([NotNullWhen(returnValue: true)] out T? value)
+            where T : ISpanParsable<T>
+        {
+            return view.TryParse(out value);
+        }
 
         public bool ReadString<T>(out T? value) where T : ISpanParsable<T>
             => view.TryParse(out value);

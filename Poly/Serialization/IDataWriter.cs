@@ -35,11 +35,11 @@ public interface IDataWriter
     bool StringView(StringView value);
     bool Number<T>(T value) where T : INumber<T>;
 
-    bool DateTime(in DateTime value);
-    bool TimeSpan(in TimeSpan value);
+    bool DateTime(DateTime value);
+    bool TimeSpan(TimeSpan value);
 
     bool BeginMember(StringView value);
-    bool BeginMember<T>(SerializeDelegate<T> serializer, in T name);
+    bool BeginMember<T>(SerializeDelegate<T> serializer, T name);
 
     bool BeginValue();
     bool EndValue();
@@ -50,5 +50,5 @@ public interface IDataWriter
     bool BeginArray();
     bool EndArray();
 
-    bool Write<T>(T value) where T : ISpanFormattable;
+    bool Write<T>(T value, ReadOnlySpan<char> format = default, IFormatProvider? formatProvider = default) where T : ISpanFormattable;
 }

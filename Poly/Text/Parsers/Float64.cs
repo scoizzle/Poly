@@ -1,5 +1,3 @@
-using System;
-
 namespace Poly
 {
     public static partial class StringFloat64Parser

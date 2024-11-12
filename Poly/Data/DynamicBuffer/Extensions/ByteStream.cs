@@ -1,29 +1,27 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Poly.Data
 {
     public static partial class DynamicBufferExtensions
     {
         public static async ValueTask<bool> ReadAsync(
-            this Stream stream, 
+            this Stream stream,
             DynamicBuffer<byte> buffer,
             CancellationToken cancellationToken = default)
         {
             if (!buffer.EnsureWriteableCapacity())
                 return false;
 
-            try {
-                var read = await stream.ReadAsync(buffer.Writable, cancellationToken);
+            try
+            {
+                var read = await stream.ReadAsync(buffer.WriteableMemory, cancellationToken);
 
-                if (read > 0) {
+                if (read > 0)
+                {
                     buffer.Commit(read);
                     return true;
                 }
             }
-            catch (Exception error) {
+            catch (Exception error)
+            {
                 Log.Error(error);
             }
 
@@ -31,7 +29,7 @@ namespace Poly.Data
         }
 
         public static async ValueTask<bool> ReadAsync(
-            this Stream stream, 
+            this Stream stream,
             DynamicBuffer<byte> buffer,
             int count,
             CancellationToken cancellationToken = default)
@@ -41,8 +39,9 @@ namespace Poly.Data
 
             try
             {
-                do {
-                    var read = await stream.ReadAsync(buffer.Writable[..count], cancellationToken);
+                do
+                {
+                    var read = await stream.ReadAsync(buffer.WriteableMemory[..count], cancellationToken);
 
                     if (read == 0 || !buffer.Commit(read))
                         return false;
@@ -54,7 +53,7 @@ namespace Poly.Data
             }
             catch (Exception error)
             { Log.Error(error); }
-            
+
             return false;
         }
 
@@ -63,8 +62,9 @@ namespace Poly.Data
             DynamicBuffer<byte> buffer,
             CancellationToken cancellationToken = default)
         {
-            try {
-                await stream.WriteAsync(buffer.Readable, cancellationToken);
+            try
+            {
+                await stream.WriteAsync(buffer.ReadableMemory, cancellationToken);
                 buffer.Reset();
                 return true;
             }
@@ -75,16 +75,17 @@ namespace Poly.Data
         }
 
         public static async ValueTask<bool> WriteAsync(
-            this Stream stream, 
-            DynamicBuffer<byte> buffer, 
+            this Stream stream,
+            DynamicBuffer<byte> buffer,
             int count,
             CancellationToken cancellationToken = default)
         {
             if (buffer.Count < count)
                 return false;
 
-            try {
-                await stream.WriteAsync(buffer.Readable[..count], cancellationToken);
+            try
+            {
+                await stream.WriteAsync(buffer.ReadableMemory[..count], cancellationToken);
                 return buffer.Consume(count);
             }
             catch (Exception error)
@@ -94,8 +95,8 @@ namespace Poly.Data
         }
 
         public static async ValueTask<bool> CopyAsync(
-            this DynamicBuffer<byte> buffer, 
-            Stream In, 
+            this DynamicBuffer<byte> buffer,
+            Stream In,
             Stream Out,
             CancellationToken cancellationToken = default
             )
@@ -114,15 +115,15 @@ namespace Poly.Data
 
         public static async ValueTask<bool> CopyAsync(
             this DynamicBuffer<byte> buffer,
-            Stream In, 
-            Stream Out, 
+            Stream In,
+            Stream Out,
             long length,
             CancellationToken cancellationToken = default
             )
         {
             do
             {
-                var to_read = (int)Math.Min(buffer.RemainingLength, length);
+                var to_read = (int)Math.Min(buffer.UnallocatedSize, length);
 
                 if (!await ReadAsync(In, buffer, to_read, cancellationToken))
                     return true;

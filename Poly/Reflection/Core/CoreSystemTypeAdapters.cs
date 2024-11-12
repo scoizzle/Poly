@@ -11,5 +11,4 @@ internal sealed class UInt64Adapter : SpanableValueTypeAdapter<ulong>;
 internal sealed class SingleAdapter : SpanableValueTypeAdapter<float>;
 internal sealed class DoubleAdapter : SpanableValueTypeAdapter<double>;
 internal sealed class DecimalAdapter : SpanableValueTypeAdapter<decimal>;
-internal sealed class DateTimeAdapter : SpanableValueTypeAdapter<DateTime>;
-internal sealed class TimeSpanAdapter : SpanableValueTypeAdapter<TimeSpan>;
+internal sealed class GuidAdapter : SpanableValueTypeAdapter<Guid>;

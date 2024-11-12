@@ -2,7 +2,8 @@ namespace Poly.Data.Tests;
 
 using Xunit;
 
-public class BitArrayTests {
+public class BitArrayTests
+{
     static readonly byte[] TestArray = { 0xDE, 0xAD, 0xBE, 0xEF };
 
     [Fact]

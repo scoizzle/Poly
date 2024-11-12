@@ -1,71 +1,115 @@
 namespace Poly.Data;
 
-public readonly struct BitArray : IEnumerable<bool> {
-    readonly byte[] array;
+[DebuggerDisplay("{DebugDisplayString}")]
+public readonly struct BitArray : IEnumerable<bool>
+{
+    readonly int m_BitCapacity;
+    readonly byte[] m_Array;
 
-    public BitArray(byte[] data) => array = data;
+    public BitArray(byte[] data)
+    {
+        Guard.IsNotNull(data);
 
-    public BitArray(int bitCapacity) => Array.Resize(ref array, CalculateArraySize(bitCapacity));
+        m_Array = data;
+        m_BitCapacity = data.Length * 8;
+    }
 
-    public int BitCapacity => array.Length * 8;
+    public BitArray(int bitCapacity)
+    {
+        var arraySize = CalculateArraySize(bitCapacity);
+        m_BitCapacity = arraySize * 8;
+        Array.Resize(ref m_Array, arraySize);
+    }
 
-    public readonly bool this[int bitPosition] {
-        get {
-            var (idx, mask) = CalculateArrayIndex(bitPosition);
+    public int BitCapacity => m_BitCapacity;
 
-            Guard.IsBetweenOrEqualTo(idx, 0, array.Length);
 
-            return mask == (array[idx] & mask);
+    public readonly bool this[int bitPosition]
+    {
+        get
+        {
+            var (idx, mask) = new BitArrayIndex(bitPosition);
+            Guard.IsBetweenOrEqualTo(idx, 0, m_Array.Length);
+
+            return mask == (m_Array[idx] & mask);
         }
-        set {
-            var (idx, mask) = CalculateArrayIndex(bitPosition);
+        set
+        {
+            var (idx, mask) = new BitArrayIndex(bitPosition);
+            Guard.IsBetweenOrEqualTo(idx, 0, m_Array.Length);
 
-            Guard.IsBetweenOrEqualTo(idx, 0, array.Length);
-
-            if (value) {
-                array[idx] |= mask; 
+            if (value)
+            {
+                m_Array[idx] |= mask;
             }
-            else {
-                array[idx] &= (byte)~mask;
+            else
+            {
+                m_Array[idx] &= (byte)~mask;
             }
         }
     }
 
-    public void Toggle(int bitPosition) {
-        var (idx, mask) = CalculateArrayIndex(bitPosition);
+    public bool TryGetValue(int bitPosition, out bool value)
+    {
+        var (idx, mask) = new BitArrayIndex(bitPosition);
 
-        Guard.IsBetweenOrEqualTo(idx, 0, array.Length);
+        if (idx < 0 || idx >= m_Array.Length)
+        {
+            return value = false;
+        }
 
-        array[idx] ^= mask;
+        value = mask == (m_Array[idx] & mask);
+        return true;
     }
 
-    static int CalculateArraySize(int numberOfBits) => (numberOfBits / 8) + (numberOfBits % 8 > 0 ? 1 : 0);
+    public bool TrySetValue(int bitPosition, bool value)
+    {
+        var (idx, mask) = new BitArrayIndex(bitPosition);
 
-    static byte CalculateBitMask(int bitPosition) => (byte)(0b10000000 >> bitPosition);
+        if (idx < 0 || idx >= m_Array.Length)
+            return false;
 
-    static (int ByteIndex, byte BitMask) CalculateArrayIndex(int bitPosition) {
-        var byteNumber = bitPosition / 8;
-        var bitNumber = bitPosition % 8;
+        ref var byteRef = ref m_Array[idx];
 
-        if (byteNumber > 0 && bitNumber > 3)
-            byteNumber--;
+        var isBitSet = mask == (byteRef & mask);
 
-        var bitMask = CalculateBitMask(bitNumber);
+        if (isBitSet == value)
+            return true;
 
-        return (byteNumber, bitMask);
+        if (value)
+        {
+            byteRef |= mask;
+        }
+        else
+        {
+            byteRef &= (byte)~mask;
+        }
+
+        return true;
     }
 
-    public IEnumerator<bool> GetEnumerator() => new Enumerator(this);
+    public void Toggle(int bitPosition)
+    {
+        var (idx, mask) = new BitArrayIndex(bitPosition);
+        Guard.IsBetweenOrEqualTo(idx, 0, m_Array.Length);
+        m_Array[idx] ^= mask;
+    }
 
-    IEnumerator IEnumerable.GetEnumerator() => new Enumerator(this);
+    private string DebugDisplayString => string.Concat(m_Array.Select(e => e.ToString("B")));
 
-    struct Enumerator : IEnumerator<bool>
+    private static int CalculateArraySize(int numberOfBits) => new BitArrayIndex(numberOfBits).ByteIndex + 1;
+
+    public IEnumerator<bool> GetEnumerator() => new BitArrayEnumerator(this);
+
+    IEnumerator IEnumerable.GetEnumerator() => new BitArrayEnumerator(this);
+
+    private struct BitArrayEnumerator : IEnumerator<bool>
     {
         int bitIndex;
         BitArray array;
 
-        public Enumerator(BitArray array) => this.array = array;
-        
+        public BitArrayEnumerator(BitArray array) => this.array = array;
+
         public bool Current { get; private set; }
 
         public void Dispose() => array = default;

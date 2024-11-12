@@ -1,8 +1,3 @@
-using System;
-using System.Buffers;
-using System.Numerics;
-using System.Text;
-
 namespace Poly.Serialization
 {
     public class StringWriter : IDataWriter
@@ -187,7 +182,17 @@ namespace Poly.Serialization
             throw new NotImplementedException();
         }
 
-        public bool Write<T>(T value) where T : ISpanFormattable
+        public bool Write<T>(T value, ReadOnlySpan<char> format = default, IFormatProvider? formatProvider = default) where T : ISpanFormattable
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool DateTime(DateTime value)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool TimeSpan(TimeSpan value)
         {
             throw new NotImplementedException();
         }

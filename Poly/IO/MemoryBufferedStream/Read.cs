@@ -1,8 +1,3 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-
 using Poly.Data;
 
 namespace Poly.IO
@@ -10,26 +5,26 @@ namespace Poly.IO
     public partial class MemoryBufferedStream
     {
         public override int Read(byte[] buffer, int offset, int count)
-            => In.Read(buffer.AsSpan(offset, count), count) 
+            => In.TryRead(buffer.AsSpan(offset, count), count)
              ? count
              : 0;
 
         public override int Read(Span<byte> buffer)
-            => In.Read(buffer, out var count)
+            => In.TryRead(buffer, out var count)
              ? count
              : 0;
-             
+
         public int Read(Span<byte> buffer, int count)
-            => In.Read(buffer, count)
+            => In.TryRead(buffer, count)
              ? count
              : 0;
 
         public async ValueTask<bool> DataAvailableAsync(CancellationToken cancellationToken = default)
-            => In.Count > 0 
+            => In.Count > 0
             || await Stream.ReadAsync(In, cancellationToken);
 
         public async ValueTask<bool> DataAvailableAsync(int count, CancellationToken cancellationToken = default)
-            => In.Count >= count 
+            => In.Count >= count
             || await Stream.ReadAsync(In, count, cancellationToken);
 
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default)

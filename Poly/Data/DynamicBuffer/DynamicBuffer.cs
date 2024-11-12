@@ -1,108 +1,126 @@
-using System;
+namespace Poly.Data;
 
-namespace Poly.Data {
-    public partial class DynamicBuffer<T> {
-        public DynamicBuffer(Memory<T> buffer) {
-            Buffer = buffer;
-            Size = buffer.Length;
-            Offset = Count = 0;
-        }
+public partial class DynamicBuffer<T> : IDisposable
+{
+    private readonly IMemoryOwner<T>? m_MemoryOwner;
+    private Memory<T> m_Memory;
+    private int m_Offset, m_Count;
 
-        Memory<T> Buffer { get; }
+    public DynamicBuffer(int minBufferSize = -1)
+    {
+        Guard.IsGreaterThanOrEqualTo(minBufferSize, -1);
 
-        public int Size { get; }
+        m_MemoryOwner = MemoryPool<T>.Shared.Rent(minBufferSize);
+        m_Memory = m_MemoryOwner.Memory;
+    }
 
-        public int Offset { get; private set; }
+    public DynamicBuffer(Memory<T> memory)
+    {
+        Guard.IsNotNull(memory);
 
-        public int Count { get; private set; }
+        m_Memory = memory;
+    }
 
-        public T? this[int index]
-            => index >= 0 && index < Count
-             ? Buffer.Span[Offset + index]
-             : default;
+    public DynamicBuffer(IMemoryOwner<T> memoryOwner)
+    {
+        Guard.IsNotNull(memoryOwner);
 
-        public T? Current
-            => this[0];
+        m_MemoryOwner = memoryOwner;
+        m_Memory = memoryOwner.Memory;
+    }
 
-        public bool IsEmpty
-            => Count == 0;
+    public T? this[int index] => GetValueFromBuffer(index);
+    public int Offset => m_Offset;
+    public int Count => m_Count;
+    public int WriteableSize => m_Memory.Length - Offset - Count;
+    public int UnallocatedSize => m_Memory.Length - Count;
+    public ReadOnlyMemory<T> ReadableMemory => m_Memory.Slice(Offset, Count);
+    public ReadOnlySpan<T> ReadableSpan => m_Memory.Span.Slice(Offset, Count);
+    public Memory<T> WriteableMemory => m_Memory.Slice(Offset + Count);
+    public Span<T> WriteableSpan => m_Memory.Span.Slice(Offset + Count);
 
-        public int Available
-            => Count;
+    public void Dispose()
+    {
+        m_Memory = default;
+        m_MemoryOwner?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
-        public int WriteOffset
-            => Offset + Count;
+    public bool Consume(int count = 1)
+    {
+        if (count > m_Count)
+            return false;
 
-        public int RemainingLength
-            => Buffer.Length - WriteOffset;
+        m_Count -= count;
+        m_Offset += count;
+        return true;
+    }
 
-        public int Unallocated
-            => Buffer.Length - Count;
+    public bool Commit(int count = 1)
+    {
+        if (count > WriteableSize)
+            return false;
 
-        public ReadOnlyMemory<T> Readable
-            => Buffer.Slice(Offset, Count);
+        m_Count += count;
+        return true;
+    }
 
-        public Memory<T> Writable
-            => Buffer.Slice(WriteOffset, RemainingLength);
+    public bool EnsureWriteableCapacity(int count = 1)
+    {
+        if (count < 0) return false;
+        if (count == 0) return true;
 
-        public ReadOnlySpan<T> ReadableSpan
-            => Buffer.Span.Slice(Offset, Count);
-
-        public Span<T> WritableSpan
-            => Buffer.Span.Slice(WriteOffset, RemainingLength);
-
-        public bool Consume(int n = 1) {
-            if (n > Count)
-                return false;
-
-            Count -= n;
-            Offset += n;
-            return true;
-        }
-
-        public bool Commit(int n = 1) {
-            if (n > RemainingLength)
-                return false;
-
-            Count += n;
-            return true;
-        }
-
-        public bool EnsureWriteableCapacity(int n = 1)
-        {   if (n < 0) return false;
-            if (n == 0) return true;
-            
-            if (Count == 0 && Offset > 0) {
-                Reset();
-                return n <= Buffer.Length;
-            }
-
-            var unallocated = Buffer.Length - Count;
-            if (unallocated < n)
-                return false;
-
-            var remaining = unallocated - Offset;
-            if (remaining < n)
-                Rebase();
-
-            return true;
-        }
-
-        public void Reset()
-            => Offset = Count = 0;
-
-        public bool Rebase() {
-            if (!ReadableSpan.TryCopyTo(Buffer.Span))
-                return false;
-
-            Offset = 0;
-            return true;
-        }
-
-        public void Clear() {
+        if (m_Count == 0 && m_Offset > 0)
+        {
             Reset();
-
-            Buffer.Span.Clear();
+            return count <= m_Memory.Length;
         }
+
+        var unallocated = m_Memory.Length - m_Count;
+        if (unallocated < count)
+            return false;
+
+        var remaining = unallocated - Offset;
+        if (remaining < count)
+            Rebase();
+
+        return true;
+    }
+
+    public void Reset()
+        => m_Offset = m_Count = 0;
+
+    public bool Rebase()
+    {
+        var span = m_Memory.Span;
+        var readableSpan = span.Slice(m_Offset, m_Count);
+
+        if (!readableSpan.TryCopyTo(span))
+            return false;
+
+        m_Offset = 0;
+        return true;
+    }
+
+    public void Clear()
+    {
+        m_Memory.Span.Clear();
+        Reset();
+    }
+
+    private T? GetValueFromBuffer(int index)
+    {
+        var (offset, count) = (Offset, Count);
+
+        if (index >= count)
+            return default;
+
+        index += offset;
+
+        var span = m_Memory.Span;
+        if (index < 0 || index >= span.Length)
+            return default;
+
+        return span[index];
     }
 }

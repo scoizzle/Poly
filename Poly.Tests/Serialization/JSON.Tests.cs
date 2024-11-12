@@ -1,5 +1,5 @@
 using System;
-using System.Buffers;
+using System.Collections;
 using System.Collections.Generic;
 
 using Xunit;
@@ -7,7 +7,7 @@ using Xunit.Abstractions;
 
 using Poly.Reflection;
 using System.Linq;
-using System.Text;
+using Poly.Grammar;
 
 namespace Poly.Serialization.JSON
 {
@@ -57,56 +57,20 @@ namespace Poly.Serialization.JSON
 
         private static TestClass CreateSerializationObject()
         {
-            TestClass test = new()
+            var test = new TestClass
             {
                 BigNumber = 34123123123.121M,
                 Now = DateTime.Now.AddHours(1),
-                Dictionary = new Dictionary<string, int> { { "Val & asd1", 1 }, { "Val2 & asd1", 3 }, { "Val3 & asd1", 3 } },
+                Dictionary = new Dictionary<string, int> { { "Val & asd1", 1 }, { "Val2 & asd1", 3 }, { "Val3 & asd1", 4 } },
                 Strings = new List<string>() { null, "Markus egger ]><[, (2nd)", null },
                 Address = new Address { Street = "fff Street", Entered = DateTime.Now.AddDays(20) },
-                Addresses = new List<Address>
-                {
-                    new Address { Entered = DateTime.Now.AddDays(-1), Street = "\u001farray\u003caddress" },
-                    new Address { Entered = DateTime.Now.AddDays(-2), Street = "array 2 address" }
-                }
+                Addresses = Enumerable
+                    .Range(0, 100000)
+                    .Select(i => new Address { Entered = DateTime.Now.AddDays(i), Street = $"{i} address" })
+                    .ToList()
             };
             return test;
         }
-
-        // [Fact]
-        // public void ITokenReader_Read_All_Tokens()
-        // {
-        //     var tabs = 0;
-        //     var builder = new StringBuilder();
-        //     var tokenReader = new JsonStringTokenReader(JsonText);
-
-        //     output.WriteLine(string.Empty);
-
-        //     while (tokenReader.TryReadToken(out var result)) {
-        //         tabs = result.Token switch {
-        //             JsonToken.EndObject or JsonToken.EndArray => tabs - 1,
-        //             _ => tabs
-        //         };
-
-        //         builder
-        //             .Append(' ', tabs * 2)
-        //             .Append(result.Token.ToString());
-
-        //         output.WriteLine(builder.ToString());
-
-        //         builder.Clear();
-
-        //         tabs = result.Token switch {
-        //             JsonToken.BeginObject or JsonToken.BeginArray => tabs + 1,
-        //             _ => tabs
-        //         };
-        //     }
-
-        //     if (!tokenReader.IsDone)
-        //         output.WriteLine(tokenReader.ToString());
-
-        //     Assert.True(tokenReader.IsDone, "TokenReader.IsDone should be true after reading all tokens.");
-        // }
 
         [Fact]
         public void Serialize()
@@ -142,12 +106,14 @@ namespace Poly.Serialization.JSON
             Assert.Equal(test.Strings, result.Strings);
             Assert.Equal(test.Dictionary, result.Dictionary);
         }
+
         [Fact]
         public void Poly_Serialize()
         {
             var writer = new JsonWriter();
             typeInterface.Serialize(writer, test);
-            output.WriteLine(writer.Text.ToString());
+            string result = writer.Text.ToString();
+            output.WriteLine(result);
         }
 
         [Fact]
@@ -159,6 +125,14 @@ namespace Poly.Serialization.JSON
             Assert.Equal(test.Name, result.Name);
             Assert.Equal(test.Strings, result.Strings);
             Assert.Equal(test.Dictionary, result.Dictionary);
+        }
+
+        [Fact]
+        public void Poly_Ugh()
+        {
+
+            Grammar.Ugh ugh = new();
+            IEnumerable<JsonToken> tokens = ugh.GetJsonTokens(JsonText).ToList();
         }
     }
 }

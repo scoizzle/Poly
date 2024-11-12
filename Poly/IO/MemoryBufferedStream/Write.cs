@@ -1,8 +1,3 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-
 using Poly.Data;
 
 namespace Poly.IO
@@ -10,21 +5,21 @@ namespace Poly.IO
     public partial class MemoryBufferedStream
     {
         public void Write(byte[] buffer)
-            => Out.Write(buffer);
+            => Out.TryWrite(buffer.AsSpan());
 
         public override void Write(byte[] buffer, int index, int count)
-            => Out.Write(buffer, index, count);
+            => Out.TryWrite(buffer.AsSpan(index, count));
 
         public override void Write(ReadOnlySpan<byte> buffer)
-            => Out.Write(buffer);
+            => Out.TryWrite(buffer);
 
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default)
-            => Out.Write(buffer, offset, count) ?
+            => Out.TryWrite(buffer.AsSpan(offset, count)) ?
                 Task.CompletedTask :
                 Task.FromException(new IOException());
 
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> memory, CancellationToken cancellationToken = default)
-            => Out.Write(memory.Span)
+            => Out.TryWrite(memory.Span)
              ? default
              : default;
 
@@ -40,7 +35,8 @@ namespace Poly.IO
         public ValueTask<bool> WriteAsync(Stream stream, long count, CancellationToken cancellationToken = default)
             => Out.CopyAsync(stream, Stream, count, cancellationToken);
 
-        public override async Task FlushAsync(CancellationToken cancellationToken = default) {
+        public override async Task FlushAsync(CancellationToken cancellationToken = default)
+        {
             await Stream.WriteAsync(Out, cancellationToken);
             await Stream.FlushAsync(cancellationToken);
         }

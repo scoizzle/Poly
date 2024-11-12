@@ -2,6 +2,12 @@ namespace Poly.Reflection;
 
 public static class TypeExtensions
 {
+    public static bool HasDefaultConstructor(
+        this Type type)
+    {
+        return type.GetConstructor(Type.EmptyTypes) != null;
+    }
+    
     public static bool ImplementsInterface(
         this Type type,
              Type interfaceType)
@@ -26,10 +32,9 @@ public static class TypeExtensions
             goto failure;
 
         var implType = type
-            .GetInterfaces()
-            .Where(t => t.IsGenericType)
-            .Where(t => t.GetGenericTypeDefinition() == interfaceType)
-            .FirstOrDefault();
+                      .GetInterfaces()
+                      .Where(t => t.IsGenericType)
+                      .FirstOrDefault(t => t.GetGenericTypeDefinition() == interfaceType);
 
         if (implType is null)
             goto failure;

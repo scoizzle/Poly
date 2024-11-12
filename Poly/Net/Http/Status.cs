@@ -1,8 +1,8 @@
-﻿using System.Text;
+﻿namespace Poly.Net.Http
+{
 
-namespace Poly.Net.Http {
-
-    public enum Status {
+    public enum Status
+    {
         // Informational
         Continue = 100,
 
@@ -61,12 +61,14 @@ namespace Poly.Net.Http {
         VersionNotSupported
     }
 
-    public static class StringBuilderExtension {
+    public static class StringBuilderExtension
+    {
         public static StringBuilder Append(this StringBuilder builder, Status status)
             => builder.Append(status.GetString());
     }
 
-    public static class ResultExtensions {
+    public static class ResultExtensions
+    {
         public static string? GetString(this Status status) => status switch
         {
             Status.Continue => "100 Continue",

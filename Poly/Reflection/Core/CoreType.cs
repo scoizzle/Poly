@@ -1,7 +1,7 @@
 using Poly.Serialization;
 namespace Poly.Reflection.Core;
 
-internal sealed class CoreType<T> : GenericReferenceTypeAdapterBase<T> where T : class
+internal sealed class CoreType<T> : GenericReferenceTypeAdapterBase<T> where T : class, new()
 {
     static readonly IMemberAdapter[] s_MemberInterfaces;
     static readonly Dictionary<StringView, IMemberAdapter> s_MemberDictionary;
@@ -9,35 +9,47 @@ internal sealed class CoreType<T> : GenericReferenceTypeAdapterBase<T> where T :
     static CoreType()
     {
         s_MemberInterfaces = CoreTypeMember.GetMemberInterfacesForType(typeof(T)).ToArray();
-        s_MemberDictionary = new Dictionary<StringView, IMemberAdapter>(StringViewEqualityComparer.Ordinal);
+        s_MemberDictionary = new Dictionary<StringView, IMemberAdapter>(StringViewEqualityComparer.OrdinalIgnoreCase);
 
         foreach (var member in s_MemberInterfaces)
             s_MemberDictionary.Add(member.Name, member);
     }
 
-    public override bool Serialize(IDataWriter writer, T? obj)
+    public CoreType()
+    {
+        TryInstantiate = TryCreateInstance;
+        TryDeserialize = Deserialize;
+        TrySerialize = Serialize;
+    }
+
+    public override bool TryCreateInstance([NotNullWhen(true)] out T? instance)
+    {
+        instance = new();
+        return true;
+    }
+
+    public override bool Serialize<TWriter>(TWriter writer, T? value)
     {
         Guard.IsNotNull(writer);
 
-        if (obj is null) return writer.Null();
+        if (value is null) return writer.Null();
 
         if (!writer.BeginObject()) return false;
 
         foreach (var member in s_MemberInterfaces)
         {
+
+            if (!member.TryGetValue(value, out var memberValue))
+                return false;
+
             if (!writer.BeginMember(member.Name))
                 return false;
 
-            if (!member.TryGetValue(obj, out var value) || value is null)
-            {
-                if (!writer.Null())
-                    return false;
-            }
-            else
-            {
-                if (!member.TypeInterface.Serialize(writer, value))
-                    return false;
-            }
+            if (memberValue is null)
+                return writer.Null();
+
+            if (!member.TypeInterface.Serialize(writer, memberValue))
+                return false;
 
             if (!writer.EndValue())
                 break;
@@ -46,38 +58,44 @@ internal sealed class CoreType<T> : GenericReferenceTypeAdapterBase<T> where T :
         return writer.EndObject();
     }
 
-    public override bool Deserialize(IDataReader reader, [NotNullWhen(true)] out T? obj)
+    public override bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out T? obj)
     {
-        Guard.IsNotNull(reader);
-
         if (reader.BeginObject())
         {
-            obj = Activator.CreateInstance(typeof(T)) as T;
-
-            Guard.IsNotNull(obj);
+            if (!TryCreateInstance(out obj))
+                return false;
 
             while (!reader.IsDone)
             {
                 if (!reader.BeginMember(out var name))
-                    return false;
+                    break;
 
                 if (!s_MemberDictionary.TryGetValue(name, out IMemberAdapter? member))
-                    return false;
+                    goto failure;
 
-                if (!member.TypeInterface.Deserialize(reader, out object? value))
-                    return false;
-
-                if (!member.TrySetValue(obj, value))
-                    return false;
+                if (member.TypeInterface.Deserialize(reader, out object? value))
+                {
+                    if (!member.TrySetValue(obj, value))
+                        goto failure;
+                }
+                else
+                if (!reader.Null())
+                {
+                    goto failure;
+                }
 
                 if (!reader.EndValue())
                     break;
             }
 
-            return reader.EndObject();
+            if (!reader.EndObject())
+                goto failure;
+
+            return true;
         }
 
+    failure:
         obj = default;
-        return reader.Null();
+        return false;
     }
 }

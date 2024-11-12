@@ -1,8 +1,8 @@
-﻿using System.IO;
+﻿namespace Poly.IO
+{
 
-namespace Poly.IO {
-
-    public class TempFileStream : Stream {
+    public class TempFileStream : Stream
+    {
         public string FileName { get; private set; }
         public FileInfo FileInfo { get; private set; }
         public FileStream BaseStream { get; private set; }
@@ -15,18 +15,21 @@ namespace Poly.IO {
 
         public override long Length => BaseStream.Length;
 
-        public override long Position {
+        public override long Position
+        {
             get { return BaseStream.Position; }
             set { BaseStream.Position = value; }
         }
 
-        public TempFileStream() {
+        public TempFileStream()
+        {
             FileName = Path.GetTempFileName();
             FileInfo = new FileInfo(FileName);
             BaseStream = FileInfo.Open(FileMode.Create);
         }
 
-        ~TempFileStream() {
+        ~TempFileStream()
+        {
             BaseStream.Close();
 
             if (FileInfo.FullName == FileName)
@@ -36,7 +39,7 @@ namespace Poly.IO {
         public virtual void SaveTo(string file_path) =>
             FileInfo.MoveTo(file_path);
 
-        public override void Flush() => 
+        public override void Flush() =>
             BaseStream.Flush();
 
         public override int Read(byte[] buffer, int offset, int count) =>

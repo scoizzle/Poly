@@ -130,11 +130,11 @@ public partial struct StringView
     public readonly void Deconstruct(out string str, out int begin, out int end) => (str, begin, end) = (String, Index, LastIndex);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly override int GetHashCode() => HashCode.Combine(First, Last, Length);
+    public readonly override int GetHashCode() => HashCode.Combine(First, Length);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly override string ToString() => String.Substring(Index, Length);
-
+    public readonly override string ToString() => AsSpan().ToString();
+    
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator StringView(string str) => new(str);
 

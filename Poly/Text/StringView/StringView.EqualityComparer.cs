@@ -11,7 +11,7 @@ public readonly struct StringViewEqualityComparer : IEqualityComparer<StringView
         => x.CompareTo(y, Comparison) == 0;
 
     public int GetHashCode(StringView obj)
-        => obj.GetHashCode();
+        => string.GetHashCode(obj.AsSpan(), Comparison);
 
     public static readonly StringViewEqualityComparer Ordinal = new(StringComparison.Ordinal);
 

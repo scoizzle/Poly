@@ -6,9 +6,7 @@ using Newtonsoft.Json;
 using BenchmarkDotNet.Attributes;
 
 using Poly.Reflection;
-using BenchmarkDotNet.Jobs;
 using System.Linq;
-using System.Buffers;
 using System.Text.Json.Serialization;
 
 namespace Poly.Serialization.Benchmarks.Serializer
@@ -47,9 +45,7 @@ namespace Poly.Serialization.Benchmarks.Serializer
     {
     }
 
-    [MemoryDiagnoser]
-    [ShortRunJob]
-    [MinColumn, MaxColumn, MeanColumn]
+    [MemoryDiagnoser, BaselineColumn, MinColumn, MaxColumn, MeanColumn]
     public class SerializationBenchmarks
     {
         public static readonly string JsonText = JsonConvert.SerializeObject(test);
@@ -68,17 +64,11 @@ namespace Poly.Serialization.Benchmarks.Serializer
                 Strings = new List<string>() { null, "Markus egger ]><[, (2nd)", null },
                 Address = new Address { Street = "fff Street", Entered = DateTime.Now.AddDays(20) },
                 Addresses = Enumerable
-                    .Range(0, 100)
+                    .Range(0, 100000)
                     .Select(i => new Address { Entered = DateTime.Now.AddDays(i), Street = $"{i} address" })
                     .ToList()
             };
             return test;
-        }
-
-        [GlobalSetup]
-        public void Setup()
-        {
-
         }
 
         [Benchmark]
@@ -87,7 +77,7 @@ namespace Poly.Serialization.Benchmarks.Serializer
             _ = JsonConvert.SerializeObject(test);
         }
 
-        [Benchmark]
+        [Benchmark(Baseline = true)]
         public void SystemTextJson_Serialize()
         {
             _ = System.Text.Json.JsonSerializer.Serialize<TestClass>(test);
@@ -107,7 +97,7 @@ namespace Poly.Serialization.Benchmarks.Serializer
         }
 
         [Benchmark]
-        public void Poly_CachedTypeInterface_Serialize()
+        public void Poly_CachedTypeInterface_Serialize_JsonWriter()
         {
             var writer = new JsonWriter();
             typeInterface.Serialize(writer, test);

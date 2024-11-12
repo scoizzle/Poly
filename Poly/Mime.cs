@@ -1,7 +1,7 @@
-﻿using System.Collections.Generic;
-
-namespace Poly {
-    public static class Mime {
+﻿namespace Poly
+{
+    public static class Mime
+    {
         public static readonly Dictionary<string, string> Types = new()
         {
             { ".7z", "application/x-7z-compressed" },

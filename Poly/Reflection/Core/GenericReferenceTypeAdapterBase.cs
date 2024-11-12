@@ -2,7 +2,7 @@ using Poly.Serialization;
 
 namespace Poly.Reflection;
 
-public abstract class GenericReferenceTypeAdapterBase<T> : GenericTypeAdapterBase<T> where T : class
+public abstract class GenericReferenceTypeAdapterBase<T> : GenericTypeAdapterBase<T> where T : class, new()
 {
     public override bool Deserialize(IDataReader reader, [NotNullWhen(true)] out object? value)
     {

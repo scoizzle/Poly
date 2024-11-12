@@ -2,7 +2,7 @@ namespace Poly.Serialization;
 
 public delegate bool DeserializeToObjectDelegate(IDataReader view, [NotNullWhen(returnValue: true)] out object? value);
 public delegate bool DeserializeDelegate<T>(IDataReader view, [NotNullWhen(returnValue: true)] out T? value);
-public delegate bool DeserializeDelegate<TDeserializer, TValue>(TDeserializer view, [NotNullWhen(true)] out TValue? value) where TDeserializer : IDataReader;
+public delegate bool DeserializeDelegate<in TDeserializer, TValue>(TDeserializer view, [NotNullWhen(true)] out TValue? value) where TDeserializer : IDataReader;
 
 public static class DeserializeDelegateExtensions
 {

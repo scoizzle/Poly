@@ -1,7 +1,4 @@
-﻿using System.Buffers;
-using System.IO;
-
-using Poly.Data;
+﻿using Poly.Data;
 
 namespace Poly.IO
 {
@@ -17,17 +14,18 @@ namespace Poly.IO
 
             inBufferOwner = MemoryPool<byte>.Shared.Rent(inMinimumSize);
             outBufferOwner = MemoryPool<byte>.Shared.Rent(outMinimumSize);
-            
+
             In = new DynamicBuffer<byte>(inBufferOwner.Memory);
             Out = new DynamicBuffer<byte>(outBufferOwner.Memory);
         }
 
-        protected MemoryBufferedStream(int inMinimumSize = DEFAULT_BUFFER_SIZE, int outMinimumSize = DEFAULT_BUFFER_SIZE) : this(default!, inMinimumSize, outMinimumSize) {
+        protected MemoryBufferedStream(int inMinimumSize = DEFAULT_BUFFER_SIZE, int outMinimumSize = DEFAULT_BUFFER_SIZE) : this(default!, inMinimumSize, outMinimumSize)
+        {
 
         }
 
         public DynamicBuffer<byte> In { get; }
-        
+
         public DynamicBuffer<byte> Out { get; }
 
         public override bool CanRead => Stream.CanRead;
@@ -54,7 +52,8 @@ namespace Poly.IO
 
         public override void SetLength(long value) => Stream.SetLength(value);
 
-        public override void Close() {
+        public override void Close()
+        {
             Stream.Close();
 
             In.Clear();

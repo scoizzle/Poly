@@ -1,6 +1,3 @@
-using System.Linq;
-using System.Collections.Generic;
-
 namespace Poly.Text.Matching
 {
     using Expressions;

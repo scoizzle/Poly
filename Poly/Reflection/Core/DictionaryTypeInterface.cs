@@ -3,9 +3,36 @@ using Poly.Serialization;
 namespace Poly.Reflection.Core;
 
 internal sealed class DictionaryTypeInterface<TDictionary, TKey, TValue> : GenericReferenceTypeAdapterBase<TDictionary>
-    where TDictionary : class, IDictionary<TKey, TValue>
+    where TDictionary : class, IDictionary<TKey, TValue>, new()
 {
-    public override bool Deserialize(IDataReader reader, [NotNullWhen(true)] out TDictionary? result)
+    public override bool TryCreateInstance([NotNullWhen(true)] out TDictionary? instance)
+    {
+        instance = new TDictionary();
+        return true;
+    }
+
+    public override bool Serialize<TWriter>(TWriter writer, TDictionary? value)
+    {
+        if (value is null) return writer.Null();
+
+        if (!writer.BeginObject()) return false;
+
+        foreach (var pair in value)
+        {
+            if (!writer.BeginMember(KeyTypeInterface.Serialize, pair.Key))
+                return false;
+
+            if (!ValueTypeInterface.Serialize(writer, pair.Value))
+                return false;
+
+            if (!writer.EndValue())
+                break;
+        }
+
+        return writer.EndObject();
+    }
+
+    public override bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out TDictionary? result)
     {
         if (reader.BeginObject())
         {
@@ -34,28 +61,6 @@ internal sealed class DictionaryTypeInterface<TDictionary, TKey, TValue> : Gener
         result = default;
         return reader.Null();
     }
-
-    public override bool Serialize(IDataWriter writer, TDictionary? value)
-    {
-        if (value is null) return writer.Null();
-
-        if (!writer.BeginObject()) return false;
-
-        foreach (var pair in value)
-        {
-            if (!writer.BeginMember(KeyTypeInterface.Serialize, pair.Key))
-                return false;
-
-            if (!ValueTypeInterface.Serialize(writer, pair.Value))
-                return false;
-
-            if (!writer.EndValue())
-                break;
-        }
-
-        return writer.EndObject();
-    }
-
 
     static readonly ISystemTypeAdapter<TKey> KeyTypeInterface = TypeAdapterRegistry.Get<TKey>()!;
 

@@ -1,5 +1,3 @@
-using Poly.Data;
-
 namespace Poly.Text.Matching
 {
     public static class Linker

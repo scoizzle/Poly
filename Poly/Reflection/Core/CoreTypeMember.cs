@@ -1,5 +1,4 @@
 ﻿using System.Reflection;
-using Poly.Serialization;
 
 namespace Poly.Reflection;
 
@@ -14,7 +13,7 @@ public class CoreTypeMember : IMemberAdapter
 
     public required Func<object, object>? GetValueDelegate { get; init; }
 
-    public required Action<object, object>? SetValueDelegate { get; init; }
+    public required Action<object, object?>? SetValueDelegate { get; init; }
 
     public bool TryGetValue(object instance, out object? value)
     {
@@ -28,7 +27,7 @@ public class CoreTypeMember : IMemberAdapter
         return true;
     }
 
-    public bool TrySetValue(object instance, object value)
+    public bool TrySetValue(object instance, object? value)
     {
         if (SetValueDelegate is null)
             return false;
@@ -96,7 +95,7 @@ public class CoreTypeMember : IMemberAdapter
         return Expression.Lambda<Func<object, object>>(box, This).Compile();
     }
 
-    private static Action<object, object>? GetFieldWriteMethod(
+    private static Action<object, object?>? GetFieldWriteMethod(
         FieldInfo fieldInfo)
     {
         if (fieldInfo.IsInitOnly || fieldInfo.IsLiteral)
@@ -109,7 +108,7 @@ public class CoreTypeMember : IMemberAdapter
         var field = Expression.Field(fieldInfo.IsStatic ? null : typedThis, fieldInfo);
         var asign = Expression.Assign(field, typedValue);
 
-        return Expression.Lambda<Action<object, object>>(asign, new[] { This, value }).Compile();
+        return Expression.Lambda<Action<object, object?>>(asign, new[] { This, value }).Compile();
     }
 
     private static Func<object, object>? GetPropertyReadMethod(
@@ -133,7 +132,7 @@ public class CoreTypeMember : IMemberAdapter
         return Expression.Lambda<Func<object, object>>(box, This).Compile();
     }
 
-    private static Action<object, object>? GetPropertyWriteMethod(
+    private static Action<object, object?>? GetPropertyWriteMethod(
         PropertyInfo propertyInfo)
     {
         if (!propertyInfo.CanWrite)
@@ -152,6 +151,6 @@ public class CoreTypeMember : IMemberAdapter
         var typedValue = Expression.Convert(value, propertyInfo.PropertyType);
         var prop = Expression.Call(isStatic ? default : typedThis, method!, typedValue);
 
-        return Expression.Lambda<Action<object, object>>(prop, new[] { This, value }).Compile();
+        return Expression.Lambda<Action<object, object?>>(prop, new[] { This, value }).Compile();
     }
 }

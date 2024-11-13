@@ -13,6 +13,13 @@ internal sealed class ArrayAdapter<TElement> : GenericTypeAdapterBase<TElement[]
 
     private static readonly ISystemTypeAdapter<TElement> s_ElementTypeInterface = TypeAdapterRegistry.Get<TElement>()!;
 
+    public override bool Deserialize(IDataReader reader, [NotNullWhen(true)] out object? value)
+    {
+        var result = Deserialize(reader, out TElement[]? typedValue);
+        value = typedValue;
+        return result;
+    }
+
     public override Delegate<TElement[]>.TryCreateInstance TryInstantiate { get; }
     public override Delegate<TElement[]>.TrySerialize TrySerialize { get; }
     public override Delegate<TElement[]>.TryDeserialize TryDeserialize { get; }

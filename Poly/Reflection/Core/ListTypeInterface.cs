@@ -69,7 +69,6 @@ internal sealed class ListTypeInterface<TList, TElement> : GenericReferenceTypeA
         if (!writer.BeginArray()) return false;
 
         ISystemTypeAdapter<TElement> elementTypeAdapter = s_ElementTypeInterface;
-
         foreach (var element in value)
         {
             if (!elementTypeAdapter.Serialize(writer, element))

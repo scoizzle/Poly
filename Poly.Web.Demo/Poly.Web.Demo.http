@@ -1,0 +1,6 @@
+@Poly.Web.Demo_HostAddress = http://localhost:5178
+
+GET {{Poly.Web.Demo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

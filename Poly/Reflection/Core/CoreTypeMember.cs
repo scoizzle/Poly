@@ -39,14 +39,8 @@ public class CoreTypeMember : IMemberAdapter
     public static IEnumerable<IMemberAdapter> GetMemberInterfacesForType(
         Type type)
     {
-        var fields = type.GetFields();
-        var properties = type.GetProperties();
-        var memberAdapters = new List<IMemberAdapter>();
-
-        memberAdapters.AddRange(fields.Select(From));
-        memberAdapters.AddRange(properties.Select(From));
-
-        return memberAdapters;
+        foreach (var field in type.GetFields()) yield return From(field);
+        foreach (var prop in type.GetProperties()) yield return From(prop);
     }
 
     public static CoreTypeMember From(

@@ -1,8 +1,8 @@
 namespace Poly.Data;
 
-public static class HuffmanEncoding<TPriority, TValue>
-    where TPriority : INumber<TPriority>, 
-    IAdditiveIdentity<TPriority, TPriority>, 
+public class HuffmanEncoding<TPriority, TValue>
+    where TPriority : INumber<TPriority>,
+    IAdditiveIdentity<TPriority, TPriority>,
     IBitwiseOperators<TPriority, TPriority, TPriority>,
     IShiftOperators<TPriority, TPriority, TPriority>
     where TValue : IComparable<TValue>

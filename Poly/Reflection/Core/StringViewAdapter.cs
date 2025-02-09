@@ -13,6 +13,7 @@ internal sealed class StringViewAdapter : GenericValueTypeAdapterBase<StringView
 
     public override Delegate<StringView>.TrySerialize TrySerialize { get; } =
         static (IDataWriter writer, StringView value) => writer.StringView(value);
+
     public override Delegate<StringView>.TryDeserialize TryDeserialize { get; } =
         static (IDataReader reader, out StringView value) => reader.StringView(out value);
 

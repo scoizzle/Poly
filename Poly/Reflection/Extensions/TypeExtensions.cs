@@ -5,9 +5,10 @@ public static class TypeExtensions
     public static bool HasDefaultConstructor(
         this Type type)
     {
+        Guard.IsNotNull(type);
         return type.GetConstructor(Type.EmptyTypes) != null;
     }
-    
+
     public static bool ImplementsInterface(
         this Type type,
              Type interfaceType)

@@ -12,10 +12,7 @@ internal sealed class StringAdapter : GenericTypeAdapterBase<string>
         };
 
     public override Delegate<string>.TryDeserialize TryDeserialize { get; } =
-        static (IDataReader reader, [NotNullWhen(returnValue: true)] out string? value) =>
-        {
-            return reader.String(out value);
-        };
+        static (IDataReader reader, [NotNullWhen(returnValue: true)] out string? value) => reader.String(out value);
 
     public override Delegate<string>.TrySerialize TrySerialize { get; } =
         static (IDataWriter writer, string? value) => value switch

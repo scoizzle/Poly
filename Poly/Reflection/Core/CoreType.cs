@@ -6,6 +6,10 @@ internal sealed class CoreType<T> : GenericReferenceTypeAdapterBase<T> where T :
     static readonly IMemberAdapter[] s_MemberInterfaces;
     static readonly Dictionary<StringView, IMemberAdapter> s_MemberDictionary;
 
+    public override Delegate<T>.TryCreateInstance TryInstantiate { get; }
+    public override Delegate<T>.TrySerialize TrySerialize { get; }
+    public override Delegate<T>.TryDeserialize TryDeserialize { get; }
+
     static CoreType()
     {
         s_MemberInterfaces = CoreTypeMember.GetMemberInterfacesForType(typeof(T)).ToArray();
@@ -60,39 +64,39 @@ internal sealed class CoreType<T> : GenericReferenceTypeAdapterBase<T> where T :
 
     public override bool Deserialize<TReader>(TReader reader, [NotNullWhen(true)] out T? obj)
     {
-        if (reader.BeginObject())
+        if (!reader.BeginObject())
+            goto failure;
+
+        if (!TryCreateInstance(out obj))
+            return false;
+
+        while (!reader.IsDone)
         {
-            if (!TryCreateInstance(out obj))
-                return false;
+            if (!reader.BeginMember(out var name))
+                break;
 
-            while (!reader.IsDone)
-            {
-                if (!reader.BeginMember(out var name))
-                    break;
-
-                if (!s_MemberDictionary.TryGetValue(name, out IMemberAdapter? member))
-                    goto failure;
-
-                if (member.TypeInterface.Deserialize(reader, out object? value))
-                {
-                    if (!member.TrySetValue(obj, value))
-                        goto failure;
-                }
-                else
-                if (!reader.Null())
-                {
-                    goto failure;
-                }
-
-                if (!reader.EndValue())
-                    break;
-            }
-
-            if (!reader.EndObject())
+            if (!s_MemberDictionary.TryGetValue(name, out IMemberAdapter? member))
                 goto failure;
 
-            return true;
+            if (member.TypeInterface.Deserialize(reader, out object? value))
+            {
+                if (!member.TrySetValue(obj, value))
+                    goto failure;
+            }
+            else
+            if (!reader.Null())
+            {
+                goto failure;
+            }
+
+            if (!reader.EndValue())
+                break;
         }
+
+        if (!reader.EndObject())
+            goto failure;
+
+        return true;
 
     failure:
         obj = default;

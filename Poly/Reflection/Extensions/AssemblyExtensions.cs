@@ -6,10 +6,7 @@ public static class AssemblyExtensions
 {
     public static string GetAssemblyVersionString(this Assembly assembly)
     {
-        var versionAttributeString = assembly
-            .GetCustomAttribute<AssemblyVersionAttribute>()?.Version;
-
-        return versionAttributeString ?? string.Empty;
+        return assembly.GetCustomAttribute<AssemblyVersionAttribute>()?.Version ?? string.Empty;
     }
 
     public static Version? GetAssemblyVersion(this Assembly assembly)

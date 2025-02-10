@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Poly.Management.Certificates.Monitoring;
@@ -9,6 +11,8 @@ public static class DependencyInjection
         this IServiceCollection serviceCollection,
         Action<OptionsBuilder<CertificateMonitoringOptions>>? configure = default)
     {
+        serviceCollection.TryAddTransient<TimeProvider>(static _ => TimeProvider.System);
+
         return serviceCollection
             .AddCertificateMonitoringOptions(configure)
             .AddCertificateDiscoveryService()
@@ -21,7 +25,9 @@ public static class DependencyInjection
         Action<OptionsBuilder<CertificateMonitoringOptions>>? configure = default)
     {
         var builder = serviceCollection
-            .AddOptions<CertificateMonitoringOptions>(name: CertificateMonitoringOptions.ConfigurationPath);
+            .AddOptions<CertificateMonitoringOptions>()
+            .BindConfiguration(CertificateMonitoringOptions.ConfigurationPath)
+            .ValidateOnStart();
 
         if (configure is not null)
             configure(builder);

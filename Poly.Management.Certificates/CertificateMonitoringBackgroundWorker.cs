@@ -6,42 +6,34 @@ using Microsoft.Extensions.Options;
 namespace Poly.Management.Certificates.Monitoring;
 
 class CertificateMonitoringBackgroundWorker(
-    IMeterFactory meterFactory,
     ICertificateDiscoveryService certificateDiscovery,
     IOptionsMonitor<CertificateMonitoringOptions> optionsMonitor) : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+
+    protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
             CertificateMonitoringOptions options = optionsMonitor.CurrentValue;
 
-            TimeSpan scanDuration = await ScanAsync(cancellationToken: stoppingToken);
+            await certificateDiscovery.ScanAsync(options, cancellationToken);
 
-            ReportMetrics(options, scanDuration);
+            CancellationTokenSource cts = new();
 
-            await Task.Delay(delay: options.ScanningFrequencyMinusLastScanDuration(scanDuration));
+            using var optionsChangedRegistration = optionsMonitor.OnChange(_ => cts.Cancel());
+            using var stoppingTokenRegistration = cancellationToken.Register(callback: cts.Cancel);
+
+            TimeSpan delay = options.ScanningFrequencyMinusLastScanDuration(scanDuration: certificateDiscovery.LastScanDuration);
+
+            try
+            {
+                await Task.Delay(delay, cancellationToken: cts.Token);
+            }
+            catch (TaskCanceledException)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    throw;
+            }
         }
-    }
-
-    private async ValueTask<TimeSpan> ScanAsync(CancellationToken cancellationToken)
-    {
-        Stopwatch stopwatch = Stopwatch.StartNew();
-
-        await certificateDiscovery.ScanAsync(cancellationToken);
-
-        stopwatch.Stop();
-
-        return stopwatch.Elapsed;
-    }
-
-    private void ReportMetrics(CertificateMonitoringOptions options, TimeSpan scanDuration)
-    {
-        Meter meter = meterFactory.Create(name: options.BackgroundMonitoringMeterName);
-        Histogram<double> durationHistogram = meter.CreateHistogram<double>(name: options.BackgroundMonitoringScanHistogramName);
-        Counter<long> scanCounter = meter.CreateCounter<long>(name: options.BackgroundMonitoringScanCounterName);
-
-        durationHistogram.Record(value: scanDuration.TotalMilliseconds);
-        scanCounter.Add(delta: 1);
     }
 }

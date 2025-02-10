@@ -5,7 +5,7 @@ namespace Poly.Management.Certificates.Monitoring;
 
 public class CertificateMonitoringHealthCheck(
     TimeProvider timeProvider,
-    CertificateDiscoveryService discoveryService,
+    ICertificateDiscoveryService discoveryService,
     IOptionsMonitor<CertificateMonitoringOptions> optionsMonitor) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
@@ -17,7 +17,7 @@ public class CertificateMonitoringHealthCheck(
         DateTimeOffset timeToDegradeCertificates = options.TimeToConsiderDegraded(now);
 
         if (discoveryService.LastScanCompletedAt < timeToRescanCertificates)
-            await discoveryService.ScanAsync(cancellationToken);
+            await discoveryService.ScanAsync(options, cancellationToken);
 
         List<CertificateInformation> invalidCertificates = discoveryService
             .LatestCertificateInformation
@@ -28,7 +28,7 @@ public class CertificateMonitoringHealthCheck(
         {
             IReadOnlyDictionary<string, object> invalidCertificateInformation = invalidCertificates
                 .ToDictionary(
-                    keySelector: static e => $"{e.StoreLocation}/{e.StoreName}/{e.Certificate.FriendlyName}",
+                    keySelector: static e => $"{e.StoreLocation}/{e.StoreName}/{e.Certificate.SubjectName.Name}",
                     elementSelector: static e => e.Certificate as object
                 );
 

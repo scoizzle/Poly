@@ -9,7 +9,7 @@ public record CertificateMonitoringCertificateFilters(
 )
 {
     [JsonIgnore]
-    public Regex Regex { get; init; } = new Regex(pattern: Pattern);
+    public Regex Regex { get; init; } = new Regex(pattern: Pattern, RegexOptions.None);
 }
 
 public record CertificateMonitoringOptions
@@ -23,7 +23,9 @@ public record CertificateMonitoringOptions
     string BackgroundMonitoringCertificateCounterName = "poly.management.certificates.monitoring.certificate_count"
 )
 {
-    public const string ConfigurationPath = "Poly.Management.Certificates.Monitoring";
+    public CertificateMonitoringOptions() : this(ScanningFrequency: default, DegradedHealthThreshold: default, Filters: default) { }
+
+    public const string ConfigurationPath = "Poly:Management:Certificates:Monitoring";
 
     public TimeSpan ScanningFrequencyMinusLastScanDuration(TimeSpan scanDuration) =>
         (ScanningFrequency ?? TimeSpan.FromHours(value: 1)) - scanDuration;
@@ -47,10 +49,10 @@ public record CertificateMonitoringOptions
         ];
 
         IEnumerable<bool> query =
-            from regex in Filters.Select(e => e.Regex)
+            from filter in Filters
             from propertyString in CertificatePropertyStrings
-            select regex.IsMatch(propertyString);
+            select filter.Regex.IsMatch(propertyString);
 
-        return query.Any();
+        return query.Where(static _ => _).Any();
     }
 }

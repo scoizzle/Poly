@@ -27,8 +27,13 @@ public record CertificateMonitoringOptions
 
     public const string ConfigurationPath = "Poly:Management:Certificates:Monitoring";
 
-    public TimeSpan ScanningFrequencyMinusLastScanDuration(TimeSpan scanDuration) =>
-        (ScanningFrequency ?? TimeSpan.FromHours(value: 1)) - scanDuration;
+    public TimeSpan ScanningFrequencyMinusLastScanDuration(TimeSpan scanDuration)
+    {
+        var frequency = ScanningFrequency ?? TimeSpan.FromHours(value: 1);
+        if (scanDuration > frequency)
+            return frequency;
+        return frequency - scanDuration;
+    }
 
     public DateTimeOffset TimeToConsiderStale(DateTimeOffset now) =>
         now - (ScanningFrequency ?? TimeSpan.FromHours(value: 1));

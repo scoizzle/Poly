@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageId>Poly.Management.Certificates</PackageId>
+        <Version>1.0.0-preview</Version>
+        <Authors>Scot 'Scoizzle' Murphy</Authors>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Bcl.TimeProvider" Version="*" />
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="*" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="*" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="*" />
+    </ItemGroup>
+</Project>

@@ -8,13 +8,15 @@ public class CertificateMonitoringHealthCheck(
     ICertificateDiscoveryService discoveryService,
     IOptionsMonitor<CertificateMonitoringOptions> optionsMonitor) : IHealthCheck
 {
+    public const string FriendlyName = "Certificate Monitoring";
+
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         CertificateMonitoringOptions options = optionsMonitor.CurrentValue;
 
         DateTimeOffset now = timeProvider.GetUtcNow();
-        DateTimeOffset timeToRescanCertificates = options.TimeToConsiderStale(now);
-        DateTimeOffset timeToDegradeCertificates = options.TimeToConsiderDegraded(now);
+        DateTimeOffset timeToRescanCertificates = options.TimeToConsiderStaleFrom(now);
+        DateTimeOffset timeToDegradeCertificates = options.TimeToConsiderDegradedFrom(now);
 
         if (discoveryService.LastScanCompletedAt < timeToRescanCertificates)
             await discoveryService.ScanAsync(options, cancellationToken);
@@ -29,7 +31,7 @@ public class CertificateMonitoringHealthCheck(
             IReadOnlyDictionary<string, object> invalidCertificateInformation = invalidCertificates
                 .ToDictionary(
                     keySelector: static e => $"{e.StoreLocation}/{e.StoreName}/{e.Certificate.SubjectName.Name}",
-                    elementSelector: static e => e.Certificate as object
+                    elementSelector: static e => (object)e
                 );
 
             return HealthCheckResult.Unhealthy(description: $"At least one certificate is invalid.", data: invalidCertificateInformation);
@@ -44,8 +46,8 @@ public class CertificateMonitoringHealthCheck(
         {
             IReadOnlyDictionary<string, object> degradedCertificateInformation = certificatesWithinDegradationThreshold
                 .ToDictionary(
-                    keySelector: static e => $"{e.StoreLocation}/{e.StoreName}/{e.Certificate.FriendlyName}",
-                    elementSelector: static e => e.Certificate as object
+                    keySelector: static e => $"{e.StoreLocation}/{e.StoreName}/{e.Certificate.Subject}",
+                    elementSelector: static e => (object)e
                 );
 
             return HealthCheckResult.Degraded(description: $"At least one certificate is about to expire.", data: degradedCertificateInformation);

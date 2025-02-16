@@ -35,11 +35,11 @@ public record CertificateMonitoringOptions
         return frequency - scanDuration;
     }
 
-    public DateTimeOffset TimeToConsiderStale(DateTimeOffset now) =>
+    public DateTimeOffset TimeToConsiderStaleFrom(DateTimeOffset now) =>
         now - (ScanningFrequency ?? TimeSpan.FromHours(value: 1));
 
-    public DateTimeOffset TimeToConsiderDegraded(DateTimeOffset now) =>
-        now + (DegradedHealthThreshold ?? TimeSpan.FromDays(7));
+    public DateTimeOffset TimeToConsiderDegradedFrom(DateTimeOffset now) =>
+        now + (DegradedHealthThreshold ?? TimeSpan.FromDays(value: 7));
 
     public bool CertificateMatchesAnyFilters(X509Certificate2 certificate)
     {
@@ -58,6 +58,6 @@ public record CertificateMonitoringOptions
             from propertyString in CertificatePropertyStrings
             select filter.Regex.IsMatch(propertyString);
 
-        return query.Where(static _ => _).Any();
+        return query.Any(static _ => _);
     }
 }

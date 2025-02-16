@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-using System.Diagnostics.Metrics;
-using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace Poly.Management.Certificates.Monitoring;
@@ -9,7 +7,6 @@ class CertificateMonitoringBackgroundWorker(
     ICertificateDiscoveryService certificateDiscovery,
     IOptionsMonitor<CertificateMonitoringOptions> optionsMonitor) : BackgroundService
 {
-
     protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -20,7 +17,7 @@ class CertificateMonitoringBackgroundWorker(
 
             CancellationTokenSource cts = new();
 
-            using var optionsChangedRegistration = optionsMonitor.OnChange(_ => cts.Cancel());
+            using var optionsChangedRegistration = optionsMonitor.OnChange(listener: _ => cts.Cancel());
             using var stoppingTokenRegistration = cancellationToken.Register(callback: cts.Cancel);
 
             TimeSpan delay = options.ScanningFrequencyMinusLastScanDuration(scanDuration: certificateDiscovery.LastScanDuration);

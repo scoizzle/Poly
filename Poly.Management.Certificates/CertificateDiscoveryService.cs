@@ -36,7 +36,7 @@ public class CertificateDiscoveryService(
             LastScanDuration = stopwatch.Elapsed;
             LastScanCompletedAt = timeProvider.GetUtcNow();
 
-            ReportScanningMetrics(options, LastScanDuration);
+            ReportScanningMetrics(options, scanDuration: LastScanDuration);
 
             if (OnCertificateScanCompleted is not null)
                 OnCertificateScanCompleted(LatestCertificateInformation);

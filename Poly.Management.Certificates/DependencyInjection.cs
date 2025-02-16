@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -11,7 +10,7 @@ public static class DependencyInjection
         this IServiceCollection serviceCollection,
         Action<OptionsBuilder<CertificateMonitoringOptions>>? configure = default)
     {
-        serviceCollection.TryAddTransient<TimeProvider>(static _ => TimeProvider.System);
+        serviceCollection.AddSingleton(TimeProvider.System);
 
         return serviceCollection
             .AddCertificateMonitoringOptions(configure)
@@ -26,8 +25,7 @@ public static class DependencyInjection
     {
         var builder = serviceCollection
             .AddOptions<CertificateMonitoringOptions>()
-            .BindConfiguration(CertificateMonitoringOptions.ConfigurationPath)
-            .ValidateOnStart();
+            .BindConfiguration(configSectionPath: CertificateMonitoringOptions.ConfigurationPath);
 
         if (configure is not null)
             configure(builder);
@@ -39,21 +37,25 @@ public static class DependencyInjection
         this IServiceCollection serviceCollection)
     {
         AddCertificateMonitoringOptions(serviceCollection);
-        return serviceCollection.AddSingleton<ICertificateDiscoveryService, CertificateDiscoveryService>();
+        return serviceCollection
+            .AddSingleton<ICertificateDiscoveryService, CertificateDiscoveryService>();
     }
 
     public static IServiceCollection AddCertificateMonitoringBackgroundWorker(
         this IServiceCollection serviceCollection)
     {
         AddCertificateDiscoveryService(serviceCollection);
-        return serviceCollection.AddHostedService<CertificateMonitoringBackgroundWorker>();
+        return serviceCollection
+            .AddHostedService<CertificateMonitoringBackgroundWorker>();
     }
 
     public static IServiceCollection AddCertificateMonitoringHealthChecks(
         this IServiceCollection serviceCollection)
     {
         AddCertificateDiscoveryService(serviceCollection);
-        serviceCollection.AddHealthChecks().AddCheck<CertificateMonitoringHealthCheck>(nameof(CertificateMonitoringHealthCheck));
+        serviceCollection
+            .AddHealthChecks()
+            .AddCheck<CertificateMonitoringHealthCheck>(name: CertificateMonitoringHealthCheck.FriendlyName);
         return serviceCollection;
     }
 }

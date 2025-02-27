@@ -1,5 +1,6 @@
 namespace Poly.Data.Tests;
 
+using Poly.Introspection;
 using Xunit;
 
 public class BitArrayTests

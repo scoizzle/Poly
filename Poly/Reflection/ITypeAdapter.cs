@@ -1,14 +1,15 @@
+using System.Reflection;
 using Poly.Serialization;
 
 namespace Poly.Reflection;
 
 public interface ITypeAdapter
 {
-    public string                             Name                 { get; }
-    public string                             FullName             { get; }
+    public string Name { get; }
+    public string FullName { get; }
     public Delegate<object>.TryCreateInstance TryInstantiateObject { get; }
-    public Delegate<object>.TrySerialize      TrySerializeObject   { get; }
-    public Delegate<object>.TryDeserialize    TryDeserializeObject { get; }
+    public Delegate<object>.TrySerialize TrySerializeObject { get; }
+    public Delegate<object>.TryDeserialize TryDeserializeObject { get; }
 
 
     public bool Serialize(IDataWriter writer, object? value);
@@ -19,7 +20,7 @@ public interface ITypeAdapter
         instance = null;
         return false;
     }
-    
+
     public bool TryGetMemberAdapter(ReadOnlySpan<char> name, [NotNullWhen(true)] out IMemberAdapter? member)
     {
         member = default;

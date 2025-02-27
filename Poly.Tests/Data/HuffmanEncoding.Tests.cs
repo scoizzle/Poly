@@ -14,7 +14,7 @@ public class HuffmanEncodingTests
         .Select(_ => (char)Random.Shared.Next('a', 'z'))
         .ToArray();
 
-    private HuffmanEncoding<short, char>.Encoder s_Encoding = new(s_DataSet);
+    private HuffmanEncoding<int, char>.Encoder s_Encoding = new(s_DataSet);
 
     private readonly ITestOutputHelper output;
 

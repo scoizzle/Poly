@@ -2,9 +2,9 @@
 
 var provider = new TypeInfoProvider();
 
-ITypeInfo stringTypeInfo = provider.GetTypeInfo(typeof(AppDomain));
+ITypeInfo stringTypeInfo = provider.GetTypeInfo(typeof(TypeInfoProvider));
 
 Console.WriteLine(stringTypeInfo.ToString());
 
 if (Console.IsInputRedirected)
-    Console.ReadKey();
+    Console.Read();

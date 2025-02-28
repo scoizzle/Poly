@@ -12,7 +12,7 @@ public sealed record TypeInfoProvider : ITypeInfoProvider
 
     public ITypeInfo GetTypeInfo<T>() => GetTypeInfoFactory(type: typeof(T)).Value;
 
-    public void RegisterCustomTypeInfo(ITypeInfo typeInfo)
+    public void RegisterTypeInfo(ITypeInfo typeInfo)
     {
         if (typeInfo is null)
             throw new ArgumentNullException(nameof(typeInfo));
@@ -87,7 +87,7 @@ public sealed record TypeInfoProvider : ITypeInfoProvider
         {
             var methods = type
                 .GetMethods()
-                .Where(method => method.IsSpecialName)
+                .Where(method => !method.IsSpecialName)
                 .Select(method => new ClrMethodInfo(
                     name: method.Name,
                     parameters: GetLazyMethodParametersInfoFactory(method),
@@ -165,17 +165,15 @@ public sealed record TypeInfoProvider : ITypeInfoProvider
                 .ToList();
         });
 
-    private Lazy<IEnumerable<IMemberInfo>> GetLazyPropertiesInfoFactory(Type type) =>
-        new(() =>
+    private Lazy<IEnumerable<IMemberInfo>> GetLazyPropertiesInfoFactory(Type type)
+    {
+        return new(() =>
         {
             return type
                 .GetProperties()
                 .Select(prop => new ClrPropertyInfo(
                     name: prop.Name,
-                    accessModifiers: prop switch
-                    {
-                        _ => ClrAccessModifier.None
-                    },
+                    accessModifiers: GetTopLevelPropertyAccessModifier(prop),
                     lifetimeModifiers: prop.GetAccessors(true).Any(accessor => accessor.IsStatic)
                         ? ClrLifetimeModifier.Static
                         : ClrLifetimeModifier.Instance,
@@ -185,4 +183,24 @@ public sealed record TypeInfoProvider : ITypeInfoProvider
                 ))
                 .ToList();
         });
+
+        static ClrAccessModifier GetTopLevelPropertyAccessModifier(PropertyInfo property)
+        {
+            var modifiers = property
+                .GetAccessors()
+                .Select(e => e switch
+                {
+                    { IsPublic: true } => ClrAccessModifier.Public,
+                    { IsPrivate: true } => ClrAccessModifier.Private,
+                    { IsFamilyOrAssembly: true } => ClrAccessModifier.ProtectedInternal,
+                    { IsFamilyAndAssembly: true } => ClrAccessModifier.PrivateProtected,
+                    { IsFamily: true } => ClrAccessModifier.Protected,
+                    { IsAssembly: true } => ClrAccessModifier.Internal,
+                    _ => ClrAccessModifier.None
+                })
+                .OrderBy(e => e)
+                .FirstOrDefault();
+            return modifiers;
+        }
+    }
 }

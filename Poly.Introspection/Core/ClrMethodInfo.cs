@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Poly.Introspection;
+namespace Poly.Introspection.Core;
 
 internal class ClrMethodInfo(
     string name,
@@ -22,3 +22,4 @@ internal class ClrMethodInfo(
         return sb.ToString();
     }
 }
+

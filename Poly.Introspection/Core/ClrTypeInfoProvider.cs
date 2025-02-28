@@ -1,44 +1,18 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 
-namespace Poly.Introspection;
+namespace Poly.Introspection.Core;
 
-public sealed record TypeInfoProvider : ITypeInfoProvider
+sealed record ClrTypeInfoProvider : ITypeInfoProvider
 {
     private readonly ConcurrentDictionary<Type, Lazy<ITypeInfo>> _typeInfoCache = new();
-    private readonly ConcurrentDictionary<string, Lazy<ITypeInfo>> _customTypeInfoCache = new();
 
     public ITypeInfo GetTypeInfo(Type type) => GetTypeInfoFactory(type).Value;
 
     public ITypeInfo GetTypeInfo<T>() => GetTypeInfoFactory(type: typeof(T)).Value;
 
-    public void RegisterTypeInfo(ITypeInfo typeInfo)
-    {
-        if (typeInfo is null)
-            throw new ArgumentNullException(nameof(typeInfo));
-
-        _customTypeInfoCache.AddOrUpdate(
-            key: typeInfo.FullName,
-            addValueFactory: _ => new(() => typeInfo),
-            updateValueFactory: (_, _) => new(() => typeInfo));
-
-        if (Type.GetType(typeInfo.FullName) is Type type)
-        {
-            _typeInfoCache.AddOrUpdate(
-                key: type,
-                addValueFactory: _ => new(() => typeInfo),
-                updateValueFactory: (_, _) => new(() => typeInfo));
-        }
-    }
-
     public ITypeInfo GetTypeInfo(string typeName)
     {
-        if (string.IsNullOrEmpty(typeName))
-            throw new ArgumentNullException(nameof(typeName));
-
-        if (_customTypeInfoCache.TryGetValue(typeName, out var typeInfoFactory))
-            return typeInfoFactory.Value;
-
         return Type.GetType(typeName) switch
         {
             Type type => GetTypeInfoFactory(type).Value,

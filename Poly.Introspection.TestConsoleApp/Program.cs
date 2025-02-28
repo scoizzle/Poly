@@ -1,8 +1,7 @@
 ﻿using Poly.Introspection;
 
-var provider = new TypeInfoProvider();
-
-ITypeInfo stringTypeInfo = provider.GetTypeInfo(typeof(TypeInfoProvider));
+ITypeInfoProvider provider = new TypeInfoRegistry();
+ITypeInfo stringTypeInfo = provider.GetTypeInfo(provider.GetType());
 
 Console.WriteLine(stringTypeInfo.ToString());
 

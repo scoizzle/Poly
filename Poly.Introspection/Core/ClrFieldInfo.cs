@@ -1,6 +1,7 @@
+using System.Diagnostics;
 using System.Text;
 
-namespace Poly.Introspection;
+namespace Poly.Introspection.Core;
 
 sealed class ClrFieldInfo(
     string name,

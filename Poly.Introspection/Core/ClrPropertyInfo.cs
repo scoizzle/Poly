@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Poly.Introspection;
+namespace Poly.Introspection.Core;
 
 sealed class ClrPropertyInfo(
     string name,

@@ -1,4 +1,4 @@
-namespace Poly.Introspection;
+namespace Poly.Introspection.Core;
 
 internal class ClrMethodParameterInfo(
     string name,

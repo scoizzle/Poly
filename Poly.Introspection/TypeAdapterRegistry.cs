@@ -4,16 +4,16 @@ using Poly.Introspection.Core;
 
 namespace Poly.Introspection;
 
-public sealed record TypeInfoRegistry : ITypeInfoProvider, IEnumerable<ITypeInfo>
+public sealed record TypeAdapterRegistry : ITypeAdapterProvider, IEnumerable<ITypeAdapter>
 {
-    private readonly ClrTypeInfoProvider clrTypeInfoProvider = new();
-    private readonly ConcurrentDictionary<string, ITypeInfo> customTypeInfoCache = new();
+    private readonly ClrTypeAdapterProvider clrTypeInfoProvider = new();
+    private readonly ConcurrentDictionary<string, ITypeAdapter> customTypeInfoCache = new();
 
-    public ITypeInfo GetTypeInfo(Type type) => GetTypeInfo(type.FullName);
+    public ITypeAdapter GetTypeInfo(Type type) => GetTypeInfo(type.FullName);
 
-    public ITypeInfo GetTypeInfo<T>() => GetTypeInfo(typeof(T).FullName);
+    public ITypeAdapter GetTypeInfo<T>() => GetTypeInfo(typeof(T).FullName);
 
-    public ITypeInfo GetTypeInfo(string typeName)
+    public ITypeAdapter GetTypeInfo(string typeName)
     {
         if (string.IsNullOrEmpty(typeName))
             throw new ArgumentNullException(nameof(typeName));
@@ -24,7 +24,7 @@ public sealed record TypeInfoRegistry : ITypeInfoProvider, IEnumerable<ITypeInfo
         return clrTypeInfoProvider.GetTypeInfo(typeName);
     }
 
-    public void Add(ITypeInfo typeInfo)
+    public void Add(ITypeAdapter typeInfo)
     {
         if (typeInfo is null)
             throw new ArgumentNullException(nameof(typeInfo));
@@ -35,7 +35,7 @@ public sealed record TypeInfoRegistry : ITypeInfoProvider, IEnumerable<ITypeInfo
             updateValueFactory: (_, _) => typeInfo);
     }
 
-    public IEnumerator<ITypeInfo> GetEnumerator()
+    public IEnumerator<ITypeAdapter> GetEnumerator()
     {
         foreach (var info in customTypeInfoCache.Values)
         {

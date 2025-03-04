@@ -2,18 +2,18 @@ using System.Text;
 
 namespace Poly.Introspection.Core;
 
-sealed class ClrPropertyInfo(
+sealed class ClrPropertyAdapter(
     string name,
     ClrAccessModifier accessModifiers,
     ClrLifetimeModifier lifetimeModifiers,
     bool isReadable,
     bool isWritable,
-    Lazy<ITypeInfo> typeInfoFactory) : IMemberInfo
+    Lazy<ITypeAdapter> typeInfoFactory) : ITypeMemberAdapter
 {
     public string Name => name;
     public bool IsReadable => isReadable;
     public bool IsWritable => isWritable;
-    public ITypeInfo Type => typeInfoFactory.Value;
+    public ITypeAdapter Type => typeInfoFactory.Value;
     public ClrAccessModifier AccessModifiers => accessModifiers;
     public ClrLifetimeModifier LifetimeModifiers => lifetimeModifiers;
 

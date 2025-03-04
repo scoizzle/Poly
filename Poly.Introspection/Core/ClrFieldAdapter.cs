@@ -3,14 +3,14 @@ using System.Text;
 
 namespace Poly.Introspection.Core;
 
-sealed class ClrFieldInfo(
+sealed class ClrFieldAdapter(
     string name,
     ClrAccessModifier accessModifier,
     ClrLifetimeModifier lifetimeModifier,
-    Lazy<ITypeInfo> typeInfoFactory) : IMemberInfo
+    Lazy<ITypeAdapter> typeInfoFactory) : ITypeMemberAdapter
 {
     public string Name => name;
-    public ITypeInfo Type => typeInfoFactory.Value;
+    public ITypeAdapter Type => typeInfoFactory.Value;
     public ClrAccessModifier AccessModifier => accessModifier;
     public ClrLifetimeModifier LifetimeModifier => lifetimeModifier;
 

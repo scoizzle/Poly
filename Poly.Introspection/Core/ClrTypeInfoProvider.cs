@@ -3,26 +3,23 @@ using System.Reflection;
 
 namespace Poly.Introspection.Core;
 
-sealed record ClrTypeInfoProvider : ITypeInfoProvider
+sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
 {
-    private readonly ConcurrentDictionary<Type, Lazy<ITypeInfo>> _typeInfoCache = new();
+    private readonly ConcurrentDictionary<Type, Lazy<ITypeAdapter>> _typeInfoCache = new();
 
-    public ITypeInfo GetTypeInfo(Type type) => GetTypeInfoFactory(type).Value;
+    public ITypeAdapter GetTypeInfo(Type type) => GetTypeInfoFactory(type).Value;
 
-    public ITypeInfo GetTypeInfo<T>() => GetTypeInfoFactory(type: typeof(T)).Value;
+    public ITypeAdapter GetTypeInfo<T>() => GetTypeInfoFactory(type: typeof(T)).Value;
 
-    public ITypeInfo GetTypeInfo(string typeName)
+    public ITypeAdapter GetTypeInfo(string typeName) => Type.GetType(typeName) switch
     {
-        return Type.GetType(typeName) switch
-        {
-            Type type => GetTypeInfoFactory(type).Value,
-            _ => throw new Exception($"Type {typeName} was not found.")
-        };
-    }
+        Type type => GetTypeInfoFactory(type).Value,
+        _ => throw new Exception($"Type {typeName} was not found.")
+    };
 
-    private Lazy<ITypeInfo> GetTypeInfoFactory(Type type) => _typeInfoCache.GetOrAdd(type, GetLazyTypeInfoFactory);
+    private Lazy<ITypeAdapter> GetTypeInfoFactory(Type type) => _typeInfoCache.GetOrAdd(type, GetLazyTypeInfoFactory);
 
-    private Lazy<ITypeInfo> GetLazyTypeInfoFactory(Type type)
+    private Lazy<ITypeAdapter> GetLazyTypeInfoFactory(Type type)
     {
         return new(() =>
         {
@@ -39,7 +36,7 @@ sealed record ClrTypeInfoProvider : ITypeInfoProvider
             var methods = GetLazyMethodsInfoFactory(type);
             var attributes = GetLazyAttributesFactory(type);
 
-            return new ClrTypeInfo(
+            return new ClrTypeAdapter(
                 type: type,
                 accessModifiers: accessModifiers,
                 fields: fields,
@@ -55,14 +52,14 @@ sealed record ClrTypeInfoProvider : ITypeInfoProvider
         }
     }
 
-    private Lazy<IEnumerable<IMethodInfo>> GetLazyMethodsInfoFactory(Type type)
+    private Lazy<IEnumerable<IMethodAdapter>> GetLazyMethodsInfoFactory(Type type)
     {
         return new(() =>
         {
             var methods = type
                 .GetMethods()
                 .Where(method => !method.IsSpecialName)
-                .Select(method => new ClrMethodInfo(
+                .Select(method => new ClrMethodAdapter(
                     name: method.Name,
                     parameters: GetLazyMethodParametersInfoFactory(method),
                     returnTypeFactory: GetTypeInfoFactory(type),
@@ -79,13 +76,13 @@ sealed record ClrTypeInfoProvider : ITypeInfoProvider
         }
     }
 
-    private Lazy<IEnumerable<IMethodParameterInfo>> GetLazyMethodParametersInfoFactory(MethodBase methodBase)
+    private Lazy<IEnumerable<IMethodParameterAdapter>> GetLazyMethodParametersInfoFactory(MethodBase methodBase)
     {
         return new(() =>
         {
             var parameters = methodBase
                 .GetParameters()
-                .Select(parameter => new ClrMethodParameterInfo(
+                .Select(parameter => new ClrMethodParameterAdapter(
                     name: parameter.Name ?? parameter.Position.ToString(),
                     typeInfoFactory: GetTypeInfoFactory(type: parameter.ParameterType)
                 ))
@@ -95,12 +92,12 @@ sealed record ClrTypeInfoProvider : ITypeInfoProvider
         });
     }
 
-    private Lazy<IEnumerable<IMethodInfo>> GetLazyConstructorsInfoFactory(Type type) =>
+    private Lazy<IEnumerable<IMethodAdapter>> GetLazyConstructorsInfoFactory(Type type) =>
         new(() =>
         {
             var constructors = type
                 .GetConstructors()
-                .Select(ctor => new ClrMethodInfo(
+                .Select(ctor => new ClrMethodAdapter(
                     name: ctor.Name,
                     parameters: GetLazyMethodParametersInfoFactory(ctor),
                     returnTypeFactory: GetTypeInfoFactory(type),
@@ -116,12 +113,12 @@ sealed record ClrTypeInfoProvider : ITypeInfoProvider
         return new(() => Attribute.GetCustomAttributes(constructorInfo));
     }
 
-    private Lazy<IEnumerable<IMemberInfo>> GetLazyFieldsInfoFactory(Type type) =>
+    private Lazy<IEnumerable<ITypeMemberAdapter>> GetLazyFieldsInfoFactory(Type type) =>
         new(() =>
         {
             return type
                 .GetFields()
-                .Select(field => new ClrFieldInfo(
+                .Select(field => new ClrFieldAdapter(
                     name: field.Name,
                     accessModifier: field switch
                     {
@@ -139,13 +136,13 @@ sealed record ClrTypeInfoProvider : ITypeInfoProvider
                 .ToList();
         });
 
-    private Lazy<IEnumerable<IMemberInfo>> GetLazyPropertiesInfoFactory(Type type)
+    private Lazy<IEnumerable<ITypeMemberAdapter>> GetLazyPropertiesInfoFactory(Type type)
     {
         return new(() =>
         {
             return type
                 .GetProperties()
-                .Select(prop => new ClrPropertyInfo(
+                .Select(prop => new ClrPropertyAdapter(
                     name: prop.Name,
                     accessModifiers: GetTopLevelPropertyAccessModifier(prop),
                     lifetimeModifiers: prop.GetAccessors(true).Any(accessor => accessor.IsStatic)

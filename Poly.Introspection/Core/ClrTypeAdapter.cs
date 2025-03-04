@@ -2,23 +2,23 @@ using System.Text;
 
 namespace Poly.Introspection.Core;
 
-sealed class ClrTypeInfo(
+sealed class ClrTypeAdapter(
     Type type,
     ClrAccessModifier accessModifiers,
-    Lazy<IEnumerable<IMemberInfo>> fields,
-    Lazy<IEnumerable<IMemberInfo>> properties,
-    Lazy<IEnumerable<IMethodInfo>> constructors,
-    Lazy<IEnumerable<IMethodInfo>> methods,
-    Lazy<IEnumerable<Attribute>> attributes) : ITypeInfo
+    Lazy<IEnumerable<ITypeMemberAdapter>> fields,
+    Lazy<IEnumerable<ITypeMemberAdapter>> properties,
+    Lazy<IEnumerable<IMethodAdapter>> constructors,
+    Lazy<IEnumerable<IMethodAdapter>> methods,
+    Lazy<IEnumerable<Attribute>> attributes) : ITypeAdapter
 {
     public string Name { get; } = GetNameString(type);
     public string FullName { get; } = type.FullName ?? type.Name;
     public Type Type => type;
     public ClrAccessModifier AccessModifiers => accessModifiers;
-    public IEnumerable<IMemberInfo> Fields => fields.Value;
-    public IEnumerable<IMemberInfo> Properties => properties.Value;
-    public IEnumerable<IMethodInfo> Constructors => constructors.Value;
-    public IEnumerable<IMethodInfo> Methods => methods.Value;
+    public IEnumerable<ITypeMemberAdapter> Fields => fields.Value;
+    public IEnumerable<ITypeMemberAdapter> Properties => properties.Value;
+    public IEnumerable<IMethodAdapter> Constructors => constructors.Value;
+    public IEnumerable<IMethodAdapter> Methods => methods.Value;
     public IEnumerable<Attribute> Attributes => attributes.Value;
 
     static string GetNameString(Type type)

@@ -2,16 +2,16 @@ using System.Text;
 
 namespace Poly.Introspection.Core;
 
-internal class ClrMethodInfo(
+internal class ClrMethodAdapter(
     string name,
-    Lazy<IEnumerable<IMethodParameterInfo>> parameters,
-    Lazy<ITypeInfo> returnTypeFactory,
-    Lazy<IEnumerable<Attribute>> attributesFactory) : IMethodInfo
+    Lazy<IEnumerable<IMethodParameterAdapter>> parameters,
+    Lazy<ITypeAdapter> returnTypeFactory,
+    Lazy<IEnumerable<Attribute>> attributesFactory) : IMethodAdapter
 {
     public string Name => name;
-    public IEnumerable<IMethodParameterInfo> Parameters => parameters.Value;
+    public IEnumerable<IMethodParameterAdapter> Parameters => parameters.Value;
     public IEnumerable<Attribute> Attributes => attributesFactory.Value;
-    public ITypeInfo ReturnType => returnTypeFactory.Value;
+    public ITypeAdapter ReturnType => returnTypeFactory.Value;
 
     public sealed override string ToString()
     {

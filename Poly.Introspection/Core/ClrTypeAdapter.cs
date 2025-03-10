@@ -12,7 +12,8 @@ sealed class ClrTypeAdapter(
     Lazy<IEnumerable<Attribute>> attributes,
     Lazy<ITypeAdapterFeatureCollection> features) : ITypeAdapter
 {
-    public string Name { get; } = GetNameString(type);
+    private string? _name;
+    public string Name => _name ??= GetNameString(type);
     public string FullName { get; } = type.FullName ?? type.Name;
     public Type Type => type;
     public ClrAccessModifier AccessModifiers => accessModifiers;

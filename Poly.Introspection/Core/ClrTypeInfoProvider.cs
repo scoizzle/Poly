@@ -35,6 +35,7 @@ sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
             var constructors = GetLazyConstructorsInfoFactory(type);
             var methods = GetLazyMethodsInfoFactory(type);
             var attributes = GetLazyAttributesFactory(type);
+            var features = TypeAdapterFeatureCollection.NewLazyFactory();
 
             return new ClrTypeAdapter(
                 type: type,
@@ -43,7 +44,8 @@ sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
                 properties: properties,
                 constructors: constructors,
                 methods: methods,
-                attributes: attributes);
+                attributes: attributes,
+                features);
         });
 
         static Lazy<IEnumerable<Attribute>> GetLazyAttributesFactory(Type type)

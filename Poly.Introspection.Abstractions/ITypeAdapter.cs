@@ -9,4 +9,5 @@ public interface ITypeAdapter
     public IEnumerable<IMethodAdapter> Constructors { get; }
     public IEnumerable<IMethodAdapter> Methods { get; }
     public IEnumerable<Attribute> Attributes { get; }
+    public ITypeAdapterFeatureCollection Features { get; }
 }

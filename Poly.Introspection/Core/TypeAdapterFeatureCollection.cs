@@ -10,7 +10,10 @@ class TypeAdapterFeatureCollection : ITypeAdapterFeatureCollection
         set => features[key] = value;
     }
 
-    public TFeature Get<TFeature>(Type key) => (TFeature)features[key];
+    public TFeature? Get<TFeature>() =>
+        features.TryGetValue(typeof(TFeature), out var value) && value is TFeature feature
+            ? feature
+            : default;
 
     public void Set<TFeature>(TFeature value)
     {

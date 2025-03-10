@@ -2,11 +2,11 @@ namespace Poly.Introspection;
 
 public static class TypeAdapter
 {
-    private static Lazy<TypeAdapterRegistry> registry = new(() => new TypeAdapterRegistry());
+    private static readonly Lazy<TypeAdapterRegistry> registry = new(() => new TypeAdapterRegistry());
 
-    public static IEnumerable<ITypeAdapter> GetTypesBasedOn<T>()
+    public static IEnumerable<ITypeAdapter> GetTypesInheriting<T>() => GetTypesInheriting(typeof(T));
+    public static IEnumerable<ITypeAdapter> GetTypesInheriting(Type type)
     {
-        var type = typeof(T);
         var types = AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type.IsAssignableFrom);
@@ -17,12 +17,17 @@ public static class TypeAdapter
         }
     }
 
-    public static IEnumerable<ITypeAdapter> GetTypesImplementingInterface<T>()
+    public static IEnumerable<ITypeAdapter> GetTypesImplementingInterface<T>() => GetTypesImplementingInterface(typeof(T));
+
+    public static IEnumerable<ITypeAdapter> GetTypesImplementingInterface(Type interfaceType)
     {
-        var interfaceType = typeof(T);
+        if (!interfaceType.IsInterface)
+            throw new ArgumentException("The provided type is not an interface.", nameof(interfaceType));
+
         var types = AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(assembly => assembly.GetTypes())
-            .SelectMany(type => type.GetInterfaces());
+            .SelectMany(type => type.GetInterfaces())
+            .Where(type => !string.IsNullOrEmpty(type.FullName));
 
         if (interfaceType.IsGenericType)
         {

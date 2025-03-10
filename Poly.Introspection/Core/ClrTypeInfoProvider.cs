@@ -64,7 +64,7 @@ sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
                 .Select(method => new ClrMethodAdapter(
                     name: method.Name,
                     parameters: GetLazyMethodParametersInfoFactory(method),
-                    returnTypeFactory: GetTypeInfoFactory(type),
+                    returnTypeFactory: GetTypeInfoFactory(method.ReturnType),
                     attributesFactory: GetLazyAttributesFactory(method)
                 ))
                 .ToList();

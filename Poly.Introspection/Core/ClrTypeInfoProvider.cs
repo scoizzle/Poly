@@ -30,8 +30,7 @@ sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
                 _ => ClrAccessModifier.None
             };
 
-            var fields = GetLazyFieldsInfoFactory(type);
-            var properties = GetLazyPropertiesInfoFactory(type);
+            var members = GetLazyMembersInfoFactory(type);
             var constructors = GetLazyConstructorsInfoFactory(type);
             var methods = GetLazyMethodsInfoFactory(type);
             var attributes = GetLazyAttributesFactory(type);
@@ -40,8 +39,7 @@ sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
             return new ClrTypeAdapter(
                 type: type,
                 accessModifiers: accessModifiers,
-                fields: fields,
-                properties: properties,
+                members: members,
                 constructors: constructors,
                 methods: methods,
                 attributes: attributes,
@@ -115,10 +113,11 @@ sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
         return new(() => Attribute.GetCustomAttributes(constructorInfo));
     }
 
-    private Lazy<IEnumerable<ITypeMemberAdapter>> GetLazyFieldsInfoFactory(Type type) =>
-        new(() =>
+    private Lazy<IEnumerable<ITypeMemberAdapter>> GetLazyMembersInfoFactory(Type type)
+    {
+        return new(() =>
         {
-            return type
+            var fields = type
                 .GetFields()
                 .Select(field => new ClrFieldAdapter(
                     name: field.Name,
@@ -134,15 +133,9 @@ sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
                     },
                     lifetimeModifier: field.IsStatic ? ClrLifetimeModifier.Static : ClrLifetimeModifier.Instance,
                     typeInfoFactory: GetTypeInfoFactory(type: field.FieldType)
-                ))
-                .ToList();
-        });
+                ));
 
-    private Lazy<IEnumerable<ITypeMemberAdapter>> GetLazyPropertiesInfoFactory(Type type)
-    {
-        return new(() =>
-        {
-            return type
+            var properties = type
                 .GetProperties()
                 .Select(prop => new ClrPropertyAdapter(
                     name: prop.Name,
@@ -153,7 +146,10 @@ sealed record ClrTypeAdapterProvider : ITypeAdapterProvider
                     isReadable: prop.CanRead,
                     isWritable: prop.CanWrite,
                     typeInfoFactory: GetTypeInfoFactory(type: prop.PropertyType)
-                ))
+                ));
+
+            return fields
+                .Concat<ITypeMemberAdapter>(properties)
                 .ToList();
         });
 

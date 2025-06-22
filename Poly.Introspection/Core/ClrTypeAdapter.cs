@@ -5,8 +5,7 @@ namespace Poly.Introspection.Core;
 sealed class ClrTypeAdapter(
     Type type,
     ClrAccessModifier accessModifiers,
-    Lazy<IEnumerable<ITypeMemberAdapter>> fields,
-    Lazy<IEnumerable<ITypeMemberAdapter>> properties,
+    Lazy<IEnumerable<ITypeMemberAdapter>> members,
     Lazy<IEnumerable<IMethodAdapter>> constructors,
     Lazy<IEnumerable<IMethodAdapter>> methods,
     Lazy<IEnumerable<Attribute>> attributes,
@@ -14,11 +13,10 @@ sealed class ClrTypeAdapter(
 {
     private string? _name;
     public string Name => _name ??= GetNameString(type);
-    public string FullName { get; } = type.FullName ?? type.Name;
+    public string GloballyUniqueName { get; } = type.FullName ?? type.Name;
     public Type Type => type;
     public ClrAccessModifier AccessModifiers => accessModifiers;
-    public IEnumerable<ITypeMemberAdapter> Fields => fields.Value;
-    public IEnumerable<ITypeMemberAdapter> Properties => properties.Value;
+    public IEnumerable<ITypeMemberAdapter> Members => members.Value;
     public IEnumerable<IMethodAdapter> Constructors => constructors.Value;
     public IEnumerable<IMethodAdapter> Methods => methods.Value;
     public IEnumerable<Attribute> Attributes => attributes.Value;
@@ -49,17 +47,13 @@ sealed class ClrTypeAdapter(
         string typeName = type.IsInterface ? "interface" : type.IsEnum ? "enum" : type.IsValueType ? "struct" : "class";
         sb.AppendLine($"{accessModifiers.ToString().ToLowerInvariant()} {typeName} {Name}");
         sb.AppendLine("{");
-        foreach (var field in Fields)
-        {
-            sb.AppendLine($"    {field};");
-        }
         foreach (var constructor in Constructors)
         {
             sb.AppendLine($"    {constructor};");
         }
-        foreach (var property in Properties)
+        foreach (var member in Members)
         {
-            sb.AppendLine($"    {property}");
+            sb.AppendLine($"    {member};");
         }
         foreach (var method in Methods)
         {

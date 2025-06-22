@@ -30,7 +30,7 @@ public sealed record TypeAdapterRegistry : ITypeAdapterProvider, IEnumerable<ITy
             throw new ArgumentNullException(nameof(typeInfo));
 
         customTypeInfoCache.AddOrUpdate(
-            key: typeInfo.FullName,
+            key: typeInfo.GloballyUniqueName,
             addValueFactory: _ => typeInfo,
             updateValueFactory: (_, _) => typeInfo);
     }

@@ -287,7 +287,7 @@ public static partial class HuffmanEncoding<TPriority, TValue>
             var value = Value;
             var mask = TPriority.One;
 
-            for (; index < length; index++, mask <<= 1)
+            for (; index < length; index++, mask <<= TPriority.One)
             {
                 var theBitIsSet = (value & mask) == mask;
                 yield return theBitIsSet;
@@ -313,13 +313,13 @@ public static partial class HuffmanEncoding<TPriority, TValue>
             if (value)
                 m_EncodedKey |= m_EncodingMask;
 
-            m_EncodingMask <<= 1;
+            m_EncodingMask <<= TPriority.One;
             m_BitLength++;
         }
 
         public void Remove()
         {
-            m_EncodingMask >>= 1;
+            m_EncodingMask >>= TPriority.One;
             m_EncodedKey &= ~m_EncodingMask;
             m_BitLength--;
         }

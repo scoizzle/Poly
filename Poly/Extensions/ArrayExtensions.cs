@@ -1,7 +1,6 @@
 namespace Poly;
 
-public static partial class ArrayExtensions
-{
+public static partial class ArrayExtensions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool BoundsCheck<T>(this ReadOnlySpan<T> This, int index)
         => index >= 0
@@ -24,7 +23,6 @@ public static partial class ArrayExtensions
         => index >= 0
         && index + length <= lastIndex
         && lastIndex <= This.Length
-        && other != default
         && otherIndex >= 0
         && otherIndex + length <= other.Length;
 
@@ -34,8 +32,7 @@ public static partial class ArrayExtensions
             int min,
             int max,
             int index,
-            int length)
-    {
+            int length) {
         return min >= 0
             && max <= array.Length
             && index >= min
@@ -47,10 +44,8 @@ public static partial class ArrayExtensions
     public static bool TryGet<T>(
         this ReadOnlySpan<T> array,
             int index,
-            out T? value)
-    {
-        if (BoundsCheck(array, index))
-        {
+            out T? value) {
+        if (BoundsCheck(array, index)) {
             value = array[index];
             return true;
         }
@@ -65,10 +60,8 @@ public static partial class ArrayExtensions
             int min,
             int max,
             int index,
-            out T? value)
-    {
-        if (BoundsCheck(array, min, max, index))
-        {
+            out T? value) {
+        if (BoundsCheck(array, min, max, index)) {
             value = array[index];
             return true;
         }
@@ -81,10 +74,8 @@ public static partial class ArrayExtensions
     public static bool TrySet<T>(
         this Span<T> array,
             int index,
-            T value)
-    {
-        if (BoundsCheck<T>(array, index))
-        {
+            T value) {
+        if (BoundsCheck(array, index)) {
             array[index] = value;
             return true;
         }
@@ -98,10 +89,8 @@ public static partial class ArrayExtensions
             int min,
             int max,
             int index,
-            T value)
-    {
-        if (BoundsCheck<T>(array, min, max, index))
-        {
+            T value) {
+        if (BoundsCheck(array, min, max, index)) {
             array[index] = value;
             return true;
         }

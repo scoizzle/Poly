@@ -1,6 +1,6 @@
-namespace Poly;
+namespace Poly.Dead;
 
-internal record struct TelemetryEventScopeTracer(
+public record struct TelemetryEventScopeTracer(
     string File,
     string Method,
     int Line,
@@ -19,7 +19,7 @@ public record struct TelemetryEvent(string Method, TimeSpan Duration);
 
 public static class Telemetry
 {
-    public static IDisposable BeginEvent(
+    public static TelemetryEventScopeTracer BeginEvent(
         [CallerFilePath] string? file = default,
         [CallerMemberName] string? method = default,
         [CallerLineNumber] int? line = default)

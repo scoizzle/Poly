@@ -8,17 +8,17 @@ namespace Poly.Text.Matching.Expressions {
 
         public Expression[] Members { get; }
 
-        public override void Link(Expression previous, Expression next) {
+        public override void Link(Expression? previous, Expression? next) {
             Linker.Link(Members, previous, next);
             base.Link(previous, next);
         }
 
-        public static bool Parse(StringView view, out Expression expression) {
+        public static bool Parse(StringView view, out Expression? expression) {
             if (view.ExtractBetween('(', ')', out var section)) {
                 var optional = view.Consume('?');
                 var minimumLength = optional ? 0 : 1;
 
-                if (Parser.TryParse(section, out Expression[] members)) {
+                if (Parser.TryParse(section, out Expression[]? members) && members is not null) {
                     expression = new Group(members, optional, minimumLength);
                     return true;
                 }

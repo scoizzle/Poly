@@ -4,7 +4,7 @@ namespace Poly.Text.Matching.Expressions {
             gotoView(Optional, Next);
 
         public override TryCompareDelegate Compare() =>
-            Compare(Optional, Next);
+            compare(Optional, Next);
 
         private static TryCompareDelegate gotoView() =>
             (StringView view) => view.GotoAndConsume(char.IsWhiteSpace);
@@ -19,7 +19,7 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate gotoView(Expression next) {
+        private static TryCompareDelegate gotoView(Expression? next) {
             if (next is default(Expression))
                 return gotoView();
 
@@ -40,7 +40,7 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate gotoView(bool optional, Expression next) {
+        private static TryCompareDelegate gotoView(bool optional, Expression? next) {
             if (!optional)
                 return gotoView(next);
 
@@ -75,7 +75,7 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate compare(Expression next) {
+        private static TryCompareDelegate compare(Expression? next) {
             if (next is default(Expression))
                 return compare();
 
@@ -96,7 +96,7 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate Compare(bool optional, Expression next) {
+        private static TryCompareDelegate compare(bool optional, Expression? next) {
             if (!optional)
                 return compare(next);
 

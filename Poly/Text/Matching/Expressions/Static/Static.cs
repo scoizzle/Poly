@@ -9,7 +9,7 @@ namespace Poly.Text.Matching.Expressions
 
         public string Value { get; }
 
-        public static bool Parse(StringView view, out Expression expression)
+        public static bool Parse(StringView view, out Expression? expression)
         {
             //if (view.Extract(SelectStatic, out var content)) {
             //    var value = Conversion.Descape(content);

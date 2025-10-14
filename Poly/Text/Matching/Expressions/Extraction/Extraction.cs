@@ -10,7 +10,7 @@ namespace Poly.Text.Matching.Expressions
 
         public string Name { get; }
 
-        public static bool Parse(StringView view, out Expression expression)
+        public static bool Parse(StringView view, out Expression? expression)
         {
             if (view.ExtractBetween('{', '}', out var name))
             {

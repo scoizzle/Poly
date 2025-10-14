@@ -1,4 +1,4 @@
-﻿namespace Poly;
+﻿namespace Poly.Dead;
 
 public enum LogLevel
 {

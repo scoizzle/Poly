@@ -48,7 +48,7 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate gotoView(Expression[] members, bool optional, Expression next)
+        private static TryCompareDelegate gotoView(Expression[] members, bool optional, Expression? next)
         {
             if (!optional)
                 return gotoView(members);
@@ -107,7 +107,7 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate compare(Expression[] members, bool optional, Expression next)
+        private static TryCompareDelegate compare(Expression[] members, bool optional, Expression? next)
         {
             if (!optional)
                 return compare(members);

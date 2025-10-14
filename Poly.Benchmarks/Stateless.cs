@@ -27,7 +27,7 @@ public class PhoneCall
         TakenOffHold,
         PhoneHurledAgainstWall,
         MuteMicrophone,
-        UnmuteMicrophone,
+        UnMuteMicrophone,
         SetVolume
     }
 
@@ -42,11 +42,11 @@ public class PhoneCall
 
     State _state = State.OffHook;
 
-    StateMachine<State, Trigger> _machine;
-    StateMachine<State, Trigger>.TriggerWithParameters<int> _setVolumeTrigger;
-    StateMachine<State, Trigger>.TriggerWithParameters<string> _setCalleeTrigger;
+    readonly StateMachine<State, Trigger> _machine;
+    readonly StateMachine<State, Trigger>.TriggerWithParameters<int> _setVolumeTrigger;
+    readonly StateMachine<State, Trigger>.TriggerWithParameters<string> _setCalleeTrigger;
 
-    string _caller;
+    readonly string _caller;
 
     string _callee;
 
@@ -69,7 +69,7 @@ public class PhoneCall
             .OnEntry(t => StartCallTimer())
             .OnExit(t => StopCallTimer())
             .InternalTransition(Trigger.MuteMicrophone, t => OnMute())
-            .InternalTransition(Trigger.UnmuteMicrophone, t => OnUnmute())
+            .InternalTransition(Trigger.UnMuteMicrophone, t => OnUnMute())
             .InternalTransition<int>(_setVolumeTrigger, (volume, t) => OnSetVolume(volume))
             .Permit(Trigger.LeftMessage, State.OffHook)
             .Permit(Trigger.PlacedOnHold, State.OnHold);
@@ -87,9 +87,9 @@ public class PhoneCall
         Console.WriteLine("Volume set to " + volume + "!");
     }
 
-    void OnUnmute()
+    void OnUnMute()
     {
-        Console.WriteLine("Microphone unmuted!");
+        Console.WriteLine("Microphone un-muted!");
     }
 
     void OnMute()
@@ -118,9 +118,9 @@ public class PhoneCall
         _machine.Fire(Trigger.MuteMicrophone);
     }
 
-    public void Unmute()
+    public void UnMute()
     {
-        _machine.Fire(Trigger.UnmuteMicrophone);
+        _machine.Fire(Trigger.UnMuteMicrophone);
     }
 
     public void SetVolume(int volume)

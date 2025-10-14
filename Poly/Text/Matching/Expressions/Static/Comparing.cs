@@ -20,7 +20,7 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate gotoView(string value, Expression next) {
+        private static TryCompareDelegate gotoView(string value, Expression? next) {
             if (next is default(Expression))
                 return gotoView(value);
 
@@ -46,7 +46,7 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate gotoView(string value, bool optional, Expression next) {
+        private static TryCompareDelegate gotoView(string value, bool optional, Expression? next) {
             if (!optional)
                 return gotoView(value, next);
 
@@ -88,7 +88,7 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate compare(string value, Expression next) {
+        private static TryCompareDelegate compare(string value, Expression? next) {
             if (next is default(Expression))
                 return compare(value);
 
@@ -109,7 +109,7 @@ namespace Poly.Text.Matching.Expressions
             };
         }
 
-        private static TryCompareDelegate compare(string value, bool optional, Expression next) {
+        private static TryCompareDelegate compare(string value, bool optional, Expression? next) {
             if (!optional)
                 return compare(value, next);
 

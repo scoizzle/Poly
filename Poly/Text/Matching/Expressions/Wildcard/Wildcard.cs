@@ -4,7 +4,7 @@ namespace Poly.Text.Matching.Expressions
         public Wildcard(bool optional = true, int minimumLength = 0) : base(optional, minimumLength) 
         { }
 
-        public static bool Parse(StringView view, out Expression expression) {
+        public static bool Parse(StringView view, out Expression? expression) {
             if (view.Consume('*')) {
                 expression = new Wildcard(optional: true, minimumLength: 0);
                 return true;

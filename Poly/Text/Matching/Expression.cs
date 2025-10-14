@@ -9,15 +9,15 @@ namespace Poly.Text.Matching {
 
         public int MinimumLength { get; }
 
-        public Expression Previous { get; protected set; }
+        public Expression? Previous { get; protected set; }
 
-        public Expression Next { get; protected set; }
+        public Expression? Next { get; protected set; }
 
         public abstract TryCompareDelegate Goto();
         
         public abstract TryCompareDelegate Compare();
 
-        public virtual void Link(Expression previous, Expression next) {
+        public virtual void Link(Expression? previous, Expression? next) {
             Previous = previous;
             Next = next;
         }

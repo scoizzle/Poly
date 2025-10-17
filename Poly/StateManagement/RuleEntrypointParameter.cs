@@ -1,8 +1,16 @@
 using Poly.Interpretation;
 
-public sealed class RuleInterpretationContext : Context {
-    public RuleInterpretationContext() : base() {
-        EntryPoint = new Parameter("_");
+namespace Poly.StateManagement;
+
+public sealed class RuleInterpretationContext {
+    private readonly Variable _entryPoint;
+    private readonly Context _interpretationContext;
+
+    public RuleInterpretationContext() {
+        _interpretationContext = new Context();
+        _entryPoint = _interpretationContext.AddParameter("@obj");
     }
-    internal Parameter EntryPoint { get; } = new Parameter("_");
-}
+
+    internal Context GetContext() => _interpretationContext;
+    internal Value GetEntryPoint() => _entryPoint;
+    internal Value GetMemberAccess(string memberName) => throw new NotImplementedException();

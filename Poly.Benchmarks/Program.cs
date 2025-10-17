@@ -6,46 +6,43 @@ using System.Linq.Expressions;
 
 ClrTypeDefinitionRegistry registry = new();
 
-ITypeDefinition strType = registry.GetTypeDefinition<string>();
 ITypeDefinition personType = registry.GetTypeDefinition<Person>();
-
-foreach (var member in personType.Members) {
-    Console.WriteLine($"{member.MemberType.Name} {member.Name};");
-}
-
-foreach (var method in personType.Methods) {
-    Console.WriteLine($"{method.ReturnType.Name} {method.Name}(");
-    foreach (var param in method.Parameters) {
-        Console.WriteLine($"  {param.Position}. {param.Name} : {param.ParameterType.Name}");
-    }
-    Console.WriteLine(")");
-}
-
-ITypeMember personName = personType.GetMember("Name");
-ITypeMember personAge = personType.GetMember("Age");
-
+ITypeMember personName = personType.GetMember(nameof(Person.Name));
+ITypeMember personAge = personType.GetMember(nameof(Person.Age));
 
 Context context = new Context();
+
 Person person = new("Alice", 30);
 Literal personNode = new Literal(person);
-ClrTypeMemberAccessor getName = new ClrTypeMemberAccessor(personNode, personName);
-ClrTypeMemberAccessor getAge = new ClrTypeMemberAccessor(personNode, personAge);
+Value getName = personName.GetMemberAccessor(personNode);
+Value getAge = personAge.GetMemberAccessor(personNode);
 
 Expression nameExpr = getName.BuildExpression(context);
 Expression ageExpr = getAge.BuildExpression(context);
+
+Console.WriteLine(nameExpr);
+Console.WriteLine(ageExpr);
 
 Constant constantNode = new Literal("Bob");
 
 Assignment assignNameExpr = new Assignment(getName, constantNode);
 Console.WriteLine(assignNameExpr.BuildExpression(context));
 
-ITypeMember strLength = strType.GetMember("Length");
+ITypeMember strLength = personName.MemberType.GetMember(nameof(string.Length));
 
 Literal valueNode = new Literal("This is a test.");
-ClrTypeMemberAccessor getLength = new ClrTypeMemberAccessor(valueNode, strLength);
+Value getLength = strLength.GetMemberAccessor(valueNode);
 
 Expression expr = getLength.BuildExpression(context);
 
 Console.WriteLine(expr);
 
-record Person(string Name, int Age);
+var compiled = Expression.Lambda<Func<int>>(expr).Compile();
+Console.WriteLine(compiled());
+
+class Person(string name, int age) {
+    public string Name { get; set; } = name;
+    public int Age { get; set; } = age;
+
+    public override string ToString() => $"({Name}, {Age} years old)";
+}

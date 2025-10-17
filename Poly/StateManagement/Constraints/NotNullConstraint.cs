@@ -1,17 +1,12 @@
+using Poly.Interpretation;
+using Poly.Interpretation.Operators.Boolean;
+
 namespace Poly.StateManagement;
 
-// public sealed class NotNullConstraint(Property resourceProperty) : Constraint(resourceProperty)
-// {
-//     public override Expression BuildExpression(Expression param)
-//     {
-//         var property = Expression.Property(param, Member.Name);
-//         if (property.Type.IsValueType && Nullable.GetUnderlyingType(property.Type) == null)
-//         {
-//             // Non-nullable value types are always "not null"
-//             return Expression.Constant(true);
-//         }
-
-//         var nullConstant = Expression.Constant(null, property.Type);
-//         return Expression.NotEqual(property, nullConstant);
-//     }
-// }
+public sealed record NotNullConstraint(string resourceProperty) : Constraint(resourceProperty)
+{
+    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+        Value member = context.GetMemberAccess(Member);
+        return new InequalityOperator(member, Literal.Null);
+    }
+}

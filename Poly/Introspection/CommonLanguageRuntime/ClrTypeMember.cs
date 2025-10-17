@@ -1,5 +1,7 @@
-namespace Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
+namespace Poly.Introspection.CommonLanguageRuntime;
 [DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
 public sealed class ClrTypeMember : ITypeMember {
     private readonly string _name;
@@ -21,6 +23,8 @@ public sealed class ClrTypeMember : ITypeMember {
 
     ITypeDefinition ITypeMember.MemberType => MemberType;
     ITypeDefinition ITypeMember.DeclaringType => DeclaringType;
+
+    public Value GetMemberAccessor(Value instance) => new ClrTypeMemberInterpretationAccessor(instance, this);
 
     public override string ToString() => $"{MemberType} {DeclaringType}.{Name}";
 }

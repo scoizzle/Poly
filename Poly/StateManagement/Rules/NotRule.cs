@@ -10,4 +10,3 @@ public sealed record NotRule(Rule rule) : Rule {
 
     public override string ToString() => $"!({Rule})";
 }
-

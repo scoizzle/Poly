@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 public sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
+    public static readonly ClrTypeDefinitionRegistry Shared = new();
     private readonly ConcurrentDictionary<string, ClrTypeDefinition> _types = new();
 
     public Lazy<ClrTypeDefinition> GetDeferredTypeDefinitionResolver(Type type) {
@@ -35,7 +36,7 @@ public sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
         _types.TryRemove(type.FullName, out _);
     }
 
-    public ITypeDefinition? GetType(string name) {
+    public ITypeDefinition? GetTypeDefinition(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         return _types.GetOrAdd(name, CreateTypeDefinition, this);

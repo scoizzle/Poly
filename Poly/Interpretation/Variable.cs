@@ -11,4 +11,6 @@ public class Variable(string name, Value? value = null) : Value {
 
     public override Expression BuildExpression(Context context) => Value?.BuildExpression(context)
         ?? throw new InvalidOperationException($"Variable '{Name}' is not initialized.");
+
+    public override string ToString() => Name;
 }

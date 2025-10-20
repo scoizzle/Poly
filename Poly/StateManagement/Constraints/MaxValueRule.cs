@@ -1,5 +1,5 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Boolean;
+using Poly.Interpretation.Operators.Comparison;
 
 namespace Poly.StateManagement.Constraints;
 

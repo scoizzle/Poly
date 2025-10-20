@@ -8,7 +8,14 @@ using Poly.Interpretation.Operators;
 
 Person person = new("Alice", 30);
 
-RuleInterpretationContext ruleInterpretationContext = new();
+RuleSetBuilder<Person> ruleSetBuilder = new RuleSetBuilder<Person>()
+    .Property(p => p.Name, constraints => constraints.NotNull());
+
+RuleSet ruleSet = ruleSetBuilder.Build();
+RuleInterpretationContext<Person> ruleInterpretationContext = new RuleInterpretationContext<Person>(person);
+
+Value ruleInterpretationTree = ruleSet.BuildInterpretationTree(ruleInterpretationContext);
+Console.WriteLine(ruleInterpretationTree);
 
 ClrTypeDefinitionRegistry registry = new();
 

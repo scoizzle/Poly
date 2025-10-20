@@ -20,4 +20,6 @@ public class MemberAccess(Value value, string memberName) : Operator {
         Value memberAccessor = member.GetMemberAccessor(Value);
         return memberAccessor.BuildExpression(context);
     }
+
+    public override string ToString() => $"{Value}.{MemberName}";
 }

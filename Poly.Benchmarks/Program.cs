@@ -8,48 +8,52 @@ using Poly.Interpretation.Operators;
 
 Person person = new("Alice", 30);
 
-RuleSetBuilder<Person> ruleSetBuilder = new RuleSetBuilder<Person>()
-    .Property(p => p.Name, constraints => constraints.NotNull());
+RuleSet ruleSet = new RuleSetBuilder<Person>()
+    .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
+    .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
+    .Build();
 
-RuleSet ruleSet = ruleSetBuilder.Build();
-RuleInterpretationContext<Person> ruleInterpretationContext = new RuleInterpretationContext<Person>(person);
+RuleInterpretationContext<Person> ruleInterpretationContext = new RuleInterpretationContext<Person>();
 
-Value ruleInterpretationTree = ruleSet.BuildInterpretationTree(ruleInterpretationContext);
-Console.WriteLine(ruleInterpretationTree);
+Expression ruleExpression = ruleInterpretationContext.BuildExpression(ruleSet);
+Console.WriteLine(ruleExpression);
 
-ClrTypeDefinitionRegistry registry = new();
+Predicate<Person> rulePredicate = ruleInterpretationContext.CompilePredicate(ruleSet);
+Console.WriteLine($"Rule evaluation for {person}: {rulePredicate(person)}");
 
-ITypeDefinition personType = registry.GetTypeDefinition<Person>();
-ITypeMember personName = personType.GetMember(nameof(Person.Name));
-ITypeMember personAge = personType.GetMember(nameof(Person.Age));
+// ClrTypeDefinitionRegistry registry = new();
 
-Context context = new Context();
-Literal personNode = new Literal(person);
-Value getName = personName.GetMemberAccessor(personNode);
-Value getAge = personAge.GetMemberAccessor(personNode);
+// ITypeDefinition personType = registry.GetTypeDefinition<Person>();
+// ITypeMember personName = personType.GetMember(nameof(Person.Name));
+// ITypeMember personAge = personType.GetMember(nameof(Person.Age));
 
-Expression nameExpr = getName.BuildExpression(context);
-Expression ageExpr = getAge.BuildExpression(context);
+// Context context = new Context();
+// Literal personNode = new Literal(person);
+// Value getName = personName.GetMemberAccessor(personNode);
+// Value getAge = personAge.GetMemberAccessor(personNode);
 
-Console.WriteLine(nameExpr);
-Console.WriteLine(ageExpr);
+// Expression nameExpr = getName.BuildExpression(context);
+// Expression ageExpr = getAge.BuildExpression(context);
 
-Constant constantNode = new Literal("Bob");
+// Console.WriteLine(nameExpr);
+// Console.WriteLine(ageExpr);
 
-Assignment assignNameExpr = new Assignment(getName, constantNode);
-Console.WriteLine(assignNameExpr.BuildExpression(context));
+// Constant constantNode = new Literal("Bob");
 
-ITypeMember strLength = personName.MemberTypeDefinition.GetMember(nameof(string.Length));
+// Assignment assignNameExpr = new Assignment(getName, constantNode);
+// Console.WriteLine(assignNameExpr.BuildExpression(context));
 
-Literal valueNode = new Literal("This is a test.");
-Value getLength = strLength.GetMemberAccessor(valueNode);
+// ITypeMember strLength = personName.MemberTypeDefinition.GetMember(nameof(string.Length));
 
-Expression expr = getLength.BuildExpression(context);
+// Literal valueNode = new Literal("This is a test.");
+// Value getLength = strLength.GetMemberAccessor(valueNode);
 
-Console.WriteLine(expr);
+// Expression expr = getLength.BuildExpression(context);
 
-var compiled = Expression.Lambda<Func<int>>(expr).Compile();
-Console.WriteLine(compiled());
+// Console.WriteLine(expr);
+
+// var compiled = Expression.Lambda<Func<int>>(expr).Compile();
+// Console.WriteLine(compiled());
 
 class Person(string name, int age) {
     public string Name { get; set; } = name;

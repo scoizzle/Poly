@@ -4,10 +4,10 @@ using Poly.Interpretation.Operators.Comparison;
 
 namespace Poly.StateManagement;
 
-public sealed record LengthConstraint(string propertyName, int? minLength, int? maxLength) : Constraint(propertyName)
+public sealed class LengthConstraint(string propertyName, int? minLength, int? maxLength) : Constraint(propertyName)
 {
-    public int? MinLength { get; init; } = minLength;
-    public int? MaxLength { get; init; } = maxLength;
+    public int? MinLength { get; set; } = minLength;
+    public int? MaxLength { get; set; } = maxLength;
 
     public override Value BuildInterpretationTree(RuleInterpretationContext context) {
         var member = context.GetMemberAccessor(PropertyName);

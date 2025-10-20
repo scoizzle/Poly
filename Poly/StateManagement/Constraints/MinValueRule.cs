@@ -4,7 +4,7 @@ using Poly.Interpretation.Operators.Comparison;
 
 namespace Poly.StateManagement.Constraints;
 
-public sealed record MinValueConstraint(string memberName, object minValue) : Constraint(memberName)
+public sealed class MinValueConstraint(string memberName, object minValue) : Constraint(memberName)
 {
     public object MinValue { get; set; } = minValue;
 

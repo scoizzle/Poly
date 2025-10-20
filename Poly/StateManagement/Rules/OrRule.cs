@@ -3,7 +3,7 @@ using Poly.Interpretation.Operators.Boolean;
 
 namespace Poly.StateManagement.Validation.Rules;
 
-public sealed record OrRule(params IEnumerable<Rule> rules) : Rule {
+public sealed class OrRule(params IEnumerable<Rule> rules) : Rule {
     public IEnumerable<Rule> Rules { get; set; } = rules;
 
     public override Value BuildInterpretationTree(RuleInterpretationContext context) {

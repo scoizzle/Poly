@@ -3,7 +3,7 @@ using Poly.Interpretation.Operators.Boolean;
 
 namespace Poly.StateManagement.Validation.Rules;
 
-public sealed record AndRule(params IEnumerable<Rule> rules) : Rule
+public sealed class AndRule(params IEnumerable<Rule> rules) : Rule
 {
     public IEnumerable<Rule> Rules { get; set; } = rules;
 
@@ -12,9 +12,15 @@ public sealed record AndRule(params IEnumerable<Rule> rules) : Rule
         if (Rules == null || !Rules.Any())
             return new Literal(true);
 
-        return Rules
+        var ruleInterpretationTrees = Rules
             .Select(e => e.BuildInterpretationTree(context))
-            .Aggregate<Value, Value>(Literal.True, (current, rule) => new And(current, rule));
+            .ToList();
+
+        if (ruleInterpretationTrees.Count == 1)
+            return ruleInterpretationTrees.First();
+
+        return ruleInterpretationTrees
+            .Aggregate((current, rule) => new And(current, rule));
     }
 
     public override string ToString()

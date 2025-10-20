@@ -3,7 +3,7 @@ using Poly.Interpretation.Operators.Comparison;
 
 namespace Poly.StateManagement.Constraints;
 
-public sealed record MaxValueConstraint(string memberName, object maxValue) : Constraint(memberName) {
+public sealed class MaxValueConstraint(string memberName, object maxValue) : Constraint(memberName) {
     public object MaxValue { get; set; } = maxValue;
 
     public override Value BuildInterpretationTree(RuleInterpretationContext context) {

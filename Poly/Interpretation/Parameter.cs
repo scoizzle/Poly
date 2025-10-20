@@ -5,13 +5,15 @@ namespace Poly.Interpretation;
 
 public sealed class Parameter(string name, Type type) : Value
 {
+    private readonly ParameterExpression _expression = Expression.Parameter(type, name);
+
     public string Name { get; } = name;
     public Type Type { get; } = type;
 
     public override ITypeDefinition GetTypeDefinition(Context context) => context.GetTypeDefinition(Type)
         ?? throw new InvalidOperationException($"Type '{Type}' is not registered in the context.");
         
-    public override Expression BuildExpression(Context context) => Expression.Parameter(Type, Name);
+    public override ParameterExpression BuildExpression(Context context) => _expression;
 
     public override string ToString() => $"{Type} {Name}";
 }

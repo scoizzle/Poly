@@ -3,7 +3,7 @@ using Poly.Interpretation.Operators.Equality;
 
 namespace Poly.StateManagement.Constraints;
 
-public sealed record EqualityConstraint(string propertyName, object value) : Constraint(propertyName)
+public sealed class EqualityConstraint(string propertyName, object value) : Constraint(propertyName)
 {
     public object Value { get; set; } = value;
 

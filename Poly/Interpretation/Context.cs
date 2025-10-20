@@ -6,6 +6,7 @@ namespace Poly.Interpretation;
 
 public sealed class Context {
     private readonly TypeDefinitionProviderCollection _typeDefinitionProviderCollection;
+    private readonly List<Parameter> _parameters = new();
     private readonly Stack<VariableScope> _scopes;
     private readonly VariableScope _globalScope;
     private VariableScope _currentScope;
@@ -17,6 +18,8 @@ public sealed class Context {
         _scopes.Push(_currentScope);
     }
 
+    public IEnumerable<Parameter> Parameters => _parameters.AsReadOnly();
+
     public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider) {
         _typeDefinitionProviderCollection.AddProvider(provider);
     }
@@ -26,6 +29,7 @@ public sealed class Context {
     public ITypeDefinition? GetTypeDefinition<T>() => GetTypeDefinition(typeof(T));
 
     public Variable DeclareVariable(string name, Value? initialValue = null) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return _currentScope.SetVariable(name, initialValue);
     }
 
@@ -41,12 +45,14 @@ public sealed class Context {
         return default;
     }
     
-    public Variable AddParameter(string name, Type type) {
+    public Parameter AddParameter(string name, Type type) {
         Parameter param = new Parameter(name, type);
-        return _globalScope.SetVariable(name, param);
+        _parameters.Add(param);
+        _globalScope.SetVariable(name, param);
+        return param;
     }
 
-    public Variable AddParameter<T>(string name) => AddParameter(name, typeof(T));
+    public Parameter AddParameter<T>(string name) => AddParameter(name, typeof(T));
 
     public void PushScope() {
         var newScope = new VariableScope();

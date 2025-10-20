@@ -1,35 +1,32 @@
+using Poly.Interpretation;
+using Poly.Interpretation.Operators.Boolean;
+using Poly.Interpretation.Operators.Comparison;
+
 namespace Poly.StateManagement;
 
-// public sealed class LengthConstraint : Constraint
-// {
-//     public LengthConstraint(Property property, int? minLength, int? maxLength) : base(property)
-//     {
-//         MinLength = minLength;
-//         MaxLength = maxLength;
-//     }
+public sealed record LengthConstraint(string propertyName, int? minLength, int? maxLength) : Constraint(propertyName)
+{
+    public int? MinLength { get; init; } = minLength;
+    public int? MaxLength { get; init; } = maxLength;
 
-//     public int? MinLength { get; init; }
-//     public int? MaxLength { get; init; }
+    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+        var member = context.GetMemberAccessor(PropertyName);
+        var length = member.GetMember("Length");
 
-//     public override Expression BuildExpression(Expression param)
-//     {
-//         var property = Expression.Property(param, Member.Name);
-//         var lengthProperty = Expression.Property(property, "Length");
+        var minCheck = MinLength.HasValue
+            ? new GreaterThanOrEqual(length, new Literal(MinLength.Value))
+            : null;
 
-//         if (lengthProperty.Type != typeof(int))
-//             throw new InvalidOperationException($"Property '{Member.Name}' must be a type that has a Length property of type int.");
+        var maxCheck = MaxLength.HasValue
+            ? new LessThanOrEqual(length, new Literal(MaxLength.Value))
+            : null;
 
-//         var minValue = Expression.Constant(MinLength ?? null);
-//         var minCheck = Expression.GreaterThanOrEqual(lengthProperty, minValue);
-
-//         var maxValue = Expression.Constant(MaxLength ?? null);
-//         var maxCheck = Expression.LessThanOrEqual(lengthProperty, maxValue);
-//         return (MinLength, MaxLength) switch
-//         {
-//             (int, int) => Expression.AndAlso(minCheck, maxCheck),
-//             (int, null) => minCheck,
-//             (null, int) => maxCheck,
-//             _ => Expression.Constant(true)
-//         };
-//     }
-// }
+        return (minCheck, maxCheck) switch
+        {
+            (Value min, Value max) => new And(min, max),
+            (Value min, null) => min,
+            (null, Value max) => max,
+            _ => new Literal(true)
+        };
+    }
+}

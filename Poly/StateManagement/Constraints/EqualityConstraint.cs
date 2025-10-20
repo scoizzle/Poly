@@ -1,17 +1,17 @@
-namespace Poly.StateManagement.Validation.Rules;
+using Poly.Interpretation;
+using Poly.Interpretation.Operators.Equality;
 
-// public sealed class EqualityConstraint(Property property, object value) : Constraint(property)
-// {
-//     public object Value { get; set; } = value;
+namespace Poly.StateManagement.Constraints;
 
-//     public override Expression BuildExpression(Expression param)
-//     {
-//         var property = Expression.Property(param, Member.Name);
-//         var value = Expression.Constant(Value);
-//         var convertedValue = Expression.Convert(value, property.Type);
-//         var constant = Expression.Constant(convertedValue);
-//         return Expression.Equal(property, constant);
-//     }
+public sealed record EqualityConstraint(string propertyName, object value) : Constraint(propertyName)
+{
+    public object Value { get; set; } = value;
 
-//     public override string ToString() => $"{Member.Name} == {Value}";
-// }
+    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+        var member = context.GetMemberAccessor(PropertyName);
+        var valueLiteral = new Literal(Value);
+        return new Equal(member, valueLiteral);
+    }
+
+    public override string ToString() => $"{PropertyName} == {Value}";
+}

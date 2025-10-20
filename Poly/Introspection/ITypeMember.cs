@@ -3,8 +3,8 @@ using Poly.Interpretation;
 namespace Poly.Introspection;
 
 public interface ITypeMember {
-    ITypeDefinition MemberType { get; }
-    ITypeDefinition DeclaringType { get; }
+    ITypeDefinition MemberTypeDefinition { get; }
+    ITypeDefinition DeclaringTypeDefinition { get; }
     string Name { get; }
 
     Value GetMemberAccessor(Value instance);

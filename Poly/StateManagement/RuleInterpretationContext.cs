@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Operators;
 
 namespace Poly.StateManagement;
 
@@ -8,9 +9,10 @@ public sealed class RuleInterpretationContext {
 
     public RuleInterpretationContext() {
         _interpretationContext = new Context();
-        _entryPoint = _interpretationContext.AddParameter("@obj");
+        _entryPoint = _interpretationContext.DeclareVariable("@obj");
     }
 
     internal Context GetContext() => _interpretationContext;
     internal Value GetEntryPoint() => _entryPoint;
-    internal Value GetMemberAccess(string memberName) => throw new NotImplementedException();
+    internal Value GetMemberAccessor(string memberName) => new MemberAccess(_entryPoint, memberName);
+}

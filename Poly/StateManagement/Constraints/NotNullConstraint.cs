@@ -1,12 +1,13 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Operators.Boolean;
+using Poly.Interpretation.Operators.Equality;
 
 namespace Poly.StateManagement;
 
-public sealed record NotNullConstraint(string resourceProperty) : Constraint(resourceProperty)
+public sealed record NotNullConstraint(string memberName) : Constraint(memberName)
 {
     public override Value BuildInterpretationTree(RuleInterpretationContext context) {
-        Value member = context.GetMemberAccess(Member);
-        return new InequalityOperator(member, Literal.Null);
+        Value member = context.GetMemberAccessor(PropertyName);
+        return new NotEqual(member, Literal.Null);
     }
 }

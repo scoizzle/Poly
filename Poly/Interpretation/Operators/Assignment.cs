@@ -1,6 +1,6 @@
 using Poly.Introspection;
 
-namespace Poly.Interpretation;
+namespace Poly.Interpretation.Operators;
 
 public sealed class Assignment(Value destination, Value value) : Operator {
     public Value Destination { get; init; } = destination ?? throw new ArgumentNullException(nameof(destination));

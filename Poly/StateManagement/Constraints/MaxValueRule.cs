@@ -1,17 +1,17 @@
+using Poly.Interpretation;
+using Poly.Interpretation.Operators.Boolean;
+
 namespace Poly.StateManagement.Constraints;
 
-// public sealed class MaxValueConstraint(Property property, object maxValue) : Constraint(property)
-// {
-//     public object MaxValue { get; set; } = maxValue;
+public sealed record MaxValueConstraint(string memberName, object maxValue) : Constraint(memberName) {
+    public object MaxValue { get; set; } = maxValue;
 
-//     public override Expression BuildExpression(Expression param)
-//     {
-//         var property = Expression.Property(param, Member.Name);
-//         var value = Expression.Constant(MaxValue);
-//         var convertedValue = Expression.Convert(value, property.Type);
-//         var constant = Expression.Constant(convertedValue);
-//         return Expression.LessThanOrEqual(property, constant);
-//     }
+    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+        Literal maxValueLiteral = new(MaxValue);
+        Value memberValue = context.GetMemberAccessor(PropertyName);
+        return new LessThanOrEqual(memberValue, maxValueLiteral);
 
-//     public override string ToString() => $"{Member.Name} <= {MaxValue}";
-// }
+    }
+
+    public override string ToString() => $"{PropertyName} <= {MaxValue}";
+}

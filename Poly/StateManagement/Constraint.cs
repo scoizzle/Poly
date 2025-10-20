@@ -1,6 +1,6 @@
 namespace Poly.StateManagement;
 
-public abstract record Constraint(string memberName) : Rule
+public abstract record Constraint(string propertyName) : Rule
 {
-    public string Member { get; init; } = memberName;
+    public string PropertyName { get; init; } = propertyName;
 }

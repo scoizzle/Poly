@@ -1,6 +1,6 @@
 using Poly.Introspection;
 
-namespace Poly.Interpretation.Operators.Boolean;
+namespace Poly.Interpretation.Operators;
 
 public abstract class BooleanOperator : Operator {
     public sealed override ITypeDefinition GetTypeDefinition(Context context) {

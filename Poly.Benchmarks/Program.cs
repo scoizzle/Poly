@@ -3,6 +3,12 @@ using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Interpretation;
 using System.Linq.Expressions;
+using Poly.StateManagement;
+using Poly.Interpretation.Operators;
+
+Person person = new("Alice", 30);
+
+RuleInterpretationContext ruleInterpretationContext = new();
 
 ClrTypeDefinitionRegistry registry = new();
 
@@ -11,8 +17,6 @@ ITypeMember personName = personType.GetMember(nameof(Person.Name));
 ITypeMember personAge = personType.GetMember(nameof(Person.Age));
 
 Context context = new Context();
-
-Person person = new("Alice", 30);
 Literal personNode = new Literal(person);
 Value getName = personName.GetMemberAccessor(personNode);
 Value getAge = personAge.GetMemberAccessor(personNode);
@@ -28,7 +32,7 @@ Constant constantNode = new Literal("Bob");
 Assignment assignNameExpr = new Assignment(getName, constantNode);
 Console.WriteLine(assignNameExpr.BuildExpression(context));
 
-ITypeMember strLength = personName.MemberType.GetMember(nameof(string.Length));
+ITypeMember strLength = personName.MemberTypeDefinition.GetMember(nameof(string.Length));
 
 Literal valueNode = new Literal("This is a test.");
 Value getLength = strLength.GetMemberAccessor(valueNode);

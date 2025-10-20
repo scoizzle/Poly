@@ -21,8 +21,8 @@ public sealed class ClrTypeMember : ITypeMember {
     public ClrTypeDefinition DeclaringType => _declaringType;
     public string Name => _name;
 
-    ITypeDefinition ITypeMember.MemberType => MemberType;
-    ITypeDefinition ITypeMember.DeclaringType => DeclaringType;
+    ITypeDefinition ITypeMember.MemberTypeDefinition => MemberType;
+    ITypeDefinition ITypeMember.DeclaringTypeDefinition => DeclaringType;
 
     public Value GetMemberAccessor(Value instance) => new ClrTypeMemberInterpretationAccessor(instance, this);
 

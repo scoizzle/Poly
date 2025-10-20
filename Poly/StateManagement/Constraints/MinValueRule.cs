@@ -1,17 +1,19 @@
+using Poly.Interpretation;
+using Poly.Interpretation.Operators.Boolean;
+using Poly.Interpretation.Operators.Comparison;
+
 namespace Poly.StateManagement.Constraints;
 
-// public sealed class MinValueConstraint(Property property, object minValue) : Constraint(property)
-// {
-//     public object MinValue { get; set; } = minValue;
+public sealed record MinValueConstraint(string memberName, object minValue) : Constraint(memberName)
+{
+    public object MinValue { get; set; } = minValue;
 
-//     public override Expression BuildExpression(Expression param)
-//     {
-//         var property = Expression.Property(param, Member.Name);
-//         var value = Expression.Constant(MinValue);
-//         var convertedValue = Expression.Convert(value, property.Type);
-//         var constant = Expression.Constant(convertedValue);
-//         return Expression.GreaterThanOrEqual(property, constant);
-//     }
+    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+        Literal minValueLiteral = new(MinValue);
+        Value memberValue = context.GetMemberAccessor(PropertyName);
+        return new GreaterThanOrEqual(memberValue, minValueLiteral);
 
-//     public override string ToString() => $"{Member.Name} >= {MinValue}";
-// }
+    }
+
+    public override string ToString() => $"{PropertyName} >= {MinValue}";
+}

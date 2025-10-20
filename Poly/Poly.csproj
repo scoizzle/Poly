@@ -36,7 +36,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Interpretation/Operators/Unary/" />
       <Folder Include="StateManagement/Validation/" />
     </ItemGroup>
 </Project>

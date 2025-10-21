@@ -4,7 +4,7 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.StateManagement;
 
-public abstract class RuleInterpretationContext {
+public class RuleInterpretationContext {
     protected const string EntryPointName = "@obj";
     protected readonly Variable _entryPoint;
     protected readonly Context _interpretationContext;
@@ -14,14 +14,11 @@ public abstract class RuleInterpretationContext {
         _entryPoint = _interpretationContext.DeclareVariable(EntryPointName);
     }
 
-    internal Context GetContext() => _interpretationContext;
-    internal Value GetEntryPoint() => _entryPoint;
     internal Value GetMemberAccessor(string memberName) => new MemberAccess(_entryPoint, memberName);
-
-    public Expression BuildExpression(RuleSet rules) {
-        ArgumentNullException.ThrowIfNull(rules);
-        Value interpretationTree = rules.BuildInterpretationTree(this);
-        return interpretationTree.BuildExpression(_interpretationContext);
+    
+    public Expression BuildExpression(Rule rule) {
+        var interpretable = rule.BuildInterpretationTree(this);
+        return interpretable.BuildExpression(_interpretationContext);
     }
 }
 
@@ -32,9 +29,5 @@ public sealed class RuleInterpretationContext<T> : RuleInterpretationContext {
         _parameterExpression = _interpretationContext.AddParameter<T>(EntryPointName);
     }
 
-    public Predicate<T> CompilePredicate(RuleSet rules) {
-        Expression expr = BuildExpression(rules);
-        ParameterExpression param = _parameterExpression.BuildExpression(_interpretationContext);
-        return Expression.Lambda<Predicate<T>>(expr, param).Compile();
-    }
+    public ParameterExpression GetParameterExpression() => _parameterExpression.BuildExpression(_interpretationContext);
 }

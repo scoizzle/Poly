@@ -10,4 +10,6 @@ public sealed class NotNullConstraint(string memberName) : Constraint(memberName
         Value member = context.GetMemberAccessor(PropertyName);
         return new NotEqual(member, Literal.Null);
     }
+
+    public override string ToString() => $"{PropertyName} != null";
 }

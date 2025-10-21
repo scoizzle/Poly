@@ -21,12 +21,26 @@ public sealed class LengthConstraint(string propertyName, int? minLength, int? m
             ? new LessThanOrEqual(length, new Literal(MaxLength.Value))
             : null;
 
-        return (minCheck, maxCheck) switch
-        {
+        return (minCheck, maxCheck) switch {
             (Value min, Value max) => new And(min, max),
             (Value min, null) => min,
             (null, Value max) => max,
             _ => new Literal(true)
         };
+    }
+    
+    public override string ToString() {
+        if (MinLength.HasValue && MaxLength.HasValue) {
+            return $"{PropertyName}.Length >= {MinLength.Value} && {PropertyName}.Length <= {MaxLength.Value}";
+        }
+        else if (MinLength.HasValue) {
+            return $"{PropertyName}.Length >= {MinLength.Value}";
+        }
+        else if (MaxLength.HasValue) {
+            return $"{PropertyName}.Length <= {MaxLength.Value}";
+        }
+        else {
+            return "true";
+        }
     }
 }

@@ -1,12 +1,12 @@
 
-using Poly.Interpretation.Operators.Comparison;
+using Poly.Interpretation;
 using Poly.StateManagement.Constraints;
 using Poly.StateManagement.Validation.Rules;
 
 namespace Poly.StateManagement;
 
 public abstract class Rule {
-    public abstract Interpretation.Value BuildInterpretationTree(RuleInterpretationContext context);
+    public abstract Value BuildInterpretationTree(RuleInterpretationContext context);
 }
 
 public sealed class ConstraintSetBuilder<T>(string propertyName) {
@@ -84,22 +84,29 @@ public sealed class RuleSetBuilder<T> {
         return this;
     }
 
-    public RuleSet Build() => new(_rules);
+    public RuleSet<T> Build() => new(_rules);
 }
 
-public sealed class RuleSet(IEnumerable<Rule> rules) : IEnumerable<Rule> {
-    private readonly IEnumerable<Rule> _rules = rules;
-
-    public Interpretation.Value BuildInterpretationTree(RuleInterpretationContext context) {
-        AndRule combinedRule = new(_rules);
-        return combinedRule.BuildInterpretationTree(context);
+public sealed class RuleSet<T> {
+    public RuleSet(IEnumerable<Rule> rules) {
+        CombinedRules = new AndRule(rules);
+        (InterpretationTree, ExpressionTree, Predicate) = GetInterpretationTreeExpressionAndPredicate();
     }
 
-    public IEnumerator<Rule> GetEnumerator() {
-        return _rules.GetEnumerator();
+    public Rule CombinedRules { get; }
+    public Value InterpretationTree { get; }
+    public Expression ExpressionTree { get; }
+    public Predicate<T> Predicate { get; }
+
+    private (Value, Expression, Predicate<T>) GetInterpretationTreeExpressionAndPredicate() {
+        var ruleInterpretationContext = new RuleInterpretationContext<T>();
+        var interpretationTree = CombinedRules.BuildInterpretationTree(ruleInterpretationContext);
+        var expressionTree = ruleInterpretationContext.BuildExpression(CombinedRules);
+        var paramInterpretation = ruleInterpretationContext.GetParameterExpression();
+        var lambda = Expression.Lambda<Predicate<T>>(expressionTree, paramInterpretation);
+        var predicate = lambda.Compile();
+        return (interpretationTree, expressionTree, predicate);
     }
 
-    IEnumerator IEnumerable.GetEnumerator() {
-        return ((IEnumerable)_rules).GetEnumerator();
-    }
+    public bool Test(T instance) => Predicate(instance);
 }

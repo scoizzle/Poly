@@ -1,29 +1,27 @@
 namespace Poly.Data.Tests;
 
-using Xunit;
-
 public class BitArrayTests
 {
     static readonly byte[] TestArray = { 0xDE, 0xAD, 0xBE, 0xEF };
 
-    [Fact]
-    public void FromArray()
+    [Test]
+    public async Task FromArray()
     {
         var array = new BitArray(TestArray);
 
-        Assert.Equal(array.BitCapacity, TestArray.Length * 8);
+        await Assert.That(array.BitCapacity).EqualTo(TestArray.Length * 8);
     }
 
-    [Fact]
-    public void FromCapacity()
+    [Test]
+    public async Task FromCapacity()
     {
         var array = new BitArray(bitCapacity: 4);
 
-        Assert.Equal(8, array.BitCapacity);
+        await Assert.That(array.BitCapacity).EqualTo(8);
     }
 
-    [Fact]
-    public void GetAndSetValue()
+    [Test]
+    public async Task GetAndSetValue()
     {
         var array = new BitArray(TestArray);
 
@@ -31,10 +29,10 @@ public class BitArrayTests
 
         array[7] = !bit;
 
-        Assert.NotEqual(bit, array[7]);
+        await Assert.That(array[7]).IsNotEqualTo(bit);
 
         array.Toggle(7);
 
-        Assert.Equal(bit, array[7]);
+        await Assert.That(array[7]).EqualTo(bit);
     }
 }

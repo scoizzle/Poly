@@ -1,43 +1,37 @@
+using Poly.Interpretation;
+using Poly.Interpretation.Operators.Boolean;
+using Poly.Interpretation.Operators.Comparison;
+
 namespace Poly.StateManagement;
 
-// public sealed class RangeConstraint : Constraint
-// {
-//     public RangeConstraint(Property property, IComparable? minValue, IComparable? maxValue) : base(property)
-//     {
-//         MinValue = minValue;
-//         MaxValue = maxValue;
-//     }
+public sealed class RangeConstraint(string propertyName, object? minValue, object? maxValue) : Constraint(propertyName)
+{
+    public object? MinValue { get; set; } = minValue;
+    public object? MaxValue { get; set; } = maxValue;
 
-//     public IComparable? MinValue { get; init; }
-//     public IComparable? MaxValue { get; init; }
+    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+        var member = context.GetMemberAccessor(PropertyName);
 
-//     public override Expression BuildExpression(Expression param)
-//     {
-//         var property = Expression.Property(param, Member.Name);
+        Value? minCheck = MinValue is null
+            ? null
+            : new GreaterThanOrEqual(member, new Literal(MinValue));
 
-//         if (!typeof(IComparable).IsAssignableFrom(property.Type))
-//             throw new InvalidOperationException($"Property '{Member.Name}' must implement IComparable.");
+        Value? maxCheck = MaxValue is null
+            ? null
+            : new LessThanOrEqual(member, new Literal(MaxValue));
 
-//         Expression? minCheck = null;
-//         if (MinValue != null)
-//         {
-//             var minValueExpr = Expression.Constant(MinValue, property.Type);
-//             minCheck = Expression.GreaterThanOrEqual(property, minValueExpr);
-//         }
-
-//         Expression? maxCheck = null;
-//         if (MaxValue != null)
-//         {
-//             var maxValueExpr = Expression.Constant(MaxValue, property.Type);
-//             maxCheck = Expression.LessThanOrEqual(property, maxValueExpr);
-//         }
-
-//         return (minCheck, maxCheck) switch
-//         {
-//             (Expression min, Expression max) => Expression.AndAlso(min, max),
-//             (Expression min, null) => min,
-//             (null, Expression max) => max,
-//             _ => Expression.Constant(true)
-//         };
-//     }
-// }
+        return (minCheck, maxCheck) switch {
+            (Value min, Value max) => new And(min, max),
+            (Value min, null) => min,
+            (null, Value max) => max,
+            _ => Literal.True
+        };
+    }
+    
+    public override string ToString() => (MinValue, MaxValue) switch {
+        (not null, not null) => $"{PropertyName} >= {MinValue} and {PropertyName} <= {MaxValue}",
+        (not null, null) => $"{PropertyName} >= {MinValue}",
+        (null, not null) => $"{PropertyName} <= {MaxValue}",
+        (null, null) => $"{PropertyName} has no range constraints"
+    };
+}

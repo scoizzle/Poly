@@ -26,7 +26,7 @@ public sealed class Context {
 
     public ITypeDefinition? GetTypeDefinition(string name) => _typeDefinitionProviderCollection.GetTypeDefinition(name);
     public ITypeDefinition? GetTypeDefinition(Type type) => _typeDefinitionProviderCollection.GetTypeDefinition(type.SafeName());
-    public ITypeDefinition? GetTypeDefinition<T>() => GetTypeDefinition(typeof(T));
+    public ITypeDefinition? GetTypeDefinition<T>() => _typeDefinitionProviderCollection.GetTypeDefinition(typeof(T).SafeName());
 
     public Variable DeclareVariable(string name, Value? initialValue = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);

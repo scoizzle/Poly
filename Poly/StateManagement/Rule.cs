@@ -9,8 +9,19 @@ public abstract class Rule {
     public abstract Value BuildInterpretationTree(RuleInterpretationContext context);
 }
 
+public sealed class RuleEvaluationResult {
+    private readonly List<string> _violations = new();
+
+    public IReadOnlyList<string> Violations => _violations;
+    public bool IsValid => _violations.Count == 0;
+
+    public void AddError(string violation) {
+        _violations.Add(violation);
+    }
+}
+
 public sealed class ConstraintSetBuilder<T>(string propertyName) {
-    private readonly List<Constraint> _constraints = new();
+    internal readonly List<Constraint> _constraints = new();
     internal string PropertyName => propertyName;
 
     internal ConstraintSetBuilder<T> Add(Constraint constraint) {
@@ -18,48 +29,96 @@ public sealed class ConstraintSetBuilder<T>(string propertyName) {
         return this;
     }
 
-    public ConstraintSetBuilder<T> NotNull() {
-        return Add(new NotNullConstraint(PropertyName));
-    }
+    public Rule Build() => new AndRule(_constraints);
+}
 
-    public ConstraintSetBuilder<T> MinLength(int minLength) {
-        LengthConstraint? existingLengthConstraint = _constraints
+public static class NotNullConstraintBuilderExtensions {
+    public static ConstraintSetBuilder<T?> NotNull<T>(this ConstraintSetBuilder<T?> builder) where T : class {
+        return builder.Add(new NotNullConstraint(builder.PropertyName));
+    }
+}
+
+public static class LengthConstraintBuilderExtensions {
+    public static ConstraintSetBuilder<string> MinLength(this ConstraintSetBuilder<string> builder, int minLength) {
+        LengthConstraint? existingLengthConstraint = builder._constraints
             .OfType<LengthConstraint>()
             .FirstOrDefault();
 
         if (existingLengthConstraint != null) {
             existingLengthConstraint.MinLength = minLength;
-            return this; ;
+            return builder;
         }
 
-        return Add(new LengthConstraint(PropertyName, minLength, null));
+        return builder.Add(new LengthConstraint(builder.PropertyName, minLength, null));
     }
-    
-    public ConstraintSetBuilder<T> MaxLength(int maxLength) {
-        LengthConstraint? existingLengthConstraint = _constraints
+
+    public static ConstraintSetBuilder<string> MaxLength(this ConstraintSetBuilder<string> builder, int maxLength) {
+        LengthConstraint? existingLengthConstraint = builder._constraints
             .OfType<LengthConstraint>()
             .FirstOrDefault();
 
         if (existingLengthConstraint != null) {
             existingLengthConstraint.MaxLength = maxLength;
-            return this;
+            return builder;
         }
 
-        return Add(new LengthConstraint(PropertyName, null, maxLength));
+        return builder.Add(new LengthConstraint(builder.PropertyName, null, maxLength));
     }
 
-    public Rule Build() => new AndRule(_constraints);
+    public static ConstraintSetBuilder<T[]> MinLength<T>(this ConstraintSetBuilder<T[]> builder, int minLength) {
+        LengthConstraint? existingLengthConstraint = builder._constraints
+            .OfType<LengthConstraint>()
+            .FirstOrDefault();
+
+        if (existingLengthConstraint != null) {
+            existingLengthConstraint.MinLength = minLength;
+            return builder;
+        }
+
+        return builder.Add(new LengthConstraint(builder.PropertyName, minLength, null));
+    }
+
+    public static ConstraintSetBuilder<T[]> MaxLength<T>(this ConstraintSetBuilder<T[]> builder, int maxLength) {
+        LengthConstraint? existingLengthConstraint = builder._constraints
+            .OfType<LengthConstraint>()
+            .FirstOrDefault();
+
+        if (existingLengthConstraint != null) {
+            existingLengthConstraint.MaxLength = maxLength;
+            return builder;
+        }
+
+        return builder.Add(new LengthConstraint(builder.PropertyName, null, maxLength));
+    }
 }
 
 public static class NumericConstraintSetBuilderExtensions {
     public static ConstraintSetBuilder<T> Minimum<T, TProp>(this ConstraintSetBuilder<T> builder, TProp value)
         where TProp : INumber<TProp> {
-        return builder.Add(new MinValueConstraint(builder.PropertyName, value));
+        RangeConstraint? existingRangeConstraint = builder._constraints
+            .OfType<RangeConstraint>()
+            .FirstOrDefault();
+
+        if (existingRangeConstraint != null) {
+            existingRangeConstraint.MinValue = value;
+            return builder;
+        }
+
+        return builder.Add(new RangeConstraint(builder.PropertyName, value, null));
     }
 
     public static ConstraintSetBuilder<T> Maximum<T, TProp>(this ConstraintSetBuilder<T> builder, TProp value)
         where TProp : INumber<TProp> {
-        return builder.Add(new MaxValueConstraint(builder.PropertyName, value));
+        RangeConstraint? existingRangeConstraint = builder._constraints
+            .OfType<RangeConstraint>()
+            .FirstOrDefault();
+
+        if (existingRangeConstraint != null) {
+            existingRangeConstraint.MaxValue = value;
+            return builder;
+        }
+
+        return builder.Add(new RangeConstraint(builder.PropertyName, null, value));
     }
 }
 
@@ -76,9 +135,9 @@ public sealed class RuleSetBuilder<T> {
         return memberExpr.Member.Name;
     }
 
-    public RuleSetBuilder<T> Member<TProperty>(Expression<Func<T, TProperty>> propertyExpression, Action<ConstraintSetBuilder<T>> constraintsBuilder) {
+    public RuleSetBuilder<T> Member<TProperty>(Expression<Func<T, TProperty>> propertyExpression, Action<ConstraintSetBuilder<TProperty>> constraintsBuilder) {
         var propertyName = GetMemberName(propertyExpression);
-        var constraintSetBuilder = new ConstraintSetBuilder<T>(propertyName);
+        var constraintSetBuilder = new ConstraintSetBuilder<TProperty>(propertyName);
         constraintsBuilder(constraintSetBuilder);
         _rules.Add(constraintSetBuilder.Build());
         return this;
@@ -90,23 +149,20 @@ public sealed class RuleSetBuilder<T> {
 public sealed class RuleSet<T> {
     public RuleSet(IEnumerable<Rule> rules) {
         CombinedRules = new AndRule(rules);
-        (InterpretationTree, ExpressionTree, Predicate) = GetInterpretationTreeExpressionAndPredicate();
+
+        var ruleInterpretationContext = new RuleInterpretationContext<T>();        
+        InterpretationTree = CombinedRules.BuildInterpretationTree(ruleInterpretationContext);
+        ExpressionTree = ruleInterpretationContext.BuildExpression(CombinedRules);
+
+        var paramInterpretation = ruleInterpretationContext.GetParameterExpression();
+        var lambda = Expression.Lambda<Predicate<T>>(ExpressionTree, paramInterpretation);
+        Predicate = lambda.Compile();
     }
 
     public Rule CombinedRules { get; }
     public Value InterpretationTree { get; }
     public Expression ExpressionTree { get; }
     public Predicate<T> Predicate { get; }
-
-    private (Value, Expression, Predicate<T>) GetInterpretationTreeExpressionAndPredicate() {
-        var ruleInterpretationContext = new RuleInterpretationContext<T>();
-        var interpretationTree = CombinedRules.BuildInterpretationTree(ruleInterpretationContext);
-        var expressionTree = ruleInterpretationContext.BuildExpression(CombinedRules);
-        var paramInterpretation = ruleInterpretationContext.GetParameterExpression();
-        var lambda = Expression.Lambda<Predicate<T>>(expressionTree, paramInterpretation);
-        var predicate = lambda.Compile();
-        return (interpretationTree, expressionTree, predicate);
-    }
 
     public bool Test(T instance) => Predicate(instance);
 }

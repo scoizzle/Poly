@@ -28,6 +28,7 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members.Cast<ITypeMember>();
     IEnumerable<IMethod> ITypeDefinition.Methods => Methods.Cast<IMethod>();
     ITypeMember? ITypeDefinition.GetMember(string name) => _members.TryGetValue(name, out var member) ? member : null;
+    Type ITypeDefinition.ReflectedType => _type;
 
     public override string ToString() => FullName;
 

@@ -6,6 +6,7 @@ public interface ITypeDefinition {
     public string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
     public IEnumerable<ITypeMember> Members { get; }
     public IEnumerable<IMethod> Methods { get; }
+    public Type ReflectedType { get; }
 
     public ITypeMember? GetMember(string name);
 }

@@ -25,7 +25,6 @@ RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
     .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
     .Build();
 
-Console.WriteLine($"Person: {person.Name}, {person.Age}");
 Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
 Console.WriteLine(ruleSet.CombinedRules);
 
@@ -63,10 +62,7 @@ Console.WriteLine(ruleSet.CombinedRules);
 // var compiled = Expression.Lambda<Func<int>>(expr).Compile();
 // Console.WriteLine(compiled());
 
-public class Person(string name, int age) {
-    public string Name { get; set; } = name;
-    public int Age { get; set; } = age;
-}
+public record Person(string Name, int Age);
 
 [BenchmarkDotNet.Attributes.MemoryDiagnoser]
 public class BenchmarkPersonPredicate {

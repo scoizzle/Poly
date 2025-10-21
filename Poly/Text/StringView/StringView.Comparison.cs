@@ -127,7 +127,7 @@ public partial struct StringView :
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool IsAt(Func<char, bool> predicate)
     {
-        Guard.IsNotNull(predicate);
+        ArgumentNullException.ThrowIfNull(predicate);
 
         char? current = First;
 
@@ -138,9 +138,8 @@ public partial struct StringView :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsAt(params Func<char, bool>[] predicates)
-    {
-        Guard.IsNotNull(predicates);
+    public readonly bool IsAt(params Func<char, bool>[] predicates) {
+        ArgumentNullException.ThrowIfNull(predicates);
 
         char? current = First;
 
@@ -158,9 +157,8 @@ public partial struct StringView :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsNotAt(Func<char, bool> predicate)
-    {
-        Guard.IsNotNull(predicate);
+    public readonly bool IsNotAt(Func<char, bool> predicate) {
+        ArgumentNullException.ThrowIfNull(predicate);
 
         var current = First;
 
@@ -171,9 +169,8 @@ public partial struct StringView :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsNotAt(params Func<char, bool>[] predicates)
-    {
-        Guard.IsNotNull(predicates);
+    public readonly bool IsNotAt(params Func<char, bool>[] predicates) {
+        ArgumentNullException.ThrowIfNull(predicates);
 
         char? current = First;
 

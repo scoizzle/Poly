@@ -9,7 +9,7 @@ public readonly struct BitArray : IEnumerable<bool> {
     private Span<byte> GetByteSpan(int byteIndex) => CollectionsMarshal.AsSpan(_data).Slice(byteIndex);
 
     public BitArray(byte[] data) {
-        Guard.IsNotNull(data);
+        ArgumentNullException.ThrowIfNull(data);
         _data = data.ToList();
     }
 
@@ -24,13 +24,15 @@ public readonly struct BitArray : IEnumerable<bool> {
     public readonly bool this[int bitPosition] {
         get {
             var (idx, mask) = new BitArrayIndex(bitPosition);
-            Guard.IsBetweenOrEqualTo(idx, 0, _data.Count);
+            ArgumentOutOfRangeException.ThrowIfNegative(bitPosition);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(idx, _data.Count);
             var span = GetByteSpan(idx);
             return mask == (span[0] & mask);
         }
         set {
             var (idx, mask) = new BitArrayIndex(bitPosition);
-            Guard.IsBetweenOrEqualTo(idx, 0, _data.Count);
+            ArgumentOutOfRangeException.ThrowIfNegative(bitPosition);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(idx, _data.Count);
             var span = GetByteSpan(idx);
 
             span[0] = value
@@ -72,7 +74,8 @@ public readonly struct BitArray : IEnumerable<bool> {
 
     public void Toggle(int bitPosition) {
         var (idx, mask) = new BitArrayIndex(bitPosition);
-        Guard.IsBetweenOrEqualTo(idx, 0, _data.Count);
+        ArgumentOutOfRangeException.ThrowIfNegative(bitPosition);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(idx, _data.Count);
         _data[idx] ^= mask;
     }
 

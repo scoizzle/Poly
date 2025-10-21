@@ -8,8 +8,8 @@ public static class IEnumerableExtensions {
     /// <param name="set"></param>
     /// <param name="action"></param>
     public static void ForEach<T>(this IEnumerable<T> set, Action<T> action) {
-        Guard.IsNotNull(set);
-        Guard.IsNotNull(action);
+        ArgumentNullException.ThrowIfNull(set);
+        ArgumentNullException.ThrowIfNull(action);
 
         foreach (var value in set)
             action(value);

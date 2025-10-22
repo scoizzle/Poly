@@ -7,25 +7,24 @@ public partial struct StringView
 
     public StringView(string str)
     {
-        Guard.IsNotNull(str);
-
+        ArgumentNullException.ThrowIfNull(str);
         (String, Index, LastIndex) = (str, 0, str.Length);
     }
 
     public StringView(string str, int begin)
     {
-        Guard.IsNotNull(str);
-        Guard.IsBetweenOrEqualTo(begin, 0, str.Length);
+        ArgumentNullException.ThrowIfNull(str);
+        ArgumentOutOfRangeException.ThrowIfNegative(begin);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(str.Length, begin);
 
         (String, Index, LastIndex) = (str, begin, str.Length);
     }
 
-    public StringView(string str, int begin, int end)
-    {
-        Guard.IsNotNull(str);
-        Guard.IsBetweenOrEqualTo(begin, 0, end);
-        Guard.IsBetweenOrEqualTo(end, begin, str.Length);
-
+    public StringView(string str, int begin, int end) {
+        ArgumentNullException.ThrowIfNull(str);
+        ArgumentOutOfRangeException.ThrowIfNegative(begin);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(str.Length, end);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(end, begin);
         (String, Index, LastIndex) = (str, begin, end);
     }
 

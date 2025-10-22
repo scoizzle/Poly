@@ -17,16 +17,16 @@ using Poly.Interpretation.Operators;
 // var ruleBasedResult = test.RuleBased();
 // Console.WriteLine($"Rule-based result: {ruleBasedResult}");
 
-// BenchmarkDotNet.Running.BenchmarkRunner.Run<BenchmarkPersonPredicate>();
+BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run();
 
-Person person = new("Alice", 30);
-RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-    .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
-    .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
-    .Build();
+// Person person = new("Alice", 30);
+// RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
+//     .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
+//     .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
+//     .Build();
 
-Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
-Console.WriteLine(ruleSet.CombinedRules);
+// Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
+// Console.WriteLine(ruleSet.CombinedRules);
 
 // ClrTypeDefinitionRegistry registry = new();
 

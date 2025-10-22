@@ -17,7 +17,7 @@ public class BitArrayTests
     {
         var array = new BitArray(bitCapacity: 4);
 
-        await Assert.That(array.BitCapacity).EqualTo(8);
+        await Assert.That(array.BitCapacity).EqualTo(4);
     }
 
     [Test]

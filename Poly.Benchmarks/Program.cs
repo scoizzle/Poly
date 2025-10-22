@@ -17,18 +17,18 @@ using Poly.Interpretation.Operators;
 // var ruleBasedResult = test.RuleBased();
 // Console.WriteLine($"Rule-based result: {ruleBasedResult}");
 
-// BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run();
+BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run();
 
-RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-    .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
-    .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
-    .Build();
+// RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
+//     .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
+//     .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
+//     .Build();
 
-Person person = new("Alice", 30);
-Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
-Person person2 = new("", 200);
-Console.WriteLine($"Rule evaluation for {person2}: {ruleSet.Test(person2)}");
-Console.WriteLine(ruleSet.CombinedRules);
+// Person person = new("Alice", 30);
+// Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
+// Person person2 = new("", 200);
+// Console.WriteLine($"Rule evaluation for {person2}: {ruleSet.Test(person2)}");
+// Console.WriteLine(ruleSet.CombinedRules);
 
 // ClrTypeDefinitionRegistry registry = new();
 

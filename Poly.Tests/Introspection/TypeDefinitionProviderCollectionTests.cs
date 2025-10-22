@@ -16,7 +16,7 @@ public class TypeDefinitionProviderCollectionTests {
         var result = collection.GetTypeDefinition("TestType");
 
         await Assert.That(result).IsNotNull();
-    await Assert.That(result!.Name).IsEqualTo("TestType");
+        await Assert.That(result!.Name).IsEqualTo("TestType");
     }
 
     [Test]

@@ -10,6 +10,11 @@ sealed class ClrTypeFieldInterpretationAccessor(Value instance, ClrTypeField fie
 
     public override Expression BuildExpression(InterpretationContext context) {
         var instanceExpression = Instance.BuildExpression(context);
+
+        if (Field.FieldInfo.IsStatic && instanceExpression is ConstantExpression constExpr && constExpr.Value is null) {
+            return Expression.Field(null, Field.FieldInfo);
+        }
+
         return Expression.Field(instanceExpression, Field.FieldInfo);
     }
 

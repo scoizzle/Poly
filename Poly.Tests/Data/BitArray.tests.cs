@@ -1,28 +1,24 @@
 namespace Poly.Data.Tests;
 
-public class BitArrayTests
-{
+public class BitArrayTests {
     static readonly byte[] TestArray = { 0xDE, 0xAD, 0xBE, 0xEF };
 
     [Test]
-    public async Task FromArray()
-    {
+    public async Task FromArray() {
         var array = new BitArray(TestArray);
 
-        await Assert.That(array.BitCapacity).EqualTo(TestArray.Length * 8);
+        await Assert.That(array.BitCapacity).IsEqualTo(TestArray.Length * 8);
     }
 
     [Test]
-    public async Task FromCapacity()
-    {
+    public async Task FromCapacity() {
         var array = new BitArray(bitCapacity: 4);
 
-        await Assert.That(array.BitCapacity).EqualTo(4);
+        await Assert.That(array.BitCapacity).IsEqualTo(4);
     }
 
     [Test]
-    public async Task GetAndSetValue()
-    {
+    public async Task GetAndSetValue() {
         var array = new BitArray(TestArray);
 
         var bit = array[7];
@@ -33,6 +29,6 @@ public class BitArrayTests
 
         array.Toggle(7);
 
-        await Assert.That(array[7]).EqualTo(bit);
+        await Assert.That(array[7]).IsEqualTo(bit);
     }
 }

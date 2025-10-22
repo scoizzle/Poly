@@ -4,14 +4,14 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation;
 
-public sealed class Context {
+public sealed class InterpretationContext {
     private readonly TypeDefinitionProviderCollection _typeDefinitionProviderCollection;
     private readonly List<Parameter> _parameters = new();
     private readonly Stack<VariableScope> _scopes;
     private readonly VariableScope _globalScope;
     private VariableScope _currentScope;
 
-    public Context() {
+    public InterpretationContext() {
         _typeDefinitionProviderCollection = new TypeDefinitionProviderCollection(ClrTypeDefinitionRegistry.Shared);
         _scopes = new Stack<VariableScope>();
         _currentScope = _globalScope = new VariableScope();

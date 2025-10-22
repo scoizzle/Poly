@@ -6,14 +6,14 @@ public class MemberAccess(Value value, string memberName) : Operator {
     public Value Value { get; } = value;
     public string MemberName { get; } = memberName;
 
-    public override ITypeDefinition GetTypeDefinition(Context context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
         ITypeDefinition typeDefinition = Value.GetTypeDefinition(context);
         ITypeMember member = typeDefinition.GetMember(MemberName)
             ?? throw new InvalidOperationException($"Member '{MemberName}' not found on type '{typeDefinition.Name}'.");
         return member.MemberTypeDefinition;
     }
 
-    public override Expression BuildExpression(Context context) {
+    public override Expression BuildExpression(InterpretationContext context) {
         ITypeDefinition typeDefinition = Value.GetTypeDefinition(context);
         ITypeMember member = typeDefinition.GetMember(MemberName)
             ?? throw new InvalidOperationException($"Member '{MemberName}' not found on type '{typeDefinition.Name}'.");

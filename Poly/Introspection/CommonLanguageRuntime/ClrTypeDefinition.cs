@@ -40,43 +40,48 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
         var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
             .Select(ConstructMemberProperty);
 
-        return Enumerable.Concat(fields, properties)
+        return Enumerable.Concat<ClrTypeMember>(fields, properties)
             .ToFrozenDictionary(m => m.Name);
 
-        ClrTypeMember ConstructMemberField(FieldInfo fi) {
+        ClrTypeField ConstructMemberField(FieldInfo fi) {
             ArgumentNullException.ThrowIfNull(fi);
             ArgumentNullException.ThrowIfNull(fi.FieldType);
             ArgumentException.ThrowIfNullOrWhiteSpace(fi.Name);
 
             Lazy<ClrTypeDefinition> type = provider.GetDeferredTypeDefinitionResolver(fi.FieldType);
-            return new ClrTypeMember(type, declaringType, fi.Name);
+            return new ClrTypeField(type, declaringType, fi);
         }
 
-        ClrTypeMember ConstructMemberProperty(PropertyInfo pi) {
+        ClrTypeProperty ConstructMemberProperty(PropertyInfo pi) {
             ArgumentNullException.ThrowIfNull(pi);
             ArgumentNullException.ThrowIfNull(pi.PropertyType);
             ArgumentException.ThrowIfNullOrWhiteSpace(pi.Name);
 
             Lazy<ClrTypeDefinition> type = provider.GetDeferredTypeDefinitionResolver(pi.PropertyType);
-            return new ClrTypeMember(type, declaringType, pi.Name);
+            IEnumerable<MethodInfo> accessors = pi.GetAccessors(nonPublic: true);
+            
+            bool isStatic = accessors.Any(a => a.IsStatic);
+            return new ClrTypeProperty(type, declaringType, pi);
         }
     }
 
     private static FrozenSet<ClrMethod> BuildMethodCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         return type
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+            .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
             .Select(ConstructMethod)
             .ToFrozenSet();
 
         ClrParameter ConstructParameter(ParameterInfo pi) {
             ArgumentNullException.ThrowIfNull(pi);
             ArgumentException.ThrowIfNullOrWhiteSpace(pi.Name);
+
             Lazy<ClrTypeDefinition> type = provider.GetDeferredTypeDefinitionResolver(pi.ParameterType);
-            return new ClrParameter(pi.Name ?? throw new InvalidOperationException(), type, pi.Position, pi.IsOptional, pi.DefaultValue);
+            return new ClrParameter(pi.Name, type, pi.Position, pi.IsOptional, pi.DefaultValue);
         }
 
         ClrMethod ConstructMethod(MethodInfo mi) {
             ArgumentNullException.ThrowIfNull(mi);
+
             Lazy<ClrTypeDefinition> returnType = provider.GetDeferredTypeDefinitionResolver(mi.ReturnType);
             IEnumerable<ClrParameter> parameters = mi.GetParameters().Select(ConstructParameter).ToArray();
             return new ClrMethod(mi.Name, declaringType, returnType, parameters);

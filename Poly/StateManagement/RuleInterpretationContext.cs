@@ -7,10 +7,10 @@ namespace Poly.StateManagement;
 public class RuleInterpretationContext {
     protected const string EntryPointName = "@obj";
     protected readonly Variable _entryPoint;
-    protected readonly Context _interpretationContext;
+    protected readonly InterpretationContext _interpretationContext;
 
     public RuleInterpretationContext() {
-        _interpretationContext = new Context();
+        _interpretationContext = new InterpretationContext();
         _entryPoint = _interpretationContext.DeclareVariable(EntryPointName);
     }
 

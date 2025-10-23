@@ -3,8 +3,9 @@ using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Interpretation;
 using System.Linq.Expressions;
-using Poly.StateManagement;
+using Poly.Validation;
 using Poly.Interpretation.Operators;
+using Poly.Validation.Builders;
 
 
 // BenchmarkPersonPredicate test = new();

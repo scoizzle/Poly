@@ -6,7 +6,7 @@ public class ClrMethodTests {
     [Test]
     public async Task ToStringMethod_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var intType = registry.GetTypeDefinition(typeof(int));
+        var intType = registry.GetTypeDefinition<int>();
         var toStringMethod = intType.Methods.First(m => m.Name == "ToString");
 
         await Assert.That(toStringMethod.Name).IsEqualTo("ToString");
@@ -17,7 +17,7 @@ public class ClrMethodTests {
     [Test]
     public async Task ToStringMethod_HasParameters() {
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var intType = registry.GetTypeDefinition(typeof(int));
+        var intType = registry.GetTypeDefinition<int>();
         var toStringMethod = intType.Methods.First(m => m.Name == "ToString");
 
         var parameters = toStringMethod.Parameters.ToList();
@@ -30,9 +30,9 @@ public class ClrMethodTests {
     [Test]
     public async Task ParseMethod_HasCorrectReturnType() {
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var intType = registry.GetTypeDefinition(typeof(int));
+        var intType = registry.GetTypeDefinition<int>();
         var parseMethod = intType.Methods.First(m => m.Name == "Parse");
-
+        
         await Assert.That(parseMethod.Name).IsEqualTo("Parse");
         await Assert.That(parseMethod.ReturnType.FullName).IsEqualTo("System.Int32");
     }

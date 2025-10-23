@@ -6,7 +6,7 @@ public class ClrParameterTests {
     [Test]
     public async Task SubstringMethod_ParametersHaveCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var stringType = registry.GetTypeDefinition(typeof(string));
+        var stringType = registry.GetTypeDefinition<string>();
         var substringMethod = stringType.Methods.First(m => m.Name == "Substring" && m.Parameters.Count() == 2);
 
         var parameters = substringMethod.Parameters.ToArray();
@@ -29,7 +29,7 @@ public class ClrParameterTests {
     public async Task OptionalParameter_HasCorrectProperties() {
         // Find a method with optional parameter, e.g., string.PadLeft(int totalWidth, char paddingChar = ' ')
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var typeDefinition = registry.GetTypeDefinition(typeof(ClrParameterTests));
+        var typeDefinition = registry.GetTypeDefinition<ClrParameterTests>();
         var padLeftMethod = typeDefinition.Methods.First(m => m.Name == nameof(DummyMethod) && m.Parameters.Count() == 2);
 
         var parameters = padLeftMethod.Parameters;

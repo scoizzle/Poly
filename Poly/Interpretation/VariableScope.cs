@@ -1,17 +1,29 @@
+using System.Collections.Concurrent;
+
 namespace Poly.Interpretation;
 
-public sealed class VariableScope {
-    public Dictionary<string, Variable> Variables { get; } = new();
+public sealed class VariableScope(VariableScope? parentScope = null) {
+    public VariableScope? ParentScope { get; } = parentScope;
 
-    public Variable? GetVariable(string name) => Variables.TryGetValue(name, out var variable) ? variable : default;
+    public ConcurrentDictionary<string, Variable> Variables { get; private init; } = new();
+
+    public Variable? GetVariable(string name) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        
+        return Variables.TryGetValue(name, out var variable) 
+            ? variable 
+            : ParentScope?.GetVariable(name);
+    }
+
     public Variable SetVariable(string name, Value? value) {
-        if (Variables.TryGetValue(name, out var variable)) {
-            variable.Value = value;
-            return variable;
-        } else {
-            variable = new Variable(name, value);
-            Variables[name] = variable;
-            return variable;
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return Variables.GetOrAdd(name, static (name, value) => new Variable(name, value), value);
+    }
+
+    public VariableScope Clone() {
+        var clone = new VariableScope(ParentScope) {
+            Variables = new ConcurrentDictionary<string, Variable>(Variables)
+        };
+        return clone;
     }
 }

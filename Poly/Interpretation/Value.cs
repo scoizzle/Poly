@@ -8,6 +8,4 @@ public abstract class Value : Interpretable {
     public Value GetMember(string memberName) => new MemberAccess(this, memberName);
 
     public static readonly Value Null = new Literal(null);
-    public static readonly Value True = new Literal(true);
-    public static readonly Value False = new Literal(false);
 }

@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="TUnit" Version="0.74.2" />
+		<PackageReference Include="TUnit" Version="0.75.11" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Poly\Poly.csproj" />

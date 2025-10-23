@@ -1,7 +1,5 @@
-namespace Poly
-{
-    public static partial class StringFloat64Parser
-    {
+namespace Poly {
+    public static partial class StringFloat64Parser {
         /* Future work, must improve accuracy of mantissa
         private static readonly double[] validPowersOf10 = new double[] {
             1e-308, 1e-307, 1e-306, 1e-305, 1e-304, 1e-303, 1e-302,

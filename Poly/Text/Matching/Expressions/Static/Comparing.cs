@@ -1,5 +1,4 @@
-namespace Poly.Text.Matching.Expressions
-{
+namespace Poly.Text.Matching.Expressions {
     public partial class Static {
         public override TryCompareDelegate Goto() =>
             gotoView(Value, Optional, Next);
@@ -13,7 +12,7 @@ namespace Poly.Text.Matching.Expressions
         private static TryCompareDelegate gotoView(string value, bool optional) {
             if (!optional)
                 return gotoView(value);
-                
+
             return (StringView view) => {
                 view.GotoAndConsume(char.IsWhiteSpace);
                 return true;
@@ -26,7 +25,7 @@ namespace Poly.Text.Matching.Expressions
 
             var valueLength = value.Length;
             var nextCompare = next.Compare();
-                
+
             return (StringView view) => {
                 var index = view.Index;
 
@@ -55,7 +54,7 @@ namespace Poly.Text.Matching.Expressions
 
             var valueLength = value.Length;
             var nextCompare = next.Compare();
-                
+
             return (StringView view) => {
                 var index = view.Index;
                 var offset = index;
@@ -81,7 +80,7 @@ namespace Poly.Text.Matching.Expressions
         private static TryCompareDelegate compare(string value, bool optional) {
             if (!optional)
                 return compare(value);
-                
+
             return (StringView view) => {
                 view.Consume(value);
                 return true;
@@ -93,7 +92,7 @@ namespace Poly.Text.Matching.Expressions
                 return compare(value);
 
             var nextCompare = next.Compare();
-                
+
             return (StringView view) => {
                 var index = view.Index;
 
@@ -117,7 +116,7 @@ namespace Poly.Text.Matching.Expressions
                 return compare(value, optional);
 
             var nextCompare = next.Compare();
-                
+
             return (StringView view) => {
                 var index = view.Index;
                 view.Consume(value);

@@ -1,7 +1,6 @@
 namespace Poly;
 
-public readonly struct StringViewEqualityComparer : IEqualityComparer<StringView>
-{
+public readonly struct StringViewEqualityComparer : IEqualityComparer<StringView> {
     public readonly StringComparison Comparison;
 
     public StringViewEqualityComparer(StringComparison comparison = StringComparison.Ordinal)

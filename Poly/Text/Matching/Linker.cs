@@ -1,9 +1,6 @@
-namespace Poly.Text.Matching
-{
-    public static class Linker
-    {
-        public static void Link(Expression[] expressions, Expression? previous = default, Expression? next = default)
-        {
+namespace Poly.Text.Matching {
+    public static class Linker {
+        public static void Link(Expression[] expressions, Expression? previous = default, Expression? next = default) {
             // var it = new ArrayIterator<Expression>(expressions);
 
             // if (it.IsDone) // expressions was empty;

@@ -1,7 +1,6 @@
 ﻿namespace Poly;
 
-public static class StringIteration
-{
+public static class StringIteration {
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool BoundsCheck(this string This, int index)
@@ -43,8 +42,7 @@ public static class StringIteration
         && subIndex + length <= subString.Length;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAt(this string This, int index, char value, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool IsAt(this string This, int index, char value, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index))
             return false;
 
@@ -55,8 +53,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAt(this string This, int index, int lastIndex, char value, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool IsAt(this string This, int index, int lastIndex, char value, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
@@ -67,8 +64,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAt(this string This, int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool IsAt(this string This, int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex, subString))
             return false;
 
@@ -80,8 +76,7 @@ public static class StringIteration
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAt(this string This, int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool IsAt(this string This, int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex, subString, subIndex, length))
             return false;
 
@@ -116,8 +111,7 @@ public static class StringIteration
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Equals(this string This, int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool Equals(this string This, int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex, subString) || subString.Length != lastIndex - index)
             return false;
 
@@ -129,8 +123,7 @@ public static class StringIteration
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Equals(this string This, int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool Equals(this string This, int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex, subString, subIndex, length) || length != lastIndex - index)
             return false;
 
@@ -141,10 +134,8 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, int lastIndex, int n)
-    {
-        if (BoundsCheck(This, index, lastIndex, n))
-        {
+    public static bool Consume(this string This, ref int index, int lastIndex, int n) {
+        if (BoundsCheck(This, index, lastIndex, n)) {
             index += n;
             return true;
         }
@@ -153,10 +144,8 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, char value, StringComparison comparisonType = StringComparison.Ordinal)
-    {
-        if (IsAt(This, index, value, comparisonType))
-        {
+    public static bool Consume(this string This, ref int index, char value, StringComparison comparisonType = StringComparison.Ordinal) {
+        if (IsAt(This, index, value, comparisonType)) {
             index++;
             return true;
         }
@@ -165,10 +154,8 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, int lastIndex, char character, StringComparison comparisonType = StringComparison.Ordinal)
-    {
-        if (IsAt(This, index, lastIndex, character, comparisonType))
-        {
+    public static bool Consume(this string This, ref int index, int lastIndex, char character, StringComparison comparisonType = StringComparison.Ordinal) {
+        if (IsAt(This, index, lastIndex, character, comparisonType)) {
             index++;
             return true;
         }
@@ -178,10 +165,8 @@ public static class StringIteration
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, int lastIndex, out char character)
-    {
-        if (BoundsCheck(This, index, lastIndex))
-        {
+    public static bool Consume(this string This, ref int index, int lastIndex, out char character) {
+        if (BoundsCheck(This, index, lastIndex)) {
             character = This[index++];
             return true;
         }
@@ -192,13 +177,10 @@ public static class StringIteration
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, int lastIndex, out int digit)
-    {
-        if (BoundsCheck(This, index, lastIndex))
-        {
+    public static bool Consume(this string This, ref int index, int lastIndex, out int digit) {
+        if (BoundsCheck(This, index, lastIndex)) {
             var character = This[index];
-            if ((character ^ '0') > 9)
-            {
+            if ((character ^ '0') > 9) {
                 digit = character - '0';
                 index++;
                 return true;
@@ -211,10 +193,8 @@ public static class StringIteration
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
-        if (IsAt(This, index, lastIndex, subString, comparisonType))
-        {
+    public static bool Consume(this string This, ref int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal) {
+        if (IsAt(This, index, lastIndex, subString, comparisonType)) {
             index += subString.Length;
             return true;
         }
@@ -223,10 +203,8 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
-        if (IsAt(This, index, lastIndex, subString, subIndex, length, comparisonType))
-        {
+    public static bool Consume(this string This, ref int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
+        if (IsAt(This, index, lastIndex, subString, subIndex, length, comparisonType)) {
             index += length;
             return true;
         }
@@ -235,15 +213,13 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, int lastIndex, Func<char, bool> predicate)
-    {
+    public static bool Consume(this string This, ref int index, int lastIndex, Func<char, bool> predicate) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
         var offset = index;
 
-        while (offset < lastIndex)
-        {
+        while (offset < lastIndex) {
             var chr = This[offset];
             if (!predicate(chr))
                 break;
@@ -259,20 +235,17 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Consume(this string This, ref int index, int lastIndex, params Func<char, bool>[] predicates)
-    {
+    public static bool Consume(this string This, ref int index, int lastIndex, params Func<char, bool>[] predicates) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
         var offset = index;
 
-        while (offset < lastIndex)
-        {
+        while (offset < lastIndex) {
             var character = This[offset];
             var precondition = false;
 
-            for (var i = 0; i < predicates.Length; i++)
-            {
+            for (var i = 0; i < predicates.Length; i++) {
                 if (precondition = predicates[i](character))
                     break;
             }
@@ -292,15 +265,13 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool ConsumeUntil(this string This, ref int index, int lastIndex, Func<char, bool> predicate)
-    {
+    public static bool ConsumeUntil(this string This, ref int index, int lastIndex, Func<char, bool> predicate) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
         var offset = index;
 
-        while (offset < lastIndex)
-        {
+        while (offset < lastIndex) {
             if (predicate(This[offset]))
                 break;
 
@@ -315,20 +286,17 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool ConsumeUntil(this string This, ref int index, int lastIndex, params Func<char, bool>[] predicates)
-    {
+    public static bool ConsumeUntil(this string This, ref int index, int lastIndex, params Func<char, bool>[] predicates) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
         var offset = index;
 
-        while (offset < lastIndex)
-        {
+        while (offset < lastIndex) {
             var character = This[offset];
             var precondition = false;
 
-            for (var i = 0; i < predicates.Length; i++)
-            {
+            for (var i = 0; i < predicates.Length; i++) {
                 if (precondition = predicates[i](character))
                     break;
             }
@@ -349,15 +317,13 @@ public static class StringIteration
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool ConsumeWhitespace(this string This, ref int index, int lastIndex)
-    {
+    public static bool ConsumeWhitespace(this string This, ref int index, int lastIndex) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
         var offset = index;
 
-        while (offset < lastIndex)
-        {
+        while (offset < lastIndex) {
             var chr = This[offset];
             if (!char.IsWhiteSpace(chr))
                 break;
@@ -373,8 +339,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Goto(this string This, ref int index, int lastIndex, char character, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool Goto(this string This, ref int index, int lastIndex, char character, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
@@ -388,8 +353,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Goto(this string This, ref int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool Goto(this string This, ref int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex, subString))
             return false;
 
@@ -403,8 +367,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Goto(this string This, ref int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool Goto(this string This, ref int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex, subString, subIndex, length))
             return false;
 
@@ -418,8 +381,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GotoAny(this string This, ref int index, int lastIndex, ReadOnlySpan<char> characters, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool GotoAny(this string This, ref int index, int lastIndex, ReadOnlySpan<char> characters, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
@@ -433,8 +395,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, char character, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, char character, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 
@@ -448,8 +409,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex, subString))
             return false;
 
@@ -463,8 +423,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex, subString, subIndex, length))
             return false;
 
@@ -478,8 +437,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, Func<char, bool> predicate)
-    {
+    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, Func<char, bool> predicate) {
         var offset = index;
 
         while (IsNotAt(This, offset, lastIndex, predicate))
@@ -496,8 +454,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, params Func<char, bool>[] predicates)
-    {
+    public static bool GotoAndConsume(this string This, ref int index, int lastIndex, params Func<char, bool>[] predicates) {
         var offset = index;
 
         while (IsNotAt(This, offset, lastIndex, predicates))
@@ -514,8 +471,7 @@ public static class StringIteration
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GotoAndConsumeAny(this string This, ref int index, int lastIndex, char[] characters, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static bool GotoAndConsumeAny(this string This, ref int index, int lastIndex, char[] characters, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!BoundsCheck(This, index, lastIndex))
             return false;
 

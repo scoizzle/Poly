@@ -3,8 +3,7 @@ using Poly.Interpretation.Operators.Equality;
 
 namespace Poly.Validation.Constraints;
 
-public sealed class EqualityConstraint(string propertyName, object value) : Constraint(propertyName)
-{
+public sealed class EqualityConstraint(string propertyName, object value) : Constraint(propertyName) {
     public object Value { get; set; } = value;
 
     public override Value BuildInterpretationTree(RuleInterpretationContext context) {

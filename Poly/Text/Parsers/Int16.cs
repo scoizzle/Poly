@@ -1,15 +1,12 @@
-namespace Poly
-{
-    public static class StringInt16Parser
-    {
+namespace Poly {
+    public static class StringInt16Parser {
         public static bool TryParse(this string text, out short value) =>
             TryParse(text, 0, text?.Length ?? -1, out value);
 
         public static bool TryParse(this string text, int index, int lastIndex, out short value) =>
             TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out short value)
-        {
+        public static bool TryParse(this string text, ref int index, int lastIndex, out short value) {
             if (!StringIteration.BoundsCheck(text, index, lastIndex))
                 goto failure;
 
@@ -21,10 +18,8 @@ namespace Poly
             if (negative)
                 offset++;
 
-            try
-            {
-                while (offset < lastIndex)
-                {
+            try {
+                while (offset < lastIndex) {
                     var character = text[offset];
 
                     if (character < '0' || character > '9')
@@ -54,18 +49,15 @@ namespace Poly
         public static bool TryParse(this string text, int index, int lastIndex, out ushort value) =>
             TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out ushort value)
-        {
+        public static bool TryParse(this string text, ref int index, int lastIndex, out ushort value) {
             if (!StringIteration.BoundsCheck(text, index, lastIndex))
                 goto failure;
 
             int offset = index;
             ushort result = 0;
 
-            try
-            {
-                while (offset < lastIndex)
-                {
+            try {
+                while (offset < lastIndex) {
                     var character = text[offset];
 
                     if (character < '0' || character > '9')

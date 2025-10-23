@@ -1,7 +1,6 @@
 namespace Poly;
 
-public static class StringSliceStringExtensions
-{
+public static class StringSliceStringExtensions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static StringView AsSlice(this string str) => new(str);
 

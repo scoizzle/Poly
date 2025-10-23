@@ -1,8 +1,6 @@
-namespace Poly.Text.Matching.Expressions
-{
-    public partial class Wildcard : Expression {          
-        public Wildcard(bool optional = true, int minimumLength = 0) : base(optional, minimumLength) 
-        { }
+namespace Poly.Text.Matching.Expressions {
+    public partial class Wildcard : Expression {
+        public Wildcard(bool optional = true, int minimumLength = 0) : base(optional, minimumLength) { }
 
         public static bool Parse(StringView view, out Expression? expression) {
             if (view.Consume('*')) {

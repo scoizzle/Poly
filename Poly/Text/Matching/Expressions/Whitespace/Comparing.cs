@@ -12,7 +12,7 @@ namespace Poly.Text.Matching.Expressions {
         private static TryCompareDelegate gotoView(bool optional) {
             if (!optional)
                 return gotoView();
-                
+
             return (StringView view) => {
                 view.ConsumeUntil(char.IsWhiteSpace);
                 return true;
@@ -30,7 +30,7 @@ namespace Poly.Text.Matching.Expressions {
 
                 if (!view.GotoAndConsume(char.IsWhiteSpace))
                     return false;
-                
+
                 if (!nextCompare(view)) {
                     view.Index = index;
                     return false;
@@ -52,7 +52,7 @@ namespace Poly.Text.Matching.Expressions {
             return (StringView view) => {
                 var index = view.Index;
                 view.GotoAndConsume(char.IsWhiteSpace);
-                
+
                 if (!nextCompare(view)) {
                     view.Index = index;
                     return false;
@@ -65,10 +65,10 @@ namespace Poly.Text.Matching.Expressions {
         private static TryCompareDelegate compare() =>
             (StringView view) => view.Consume(char.IsWhiteSpace);
 
-        private static TryCompareDelegate compare(bool optional)  {
+        private static TryCompareDelegate compare(bool optional) {
             if (!optional)
                 return compare();
-                
+
             return (StringView view) => {
                 view.Consume(char.IsWhiteSpace);
                 return true;
@@ -86,7 +86,7 @@ namespace Poly.Text.Matching.Expressions {
 
                 if (!view.Consume(char.IsWhiteSpace))
                     return false;
-                
+
                 if (!nextCompare(view)) {
                     view.Index = index;
                     return false;
@@ -108,7 +108,7 @@ namespace Poly.Text.Matching.Expressions {
             return (StringView view) => {
                 var index = view.Index;
                 view.Consume(char.IsWhiteSpace);
-                
+
                 if (!nextCompare(view)) {
                     view.Index = index;
                     return false;

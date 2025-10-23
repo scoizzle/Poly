@@ -1,8 +1,7 @@
 namespace Poly.Text.Matching.Expressions {
     public partial class Group : Expression {
         public Group(Expression[] members, bool optional = false, int minimumLength = 0)
-             : base(optional, minimumLength)
-        {
+             : base(optional, minimumLength) {
             Members = members;
         }
 

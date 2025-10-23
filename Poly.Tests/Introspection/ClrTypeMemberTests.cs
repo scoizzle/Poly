@@ -43,7 +43,7 @@ public class ClrTypeMemberTests {
 
         await Assert.That(maxValueMember).IsNotNull();
         await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
-        
+
         // Static members should be accessible
         var accessor = maxValueMember.GetMemberAccessor(Value.Null);
         await Assert.That(accessor).IsNotNull();
@@ -57,7 +57,7 @@ public class ClrTypeMemberTests {
 
         await Assert.That(lengthMember).IsNotNull();
         await Assert.That(lengthMember!.Name).IsEqualTo("Length");
-        
+
         // Instance members should be accessible with an instance
         var testString = "test";
         var stringValue = new Literal(testString);

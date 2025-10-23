@@ -6,11 +6,9 @@ public partial struct StringView :
     IComparable<char[]>,
     IEquatable<StringView>,
     IEquatable<string>,
-    IEquatable<char[]>
-{
+    IEquatable<char[]> {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly override bool Equals(object? obj) => obj switch
-    {
+    public readonly override bool Equals(object? obj) => obj switch {
         StringView slice => CompareTo(slice) == 0,
         string str => CompareTo(str) == 0,
         char[] arr => CompareTo(arr) == 0,
@@ -42,8 +40,7 @@ public partial struct StringView :
     public readonly int CompareTo(StringView other) => CompareTo(other, StringComparison.Ordinal);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly int CompareTo(StringView other, StringComparison comparison)
-    {
+    public readonly int CompareTo(StringView other, StringComparison comparison) {
         var (strA, idxA, lstA) = this;
         var (strB, idxB, lstB) = other;
 
@@ -63,8 +60,7 @@ public partial struct StringView :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly int CompareTo(string? strB, int idxB, int lstB)
-    {
+    public readonly int CompareTo(string? strB, int idxB, int lstB) {
         var (strA, idxA, lstA) = this;
 
         if (String is null || strB is null)
@@ -83,14 +79,12 @@ public partial struct StringView :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsAt(char character)
-    {
+    public readonly bool IsAt(char character) {
         return First == character;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsAt(string subString, StringComparison comparison = StringComparison.Ordinal)
-    {
+    public readonly bool IsAt(string subString, StringComparison comparison = StringComparison.Ordinal) {
         if (!BoundsCheck(subString))
             return false;
 
@@ -101,8 +95,7 @@ public partial struct StringView :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsAt(string subString, int subIndex, int length, StringComparison comparison = StringComparison.Ordinal)
-    {
+    public readonly bool IsAt(string subString, int subIndex, int length, StringComparison comparison = StringComparison.Ordinal) {
         if (!BoundsCheck(subString, subIndex, length))
             return false;
 
@@ -113,8 +106,7 @@ public partial struct StringView :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsAt(StringView slice, StringComparison comparison = StringComparison.Ordinal)
-    {
+    public readonly bool IsAt(StringView slice, StringComparison comparison = StringComparison.Ordinal) {
         if (!BoundsCheck() || !slice.BoundsCheck())
             return false;
 
@@ -125,8 +117,7 @@ public partial struct StringView :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsAt(Func<char, bool> predicate)
-    {
+    public readonly bool IsAt(Func<char, bool> predicate) {
         ArgumentNullException.ThrowIfNull(predicate);
 
         char? current = First;
@@ -147,8 +138,7 @@ public partial struct StringView :
             return false;
 
 
-        foreach (var predicate in predicates)
-        {
+        foreach (var predicate in predicates) {
             if (predicate(current.Value))
                 return true;
         }
@@ -177,8 +167,7 @@ public partial struct StringView :
         if (!current.HasValue)
             return false;
 
-        foreach (var predicate in predicates)
-        {
+        foreach (var predicate in predicates) {
             if (predicate(current.Value))
                 return false;
         }

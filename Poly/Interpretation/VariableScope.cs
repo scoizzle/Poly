@@ -9,9 +9,9 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
 
     public Variable? GetVariable(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        
-        return Variables.TryGetValue(name, out var variable) 
-            ? variable 
+
+        return Variables.TryGetValue(name, out var variable)
+            ? variable
             : ParentScope?.GetVariable(name);
     }
 

@@ -1,10 +1,8 @@
 ﻿namespace Poly;
 
-public static class StringSearching
-{
+public static class StringSearching {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int IndexOf(this string This, int index, int lastIndex, char value, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static int IndexOf(this string This, int index, int lastIndex, char value, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!StringIteration.BoundsCheck(This, index, lastIndex))
             return -1;
 
@@ -20,8 +18,7 @@ public static class StringSearching
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int IndexOf(this string This, int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static int IndexOf(this string This, int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal) {
         if (ReferenceEquals(This, subString) && index == 0 && lastIndex == subString.Length)
             return 0;
 
@@ -40,8 +37,7 @@ public static class StringSearching
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int IndexOf(this string This, int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static int IndexOf(this string This, int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
         if (ReferenceEquals(This, subString) && index <= subIndex && lastIndex >= subIndex + length)
             return subIndex;
 
@@ -60,18 +56,15 @@ public static class StringSearching
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int IndexOfAny(this string This, int index, int lastIndex, ReadOnlySpan<char> characters, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public static int IndexOfAny(this string This, int index, int lastIndex, ReadOnlySpan<char> characters, StringComparison comparisonType = StringComparison.Ordinal) {
         if (!StringIteration.BoundsCheck(This, index, lastIndex))
             return -1;
 
         var length = lastIndex - index;
         var currentSpan = This.AsSpan(index, lastIndex - index);
 
-        if (comparisonType == StringComparison.Ordinal)
-        {
-            for (var i = 0; i < currentSpan.Length; i++)
-            {
+        if (comparisonType == StringComparison.Ordinal) {
+            for (var i = 0; i < currentSpan.Length; i++) {
                 var chr = currentSpan[i];
 
                 if (characters.Contains(chr))
@@ -83,8 +76,7 @@ public static class StringSearching
 
         var idx = lastIndex;
 
-        for (var i = 0; i < characters.Length; i++)
-        {
+        for (var i = 0; i < characters.Length; i++) {
             var chr = characters.Slice(i, 1);
 
             var next = currentSpan.IndexOf(chr, comparisonType);
@@ -102,10 +94,8 @@ public static class StringSearching
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IEnumerable<int> FindAll(this string This, int index, int lastIndex, char value, StringComparison comparisonType = StringComparison.Ordinal)
-    {
-        while (StringIteration.BoundsCheck(This, index, lastIndex))
-        {
+    public static IEnumerable<int> FindAll(this string This, int index, int lastIndex, char value, StringComparison comparisonType = StringComparison.Ordinal) {
+        while (StringIteration.BoundsCheck(This, index, lastIndex)) {
             index = IndexOf(This, index, lastIndex, value, comparisonType);
 
             if (index == -1)
@@ -117,10 +107,8 @@ public static class StringSearching
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IEnumerable<int> FindAll(this string This, int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
-        while (StringIteration.BoundsCheck(This, index, lastIndex, subString))
-        {
+    public static IEnumerable<int> FindAll(this string This, int index, int lastIndex, string subString, StringComparison comparisonType = StringComparison.Ordinal) {
+        while (StringIteration.BoundsCheck(This, index, lastIndex, subString)) {
             index = IndexOf(This, index, lastIndex, subString, comparisonType);
 
             if (index == -1)
@@ -134,10 +122,8 @@ public static class StringSearching
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IEnumerable<int> FindAll(this string This, int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
-        while (StringIteration.BoundsCheck(This, index, lastIndex, subString, subIndex, length))
-        {
+    public static IEnumerable<int> FindAll(this string This, int index, int lastIndex, string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
+        while (StringIteration.BoundsCheck(This, index, lastIndex, subString, subIndex, length)) {
             index = IndexOf(This, index, lastIndex, subString, subIndex, length, comparisonType);
 
             if (index == -1)
@@ -156,15 +142,13 @@ public static class StringSearching
         int lastIndex,
         char open,
         char close
-        )
-    {
+        ) {
         if (!StringIteration.Consume(This, ref index, lastIndex, open))
             return -1;
 
         var count = 1;
 
-        while (index < lastIndex)
-        {
+        while (index < lastIndex) {
             var character = This[index];
 
             if (character == '\\')

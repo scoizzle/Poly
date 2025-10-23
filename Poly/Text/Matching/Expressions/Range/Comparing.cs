@@ -1,5 +1,4 @@
-namespace Poly.Text.Matching.Expressions
-{
+namespace Poly.Text.Matching.Expressions {
     public partial class Range {
         public override TryCompareDelegate Goto() => Evaluation.DefaultComparisonFalse;
 

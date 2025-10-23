@@ -1,15 +1,13 @@
 using BenchmarkDotNet.Attributes;
 
-namespace Poly.Text.Matching.Benchmarks
-{
+namespace Poly.Text.Matching.Benchmarks {
 
     public class UrlMatcherBenchmarks {
         private Expression expression;
         private TryCompareDelegate compare;
 
         [GlobalSetup]
-        public void Setup()
-        {
+        public void Setup() {
             _ = Parser.TryParse(new StringView(UrlMatchString), out expression);
             compare = expression.Compare();
         }

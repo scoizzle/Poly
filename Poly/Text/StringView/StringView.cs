@@ -1,18 +1,15 @@
 namespace Poly;
 
 [DebuggerDisplay("{DebuggerDisplay}")]
-public partial struct StringView
-{
+public partial struct StringView {
     public static readonly StringView Empty = new(string.Empty);
 
-    public StringView(string str)
-    {
+    public StringView(string str) {
         ArgumentNullException.ThrowIfNull(str);
         (String, Index, LastIndex) = (str, 0, str.Length);
     }
 
-    public StringView(string str, int begin)
-    {
+    public StringView(string str, int begin) {
         ArgumentNullException.ThrowIfNull(str);
         ArgumentOutOfRangeException.ThrowIfNegative(begin);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(str.Length, begin);
@@ -34,56 +31,47 @@ public partial struct StringView
 
     public int LastIndex { readonly get; set; }
 
-    public readonly int Length
-    {
+    public readonly int Length {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => LastIndex - Index;
     }
 
-    public readonly bool IsEmpty
-    {
+    public readonly bool IsEmpty {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => Index == LastIndex;
     }
 
-    public readonly char? First
-    {
+    public readonly char? First {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => BoundsCheck()
             ? String[Index]
             : default;
     }
 
-    public readonly char? Last
-    {
+    public readonly char? Last {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => BoundsCheck()
             ? String[LastIndex - 1]
             : default;
     }
 
-    public readonly char? this[int index]
-    {
+    public readonly char? this[int index] {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get
-        {
+        get {
             return BoundsCheck(index)
                 ? String[Index + index]
                 : default;
         }
     }
 
-    public readonly StringView this[int begin, int end]
-    {
+    public readonly StringView this[int begin, int end] {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => new(String, begin, end);
     }
 
-    public readonly StringView this[Range range]
-    {
+    public readonly StringView this[Range range] {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get
-        {
+        get {
             var (start, length) = range.GetOffsetAndLength(LastIndex - Index);
 
             var begin = Index + start;
@@ -109,8 +97,7 @@ public partial struct StringView
     public readonly bool BoundsCheck(StringView other) => String.BoundsCheck(Index, LastIndex, other.String, other.Index, other.Length);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool ReferenceEquals(StringView other)
-    {
+    public readonly bool ReferenceEquals(StringView other) {
         if (!BoundsCheck(other))
             return false;
 
@@ -133,7 +120,7 @@ public partial struct StringView
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly override string ToString() => AsSpan().ToString();
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static implicit operator StringView(string str) => new(str);
 

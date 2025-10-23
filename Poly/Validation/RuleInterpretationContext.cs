@@ -15,7 +15,7 @@ public class RuleInterpretationContext {
     }
 
     internal Value GetMemberAccessor(string memberName) => new MemberAccess(_entryPoint, memberName);
-    
+
     public Expression BuildExpression(Rule rule) {
         var interpretable = rule.BuildInterpretationTree(this);
         return interpretable.BuildExpression(_interpretationContext);

@@ -4,8 +4,7 @@ using Poly.Interpretation.Operators.Comparison;
 
 namespace Poly.Validation;
 
-public sealed class LengthConstraint(string propertyName, int? minLength, int? maxLength) : Constraint(propertyName)
-{
+public sealed class LengthConstraint(string propertyName, int? minLength, int? maxLength) : Constraint(propertyName) {
     public int? MinLength { get; set; } = minLength;
     public int? MaxLength { get; set; } = maxLength;
 
@@ -28,7 +27,7 @@ public sealed class LengthConstraint(string propertyName, int? minLength, int? m
             _ => new Literal(true)
         };
     }
-    
+
     public override string ToString() {
         if (MinLength.HasValue && MaxLength.HasValue) {
             return $"{PropertyName}.Length >= {MinLength.Value} && {PropertyName}.Length <= {MaxLength.Value}";

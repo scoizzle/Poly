@@ -3,8 +3,7 @@ using Poly.Introspection;
 
 namespace Poly.Interpretation;
 
-public sealed class Parameter(string name, ITypeDefinition type) : Value
-{
+public sealed class Parameter(string name, ITypeDefinition type) : Value {
     private readonly ParameterExpression _expression = Expression.Parameter(type.ReflectedType, name);
 
     public string Name { get; } = name;

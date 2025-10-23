@@ -1,5 +1,4 @@
-namespace Poly.Text.Matching.Expressions
-{
+namespace Poly.Text.Matching.Expressions {
     public partial class Wildcard {
         public override TryCompareDelegate Goto() =>
             Next == null ?

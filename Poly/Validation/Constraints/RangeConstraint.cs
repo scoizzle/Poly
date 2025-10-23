@@ -4,8 +4,7 @@ using Poly.Interpretation.Operators.Comparison;
 
 namespace Poly.Validation;
 
-public sealed class RangeConstraint(string propertyName, object? minValue, object? maxValue) : Constraint(propertyName)
-{
+public sealed class RangeConstraint(string propertyName, object? minValue, object? maxValue) : Constraint(propertyName) {
     public object? MinValue { get; set; } = minValue;
     public object? MaxValue { get; set; } = maxValue;
 
@@ -27,7 +26,7 @@ public sealed class RangeConstraint(string propertyName, object? minValue, objec
             _ => Literal.True
         };
     }
-    
+
     public override string ToString() => (MinValue, MaxValue) switch {
         (not null, not null) => $"{PropertyName} >= {MinValue} and {PropertyName} <= {MaxValue}",
         (not null, null) => $"{PropertyName} >= {MinValue}",

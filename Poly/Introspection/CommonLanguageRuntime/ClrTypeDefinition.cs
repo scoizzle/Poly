@@ -59,7 +59,7 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
 
             Lazy<ClrTypeDefinition> type = provider.GetDeferredTypeDefinitionResolver(pi.PropertyType);
             IEnumerable<MethodInfo> accessors = pi.GetAccessors(nonPublic: true);
-            
+
             bool isStatic = accessors.Any(a => a.IsStatic);
             return new ClrTypeProperty(type, declaringType, pi);
         }

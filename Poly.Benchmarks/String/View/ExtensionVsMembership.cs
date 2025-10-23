@@ -1,37 +1,31 @@
 using BenchmarkDotNet.Attributes;
 
-namespace Poly.Text.View.Benchmarks
-{
+namespace Poly.Text.View.Benchmarks {
     [MinColumn, MaxColumn, MeanColumn, MedianColumn, MemoryDiagnoser]
-    public class StringSliceBenchmark
-    {
+    public class StringSliceBenchmark {
         [Benchmark]
-        public void ExtractUntilChar_A()
-        {
+        public void ExtractUntilChar_A() {
             var view = new StringView("aaaaba");
 
             var sub = view['b'];
         }
 
         [Benchmark]
-        public void ExtractUntilChar_B()
-        {
+        public void ExtractUntilChar_B() {
             var view = new StringView("aaaaba");
 
             var sub = view.ExtractUntil('b');
         }
 
         [Benchmark]
-        public void ExtractUntilChar_C()
-        {
+        public void ExtractUntilChar_C() {
             var view = new StringView("aaaaba");
 
             var sub = view['b'];
         }
 
         [Benchmark]
-        public void ExtractUntilChar_D()
-        {
+        public void ExtractUntilChar_D() {
             var view = new StringView("aaaaba");
 
             var sub = view.ExtractAndConsumeUntil('b');

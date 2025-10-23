@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Linq.Expressions;
+
+using Poly.Interpretation;
+using Poly.Interpretation.Operators;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Interpretation;
-using System.Linq.Expressions;
 using Poly.Validation;
-using Poly.Interpretation.Operators;
 using Poly.Validation.Builders;
 
 

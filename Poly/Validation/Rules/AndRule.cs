@@ -3,12 +3,10 @@ using Poly.Interpretation.Operators.Boolean;
 
 namespace Poly.Validation.Rules;
 
-public sealed class AndRule(params IEnumerable<Rule> rules) : Rule
-{
+public sealed class AndRule(params IEnumerable<Rule> rules) : Rule {
     public IEnumerable<Rule> Rules { get; set; } = rules;
 
-    public override Value BuildInterpretationTree(RuleInterpretationContext context)
-    {
+    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
         if (Rules == null || !Rules.Any())
             return new Literal(true);
 
@@ -23,8 +21,7 @@ public sealed class AndRule(params IEnumerable<Rule> rules) : Rule
             .Aggregate((current, rule) => new And(current, rule));
     }
 
-    public override string ToString()
-    {
+    public override string ToString() {
         if (Rules == null || !Rules.Any())
             return "true";
 

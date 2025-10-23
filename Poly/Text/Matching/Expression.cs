@@ -4,7 +4,7 @@ namespace Poly.Text.Matching {
             Optional = optional;
             MinimumLength = minimumLength;
         }
-        
+
         public bool Optional { get; }
 
         public int MinimumLength { get; }
@@ -14,7 +14,7 @@ namespace Poly.Text.Matching {
         public Expression? Next { get; protected set; }
 
         public abstract TryCompareDelegate Goto();
-        
+
         public abstract TryCompareDelegate Compare();
 
         public virtual void Link(Expression? previous, Expression? next) {

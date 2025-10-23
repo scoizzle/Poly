@@ -4,8 +4,7 @@ using Poly.Interpretation.Operators.Equality;
 
 namespace Poly.Validation;
 
-public sealed class NotNullConstraint(string memberName) : Constraint(memberName)
-{
+public sealed class NotNullConstraint(string memberName) : Constraint(memberName) {
     public override Value BuildInterpretationTree(RuleInterpretationContext context) {
         Value member = context.GetMemberAccessor(PropertyName);
         return new NotEqual(member, Literal.Null);

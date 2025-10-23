@@ -1,8 +1,6 @@
-namespace Poly.Text.Matching.Expressions
-{
+namespace Poly.Text.Matching.Expressions {
     public partial class Whitespace : Expression {
-        public Whitespace(bool optional = false, int minimumLength = 0) : base(optional, minimumLength)
-        { }
+        public Whitespace(bool optional = false, int minimumLength = 0) : base(optional, minimumLength) { }
 
         public static bool Parse(StringView view, out Expression? expression) {
             if (view.Consume('^')) {

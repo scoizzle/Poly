@@ -9,10 +9,10 @@ public class ClrTypeDefinitionTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
-    await Assert.That(intType.Name).IsEqualTo("Int32");
-    await Assert.That(intType.Namespace).IsEqualTo("System");
-    await Assert.That(intType.FullName).IsEqualTo("System.Int32");
-    await Assert.That(((ITypeDefinition)intType).ReflectedType).IsEqualTo(typeof(int));
+        await Assert.That(intType.Name).IsEqualTo("Int32");
+        await Assert.That(intType.Namespace).IsEqualTo("System");
+        await Assert.That(intType.FullName).IsEqualTo("System.Int32");
+        await Assert.That(((ITypeDefinition)intType).ReflectedType).IsEqualTo(typeof(int));
     }
 
     [Test]
@@ -49,7 +49,7 @@ public class ClrTypeDefinitionTests {
         var maxValueMember = intType.GetMember("MaxValue");
 
         await Assert.That(maxValueMember).IsNotNull();
-    await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
+        await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
     }
 
     [Test]
@@ -79,7 +79,7 @@ public class ClrTypeDefinitionTests {
 
         var members = listType.Members.ToList();
         await Assert.That(members.Count > 0).IsTrue();
-        
+
         // List<T> has Count property
         var countMember = members.FirstOrDefault(m => m.Name == "Count");
         await Assert.That(countMember).IsNotNull();

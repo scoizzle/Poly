@@ -1,7 +1,5 @@
-namespace Poly
-{
-    public static partial class StringFloat64Parser
-    {
+namespace Poly {
+    public static partial class StringFloat64Parser {
         public static bool TryParse(this string text, out double value)
             => TryParse(text, 0, text?.Length ?? -1, out value);
 
@@ -9,10 +7,8 @@ namespace Poly
             => TryParse(text, ref index, lastIndex, out value)
             && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out double value)
-        {
-            if (!StringIteration.BoundsCheck(text, index, lastIndex))
-            {
+        public static bool TryParse(this string text, ref int index, int lastIndex, out double value) {
+            if (!StringIteration.BoundsCheck(text, index, lastIndex)) {
                 value = double.NaN;
                 return false;
             }
@@ -20,25 +16,21 @@ namespace Poly
 
             var offset = index;
 
-            if (text[offset] == '-')
-            {
+            if (text[offset] == '-') {
                 offset++;
             }
 
-            while (offset < lastIndex)
-            {
+            while (offset < lastIndex) {
                 if ((text[offset] ^ '0') > 9)
                     break;
 
                 offset++;
             }
 
-            if (offset < lastIndex && text[offset] == '.')
-            {
+            if (offset < lastIndex && text[offset] == '.') {
                 offset++;
 
-                while (offset < lastIndex)
-                {
+                while (offset < lastIndex) {
                     if ((text[offset] ^ '0') > 9)
                         break;
 
@@ -46,8 +38,7 @@ namespace Poly
                 }
             }
 
-            if (offset < lastIndex && (text[offset] == 'e' || text[offset] == 'E'))
-            {
+            if (offset < lastIndex && (text[offset] == 'e' || text[offset] == 'E')) {
                 offset++;
 
                 if (text[offset] == '-')
@@ -56,8 +47,7 @@ namespace Poly
                 if (text[offset] == '+')
                     offset++;
 
-                while (offset < lastIndex)
-                {
+                while (offset < lastIndex) {
                     if ((text[offset] ^ '0') > 9)
                         break;
 
@@ -65,8 +55,7 @@ namespace Poly
                 }
             }
 
-            if (double.TryParse(text.AsSpan(index, offset - index), out value))
-            {
+            if (double.TryParse(text.AsSpan(index, offset - index), out value)) {
                 index = offset;
                 return true;
             }

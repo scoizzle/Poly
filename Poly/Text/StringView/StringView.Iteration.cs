@@ -1,10 +1,8 @@
 namespace Poly;
 
-public partial struct StringView
-{
+public partial struct StringView {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Consume(int numberOfCharacters = 1)
-    {
+    public bool Consume(int numberOfCharacters = 1) {
         if (!BoundsCheck(numberOfCharacters))
             return false;
 
@@ -13,12 +11,10 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Consume(out char character)
-    {
+    public bool Consume(out char character) {
         var (str, index, lastIndex) = this;
 
-        if (str.Consume(ref index, lastIndex, out character))
-        {
+        if (str.Consume(ref index, lastIndex, out character)) {
             Index = index;
             return true;
         }
@@ -28,12 +24,10 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Consume(char value, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool Consume(char value, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
-        if (str.Consume(ref index, lastIndex, value, comparisonType))
-        {
+        if (str.Consume(ref index, lastIndex, value, comparisonType)) {
             Index = index;
             return true;
         }
@@ -42,12 +36,10 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Consume(string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool Consume(string subString, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
-        if (str.Consume(ref index, lastIndex, subString, comparisonType))
-        {
+        if (str.Consume(ref index, lastIndex, subString, comparisonType)) {
             Index = index;
             return true;
         }
@@ -56,12 +48,10 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Consume(string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool Consume(string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
-        if (str.Consume(ref index, lastIndex, subString, comparisonType))
-        {
+        if (str.Consume(ref index, lastIndex, subString, comparisonType)) {
             Index = index;
             return true;
         }
@@ -70,19 +60,16 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Consume(StringView sub, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool Consume(StringView sub, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, idx, lst) = this;
         var (subStr, subIdx, subLst) = sub;
 
-        if (ReferenceEquals(str, subStr) && idx == subIdx && subLst <= lst)
-        {
+        if (ReferenceEquals(str, subStr) && idx == subIdx && subLst <= lst) {
             Index = subLst;
             return true;
         }
 
-        if (str.Consume(ref idx, lst, sub.String, comparisonType))
-        {
+        if (str.Consume(ref idx, lst, sub.String, comparisonType)) {
             Index = idx;
             return true;
         }
@@ -91,12 +78,10 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Consume(Func<char, bool> predicate)
-    {
+    public bool Consume(Func<char, bool> predicate) {
         var (str, index, lastIndex) = this;
 
-        if (str.Consume(ref index, lastIndex, predicate))
-        {
+        if (str.Consume(ref index, lastIndex, predicate)) {
             Index = index;
             return true;
         }
@@ -105,12 +90,10 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Consume(params Func<char, bool>[] predicates)
-    {
+    public bool Consume(params Func<char, bool>[] predicates) {
         var (str, index, lastIndex) = this;
 
-        if (str.Consume(ref index, lastIndex, predicates))
-        {
+        if (str.Consume(ref index, lastIndex, predicates)) {
             Index = index;
             return true;
         }
@@ -119,12 +102,10 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ConsumeUntil(Func<char, bool> predicate)
-    {
+    public bool ConsumeUntil(Func<char, bool> predicate) {
         var (str, index, lastIndex) = this;
 
-        if (str.ConsumeUntil(ref index, lastIndex, predicate))
-        {
+        if (str.ConsumeUntil(ref index, lastIndex, predicate)) {
             Index = index;
             return true;
         }
@@ -133,12 +114,10 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ConsumeUntil(params Func<char, bool>[] predicates)
-    {
+    public bool ConsumeUntil(params Func<char, bool>[] predicates) {
         var (str, index, lastIndex) = this;
 
-        if (str.ConsumeUntil(ref index, lastIndex, predicates))
-        {
+        if (str.ConsumeUntil(ref index, lastIndex, predicates)) {
             Index = index;
             return true;
         }
@@ -148,12 +127,10 @@ public partial struct StringView
 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ConsumeWhitespace()
-    {
+    public bool ConsumeWhitespace() {
         var (str, index, lastIndex) = this;
 
-        if (str.ConsumeWhitespace(ref index, lastIndex))
-        {
+        if (str.ConsumeWhitespace(ref index, lastIndex)) {
             Index = index;
             return true;
         }
@@ -162,8 +139,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Goto(char character, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool Goto(char character, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
         if (!str.GotoAndConsume(ref index, lastIndex, character, comparisonType))
@@ -174,8 +150,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Goto(string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool Goto(string subString, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
         if (!str.Goto(ref index, lastIndex, subString, comparisonType))
@@ -186,8 +161,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Goto(string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool Goto(string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
         if (!str.Goto(ref index, lastIndex, subString, subIndex, length, comparisonType))
@@ -198,8 +172,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Goto(StringView sub, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool Goto(StringView sub, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
         var (subString, subIndex, subLst) = sub;
         var length = subLst - subIndex;
@@ -212,8 +185,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool GotoAndConsume(char character, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool GotoAndConsume(char character, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
         if (!str.GotoAndConsume(ref index, lastIndex, character, comparisonType))
@@ -224,8 +196,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool GotoAndConsume(string subString, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool GotoAndConsume(string subString, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
         if (!str.GotoAndConsume(ref index, lastIndex, subString, comparisonType))
@@ -236,8 +207,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool GotoAndConsume(string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool GotoAndConsume(string subString, int subIndex, int length, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
 
         if (!str.GotoAndConsume(ref index, lastIndex, subString, subIndex, length, comparisonType))
@@ -248,8 +218,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool GotoAndConsume(StringView sub, StringComparison comparisonType = StringComparison.Ordinal)
-    {
+    public bool GotoAndConsume(StringView sub, StringComparison comparisonType = StringComparison.Ordinal) {
         var (str, index, lastIndex) = this;
         var (subString, subIndex, subLst) = sub;
         var length = subLst - subIndex;
@@ -262,8 +231,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool GotoAndConsume(Func<char, bool> predicate)
-    {
+    public bool GotoAndConsume(Func<char, bool> predicate) {
         var (str, index, lastIndex) = this;
 
         if (!str.GotoAndConsume(ref index, lastIndex, predicate))
@@ -274,8 +242,7 @@ public partial struct StringView
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool GotoAndConsume(params Func<char, bool>[] predicates)
-    {
+    public bool GotoAndConsume(params Func<char, bool>[] predicates) {
         var (str, index, lastIndex) = this;
 
         if (!str.GotoAndConsume(ref index, lastIndex, predicates))

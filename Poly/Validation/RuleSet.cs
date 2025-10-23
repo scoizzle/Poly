@@ -6,7 +6,7 @@ public sealed class RuleSet<T> {
     public RuleSet(IEnumerable<Rule> rules) {
         CombinedRules = new AndRule(rules);
 
-        var ruleInterpretationContext = new RuleInterpretationContext<T>();        
+        var ruleInterpretationContext = new RuleInterpretationContext<T>();
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(ruleInterpretationContext);
         ExpressionTree = ruleInterpretationContext.BuildExpression(CombinedRules);
 

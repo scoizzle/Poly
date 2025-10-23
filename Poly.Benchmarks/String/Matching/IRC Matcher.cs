@@ -1,23 +1,19 @@
 using BenchmarkDotNet.Attributes;
 
-namespace Poly.Text.Matching.Benchmarks
-{
+namespace Poly.Text.Matching.Benchmarks {
 
-    public class IrcMatcherBenchmarks
-    {
+    public class IrcMatcherBenchmarks {
         private Expression expression;
         private TryCompareDelegate compare;
 
         [GlobalSetup]
-        public void Setup()
-        {
+        public void Setup() {
             _ = Parser.TryParse(new StringView(IRCMatchString), out expression);
             compare = expression.Compare();
         }
 
         [Benchmark]
-        public void GeneratedViewDelegateChain()
-        {
+        public void GeneratedViewDelegateChain() {
             compare(new StringView(IRCTestString));
         }
 

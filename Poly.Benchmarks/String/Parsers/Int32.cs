@@ -2,8 +2,7 @@ using System;
 
 using BenchmarkDotNet.Attributes;
 
-namespace Benchmarks.String.Parsers
-{
+namespace Benchmarks.String.Parsers {
     [MemoryDiagnoser]
     [MinColumn, MaxColumn, MeanColumn, MedianColumn]
     public class Int32Parser {

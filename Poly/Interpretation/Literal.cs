@@ -14,6 +14,8 @@ public sealed class Literal(object? value) : Constant {
     public override Expression BuildExpression(InterpretationContext context) => Expression.Constant(Value);
 
     public override string ToString() => Value?.ToString() ?? "null";
-    public static readonly Value True = new Literal(true);
-    public static readonly Value False = new Literal(false);
+
+    public static readonly Literal Null = new(null);
+    public static readonly Literal True = new(true);
+    public static readonly Literal False = new(false);
 }

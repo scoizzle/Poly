@@ -45,21 +45,17 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     // Mock implementations for testing
-    private class MockTypeDefinition : ITypeDefinition {
-        public MockTypeDefinition(string name) {
-            Name = name;
-        }
-
-        public string Name { get; }
+    private class MockTypeDefinition(string name) : ITypeDefinition {
+        public string Name { get; } = name;
         public string? Namespace => null;
-        public IEnumerable<ITypeMember> Members => Array.Empty<ITypeMember>();
-        public IEnumerable<IMethod> Methods => Array.Empty<IMethod>();
+        public IEnumerable<ITypeMember> Members => [];
+        public IEnumerable<IMethod> Methods => [];
         public Type ReflectedType => typeof(object);
         public ITypeMember? GetMember(string name) => null;
     }
 
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {
-        private readonly Dictionary<string, ITypeDefinition> _types = new();
+        private readonly Dictionary<string, ITypeDefinition> _types = [];
 
         public void AddType(string name, ITypeDefinition type) {
             _types[name] = type;

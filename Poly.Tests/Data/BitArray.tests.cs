@@ -1,4 +1,6 @@
-namespace Poly.Data.Tests;
+using Poly.Data;
+
+namespace Poly.Tests.Data;
 
 public class BitArrayTests {
     static readonly byte[] TestArray = { 0xDE, 0xAD, 0xBE, 0xEF };

@@ -9,7 +9,7 @@ public class ClrTypeMemberTests {
     [Test]
     public async Task MaxValueMember_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var intType = registry.GetTypeDefinition(typeof(int));
+        var intType = registry.GetTypeDefinition<int>();
         var maxValueMember = intType.GetMember("MaxValue");
 
         await Assert.That(maxValueMember).IsNotNull();
@@ -21,7 +21,7 @@ public class ClrTypeMemberTests {
     [Test]
     public async Task GetMemberAccessor_ReturnsValue() {
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var intType = registry.GetTypeDefinition(typeof(int));
+        var intType = registry.GetTypeDefinition<int>();
         var maxValueMember = intType.GetMember("MaxValue");
         var accessor = maxValueMember!.GetMemberAccessor(Value.Null);
 

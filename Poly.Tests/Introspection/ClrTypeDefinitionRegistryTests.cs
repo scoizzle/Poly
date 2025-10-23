@@ -9,7 +9,7 @@ public class ClrTypeDefinitionRegistryTests
     {
         var registry = new ClrTypeDefinitionRegistry();
 
-        var intType = registry.GetTypeDefinition(typeof(int));
+        var intType = registry.GetTypeDefinition<int>();
 
         await Assert.That(intType.FullName).IsEqualTo("System.Int32");
     }

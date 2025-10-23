@@ -17,18 +17,18 @@ using Poly.Interpretation.Operators;
 // var ruleBasedResult = test.RuleBased();
 // Console.WriteLine($"Rule-based result: {ruleBasedResult}");
 
-BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run();
+// BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run();
 
-// RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-//     .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
-//     .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
-//     .Build();
+RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
+    .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
+    .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
+    .Build();
 
-// Person person = new("Alice", 30);
-// Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
-// Person person2 = new("", 200);
-// Console.WriteLine($"Rule evaluation for {person2}: {ruleSet.Test(person2)}");
-// Console.WriteLine(ruleSet.CombinedRules);
+Person person = new("Alice", 30);
+Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
+Person person2 = new("", 200);
+Console.WriteLine($"Rule evaluation for {person2}: {ruleSet.Test(person2)}");
+Console.WriteLine(ruleSet.CombinedRules);
 
 // ClrTypeDefinitionRegistry registry = new();
 
@@ -68,33 +68,33 @@ public record Person(string Name, int Age);
 
 [BenchmarkDotNet.Attributes.MemoryDiagnoser]
 public class BenchmarkPersonPredicate {
-    private Predicate<Person> rulePredicate;
-    private Person person;
+    private Predicate<Person> _rulePredicate;
+    private Person _person;
 
     [BenchmarkDotNet.Attributes.GlobalSetup]
     public void Setup() {
-        person = new Person("Alice", 30);
+        _person = new Person("Alice", 30);
 
         RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
             .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
             .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
             .Build();
 
-        rulePredicate = ruleSet.Predicate;
+        _rulePredicate = ruleSet.Predicate;
     }
 
     [BenchmarkDotNet.Attributes.Benchmark]
     public bool Handrolled() {
-        if (person.Name == null) return false;
-        if (person.Name.Length < 1) return false;
-        if (person.Name.Length > 100) return false;
-        if (person.Age < 0) return false;
-        if (person.Age > 150) return false;
+        if (_person.Name == null) return false;
+        if (_person.Name.Length < 1) return false;
+        if (_person.Name.Length > 100) return false;
+        if (_person.Age < 0) return false;
+        if (_person.Age > 150) return false;
         return true;
     }
 
     [BenchmarkDotNet.Attributes.Benchmark(Baseline = true)]
     public bool RuleBased() {
-        return rulePredicate(person);
+        return _rulePredicate(_person);
     }
 }

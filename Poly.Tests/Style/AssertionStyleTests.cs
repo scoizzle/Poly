@@ -2,17 +2,15 @@ using System.Text.RegularExpressions;
 
 namespace Poly.Tests.Style;
 
-public class AssertionStyleTests
+public partial class AssertionStyleTests
 {
     private static readonly Regex[] BannedPatterns =
     [
         // Direct old-style assertions
-        new(@"\bAssert\.(Equal|NotEqual|True|False|Null|NotNull|AreEqual|IsNull|IsNotNull)\s*\(", RegexOptions.Compiled),
+        OldStyleAssertions(),
         // NUnit Is usage
-        new(@"using\s+static\s+NUnit\.Framework\.Is\s*;", RegexOptions.Compiled),
-        new(@"\bIs\.(EqualTo|Not|Null|NotNull)\b", RegexOptions.Compiled),
-        // TUnit old EqualTo without the Is prefix
-        new(@"\.EqualTo\s*\(", RegexOptions.Compiled)
+        NUnitIsUsingRegex(),
+        NUnitIsUsageRegex()
     ];
 
     [Test]
@@ -60,4 +58,13 @@ public class AssertionStyleTests
         var projectDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
         return projectDir;
     }
+
+    [GeneratedRegex(@"\bAssert\.(Equal|NotEqual|True|False|Null|NotNull|AreEqual|IsNull|IsNotNull)\s*\(", RegexOptions.Compiled)]
+    private static partial Regex OldStyleAssertions();
+
+    [GeneratedRegex(@"using\s+static\s+NUnit\.Framework\.Is\s*;", RegexOptions.Compiled)]
+    private static partial Regex NUnitIsUsingRegex();
+
+    [GeneratedRegex(@"\bIs\.(EqualTo|Not|Null|NotNull)\b", RegexOptions.Compiled)]
+    private static partial Regex NUnitIsUsageRegex();
 }

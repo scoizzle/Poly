@@ -18,6 +18,7 @@ public sealed class InterpretationContext {
         _scopes.Push(_currentScope);
     }
 
+    public int MaxScopeDepth { get; set; } = 256;
     public IEnumerable<Parameter> Parameters => _parameters.AsReadOnly();
 
     public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider) {
@@ -67,6 +68,9 @@ public sealed class InterpretationContext {
     public Parameter AddParameter<T>(string name) => AddParameter(name, GetTypeDefinition<T>()!);
 
     public void PushScope() {
+        if (_scopes.Count >= MaxScopeDepth)
+            throw new InvalidOperationException("Maximum scope depth exceeded.");
+            
         var newScope = new VariableScope(_currentScope);
         _scopes.Push(newScope);
         _currentScope = newScope;

@@ -1,11 +1,11 @@
-using System.Collections.Concurrent;
+using Poly.Extensions;
 
 namespace Poly.Interpretation;
 
 public sealed class VariableScope(VariableScope? parentScope = null) {
     public VariableScope? ParentScope { get; } = parentScope;
 
-    public ConcurrentDictionary<string, Variable> Variables { get; private init; } = new();
+    public Dictionary<string, Variable> Variables { get; private init; } = new();
 
     public Variable? GetVariable(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -22,7 +22,7 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
 
     public VariableScope Clone() {
         var clone = new VariableScope(ParentScope) {
-            Variables = new ConcurrentDictionary<string, Variable>(Variables)
+            Variables = new Dictionary<string, Variable>(Variables)
         };
         return clone;
     }

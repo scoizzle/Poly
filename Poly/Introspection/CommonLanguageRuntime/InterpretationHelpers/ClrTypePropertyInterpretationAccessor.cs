@@ -1,3 +1,4 @@
+using Poly.Extensions;
 using Poly.Interpretation;
 
 namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
@@ -10,6 +11,13 @@ sealed class ClrTypePropertyInterpretationAccessor(Value instance, ClrTypeProper
 
     public override Expression BuildExpression(InterpretationContext context) {
         var instanceExpression = Instance.BuildExpression(context);
+
+
+        if (Property.PropertyInfo.IsStatic() && instanceExpression is ConstantExpression constExpr && constExpr.Value is null) {
+            return Expression.Property(null, Property.PropertyInfo);
+        }
+
+
         return Expression.Property(instanceExpression, Property.Name);
     }
 

@@ -34,4 +34,34 @@ public class ClrTypeMemberTests {
 
         await Assert.That(result).IsEqualTo(int.MaxValue);
     }
+
+    [Test]
+    public async Task StaticMember_IsAccessible() {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var intType = registry.GetTypeDefinition<int>();
+        var maxValueMember = intType.GetMember("MaxValue");
+
+        await Assert.That(maxValueMember).IsNotNull();
+        await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
+        
+        // Static members should be accessible
+        var accessor = maxValueMember.GetMemberAccessor(Value.Null);
+        await Assert.That(accessor).IsNotNull();
+    }
+
+    [Test]
+    public async Task InstanceMember_IsAccessible() {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var stringType = registry.GetTypeDefinition<string>();
+        var lengthMember = stringType.GetMember("Length");
+
+        await Assert.That(lengthMember).IsNotNull();
+        await Assert.That(lengthMember!.Name).IsEqualTo("Length");
+        
+        // Instance members should be accessible with an instance
+        var testString = "test";
+        var stringValue = new Literal(testString);
+        var accessor = lengthMember.GetMemberAccessor(stringValue);
+        await Assert.That(accessor).IsNotNull();
+    }
 }

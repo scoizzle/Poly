@@ -44,6 +44,27 @@ public class TypeDefinitionProviderCollectionTests {
         await Assert.That(result).IsNotNull();
     }
 
+    [Test]
+    public async Task GetTypeDefinition_ReturnsFromFirstProviderWhenMultipleHaveSameType() {
+        var mockProvider1 = new MockTypeDefinitionProvider();
+        var mockProvider2 = new MockTypeDefinitionProvider();
+        var collection = new TypeDefinitionProviderCollection();
+        collection.AddProvider(mockProvider1);
+        collection.AddProvider(mockProvider2);
+
+        // Both providers have "SharedType", but with different instances
+        var type1 = new MockTypeDefinition("SharedType") { Tag = "Provider1" };
+        var type2 = new MockTypeDefinition("SharedType") { Tag = "Provider2" };
+        mockProvider1.AddType("SharedType", type1);
+        mockProvider2.AddType("SharedType", type2);
+
+        var result = collection.GetTypeDefinition("SharedType");
+
+        await Assert.That(result).IsNotNull();
+        await Assert.That(result).IsEqualTo(type1);
+        await Assert.That(((MockTypeDefinition)result!).Tag).IsEqualTo("Provider1");
+    }
+
     // Mock implementations for testing
     private class MockTypeDefinition(string name) : ITypeDefinition {
         public string Name { get; } = name;
@@ -52,6 +73,7 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<IMethod> Methods => [];
         public Type ReflectedType => typeof(object);
         public ITypeMember? GetMember(string name) => null;
+        public string? Tag { get; set; }
     }
 
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {

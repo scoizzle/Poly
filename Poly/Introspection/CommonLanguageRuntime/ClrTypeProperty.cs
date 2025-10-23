@@ -26,6 +26,7 @@ public sealed class ClrTypeProperty : ClrTypeMember {
     public override ClrTypeDefinition MemberType => _memberType.Value;
     public override ClrTypeDefinition DeclaringType => _declaringType;
     public override string Name => _name;
+    public PropertyInfo PropertyInfo => _propertyInfo;
 
     public override Value GetMemberAccessor(Value instance) => new ClrTypePropertyInterpretationAccessor(instance, this);
 

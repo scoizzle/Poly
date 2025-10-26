@@ -1,13 +1,36 @@
+using System.Reflection;
+
+using Poly.Interpretation;
+using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
+
 namespace Poly.Introspection.CommonLanguageRuntime;
 
-public class ClrMethod(string name, ClrTypeDefinition declaringType, Lazy<ClrTypeDefinition> returnType, IEnumerable<ClrParameter> parameters) : IMethod {
-    private readonly Lazy<ClrTypeDefinition> _returnType = returnType ?? throw new ArgumentNullException(nameof(returnType));
-    private readonly ClrParameter[] _parameters = parameters?.ToArray() ?? throw new ArgumentNullException(nameof(parameters));
+public class ClrMethod : IMethod {
+    private readonly Lazy<ClrTypeDefinition> _returnType;
+    private readonly ClrParameter[] _parameters;
+    private readonly MethodInfo _methodInfo;
 
-    public string Name { get; } = name ?? throw new ArgumentNullException(nameof(name));
-    public ClrTypeDefinition DeclaringType { get; } = declaringType ?? throw new ArgumentNullException(nameof(declaringType));
+    public ClrMethod(MethodInfo methodInfo, ClrTypeDefinition declaringType, Lazy<ClrTypeDefinition> returnType, IEnumerable<ClrParameter> parameters) {
+        ArgumentNullException.ThrowIfNull(methodInfo);
+        ArgumentNullException.ThrowIfNull(declaringType);
+        ArgumentNullException.ThrowIfNull(returnType);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        _returnType = returnType;
+        _parameters = parameters.ToArray();
+        _methodInfo = methodInfo;
+        DeclaringType = declaringType;
+    }
+
+    public string Name  => _methodInfo.Name;
+    public ClrTypeDefinition DeclaringType { get; }
     public ClrTypeDefinition ReturnType => _returnType.Value;
     public IEnumerable<IParameter> Parameters => _parameters;
-    ITypeDefinition IMethod.ReturnType => ReturnType;
+    public MethodInfo MethodInfo => _methodInfo;
+
+
+    ITypeDefinition IMethod.ReturnTypeDefinition => ReturnType;
     IEnumerable<IParameter> IMethod.Parameters => Parameters;
+
+    public Value GetMethodInvocation(Value target, params IEnumerable<Value> arguments) => new ClrMethodInterpretationInvocation(this, target, arguments);
 }

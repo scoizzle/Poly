@@ -84,7 +84,7 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
 
             Lazy<ClrTypeDefinition> returnType = provider.GetDeferredTypeDefinitionResolver(mi.ReturnType);
             IEnumerable<ClrParameter> parameters = mi.GetParameters().Select(ConstructParameter).ToArray();
-            return new ClrMethod(mi.Name, declaringType, returnType, parameters);
+            return new ClrMethod(mi, declaringType, returnType, parameters);
         }
     }
 }

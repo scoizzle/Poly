@@ -15,13 +15,13 @@ public class ClrParameterTests {
         var startIndexParam = parameters[0];
         await Assert.That(startIndexParam.Name).IsEqualTo("startIndex");
         await Assert.That(startIndexParam.Position).IsEqualTo(0);
-        await Assert.That(startIndexParam.ParameterType.FullName).IsEqualTo("System.Int32");
+        await Assert.That(startIndexParam.ParameterTypeDefinition.FullName).IsEqualTo("System.Int32");
         await Assert.That(startIndexParam.IsOptional).IsFalse();
 
         var lengthParam = parameters[1];
         await Assert.That(lengthParam.Name).IsEqualTo("length");
         await Assert.That(lengthParam.Position).IsEqualTo(1);
-        await Assert.That(lengthParam.ParameterType.FullName).IsEqualTo("System.Int32");
+        await Assert.That(lengthParam.ParameterTypeDefinition.FullName).IsEqualTo("System.Int32");
         await Assert.That(lengthParam.IsOptional).IsFalse();
     }
 

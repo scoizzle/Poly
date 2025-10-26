@@ -9,5 +9,5 @@ public class ClrParameter(string name, Lazy<ClrTypeDefinition> type, int positio
     public bool IsOptional { get; } = isOptional;
     public object? DefaultValue { get; } = defaultValue;
 
-    ITypeDefinition IParameter.ParameterType => Type;
+    ITypeDefinition IParameter.ParameterTypeDefinition => Type;
 }

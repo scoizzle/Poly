@@ -18,7 +18,7 @@
         <PackageProjectUrl>http://github.com/scoizzle/Poly/</PackageProjectUrl>
         <RepositoryUrl>http://github.com/scoizzle/Poly/</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
-        <PackageLicenseUrl>http://You.Make.Money/I.Make.Money</PackageLicenseUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
         <PackOnBuild>true</PackOnBuild>
         <Owners>Scot 'Scoizzle' Murphy</Owners>

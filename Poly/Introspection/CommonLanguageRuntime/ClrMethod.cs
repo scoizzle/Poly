@@ -32,5 +32,5 @@ public class ClrMethod : IMethod {
     ITypeDefinition IMethod.ReturnTypeDefinition => ReturnType;
     IEnumerable<IParameter> IMethod.Parameters => Parameters;
 
-    public Value GetMethodInvocation(Value target, params IEnumerable<Value> arguments) => new ClrMethodInterpretationInvocation(this, target, arguments);
+    public Value GetMethodInvocation(Value target, params IEnumerable<Value> arguments) => new ClrMethodInvocationInterpretation(this, target, arguments);
 }

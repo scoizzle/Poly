@@ -1,5 +1,3 @@
-using System;
-
 namespace Poly.Extensions;
 
 public static class TypeExtensions {

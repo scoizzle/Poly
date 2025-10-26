@@ -1,5 +1,3 @@
-using System;
-
 using Poly.Introspection;
 
 namespace Poly.Interpretation.Operators;

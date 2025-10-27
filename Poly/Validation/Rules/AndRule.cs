@@ -6,7 +6,7 @@ namespace Poly.Validation.Rules;
 public sealed class AndRule(params IEnumerable<Rule> rules) : Rule {
     public IEnumerable<Rule> Rules { get; set; } = rules;
 
-    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context) {
         if (Rules == null || !Rules.Any())
             return new Literal(true);
 

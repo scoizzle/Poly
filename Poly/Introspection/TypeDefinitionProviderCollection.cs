@@ -1,14 +1,10 @@
 namespace Poly.Introspection;
 
-public sealed class TypeDefinitionProviderCollection : ITypeDefinitionProvider {
-    private readonly List<ITypeDefinitionProvider> _providers = new();
-
-    public TypeDefinitionProviderCollection(params IEnumerable<ITypeDefinitionProvider> providers) {
-        _providers.AddRange(providers);
-    }
+public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDefinitionProvider> providers) : ITypeDefinitionProvider {
+    private readonly Stack<ITypeDefinitionProvider> _providers = new(providers);
 
     public void AddProvider(ITypeDefinitionProvider provider) {
-        _providers.Add(provider);
+        _providers.Push(provider);
     }
 
     public ITypeDefinition? GetTypeDefinition(string name) {

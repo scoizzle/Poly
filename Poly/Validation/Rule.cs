@@ -1,7 +1,7 @@
 namespace Poly.Validation;
 
 public abstract class Rule {
-    public abstract Interpretation.Value BuildInterpretationTree(RuleInterpretationContext context);
+    public abstract Interpretation.Value BuildInterpretationTree(RuleBuildingContext context);
 }
 
 public sealed class RuleEvaluationResult {

@@ -8,7 +8,7 @@ public sealed class LengthConstraint(string propertyName, int? minLength, int? m
     public int? MinLength { get; set; } = minLength;
     public int? MaxLength { get; set; } = maxLength;
 
-    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var member = context.GetMemberAccessor(PropertyName);
         var length = member.GetMember("Length");
 

@@ -8,7 +8,7 @@ public sealed class RangeConstraint(string propertyName, object? minValue, objec
     public object? MinValue { get; set; } = minValue;
     public object? MaxValue { get; set; } = maxValue;
 
-    public override Value BuildInterpretationTree(RuleInterpretationContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var member = context.GetMemberAccessor(PropertyName);
 
         Value? minCheck = MinValue is null

@@ -4,12 +4,12 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Validation;
 
-public class RuleInterpretationContext {
+public class RuleBuildingContext {
     protected const string EntryPointName = "@obj";
     protected readonly Variable _entryPoint;
     protected readonly InterpretationContext _interpretationContext;
 
-    public RuleInterpretationContext() {
+    public RuleBuildingContext() {
         _interpretationContext = new InterpretationContext();
         _entryPoint = _interpretationContext.DeclareVariable(EntryPointName);
     }
@@ -22,9 +22,9 @@ public class RuleInterpretationContext {
     }
 }
 
-public sealed class RuleInterpretationContext<T> : RuleInterpretationContext {
+public sealed class RuleBuildingContext<T> : RuleBuildingContext {
     private readonly Parameter _parameterExpression;
-    public RuleInterpretationContext() : base() {
+    public RuleBuildingContext() : base() {
         ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<T>();
         _parameterExpression = _interpretationContext.AddParameter<T>(EntryPointName);
     }

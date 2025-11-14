@@ -1,7 +1,11 @@
 ﻿using System;
+using System.Text.Json;
 
+using Poly.DataModeling;
 using Poly.Validation;
 using Poly.Validation.Builders;
+
+using JsonProp = Poly.DataModeling.JsonProperty;
 
 
 // BenchmarkPersonPredicate test = new();
@@ -16,16 +20,119 @@ using Poly.Validation.Builders;
 
 // BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run();
 
-RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-    .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
-    .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
-    .Build();
+DataModelBuilder builder = new();
 
-Person person = new("Alice", 30);
-Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
-Person person2 = new("", 200);
-Console.WriteLine($"Rule evaluation for {person2}: {ruleSet.Test(person2)}");
-Console.WriteLine(ruleSet.CombinedRules);
+// Comprehensive example showing all property types
+DataType personType = new DataType("Person", [
+    new GuidProperty("Id", []),
+    new StringProperty("Name", []),
+    new Int32Property("Age", []),
+    new DecimalProperty("Salary", 18, 2, []),
+    new BooleanProperty("IsActive", []),
+    new DateTimeProperty("CreatedAt", []),
+    new DateOnlyProperty("BirthDate", []),
+    new EnumProperty("Status", "PersonStatus", ["Active", "Inactive", "Pending"], []),
+    new JsonProp("Metadata", null, [])
+], []);
+
+DataType petType = new DataType("Pet", [
+    new GuidProperty("Id", []),
+    new StringProperty("Name", []),
+    new EnumProperty("Species", "PetSpecies", ["Dog", "Cat", "Bird", "Fish"], []),
+    new Int32Property("Age", [
+        new RangeConstraint(0, 50) // Pets typically live 0-50 years
+    ]),
+    new DoubleProperty("Weight", [
+        new RangeConstraint(0.1, null) // Weight must be positive
+    ]),
+    new DateTimeProperty("AdoptedAt", []),
+    new ByteArrayProperty("Photo", 5000000, [])
+], [
+    // Cross-property rule: Pets older than 10 years should weigh more than 5 kg
+    new Poly.Validation.Rules.ConditionalRule(
+        new Poly.Validation.Rules.PropertyConstraintRule("Age", new RangeConstraint(10, null)),
+        new Poly.Validation.Rules.PropertyConstraintRule("Weight", new RangeConstraint(5.0, null))
+    ),
+    // Cross-property rule: If a pet has a photo, it must have a name
+    new Poly.Validation.Rules.PropertyDependencyRule(
+        "Photo",
+        "Name",
+        requireWhenSourceHasValue: true
+    )
+]);
+
+DataType appointmentType = new DataType("VetAppointment", [
+    new GuidProperty("Id", []),
+    new DateOnlyProperty("AppointmentDate", []),
+    new TimeOnlyProperty("AppointmentTime", []),
+    new StringProperty("Notes", []),
+    new DecimalProperty("Cost", 10, 2, [
+        new RangeConstraint(0.01m, null) // Cost must be positive
+    ])
+], []);
+
+// Event type with mutual exclusion rule
+DataType eventType = new DataType("Event", [
+    new GuidProperty("Id", []),
+    new DateTimeProperty("StartTime", []),
+    new DateTimeProperty("EndTime", []),
+    new Int32Property("DurationMinutes", [])
+], [
+    // Can specify either EndTime OR DurationMinutes, but not both
+    new Poly.Validation.Rules.MutualExclusionRule(
+        ["EndTime", "DurationMinutes"],
+        maxAllowed: 1
+    ),
+    // If using duration, validate it's between 1 minute and 24 hours
+    new Poly.Validation.Rules.ConditionalRule(
+        new Poly.Validation.Rules.PropertyConstraintRule("DurationMinutes", new NotNullConstraint()),
+        new Poly.Validation.Rules.PropertyConstraintRule("DurationMinutes", new RangeConstraint(1, 1440))
+    )
+]);
+
+builder.AddDataType(personType);
+builder.AddDataType(petType);
+builder.AddDataType(appointmentType);
+builder.AddDataType(eventType);
+
+// Add relationships with constraints
+
+// Person → Pets: No source constraint, but each pet must have an owner
+builder.AddRelationship(new OneToManyRelationship(
+    "PersonPets",
+    Source: new RelationshipEnd("Person", "Pets", null),
+    Target: new RelationshipEnd("Pet", "Owner", [
+        new NotNullConstraint()  // Pet must have an owner (required reference)
+    ])
+));
+
+// Pet ↔ Appointments: No constraints on either side for now
+builder.AddRelationship(new ManyToManyRelationship(
+    "PetAppointments",
+    Source: new RelationshipEnd("Pet", "Appointments", null),
+    Target: new RelationshipEnd("VetAppointment", "Pets", null)
+));
+
+DataModel dataModel = builder.Build();
+
+JsonSerializerOptions options = new() {
+    WriteIndented = true,
+    TypeInfoResolver = DataModelPropertyPolymorphicJsonTypeResolver.Shared
+};
+
+Console.WriteLine(JsonSerializer.Serialize(dataModel, options));
+
+
+// RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
+//     .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
+//     .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
+//     .Build();
+
+// Person person = new("Alice", 30);
+// Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
+// Person person2 = new("", 200);
+// Console.WriteLine($"Rule evaluation for {person2}: {ruleSet.Test(person2)}");
+// Console.WriteLine(ruleSet.CombinedRules);
 
 // ClrTypeDefinitionRegistry registry = new();
 
@@ -94,4 +201,4 @@ public class BenchmarkPersonPredicate {
     public bool RuleBased() {
         return _rulePredicate(_person);
     }
-}
+} 

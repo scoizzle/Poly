@@ -3,11 +3,10 @@ using Poly.Interpretation.Operators.Equality;
 
 namespace Poly.Validation;
 
-public sealed class NotNullConstraint(string memberName) : Constraint(memberName) {
+public sealed class NotNullConstraint : Constraint {
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
-        Value member = context.GetMemberAccessor(PropertyName);
-        return new NotEqual(member, Value.Null);
+        return new NotEqual(context.Value, Value.Null);
     }
 
-    public override string ToString() => $"{PropertyName} != null";
+    public override string ToString() => "value != null";
 }

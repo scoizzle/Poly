@@ -12,7 +12,7 @@ public static class NumericConstraintSetBuilderExtensions {
             return builder;
         }
 
-        return builder.Add(new RangeConstraint(builder.PropertyName, value, null));
+        return builder.Add(new RangeConstraint(value, null));
     }
 
     public static ConstraintSetBuilder<T> Maximum<T, TProp>(this ConstraintSetBuilder<T> builder, TProp value)
@@ -26,6 +26,6 @@ public static class NumericConstraintSetBuilderExtensions {
             return builder;
         }
 
-        return builder.Add(new RangeConstraint(builder.PropertyName, null, value));
+        return builder.Add(new RangeConstraint(null, value));
     }
 }

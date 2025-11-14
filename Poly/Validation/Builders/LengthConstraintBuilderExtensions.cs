@@ -11,7 +11,7 @@ public static class LengthConstraintBuilderExtensions {
             return builder;
         }
 
-        return builder.Add(new LengthConstraint(builder.PropertyName, minLength, null));
+        return builder.Add(new LengthConstraint(minLength, null));
     }
 
     public static ConstraintSetBuilder<string> MaxLength(this ConstraintSetBuilder<string> builder, int maxLength) {
@@ -24,7 +24,7 @@ public static class LengthConstraintBuilderExtensions {
             return builder;
         }
 
-        return builder.Add(new LengthConstraint(builder.PropertyName, null, maxLength));
+        return builder.Add(new LengthConstraint(null, maxLength));
     }
 
     public static ConstraintSetBuilder<T[]> MinLength<T>(this ConstraintSetBuilder<T[]> builder, int minLength) {
@@ -37,7 +37,7 @@ public static class LengthConstraintBuilderExtensions {
             return builder;
         }
 
-        return builder.Add(new LengthConstraint(builder.PropertyName, minLength, null));
+        return builder.Add(new LengthConstraint(minLength, null));
     }
 
     public static ConstraintSetBuilder<T[]> MaxLength<T>(this ConstraintSetBuilder<T[]> builder, int maxLength) {
@@ -50,6 +50,6 @@ public static class LengthConstraintBuilderExtensions {
             return builder;
         }
 
-        return builder.Add(new LengthConstraint(builder.PropertyName, null, maxLength));
+        return builder.Add(new LengthConstraint(null, maxLength));
     }
 }

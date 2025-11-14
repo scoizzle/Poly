@@ -1,0 +1,40 @@
+using Poly.Interpretation;
+using Poly.Interpretation.Operators.Boolean;
+using Poly.Interpretation.Operators.Equality;
+
+namespace Poly.Validation.Rules;
+
+public sealed class PropertyDependencyRule : Rule {
+    public string SourcePropertyName { get; set; }
+    public string DependentPropertyName { get; set; }
+    public bool RequireWhenSourceHasValue { get; set; }
+
+    public PropertyDependencyRule(string sourcePropertyName, string dependentPropertyName, bool requireWhenSourceHasValue = true) {
+        SourcePropertyName = sourcePropertyName;
+        DependentPropertyName = dependentPropertyName;
+        RequireWhenSourceHasValue = requireWhenSourceHasValue;
+    }
+
+    public override Value BuildInterpretationTree(RuleBuildingContext context) {
+        var sourceMember = context.GetMemberAccessor(SourcePropertyName);
+        var dependentMember = context.GetMemberAccessor(DependentPropertyName);
+        
+        var sourceHasValue = new NotEqual(sourceMember, Value.Null);
+        var dependentHasValue = new NotEqual(dependentMember, Value.Null);
+        
+        if (RequireWhenSourceHasValue) {
+            // If source has value, then dependent must have value
+            // !sourceHasValue OR dependentHasValue
+            return new Or(new Not(sourceHasValue), dependentHasValue);
+        } else {
+            // If source has value, then dependent must NOT have value
+            // !sourceHasValue OR !dependentHasValue
+            return new Or(new Not(sourceHasValue), new Not(dependentHasValue));
+        }
+    }
+
+    public override string ToString() {
+        var action = RequireWhenSourceHasValue ? "requires" : "excludes";
+        return $"{SourcePropertyName} {action} {DependentPropertyName}";
+    }
+}

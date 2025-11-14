@@ -3,14 +3,14 @@ using Poly.Interpretation.Operators.Equality;
 
 namespace Poly.Validation.Constraints;
 
-public sealed class EqualityConstraint(string propertyName, object value) : Constraint(propertyName) {
+public sealed class EqualityConstraint(object value) : Constraint {
     public object Value { get; set; } = value;
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
-        var member = context.GetMemberAccessor(PropertyName);
+        var member = context.Value;
         var valueLiteral = new Literal(Value);
         return new Equal(member, valueLiteral);
     }
 
-    public override string ToString() => $"{PropertyName} == {Value}";
+    public override string ToString() => $"value == {Value}";
 }

@@ -27,5 +27,5 @@ public sealed class And(Value leftHandValue, Value rightHandValue) : BooleanOper
     }
 
     /// <inheritdoc />
-    public override string ToString() => $"{LeftHandValue} && {RightHandValue}";
+    public override string ToString() => $"{LeftHandValue} and {RightHandValue}";
 }

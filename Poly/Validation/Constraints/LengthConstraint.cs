@@ -4,13 +4,12 @@ using Poly.Interpretation.Operators.Comparison;
 
 namespace Poly.Validation;
 
-public sealed class LengthConstraint(string propertyName, int? minLength, int? maxLength) : Constraint(propertyName) {
+public sealed class LengthConstraint(int? minLength, int? maxLength) : Constraint {
     public int? MinLength { get; set; } = minLength;
     public int? MaxLength { get; set; } = maxLength;
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
-        var member = context.GetMemberAccessor(PropertyName);
-        var length = member.GetMember("Length");
+        var length = context.Value.GetMember("Length");
 
         var minCheck = MinLength.HasValue
             ? new GreaterThanOrEqual(length, new Literal(MinLength.Value))
@@ -30,13 +29,13 @@ public sealed class LengthConstraint(string propertyName, int? minLength, int? m
 
     public override string ToString() {
         if (MinLength.HasValue && MaxLength.HasValue) {
-            return $"{PropertyName}.Length >= {MinLength.Value} && {PropertyName}.Length <= {MaxLength.Value}";
+            return $"value.Length >= {MinLength.Value} && value.Length <= {MaxLength.Value}";
         }
         else if (MinLength.HasValue) {
-            return $"{PropertyName}.Length >= {MinLength.Value}";
+            return $"value.Length >= {MinLength.Value}";
         }
         else if (MaxLength.HasValue) {
-            return $"{PropertyName}.Length <= {MaxLength.Value}";
+            return $"value.Length <= {MaxLength.Value}";
         }
         else {
             return "true";

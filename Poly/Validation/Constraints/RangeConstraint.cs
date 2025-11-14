@@ -4,12 +4,12 @@ using Poly.Interpretation.Operators.Comparison;
 
 namespace Poly.Validation;
 
-public sealed class RangeConstraint(string propertyName, object? minValue, object? maxValue) : Constraint(propertyName) {
+public sealed class RangeConstraint(object? minValue, object? maxValue) : Constraint {
     public object? MinValue { get; set; } = minValue;
     public object? MaxValue { get; set; } = maxValue;
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
-        var member = context.GetMemberAccessor(PropertyName);
+        var member = context.Value;
 
         Value? minCheck = MinValue is null
             ? null
@@ -28,9 +28,9 @@ public sealed class RangeConstraint(string propertyName, object? minValue, objec
     }
 
     public override string ToString() => (MinValue, MaxValue) switch {
-        (not null, not null) => $"{PropertyName} >= {MinValue} and {PropertyName} <= {MaxValue}",
-        (not null, null) => $"{PropertyName} >= {MinValue}",
-        (null, not null) => $"{PropertyName} <= {MaxValue}",
-        (null, null) => $"{PropertyName} has no range constraints"
+        (not null, not null) => $"value >= {MinValue} and value <= {MaxValue}",
+        (not null, null) => $"value >= {MinValue}",
+        (null, not null) => $"value <= {MaxValue}",
+        (null, null) => "no range constraints"
     };
 }

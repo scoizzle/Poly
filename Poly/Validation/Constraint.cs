@@ -1,5 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace Poly.Validation;
 
-public abstract class Constraint(string propertyName) : Rule {
-    public string PropertyName { get; protected set; } = propertyName;
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "ConstraintType")]
+[JsonDerivedType(typeof(RangeConstraint), "Range")]
+[JsonDerivedType(typeof(NotNullConstraint), "NotNull")]
+[JsonDerivedType(typeof(LengthConstraint), "Length")]
+[JsonDerivedType(typeof(Constraints.EqualityConstraint), "Equality")]
+public abstract class Constraint : Rule {
 }

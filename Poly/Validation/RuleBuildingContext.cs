@@ -14,6 +14,13 @@ public class RuleBuildingContext {
         _entryPoint = _interpretationContext.DeclareVariable(EntryPointName);
     }
 
+    /// <summary>
+    /// Gets the value being validated in the current context (used for constraints).
+    /// For property constraints, this is the property value.
+    /// For type rules, use GetMemberAccessor to access specific properties.
+    /// </summary>
+    public Value Value => _entryPoint;
+
     internal Value GetMemberAccessor(string memberName) => new MemberAccess(_entryPoint, memberName);
 
     public Expression BuildExpression(Rule rule) {

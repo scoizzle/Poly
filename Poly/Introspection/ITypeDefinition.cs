@@ -8,5 +8,6 @@ public interface ITypeDefinition {
     public IEnumerable<IMethod> Methods { get; }
     public Type ReflectedType { get; }
 
-    public ITypeMember? GetMember(string name);
+    public IEnumerable<ITypeMember> GetMembers(string name);
+    public IEnumerable<ITypeMember> GetIndexers() => GetMembers("Item");
 }

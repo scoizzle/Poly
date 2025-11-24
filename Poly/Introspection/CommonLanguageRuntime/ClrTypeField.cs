@@ -23,10 +23,12 @@ public sealed class ClrTypeField : ClrTypeMember {
 
     public override ClrTypeDefinition MemberType => _memberType.Value;
     public override ClrTypeDefinition DeclaringType => _declaringType;
+    public override IOrderedEnumerable<ClrParameter>? Parameters => null;
     public override string Name => _fieldInfo.Name;
     public FieldInfo FieldInfo => _fieldInfo;
 
-    public override Value GetMemberAccessor(Value instance) => new ClrTypeFieldInterpretationAccessor(instance, this);
+
+    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters) => new ClrTypeFieldInterpretationAccessor(instance, this);
 
     public override string ToString() => $"{MemberType} {DeclaringType}.{Name}";
 }

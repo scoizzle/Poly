@@ -21,6 +21,7 @@ namespace Poly.DataModeling;
 [JsonSerializable(typeof(EnumProperty))]
 [JsonSerializable(typeof(ByteArrayProperty))]
 [JsonSerializable(typeof(JsonProperty))]
+[JsonSerializable(typeof(ReferenceProperty))]
 [JsonSerializable(typeof(Relationship))]
 [JsonSerializable(typeof(OneToOneRelationship))]
 [JsonSerializable(typeof(OneToManyRelationship))]
@@ -43,19 +44,20 @@ public sealed class DataModelPropertyPolymorphicJsonTypeResolver : DefaultJsonTy
                 UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
                 DerivedTypes =
                 {
-                    new JsonDerivedType(typeof(Int32Property), "int32"),
-                    new JsonDerivedType(typeof(Int64Property), "int64"),
-                    new JsonDerivedType(typeof(StringProperty), "string"),
-                    new JsonDerivedType(typeof(DecimalProperty), "decimal"),
-                    new JsonDerivedType(typeof(DoubleProperty), "double"),
-                    new JsonDerivedType(typeof(BooleanProperty), "bool"),
-                    new JsonDerivedType(typeof(DateTimeProperty), "datetime"),
-                    new JsonDerivedType(typeof(DateOnlyProperty), "date"),
-                    new JsonDerivedType(typeof(TimeOnlyProperty), "time"),
-                    new JsonDerivedType(typeof(GuidProperty), "guid"),
-                    new JsonDerivedType(typeof(EnumProperty), "enum"),
-                    new JsonDerivedType(typeof(ByteArrayProperty), "bytes"),
-                    new JsonDerivedType(typeof(JsonProperty), "json")
+                    new JsonDerivedType(typeof(Int32Property), "Int32"),
+                    new JsonDerivedType(typeof(Int64Property), "Int64"),
+                    new JsonDerivedType(typeof(StringProperty), "String"),
+                    new JsonDerivedType(typeof(DecimalProperty), "Decimal"),
+                    new JsonDerivedType(typeof(DoubleProperty), "Double"),
+                    new JsonDerivedType(typeof(BooleanProperty), "Bool"),
+                    new JsonDerivedType(typeof(DateTimeProperty), "DateTime"),
+                    new JsonDerivedType(typeof(DateOnlyProperty), "Date"),
+                    new JsonDerivedType(typeof(TimeOnlyProperty), "Time"),
+                    new JsonDerivedType(typeof(GuidProperty), "Guid"),
+                    new JsonDerivedType(typeof(EnumProperty), "Enum"),
+                    new JsonDerivedType(typeof(ByteArrayProperty), "Bytes"),
+                    new JsonDerivedType(typeof(JsonProperty), "Json"),
+                    new JsonDerivedType(typeof(ReferenceProperty), "Reference")
                 }
             };
         }

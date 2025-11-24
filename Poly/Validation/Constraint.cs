@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Poly.Validation;
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "ConstraintType")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
 [JsonDerivedType(typeof(RangeConstraint), "Range")]
 [JsonDerivedType(typeof(NotNullConstraint), "NotNull")]
 [JsonDerivedType(typeof(LengthConstraint), "Length")]

@@ -36,14 +36,14 @@ public sealed class ClrMethodInvocationInterpretation(ClrMethod method, Value in
 
     /// <inheritdoc />
     /// <remarks>
-    /// For static methods, if the instance is a <see cref="ConstantExpression"/> with a null value,
-    /// the instance expression is set to null to properly invoke the static method.
+    /// For static methods, the instance expression is ignored and set to null to properly invoke the static method.
     /// </remarks>
     public override Expression BuildExpression(InterpretationContext context) {
         var instanceExpression = Instance.BuildExpression(context);
         var argumentExpressions = Arguments.Select(arg => arg.BuildExpression(context)).ToArray();
 
-        if (Method.MethodInfo.IsStatic && instanceExpression is ConstantExpression constExpr && constExpr.Value == null) {
+        // For static methods, always use null as the instance regardless of what was provided
+        if (Method.MethodInfo.IsStatic) {
             instanceExpression = null;
         }
 

@@ -14,7 +14,7 @@ public sealed class MemberAccess(Value value, string memberName) : Operator {
     /// Gets the value whose member is being accessed.
     /// </summary>
     public Value Value { get; } = value ?? throw new ArgumentNullException(nameof(value));
-    
+
     /// <summary>
     /// Gets the name of the member to access.
     /// </summary>
@@ -28,7 +28,7 @@ public sealed class MemberAccess(Value value, string memberName) : Operator {
     /// <exception cref="InvalidOperationException">Thrown when the member is not found on the type.</exception>
     private ITypeMember GetMember(InterpretationContext context) {
         ITypeDefinition typeDefinition = Value.GetTypeDefinition(context);
-        return typeDefinition.GetMember(MemberName)
+        return typeDefinition.GetMembers(MemberName).SingleOrDefault()
             ?? throw new InvalidOperationException($"Member '{MemberName}' not found on type '{typeDefinition.Name}'.");
     }
 

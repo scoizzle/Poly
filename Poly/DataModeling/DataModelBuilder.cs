@@ -24,11 +24,17 @@ public sealed class DataModelBuilder {
         return this;
     }
 
-    public DataModelBuilder AddDataType(Action<DataTypeBuilder> configure) {
+    public DataModelBuilder AddDataType(string name, Action<DataTypeBuilder> configure) {
         ArgumentNullException.ThrowIfNull(configure);
-        DataTypeBuilder builder = new("");
+        DataTypeBuilder builder = new(name);
         configure(builder);
         _dataTypes.Add(builder.Build());
+        
+        // Collect relationships from the builder
+        foreach (var relationshipBuilder in builder.Relationships) {
+            _relationships.Add(relationshipBuilder.Build());
+        }
+        
         return this;
     }
 

@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Operators;
 using Poly.Interpretation.Operators.Comparison;
 using Poly.Interpretation.Operators.Equality;
 
@@ -25,8 +26,8 @@ public sealed class ComparisonRule : Rule {
     }
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
-        var leftMember = context.GetMemberAccessor(LeftPropertyName);
-        var rightMember = context.GetMemberAccessor(RightPropertyName);
+        var leftMember = new MemberAccess(context.Value, LeftPropertyName);
+        var rightMember = new MemberAccess(context.Value, RightPropertyName);
 
         return Operator switch {
             ComparisonOperator.Equal => new Equal(leftMember, rightMember),

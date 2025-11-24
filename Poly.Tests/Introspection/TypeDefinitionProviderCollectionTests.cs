@@ -61,8 +61,8 @@ public class TypeDefinitionProviderCollectionTests {
         var result = collection.GetTypeDefinition("SharedType");
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result).IsEqualTo(type1);
-        await Assert.That(((MockTypeDefinition)result!).Tag).IsEqualTo("Provider1");
+        // The collection uses LIFO (stack) order, so the last added provider (mockProvider2) is checked first
+        await Assert.That(((MockTypeDefinition)result!).Tag).IsEqualTo("Provider2");
     }
 
     // Mock implementations for testing
@@ -72,7 +72,7 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeMember> Members => [];
         public IEnumerable<IMethod> Methods => [];
         public Type ReflectedType => typeof(object);
-        public ITypeMember? GetMember(string name) => null;
+        public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public string? Tag { get; set; }
     }
 
@@ -85,6 +85,10 @@ public class TypeDefinitionProviderCollectionTests {
 
         public ITypeDefinition? GetTypeDefinition(string name) {
             return _types.TryGetValue(name, out var type) ? type : null;
+        }
+
+        public ITypeDefinition? GetTypeDefinition(Type type) {
+            throw new NotImplementedException();
         }
     }
 }

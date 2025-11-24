@@ -69,14 +69,14 @@ public sealed class InterpretationContext {
     /// </summary>
     /// <param name="type">The CLR type.</param>
     /// <returns>The type definition if found; otherwise, <c>null</c>.</returns>
-    public ITypeDefinition? GetTypeDefinition(Type type) => _typeDefinitionProviderCollection.GetTypeDefinition(type.SafeName());
+    public ITypeDefinition? GetTypeDefinition(Type type) => _typeDefinitionProviderCollection.GetTypeDefinition(type);
     
     /// <summary>
     /// Gets the type definition for a generic type parameter.
     /// </summary>
     /// <typeparam name="T">The type to get the definition for.</typeparam>
     /// <returns>The type definition if found; otherwise, <c>null</c>.</returns>
-    public ITypeDefinition? GetTypeDefinition<T>() => _typeDefinitionProviderCollection.GetTypeDefinition(typeof(T).SafeName());
+    public ITypeDefinition? GetTypeDefinition<T>() => _typeDefinitionProviderCollection.GetTypeDefinition(typeof(T));
 
     /// <summary>
     /// Declares a new variable in the current scope.

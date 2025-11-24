@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Operators;
 using Poly.Interpretation.Operators.Boolean;
 using Poly.Interpretation.Operators.Equality;
 
@@ -16,8 +17,8 @@ public sealed class PropertyDependencyRule : Rule {
     }
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
-        var sourceMember = context.GetMemberAccessor(SourcePropertyName);
-        var dependentMember = context.GetMemberAccessor(DependentPropertyName);
+        var sourceMember = new MemberAccess(context.Value, SourcePropertyName);
+        var dependentMember = new MemberAccess(context.Value, DependentPropertyName);
         
         var sourceHasValue = new NotEqual(sourceMember, Value.Null);
         var dependentHasValue = new NotEqual(dependentMember, Value.Null);

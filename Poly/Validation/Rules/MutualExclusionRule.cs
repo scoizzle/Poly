@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Operators;
 using Poly.Interpretation.Operators.Boolean;
 using Poly.Interpretation.Operators.Equality;
 
@@ -25,7 +26,7 @@ public sealed class MutualExclusionRule : Rule {
         if (MaxAllowed == 1) {
             // At most one property can be non-null
             var nonNullChecks = properties
-                .Select(name => context.GetMemberAccessor(name))
+                .Select(name => new MemberAccess(context.Value, name))
                 .Select(member => new NotEqual(member, Value.Null))
                 .ToList();
             

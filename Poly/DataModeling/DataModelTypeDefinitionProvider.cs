@@ -11,4 +11,6 @@ public sealed class DataModelTypeDefinitionProvider : ITypeDefinitionProvider {
     }
 
     public ITypeDefinition? GetTypeDefinition(string name) => _typeDefinitions.TryGetValue(name, out var typeDef) ? typeDef : null;
+
+    public ITypeDefinition? GetTypeDefinition(Type type) => default;
 }

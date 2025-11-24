@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Operators;
 using Poly.Interpretation.Operators.Arithmetic;
 using Poly.Interpretation.Operators.Comparison;
 using Poly.Interpretation.Operators.Equality;
@@ -33,9 +34,9 @@ public sealed class ComputedValueRule : Rule {
     }
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
-        var target = context.GetMemberAccessor(TargetPropertyName);
-        var left = context.GetMemberAccessor(LeftOperandPropertyName);
-        var right = context.GetMemberAccessor(RightOperandPropertyName);
+        var target = new MemberAccess(context.Value, TargetPropertyName);
+        var left = new MemberAccess(context.Value, LeftOperandPropertyName);
+        var right = new MemberAccess(context.Value, RightOperandPropertyName);
         
         Value computation = Operation switch {
             ArithmeticOperation.Add => new Add(left, right),

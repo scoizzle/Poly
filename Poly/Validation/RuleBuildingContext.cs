@@ -1,40 +1,34 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Operators;
-using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Introspection;
 
 namespace Poly.Validation;
 
-public class RuleBuildingContext {
-    protected const string EntryPointName = "@obj";
-    protected readonly Variable _entryPoint;
-    protected readonly InterpretationContext _interpretationContext;
+public sealed record RuleBuildingContext {
+    private const string EntryPointName = "@value";
+    private const string ResultName = "@result";
 
-    public RuleBuildingContext() {
-        _interpretationContext = new InterpretationContext();
-        _entryPoint = _interpretationContext.DeclareVariable(EntryPointName);
+    public RuleBuildingContext(InterpretationContext interpretationContext, ITypeDefinition entryPointTypeDefinition) {
+        Value = interpretationContext.AddParameter(EntryPointName, entryPointTypeDefinition);
+        RuleEvaluationContext = interpretationContext.AddParameter<RuleEvaluationResult>(ResultName);
     }
 
     /// <summary>
     /// Gets the value being validated in the current context (used for constraints).
-    /// For property constraints, this is the property value.
-    /// For type rules, use GetMemberAccessor to access specific properties.
+    /// For property constraints, use GetMemberAccessor to access specific properties.
+    /// For type rules, this is the property value.
     /// </summary>
-    public Value Value => _entryPoint;
+    public Value Value { get; private init; }
 
-    internal Value GetMemberAccessor(string memberName) => new MemberAccess(_entryPoint, memberName);
+    /// <summary>
+    /// Gets the result value of the rule interpretation.
+    /// </summary>
+    public Value RuleEvaluationContext { get; }
 
-    public Expression BuildExpression(Rule rule) {
-        var interpretable = rule.BuildInterpretationTree(this);
-        return interpretable.BuildExpression(_interpretationContext);
-    }
-}
-
-public sealed class RuleBuildingContext<T> : RuleBuildingContext {
-    private readonly Parameter _parameterExpression;
-    public RuleBuildingContext() : base() {
-        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<T>();
-        _parameterExpression = _interpretationContext.AddParameter<T>(EntryPointName);
-    }
-
-    public ParameterExpression GetParameterExpression() => _parameterExpression.BuildExpression(_interpretationContext);
+    /// <summary>
+    /// Creates a new context with the property value as the entry point
+    /// </summary>
+    /// <param name="propertyName">The name of the property to scope the context to.</param>
+    /// <returns></returns>
+    internal RuleBuildingContext GetPropertyContext(string propertyName) => this with { Value = new MemberAccess(Value, propertyName) };
 }

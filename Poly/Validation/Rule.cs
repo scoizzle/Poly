@@ -2,29 +2,21 @@ using System.Text.Json.Serialization;
 
 namespace Poly.Validation;
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "RuleType")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
 [JsonDerivedType(typeof(RangeConstraint), "Range")]
 [JsonDerivedType(typeof(NotNullConstraint), "NotNull")]
-[JsonDerivedType(typeof(Validation.Rules.AndRule), "And")]
-[JsonDerivedType(typeof(Validation.Rules.OrRule), "Or")]
-[JsonDerivedType(typeof(Validation.Rules.NotRule), "Not")]
-[JsonDerivedType(typeof(Validation.Rules.ComparisonRule), "Comparison")]
-[JsonDerivedType(typeof(Validation.Rules.ConditionalRule), "Conditional")]
-[JsonDerivedType(typeof(Validation.Rules.PropertyDependencyRule), "PropertyDependency")]
-[JsonDerivedType(typeof(Validation.Rules.MutualExclusionRule), "MutualExclusion")]
-[JsonDerivedType(typeof(Validation.Rules.ComputedValueRule), "ComputedValue")]
-[JsonDerivedType(typeof(Validation.Rules.PropertyConstraintRule), "PropertyConstraint")]
+[JsonDerivedType(typeof(Rules.AndRule), "And")]
+[JsonDerivedType(typeof(Rules.OrRule), "Or")]
+[JsonDerivedType(typeof(Rules.NotRule), "Not")]
+[JsonDerivedType(typeof(Rules.ComparisonRule), "Comparison")]
+[JsonDerivedType(typeof(Rules.ConditionalRule), "Conditional")]
+[JsonDerivedType(typeof(Rules.PropertyDependencyRule), "PropertyDependency")]
+[JsonDerivedType(typeof(Rules.MutualExclusionRule), "MutualExclusion")]
+[JsonDerivedType(typeof(Rules.ComputedValueRule), "ComputedValue")]
+[JsonDerivedType(typeof(Rules.PropertyConstraintRule), "PropertyConstraint")]
 public abstract class Rule {
     public abstract Interpretation.Value BuildInterpretationTree(RuleBuildingContext context);
-}
 
-public sealed class RuleEvaluationResult {
-    private readonly List<string> _violations = [];
-
-    public IEnumerable<string> Violations => _violations;
-    public bool IsValid => _violations.Count == 0;
-
-    public void AddError(string violation) {
-        _violations.Add(violation);
-    }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ErrorMessage { get; set; }
 }

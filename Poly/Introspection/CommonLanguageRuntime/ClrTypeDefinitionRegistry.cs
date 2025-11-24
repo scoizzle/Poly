@@ -19,9 +19,16 @@ public sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
 
     public ClrTypeDefinition GetTypeDefinition<T>() => GetTypeDefinition(typeof(T));
 
+
     public ClrTypeDefinition GetTypeDefinition(Type type) {
+        ArgumentNullException.ThrowIfNull(type);
+
         var name = type.FullName ?? type.Name;
-        return _types.GetOrAdd(name, _ => new ClrTypeDefinition(type, this));
+        return _types.GetOrAdd(name, CreateTypeDefinition, (type, this));
+
+        static ClrTypeDefinition CreateTypeDefinition(string typeName, (Type clrType, ClrTypeDefinitionRegistry registry) context) {
+            return new ClrTypeDefinition(context.clrType, context.registry);
+        }
     }
 
     public void AddType(ClrTypeDefinition type) {
@@ -47,4 +54,6 @@ public sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
             return new ClrTypeDefinition(clrType, registry);
         }
     }
+
+    ITypeDefinition? ITypeDefinitionProvider.GetTypeDefinition(Type type) => GetTypeDefinition(type);
 }

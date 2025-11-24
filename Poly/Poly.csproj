@@ -26,8 +26,4 @@
         <PackageVersion>1.0.1</PackageVersion>
         <Version>1.0</Version>
     </PropertyGroup>
-
-    <ItemGroup>
-        <Folder Include="Dumb\" />
-    </ItemGroup>
 </Project>

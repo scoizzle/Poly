@@ -16,4 +16,14 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
         }
         return null;
     }
+    
+    public ITypeDefinition? GetTypeDefinition(Type type) {
+        foreach (var provider in _providers) {
+            var typeDef = provider.GetTypeDefinition(type);
+            if (typeDef is not null) {
+                return typeDef;
+            }
+        }
+        return null;
+    }
 }

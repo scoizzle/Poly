@@ -6,7 +6,7 @@ namespace Poly.Validation.Rules;
 public sealed class AndRule(params IEnumerable<Rule> rules) : Rule {
     public IEnumerable<Rule> Rules { get; set; } = rules;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context) {        
         if (Rules == null || !Rules.Any())
             return new Literal(true);
 
@@ -17,8 +17,10 @@ public sealed class AndRule(params IEnumerable<Rule> rules) : Rule {
         if (ruleInterpretationTrees.Count == 1)
             return ruleInterpretationTrees.First();
 
-        return ruleInterpretationTrees
+        var combinedRules = ruleInterpretationTrees
             .Aggregate((current, rule) => new And(current, rule));
+
+        return combinedRules;
     }
 
     public override string ToString() {

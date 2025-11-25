@@ -10,6 +10,13 @@ public sealed class RuleEvaluationContext {
         _errors.Add(error);
     }
 
+    public bool Evaluate(bool condition) {
+        if (!condition) {
+            AddError(new ValidationError("", "", "Validation failed."));
+        }
+        return condition;
+    }
+
     public RuleEvaluationContext Evaluate(bool condition, Func<ValidationError> errorFactory) {
         ArgumentNullException.ThrowIfNull(errorFactory);
         if (!condition) {

@@ -1,4 +1,6 @@
 using System.Collections.Frozen;
+
+using Poly.Interpretation;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -8,9 +10,9 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     private readonly DataType _dataType;
     private readonly FrozenDictionary<string, DataTypeMember> _members;
     private readonly string _name;
-    private readonly ITypeDefinitionProvider? _provider;
+    private readonly ITypeDefinitionProvider _provider;
 
-    public DataTypeDefinition(DataType dataType, ITypeDefinitionProvider? provider = null) {
+    public DataTypeDefinition(DataType dataType, ITypeDefinitionProvider provider) {
         _dataType = dataType ?? throw new ArgumentNullException(nameof(dataType));
         _name = dataType.Name;
         _provider = provider;
@@ -25,11 +27,7 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     public IEnumerable<IMethod> Methods => Array.Empty<IMethod>();
     public Type ReflectedType => typeof(IDictionary<string, object>);
 
-    public ITypeMember? GetMember(string name) => _members.TryGetValue(name, out var m) ? m : null;
-
-    public IEnumerable<ITypeMember> GetMembers(string name) {
-        throw new NotImplementedException();
-    }
+    public IEnumerable<ITypeMember> GetMembers(string name) => _members.TryGetValue(name, out var m) ? [m] : [];
 }
 
 internal sealed class DataTypeMember : ITypeMember {
@@ -50,13 +48,11 @@ internal sealed class DataTypeMember : ITypeMember {
 
     public IEnumerable<IParameter>? Parameters { get; }
 
-    public Poly.Interpretation.Value GetMemberAccessor(Poly.Interpretation.Value instance, params IEnumerable<Poly.Interpretation.Value>? _) {
-        return new DataModelPropertyAccessor(instance, Name, MemberTypeDefinition);
-    }
+    public Value GetMemberAccessor(Value instance, params IEnumerable<Value>? _) => new DataModelPropertyAccessor(instance, Name, MemberTypeDefinition);
 
     private static ITypeDefinition ResolveMemberType(DataProperty property, ITypeDefinitionProvider? provider) {
         var clr = ClrTypeDefinitionRegistry.Shared;
-        
+
         if (property is ReferenceProperty refProp) {
             // Try to resolve from provider first (DataModel types)
             if (provider != null) {
@@ -66,7 +62,7 @@ internal sealed class DataTypeMember : ITypeMember {
             // Fallback to object if type not found
             return clr.GetTypeDefinition<object>()!;
         }
-        
+
         return property switch {
             StringProperty => clr.GetTypeDefinition<string>()!,
             Int32Property => clr.GetTypeDefinition<int>()!,

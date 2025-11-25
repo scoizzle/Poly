@@ -6,11 +6,11 @@ namespace Poly.Validation;
 
 public sealed record RuleBuildingContext {
     private const string EntryPointName = "@value";
-    private const string ResultName = "@result";
+    private const string ContextName = "@context";
 
     public RuleBuildingContext(InterpretationContext interpretationContext, ITypeDefinition entryPointTypeDefinition) {
         Value = interpretationContext.AddParameter(EntryPointName, entryPointTypeDefinition);
-        RuleEvaluationContext = interpretationContext.AddParameter<RuleEvaluationResult>(ResultName);
+        RuleEvaluationContext = interpretationContext.AddParameter<RuleEvaluationContext>(ContextName);
     }
 
     /// <summary>
@@ -31,4 +31,11 @@ public sealed record RuleBuildingContext {
     /// <param name="propertyName">The name of the property to scope the context to.</param>
     /// <returns></returns>
     internal RuleBuildingContext GetPropertyContext(string propertyName) => this with { Value = new MemberAccess(Value, propertyName) };
+
+    internal Value Test(Value condition) {
+        return new InvocationOperator(
+            RuleEvaluationContext,
+            nameof(Validation.RuleEvaluationContext.Evaluate),
+            condition);
+    }
 }

@@ -29,25 +29,38 @@ internal sealed class DataModelPropertyAccessor : Value {
         if (!idictType.IsAssignableFrom(instanceExpr.Type)) {
             // Try dictionary of string to object
             var genericDictType = typeof(IDictionary<,>).MakeGenericType(typeof(string), typeof(object));
-            if (genericDictType.IsAssignableFrom(instanceExpr.Type)) {
-                // ok
-            } else {
+            if (!genericDictType.IsAssignableFrom(instanceExpr.Type)) {
                 throw new InvalidOperationException($"Instance expression type '{instanceExpr.Type.Name}' is not a dictionary-compatible type.");
             }
         }
 
-        // We will call the indexer: ((IDictionary<string, object>)instance)[key]
-        var dictType = typeof(IDictionary<string, object>);
-        var converted = Expression.Convert(instanceExpr, dictType);
-        var indexer = dictType.GetProperty("Item");
-        var keyExpr = Expression.Constant(_propertyName);
-        var indexAccess = Expression.Property(converted, indexer!, keyExpr);
+        // Use TryGetValue pattern for safer dictionary access
+        var dictType = typeof(IDictionary<string, object?>);
 
-        // Convert to the expected CLR type of the member
+        // (IDictionary<string, object?>)instance
+        var converted = Expression.Convert(instanceExpr, dictType);
+        // (IDictionary<string, object?>)instance.TryGetValue
+        var tryGetValueMethod = dictType.GetMethod("TryGetValue");
+        var valueVar = Expression.Variable(typeof(object), "value");
+        var keyExpr = Expression.Constant(_propertyName);
+        // (IDictionary<string, object?>)instance.TryGetValue(key, out value)
+        var tryGetValueCall = Expression.Call(converted, tryGetValueMethod!, keyExpr, valueVar);
+
+        // If TryGetValue returns false, use default value for the target type
         var targetClrType = _memberType.ReflectedType;
-        // If member type is object or same type, return as-is
-        if (targetClrType == typeof(object)) return indexAccess;
-        return Expression.Convert(indexAccess, targetClrType);
+        var defaultValue = Expression.Default(targetClrType);
+        Expression convertedValue = targetClrType == typeof(object) 
+            ? valueVar 
+            : Expression.Convert(valueVar, targetClrType);
+
+        return Expression.Block(
+            [valueVar],
+            Expression.Condition(
+                tryGetValueCall,
+                convertedValue,
+                defaultValue
+            )
+        );
     }
 
     public override string ToString() => $"{_instance}.{_propertyName}";

@@ -25,11 +25,11 @@ public static class FluentBuilderExample {
                 .AddProperty("Email", p => p
                     .OfType<string>()
                     .WithConstraint(new NotNullConstraint())
-                    .WithConstraint(new LengthConstraint(5, 255)))
+                    .WithConstraint(new LengthConstraint(minLength: 5, maxLength: 255)))
                 .AddProperty("Name", p => p
                     .OfType<string>()
                     .WithConstraint(new NotNullConstraint())
-                    .WithConstraint(new LengthConstraint(1, 100)))
+                    .WithConstraint(new LengthConstraint(minLength: 1, maxLength: 100)))
                 .AddProperty("CreatedAt", p => p.OfType<DateTime>())
                 .AddProperty("IsActive", p => p.OfType<bool>());
 
@@ -48,8 +48,8 @@ public static class FluentBuilderExample {
         });
 
         // Define Order type
-        model.AddDataType("Order", type => {
-            type.AddProperty("Id", p => p.OfType<Guid>())
+        model.AddDataType("Order", order => {
+            order.AddProperty("Id", p => p.OfType<Guid>())
                 .AddProperty("OrderNumber", p => p
                     .OfType<string>()
                     .WithConstraint(new NotNullConstraint()))
@@ -60,13 +60,13 @@ public static class FluentBuilderExample {
                 .AddProperty("Status", p => p.OfType<string>());
 
             // Many-to-many: Order has many Products
-            type.HasMany("Products").OfType("Product")
+            order.HasMany("Products").OfType("Product")
                 .WithMany("Orders");
         });
 
         // Define Product type
-        model.AddDataType("Product", type => {
-            type.AddProperty("Id", p => p.OfType<Guid>())
+        model.AddDataType("Product", product => {
+            product.AddProperty("Id", p => p.OfType<Guid>())
                 .AddProperty("SKU", p => p
                     .OfType<string>()
                     .WithConstraint(new NotNullConstraint())
@@ -83,7 +83,7 @@ public static class FluentBuilderExample {
                     .WithConstraint(new RangeConstraint(0, null)));
 
             // Mutation: Adjust stock with delta parameter
-            type.DefineMutation("AdjustStock", m => m
+            product.DefineMutation("AdjustStock", m => m
                 .Param("delta", p => p.OfType<int>())
                 .Effects(e => e.IncrementFromParam("StockQuantity", "delta"))
             );

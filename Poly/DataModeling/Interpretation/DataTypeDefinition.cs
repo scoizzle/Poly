@@ -8,7 +8,7 @@ namespace Poly.DataModeling.Interpretation;
 
 internal sealed class DataTypeDefinition : ITypeDefinition {
     private readonly DataType _dataType;
-    private readonly FrozenDictionary<string, DataTypeMember> _members;
+    private readonly Lazy<FrozenDictionary<string, DataTypeMember>> _members;
     private readonly string _name;
     private readonly ITypeDefinitionProvider _provider;
 
@@ -16,18 +16,23 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
         _dataType = dataType ?? throw new ArgumentNullException(nameof(dataType));
         _name = dataType.Name;
         _provider = provider;
-        _members = dataType.Properties
-            .Select(p => new DataTypeMember(this, p, provider))
-            .ToFrozenDictionary(m => m.Name);
+        _members = new(MemberDictionaryFactory);
     }
 
     public string Name => _name;
     public string? Namespace => null;
-    public IEnumerable<ITypeMember> Members => _members.Values;
+    public IEnumerable<ITypeMember> Members => _members.Value.Values;
     public IEnumerable<IMethod> Methods => Array.Empty<IMethod>();
     public Type ReflectedType => typeof(IDictionary<string, object>);
 
-    public IEnumerable<ITypeMember> GetMembers(string name) => _members.TryGetValue(name, out var m) ? [m] : [];
+    public IEnumerable<ITypeMember> GetMembers(string name) => _members.Value.TryGetValue(name, out var m) ? [m] : [];
+
+    private FrozenDictionary<string, DataTypeMember> MemberDictionaryFactory() {
+        return _dataType
+            .Properties
+            .Select(e => new DataTypeMember(this, e, _provider))
+            .ToFrozenDictionary(m => m.Name);
+    }
 }
 
 internal sealed class DataTypeMember : ITypeMember {

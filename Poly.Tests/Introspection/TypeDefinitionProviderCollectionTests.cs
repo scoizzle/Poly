@@ -70,7 +70,6 @@ public class TypeDefinitionProviderCollectionTests {
         public string Name { get; } = name;
         public string? Namespace => null;
         public IEnumerable<ITypeMember> Members => [];
-        public IEnumerable<IMethod> Methods => [];
         public Type ReflectedType => typeof(object);
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public string? Tag { get; set; }

@@ -5,9 +5,9 @@ public class ClrParameter(string name, Lazy<ClrTypeDefinition> type, int positio
     private readonly Lazy<ClrTypeDefinition> _type = type;
     public int Position { get; } = position;
     public string Name { get; } = name ?? throw new ArgumentNullException(nameof(name));
-    public ClrTypeDefinition Type => _type.Value;
+    public ClrTypeDefinition ParameterTypeDefinition => _type.Value;
     public bool IsOptional { get; } = isOptional;
     public object? DefaultValue { get; } = defaultValue;
 
-    ITypeDefinition IParameter.ParameterTypeDefinition => Type;
+    ITypeDefinition IParameter.ParameterTypeDefinition => ParameterTypeDefinition;
 }

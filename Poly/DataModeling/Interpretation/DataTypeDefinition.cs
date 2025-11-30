@@ -22,7 +22,6 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     public string Name => _name;
     public string? Namespace => null;
     public IEnumerable<ITypeMember> Members => _members.Value.Values;
-    public IEnumerable<IMethod> Methods => Array.Empty<IMethod>();
     public Type ReflectedType => typeof(IDictionary<string, object>);
 
     public IEnumerable<ITypeMember> GetMembers(string name) => _members.Value.TryGetValue(name, out var m) ? [m] : [];

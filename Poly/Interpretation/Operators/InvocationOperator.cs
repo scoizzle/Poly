@@ -15,17 +15,18 @@ public sealed class InvocationOperator : Operator
     public string MethodName { get; }
     public Value[] Arguments { get; }
 
-    private IMethod GetMethodDefinition(InterpretationContext context) {
+    private ITypeMember GetMethodDefinition(InterpretationContext context) {
         var targetTypeDef = Target.GetTypeDefinition(context);
 
         var argumentTypeDefs = Arguments
             .Select(arg => arg.GetTypeDefinition(context))
             .ToList();
 
-        var method = targetTypeDef.Methods
-            .Where(e => e.Name == MethodName)
-            .Where(e => e.Parameters.Count() == argumentTypeDefs.Count)
-            .Where(e => e.Parameters.Select(f => f.ParameterTypeDefinition).SequenceEqual(argumentTypeDefs))
+        var method = targetTypeDef.GetMembers(MethodName)
+            .Where(e =>
+                e.Parameters is not null &&
+                e.Parameters.Count() == argumentTypeDefs.Count &&
+                e.Parameters.Select(f => f.ParameterTypeDefinition).SequenceEqual(argumentTypeDefs))
             .SingleOrDefault();
 
         if (method == null) {
@@ -37,12 +38,12 @@ public sealed class InvocationOperator : Operator
 
     public override Expression BuildExpression(InterpretationContext context) {
         var method = GetMethodDefinition(context);
-        var methodInvocation = method.GetMethodInvocation(Target, Arguments);
+        var methodInvocation = method.GetMemberAccessor(Target, Arguments);
         return methodInvocation.BuildExpression(context);
     }
 
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
         var method = GetMethodDefinition(context);
-        return method.ReturnTypeDefinition;
+        return method.MemberTypeDefinition;
     }
 }

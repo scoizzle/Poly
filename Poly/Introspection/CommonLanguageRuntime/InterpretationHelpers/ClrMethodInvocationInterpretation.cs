@@ -32,7 +32,7 @@ public sealed class ClrMethodInvocationInterpretation(ClrMethod method, Value in
 
     /// <inheritdoc />
     /// <returns>The return type of the method.</returns>
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => Method.ReturnType;
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => Method.MemberType;
 
     /// <inheritdoc />
     /// <remarks>

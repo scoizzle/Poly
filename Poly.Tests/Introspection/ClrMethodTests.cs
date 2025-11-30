@@ -25,7 +25,7 @@ public class ClrMethodTests {
 
         await Assert.That(toStringMethod.Name).IsEqualTo("ToString");
         await Assert.That(toStringMethod.DeclaringType).IsEqualTo(intType);
-        await Assert.That(toStringMethod.ReturnType.FullName).IsEqualTo("System.String");
+        await Assert.That(toStringMethod.MemberType.FullName).IsEqualTo("System.String");
     }
 
     [Test]
@@ -42,13 +42,13 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task ParseMethod_HasCorrectReturnType() {
+    public async Task ParseMethod_HasCorrectMemberType() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var parseMethod = intType.Methods.First(m => m.Name == "Parse");
 
         await Assert.That(parseMethod.Name).IsEqualTo("Parse");
-        await Assert.That(parseMethod.ReturnType.FullName).IsEqualTo("System.Int32");
+        await Assert.That(parseMethod.MemberType.FullName).IsEqualTo("System.Int32");
     }
 
     [Test]
@@ -61,13 +61,13 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Method_WithGenericReturnType_HasCorrectReturnType() {
+    public async Task Method_WithGenericMemberType_HasCorrectMemberType() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var getEnumeratorMethod = listType.Methods.First(m => m.Name == "GetEnumerator");
 
-        await Assert.That(getEnumeratorMethod.ReturnType).IsNotNull();
-        await Assert.That(getEnumeratorMethod.ReturnType.Name).Contains("Enumerator");
+        await Assert.That(getEnumeratorMethod.MemberType).IsNotNull();
+        await Assert.That(getEnumeratorMethod.MemberType.Name).Contains("Enumerator");
     }
 
     [Test]
@@ -134,7 +134,7 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ReturnsMethodReturnType() {
+    public async Task GetTypeDefinition_ReturnsMethodMemberType() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -448,9 +448,9 @@ public class ClrMethodTests {
         
         var context = new InterpretationContext();
         var instance = new Literal("HELLO");
-        
-        // Use the GetMethodInvocation helper from ClrMethod
-        var invocation = toLowerMethod.GetMethodInvocation(instance);
+
+        // Use the GetMemberAccessor helper from ClrMethod
+        var invocation = toLowerMethod.GetMemberAccessor(instance, []);
 
         var expression = invocation.BuildExpression(context);
         var lambda = Expression.Lambda<Func<string>>(expression);

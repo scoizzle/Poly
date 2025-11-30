@@ -23,6 +23,10 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
     public string? Namespace => _type.Namespace;
     public string FullName => _type.FullName ?? _type.Name;
     public Type ClrType => _type;
+
+    public IEnumerable<ClrTypeField> Fields => _fields;
+    public IEnumerable<ClrTypeProperty> Properties => _properties;
+    public IEnumerable<ClrMethod> Methods => _methods;
     public IEnumerable<ClrTypeMember> Members => [.._fields, .._properties, .._methods];
     public IEnumerable<ClrTypeMember> GetMembers(string name) => Members.Where(m => m.Name == name);
 
@@ -32,9 +36,11 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
 
     public override string ToString() => FullName;
 
+    private static readonly BindingFlags MemberSearchCriteria = BindingFlags.Public | BindingFlags.NonPublic| BindingFlags.Instance | BindingFlags.Static;
+
     private static FrozenSet<ClrTypeField> BuildFieldCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         var fields = type
-            .GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+            .GetFields(MemberSearchCriteria)
             .Select(ConstructMemberField)
             .ToFrozenSet();
 
@@ -52,7 +58,7 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
 
 
     private static FrozenSet<ClrTypeProperty> BuildPropertyCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
-        var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+        var properties = type.GetProperties(MemberSearchCriteria)
             .Select(ConstructMemberProperty)
             .ToFrozenSet();
 
@@ -65,7 +71,7 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
 
             Lazy<ClrTypeDefinition> type = provider.GetDeferredTypeDefinitionResolver(pi.PropertyType);
             IEnumerable<MethodInfo> accessors = pi.GetAccessors(nonPublic: true);
-            var indexParams = pi.GetIndexParameters();
+            ParameterInfo[] indexParams = pi.GetIndexParameters();
             IEnumerable<ClrParameter>? parameters = indexParams.Length > 0
                 ? indexParams
                     .OrderBy(pi => pi.Position)
@@ -80,7 +86,7 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
 
     private static FrozenSet<ClrMethod> BuildMethodCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         var methods = type
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+            .GetMethods(MemberSearchCriteria)
             .Where(mi => !mi.IsSpecialName) // Exclude property accessors and other special methods
             .Select(ConstructMethod)
             .ToFrozenSet();

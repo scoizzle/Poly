@@ -5,7 +5,6 @@ public interface ITypeDefinition {
     public string? Namespace { get; }
     public string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
     public IEnumerable<ITypeMember> Members { get; }
-    public IEnumerable<IMethod> Methods { get; }
     public Type ReflectedType { get; }
 
     public IEnumerable<ITypeMember> GetMembers(string name);

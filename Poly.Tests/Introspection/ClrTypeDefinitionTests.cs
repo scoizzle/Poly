@@ -33,12 +33,11 @@ public class ClrTypeDefinitionTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
-        var methods = intType.Methods.ToList();
-
-        await Assert.That(methods.Count != 0).IsTrue();
-        // Int32 has ToString, etc.
-        var toStringMethod = methods.FirstOrDefault(m => m.Name == "ToString");
-        await Assert.That(toStringMethod).IsNotNull();
+        // Methods are incorporated into Members; ensure a known method exists there.
+        var members = intType.Members.ToList();
+        await Assert.That(members.Count != 0).IsTrue();
+        var toStringMember = members.FirstOrDefault(m => m.Name == "ToString");
+        await Assert.That(toStringMember).IsNotNull();
     }
 
     [Test]

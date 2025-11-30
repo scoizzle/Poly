@@ -5,32 +5,37 @@ using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
-public class ClrMethod : IMethod {
-    private readonly Lazy<ClrTypeDefinition> _returnType;
-    private readonly ClrParameter[] _parameters;
+[DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
+public sealed class ClrMethod : ClrTypeMember {
+    private readonly Lazy<ClrTypeDefinition> _memberType;
+    private readonly ClrTypeDefinition _declaringType;
     private readonly MethodInfo _methodInfo;
+    private readonly IEnumerable<ClrParameter> _parameters;
+    private readonly string _name;
 
-    public ClrMethod(MethodInfo methodInfo, ClrTypeDefinition declaringType, Lazy<ClrTypeDefinition> returnType, IEnumerable<ClrParameter> parameters) {
-        ArgumentNullException.ThrowIfNull(methodInfo);
+    public ClrMethod(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter> parameters, MethodInfo methodInfo) {
+        ArgumentNullException.ThrowIfNull(memberType);
         ArgumentNullException.ThrowIfNull(declaringType);
-        ArgumentNullException.ThrowIfNull(returnType);
-        ArgumentNullException.ThrowIfNull(parameters);
+        ArgumentNullException.ThrowIfNull(methodInfo);
 
-        _returnType = returnType;
-        _parameters = parameters.ToArray();
+        _memberType = memberType;
+        _declaringType = declaringType;
+        _parameters = parameters;
         _methodInfo = methodInfo;
-        DeclaringType = declaringType;
+        _name = methodInfo.Name;
     }
 
-    public string Name  => _methodInfo.Name;
-    public ClrTypeDefinition DeclaringType { get; }
-    public ClrTypeDefinition ReturnType => _returnType.Value;
-    public IEnumerable<IParameter> Parameters => _parameters;
+    public override ClrTypeDefinition MemberType => _memberType.Value;
+    public override ClrTypeDefinition DeclaringType => _declaringType;
+    public override IEnumerable<ClrParameter> Parameters => _parameters;
+    public override string Name => _name;
     public MethodInfo MethodInfo => _methodInfo;
 
+    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? arguments) {
+        ArgumentNullException.ThrowIfNull(arguments);
 
-    ITypeDefinition IMethod.ReturnTypeDefinition => ReturnType;
-    IEnumerable<IParameter> IMethod.Parameters => Parameters;
+        return new ClrMethodInvocationInterpretation(this, instance, arguments);
+    }
 
-    public Value GetMethodInvocation(Value target, params IEnumerable<Value> arguments) => new ClrMethodInvocationInterpretation(this, target, arguments);
+    public override string ToString() => $"{MemberType} {DeclaringType}.{Name}({string.Join(", ", _parameters)})";
 }

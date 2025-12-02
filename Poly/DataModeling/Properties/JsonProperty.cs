@@ -4,8 +4,9 @@ namespace Poly.DataModeling;
 
 public sealed record JsonProperty(
     string Name,
-    string? SchemaDefinition = null,
-    params IEnumerable<Constraint> Constraints
-) : DataProperty(Name, Constraints) {
+    IEnumerable<Constraint> Constraints,
+    object? DefaultValue = null,
+    string? SchemaDefinition = null
+) : DataProperty(Name, Constraints, DefaultValue) {
     public override string ToString() => $"json {Name}";
 }

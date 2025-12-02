@@ -8,7 +8,8 @@ namespace Poly.DataModeling;
 public sealed record ReferenceProperty(
     string Name,
     string ReferencedTypeName,
-    params IEnumerable<Constraint> Constraints
-) : DataProperty(Name, Constraints) {
+    IEnumerable<Constraint> Constraints,
+    object? DefaultValue = null
+) : DataProperty(Name, Constraints, DefaultValue) {
     public override string ToString() => $"{ReferencedTypeName} {Name}";
 }

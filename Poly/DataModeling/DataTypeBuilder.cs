@@ -1,6 +1,8 @@
 namespace Poly.DataModeling;
 
 using Poly.DataModeling.Builders;
+using Poly.DataModeling.Mutations;
+using Poly.DataModeling.Mutations.Builders;
 
 public sealed class DataTypeBuilder {
     private string _name;
@@ -62,11 +64,26 @@ public sealed class DataTypeBuilder {
         return this;
     }
 
-    public DataTypeBuilder DefineMutation(string name, Action<MutationBuilder> configure) {
+    public DataTypeBuilder HasMutation(string name, Action<MutationBuilder> configure) {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new MutationBuilder(_name, name);
         configure(builder);
+        _mutations.Add(builder.Build());
+        return this;
+    }
+
+    public DataTypeBuilder HasMutation(string name, IEnumerable<Action<PreconditionBuilder>> preconditions, IEnumerable<Action<EffectBuilder>> effects) {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(preconditions);
+        ArgumentNullException.ThrowIfNull(effects);
+        var builder = new MutationBuilder(_name, name);
+        foreach (var precondition in preconditions) {
+            builder.WithPrecondition(precondition);
+        }
+        foreach (var effect in effects) {
+            builder.HasEffect(effect);
+        }
         _mutations.Add(builder.Build());
         return this;
     }

@@ -2,6 +2,6 @@ using Poly.Validation;
 
 namespace Poly.DataModeling;
 
-public sealed record GuidProperty(string Name, IEnumerable<Constraint> Constraints) : DataProperty(Name, Constraints) {
-    public override string ToString() => $"guid {Name}";
+public sealed record GuidProperty(string Name, IEnumerable<Constraint> Constraints, object? DefaultValue = null) : DataProperty(Name, Constraints, DefaultValue) {
+    public override string ToString() => $"Guid {Name}";
 }

@@ -11,4 +11,4 @@ public sealed record Mutation(
     IEnumerable<Effect> Effects
 );
 
-public sealed record MutationCondition(string PropertyName, Constraint Constraint);
+public sealed record MutationCondition(ValueSource ValueSource, Constraint Constraint);

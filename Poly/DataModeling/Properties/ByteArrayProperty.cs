@@ -4,9 +4,10 @@ namespace Poly.DataModeling;
 
 public sealed record ByteArrayProperty(
     string Name,
-    int? MaxLength = null,
-    params IEnumerable<Constraint> Constraints
-) : DataProperty(Name, Constraints) {
+    IEnumerable<Constraint> Constraints,
+    object? DefaultValue = null,
+    int? MaxLength = null
+) : DataProperty(Name, Constraints, DefaultValue) {
     public override string ToString() => MaxLength.HasValue 
         ? $"byte[{MaxLength}] {Name}"
         : $"byte[] {Name}";

@@ -1,6 +1,7 @@
 namespace Poly.DataModeling.Builders;
 
 using Poly.DataModeling.Mutations;
+using Poly.DataModeling.Mutations.Builders;
 using Poly.Validation;
 
 public sealed class MutationBuilder {
@@ -25,14 +26,22 @@ public sealed class MutationBuilder {
         return this;
     }
 
-    public MutationBuilder WithPrecondition(string propertyName, Constraint constraint) {
-        ArgumentNullException.ThrowIfNull(propertyName);
-        ArgumentNullException.ThrowIfNull(constraint);
-        _preconditions.Add(new MutationCondition(propertyName, constraint));
+    public MutationBuilder WithPrecondition(Action<PreconditionBuilder> configure) {
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new PreconditionBuilder();
+        configure(builder);
+        return this;
+    }
+    
+    public MutationBuilder Precondition(Func<PreconditionBuilder, MutationCondition> configure) {
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new PreconditionBuilder();
+        var condition = configure(builder);
+        _preconditions.Add(condition);
         return this;
     }
 
-    public MutationBuilder Effects(Action<EffectBuilder> configure) {
+    public MutationBuilder HasEffect(Action<EffectBuilder> configure) {
         ArgumentNullException.ThrowIfNull(configure);
         configure(_effects);
         return this;

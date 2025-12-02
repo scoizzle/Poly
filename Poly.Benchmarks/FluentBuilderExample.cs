@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Text.Json;
 using Poly.DataModeling;
 using Poly.DataModeling.Builders;
+using Poly.DataModeling.Mutations;
 using Poly.Validation;
+using Poly.Validation.Constraints;
 using Poly.DataModeling.Interpretation;
 using Poly.Interpretation;
 using System.Linq.Expressions;
@@ -30,8 +32,14 @@ public static class FluentBuilderExample {
                     .OfType<string>()
                     .WithConstraint(new NotNullConstraint())
                     .WithConstraint(new LengthConstraint(minLength: 1, maxLength: 100)))
-                .AddProperty("CreatedAt", p => p.OfType<DateTime>())
-                .AddProperty("IsActive", p => p.OfType<bool>());
+                .AddProperty("CreatedAt", p => p
+                    .OfType<DateTime>()
+                    .WithDefault(DateTime.UtcNow))
+                .AddProperty("IsActive", p => p
+                    .OfType<bool>()
+                    .WithDefault(true))
+                .AddProperty("ActivatedAt", p => p.OfType<DateTime?>())
+                .AddProperty("DeactivatedAt", p => p.OfType<DateTime?>());
 
             // Define one-to-many relationship: Customer has many Orders
             customer.HasMany("Orders").OfType("Order")
@@ -41,9 +49,28 @@ public static class FluentBuilderExample {
             customer.HasMany("Addresses").OfType("Address")
                 .WithOne("Customer");
 
-            // Mutation: Activate customer (no params)
-            customer.DefineMutation("Activate", m => m
-                .Effects(e => e.SetConst("IsActive", true))
+            // Mutation: Activate customer (sets timestamp, checks not already active)
+            customer.HasMutation("Activate", m => m
+                .Precondition(p => p
+                    .Property("ActivatedAt")
+                    .MustBe().Null())
+                .HasEffect(e => e.Assign("ActivatedAt").Constant(DateTime.UtcNow))
+            );
+            
+            // Mutation: Deactivate customer (checks currently active, sets timestamp)
+            customer.HasMutation("Deactivate",
+                preconditions: [
+                    p => p.Property("ActivatedAt").MustBe().NotNull(),
+                    p => p.Property("DeactivatedAt").MustBe().Null()
+                ],
+                effects:[], m => m
+                .Precondition(p => p
+                    .Property("ActivatedAt")
+                    .MustBe().NotNull())
+                .Precondition(p => p
+                    .Property("DeactivatedAt")
+                    .MustBe().Null())
+                .Effects(e => e.SetConst("DeactivatedAt", DateTime.UtcNow))
             );
         });
 
@@ -53,15 +80,45 @@ public static class FluentBuilderExample {
                 .AddProperty("OrderNumber", p => p
                     .OfType<string>()
                     .WithConstraint(new NotNullConstraint()))
-                .AddProperty("OrderDate", p => p.OfType<DateTime>())
+                .AddProperty("OrderDate", p => p
+                    .OfType<DateTime>()
+                    .WithDefault(DateTime.UtcNow))
                 .AddProperty("TotalAmount", p => p
                     .OfType<double>()
-                    .WithConstraint(new RangeConstraint(0.01, null)))
-                .AddProperty("Status", p => p.OfType<string>());
+                    .WithConstraint(new RangeConstraint(0.01, null))
+                    .WithDefault(0.0))
+                .AddProperty("Status", p => p
+                    .OfType<string>()
+                    .WithDefault("Pending"))
+                .AddProperty("ShippingAddress", p => p.OfType("Address"));
 
             // Many-to-many: Order has many Products
             order.HasMany("Products").OfType("Product")
                 .WithMany("Orders");
+                
+            // Mutation: Ship order (requires address and pending status)
+            order.HasMutation("Ship", m => m
+                .Precondition(p => p
+                    .Property("Status")
+                    .MustBe().EqualTo("Pending"))
+                .Precondition(p => p
+                    .Property("ShippingAddress")
+                    .Member("City")
+                    .MustBe().NotNull())
+                .Precondition(p => p
+                    .Property("ShippingAddress")
+                    .Member("PostalCode")
+                    .MustBe().NotNull())
+                .Effects(e => e.SetConst("Status", "Shipped"))
+            );
+            
+            // Mutation: Cancel order (only if pending)
+            order.HasMutation("Cancel", m => m
+                .Precondition(p => p
+                    .Property("Status")
+                    .MustBe().EqualTo("Pending"))
+                .Effects(e => e.SetConst("Status", "Cancelled"))
+            );
         });
 
         // Define Product type
@@ -77,15 +134,31 @@ public static class FluentBuilderExample {
                     .WithConstraint(new LengthConstraint(1, 200)))
                 .AddProperty("Price", p => p
                     .OfType<double>()
-                    .WithConstraint(new RangeConstraint(0.0, null)))
+                    .WithConstraint(new RangeConstraint(0.0, null))
+                    .WithDefault(0.0))
                 .AddProperty("StockQuantity", p => p
                     .OfType<int>()
-                    .WithConstraint(new RangeConstraint(0, null)));
+                    .WithConstraint(new RangeConstraint(0, null))
+                    .WithDefault(0));
 
             // Mutation: Adjust stock with delta parameter
-            product.DefineMutation("AdjustStock", m => m
+            product.HasMutation("AdjustStock", m => m
                 .Param("delta", p => p.OfType<int>())
-                .Effects(e => e.IncrementFromParam("StockQuantity", "delta"))
+                .Precondition(p => p.Parameter("delta").MustBe().InRange(-1000, 1000))
+                .Precondition(p => p.Property("StockQuantity").MustBe().GreaterThanOrEqualTo(new ParameterValue("delta")))
+                .HasEffect(e => e.IncrementFromParam("StockQuantity", "delta"))
+            );
+            
+            // Mutation: Apply discount (validates price and discount amount)
+            product.HasMutation("ApplyDiscount", m => m
+                .Param("discountAmount", p => p.OfType<double>())
+                .Precondition(p => p
+                    .Parameter("discountAmount")
+                    .MustBe().GreaterThan(0.0))
+                .Precondition(p => p
+                    .Property("Price")
+                    .MustBe().GreaterThan(new ParameterValue("discountAmount")))
+                .HasEffect(e => e.IncrementFromParam("Price", "discountAmount"))
             );
         });
 

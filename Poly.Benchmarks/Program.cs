@@ -8,7 +8,7 @@ using Poly.Validation.Builders;
 
 using JsonProp = Poly.DataModeling.JsonProperty;
 
-FluentBuilderExample.Run();
+// FluentBuilderExample.Run();
 
 // BenchmarkPersonPredicate test = new();
 // Console.WriteLine("Setting up benchmark...");
@@ -126,13 +126,13 @@ BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly)
 
 
 // RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-//     .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
+//     .Member(p => p.Name, r => r.NotNull()!.MinLength(1).MaxLength(100))
 //     .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
 //     .Build();
 
-// Person person = new("Alice", 30);
+// Person person = new(Name: "Alice", Age: 30);
 // Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
-// Person person2 = new("", 200);
+// Person person2 = new(Name: "", Age: 200);
 // Console.WriteLine($"Rule evaluation for {person2}: {ruleSet.Test(person2)}");
 // Console.WriteLine(ruleSet.CombinedRules);
 
@@ -182,7 +182,7 @@ public class BenchmarkPersonPredicate {
         _person = new Person("Alice", 30);
 
         RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-            .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
+            .Member(p => p.Name, r => r.NotNull()!.MinLength(1).MaxLength(100))
             .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
             .Build();
 

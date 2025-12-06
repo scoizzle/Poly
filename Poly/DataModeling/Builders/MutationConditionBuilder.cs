@@ -204,9 +204,9 @@ internal sealed class ValueSourceComparisonConstraint : Constraint {
     private static Value BuildValueFromSource(ValueSource source, RuleBuildingContext context) {
         return source switch {
             ConstantValue cv => new Literal(cv.Value),
-            ParameterValue pv => new Variable(pv.Name),
-            PropertyValue prop => context.Value.GetMember(prop.PropertyName),
-            MemberAccessValue mav => BuildValueFromSource(mav.Source, context).GetMember(mav.MemberName),
+            // ParameterValue pv => new Variable(pv.p),
+            // PropertyValue prop => context.Value.GetMember(prop.PropertyName),
+            // MemberAccessValue mav => BuildValueFromSource(mav.Source, context).GetMember(mav.MemberName),
             _ => throw new InvalidOperationException($"Unknown value source type: {source.GetType().Name}")
         };
     }

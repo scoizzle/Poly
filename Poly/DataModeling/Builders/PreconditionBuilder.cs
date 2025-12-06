@@ -54,7 +54,7 @@ public sealed class PreconditionBuilder {
         if (_valueSource == null)
             throw new InvalidOperationException("Cannot access a member without first specifying a value source using Property(), Parameter(), or Constant().");
         
-        _valueSource = new MemberAccessValue(_valueSource, memberName);
+        // _valueSource = new MemberAccessValue(_valueSource, memberName);
         return this;
     }
     

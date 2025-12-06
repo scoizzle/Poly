@@ -1,4 +1,4 @@
-namespace Poly.DataModeling.Builders;
+namespace Poly.DataModeling.Mutations.Builders;
 
 using Poly.DataModeling.Mutations;
 using Poly.DataModeling.Mutations.Effects;
@@ -8,20 +8,7 @@ public sealed class EffectBuilder {
 
     public AssignEffectBuilder Assign(DataPropertyPath propertyPath) {
         ArgumentNullException.ThrowIfNull(propertyPath);
-        return new AssignEffectBuilder(this, propertyName);
-    }
-
-    public EffectBuilder SetConst(string propertyName, object? value) {
-        ArgumentNullException.ThrowIfNull(propertyName);
-        _effects.Add(new SetEffect(propertyName, new ConstantValue(value)));
-        return this;
-    }
-
-    public EffectBuilder SetFromParam(string propertyName, string parameterName) {
-        ArgumentNullException.ThrowIfNull(propertyName);
-        ArgumentNullException.ThrowIfNull(parameterName);
-        _effects.Add(new SetEffect(propertyName, new ParameterValue(parameterName)));
-        return this;
+        return new AssignEffectBuilder(this, propertyPath);
     }
 
     public EffectBuilder IncrementConst(string propertyName, double amount) {

@@ -35,9 +35,6 @@ public static class FluentBuilderExample {
                 .AddProperty("CreatedAt", p => p
                     .OfType<DateTime>()
                     .WithDefault(DateTime.UtcNow))
-                .AddProperty("IsActive", p => p
-                    .OfType<bool>()
-                    .WithDefault(true))
                 .AddProperty("ActivatedAt", p => p.OfType<DateTime?>())
                 .AddProperty("DeactivatedAt", p => p.OfType<DateTime?>());
 
@@ -51,26 +48,25 @@ public static class FluentBuilderExample {
 
             // Mutation: Activate customer (sets timestamp, checks not already active)
             customer.HasMutation("Activate", m => m
-                .Precondition(p => p
-                    .Property("ActivatedAt")
-                    .MustBe().Null())
+                .Precondition(p => p.Property("ActivatedAt").MustBe().Null())
                 .HasEffect(e => e.Assign("ActivatedAt").Constant(DateTime.UtcNow))
             );
-            
+
             // Mutation: Deactivate customer (checks currently active, sets timestamp)
+            customer.HasMutation("Deactivate", m => m
+                .Precondition(p => p.Property("ActivatedAt").MustBe().NotNull())
+                .Precondition(p => p.Property("DeactivatedAt").MustBe().Null())
+                .HasEffect(e => e.Assign("DeactivatedAt").Constant(DateTime.UtcNow))
+            );
+
             customer.HasMutation("Deactivate",
                 preconditions: [
                     p => p.Property("ActivatedAt").MustBe().NotNull(),
                     p => p.Property("DeactivatedAt").MustBe().Null()
                 ],
-                effects:[], m => m
-                .Precondition(p => p
-                    .Property("ActivatedAt")
-                    .MustBe().NotNull())
-                .Precondition(p => p
-                    .Property("DeactivatedAt")
-                    .MustBe().Null())
-                .Effects(e => e.SetConst("DeactivatedAt", DateTime.UtcNow))
+                effects:[
+                    e => e.Assign("DeactivatedAt").Constant(DateTime.UtcNow),
+                ]
             );
         });
 
@@ -109,7 +105,7 @@ public static class FluentBuilderExample {
                     .Property("ShippingAddress")
                     .Member("PostalCode")
                     .MustBe().NotNull())
-                .Effects(e => e.SetConst("Status", "Shipped"))
+                .HasEffect(e => e.Assign("Status").Constant("Shipped"))
             );
             
             // Mutation: Cancel order (only if pending)
@@ -117,7 +113,7 @@ public static class FluentBuilderExample {
                 .Precondition(p => p
                     .Property("Status")
                     .MustBe().EqualTo("Pending"))
-                .Effects(e => e.SetConst("Status", "Cancelled"))
+                .HasEffect(e => e.Assign("Status").Constant("Cancelled"))
             );
         });
 
@@ -143,8 +139,8 @@ public static class FluentBuilderExample {
 
             // Mutation: Adjust stock with delta parameter
             product.HasMutation("AdjustStock", m => m
-                .Param("delta", p => p.OfType<int>())
-                .Precondition(p => p.Parameter("delta").MustBe().InRange(-1000, 1000))
+                .Param("delta", p => p.OfType<int>().WithConstraints(new RangeConstraint(-1000, 1000))) // constrain delta between -1000 and 1000
+                .Precondition(p => p.Parameter("delta").MustBe().InRange(-1000, 1000))                  // experimental alternative syntax to constraint the delta parameter
                 .Precondition(p => p.Property("StockQuantity").MustBe().GreaterThanOrEqualTo(new ParameterValue("delta")))
                 .HasEffect(e => e.IncrementFromParam("StockQuantity", "delta"))
             );
@@ -199,9 +195,9 @@ public static class FluentBuilderExample {
             var param = ctx.AddParameter("@obj", customerDef);
             var emailValue = param.GetMember("Email");
             var body = emailValue.BuildExpression(ctx);
-            var lambda = System.Linq.Expressions.Expression.Lambda<Func<IDictionary<string, object>, string>>(
+            var lambda = Expression.Lambda<Func<IDictionary<string, object>, string>>(
                 body,
-                (System.Linq.Expressions.ParameterExpression)param.BuildExpression(ctx)
+                param.BuildExpression(ctx)
             );
             var fn = lambda.Compile();
             var sample = new Dictionary<string, object> { ["Email"] = "dev@example.com" };

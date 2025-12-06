@@ -11,7 +11,7 @@ public sealed record DataPropertyPath {
         (_fullPath, _segments) = (new(fullPath), new(GetSegments));
     }
 
-    public DataPropertyPath(IEnumerable<string> segments) {
+    public DataPropertyPath(params IEnumerable<string> segments) {
         if (segments == null || !segments.Any()) {
             throw new ArgumentException("Segments cannot be null or empty.", nameof(segments));
         }

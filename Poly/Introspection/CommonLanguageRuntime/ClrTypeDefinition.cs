@@ -104,9 +104,11 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
 
     static ClrParameter ConstructParameter(ClrTypeDefinitionRegistry provider, ParameterInfo pi) {
         ArgumentNullException.ThrowIfNull(pi);
-        ArgumentException.ThrowIfNullOrWhiteSpace(pi.Name);
+        
+        // Array indexers and some built-in methods may have null parameter names
+        string parameterName = pi.Name ?? $"param{pi.Position}";
 
         Lazy<ClrTypeDefinition> type = provider.GetDeferredTypeDefinitionResolver(pi.ParameterType);
-        return new ClrParameter(pi.Name, type, pi.Position, pi.IsOptional, pi.DefaultValue);
+        return new ClrParameter(parameterName, type, pi.Position, pi.IsOptional, pi.DefaultValue);
     }
 }

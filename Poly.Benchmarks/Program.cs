@@ -1,12 +1,7 @@
 ﻿using System;
-using System.Text.Json;
 
-using Poly.Benchmarks;
-using Poly.DataModeling;
 using Poly.Validation;
 using Poly.Validation.Builders;
-
-using JsonProp = Poly.DataModeling.JsonProperty;
 
 // FluentBuilderExample.Run();
 
@@ -186,7 +181,7 @@ public class BenchmarkPersonPredicate {
             .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
             .Build();
 
-        _rulePredicate = ruleSet.Predicate;
+        _rulePredicate = ruleSet.Test;
     }
 
     [BenchmarkDotNet.Attributes.Benchmark]

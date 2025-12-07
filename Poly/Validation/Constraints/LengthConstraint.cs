@@ -25,8 +25,8 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
             (null, Value max) => max,
             _ => new Literal(true)
         };
-        
-        return context.Test(lengthCheck, DefaultErrorFactory);
+
+        return lengthCheck;
     }
 
     public override string ToString() {

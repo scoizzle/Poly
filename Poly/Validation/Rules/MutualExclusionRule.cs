@@ -18,7 +18,7 @@ public sealed class MutualExclusionRule : Rule {
         var properties = PropertyNames.ToList();
         
         if (properties.Count <= MaxAllowed) {
-            return context.Test(Literal.True);
+            return Literal.True;
         }
         
         // For now, implement simple mutual exclusion (only one can have value)
@@ -40,7 +40,7 @@ public sealed class MutualExclusionRule : Rule {
             }
             
             var exclusionResult = exclusions.Aggregate((current, next) => new And(current, next));
-            return context.Test(exclusionResult, DefaultErrorFactory);
+            return exclusionResult;
         }
         
         // For maxAllowed > 1, would need count aggregation

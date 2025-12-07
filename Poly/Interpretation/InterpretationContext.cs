@@ -190,4 +190,11 @@ public sealed class InterpretationContext {
         _scopes.Pop();
         _currentScope = _scopes.Peek();
     }
+
+    /// <summary>
+    /// Gets the parameter expressions for all registered parameters.
+    /// </summary>
+    /// <returns>An enumerable of parameter expressions.</returns>
+    public IEnumerable<ParameterExpression> GetParameterExpressions() =>
+        _parameters.Select(p => p.BuildExpression(this));
 }

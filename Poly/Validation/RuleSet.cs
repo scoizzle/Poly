@@ -31,10 +31,10 @@ public sealed class RuleSet<T> {
         
         // Build the expression tree
         ExpressionTree = RuleSetInterpretation.BuildExpression(interpretationContext);
-        
+
         // Compile to a predicate - use the Value (parameter) from the building context
-        var paramExpression = (ParameterExpression)buildingContext.Value.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Predicate<T>>(ExpressionTree, paramExpression);
+        var parameterExpressions = interpretationContext.GetParameterExpressions();
+        var lambda = Expression.Lambda<Predicate<T>>(ExpressionTree, parameterExpressions);
         Predicate = lambda.Compile();
     }
 

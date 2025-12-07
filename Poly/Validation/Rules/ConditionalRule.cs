@@ -29,10 +29,10 @@ public sealed class ConditionalRule : Rule {
                 new And(conditionTree, thenTree),
                 new And(new Not(conditionTree), elseTree)
             );
-            return context.Test(conditionalResult, DefaultErrorFactory);
+            return conditionalResult;
         }
         
-        return context.Test(implication, DefaultErrorFactory);
+        return implication;
     }
 
     public override string ToString() {

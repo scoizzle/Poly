@@ -33,8 +33,8 @@ public sealed class PropertyDependencyRule : Rule {
             // !sourceHasValue OR !dependentHasValue
             dependencyResult = new Or(new Not(sourceHasValue), new Not(dependentHasValue));
         }
-        
-        return context.Test(dependencyResult, DefaultErrorFactory);
+
+        return dependencyResult;
     }
 
     public override string ToString() {

@@ -17,7 +17,7 @@ public sealed class PropertyConstraintRule : Rule {
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var propertyContext = context.GetPropertyContext(PropertyName);
         var propertyRuleResult = PropertyRule.BuildInterpretationTree(propertyContext);
-        return context.Test(propertyRuleResult, DefaultErrorFactory);
+        return propertyRuleResult;
     }
 
     public override string ToString() => $"{PropertyName}: {PropertyRule}";

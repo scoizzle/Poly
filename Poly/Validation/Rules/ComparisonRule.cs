@@ -39,7 +39,7 @@ public sealed class ComparisonRule : Rule {
             _ => throw new ArgumentException($"Unknown operator: {Operator}")
         };
         
-        return context.Test(comparisonResult, DefaultErrorFactory);
+        return comparisonResult;
     }
 
     public override string ToString() {

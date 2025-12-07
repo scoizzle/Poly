@@ -13,8 +13,8 @@ public sealed class OrRule(params IEnumerable<Rule> rules) : Rule {
         var combinedRules = Rules
             .Select(e => e.BuildInterpretationTree(context))
             .Aggregate(Literal.False, (current, rule) => new Or(current, rule));
-        
-        return context.Test(combinedRules, DefaultErrorFactory);
+
+        return combinedRules;
     }
 
     public override string ToString() {

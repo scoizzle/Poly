@@ -18,7 +18,7 @@ public sealed class MutualExclusionRule : Rule {
         var properties = PropertyNames.ToList();
         
         if (properties.Count <= MaxAllowed) {
-            return Literal.True;
+            return Value.True;
         }
         
         // For now, implement simple mutual exclusion (only one can have value)

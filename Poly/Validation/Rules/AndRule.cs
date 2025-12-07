@@ -8,7 +8,7 @@ public sealed class AndRule(params IEnumerable<Rule> rules) : Rule {
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {        
         if (Rules == null || !Rules.Any())
-            return new Literal(true);
+            return Value.Wrap(true);
 
         var ruleInterpretationTrees = Rules
             .Select(e => e.BuildInterpretationTree(context))

@@ -26,7 +26,7 @@ public class ClrTypePropertyTests {
         var lengthProperty = stringType.GetMembers("Length").SingleOrDefault();
 
         var testString = "Hello World";
-        var stringValue = new Literal(testString);
+        var stringValue = Value.Wrap(testString);
         var accessor = lengthProperty!.GetMemberAccessor(stringValue);
 
         await Assert.That(accessor).IsNotNull();
@@ -71,7 +71,7 @@ public class ClrTypePropertyTests {
         var dayProperty = dateTimeType.GetMembers("Day").SingleOrDefault();
 
         var testDate = new DateTime(2025, 10, 23);
-        var dateValue = new Literal(testDate);
+        var dateValue = Value.Wrap(testDate);
         var accessor = dayProperty!.GetMemberAccessor(dateValue);
 
         await Assert.That(accessor).IsNotNull();

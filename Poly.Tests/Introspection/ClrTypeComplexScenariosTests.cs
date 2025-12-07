@@ -17,7 +17,7 @@ public class ClrTypeComplexScenariosTests {
         
         var addressProperty = addressMembers.First();
         var person = new Person { Address = new Address { City = "Seattle" } };
-        var personLiteral = new Literal(person);
+        var personLiteral = Value.Wrap(person);
         
         var addressAccessor = addressProperty.GetMemberAccessor(personLiteral);
         var context = new InterpretationContext();
@@ -43,7 +43,7 @@ public class ClrTypeComplexScenariosTests {
         var cityProperty = cityMembers.First();
         
         var person = new Person { Address = new Address { City = "Portland" } };
-        var personLiteral = new Literal(person);
+        var personLiteral = Value.Wrap(person);
         
         // First get address via property accessor
         var addressAccessor = addressProperty.GetMemberAccessor(personLiteral);
@@ -68,8 +68,8 @@ public class ClrTypeComplexScenariosTests {
         await Assert.That(startWithMethod).IsNotNull();
         
         var testString = "hello world";
-        var stringLiteral = new Literal(testString);
-        var prefixLiteral = new Literal("hello");
+        var stringLiteral = Value.Wrap(testString);
+        var prefixLiteral = Value.Wrap("hello");
         
         var context = new InterpretationContext();
         var methodAccessor = startWithMethod!.GetMemberAccessor(stringLiteral, [prefixLiteral]);
@@ -92,8 +92,8 @@ public class ClrTypeComplexScenariosTests {
         await Assert.That(containsMethod).IsNotNull();
         
         var testString = "hello";
-        var stringLiteral = new Literal(testString);
-        var charLiteral = new Literal('e');
+        var stringLiteral = Value.Wrap(testString);
+        var charLiteral = Value.Wrap('e');
         
         var context = new InterpretationContext();
         var expression = containsMethod!.GetMemberAccessor(stringLiteral, [charLiteral]).BuildExpression(context);
@@ -115,9 +115,9 @@ public class ClrTypeComplexScenariosTests {
         await Assert.That(substringMethod).IsNotNull();
         
         var testString = "hello world";
-        var stringLiteral = new Literal(testString);
-        var start = new Literal(0);
-        var length = new Literal(5);
+        var stringLiteral = Value.Wrap(testString);
+        var start = Value.Wrap(0);
+        var length = Value.Wrap(5);
         
         var context = new InterpretationContext();
         var expression = substringMethod!.GetMemberAccessor(stringLiteral, [start, length]).BuildExpression(context);
@@ -144,16 +144,16 @@ public class ClrTypeComplexScenariosTests {
         await Assert.That(twoParamVersion).IsNotNull();
         
         var testString = "hello";
-        var stringLiteral = new Literal(testString);
+        var stringLiteral = Value.Wrap(testString);
         var context = new InterpretationContext();
         
         // Test single parameter version
-        var start = new Literal(1);
+        var start = Value.Wrap(1);
         var expr1 = oneParamVersion!.GetMemberAccessor(stringLiteral, [start]).BuildExpression(context);
         var result1 = Expression.Lambda<Func<string>>(expr1).Compile()();
         
         // Test two parameter version
-        var length = new Literal(3);
+        var length = Value.Wrap(3);
         var expr2 = twoParamVersion!.GetMemberAccessor(stringLiteral, [start, length]).BuildExpression(context);
         var result2 = Expression.Lambda<Func<string>>(expr2).Compile()();
         
@@ -173,8 +173,8 @@ public class ClrTypeComplexScenariosTests {
         await Assert.That(addMethod).IsNotNull();
         
         var list = new List<int> { 1, 2 };
-        var listLiteral = new Literal(list);
-        var value = new Literal(3);
+        var listLiteral = Value.Wrap(list);
+        var value = Value.Wrap(3);
         
         var context = new InterpretationContext();
         var expression = addMethod!.GetMemberAccessor(listLiteral, [value]).BuildExpression(context);
@@ -198,9 +198,9 @@ public class ClrTypeComplexScenariosTests {
         await Assert.That(addMethod).IsNotNull();
         
         var dict = new Dictionary<string, int> { ["one"] = 1 };
-        var dictLiteral = new Literal(dict);
-        var key = new Literal("two");
-        var value = new Literal(2);
+        var dictLiteral = Value.Wrap(dict);
+        var key = Value.Wrap("two");
+        var value = Value.Wrap(2);
         
         var context = new InterpretationContext();
         var expression = addMethod!.GetMemberAccessor(dictLiteral, [key, value]).BuildExpression(context);
@@ -219,7 +219,7 @@ public class ClrTypeComplexScenariosTests {
         var addressProperty = addressMembers.First();
         
         var person = new Person { Address = null };
-        var personLiteral = new Literal(person);
+        var personLiteral = Value.Wrap(person);
         
         var context = new InterpretationContext();
         var addressAccessor = addressProperty.GetMemberAccessor(personLiteral);
@@ -242,7 +242,7 @@ public class ClrTypeComplexScenariosTests {
         await Assert.That(lastNameMembers.Count()).IsGreaterThan(0);
         
         var person = new PersonWithFields { FirstName = "John", LastName = "Doe" };
-        var personLiteral = new Literal(person);
+        var personLiteral = Value.Wrap(person);
         var context = new InterpretationContext();
         
         var firstAccessor = firstNameMembers.First().GetMemberAccessor(personLiteral);
@@ -267,7 +267,7 @@ public class ClrTypeComplexScenariosTests {
         var lengthProperty = lengthMembers.First();
         
         var testString = "hello";
-        var stringLiteral = new Literal(testString);
+        var stringLiteral = Value.Wrap(testString);
         var context = new InterpretationContext();
         
         var lengthAccessor = lengthProperty.GetMemberAccessor(stringLiteral);
@@ -293,8 +293,8 @@ public class ClrTypeComplexScenariosTests {
         // Test with different string values
         var testCases = new[] { ("hello", 'e', 1), ("world", 'w', 0), ("testing", 't', 0) };
         foreach (var (testString, searchChar, expectedIndex) in testCases) {
-            var stringLiteral = new Literal(testString);
-            var charLiteral = new Literal(searchChar);
+            var stringLiteral = Value.Wrap(testString);
+            var charLiteral = Value.Wrap(searchChar);
             var accessor = indexOfMethod!.GetMemberAccessor(stringLiteral, [charLiteral]);
             var expr = accessor.BuildExpression(context);
             var result = Expression.Lambda<Func<int>>(expr).Compile()();
@@ -313,12 +313,12 @@ public class ClrTypeComplexScenariosTests {
         var addMethod = addMembers.WithParameters(intType);
         
         var list = new List<int>();
-        var listLiteral = new Literal(list);
+        var listLiteral = Value.Wrap(list);
         var context = new InterpretationContext();
         
         // Add multiple values
         foreach (var value in new[] { 1, 2, 3, 4, 5 }) {
-            var valueLiteral = new Literal(value);
+            var valueLiteral = Value.Wrap(value);
             var accessor = addMethod!.GetMemberAccessor(listLiteral, [valueLiteral]);
             var expr = accessor.BuildExpression(context);
             Expression.Lambda<Action>(expr).Compile()();

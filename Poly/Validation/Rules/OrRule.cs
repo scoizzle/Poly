@@ -8,11 +8,11 @@ public sealed class OrRule(params IEnumerable<Rule> rules) : Rule {
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
         if (Rules == null || !Rules.Any())
-            return new Literal(false);
+            return Value.Wrap(false);
 
         var combinedRules = Rules
             .Select(e => e.BuildInterpretationTree(context))
-            .Aggregate(Literal.False, (current, rule) => new Or(current, rule));
+            .Aggregate(Value.False, (current, rule) => new Or(current, rule));
 
         return combinedRules;
     }

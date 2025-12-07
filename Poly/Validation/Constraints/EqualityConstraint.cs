@@ -8,7 +8,7 @@ public sealed class EqualityConstraint(object value) : Constraint {
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var member = context.Value;
-        var valueLiteral = new Literal(Value);
+        var valueLiteral = Interpretation.Value.Wrap(Value);
         var equalityCheck = new Equal(member, valueLiteral);
         return equalityCheck;
     }

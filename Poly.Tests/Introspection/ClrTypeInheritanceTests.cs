@@ -155,7 +155,7 @@ public class ClrTypeInheritanceTests {
         var baseNameProperty = baseNameMembers.First();
         
         var instance = new DerivedWithProperty { BaseName = "TestName" };
-        var instanceLiteral = new Literal(instance);
+        var instanceLiteral = Value.Wrap(instance);
         
         var context = new InterpretationContext();
         var accessor = baseNameProperty.GetMemberAccessor(instanceLiteral);

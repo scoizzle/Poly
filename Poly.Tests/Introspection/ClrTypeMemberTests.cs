@@ -60,7 +60,7 @@ public class ClrTypeMemberTests {
 
         // Instance members should be accessible with an instance
         var testString = "test";
-        var stringValue = new Literal(testString);
+        var stringValue = Value.Wrap(testString);
         var accessor = lengthMember.GetMemberAccessor(stringValue);
         await Assert.That(accessor).IsNotNull();
     }

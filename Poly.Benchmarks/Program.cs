@@ -138,7 +138,7 @@ BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly)
 // ITypeMember personAge = personType.GetMember(nameof(Person.Age));
 
 // Context context = new Context();
-// Literal personNode = new Literal(person);
+// Literal personNode = Value.Wrap(person);
 // Value getName = personName.GetMemberAccessor(personNode);
 // Value getAge = personAge.GetMemberAccessor(personNode);
 
@@ -148,14 +148,14 @@ BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly)
 // Console.WriteLine(nameExpr);
 // Console.WriteLine(ageExpr);
 
-// Constant constantNode = new Literal("Bob");
+// Constant constantNode = Value.Wrap("Bob");
 
 // Assignment assignNameExpr = new Assignment(getName, constantNode);
 // Console.WriteLine(assignNameExpr.BuildExpression(context));
 
 // ITypeMember strLength = personName.MemberTypeDefinition.GetMember(nameof(string.Length));
 
-// Literal valueNode = new Literal("This is a test.");
+// Literal valueNode = Value.Wrap("This is a test.");
 // Value getLength = strLength.GetMemberAccessor(valueNode);
 
 // Expression expr = getLength.BuildExpression(context);

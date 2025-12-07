@@ -30,5 +30,24 @@ public abstract class Value : Interpretable {
     /// <summary>
     /// A predefined null literal value.
     /// </summary>
-    public static readonly Value Null = new Literal(null);
+    public static readonly Value Null = Wrap<object?>(null);
+
+    /// <summary>
+    /// A predefined literal representing the boolean value <c>true</c>.
+    /// </summary>
+    public static readonly Value True = Wrap(true);
+
+    /// <summary>
+    /// A predefined literal representing the boolean value <c>false</c>.
+    /// </summary>
+    public static readonly Value False = Wrap(false);
+
+    /// <summary>
+    /// Creates a literal value wrapping the specified constant.
+    /// </summary>
+    /// <typeparam name="T">The type of the literal value.</typeparam>
+    /// <param name="value">The constant value to wrap.</param>
+    /// <returns>A literal value representing the specified constant.</returns>
+    public static Value Wrap<T>(T value) => new Literal<T>(value);
+    
 }

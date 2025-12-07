@@ -95,7 +95,7 @@ public class ClrMethodTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
-        var instance = new Literal("HELLO");
+        var instance = Value.Wrap("HELLO");
 
         var invocation = new ClrMethodInvocationInterpretation(toLowerMethod, instance, []);
 
@@ -107,7 +107,7 @@ public class ClrMethodTests {
 
     [Test]
     public async Task Constructor_WithNullMethod_ThrowsArgumentNullException() {
-        var instance = new Literal("test");
+        var instance = Value.Wrap("test");
 
         await Assert.That(() => new ClrMethodInvocationInterpretation(null!, instance, []))
             .Throws<ArgumentNullException>();
@@ -128,7 +128,7 @@ public class ClrMethodTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
-        var instance = new Literal("test");
+        var instance = Value.Wrap("test");
 
         await Assert.That(() => new ClrMethodInvocationInterpretation(toLowerMethod, instance, null!))
             .Throws<ArgumentNullException>();
@@ -139,7 +139,7 @@ public class ClrMethodTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
-        var instance = new Literal("HELLO");
+        var instance = Value.Wrap("HELLO");
         var invocation = new ClrMethodInvocationInterpretation(toLowerMethod, instance, []);
         var context = new InterpretationContext();
 
@@ -154,7 +154,7 @@ public class ClrMethodTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var toStringMethod = (ClrMethod)intType.Methods.First(m => m.Name == "ToString" && !m.Parameters.Any());
-        var instance = new Literal(42);
+        var instance = Value.Wrap(42);
         var invocation = new ClrMethodInvocationInterpretation(toStringMethod, instance, []);
         var context = new InterpretationContext();
 
@@ -169,7 +169,7 @@ public class ClrMethodTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
-        var instance = new Literal("HELLO");
+        var instance = Value.Wrap("HELLO");
         var invocation = new ClrMethodInvocationInterpretation(toLowerMethod, instance, []);
         var context = new InterpretationContext();
 
@@ -188,7 +188,7 @@ public class ClrMethodTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
-        var instance = new Literal("HELLO");
+        var instance = Value.Wrap("HELLO");
         var invocation = new ClrMethodInvocationInterpretation(toLowerMethod, instance, []);
         var context = new InterpretationContext();
 
@@ -207,9 +207,9 @@ public class ClrMethodTests {
         var substringMethod = (ClrMethod)stringType.Methods.First(m => 
             m.Name == "Substring" && 
             m.Parameters.Count() == 2);
-        var instance = new Literal("Hello World");
-        var startIndex = new Literal(0);
-        var length = new Literal(5);
+        var instance = Value.Wrap("Hello World");
+        var startIndex = Value.Wrap(0);
+        var length = Value.Wrap(5);
         var invocation = new ClrMethodInvocationInterpretation(substringMethod, instance, [startIndex, length]);
         var context = new InterpretationContext();
 
@@ -229,8 +229,8 @@ public class ClrMethodTests {
             m.Name == "IndexOf" && 
             m.Parameters.Count() == 1 &&
             m.Parameters.First().ParameterTypeDefinition.Name == "Char");
-        var instance = new Literal("Hello World");
-        var searchChar = new Literal('o');
+        var instance = Value.Wrap("Hello World");
+        var searchChar = Value.Wrap('o');
         var invocation = new ClrMethodInvocationInterpretation(indexOfMethod, instance, [searchChar]);
         var context = new InterpretationContext();
 
@@ -250,8 +250,8 @@ public class ClrMethodTests {
             m.Name == "Parse" && 
             m.Parameters.Count() == 1 &&
             m.Parameters.First().ParameterTypeDefinition.Name == "String");
-        var nullInstance = new Literal(null);
-        var argument = new Literal("42");
+        var nullInstance = Value.Null;
+        var argument = Value.Wrap("42");
         var invocation = new ClrMethodInvocationInterpretation(parseMethod, nullInstance, [argument]);
         var context = new InterpretationContext();
 
@@ -273,8 +273,8 @@ public class ClrMethodTests {
             m.Name == "Parse" && 
             m.Parameters.Count() == 1 &&
             m.Parameters.First().ParameterTypeDefinition.Name == "String");
-        var nullInstance = new Literal(null);
-        var argument = new Literal("42");
+        var nullInstance = Value.Null;
+        var argument = Value.Wrap("42");
         var invocation = new ClrMethodInvocationInterpretation(parseMethod, nullInstance, [argument]);
         var context = new InterpretationContext();
 
@@ -294,9 +294,9 @@ public class ClrMethodTests {
             m.Name == "Concat" && 
             m.Parameters.Count() == 2 &&
             m.Parameters.All(p => p.ParameterTypeDefinition.Name == "String"));
-        var nullInstance = new Literal(null);
-        var arg1 = new Literal("Hello");
-        var arg2 = new Literal(" World");
+        var nullInstance = Value.Null;
+        var arg1 = Value.Wrap("Hello");
+        var arg2 = Value.Wrap(" World");
         var invocation = new ClrMethodInvocationInterpretation(concatMethod, nullInstance, [arg1, arg2]);
         var context = new InterpretationContext();
 
@@ -316,8 +316,8 @@ public class ClrMethodTests {
             m.Name == "Parse" && 
             m.Parameters.Count() == 1 &&
             m.Parameters.First().ParameterTypeDefinition.Name == "String");
-        var nonNullInstance = new Literal("ignored");
-        var argument = new Literal("123");
+        var nonNullInstance = Value.Wrap("ignored");
+        var argument = Value.Wrap("123");
         var invocation = new ClrMethodInvocationInterpretation(parseMethod, nonNullInstance, [argument]);
         var context = new InterpretationContext();
 
@@ -375,7 +375,7 @@ public class ClrMethodTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
-        var instance = new Literal("HELLO");
+        var instance = Value.Wrap("HELLO");
         var invocation = new ClrMethodInvocationInterpretation(toLowerMethod, instance, []);
 
         var result = invocation.ToString();
@@ -390,9 +390,9 @@ public class ClrMethodTests {
         var substringMethod = (ClrMethod)stringType.Methods.First(m => 
             m.Name == "Substring" && 
             m.Parameters.Count() == 2);
-        var instance = new Literal("Hello World");
-        var startIndex = new Literal(0);
-        var length = new Literal(5);
+        var instance = Value.Wrap("Hello World");
+        var startIndex = Value.Wrap(0);
+        var length = Value.Wrap(5);
         var invocation = new ClrMethodInvocationInterpretation(substringMethod, instance, [startIndex, length]);
 
         var result = invocation.ToString();
@@ -408,8 +408,8 @@ public class ClrMethodTests {
             m.Name == "IndexOf" && 
             m.Parameters.Count() == 1 &&
             m.Parameters.First().ParameterTypeDefinition.Name == "Char");
-        var instance = new Literal("test");
-        var searchChar = new Literal('e');
+        var instance = Value.Wrap("test");
+        var searchChar = Value.Wrap('e');
         var invocation = new ClrMethodInvocationInterpretation(indexOfMethod, instance, [searchChar]);
 
         var result = invocation.ToString();
@@ -425,7 +425,7 @@ public class ClrMethodTests {
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
         
         var context = new InterpretationContext();
-        var instance = new Literal("  HELLO  ");
+        var instance = Value.Wrap("  HELLO  ");
         
         // First call: Trim
         var trimInvocation = new ClrMethodInvocationInterpretation(trimMethod, instance, []);
@@ -448,7 +448,7 @@ public class ClrMethodTests {
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
         
         var context = new InterpretationContext();
-        var instance = new Literal("HELLO");
+        var instance = Value.Wrap("HELLO");
 
         // Use the GetMemberAccessor helper from ClrMethod
         var invocation = toLowerMethod.GetMemberAccessor(instance, []);
@@ -471,8 +471,8 @@ public class ClrMethodTests {
         
         var context = new InterpretationContext();
         var list = new List<int>();
-        var instance = new Literal(list);
-        var argument = new Literal(42);
+        var instance = Value.Wrap(list);
+        var argument = Value.Wrap(42);
         
         var invocation = new ClrMethodInvocationInterpretation(addMethod, instance, [argument]);
 
@@ -490,7 +490,7 @@ public class ClrMethodTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
-        var instance = new Literal("TEST");
+        var instance = Value.Wrap("TEST");
         var invocation = new ClrMethodInvocationInterpretation(toLowerMethod, instance, Array.Empty<Value>());
         var context = new InterpretationContext();
 
@@ -510,7 +510,7 @@ public class ClrMethodTests {
         var clearMethod = (ClrMethod)listType.Methods.First(m => m.Name == "Clear");
         
         var list = new List<int> { 1, 2, 3 };
-        var instance = new Literal(list);
+        var instance = Value.Wrap(list);
         var invocation = new ClrMethodInvocationInterpretation(clearMethod, instance, []);
         var context = new InterpretationContext();
 

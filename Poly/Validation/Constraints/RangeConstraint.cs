@@ -13,17 +13,17 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
 
         Value? minCheck = MinValue is null
             ? null
-            : new GreaterThanOrEqual(member, new Literal(MinValue));
+            : new GreaterThanOrEqual(member, Value.Wrap(MinValue));
 
         Value? maxCheck = MaxValue is null
             ? null
-            : new LessThanOrEqual(member, new Literal(MaxValue));
+            : new LessThanOrEqual(member, Value.Wrap(MaxValue));
 
         var rangeCheck = (minCheck, maxCheck) switch {
             (Value min, Value max) => new And(min, max),
             (Value min, null) => min,
             (null, Value max) => max,
-            _ => Literal.True
+            _ => Value.True
         };
 
         return rangeCheck;

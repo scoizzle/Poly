@@ -61,8 +61,8 @@ public class ClrTypeIndexerTests {
         var indexer = listType.Properties.First(p => p.Parameters != null);
 
         var list = new List<int> { 10, 20, 30 };
-        var listValue = new Literal(list);
-        var indexValue = new Literal(1);
+        var listValue = Value.Wrap(list);
+        var indexValue = Value.Wrap(1);
 
         var accessor = indexer.GetMemberAccessor(listValue, [indexValue]);
 
@@ -98,8 +98,8 @@ public class ClrTypeIndexerTests {
             ["two"] = 2,
             ["three"] = 3
         };
-        var dictValue = new Literal(dict);
-        var keyValue = new Literal("two");
+        var dictValue = Value.Wrap(dict);
+        var keyValue = Value.Wrap("two");
 
         var accessor = indexer.GetMemberAccessor(dictValue, [keyValue]);
 
@@ -122,8 +122,8 @@ public class ClrTypeIndexerTests {
         var indexer = customType.Properties.First(p => p.Parameters != null);
 
         var instance = new CustomIndexerClass();
-        var instanceValue = new Literal(instance);
-        var indexValue = new Literal(5);
+        var instanceValue = Value.Wrap(instance);
+        var indexValue = Value.Wrap(5);
 
         var accessor = indexer.GetMemberAccessor(instanceValue, [indexValue]);
 
@@ -150,9 +150,9 @@ public class ClrTypeIndexerTests {
         await Assert.That(twoParamIndexer.Parameters!.Count()).IsEqualTo(2);
 
         var instance = new MultiParamIndexerClass();
-        var instanceValue = new Literal(instance);
-        var index1 = new Literal(3);
-        var index2 = new Literal(4);
+        var instanceValue = Value.Wrap(instance);
+        var index1 = Value.Wrap(3);
+        var index2 = Value.Wrap(4);
 
         var accessor = twoParamIndexer.GetMemberAccessor(instanceValue, [index1, index2]);
 
@@ -173,8 +173,8 @@ public class ClrTypeIndexerTests {
         var indexer = listType.Properties.First(p => p.Parameters != null);
 
         var list = new List<int> { 1, 2, 3 };
-        var listValue = new Literal(list);
-        var indexValue = new Literal(0);
+        var listValue = Value.Wrap(list);
+        var indexValue = Value.Wrap(0);
 
         var accessor = indexer.GetMemberAccessor(listValue, [indexValue]);
 

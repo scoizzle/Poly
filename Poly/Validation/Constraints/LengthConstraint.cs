@@ -12,18 +12,18 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
         var length = context.Value.GetMember("Length");
 
         var minCheck = MinLength.HasValue
-            ? new GreaterThanOrEqual(length, new Literal(MinLength.Value))
+            ? new GreaterThanOrEqual(length, Value.Wrap(MinLength.Value))
             : null;
 
         var maxCheck = MaxLength.HasValue
-            ? new LessThanOrEqual(length, new Literal(MaxLength.Value))
+            ? new LessThanOrEqual(length, Value.Wrap(MaxLength.Value))
             : null;
 
         var lengthCheck = (minCheck, maxCheck) switch {
             (Value min, Value max) => new And(min, max),
             (Value min, null) => min,
             (null, Value max) => max,
-            _ => new Literal(true)
+            _ => Value.Wrap(true)
         };
 
         return lengthCheck;

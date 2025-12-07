@@ -33,7 +33,7 @@ public class ClrTypeFieldTests {
         var publicField = testType.GetMembers("PublicField").SingleOrDefault();
 
         var testInstance = new TestClass { PublicField = 99 };
-        var instanceValue = new Literal(testInstance);
+        var instanceValue = Value.Wrap(testInstance);
         var accessor = publicField!.GetMemberAccessor(instanceValue);
 
         await Assert.That(accessor).IsNotNull();

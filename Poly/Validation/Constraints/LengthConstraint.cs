@@ -19,12 +19,14 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
             ? new LessThanOrEqual(length, new Literal(MaxLength.Value))
             : null;
 
-        return (minCheck, maxCheck) switch {
+        var lengthCheck = (minCheck, maxCheck) switch {
             (Value min, Value max) => new And(min, max),
             (Value min, null) => min,
             (null, Value max) => max,
             _ => new Literal(true)
         };
+        
+        return context.Test(lengthCheck);
     }
 
     public override string ToString() {

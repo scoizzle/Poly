@@ -9,7 +9,8 @@ public sealed class EqualityConstraint(object value) : Constraint {
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var member = context.Value;
         var valueLiteral = new Literal(Value);
-        return new Equal(member, valueLiteral);
+        var equalityCheck = new Equal(member, valueLiteral);
+        return context.Test(equalityCheck);
     }
 
     public override string ToString() => $"value == {Value}";

@@ -23,15 +23,18 @@ public sealed class PropertyDependencyRule : Rule {
         var sourceHasValue = new NotEqual(sourceMember, Value.Null);
         var dependentHasValue = new NotEqual(dependentMember, Value.Null);
         
+        Value dependencyResult;
         if (RequireWhenSourceHasValue) {
             // If source has value, then dependent must have value
             // !sourceHasValue OR dependentHasValue
-            return new Or(new Not(sourceHasValue), dependentHasValue);
+            dependencyResult = new Or(new Not(sourceHasValue), dependentHasValue);
         } else {
             // If source has value, then dependent must NOT have value
             // !sourceHasValue OR !dependentHasValue
-            return new Or(new Not(sourceHasValue), new Not(dependentHasValue));
+            dependencyResult = new Or(new Not(sourceHasValue), new Not(dependentHasValue));
         }
+        
+        return context.Test(dependencyResult);
     }
 
     public override string ToString() {

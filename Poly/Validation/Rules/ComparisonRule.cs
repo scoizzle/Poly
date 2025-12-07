@@ -29,7 +29,7 @@ public sealed class ComparisonRule : Rule {
         var leftMember = new MemberAccess(context.Value, LeftPropertyName);
         var rightMember = new MemberAccess(context.Value, RightPropertyName);
 
-        return Operator switch {
+        Value comparisonResult = Operator switch {
             ComparisonOperator.Equal => new Equal(leftMember, rightMember),
             ComparisonOperator.NotEqual => new NotEqual(leftMember, rightMember),
             ComparisonOperator.GreaterThan => new GreaterThan(leftMember, rightMember),
@@ -38,6 +38,8 @@ public sealed class ComparisonRule : Rule {
             ComparisonOperator.LessThanOrEqual => new LessThanOrEqual(leftMember, rightMember),
             _ => throw new ArgumentException($"Unknown operator: {Operator}")
         };
+        
+        return context.Test(comparisonResult);
     }
 
     public override string ToString() {

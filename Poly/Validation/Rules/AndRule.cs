@@ -8,19 +8,19 @@ public sealed class AndRule(params IEnumerable<Rule> rules) : Rule {
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {        
         if (Rules == null || !Rules.Any())
-            return new Literal(true);
+            return context.Test(new Literal(true));
 
         var ruleInterpretationTrees = Rules
             .Select(e => e.BuildInterpretationTree(context))
             .ToList();
 
         if (ruleInterpretationTrees.Count == 1)
-            return ruleInterpretationTrees.First();
+            return context.Test(ruleInterpretationTrees.First());
 
         var combinedRules = ruleInterpretationTrees
             .Aggregate((current, rule) => new And(current, rule));
 
-        return combinedRules;
+        return context.Test(combinedRules);
     }
 
     public override string ToString() {

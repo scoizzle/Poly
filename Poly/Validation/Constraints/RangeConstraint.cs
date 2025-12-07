@@ -19,12 +19,14 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
             ? null
             : new LessThanOrEqual(member, new Literal(MaxValue));
 
-        return (minCheck, maxCheck) switch {
+        var rangeCheck = (minCheck, maxCheck) switch {
             (Value min, Value max) => new And(min, max),
             (Value min, null) => min,
             (null, Value max) => max,
             _ => Literal.True
         };
+        
+        return context.Test(rangeCheck);
     }
 
     public override string ToString() => (MinValue, MaxValue) switch {

@@ -46,7 +46,7 @@ public sealed class ComputedValueRule : Rule {
             _ => throw new ArgumentException($"Unknown operation: {Operation}")
         };
         
-        return ComparisonOperator switch {
+        Value comparisonResult = ComparisonOperator switch {
             ComparisonOperator.Equal => new Equal(target, computation),
             ComparisonOperator.NotEqual => new NotEqual(target, computation),
             ComparisonOperator.GreaterThan => new GreaterThan(target, computation),
@@ -55,6 +55,8 @@ public sealed class ComputedValueRule : Rule {
             ComparisonOperator.LessThanOrEqual => new LessThanOrEqual(target, computation),
             _ => throw new ArgumentException($"Unknown comparison: {ComparisonOperator}")
         };
+        
+        return context.Test(comparisonResult);
     }
 
     public override string ToString() {

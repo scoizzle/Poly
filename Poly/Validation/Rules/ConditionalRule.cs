@@ -25,13 +25,14 @@ public sealed class ConditionalRule : Rule {
         if (ElseRule != null) {
             var elseTree = ElseRule.BuildInterpretationTree(context);
             // (condition AND thenRule) OR (!condition AND elseRule)
-            return new Or(
+            var conditionalResult = new Or(
                 new And(conditionTree, thenTree),
                 new And(new Not(conditionTree), elseTree)
             );
+            return context.Test(conditionalResult);
         }
         
-        return implication;
+        return context.Test(implication);
     }
 
     public override string ToString() {

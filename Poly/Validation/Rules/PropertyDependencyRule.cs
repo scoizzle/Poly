@@ -34,7 +34,7 @@ public sealed class PropertyDependencyRule : Rule {
             dependencyResult = new Or(new Not(sourceHasValue), new Not(dependentHasValue));
         }
         
-        return context.Test(dependencyResult);
+        return context.Test(dependencyResult, DefaultErrorFactory);
     }
 
     public override string ToString() {

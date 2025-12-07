@@ -32,10 +32,19 @@ public sealed record RuleBuildingContext {
     /// <returns></returns>
     internal RuleBuildingContext GetPropertyContext(string propertyName) => this with { Value = new MemberAccess(Value, propertyName) };
 
-    internal Value Test(Value condition) {
+    /// <summary>
+    /// Wraps a condition in a call to the RuleEvaluationContext.Evaluate method.
+    /// </summary>
+    /// <param name="condition"></param>
+    /// <returns>A value representing the result of evaluating the condition within the rule evaluation context.</returns>
+    internal Value Test(Value condition, Func<ValidationError>? errorFactory = null) {
+        ArgumentNullException.ThrowIfNull(condition);
+        if (errorFactory is null) return condition;
+
         return new InvocationOperator(
             RuleEvaluationContext,
             nameof(Validation.RuleEvaluationContext.Evaluate),
-            condition);
+            [condition, new Literal(errorFactory) ]
+        );
     }
 }

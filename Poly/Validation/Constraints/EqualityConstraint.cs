@@ -10,7 +10,7 @@ public sealed class EqualityConstraint(object value) : Constraint {
         var member = context.Value;
         var valueLiteral = new Literal(Value);
         var equalityCheck = new Equal(member, valueLiteral);
-        return context.Test(equalityCheck);
+        return context.Test(equalityCheck, DefaultErrorFactory);
     }
 
     public override string ToString() => $"value == {Value}";

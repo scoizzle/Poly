@@ -6,7 +6,7 @@ namespace Poly.Validation;
 public sealed class NotNullConstraint : Constraint {
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var notNullCheck = new NotEqual(context.Value, Value.Null);
-        return context.Test(notNullCheck);
+        return context.Test(notNullCheck, DefaultErrorFactory);
     }
 
     public override string ToString() => "value != null";

@@ -56,7 +56,7 @@ public sealed class ComputedValueRule : Rule {
             _ => throw new ArgumentException($"Unknown comparison: {ComparisonOperator}")
         };
         
-        return context.Test(comparisonResult);
+        return context.Test(comparisonResult, DefaultErrorFactory);
     }
 
     public override string ToString() {

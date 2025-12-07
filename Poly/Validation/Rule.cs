@@ -1,5 +1,7 @@
 using System.Text.Json.Serialization;
 
+using Poly.Interpretation;
+
 namespace Poly.Validation;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
@@ -15,8 +17,22 @@ namespace Poly.Validation;
 [JsonDerivedType(typeof(Rules.ComputedValueRule), "ComputedValue")]
 [JsonDerivedType(typeof(Rules.PropertyConstraintRule), "PropertyConstraint")]
 public abstract class Rule {
-    public abstract Interpretation.Value BuildInterpretationTree(RuleBuildingContext context);
+    public abstract Value BuildInterpretationTree(RuleBuildingContext context);
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ErrorPath { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ErrorCode { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ErrorMessage { get; set; }
+
+    protected ValidationError DefaultErrorFactory() {
+        return new ValidationError(
+            Path: ErrorPath ?? "<unknown>",
+            Code: ErrorCode ?? "ValidationError",
+            Message: ErrorMessage ?? "A validation error has occurred."
+        );
+    }
 }

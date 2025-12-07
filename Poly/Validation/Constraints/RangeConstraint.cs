@@ -26,7 +26,7 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
             _ => Literal.True
         };
         
-        return context.Test(rangeCheck);
+        return context.Test(rangeCheck, DefaultErrorFactory);
     }
 
     public override string ToString() => (MinValue, MaxValue) switch {

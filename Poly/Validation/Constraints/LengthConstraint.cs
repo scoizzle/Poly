@@ -26,7 +26,7 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
             _ => new Literal(true)
         };
         
-        return context.Test(lengthCheck);
+        return context.Test(lengthCheck, DefaultErrorFactory);
     }
 
     public override string ToString() {

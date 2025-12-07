@@ -40,7 +40,7 @@ public sealed class MutualExclusionRule : Rule {
             }
             
             var exclusionResult = exclusions.Aggregate((current, next) => new And(current, next));
-            return context.Test(exclusionResult);
+            return context.Test(exclusionResult, DefaultErrorFactory);
         }
         
         // For maxAllowed > 1, would need count aggregation

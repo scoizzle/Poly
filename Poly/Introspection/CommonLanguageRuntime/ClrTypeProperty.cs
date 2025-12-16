@@ -16,6 +16,7 @@ public sealed class ClrTypeProperty : ClrTypeMember {
     private readonly PropertyInfo _propertyInfo;
     private readonly IEnumerable<ClrParameter>? _parameters;
     private readonly string _name;
+    private readonly bool _isStatic;
 
     public ClrTypeProperty(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter>? parameters, PropertyInfo propertyInfo) {
         ArgumentNullException.ThrowIfNull(memberType);
@@ -27,6 +28,8 @@ public sealed class ClrTypeProperty : ClrTypeMember {
         _parameters = parameters;
         _propertyInfo = propertyInfo;
         _name = propertyInfo.Name;
+        _isStatic = (propertyInfo.GetGetMethod(nonPublic: true)?.IsStatic ?? false) ||
+                    (propertyInfo.GetSetMethod(nonPublic: true)?.IsStatic ?? false);
     }
 
     /// <summary>
@@ -53,6 +56,11 @@ public sealed class ClrTypeProperty : ClrTypeMember {
     /// Gets the underlying reflection <see cref="PropertyInfo"/>.
     /// </summary>
     public PropertyInfo PropertyInfo => _propertyInfo;
+
+    /// <summary>
+    /// Gets whether this property's getter or setter is static.
+    /// </summary>
+    public override bool IsStatic => _isStatic;
 
     /// <summary>
     /// Creates an accessor that reads this property (or indexer) from <paramref name="instance"/>.

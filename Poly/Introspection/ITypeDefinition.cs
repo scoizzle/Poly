@@ -67,6 +67,16 @@ public interface ITypeDefinition {
     public IEnumerable<IParameter>? GenericParameters { get; }
 
     /// <summary>
+    /// Gets static members only.
+    /// </summary>
+    public IEnumerable<ITypeMember> StaticMembers => Members.Where(m => m.IsStatic);
+
+    /// <summary>
+    /// Gets instance members only.
+    /// </summary>
+    public IEnumerable<ITypeMember> InstanceMembers => Members.Where(m => !m.IsStatic);
+
+    /// <summary>
     /// Determines if values of <paramref name="other"/> can be assigned to this type.
     /// </summary>
     /// <remarks>

@@ -53,6 +53,11 @@ public sealed class ClrTypeField : ClrTypeMember {
 
 
     /// <summary>
+    /// Gets whether this field is static.
+    /// </summary>
+    public override bool IsStatic => _fieldInfo.IsStatic;
+
+    /// <summary>
     /// Creates an accessor that reads this field from the provided <paramref name="instance"/>.
     /// </summary>
     public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters) => new ClrTypeFieldInterpretationAccessor(instance, this);

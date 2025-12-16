@@ -56,13 +56,18 @@ public sealed class ClrMethod : ClrTypeMember {
     public MethodInfo MethodInfo => _methodInfo;
 
     /// <summary>
+    /// Gets whether this method is static.
+    /// </summary>
+    public override bool IsStatic => _methodInfo.IsStatic;
+
+    /// <summary>
     /// Creates an accessor that invokes this method on <paramref name="instance"/>
     /// with the supplied <paramref name="arguments"/>.
     /// </summary>
     public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? arguments) {
-        ArgumentNullException.ThrowIfNull(arguments);
-
-        return new ClrMethodInvocationInterpretation(this, instance, arguments);
+        // Convert null to empty enumerable for parameterless method calls
+        var args = arguments ?? Enumerable.Empty<Value>();
+        return new ClrMethodInvocationInterpretation(this, instance, args);
     }
 
     public override string ToString() => $"{MemberType} {DeclaringType}.{Name}({string.Join(", ", _parameters)})";

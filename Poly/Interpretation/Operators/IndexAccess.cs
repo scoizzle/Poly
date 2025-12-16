@@ -47,15 +47,10 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
         // TODO: Implement proper overload resolution
         // For now, return the first indexer that matches parameter count
         var matchingIndexer = indexers.FirstOrDefault(idx => 
-            idx is ITypeMember member && GetIndexParameterCount(member) == argumentCount);
+            idx is ITypeMember member && member.Parameters?.Count() == argumentCount);
         
         return matchingIndexer 
             ?? throw new InvalidOperationException($"No matching indexer found on type '{typeDefinition.Name}' for {argumentCount} argument(s).");
-    }
-
-    private static int GetIndexParameterCount(ITypeMember member) {
-        // This is a simplified approach - actual implementation would need to inspect parameter metadata
-        return 1; // Default assumption
     }
 
     /// <inheritdoc />

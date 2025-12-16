@@ -2,7 +2,7 @@ using Poly.Interpretation;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
-public abstract class ClrTypeMember : ITypeMember {
+internal abstract class ClrTypeMember : ITypeMember {
     public abstract ClrTypeDefinition MemberType { get; }
     public abstract ClrTypeDefinition DeclaringType { get; }
     public abstract IEnumerable<ClrParameter>? Parameters { get; }

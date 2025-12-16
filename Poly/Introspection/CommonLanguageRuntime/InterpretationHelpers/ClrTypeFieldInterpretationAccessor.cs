@@ -2,7 +2,7 @@ using Poly.Interpretation;
 
 namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
-sealed class ClrTypeFieldInterpretationAccessor(Value instance, ClrTypeField field) : Value {
+internal sealed class ClrTypeFieldInterpretationAccessor(Value instance, ClrTypeField field) : Value {
     public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
     public ClrTypeField Field { get; init; } = field ?? throw new ArgumentNullException(nameof(field));
 

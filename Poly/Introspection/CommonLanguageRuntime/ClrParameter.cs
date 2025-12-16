@@ -4,7 +4,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Reflection-backed method or indexer parameter description used by CLR member types.
 /// Evaluates its parameter type lazily via the owning registry.
 /// </summary>
-public class ClrParameter(string name, Lazy<ClrTypeDefinition> type, int position, bool isOptional, object? defaultValue) : IParameter {
+internal sealed class ClrParameter(string name, Lazy<ClrTypeDefinition> type, int position, bool isOptional, object? defaultValue) : IParameter {
     private readonly Lazy<ClrTypeDefinition> _type = type;
     /// <summary>
     /// Gets the zero-based position of the parameter.

@@ -8,7 +8,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// fields, properties, and methods, with immutable frozen collections for fast lookups.
 /// Thread-safe for concurrent reads after construction.
 /// </summary>
-public sealed class ClrTypeDefinition : ITypeDefinition {
+internal sealed class ClrTypeDefinition : ITypeDefinition {
     private readonly Type _type;
     private readonly FrozenSet<ClrTypeField> _fields;
     private readonly FrozenSet<ClrTypeProperty> _properties;

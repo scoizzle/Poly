@@ -11,7 +11,7 @@ namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 /// instance and static method invocations. For static methods, the instance
 /// should be a literal null value.
 /// </remarks>
-public sealed class ClrMethodInvocationInterpretation(ClrMethod method, Value instance, params IEnumerable<Value> arguments) : Value {
+internal sealed class ClrMethodInvocationInterpretation(ClrMethod method, Value instance, params IEnumerable<Value> arguments) : Value {
     /// <summary>
     /// Gets the instance on which the method is invoked.
     /// </summary>

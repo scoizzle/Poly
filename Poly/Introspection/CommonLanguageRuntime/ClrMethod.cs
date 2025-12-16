@@ -11,7 +11,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Instances are immutable and safe for concurrent reads.
 /// </summary>
 [DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
-public sealed class ClrMethod : ClrTypeMember {
+internal sealed class ClrMethod : ClrTypeMember {
     private readonly Lazy<ClrTypeDefinition> _memberType;
     private readonly ClrTypeDefinition _declaringType;
     private readonly MethodInfo _methodInfo;

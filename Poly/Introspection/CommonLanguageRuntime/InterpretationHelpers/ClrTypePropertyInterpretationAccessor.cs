@@ -3,7 +3,7 @@ using Poly.Interpretation;
 
 namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
-sealed class ClrTypePropertyInterpretationAccessor(Value instance, ClrTypeProperty property) : Value {
+internal sealed class ClrTypePropertyInterpretationAccessor(Value instance, ClrTypeProperty property) : Value {
     public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
     public ClrTypeProperty Property { get; init; } = property ?? throw new ArgumentNullException(nameof(property));
 

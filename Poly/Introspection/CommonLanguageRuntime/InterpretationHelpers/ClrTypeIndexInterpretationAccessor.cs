@@ -2,7 +2,7 @@ using Poly.Interpretation;
 
 namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
-sealed class ClrTypeIndexInterpretationAccessor(Value instance, ClrTypeProperty indexProperty, params IEnumerable<Value> indexParameters) : Value {
+internal sealed class ClrTypeIndexInterpretationAccessor(Value instance, ClrTypeProperty indexProperty, params IEnumerable<Value> indexParameters) : Value {
     public Value Instance { get; } = instance ?? throw new ArgumentNullException(nameof(instance));
     public ClrTypeProperty IndexProperty { get; } = indexProperty ?? throw new ArgumentNullException(nameof(indexProperty));
     public IEnumerable<Value> IndexParameters { get; } = indexParameters ?? throw new ArgumentNullException(nameof(indexParameters));

@@ -88,10 +88,10 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ByName_ThrowsOnInvalidType() {
+    public async Task GetTypeDefinition_ByName_ReturnsNullOnInvalidType() {
         var registry = new ClrTypeDefinitionRegistry();
 
-        await Assert.That(() => registry.GetTypeDefinition("NonExistent.InvalidType"))
-            .Throws<ArgumentException>();
+        var result = registry.GetTypeDefinition("NonExistent.InvalidType");
+        await Assert.That(result).IsNull();
     }
 }

@@ -9,6 +9,9 @@ public interface ITypeDefinitionProvider {
 
     public Lazy<ITypeDefinition> GetDeferredTypeDefinitionResolver(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return new Lazy<ITypeDefinition>(() => GetTypeDefinition(name) ?? throw new KeyNotFoundException($"Type with name '{name}' not found."), isThreadSafe: true);
+        return new Lazy<ITypeDefinition>(
+            () => GetTypeDefinition(name)
+                ?? throw new ArgumentException($"Type with name '{name}' not found.", nameof(name)),
+            isThreadSafe: true);
     }
 }

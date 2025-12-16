@@ -8,15 +8,31 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
     private readonly FrozenSet<ClrTypeField> _fields;
     private readonly FrozenSet<ClrTypeProperty> _properties;
     private readonly FrozenSet<ClrMethod> _methods;
+    private readonly FrozenSet<ClrTypeMember> _allMembers;
+    private readonly FrozenDictionary<string, FrozenSet<ClrTypeMember>> _membersByName;
+    private readonly ClrTypeDefinitionRegistry _provider;
+    private ITypeDefinition? _baseType;
+    private IEnumerable<ITypeDefinition>? _interfaces;
 
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
         _type = type;
+        _provider = provider;
         _fields = BuildFieldCollection(type, this, provider);
         _properties = BuildPropertyCollection(type, this, provider);
         _methods = BuildMethodCollection(type, this, provider);
+
+        var combined = Enumerable.Empty<ClrTypeMember>()
+            .Concat(_fields)
+            .Concat(_properties)
+            .Concat(_methods)
+            .ToFrozenSet();
+        _allMembers = combined;
+        _membersByName = combined
+            .GroupBy(m => m.Name)
+            .ToFrozenDictionary(g => g.Key, g => g.ToFrozenSet());
     }
 
     public string Name => _type.Name;
@@ -27,11 +43,27 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
     public IEnumerable<ClrTypeField> Fields => _fields;
     public IEnumerable<ClrTypeProperty> Properties => _properties;
     public IEnumerable<ClrMethod> Methods => _methods;
-    public IEnumerable<ClrTypeMember> Members => [.._fields, .._properties, .._methods];
-    public IEnumerable<ClrTypeMember> GetMembers(string name) => Members.Where(m => m.Name == name);
+    public IEnumerable<ClrTypeMember> Members => _allMembers;
+    public IEnumerable<ClrTypeMember> GetMembers(string name)
+        => _membersByName.TryGetValue(name, out var members) ? members : Enumerable.Empty<ClrTypeMember>();
+
+    public ITypeDefinition? BaseType {
+        get {
+            return _baseType ??= _type.BaseType != null ? _provider.GetTypeDefinition(_type.BaseType) : null;
+        }
+    }
+
+    public IEnumerable<ITypeDefinition> Interfaces {
+        get {
+            return _interfaces ??= _type
+                .GetInterfaces()
+                .Select(i => _provider.GetTypeDefinition(i))
+                .ToList();
+        }
+    }
 
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members.Cast<ITypeMember>();
-    IEnumerable<ITypeMember> ITypeDefinition.GetMembers(string name) => Members.Where(m => m.Name == name).Cast<ITypeMember>();
+    IEnumerable<ITypeMember> ITypeDefinition.GetMembers(string name) => GetMembers(name).Cast<ITypeMember>();
     Type ITypeDefinition.ReflectedType => _type;
 
     public override string ToString() => FullName;

@@ -71,8 +71,10 @@ public class TypeDefinitionProviderCollectionTests {
         public string? Namespace => null;
         public IEnumerable<ITypeMember> Members => [];
         public Type ReflectedType => typeof(object);
+        public ITypeDefinition? BaseType => null;
+        public IEnumerable<ITypeDefinition> Interfaces => [];
+        
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
-
         public bool IsAssignableTo(ITypeDefinition targetType) => throw new NotImplementedException();
 
         public string? Tag { get; set; }

@@ -45,14 +45,17 @@ public sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
 
     public ITypeDefinition? GetTypeDefinition(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-
-        return _types.GetOrAdd(name, CreateTypeDefinition, this);
-
-        static ClrTypeDefinition CreateTypeDefinition(string typeName, ClrTypeDefinitionRegistry registry) {
-            var clrType = Type.GetType(typeName);
-            if (clrType is null) throw new ArgumentException($"Type with name '{typeName}' is not defined.", nameof(typeName));
-            return new ClrTypeDefinition(clrType, registry);
+        if (_types.TryGetValue(name, out var existing)) {
+            return existing;
         }
+
+        var clrType = Type.GetType(name);
+        if (clrType is null) {
+            return null;
+        }
+
+        var created = new ClrTypeDefinition(clrType, this);
+        return _types.GetOrAdd(name, created);
     }
 
     ITypeDefinition? ITypeDefinitionProvider.GetTypeDefinition(Type type) => GetTypeDefinition(type);

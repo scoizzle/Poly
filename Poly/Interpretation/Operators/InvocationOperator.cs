@@ -22,12 +22,12 @@ public sealed class InvocationOperator : Operator
             .Select(arg => arg.GetTypeDefinition(context))
             .ToList();
 
-        var method = targetTypeDef.GetMembers(MethodName)
-            .Where(e =>
+        var method = targetTypeDef
+            .GetMembers(MethodName)
+            .SingleOrDefault(e =>
                 e.Parameters is not null &&
                 e.Parameters.Count() == argumentTypeDefs.Count &&
-                e.Parameters.Select(f => f.ParameterTypeDefinition).SequenceEqual(argumentTypeDefs))
-            .SingleOrDefault();
+                e.Parameters.Select(f => f.ParameterTypeDefinition).SequenceEqual(argumentTypeDefs));
 
         if (method == null) {
             throw new InvalidOperationException($"Method '{MethodName}' not found on type '{targetTypeDef}' with the specified argument types.");

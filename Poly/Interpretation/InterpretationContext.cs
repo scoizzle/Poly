@@ -119,13 +119,7 @@ public sealed class InterpretationContext {
     /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
     public Variable? GetVariable(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        foreach (var scope in _scopes) {
-            var variable = scope.GetVariable(name);
-            if (variable is not null) {
-                return variable;
-            }
-        }
-        return default;
+        return _currentScope.GetVariable(name);
     }
 
     /// <summary>

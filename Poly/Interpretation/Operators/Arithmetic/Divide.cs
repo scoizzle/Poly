@@ -3,7 +3,7 @@ using Poly.Introspection;
 namespace Poly.Interpretation.Operators.Arithmetic;
 
 /// <summary>
-/// Represents a division operation between two values.
+/// Represents an division operation between two values.
 /// </summary>
 /// <remarks>
 /// Compiles to <see cref="Expression.Divide"/> which performs numeric division.
@@ -22,15 +22,25 @@ public sealed class Divide(Value leftHandValue, Value rightHandValue) : Operator
 
     /// <inheritdoc />
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
-        // Return the type of the left operand (assumes both operands have compatible types)
-        return LeftHandValue.GetTypeDefinition(context);
+        // Determine the promoted type based on C# numeric promotion rules
+        var leftType = LeftHandValue.GetTypeDefinition(context);
+        var rightType = RightHandValue.GetTypeDefinition(context);
+        return NumericTypePromotion.GetPromotedType(context, leftType, rightType);
     }
 
     /// <inheritdoc />
     public override Expression BuildExpression(InterpretationContext context) {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
-        return Expression.Divide(leftExpr, rightExpr);
+        
+        var leftType = LeftHandValue.GetTypeDefinition(context);
+        var rightType = RightHandValue.GetTypeDefinition(context);
+        
+        // Convert operands to promoted type
+        var (convertedLeft, convertedRight) = NumericTypePromotion.ConvertToPromotedType(
+            context, leftExpr, rightExpr, leftType, rightType);
+        
+        return Expression.Divide(convertedLeft, convertedRight);
     }
 
     /// <inheritdoc />

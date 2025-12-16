@@ -3,7 +3,7 @@ using Poly.Introspection;
 namespace Poly.Interpretation.Operators.Arithmetic;
 
 /// <summary>
-/// Represents a multiplication operation between two values.
+/// Represents an multiplication operation between two values.
 /// </summary>
 /// <remarks>
 /// Compiles to <see cref="Expression.Multiply"/> which performs numeric multiplication.
@@ -22,15 +22,25 @@ public sealed class Multiply(Value leftHandValue, Value rightHandValue) : Operat
 
     /// <inheritdoc />
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
-        // Return the type of the left operand (assumes both operands have compatible types)
-        return LeftHandValue.GetTypeDefinition(context);
+        // Determine the promoted type based on C# numeric promotion rules
+        var leftType = LeftHandValue.GetTypeDefinition(context);
+        var rightType = RightHandValue.GetTypeDefinition(context);
+        return NumericTypePromotion.GetPromotedType(context, leftType, rightType);
     }
 
     /// <inheritdoc />
     public override Expression BuildExpression(InterpretationContext context) {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
-        return Expression.Multiply(leftExpr, rightExpr);
+        
+        var leftType = LeftHandValue.GetTypeDefinition(context);
+        var rightType = RightHandValue.GetTypeDefinition(context);
+        
+        // Convert operands to promoted type
+        var (convertedLeft, convertedRight) = NumericTypePromotion.ConvertToPromotedType(
+            context, leftExpr, rightExpr, leftType, rightType);
+        
+        return Expression.Multiply(convertedLeft, convertedRight);
     }
 
     /// <inheritdoc />

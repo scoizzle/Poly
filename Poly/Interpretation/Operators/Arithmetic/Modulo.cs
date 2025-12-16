@@ -3,20 +3,20 @@ using Poly.Introspection;
 namespace Poly.Interpretation.Operators.Arithmetic;
 
 /// <summary>
-/// Represents an subtraction operation between two values.
+/// Represents an modulo operation between two values.
 /// </summary>
 /// <remarks>
-/// Compiles to <see cref="Expression.Subtract"/> which performs numeric subtraction.
-/// Corresponds to the <c>-</c> operator in C#.
+/// Compiles to <see cref="Expression.Modulo"/> which performs numeric modulo.
+/// Corresponds to the <c>%</c> operator in C#.
 /// </remarks>
-public sealed class Subtract(Value leftHandValue, Value rightHandValue) : Operator {
+public sealed class Modulo(Value leftHandValue, Value rightHandValue) : Operator {
     /// <summary>
-    /// Gets the left-hand operand of the subtraction.
+    /// Gets the left-hand operand of the modulo.
     /// </summary>
     public Value LeftHandValue { get; init; } = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
     
     /// <summary>
-    /// Gets the right-hand operand of the subtraction.
+    /// Gets the right-hand operand of the modulo.
     /// </summary>
     public Value RightHandValue { get; init; } = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
 
@@ -40,9 +40,9 @@ public sealed class Subtract(Value leftHandValue, Value rightHandValue) : Operat
         var (convertedLeft, convertedRight) = NumericTypePromotion.ConvertToPromotedType(
             context, leftExpr, rightExpr, leftType, rightType);
         
-        return Expression.Subtract(convertedLeft, convertedRight);
+        return Expression.Modulo(convertedLeft, convertedRight);
     }
 
     /// <inheritdoc />
-    public override string ToString() => $"({LeftHandValue} - {RightHandValue})";
+    public override string ToString() => $"({LeftHandValue} % {RightHandValue})";
 }

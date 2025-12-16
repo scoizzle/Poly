@@ -26,14 +26,14 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     /// <param name="context">The interpretation context.</param>
     /// <returns>The indexer member metadata.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no indexer is found on the type.</exception>
-    private ITypeMember GetIndexer(InterpretationContext context) {
+    private ITypeMember? GetIndexer(InterpretationContext context) {
         ITypeDefinition typeDefinition = Value.GetTypeDefinition(context);
         
         // Get all members named "Item" (indexers)
         var indexers = typeDefinition.Members.Where(m => m.Name == "Item").ToList();
         
         if (indexers.Count == 0) {
-            throw new InvalidOperationException($"Indexer not found on type '{typeDefinition.Name}'.");
+            return null;
         }
         
         if (indexers.Count == 1) {
@@ -41,7 +41,6 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
         }
         
         // Multiple indexers found - attempt to resolve based on parameter count and types
-        var indexerTypes = IndexArguments.Select(arg => arg.GetTypeDefinition(context)).ToArray();
         var argumentCount = IndexArguments.Count();
         
         // TODO: Implement proper overload resolution
@@ -49,20 +48,43 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
         var matchingIndexer = indexers.FirstOrDefault(idx => 
             idx is ITypeMember member && member.Parameters?.Count() == argumentCount);
         
-        return matchingIndexer 
-            ?? throw new InvalidOperationException($"No matching indexer found on type '{typeDefinition.Name}' for {argumentCount} argument(s).");
+        return matchingIndexer;
     }
 
     /// <inheritdoc />
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
-        return GetIndexer(context).MemberTypeDefinition;
+        var indexer = GetIndexer(context);
+        if (indexer is not null) {
+            return indexer.MemberTypeDefinition;
+        }
+        
+        // Handle CLR arrays which don't expose an indexer member named "Item"
+        var valueType = Value.GetTypeDefinition(context);
+        var reflected = valueType.ReflectedType;
+        if (reflected.IsArray) {
+            var elementType = reflected.GetElementType()!;
+            return context.GetTypeDefinition(elementType) 
+                ?? throw new InvalidOperationException($"Type definition not found for array element type '{elementType}'.");
+        }
+        
+        throw new InvalidOperationException($"Indexer not found on type '{valueType.Name}'.");
     }
 
     /// <inheritdoc />
     public override Expression BuildExpression(InterpretationContext context) {
-        ITypeMember indexer = GetIndexer(context);
-        Value memberAccessor = indexer.GetMemberAccessor(Value, IndexArguments);
-        return memberAccessor.BuildExpression(context);
+        var indexer = GetIndexer(context);
+        if (indexer is not null) {
+            Value memberAccessor = indexer.GetMemberAccessor(Value, IndexArguments);
+            return memberAccessor.BuildExpression(context);
+        }
+        
+        // CLR array indexing: use Expression.ArrayIndex
+        var valueExpr = Value.BuildExpression(context);
+        var indexArgs = IndexArguments.Select(a => a.BuildExpression(context)).ToArray();
+        if (indexArgs.Length != 1) {
+            throw new InvalidOperationException("Array index access requires exactly one index argument.");
+        }
+        return Expression.ArrayIndex(valueExpr, indexArgs[0]);
     }
 
     /// <inheritdoc />

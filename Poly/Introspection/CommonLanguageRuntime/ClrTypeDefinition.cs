@@ -3,6 +3,11 @@ using System.Reflection;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
+/// <summary>
+/// CLR-backed implementation of <see cref="ITypeDefinition"/> that uses reflection to surface
+/// fields, properties, and methods, with immutable frozen collections for fast lookups.
+/// Thread-safe for concurrent reads after construction.
+/// </summary>
 public sealed class ClrTypeDefinition : ITypeDefinition {
     private readonly Type _type;
     private readonly FrozenSet<ClrTypeField> _fields;
@@ -13,6 +18,7 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
     private readonly ClrTypeDefinitionRegistry _provider;
     private ITypeDefinition? _baseType;
     private IEnumerable<ITypeDefinition>? _interfaces;
+    private IEnumerable<ClrParameter>? _genericParameters;
 
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
@@ -49,7 +55,19 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
 
     public ITypeDefinition? BaseType {
         get {
-            return _baseType ??= _type.BaseType != null ? _provider.GetTypeDefinition(_type.BaseType) : null;
+            if (_baseType is not null) return _baseType;
+
+            ITypeDefinition? resolved;
+            if (_type.IsGenericType && !_type.IsGenericTypeDefinition) {
+                var genericDef = _type.GetGenericTypeDefinition();
+                resolved = _provider.GetTypeDefinition(genericDef);
+            } else if (_type.BaseType != null) {
+                resolved = _provider.GetTypeDefinition(_type.BaseType);
+            } else {
+                resolved = null;
+            }
+
+            return _baseType = resolved;
         }
     }
 
@@ -62,9 +80,34 @@ public sealed class ClrTypeDefinition : ITypeDefinition {
         }
     }
 
+    public IEnumerable<IParameter>? GenericParameters {
+        get {
+            if (!_type.IsGenericType) return null;
+            if (_genericParameters is not null) return _genericParameters;
+
+            var args = _type.GetGenericArguments();
+            Type[] namesSource;
+            if (_type.IsGenericTypeDefinition) {
+                namesSource = args; // placeholders
+            } else {
+                namesSource = _type.GetGenericTypeDefinition().GetGenericArguments();
+            }
+
+            var parameters = new List<ClrParameter>(args.Length);
+            for (int i = 0; i < args.Length; i++) {
+                var paramName = namesSource[i].Name;
+                var lazyType = _provider.GetDeferredTypeDefinitionResolver(args[i]);
+                parameters.Add(new ClrParameter(paramName, lazyType, i, isOptional: false, defaultValue: null));
+            }
+
+            return _genericParameters = parameters;
+        }
+    }
+
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members.Cast<ITypeMember>();
     IEnumerable<ITypeMember> ITypeDefinition.GetMembers(string name) => GetMembers(name).Cast<ITypeMember>();
     Type ITypeDefinition.ReflectedType => _type;
+    IEnumerable<IParameter>? ITypeDefinition.GenericParameters => GenericParameters;
 
     public override string ToString() => FullName;
 

@@ -5,6 +5,11 @@ using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
+/// <summary>
+/// Reflection-backed field member for a CLR type. Exposes the field's type,
+/// declaring type, and name, and provides an accessor for interpretation.
+/// Instances are immutable and safe for concurrent reads.
+/// </summary>
 [DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
 public sealed class ClrTypeField : ClrTypeMember {
     private readonly Lazy<ClrTypeDefinition> _memberType;
@@ -21,13 +26,35 @@ public sealed class ClrTypeField : ClrTypeMember {
         _fieldInfo = fieldInfo;
     }
 
+    /// <summary>
+    /// Gets the field type definition.
+    /// </summary>
     public override ClrTypeDefinition MemberType => _memberType.Value;
+
+    /// <summary>
+    /// Gets the declaring type definition that owns this field.
+    /// </summary>
     public override ClrTypeDefinition DeclaringType => _declaringType;
+
+    /// <summary>
+    /// Fields do not have parameters; always null.
+    /// </summary>
     public override IOrderedEnumerable<ClrParameter>? Parameters => null;
+
+    /// <summary>
+    /// Gets the field name.
+    /// </summary>
     public override string Name => _fieldInfo.Name;
+
+    /// <summary>
+    /// Gets the underlying reflection <see cref="FieldInfo"/>.
+    /// </summary>
     public FieldInfo FieldInfo => _fieldInfo;
 
 
+    /// <summary>
+    /// Creates an accessor that reads this field from the provided <paramref name="instance"/>.
+    /// </summary>
     public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters) => new ClrTypeFieldInterpretationAccessor(instance, this);
 
     public override string ToString() => $"{MemberType} {DeclaringType}.{Name}";

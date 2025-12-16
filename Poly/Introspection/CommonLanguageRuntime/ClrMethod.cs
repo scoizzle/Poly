@@ -5,6 +5,11 @@ using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
+/// <summary>
+/// Reflection-backed method member for a CLR type. Exposes the return type, declaring type,
+/// name, and ordered parameters, and creates invocation accessors for interpretation.
+/// Instances are immutable and safe for concurrent reads.
+/// </summary>
 [DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
 public sealed class ClrMethod : ClrTypeMember {
     private readonly Lazy<ClrTypeDefinition> _memberType;
@@ -25,12 +30,35 @@ public sealed class ClrMethod : ClrTypeMember {
         _name = methodInfo.Name;
     }
 
+    /// <summary>
+    /// Gets the return type definition.
+    /// </summary>
     public override ClrTypeDefinition MemberType => _memberType.Value;
+
+    /// <summary>
+    /// Gets the declaring type definition that owns this method.
+    /// </summary>
     public override ClrTypeDefinition DeclaringType => _declaringType;
+
+    /// <summary>
+    /// Gets the ordered method parameters.
+    /// </summary>
     public override IEnumerable<ClrParameter> Parameters => _parameters;
+
+    /// <summary>
+    /// Gets the method name.
+    /// </summary>
     public override string Name => _name;
+
+    /// <summary>
+    /// Gets the underlying reflection <see cref="MethodInfo"/>.
+    /// </summary>
     public MethodInfo MethodInfo => _methodInfo;
 
+    /// <summary>
+    /// Creates an accessor that invokes this method on <paramref name="instance"/>
+    /// with the supplied <paramref name="arguments"/>.
+    /// </summary>
     public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? arguments) {
         ArgumentNullException.ThrowIfNull(arguments);
 

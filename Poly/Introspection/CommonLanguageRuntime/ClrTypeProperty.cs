@@ -5,6 +5,10 @@ using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
+/// <summary>
+/// Reflection-backed property member for a CLR type. Supports both regular properties and
+/// indexer properties (with parameters). Instances are immutable and safe for concurrent reads.
+/// </summary>
 [DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
 public sealed class ClrTypeProperty : ClrTypeMember {
     private readonly Lazy<ClrTypeDefinition> _memberType;
@@ -25,12 +29,35 @@ public sealed class ClrTypeProperty : ClrTypeMember {
         _name = propertyInfo.Name;
     }
 
+    /// <summary>
+    /// Gets the property type definition.
+    /// </summary>
     public override ClrTypeDefinition MemberType => _memberType.Value;
+
+    /// <summary>
+    /// Gets the declaring type definition that owns this property.
+    /// </summary>
     public override ClrTypeDefinition DeclaringType => _declaringType;
+
+    /// <summary>
+    /// Gets the index parameters for an indexer property, or null for regular properties.
+    /// </summary>
     public override IEnumerable<ClrParameter>? Parameters => _parameters;
+
+    /// <summary>
+    /// Gets the property name.
+    /// </summary>
     public override string Name => _name;
+
+    /// <summary>
+    /// Gets the underlying reflection <see cref="PropertyInfo"/>.
+    /// </summary>
     public PropertyInfo PropertyInfo => _propertyInfo;
 
+    /// <summary>
+    /// Creates an accessor that reads this property (or indexer) from <paramref name="instance"/>.
+    /// Validates parameter counts for indexers.
+    /// </summary>
     public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters) {
         if (_parameters is not null) {
             if (parameters is null || parameters.Count() != _parameters.Count()) {

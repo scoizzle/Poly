@@ -69,7 +69,7 @@ public interface ITypeDefinition {
     /// <param name="name">The method name.</param>
     /// <param name="argumentTypes">The types of the arguments to match against.</param>
     /// <returns>The best-matching method, or null if none found.</returns>
-    public ITypeMethod? GetBestMatchingMethod(string name, IEnumerable<Type> argumentTypes);
+    public ITypeMethod? GetBestMatchingMethod(string name, IEnumerable<Type> argumentTypes) => default;
 
     /// <summary>
     /// Gets the underlying reflected runtime type, when available.
@@ -123,6 +123,7 @@ public interface ITypeDefinition {
     /// can override with more precise or faster logic.
     /// </remarks>
     public bool IsAssignableFrom(ITypeDefinition other) {
+        ArgumentNullException.ThrowIfNull(other);
         if (this == other) return true;
 
         var current = other.BaseType;
@@ -139,5 +140,8 @@ public interface ITypeDefinition {
     /// <summary>
     /// Determines if this type can be assigned to <paramref name="other"/>.
     /// </summary>
-    public bool IsAssignableTo(ITypeDefinition other) => other.IsAssignableFrom(this);
+    public bool IsAssignableTo(ITypeDefinition other) {
+        ArgumentNullException.ThrowIfNull(other);
+        return other.IsAssignableFrom(this);
+    }
 }

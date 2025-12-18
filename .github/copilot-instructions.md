@@ -3,7 +3,7 @@
 These instructions help AI coding agents work productively in this .NET solution. Focus on concrete project patterns and commands established in this repo.
 
 ## Overview & Architecture
-- **Goal:** Fluent, strongly-typed domain modeling for validation, serialization, and future codegen.
+- **Goal:** Define a common shared abstraction layer and interface into varying type systems for supporting dynamic code generation and execution in other components of this project. Fluent, strongly-typed domain modeling for validation, serialization, and future codegen.
 - **Primary library:** `Poly/` — core DSL and engines for Data Modeling, Interpretation, Introspection, Text, and Validation.
 - **Examples/benchmarks:** `Poly.Benchmarks/` — runnable sample scenarios (e.g., `FluentBuilderExample.cs`).
 - **Tests:** `Poly.Tests/` — unit tests for core components.

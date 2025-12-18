@@ -12,7 +12,7 @@ public sealed class GreaterThan(Value leftHandValue, Value rightHandValue) : Boo
     /// Gets the left-hand operand of the comparison.
     /// </summary>
     public Value LeftHandValue { get; init; } = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
-    
+
     /// <summary>
     /// Gets the right-hand operand of the comparison.
     /// </summary>

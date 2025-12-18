@@ -2,10 +2,8 @@ using Poly.Introspection;
 
 namespace Poly.Interpretation.Operators;
 
-public sealed class InvocationOperator : Operator
-{
-    public InvocationOperator(Value target, string methodName, params Value[] arguments)
-    {
+public sealed class InvocationOperator : Operator {
+    public InvocationOperator(Value target, string methodName, params Value[] arguments) {
         Target = target;
         MethodName = methodName;
         Arguments = arguments;

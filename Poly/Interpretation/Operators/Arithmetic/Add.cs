@@ -14,7 +14,7 @@ public sealed class Add(Value leftHandValue, Value rightHandValue) : Operator {
     /// Gets the left-hand operand of the addition.
     /// </summary>
     public Value LeftHandValue { get; init; } = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
-    
+
     /// <summary>
     /// Gets the right-hand operand of the addition.
     /// </summary>
@@ -32,14 +32,14 @@ public sealed class Add(Value leftHandValue, Value rightHandValue) : Operator {
     public override Expression BuildExpression(InterpretationContext context) {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
-        
+
         var leftType = LeftHandValue.GetTypeDefinition(context);
         var rightType = RightHandValue.GetTypeDefinition(context);
-        
+
         // Convert operands to promoted type
         var (convertedLeft, convertedRight) = NumericTypePromotion.ConvertToPromotedType(
             context, leftExpr, rightExpr, leftType, rightType);
-        
+
         return Expression.Add(convertedLeft, convertedRight);
     }
 

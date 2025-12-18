@@ -1,7 +1,7 @@
 namespace Poly.DataModeling.Mutations;
 
-using Poly.Validation;
 using Poly.DataModeling.Mutations.Effects;
+using Poly.Validation;
 
 public sealed record Mutation(
     string Name,

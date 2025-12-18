@@ -15,12 +15,12 @@ public sealed class TypeCast(Value operand, ITypeDefinition targetType, bool isC
     /// Gets the value to cast.
     /// </summary>
     public Value Operand { get; } = operand ?? throw new ArgumentNullException(nameof(operand));
-    
+
     /// <summary>
     /// Gets the target type to cast to.
     /// </summary>
     public ITypeDefinition TargetType { get; } = targetType ?? throw new ArgumentNullException(nameof(targetType));
-    
+
     /// <summary>
     /// Gets whether to use checked conversion (throws on overflow).
     /// </summary>
@@ -35,8 +35,8 @@ public sealed class TypeCast(Value operand, ITypeDefinition targetType, bool isC
     public override Expression BuildExpression(InterpretationContext context) {
         Expression operandExpr = Operand.BuildExpression(context);
         Type targetClrType = TargetType.ReflectedType;
-        
-        return IsChecked 
+
+        return IsChecked
             ? Expression.ConvertChecked(operandExpr, targetClrType)
             : Expression.Convert(operandExpr, targetClrType);
     }

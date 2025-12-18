@@ -12,7 +12,7 @@ public sealed class NotEqual(Value leftHandValue, Value rightHandValue) : Boolea
     /// Gets the left-hand operand of the inequality comparison.
     /// </summary>
     public Value LeftHandValue { get; init; } = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
-    
+
     /// <summary>
     /// Gets the right-hand operand of the inequality comparison.
     /// </summary>

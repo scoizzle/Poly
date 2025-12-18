@@ -17,7 +17,7 @@ public class DataTypeBuilderTests {
     public async Task AddProperty_WithPropertyBuilder() {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("Name", b => b.OfType<string>());
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Properties.Count()).IsEqualTo(1);
@@ -31,7 +31,7 @@ public class DataTypeBuilderTests {
         builder.AddProperty("FirstName", b => b.OfType<string>());
         builder.AddProperty("LastName", b => b.OfType<string>());
         builder.AddProperty("Age", b => b.OfType<int>());
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Properties.Count()).IsEqualTo(3);
@@ -41,7 +41,7 @@ public class DataTypeBuilderTests {
     public async Task SetName_UpdatesName() {
         var builder = new DataTypeBuilder("Person");
         builder.SetName("Employee");
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Name).IsEqualTo("Employee");
@@ -62,7 +62,7 @@ public class DataTypeBuilderTests {
     public async Task HasOne_CreatesRelationship() {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("AddressId", b => b.OfType<Guid>());
-        
+
         var relationshipBuilder = builder.HasOne("Address");
 
         await Assert.That(relationshipBuilder).IsNotNull();
@@ -71,7 +71,7 @@ public class DataTypeBuilderTests {
     [Test]
     public async Task HasMany_CreatesRelationship() {
         var builder = new DataTypeBuilder("Person");
-        
+
         var relationshipBuilder = builder.HasMany("Orders");
 
         await Assert.That(relationshipBuilder).IsNotNull();
@@ -81,11 +81,11 @@ public class DataTypeBuilderTests {
     public async Task HasMutation_WithBuilder() {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("Age", b => b.OfType<int>());
-        
+
         builder.HasMutation("HaveBirthday", mutationBuilder => {
             // Configure mutation
         });
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Mutations.Count()).IsEqualTo(1);
@@ -97,11 +97,11 @@ public class DataTypeBuilderTests {
     public async Task HasMutation_WithActions() {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("Age", b => b.OfType<int>());
-        
-        builder.HasMutation("Grow", 
+
+        builder.HasMutation("Grow",
             preconditions: [p => { }],
             effects: [e => { }]);
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Mutations.Count()).IsEqualTo(1);
@@ -111,7 +111,7 @@ public class DataTypeBuilderTests {
     public async Task BuilderProperties_Accessible() {
         var builder = new DataTypeBuilder("Product");
         builder.AddProperty("Name", b => b.OfType<string>());
-        
+
         await Assert.That(builder.Name).IsEqualTo("Product");
         await Assert.That(builder.Properties.Count()).IsEqualTo(1);
     }
@@ -127,7 +127,7 @@ public class DataTypeBuilderTests {
 
         await Assert.That(dataType.Name).IsEqualTo("Order");
         await Assert.That(dataType.Properties.Count()).IsEqualTo(4);
-        
+
         var propertyNames = dataType.Properties.Select(p => p.Name).ToList();
         await Assert.That(propertyNames).Contains("OrderId");
         await Assert.That(propertyNames).Contains("CustomerName");
@@ -164,7 +164,7 @@ public class DataTypeBuilderTests {
     public async Task PropertyBuilder_Integration_String() {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("Email", b => b.OfType<string>());
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Properties.Count()).IsEqualTo(1);
@@ -180,7 +180,7 @@ public class DataTypeBuilderTests {
             b.OfType<bool>();
             b.WithDefault(true);
         });
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Properties.Count()).IsEqualTo(1);
@@ -196,7 +196,7 @@ public class DataTypeBuilderTests {
         builder.AddProperty("Price", b => b.OfType<double>());
         builder.AddProperty("Stock", b => b.OfType<int>());
         builder.AddProperty("IsAvailable", b => b.OfType<bool>());
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Properties.Count()).IsEqualTo(4);
@@ -206,7 +206,7 @@ public class DataTypeBuilderTests {
     public async Task PropertyBuilder_ReferenceType() {
         var builder = new DataTypeBuilder("Order");
         builder.AddProperty("CustomerId", b => b.OfType("Customer"));
-        
+
         var result = builder.Build();
 
         await Assert.That(result.Properties.Count()).IsEqualTo(1);
@@ -219,7 +219,7 @@ public class DataTypeBuilderTests {
         var builder = new DataTypeBuilder("User");
         builder.HasOne("Profile");
         builder.HasMany("Posts");
-        
+
         await Assert.That(builder.Relationships.Count()).IsEqualTo(2);
     }
 
@@ -228,7 +228,7 @@ public class DataTypeBuilderTests {
         var builder = new DataTypeBuilder("Article");
         builder.HasMutation("Publish", m => { });
         builder.HasMutation("Archive", m => { });
-        
+
         await Assert.That(builder.Mutations.Count()).IsEqualTo(2);
     }
 }

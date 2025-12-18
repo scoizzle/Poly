@@ -13,7 +13,7 @@ public sealed class RelationshipBuilder {
     private readonly SourceCardinality _sourceCardinality;
     private readonly List<Constraint> _sourceConstraints;
     private readonly List<Constraint> _targetConstraints;
-    
+
     private string? _targetTypeName;
     private string? _targetPropertyName;
     private bool? _targetIsMany;

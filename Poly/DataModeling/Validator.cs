@@ -21,7 +21,7 @@ public sealed class Validator {
         ArgumentNullException.ThrowIfNull(instance);
 
         var evaluationContext = new RuleEvaluationContext();
-        
+
         var dataType = _model.Types.FirstOrDefault(t => t.Name.Equals(typeName, StringComparison.OrdinalIgnoreCase));
         if (dataType == null) {
             evaluationContext.AddError(new ValidationError("", "type.notfound", $"Type '{typeName}' not found in data model."));
@@ -62,4 +62,3 @@ public sealed class Validator {
         return evaluationContext.GetResult();
     }
 }
-

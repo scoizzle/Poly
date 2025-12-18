@@ -13,7 +13,7 @@ public sealed class Or(Value leftHandValue, Value rightHandValue) : BooleanOpera
     /// Gets the left-hand operand of the OR operation.
     /// </summary>
     public Value LeftHandValue { get; } = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
-    
+
     /// <summary>
     /// Gets the right-hand operand of the OR operation.
     /// </summary>

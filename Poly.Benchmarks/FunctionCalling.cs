@@ -5,8 +5,7 @@ using BenchmarkDotNet.Attributes;
 namespace Poly.Benchmarks;
 
 
-public class FunctionCalling
-{
+public class FunctionCalling {
     record Person(string FirstName, string LastName);
     static bool TestFunction(Person? value) => value is not null;
     static bool TestStaticFunction(Person? value) => value is not null;

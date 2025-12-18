@@ -15,7 +15,7 @@ public sealed class Block : Operator {
     /// Gets the sequence of expressions to execute.
     /// </summary>
     public IReadOnlyList<Interpretable> Expressions { get; }
-    
+
     /// <summary>
     /// Gets the optional variables declared within this block's scope.
     /// </summary>
@@ -40,10 +40,10 @@ public sealed class Block : Operator {
     public Block(IEnumerable<Interpretable> expressions, IEnumerable<ParameterExpression> variables) {
         ArgumentNullException.ThrowIfNull(expressions);
         ArgumentNullException.ThrowIfNull(variables);
-        
+
         Expressions = expressions.ToList().AsReadOnly();
         Variables = variables.ToList().AsReadOnly();
-        
+
         if (Expressions.Count == 0) {
             throw new ArgumentException("Block must contain at least one expression.", nameof(expressions));
         }
@@ -53,14 +53,14 @@ public sealed class Block : Operator {
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
         // The block's type is the type of the last expression
         var lastExpression = Expressions[^1];
-        
+
         if (lastExpression is Value lastValue) {
             return lastValue.GetTypeDefinition(context);
         }
-        
+
         // If the last expression is not a Value, we can't determine its type
         // Default to void/object
-        return context.GetTypeDefinition<object>() 
+        return context.GetTypeDefinition<object>()
             ?? throw new InvalidOperationException("Unable to determine block type.");
     }
 
@@ -71,8 +71,8 @@ public sealed class Block : Operator {
             var builtExpressions = Expressions
                 .Select(expr => expr.BuildExpression(context))
                 .ToList();
-            
-            return Variables.Count > 0 
+
+            return Variables.Count > 0
                 ? Expression.Block(Variables, builtExpressions)
                 : Expression.Block(builtExpressions);
         }

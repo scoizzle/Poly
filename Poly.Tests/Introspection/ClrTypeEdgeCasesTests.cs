@@ -111,7 +111,7 @@ public class ClrTypeEdgeCasesTests {
 
         // List<T> has Add(T) method
         var addMembers = listType.GetMembers("Add");
-        
+
         await Assert.That(addMembers.Count()).IsGreaterThan(0);
     }
 

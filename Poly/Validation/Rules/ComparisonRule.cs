@@ -38,7 +38,7 @@ public sealed class ComparisonRule : Rule {
             ComparisonOperator.LessThanOrEqual => new LessThanOrEqual(leftMember, rightMember),
             _ => throw new ArgumentException($"Unknown operator: {Operator}")
         };
-        
+
         return comparisonResult;
     }
 

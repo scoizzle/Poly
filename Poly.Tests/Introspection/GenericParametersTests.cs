@@ -22,9 +22,9 @@ public class GenericParametersTests {
         var genericParams = listIntType.GenericParameters;
 
         await Assert.That(genericParams).IsNotNull();
-        
+
         if (genericParams is null) return;
-        
+
         await Assert.That(genericParams.Count()).IsEqualTo(1);
 
         var param = genericParams.First();
@@ -39,9 +39,9 @@ public class GenericParametersTests {
         var genericParams = dictType.GenericParameters;
 
         await Assert.That(genericParams).IsNotNull();
-        
+
         if (genericParams is null) return;
-        
+
         await Assert.That(genericParams.Count()).IsEqualTo(2);
 
         var paramList = genericParams.ToList();
@@ -63,9 +63,9 @@ public class GenericParametersTests {
         var genericParams = openListType.GenericParameters;
 
         await Assert.That(genericParams).IsNotNull();
-        
+
         if (genericParams is null) return;
-        
+
         await Assert.That(genericParams.Count()).IsEqualTo(1);
 
         var param = genericParams.First();
@@ -81,9 +81,9 @@ public class GenericParametersTests {
         var genericParams = openDictType.GenericParameters;
 
         await Assert.That(genericParams).IsNotNull();
-        
+
         if (genericParams is null) return;
-        
+
         await Assert.That(genericParams.Count()).IsEqualTo(2);
 
         var paramList = genericParams.ToList();
@@ -104,9 +104,9 @@ public class GenericParametersTests {
         var genericParams = nestedType.GenericParameters;
 
         await Assert.That(genericParams).IsNotNull();
-        
+
         if (genericParams is null) return;
-        
+
         await Assert.That(genericParams.Count()).IsEqualTo(1);
 
         var param = genericParams.First();
@@ -121,9 +121,9 @@ public class GenericParametersTests {
         var genericParams = tupleType.GenericParameters;
 
         await Assert.That(genericParams).IsNotNull();
-        
+
         if (genericParams is null) return;
-        
+
         await Assert.That(genericParams.Count()).IsEqualTo(3);
 
         var paramList = genericParams.ToList();
@@ -149,7 +149,7 @@ public class GenericParametersTests {
         var genericParams = dictType.GenericParameters;
 
         if (genericParams is null) return;
-        
+
         foreach (var param in genericParams) {
             await Assert.That(param.IsOptional).IsFalse();
             await Assert.That(param.DefaultValue).IsNull();

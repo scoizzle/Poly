@@ -18,7 +18,7 @@ public sealed record DataPropertyPath {
 
         (_fullPath, _segments) = (new(GetFullPath), new(segments));
     }
-    
+
     public string FullPath {
         get => _fullPath.Value;
         init {
@@ -26,18 +26,18 @@ public sealed record DataPropertyPath {
             (_fullPath, _segments) = (new(value), new(GetSegments));
         }
     }
-    
+
     public IEnumerable<string> Segments {
         get => _segments.Value;
         init {
             if (value == null || !value.Any()) {
                 throw new ArgumentException("Segments cannot be null or empty.", nameof(value));
             }
-            
+
             (_fullPath, _segments) = (new(GetFullPath), new(value));
         }
     }
-    
+
     public override string ToString() => _fullPath.Value;
 
     public static implicit operator DataPropertyPath(string fullPath) => new(fullPath);

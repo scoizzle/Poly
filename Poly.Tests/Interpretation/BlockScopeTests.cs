@@ -1,6 +1,7 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Operators;
-using System.Linq.Expressions;
 
 namespace Poly.Tests.Interpretation;
 
@@ -8,7 +9,7 @@ public class BlockScopeTests {
     [Test]
     public async Task Block_CreatesNewScope_VariablesNotVisibleOutside() {
         var context = new InterpretationContext();
-        
+
         // Verify 'y' doesn't exist initially
         var yBefore = context.GetVariable("y");
         await Assert.That(yBefore).IsNull();
@@ -27,23 +28,23 @@ public class BlockScopeTests {
     [Test]
     public async Task Block_NestedScopes_InnerShadowsOuter() {
         var context = new InterpretationContext();
-        
+
         // Declare 'x' in outer scope
         var outerX = context.DeclareVariable("x", Value.Wrap(5));
 
         // Inner block declares its own 'x'
         context.PushScope();
         var innerX = context.DeclareVariable("x", Value.Wrap(10));
-        
+
         // Inner 'x' should be different from outer 'x'
         await Assert.That(innerX).IsNotEqualTo(outerX);
-        
+
         // Current scope should see inner 'x'
         var currentX = context.GetVariable("x");
         await Assert.That(currentX).IsEqualTo(innerX);
-        
+
         context.PopScope();
-        
+
         // After popping, should see outer 'x' again
         currentX = context.GetVariable("x");
         await Assert.That(currentX).IsEqualTo(outerX);
@@ -65,7 +66,7 @@ public class BlockScopeTests {
         // Build expression - Block pushes/pops its own scope
         var expr = block.BuildExpression(context);
         var lambda = Expression.Lambda<Func<int, int, int>>(
-            expr, 
+            expr,
             x.BuildExpression(context),
             y.BuildExpression(context)
         );
@@ -78,7 +79,7 @@ public class BlockScopeTests {
     [Test]
     public async Task Block_CanAccessOuterScopeVariables() {
         var context = new InterpretationContext();
-        
+
         // Declare variable in outer scope
         var outerVar = context.DeclareVariable("outer", Value.Wrap(100));
 

@@ -71,7 +71,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
         }
         return null;
     }
-    
+
     /// <summary>
     /// Resolves by runtime type, querying providers from top to bottom. Returns null when not found.
     /// </summary>

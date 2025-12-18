@@ -15,12 +15,12 @@ public sealed class Conditional(Value condition, Value ifTrue, Value ifFalse) : 
     /// Gets the condition to evaluate.
     /// </summary>
     public Value Condition { get; } = condition ?? throw new ArgumentNullException(nameof(condition));
-    
+
     /// <summary>
     /// Gets the value to return if the condition is true.
     /// </summary>
     public Value IfTrue { get; } = ifTrue ?? throw new ArgumentNullException(nameof(ifTrue));
-    
+
     /// <summary>
     /// Gets the value to return if the condition is false.
     /// </summary>
@@ -38,7 +38,7 @@ public sealed class Conditional(Value condition, Value ifTrue, Value ifFalse) : 
         Expression conditionExpr = Condition.BuildExpression(context);
         Expression ifTrueExpr = IfTrue.BuildExpression(context);
         Expression ifFalseExpr = IfFalse.BuildExpression(context);
-        
+
         return Expression.Condition(conditionExpr, ifTrueExpr, ifFalseExpr);
     }
 

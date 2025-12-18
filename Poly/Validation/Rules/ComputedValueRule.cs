@@ -37,7 +37,7 @@ public sealed class ComputedValueRule : Rule {
         var target = new MemberAccess(context.Value, TargetPropertyName);
         var left = new MemberAccess(context.Value, LeftOperandPropertyName);
         var right = new MemberAccess(context.Value, RightOperandPropertyName);
-        
+
         Value computation = Operation switch {
             ArithmeticOperation.Add => new Add(left, right),
             ArithmeticOperation.Subtract => new Subtract(left, right),
@@ -45,7 +45,7 @@ public sealed class ComputedValueRule : Rule {
             ArithmeticOperation.Divide => new Divide(left, right),
             _ => throw new ArgumentException($"Unknown operation: {Operation}")
         };
-        
+
         Value comparisonResult = ComparisonOperator switch {
             ComparisonOperator.Equal => new Equal(target, computation),
             ComparisonOperator.NotEqual => new NotEqual(target, computation),
@@ -55,7 +55,7 @@ public sealed class ComputedValueRule : Rule {
             ComparisonOperator.LessThanOrEqual => new LessThanOrEqual(target, computation),
             _ => throw new ArgumentException($"Unknown comparison: {ComparisonOperator}")
         };
-        
+
         return comparisonResult;
     }
 

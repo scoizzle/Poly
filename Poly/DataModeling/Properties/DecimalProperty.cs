@@ -9,7 +9,7 @@ public sealed record DecimalProperty(
     int? Precision = null,
     int? Scale = null
 ) : DataProperty(Name, Constraints, DefaultValue) {
-    public override string ToString() => Precision.HasValue && Scale.HasValue 
+    public override string ToString() => Precision.HasValue && Scale.HasValue
         ? $"decimal({Precision},{Scale}) {Name}"
         : $"decimal {Name}";
 }

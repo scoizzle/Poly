@@ -13,7 +13,7 @@ public sealed class And(Value leftHandValue, Value rightHandValue) : BooleanOper
     /// Gets the left-hand operand of the AND operation.
     /// </summary>
     public Value LeftHandValue { get; } = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
-    
+
     /// <summary>
     /// Gets the right-hand operand of the AND operation.
     /// </summary>

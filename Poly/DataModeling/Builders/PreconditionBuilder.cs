@@ -9,7 +9,7 @@ namespace Poly.DataModeling.Builders;
 /// </summary>
 public sealed class PreconditionBuilder {
     private ValueSource? _valueSource;
-    
+
     /// <summary>
     /// Starts building a precondition that references a property of the target type.
     /// </summary>
@@ -20,7 +20,7 @@ public sealed class PreconditionBuilder {
         _valueSource = new PropertyValue(propertyName);
         return this;
     }
-    
+
     /// <summary>
     /// Starts building a precondition that references a parameter.
     /// </summary>
@@ -31,7 +31,7 @@ public sealed class PreconditionBuilder {
         _valueSource = new ParameterValue(parameterName);
         return this;
     }
-    
+
     /// <summary>
     /// Starts building a precondition that references a constant value.
     /// </summary>
@@ -41,7 +41,7 @@ public sealed class PreconditionBuilder {
         _valueSource = new ConstantValue(value);
         return this;
     }
-    
+
     /// <summary>
     /// Accesses a nested member of the current value source.
     /// </summary>
@@ -50,14 +50,14 @@ public sealed class PreconditionBuilder {
     /// <exception cref="InvalidOperationException">Thrown if no value source has been set.</exception>
     public PreconditionBuilder Member(string memberName) {
         ArgumentNullException.ThrowIfNull(memberName);
-        
+
         if (_valueSource == null)
             throw new InvalidOperationException("Cannot access a member without first specifying a value source using Property(), Parameter(), or Constant().");
-        
+
         // _valueSource = new MemberAccessValue(_valueSource, memberName);
         return this;
     }
-    
+
     /// <summary>
     /// Builds the precondition with the specified constraint.
     /// </summary>
@@ -66,10 +66,10 @@ public sealed class PreconditionBuilder {
     /// <exception cref="InvalidOperationException">Thrown if no value source has been set.</exception>
     public MutationCondition Must(Constraint constraint) {
         ArgumentNullException.ThrowIfNull(constraint);
-        
+
         if (_valueSource == null)
             throw new InvalidOperationException("Cannot create a precondition without specifying a value source using Property(), Parameter(), or Constant().");
-        
+
         return new MutationCondition(_valueSource, constraint);
     }
 
@@ -82,7 +82,7 @@ public sealed class PreconditionBuilder {
     public MutationConditionBuilder MustBe() {
         if (_valueSource == null)
             throw new InvalidOperationException("Cannot create a precondition without specifying a value source using Property(), Parameter(), or Constant().");
-        
+
         return new MutationConditionBuilder(_valueSource);
     }
 }

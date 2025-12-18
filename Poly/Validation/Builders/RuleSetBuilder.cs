@@ -17,19 +17,19 @@ public sealed class RuleSetBuilder<T> {
     /// <param name="constraintsBuilder">Action to configure constraints for the property.</param>
     /// <returns>This builder for method chaining.</returns>
     public RuleSetBuilder<T> Member<TProperty>(
-        Expression<Func<T, TProperty>> propertySelector, 
+        Expression<Func<T, TProperty>> propertySelector,
         Action<ConstraintSetBuilder<TProperty>> constraintsBuilder) {
-        
+
         ArgumentNullException.ThrowIfNull(propertySelector);
         ArgumentNullException.ThrowIfNull(constraintsBuilder);
 
         var propertyName = GetMemberName(propertySelector);
         var constraintSetBuilder = new ConstraintSetBuilder<TProperty>(propertyName);
         constraintsBuilder(constraintSetBuilder);
-        
+
         var combinedRule = constraintSetBuilder.Build();
         var propertyRule = new PropertyConstraintRule(propertyName, combinedRule);
-        
+
         _rules.Add(propertyRule);
         return this;
     }

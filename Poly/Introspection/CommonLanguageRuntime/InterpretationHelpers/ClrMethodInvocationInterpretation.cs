@@ -19,12 +19,12 @@ internal sealed class ClrMethodInvocationInterpretation(ClrMethod method, Value 
     /// For static methods, this should be a <see cref="Literal"/> containing null.
     /// </remarks>
     public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
-    
+
     /// <summary>
     /// Gets the CLR method to be invoked.
     /// </summary>
     public ClrMethod Method { get; init; } = method ?? throw new ArgumentNullException(nameof(method));
-    
+
     /// <summary>
     /// Gets the arguments to pass to the method.
     /// </summary>

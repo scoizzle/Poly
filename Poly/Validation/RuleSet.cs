@@ -20,12 +20,12 @@ public sealed class RuleSet<T> {
         // Build the interpretation tree
         var interpretationContext = new InterpretationContext();
         var registry = ClrTypeDefinitionRegistry.Shared;
-        var typeDefinition = registry.GetTypeDefinition<T>() 
+        var typeDefinition = registry.GetTypeDefinition<T>()
             ?? throw new InvalidOperationException($"Type definition for {typeof(T).Name} not found.");
-        
+
         var buildingContext = new RuleBuildingContext(interpretationContext, typeDefinition);
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
-        
+
         // Build the expression tree
         ExpressionTree = RuleSetInterpretation.BuildExpression(interpretationContext);
 

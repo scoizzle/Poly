@@ -1,15 +1,16 @@
 using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Text.Json;
+
 using Poly.DataModeling;
 using Poly.DataModeling.Builders;
+using Poly.DataModeling.Interpretation;
 using Poly.DataModeling.Mutations;
+using Poly.Interpretation;
 using Poly.Validation;
 using Poly.Validation.Constraints;
-using Poly.DataModeling.Interpretation;
-using Poly.Interpretation;
-using System.Linq.Expressions;
 
 namespace Poly.Benchmarks;
 
@@ -64,7 +65,7 @@ public static class FluentBuilderExample {
                     p => p.Property("ActivatedAt").MustBe().NotNull(),
                     p => p.Property("DeactivatedAt").MustBe().Null()
                 ],
-                effects:[
+                effects: [
                     e => e.Assign("DeactivatedAt").Constant(DateTime.UtcNow),
                 ]
             );
@@ -91,7 +92,7 @@ public static class FluentBuilderExample {
             // Many-to-many: Order has many Products
             order.HasMany("Products").OfType("Product")
                 .WithMany("Orders");
-                
+
             // Mutation: Ship order (requires address and pending status)
             order.HasMutation("Ship", m => m
                 .Precondition(p => p
@@ -107,7 +108,7 @@ public static class FluentBuilderExample {
                     .MustBe().NotNull())
                 .HasEffect(e => e.Assign("Status").Constant("Shipped"))
             );
-            
+
             // Mutation: Cancel order (only if pending)
             order.HasMutation("Cancel", m => m
                 .Precondition(p => p
@@ -144,7 +145,7 @@ public static class FluentBuilderExample {
                 .Precondition(p => p.Property("StockQuantity").MustBe().GreaterThanOrEqualTo(new ParameterValue("delta")))
                 .HasEffect(e => e.IncrementFromParam("StockQuantity", "delta"))
             );
-            
+
             // Mutation: Apply discount (validates price and discount amount)
             product.HasMutation("ApplyDiscount", m => m
                 .Param("discountAmount", p => p.OfType<double>())
@@ -178,11 +179,11 @@ public static class FluentBuilderExample {
         return model.Build();
     }
 
-    public static void Run() {        
+    public static void Run() {
         Console.WriteLine("=== Fluent Builder API Example ===\n");
-        
+
         var model = CreateOrderManagementModel();
-        
+
         // Register model types into the Interpretation type system
         var ctx = new InterpretationContext();
         model.RegisterIn(ctx);
@@ -190,7 +191,7 @@ public static class FluentBuilderExample {
         if (customerDef is not null) {
             Console.WriteLine("\nRegistered type in Interpretation system: Customer");
             Console.WriteLine("Members: " + string.Join(", ", customerDef.Members.Select(m => m.Name)));
-            
+
             // Build and execute a simple accessor: @obj.Email
             var param = ctx.AddParameter("@obj", customerDef);
             var emailValue = param.GetMember("Email");
@@ -203,72 +204,72 @@ public static class FluentBuilderExample {
             var sample = new Dictionary<string, object> { ["Email"] = "dev@example.com" };
             Console.WriteLine($"Accessor test (@obj.Email) => {fn(sample)}");
 
-        // Validation Examples
-        Console.WriteLine("\n=== Validation Examples ===");
-        var validator = new Validator(model);
-        
-        // Valid customer
-        var validCustomer = new Dictionary<string, object?> {
-            ["Id"] = Guid.NewGuid(),
-            ["Email"] = "john.doe@example.com",
-            ["Name"] = "John Doe",
-            ["CreatedAt"] = DateTime.UtcNow,
-            ["IsActive"] = true
-        };
-        
-        var result1 = validator.Validate("Customer", validCustomer);
-        Console.WriteLine($"\nValid customer: {result1}");
-        
-        // Invalid customer - missing required field
-        var invalidCustomer1 = new Dictionary<string, object?> {
-            ["Id"] = Guid.NewGuid(),
-            ["Name"] = "Jane Doe"
-            // Email is missing (required by NotNull constraint)
-        };
-        
-        var result2 = validator.Validate("Customer", invalidCustomer1);
-        Console.WriteLine($"\nMissing email: {result2}");
-        if (!result2.IsValid) {
-            foreach (var error in result2.Errors) {
-                Console.WriteLine($"  - {error}");
+            // Validation Examples
+            Console.WriteLine("\n=== Validation Examples ===");
+            var validator = new Validator(model);
+
+            // Valid customer
+            var validCustomer = new Dictionary<string, object?> {
+                ["Id"] = Guid.NewGuid(),
+                ["Email"] = "john.doe@example.com",
+                ["Name"] = "John Doe",
+                ["CreatedAt"] = DateTime.UtcNow,
+                ["IsActive"] = true
+            };
+
+            var result1 = validator.Validate("Customer", validCustomer);
+            Console.WriteLine($"\nValid customer: {result1}");
+
+            // Invalid customer - missing required field
+            var invalidCustomer1 = new Dictionary<string, object?> {
+                ["Id"] = Guid.NewGuid(),
+                ["Name"] = "Jane Doe"
+                // Email is missing (required by NotNull constraint)
+            };
+
+            var result2 = validator.Validate("Customer", invalidCustomer1);
+            Console.WriteLine($"\nMissing email: {result2}");
+            if (!result2.IsValid) {
+                foreach (var error in result2.Errors) {
+                    Console.WriteLine($"  - {error}");
+                }
+            }
+
+            // Invalid customer - email too short
+            var invalidCustomer2 = new Dictionary<string, object?> {
+                ["Id"] = Guid.NewGuid(),
+                ["Email"] = "a@b", // Too short (min 5 chars)
+                ["Name"] = "Bob Smith",
+                ["CreatedAt"] = DateTime.UtcNow,
+                ["IsActive"] = false
+            };
+
+            var result3 = validator.Validate("Customer", invalidCustomer2);
+            Console.WriteLine($"\nEmail too short: {result3}");
+            if (!result3.IsValid) {
+                foreach (var error in result3.Errors) {
+                    Console.WriteLine($"  - {error}");
+                }
+            }
+
+            // Invalid product - negative price
+            var invalidProduct = new Dictionary<string, object?> {
+                ["Id"] = Guid.NewGuid(),
+                ["SKU"] = "WIDGET-001",
+                ["Name"] = "Test Widget",
+                ["Price"] = -10.0, // Negative price (min 0.0)
+                ["StockQuantity"] = 50
+            };
+
+            var result4 = validator.Validate("Product", invalidProduct);
+            Console.WriteLine($"\nNegative price: {result4}");
+            if (!result4.IsValid) {
+                foreach (var error in result4.Errors) {
+                    Console.WriteLine($"  - {error}");
+                }
             }
         }
-        
-        // Invalid customer - email too short
-        var invalidCustomer2 = new Dictionary<string, object?> {
-            ["Id"] = Guid.NewGuid(),
-            ["Email"] = "a@b", // Too short (min 5 chars)
-            ["Name"] = "Bob Smith",
-            ["CreatedAt"] = DateTime.UtcNow,
-            ["IsActive"] = false
-        };
-        
-        var result3 = validator.Validate("Customer", invalidCustomer2);
-        Console.WriteLine($"\nEmail too short: {result3}");
-        if (!result3.IsValid) {
-            foreach (var error in result3.Errors) {
-                Console.WriteLine($"  - {error}");
-            }
-        }
-        
-        // Invalid product - negative price
-        var invalidProduct = new Dictionary<string, object?> {
-            ["Id"] = Guid.NewGuid(),
-            ["SKU"] = "WIDGET-001",
-            ["Name"] = "Test Widget",
-            ["Price"] = -10.0, // Negative price (min 0.0)
-            ["StockQuantity"] = 50
-        };
-        
-        var result4 = validator.Validate("Product", invalidProduct);
-        Console.WriteLine($"\nNegative price: {result4}");
-        if (!result4.IsValid) {
-            foreach (var error in result4.Errors) {
-                Console.WriteLine($"  - {error}");
-            }
-        }
-        }
-        
+
         var options = new JsonSerializerOptions {
             WriteIndented = true,
             TypeInfoResolver = DataModelPropertyPolymorphicJsonTypeResolver.Shared
@@ -276,16 +277,16 @@ public static class FluentBuilderExample {
 
         Console.WriteLine("Generated Order Management Domain Model:\n");
         Console.WriteLine(JsonSerializer.Serialize(model, options));
-        
+
         Console.WriteLine("\n=== Model Summary ===");
         Console.WriteLine($"Types: {model.Types.Count()}");
         Console.WriteLine($"Relationships: {model.Relationships.Count()}");
-        
+
         Console.WriteLine("\nTypes defined:");
         foreach (var type in model.Types) {
             Console.WriteLine($"  - {type.Name} ({type.Properties.Count()} properties)");
         }
-        
+
         Console.WriteLine("\nRelationships defined:");
         foreach (var rel in model.Relationships) {
             Console.WriteLine($"  - {rel.Name}: {rel.Source.TypeName} → {rel.Target.TypeName}");

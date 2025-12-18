@@ -1,6 +1,7 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Operators.Arithmetic;
-using System.Linq.Expressions;
 
 namespace Poly.Tests.Interpretation;
 
@@ -114,7 +115,7 @@ public class UnaryMinusTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        
+
         // -(x + 5)
         var add = new Add(param, Value.Wrap(5));
         var negate = new UnaryMinus(add);

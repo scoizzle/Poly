@@ -12,7 +12,7 @@ public sealed class Equal(Value leftHandValue, Value rightHandValue) : BooleanOp
     /// Gets the left-hand operand of the equality comparison.
     /// </summary>
     public Value LeftHandValue { get; init; } = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
-    
+
     /// <summary>
     /// Gets the right-hand operand of the equality comparison.
     /// </summary>

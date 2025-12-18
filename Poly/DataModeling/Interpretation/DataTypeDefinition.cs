@@ -54,7 +54,7 @@ internal sealed class DataTypeMember : ITypeMember {
     public ITypeDefinition MemberTypeDefinition => _memberType.Value;
 
     public IEnumerable<IParameter>? Parameters { get; }
-    
+
     /// <summary>
     /// Data model properties are always instance members (not static).
     /// </summary>

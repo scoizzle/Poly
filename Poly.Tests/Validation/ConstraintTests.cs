@@ -1,6 +1,6 @@
-using Poly.Validation.Rules;
 using Poly.Validation;
 using Poly.Validation.Constraints;
+using Poly.Validation.Rules;
 
 namespace Poly.Tests.Validation;
 
@@ -10,10 +10,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", new NotNullConstraint())
         ]);
-        
+
         var person = new Person { Name = null, Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsFalse();
     }
 
@@ -22,10 +22,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", new NotNullConstraint())
         ]);
-        
+
         var person = new Person { Name = "John", Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -35,10 +35,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -48,10 +48,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = -1 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsFalse();
     }
 
@@ -61,10 +61,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = 200 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsFalse();
     }
 
@@ -74,10 +74,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = 0 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -87,10 +87,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = 150 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -100,10 +100,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = 1000 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -113,10 +113,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = -100 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -126,10 +126,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -139,10 +139,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
         ]);
-        
+
         var person = new Person { Name = "Jo", Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsFalse();
     }
 
@@ -152,10 +152,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
         ]);
-        
+
         var person = new Person { Name = "VeryLongName", Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsFalse();
     }
 
@@ -165,10 +165,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
         ]);
-        
+
         var person = new Person { Name = "VeryLongNameWithoutLimit", Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -178,10 +178,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
         ]);
-        
+
         var person = new Person { Name = "X", Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -191,10 +191,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = 25 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsTrue();
     }
 
@@ -204,10 +204,10 @@ public class ConstraintTests {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
         ]);
-        
+
         var person = new Person { Name = "John", Age = 30 };
         var result = ruleSet.Test(person);
-        
+
         await Assert.That(result).IsFalse();
     }
 

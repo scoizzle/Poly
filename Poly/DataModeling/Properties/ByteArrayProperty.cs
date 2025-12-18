@@ -8,7 +8,7 @@ public sealed record ByteArrayProperty(
     object? DefaultValue = null,
     int? MaxLength = null
 ) : DataProperty(Name, Constraints, DefaultValue) {
-    public override string ToString() => MaxLength.HasValue 
+    public override string ToString() => MaxLength.HasValue
         ? $"byte[{MaxLength}] {Name}"
         : $"byte[] {Name}";
 }

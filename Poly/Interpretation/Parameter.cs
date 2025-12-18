@@ -18,7 +18,7 @@ public sealed class Parameter(string name, ITypeDefinition type) : Value {
     /// Gets the name of the parameter.
     /// </summary>
     public string Name { get; } = name;
-    
+
     /// <summary>
     /// Gets the type definition of the parameter.
     /// </summary>

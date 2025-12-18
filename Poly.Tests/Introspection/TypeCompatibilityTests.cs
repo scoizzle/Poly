@@ -1,7 +1,7 @@
-using TUnit.Assertions.Extensions;
-
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+
+using TUnit.Assertions.Extensions;
 
 namespace Poly.Tests.Introspection;
 
@@ -75,7 +75,7 @@ public class TypeCompatibilityTests {
     public async Task IsAssignableFrom_SameType_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
-        
+
         await Assert.That(stringType.IsAssignableFrom(stringType)).IsTrue();
     }
 
@@ -176,7 +176,7 @@ public class TypeCompatibilityTests {
     public async Task BaseType_CachedAfterFirstAccess() {
         var registry = new ClrTypeDefinitionRegistry();
         var derivedType = registry.GetTypeDefinition(typeof(ArgumentException));
-        
+
         var baseType1 = derivedType.BaseType;
         var baseType2 = derivedType.BaseType;
 
@@ -187,7 +187,7 @@ public class TypeCompatibilityTests {
     public async Task Interfaces_CachedAfterFirstAccess() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
-        
+
         var interfaces1 = stringType.Interfaces;
         var interfaces2 = stringType.Interfaces;
 

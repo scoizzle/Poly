@@ -1,8 +1,9 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Operators;
 using Poly.Interpretation.Operators.Comparison;
 using Poly.Interpretation.Operators.Equality;
-using System.Linq.Expressions;
 
 namespace Poly.Tests.Interpretation;
 
@@ -51,7 +52,7 @@ public class ConditionalTests {
         var context = new InterpretationContext();
         var intTypeDef = context.GetTypeDefinition<int>();
         var param = context.AddParameter<int>("x");
-        
+
         // x > 10 ? "big" : "small"
         var condition = new GreaterThan(param, Value.Wrap(10));
         var ifTrue = Value.Wrap("big");
@@ -74,7 +75,7 @@ public class ConditionalTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        
+
         // x < 0 ? "negative" : (x > 0 ? "positive" : "zero")
         var lessThanZero = new LessThan(param, Value.Wrap(0));
         var greaterThanZero = new GreaterThan(param, Value.Wrap(0));

@@ -1,8 +1,9 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Operators;
 using Poly.Interpretation.Operators.Arithmetic;
 using Poly.Interpretation.Operators.Comparison;
-using System.Linq.Expressions;
 
 namespace Poly.Tests.Interpretation;
 
@@ -47,16 +48,16 @@ public class BlockTests {
     public async Task Block_WithVariableDeclaration_WorksCorrectly() {
         // Arrange
         var context = new InterpretationContext();
-        
+
         // Create a local variable
         var localVar = Expression.Variable(typeof(int), "temp");
-        
+
         // Assign 42 to temp
         var assignExpr = Expression.Assign(localVar, Expression.Constant(42));
-        
+
         // Return temp
         var returnExpr = localVar;
-        
+
         // Create block with variable
         var blockExpr = Expression.Block(
             new[] { localVar },
@@ -78,7 +79,7 @@ public class BlockTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        
+
         // Block: { x + 1; x + 2; x + 3 }
         var expr1 = new Add(param, Value.Wrap(1));
         var expr2 = new Add(param, Value.Wrap(2));
@@ -100,7 +101,7 @@ public class BlockTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        
+
         // Block: { x > 10; x > 10 ? x : 0 }
         var condition = new GreaterThan(param, Value.Wrap(10));
         var conditional = new Conditional(condition, param, Value.Wrap(0));
@@ -120,7 +121,7 @@ public class BlockTests {
     public async Task Block_WithDifferentTypes_ReturnsLastExpressionType() {
         // Arrange
         var context = new InterpretationContext();
-        
+
         // Block: { 42; "hello" }
         var intExpr = Value.Wrap(42);
         var stringExpr = Value.Wrap("hello");

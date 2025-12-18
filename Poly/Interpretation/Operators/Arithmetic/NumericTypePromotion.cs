@@ -27,44 +27,44 @@ internal static class NumericTypePromotion {
         InterpretationContext context,
         ITypeDefinition leftType,
         ITypeDefinition rightType) {
-        
+
         var leftClrType = leftType.ReflectedType;
         var rightClrType = rightType.ReflectedType;
-        
+
         // Handle nullable types by unwrapping to underlying type
         var leftUnderlyingType = Nullable.GetUnderlyingType(leftClrType) ?? leftClrType;
         var rightUnderlyingType = Nullable.GetUnderlyingType(rightClrType) ?? rightClrType;
-        
+
         // Decimal has highest precedence
         if (leftUnderlyingType == typeof(decimal) || rightUnderlyingType == typeof(decimal)) {
             return context.GetTypeDefinition<decimal>()!;
         }
-        
+
         // Double
         if (leftUnderlyingType == typeof(double) || rightUnderlyingType == typeof(double)) {
             return context.GetTypeDefinition<double>()!;
         }
-        
+
         // Float
         if (leftUnderlyingType == typeof(float) || rightUnderlyingType == typeof(float)) {
             return context.GetTypeDefinition<float>()!;
         }
-        
+
         // ULong
         if (leftUnderlyingType == typeof(ulong) || rightUnderlyingType == typeof(ulong)) {
             return context.GetTypeDefinition<ulong>()!;
         }
-        
+
         // Long
         if (leftUnderlyingType == typeof(long) || rightUnderlyingType == typeof(long)) {
             return context.GetTypeDefinition<long>()!;
         }
-        
+
         // UInt
         if (leftUnderlyingType == typeof(uint) || rightUnderlyingType == typeof(uint)) {
             return context.GetTypeDefinition<uint>()!;
         }
-        
+
         // Default to int (includes byte, sbyte, short, ushort, int)
         return context.GetTypeDefinition<int>()!;
     }
@@ -84,19 +84,19 @@ internal static class NumericTypePromotion {
         Expression rightExpr,
         ITypeDefinition leftType,
         ITypeDefinition rightType) {
-        
+
         var promotedType = GetPromotedType(context, leftType, rightType);
         var promotedClrType = promotedType.ReflectedType;
-        
+
         // Convert both expressions to the promoted type if needed
-        var convertedLeft = leftExpr.Type == promotedClrType 
-            ? leftExpr 
+        var convertedLeft = leftExpr.Type == promotedClrType
+            ? leftExpr
             : Expression.Convert(leftExpr, promotedClrType);
-            
-        var convertedRight = rightExpr.Type == promotedClrType 
-            ? rightExpr 
+
+        var convertedRight = rightExpr.Type == promotedClrType
+            ? rightExpr
             : Expression.Convert(rightExpr, promotedClrType);
-        
+
         return (convertedLeft, convertedRight);
     }
 }

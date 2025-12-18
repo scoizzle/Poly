@@ -4,8 +4,7 @@ using Poly.Interpretation;
 
 namespace Poly.Introspection.Extensions;
 
-public static class EnumerableMemberExtensions
-{
+public static class EnumerableMemberExtensions {
     public static ITypeMember? WithParameters(this IEnumerable<ITypeMember> members, params IEnumerable<ITypeDefinition>? parameterTypes) {
         ArgumentNullException.ThrowIfNull(members);
         ArgumentNullException.ThrowIfNull(parameterTypes);

@@ -16,7 +16,7 @@ public class Variable(string name, Value? value = null) : Value {
     /// Gets the name of the variable.
     /// </summary>
     public string Name { get; } = name;
-    
+
     /// <summary>
     /// Gets or sets the value this variable references.
     /// </summary>

@@ -8,7 +8,7 @@ public class EnumerableMemberExtensionsTests {
     public async Task WithParameters_MultipleOverloads_Distinguishable() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        
+
         // Verify we can distinguish between different overloads by parameter types
         var charType = registry.GetTypeDefinition<char>();
         var indexOfMembers = stringType.GetMembers("IndexOf");
@@ -212,7 +212,7 @@ public class EnumerableMemberExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
-        
+
         var members = stringType.GetMembers("IndexOf");
 
         // Can distinguish between IndexOf(char) and IndexOf(string)

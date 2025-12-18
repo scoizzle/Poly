@@ -123,10 +123,10 @@ BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly)
 // Console.WriteLine(JsonSerializer.Serialize(dataModel, options));
 
 
-// RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-//     .Member(p => p.Name, r => r.NotNull()!.MinLength(1).MaxLength(100))
-//     .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
-//     .Build();
+RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
+    .Member(p => p.Name, r => r.NotNull()!.MinLength(1).MaxLength(100))
+    .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
+    .Build();
 
 // Person person = new(Name: "Alice", Age: 30);
 // Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
@@ -171,14 +171,12 @@ BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly)
 public record Person(string? Name, int Age);
 
 [BenchmarkDotNet.Attributes.MemoryDiagnoser]
-public class BenchmarkPersonPredicate
-{
+public class BenchmarkPersonPredicate {
     private Predicate<Person?>? _rulePredicate;
     private Person? _person;
 
     [BenchmarkDotNet.Attributes.GlobalSetup]
-    public void Setup()
-    {
+    public void Setup() {
         _person = new Person("Alice", 30);
 
         RuleSet<Person?> ruleSet = new RuleSetBuilder<Person?>()
@@ -190,8 +188,7 @@ public class BenchmarkPersonPredicate
     }
 
     [BenchmarkDotNet.Attributes.Benchmark]
-    public bool Handrolled()
-    {
+    public bool Handrolled() {
         if (_person == null) return false;
         if (_person.Name == null) return false;
         if (_person.Name.Length < 1) return false;
@@ -202,8 +199,7 @@ public class BenchmarkPersonPredicate
     }
 
     [BenchmarkDotNet.Attributes.Benchmark(Baseline = true)]
-    public bool RuleBased()
-    {
+    public bool RuleBased() {
         ArgumentNullException.ThrowIfNull(_rulePredicate);
         return _rulePredicate(_person);
     }

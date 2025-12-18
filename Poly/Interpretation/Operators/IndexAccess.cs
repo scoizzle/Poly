@@ -28,26 +28,26 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     /// <exception cref="InvalidOperationException">Thrown when no indexer is found on the type.</exception>
     private ITypeMember? GetIndexer(InterpretationContext context) {
         ITypeDefinition typeDefinition = Value.GetTypeDefinition(context);
-        
+
         // Get all members named "Item" (indexers)
         var indexers = typeDefinition.Members.Where(m => m.Name == "Item").ToList();
-        
+
         if (indexers.Count == 0) {
             return null;
         }
-        
+
         if (indexers.Count == 1) {
             return indexers[0];
         }
-        
+
         // Multiple indexers found - attempt to resolve based on parameter count and types
         var argumentCount = IndexArguments.Count();
-        
+
         // TODO: Implement proper overload resolution
         // For now, return the first indexer that matches parameter count
-        var matchingIndexer = indexers.FirstOrDefault(idx => 
+        var matchingIndexer = indexers.FirstOrDefault(idx =>
             idx is ITypeMember member && member.Parameters?.Count() == argumentCount);
-        
+
         return matchingIndexer;
     }
 
@@ -57,16 +57,16 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
         if (indexer is not null) {
             return indexer.MemberTypeDefinition;
         }
-        
+
         // Handle CLR arrays which don't expose an indexer member named "Item"
         var valueType = Value.GetTypeDefinition(context);
         var reflected = valueType.ReflectedType;
         if (reflected.IsArray) {
             var elementType = reflected.GetElementType()!;
-            return context.GetTypeDefinition(elementType) 
+            return context.GetTypeDefinition(elementType)
                 ?? throw new InvalidOperationException($"Type definition not found for array element type '{elementType}'.");
         }
-        
+
         throw new InvalidOperationException($"Indexer not found on type '{valueType.Name}'.");
     }
 
@@ -77,7 +77,7 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
             Value memberAccessor = indexer.GetMemberAccessor(Value, IndexArguments);
             return memberAccessor.BuildExpression(context);
         }
-        
+
         // CLR array indexing: use Expression.ArrayIndex
         var valueExpr = Value.BuildExpression(context);
         var indexArgs = IndexArguments.Select(a => a.BuildExpression(context)).ToArray();

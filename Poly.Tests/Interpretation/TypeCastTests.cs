@@ -1,6 +1,7 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Operators;
-using System.Linq.Expressions;
 
 namespace Poly.Tests.Interpretation;
 

@@ -22,7 +22,7 @@ public sealed class AssignEffectBuilder {
         _parentBuilder.AddEffect(new AssignEffect(_propertyPath, new ParameterValue(sourcePath)));
         return _parentBuilder;
     }
-    
+
     public EffectBuilder Property(DataPropertyPath sourcePath) {
         ArgumentNullException.ThrowIfNull(sourcePath);
         _parentBuilder.AddEffect(new AssignEffect(_propertyPath, new PropertyValue(sourcePath)));

@@ -29,12 +29,12 @@ public sealed class DataModelBuilder {
         DataTypeBuilder builder = new(name);
         configure(builder);
         _dataTypes.Add(builder.Build());
-        
+
         // Collect relationships from the builder
         foreach (var relationshipBuilder in builder.Relationships) {
             _relationships.Add(relationshipBuilder.Build());
         }
-        
+
         return this;
     }
 

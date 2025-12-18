@@ -43,7 +43,7 @@ public sealed class InterpretationContext {
     /// </summary>
     /// <value>The default is 256.</value>
     public int MaxScopeDepth { get; set; } = 256;
-    
+
     /// <summary>
     /// Gets a read-only collection of all parameters registered in this context.
     /// </summary>
@@ -63,14 +63,14 @@ public sealed class InterpretationContext {
     /// <param name="name">The name of the type.</param>
     /// <returns>The type definition if found; otherwise, <c>null</c>.</returns>
     public ITypeDefinition? GetTypeDefinition(string name) => _typeDefinitionProviderCollection.GetTypeDefinition(name);
-    
+
     /// <summary>
     /// Gets the type definition for a CLR type.
     /// </summary>
     /// <param name="type">The CLR type.</param>
     /// <returns>The type definition if found; otherwise, <c>null</c>.</returns>
     public ITypeDefinition? GetTypeDefinition(Type type) => _typeDefinitionProviderCollection.GetTypeDefinition(type);
-    
+
     /// <summary>
     /// Gets the type definition for a generic type parameter.
     /// </summary>
@@ -164,7 +164,7 @@ public sealed class InterpretationContext {
     public void PushScope() {
         if (_scopes.Count >= MaxScopeDepth)
             throw new InvalidOperationException("Maximum scope depth exceeded.");
-            
+
         var newScope = new VariableScope(_currentScope);
         _scopes.Push(newScope);
         _currentScope = newScope;

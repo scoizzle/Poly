@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Linq.Expressions;
+
 using Poly.Interpretation;
 using Poly.Introspection;
 
@@ -49,8 +50,8 @@ internal sealed class DataModelPropertyAccessor : Value {
         // If TryGetValue returns false, use default value for the target type
         var targetClrType = _memberType.ReflectedType;
         var defaultValue = Expression.Default(targetClrType);
-        Expression convertedValue = targetClrType == typeof(object) 
-            ? valueVar 
+        Expression convertedValue = targetClrType == typeof(object)
+            ? valueVar
             : Expression.Convert(valueVar, targetClrType);
 
         return Expression.Block(

@@ -15,7 +15,7 @@ public sealed class Coalesce(Value leftHandValue, Value rightHandValue) : Operat
     /// Gets the left-hand operand (the value to test for null).
     /// </summary>
     public Value LeftHandValue { get; } = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
-    
+
     /// <summary>
     /// Gets the right-hand operand (the fallback value if left is null).
     /// </summary>
@@ -32,7 +32,7 @@ public sealed class Coalesce(Value leftHandValue, Value rightHandValue) : Operat
     public override Expression BuildExpression(InterpretationContext context) {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
-        
+
         return Expression.Coalesce(leftExpr, rightExpr);
     }
 

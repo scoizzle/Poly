@@ -17,11 +17,11 @@ public sealed class ConditionalRule : Rule {
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var conditionTree = Condition.BuildInterpretationTree(context);
         var thenTree = ThenRule.BuildInterpretationTree(context);
-        
+
         // If condition is false, the rule passes (using implication: condition -> thenRule)
         // This is logically: !condition OR thenRule
         var implication = new Or(new Not(conditionTree), thenTree);
-        
+
         if (ElseRule != null) {
             var elseTree = ElseRule.BuildInterpretationTree(context);
             // (condition AND thenRule) OR (!condition AND elseRule)
@@ -31,7 +31,7 @@ public sealed class ConditionalRule : Rule {
             );
             return conditionalResult;
         }
-        
+
         return implication;
     }
 

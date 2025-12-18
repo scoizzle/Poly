@@ -73,7 +73,8 @@ internal sealed class ClrTypeProperty : ClrTypeMember {
             }
 
             return new ClrTypeIndexInterpretationAccessor(instance, this, parameters);
-        } else {
+        }
+        else {
             return new ClrTypePropertyInterpretationAccessor(instance, this);
         }
     }

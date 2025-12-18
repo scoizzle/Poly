@@ -1,6 +1,7 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Operators;
-using System.Linq.Expressions;
 
 namespace Poly.Tests.Interpretation;
 
@@ -10,7 +11,7 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        
+
         // x + 5 - 2 * 3
         var expr = param.Add(Value.Wrap(5)).Subtract(Value.Wrap(2)).Multiply(Value.Wrap(3));
 
@@ -28,7 +29,7 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        
+
         // x > 10
         var expr = param.GreaterThan(Value.Wrap(10));
 
@@ -48,7 +49,7 @@ public class FluentValueApiTests {
         var context = new InterpretationContext();
         var x = context.AddParameter<int>("x");
         var y = context.AddParameter<int>("y");
-        
+
         // x > 10 && y < 20
         var expr = x.GreaterThan(Value.Wrap(10)).And(y.LessThan(Value.Wrap(20)));
 
@@ -72,7 +73,7 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        
+
         // x > 10 ? x * 2 : x + 5
         var expr = param.GreaterThan(Value.Wrap(10))
             .Conditional(param.Multiply(Value.Wrap(2)), param.Add(Value.Wrap(5)));
@@ -92,7 +93,7 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int?>("x");
-        
+
         // x ?? 42
         var expr = param.Coalesce(Value.Wrap(42));
 
@@ -111,7 +112,7 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        
+
         // -x + 10
         var expr = param.Negate().Add(Value.Wrap(10));
 
@@ -130,7 +131,7 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<bool>("x");
-        
+
         // !x
         var expr = param.Not();
 
@@ -150,7 +151,7 @@ public class FluentValueApiTests {
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
         var doubleType = context.GetTypeDefinition<double>()!;
-        
+
         // (double)x + 0.5
         var expr = param.CastTo(doubleType).Add(Value.Wrap(0.5));
 
@@ -168,7 +169,7 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<List<int>>("list");
-        
+
         // list[0]
         var expr = param.Index(Value.Wrap(0));
 
@@ -187,7 +188,7 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<string>("str");
-        
+
         // str.Length
         var expr = param.GetMember("Length");
 
@@ -207,7 +208,7 @@ public class FluentValueApiTests {
         var context = new InterpretationContext();
         var x = context.AddParameter<int>("x");
         var y = context.AddParameter<int>("y");
-        
+
         // Complex: (x + y) > 100 ? (x * y) : (x - y)
         var sum = x.Add(y);
         var condition = sum.GreaterThan(Value.Wrap(100));

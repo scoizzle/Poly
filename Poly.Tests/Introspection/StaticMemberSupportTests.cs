@@ -60,7 +60,7 @@ public class StaticMemberSupportTests {
         var staticMembers = stringType.StaticMembers.ToList();
 
         await Assert.That(staticMembers.Count()).IsGreaterThan(0);
-        
+
         foreach (var member in staticMembers) {
             await Assert.That(member.IsStatic).IsTrue();
         }
@@ -72,7 +72,7 @@ public class StaticMemberSupportTests {
         var instanceMembers = stringType.InstanceMembers.ToList();
 
         await Assert.That(instanceMembers.Count()).IsGreaterThan(0);
-        
+
         foreach (var member in instanceMembers) {
             await Assert.That(member.IsStatic).IsFalse();
         }
@@ -87,7 +87,7 @@ public class StaticMemberSupportTests {
 
         // All members should be in either static or instance (but not both)
         await Assert.That(staticMembers.Count() + instanceMembers.Count()).IsEqualTo(allMembers.Count());
-        
+
         var staticSet = new HashSet<ITypeMember>(staticMembers);
         foreach (var instanceMember in instanceMembers) {
             await Assert.That(staticSet.Contains(instanceMember)).IsFalse();

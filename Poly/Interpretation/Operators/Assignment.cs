@@ -15,7 +15,7 @@ public sealed class Assignment(Value destination, Value value) : Operator {
     /// Gets the destination of the assignment (left-hand side).
     /// </summary>
     public Value Destination { get; init; } = destination ?? throw new ArgumentNullException(nameof(destination));
-    
+
     /// <summary>
     /// Gets the value to assign (right-hand side).
     /// </summary>

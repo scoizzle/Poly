@@ -16,11 +16,11 @@ public sealed class MutualExclusionRule : Rule {
 
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var properties = PropertyNames.ToList();
-        
+
         if (properties.Count <= MaxAllowed) {
             return Value.True;
         }
-        
+
         // For now, implement simple mutual exclusion (only one can have value)
         // More complex counting logic would require arithmetic operators
         if (MaxAllowed == 1) {
@@ -29,7 +29,7 @@ public sealed class MutualExclusionRule : Rule {
                 .Select(name => new MemberAccess(context.Value, name))
                 .Select(member => new NotEqual(member, Value.Null))
                 .ToList();
-            
+
             // Create pairwise exclusions: for each pair, at least one must be null
             var exclusions = new List<Value>();
             for (int i = 0; i < nonNullChecks.Count; i++) {
@@ -38,11 +38,11 @@ public sealed class MutualExclusionRule : Rule {
                     exclusions.Add(new Not(new And(nonNullChecks[i], nonNullChecks[j])));
                 }
             }
-            
+
             var exclusionResult = exclusions.Aggregate((current, next) => new And(current, next));
             return exclusionResult;
         }
-        
+
         // For maxAllowed > 1, would need count aggregation
         throw new NotImplementedException("MutualExclusionRule with MaxAllowed > 1 not yet implemented");
     }

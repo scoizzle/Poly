@@ -19,16 +19,17 @@ public sealed class PropertyDependencyRule : Rule {
     public override Value BuildInterpretationTree(RuleBuildingContext context) {
         var sourceMember = new MemberAccess(context.Value, SourcePropertyName);
         var dependentMember = new MemberAccess(context.Value, DependentPropertyName);
-        
+
         var sourceHasValue = new NotEqual(sourceMember, Value.Null);
         var dependentHasValue = new NotEqual(dependentMember, Value.Null);
-        
+
         Value dependencyResult;
         if (RequireWhenSourceHasValue) {
             // If source has value, then dependent must have value
             // !sourceHasValue OR dependentHasValue
             dependencyResult = new Or(new Not(sourceHasValue), dependentHasValue);
-        } else {
+        }
+        else {
             // If source has value, then dependent must NOT have value
             // !sourceHasValue OR !dependentHasValue
             dependencyResult = new Or(new Not(sourceHasValue), new Not(dependentHasValue));

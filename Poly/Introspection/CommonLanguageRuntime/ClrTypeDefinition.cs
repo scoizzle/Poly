@@ -61,9 +61,11 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
             if (_type.IsGenericType && !_type.IsGenericTypeDefinition) {
                 var genericDef = _type.GetGenericTypeDefinition();
                 resolved = _provider.GetTypeDefinition(genericDef);
-            } else if (_type.BaseType != null) {
+            }
+            else if (_type.BaseType != null) {
                 resolved = _provider.GetTypeDefinition(_type.BaseType);
-            } else {
+            }
+            else {
                 resolved = null;
             }
 
@@ -89,7 +91,8 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
             Type[] namesSource;
             if (_type.IsGenericTypeDefinition) {
                 namesSource = args; // placeholders
-            } else {
+            }
+            else {
                 namesSource = _type.GetGenericTypeDefinition().GetGenericArguments();
             }
 
@@ -111,7 +114,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
     public override string ToString() => FullName;
 
-    private static readonly BindingFlags MemberSearchCriteria = BindingFlags.Public | BindingFlags.NonPublic| BindingFlags.Instance | BindingFlags.Static;
+    private static readonly BindingFlags MemberSearchCriteria = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
     private static FrozenSet<ClrTypeField> BuildFieldCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         var fields = type
@@ -179,7 +182,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
     static ClrParameter ConstructParameter(ClrTypeDefinitionRegistry provider, ParameterInfo pi) {
         ArgumentNullException.ThrowIfNull(pi);
-        
+
         // Array indexers and some built-in methods may have null parameter names
         string parameterName = pi.Name ?? $"param{pi.Position}";
 

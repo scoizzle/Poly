@@ -81,7 +81,7 @@ public class ClrTypeIndexerTests {
     // Note: Arrays in C# don't expose indexers as properties - they use special array accessor IL instructions
     // Array indexing would require special handling in the expression building system
     // This test is commented out as it's not applicable to the current CLR introspection design
-    
+
     // [Test]
     // public async Task ArrayIndexer_AccessWithValidIndex_ReturnsValue() {
     //     // Arrays don't have indexer properties in CLR reflection

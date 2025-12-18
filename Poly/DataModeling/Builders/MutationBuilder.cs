@@ -32,7 +32,7 @@ public sealed class MutationBuilder {
         configure(builder);
         return this;
     }
-    
+
     public MutationBuilder Precondition(Func<PreconditionBuilder, MutationCondition> configure) {
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new PreconditionBuilder();

@@ -65,6 +65,7 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 ## Coding Style
 - Keep changes minimal and aligned to existing fluent APIs.
 - Avoid inline comments unless explicitly required; follow method naming and builder chaining patterns present in the repo.
+- **Region blocks:** Do not use C# `#region`/`#endregion` directives. They are code noise and add no value; rely on clear class structure and method organization instead.
 
 ## Useful References
 - High-level intro and examples: [README.md](README.md)

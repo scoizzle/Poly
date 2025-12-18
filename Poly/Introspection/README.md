@@ -8,6 +8,7 @@ The Introspection system provides a pluggable architecture for resolving type in
 
 - **Multiple backends**: CLR types, data models, custom types via provider plugins
 - **Lazy resolution**: Deferred type definition creation to avoid upfront reflection costs
+- **Dynamic code generation and execution**: Supports other components by providing a common interface into varying type systems for runtime code generation and execution
 - **Caching**: Thread-safe caching of type definitions for performance
 - **Composability**: Chain multiple providers with fallback semantics
 

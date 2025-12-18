@@ -1,5 +1,3 @@
-using Poly.Extensions;
-
 namespace Poly.Introspection;
 
 /// <summary>

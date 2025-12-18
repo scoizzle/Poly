@@ -3,7 +3,6 @@ using System.Linq.Expressions;
 using Poly.Interpretation;
 using Poly.Interpretation.Operators;
 using Poly.Interpretation.Operators.Comparison;
-using Poly.Interpretation.Operators.Equality;
 
 namespace Poly.Tests.Interpretation;
 

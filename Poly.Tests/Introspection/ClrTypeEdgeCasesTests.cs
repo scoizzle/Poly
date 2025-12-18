@@ -1,6 +1,3 @@
-using System.Reflection;
-
-using Poly.Interpretation;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;

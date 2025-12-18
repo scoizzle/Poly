@@ -31,9 +31,6 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
         return false;
     }
 
-    public ITypeMethod? GetBestMatchingMethod(string name, IEnumerable<Type> argumentTypes) {
-        return null;
-    }
     public Type ReflectedType => typeof(IDictionary<string, object>);
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => Enumerable.Empty<ITypeDefinition>();

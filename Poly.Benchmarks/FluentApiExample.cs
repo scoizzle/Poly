@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
 
 namespace Poly.Benchmarks;
 

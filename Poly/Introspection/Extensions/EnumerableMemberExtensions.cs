@@ -1,7 +1,3 @@
-using System;
-
-using Poly.Interpretation;
-
 namespace Poly.Introspection.Extensions;
 
 public static class EnumerableMemberExtensions {

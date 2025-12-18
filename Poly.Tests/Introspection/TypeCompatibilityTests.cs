@@ -1,8 +1,6 @@
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
-using TUnit.Assertions.Extensions;
-
 namespace Poly.Tests.Introspection;
 
 public class TypeCompatibilityTests {

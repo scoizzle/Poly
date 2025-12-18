@@ -1,5 +1,4 @@
 using Poly.Validation;
-using Poly.Validation.Rules;
 
 namespace Poly.Tests.Validation;
 

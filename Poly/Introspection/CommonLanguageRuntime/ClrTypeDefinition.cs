@@ -46,12 +46,35 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
     public string FullName => _type.FullName ?? _type.Name;
     public Type ClrType => _type;
 
-    public IEnumerable<ClrTypeField> Fields => _fields;
-    public IEnumerable<ClrTypeProperty> Properties => _properties;
-    public IEnumerable<ClrMethod> Methods => _methods;
-    public IEnumerable<ClrTypeMember> Members => _allMembers;
-    public IEnumerable<ClrTypeMember> GetMembers(string name)
-        => _membersByName.TryGetValue(name, out var members) ? members : Enumerable.Empty<ClrTypeMember>();
+    public IEnumerable<ITypeField> Fields => _fields;
+    public IEnumerable<ITypeProperty> Properties => _properties;
+    public IEnumerable<ITypeMethod> Methods => _methods;
+    public IEnumerable<ITypeMember> Members => _allMembers;
+    public IEnumerable<ITypeMember> GetMembers(string name)
+        => _membersByName.TryGetValue(name, out var members) ? members : Enumerable.Empty<ITypeMember>();
+
+    public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method) {
+        var paramTypes = parameterTypes.ToList();
+        method = _methods.FirstOrDefault(m => 
+            m.Name == name &&
+            m.Parameters.Count() == paramTypes.Count &&
+            m.Parameters.Select(p => ((IParameter)p).ParameterTypeDefinition.ReflectedType).SequenceEqual(paramTypes));
+        return method != null;
+    }
+
+    public ITypeMethod? GetBestMatchingMethod(string name, IEnumerable<Type> argumentTypes) {
+        var argTypes = argumentTypes.ToList();
+        var overloads = _methods.Where(m => m.Name == name).ToList();
+        
+        // Exact match
+        var exact = overloads.FirstOrDefault(m => 
+            m.Parameters.Count() == argTypes.Count &&
+            m.Parameters.Select(p => ((IParameter)p).ParameterTypeDefinition.ReflectedType).SequenceEqual(argTypes));
+        if (exact != null) return exact;
+        
+        // TODO: Implement best-match logic with assignability
+        return null;
+    }
 
     public ITypeDefinition? BaseType {
         get {

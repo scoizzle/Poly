@@ -10,7 +10,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// indexer properties (with parameters). Instances are immutable and safe for concurrent reads.
 /// </summary>
 [DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
-internal sealed class ClrTypeProperty : ClrTypeMember {
+internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
     private readonly Lazy<ClrTypeDefinition> _memberType;
     private readonly ClrTypeDefinition _declaringType;
     private readonly PropertyInfo _propertyInfo;

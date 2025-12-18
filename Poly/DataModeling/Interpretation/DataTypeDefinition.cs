@@ -22,6 +22,18 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     public string Name => _name;
     public string? Namespace => null;
     public IEnumerable<ITypeMember> Members => _members.Value.Values;
+    public IEnumerable<ITypeField> Fields => Enumerable.Empty<ITypeField>();
+    public IEnumerable<ITypeProperty> Properties => _members.Value.Values; // Assuming all members are properties
+    public IEnumerable<ITypeMethod> Methods => Enumerable.Empty<ITypeMethod>();
+
+    public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method) {
+        method = null;
+        return false;
+    }
+
+    public ITypeMethod? GetBestMatchingMethod(string name, IEnumerable<Type> argumentTypes) {
+        return null;
+    }
     public Type ReflectedType => typeof(IDictionary<string, object>);
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => Enumerable.Empty<ITypeDefinition>();
@@ -37,7 +49,7 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     }
 }
 
-internal sealed class DataTypeMember : ITypeMember {
+internal sealed class DataTypeMember : ITypeProperty {
     private readonly DataTypeDefinition _declaring;
     private readonly DataProperty _property;
     private readonly Lazy<ITypeDefinition> _memberType;

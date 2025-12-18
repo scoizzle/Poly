@@ -11,7 +11,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Instances are immutable and safe for concurrent reads.
 /// </summary>
 [DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
-internal sealed class ClrMethod : ClrTypeMember {
+internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     private readonly Lazy<ClrTypeDefinition> _memberType;
     private readonly ClrTypeDefinition _declaringType;
     private readonly MethodInfo _methodInfo;
@@ -44,6 +44,11 @@ internal sealed class ClrMethod : ClrTypeMember {
     /// Gets the ordered method parameters.
     /// </summary>
     public override IEnumerable<ClrParameter> Parameters => _parameters;
+
+    /// <summary>
+    /// Explicit implementation for ITypeMethod.Parameters to guarantee non-null.
+    /// </summary>
+    IEnumerable<IParameter> ITypeMethod.Parameters => _parameters;
 
     /// <summary>
     /// Gets the method name.

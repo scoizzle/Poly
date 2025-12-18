@@ -33,6 +33,45 @@ public interface ITypeDefinition {
     public IEnumerable<ITypeMember> Members { get; }
 
     /// <summary>
+    /// Gets all field members defined on the type.
+    /// </summary>
+    public IEnumerable<ITypeField> Fields { get; }
+
+    /// <summary>
+    /// Gets all property members defined on the type.
+    /// </summary>
+    public IEnumerable<ITypeProperty> Properties { get; }
+
+    /// <summary>
+    /// Gets all method members defined on the type.
+    /// </summary>
+    public IEnumerable<ITypeMethod> Methods { get; }
+
+    /// <summary>
+    /// Gets all overloads of the method with the specified name.
+    /// </summary>
+    /// <param name="name">The method name.</param>
+    /// <returns>All methods with the specified name.</returns>
+    public IEnumerable<ITypeMethod> GetMethodOverloads(string name) => Methods.Where(m => m.Name == name);
+
+    /// <summary>
+    /// Attempts to find a method overload matching the specified parameter types.
+    /// </summary>
+    /// <param name="name">The method name.</param>
+    /// <param name="parameterTypes">The types of the parameters to match.</param>
+    /// <param name="method">The matching method, if found.</param>
+    /// <returns>True if a matching method was found; otherwise, false.</returns>
+    public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method);
+
+    /// <summary>
+    /// Gets the best-matching method overload for the given name and argument types.
+    /// </summary>
+    /// <param name="name">The method name.</param>
+    /// <param name="argumentTypes">The types of the arguments to match against.</param>
+    /// <returns>The best-matching method, or null if none found.</returns>
+    public ITypeMethod? GetBestMatchingMethod(string name, IEnumerable<Type> argumentTypes);
+
+    /// <summary>
     /// Gets the underlying reflected runtime type, when available.
     /// </summary>
     public Type ReflectedType { get; }

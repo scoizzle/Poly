@@ -11,7 +11,7 @@ public class EnumerableMemberExtensionsTests {
 
         // Verify we can distinguish between different overloads by parameter types
         var charType = registry.GetTypeDefinition<char>();
-        var indexOfMembers = stringType.GetMembers("IndexOf");
+        var indexOfMembers = stringType.Methods.WithName("IndexOf");
 
         // Find overload with char parameter
         var charVersion = indexOfMembers.WithParameters(charType);
@@ -31,7 +31,7 @@ public class EnumerableMemberExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
-        var members = stringType.GetMembers("Substring");
+        var members = stringType.Methods.WithName("Substring");
 
         // String.Substring(int) - need to pass ITypeDefinition, not System.Type
         var filtered = members.WithParameters(intType);
@@ -45,7 +45,7 @@ public class EnumerableMemberExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
-        var members = stringType.GetMembers("Substring");
+        var members = stringType.Methods.WithName("Substring");
 
         // String.Substring(int, int) overload
         var filtered = members.WithParameters(intType, intType);
@@ -59,7 +59,7 @@ public class EnumerableMemberExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var doubleType = registry.GetTypeDefinition<double>();
-        var members = stringType.GetMembers("Substring");
+        var members = stringType.Methods.WithName("Substring");
 
         // Try to find with non-existent parameter signature
         var filtered = members.WithParameters(doubleType);
@@ -71,7 +71,7 @@ public class EnumerableMemberExtensionsTests {
     public async Task WithParameters_OnField_ReturnsNull() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
-        var members = intType.GetMembers("MaxValue");
+        var members = intType.Fields.WithName("MaxValue");
 
         // MaxValue is a field, not a method, so filtering by parameters returns null
         var filtered = members.WithParameters(intType);
@@ -84,7 +84,7 @@ public class EnumerableMemberExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intParamType = registry.GetTypeDefinition<int>();
-        var members = stringType.GetMembers("Length");
+        var members = stringType.Properties.WithName("Length");
 
         // Length is a property, not a method, so filtering by parameters returns null
         var filtered = members.WithParameters(intParamType);
@@ -97,7 +97,7 @@ public class EnumerableMemberExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
-        var members = stringType.GetMembers("IndexOf");
+        var members = stringType.Methods.WithName("IndexOf");
 
         // String.IndexOf(char)
         var filtered = members.WithParameters(charType);
@@ -112,7 +112,7 @@ public class EnumerableMemberExtensionsTests {
     public async Task WithParameters_IndexOf_StringOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        var members = stringType.GetMembers("IndexOf");
+        var members = stringType.Methods.WithName("IndexOf");
 
         // String.IndexOf(string)
         var filtered = members.WithParameters(stringType);
@@ -127,7 +127,7 @@ public class EnumerableMemberExtensionsTests {
     public async Task WithParameters_Contains_SingleStringOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        var members = stringType.GetMembers("Contains");
+        var members = stringType.Methods.WithName("Contains");
 
         // String.Contains(string)
         var filtered = members.WithParameters(stringType);
@@ -141,7 +141,7 @@ public class EnumerableMemberExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var stringComparisonType = registry.GetTypeDefinition<StringComparison>();
-        var members = stringType.GetMembers("Contains");
+        var members = stringType.Methods.WithName("Contains");
 
         // String.Contains(string, StringComparison)
         var filtered = members.WithParameters(stringType, stringComparisonType);
@@ -154,7 +154,7 @@ public class EnumerableMemberExtensionsTests {
     public async Task WithParameters_Replace_StringOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        var members = stringType.GetMembers("Replace");
+        var members = stringType.Methods.WithName("Replace");
 
         // String.Replace(string, string)
         var filtered = members.WithParameters(stringType, stringType);
@@ -169,7 +169,7 @@ public class EnumerableMemberExtensionsTests {
     public async Task WithParameters_Replace_CharOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var charType = registry.GetTypeDefinition<char>();
-        var members = registry.GetTypeDefinition<string>().GetMembers("Replace");
+        var members = registry.GetTypeDefinition<string>().Methods.WithName("Replace");
 
         // String.Replace(char, char)
         var filtered = members.WithParameters(charType, charType);
@@ -185,7 +185,7 @@ public class EnumerableMemberExtensionsTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<string>>();
         var stringType = registry.GetTypeDefinition<string>();
-        var members = listType.GetMembers("Add");
+        var members = listType.Methods.WithName("Add");
 
         // List<string>.Add(string)
         var filtered = members.WithParameters(stringType);
@@ -198,7 +198,7 @@ public class EnumerableMemberExtensionsTests {
     public async Task WithParameters_StartsWith() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        var members = stringType.GetMembers("StartsWith");
+        var members = stringType.Methods.WithName("StartsWith");
 
         // String.StartsWith(string)
         var filtered = members.WithParameters(stringType);
@@ -213,7 +213,7 @@ public class EnumerableMemberExtensionsTests {
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
 
-        var members = stringType.GetMembers("IndexOf");
+        var members = stringType.Methods.WithName("IndexOf");
 
         // Can distinguish between IndexOf(char) and IndexOf(string)
         var charFiltered = members.WithParameters(charType);

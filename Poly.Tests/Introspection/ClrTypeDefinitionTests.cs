@@ -45,7 +45,7 @@ public class ClrTypeDefinitionTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
-        var maxValueMember = intType.GetMembers("MaxValue").SingleOrDefault();
+        var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();
 
         await Assert.That(maxValueMember).IsNotNull();
         await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
@@ -56,7 +56,7 @@ public class ClrTypeDefinitionTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
-        var nonExistentMember = intType.GetMembers("NonExistent").SingleOrDefault();
+        var nonExistentMember = intType.Fields.WithName("NonExistent").SingleOrDefault();
 
         await Assert.That(nonExistentMember).IsNull();
     }

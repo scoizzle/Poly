@@ -12,7 +12,7 @@ public class ClrTypeComplexScenariosTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var personType = registry.GetTypeDefinition<Person>();
 
-        var addressMembers = personType.GetMembers("Address");
+        var addressMembers = personType.Properties.WithName("Address");
         await Assert.That(addressMembers.Count()).IsGreaterThan(0);
 
         var addressProperty = addressMembers.First();
@@ -36,10 +36,10 @@ public class ClrTypeComplexScenariosTests {
         var addressType = registry.GetTypeDefinition<Address>();
 
         // Person -> Address -> City
-        var addressMembers = personType.GetMembers("Address");
+        var addressMembers = personType.Properties.WithName("Address");
         var addressProperty = addressMembers.First();
 
-        var cityMembers = addressType.GetMembers("City");
+        var cityMembers = addressType.Properties.WithName("City");
         var cityProperty = cityMembers.First();
 
         var person = new Person { Address = new Address { City = "Portland" } };
@@ -62,7 +62,7 @@ public class ClrTypeComplexScenariosTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
 
-        var members = stringType.GetMembers("StartsWith");
+        var members = stringType.Methods.WithName("StartsWith");
         var startWithMethod = members.WithParameters(stringType);
 
         await Assert.That(startWithMethod).IsNotNull();
@@ -86,7 +86,7 @@ public class ClrTypeComplexScenariosTests {
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
 
-        var members = stringType.GetMembers("Contains");
+        var members = stringType.Methods.WithName("Contains");
         var containsMethod = members.WithParameters(charType);
 
         await Assert.That(containsMethod).IsNotNull();
@@ -109,7 +109,7 @@ public class ClrTypeComplexScenariosTests {
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
 
-        var members = stringType.GetMembers("Substring");
+        var members = stringType.Methods.WithName("Substring");
         var substringMethod = members.WithParameters(intType, intType);
 
         await Assert.That(substringMethod).IsNotNull();
@@ -133,7 +133,7 @@ public class ClrTypeComplexScenariosTests {
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
 
-        var members = stringType.GetMembers("Substring");
+        var members = stringType.Methods.WithName("Substring");
 
         // Substring(int) 
         var oneParamVersion = members.WithParameters(intType);
@@ -167,7 +167,7 @@ public class ClrTypeComplexScenariosTests {
         var listType = registry.GetTypeDefinition<List<int>>();
         var intType = registry.GetTypeDefinition<int>();
 
-        var members = listType.GetMembers("Add");
+        var members = listType.Methods.WithName("Add");
         var addMethod = members.WithParameters(intType);
 
         await Assert.That(addMethod).IsNotNull();
@@ -192,7 +192,7 @@ public class ClrTypeComplexScenariosTests {
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
 
-        var members = dictType.GetMembers("Add");
+        var members = dictType.Methods.WithName("Add");
         var addMethod = members.WithParameters(stringType, intType);
 
         await Assert.That(addMethod).IsNotNull();
@@ -215,7 +215,7 @@ public class ClrTypeComplexScenariosTests {
     public async Task ConditionalPropertyAccess_WithNullCheck() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var personType = registry.GetTypeDefinition<Person>();
-        var addressMembers = personType.GetMembers("Address");
+        var addressMembers = personType.Properties.WithName("Address");
         var addressProperty = addressMembers.First();
 
         var person = new Person { Address = null };
@@ -235,8 +235,8 @@ public class ClrTypeComplexScenariosTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var personType = registry.GetTypeDefinition<PersonWithFields>();
 
-        var firstNameMembers = personType.GetMembers("FirstName");
-        var lastNameMembers = personType.GetMembers("LastName");
+        var firstNameMembers = personType.Fields.WithName("FirstName");
+        var lastNameMembers = personType.Fields.WithName("LastName");
 
         await Assert.That(firstNameMembers.Count()).IsGreaterThan(0);
         await Assert.That(lastNameMembers.Count()).IsGreaterThan(0);
@@ -263,7 +263,7 @@ public class ClrTypeComplexScenariosTests {
         var stringType = registry.GetTypeDefinition<string>();
 
         // Get length property and use it
-        var lengthMembers = stringType.GetMembers("Length");
+        var lengthMembers = stringType.Properties.WithName("Length");
         var lengthProperty = lengthMembers.First();
 
         var testString = "hello";
@@ -283,7 +283,7 @@ public class ClrTypeComplexScenariosTests {
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
 
-        var members = stringType.GetMembers("IndexOf");
+        var members = stringType.Methods.WithName("IndexOf");
         var indexOfMethod = members.WithParameters(charType);
 
         await Assert.That(indexOfMethod).IsNotNull();
@@ -309,7 +309,7 @@ public class ClrTypeComplexScenariosTests {
         var listType = registry.GetTypeDefinition<List<int>>();
         var intType = registry.GetTypeDefinition<int>();
 
-        var addMembers = listType.GetMembers("Add");
+        var addMembers = listType.Methods.WithName("Add");
         var addMethod = addMembers.WithParameters(intType);
 
         var list = new List<int>();

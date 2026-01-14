@@ -11,7 +11,7 @@ public class ClrTypePropertyTests {
     public async Task LengthProperty_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        var lengthProperty = stringType.GetMembers("Length").SingleOrDefault();
+        var lengthProperty = stringType.Properties.WithName("Length").SingleOrDefault();
 
         await Assert.That(lengthProperty).IsNotNull();
         await Assert.That(lengthProperty).IsTypeOf<ClrTypeProperty>();
@@ -24,7 +24,7 @@ public class ClrTypePropertyTests {
     public async Task Property_GetMemberAccessor_ReturnsValue() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        var lengthProperty = stringType.GetMembers("Length").SingleOrDefault();
+        var lengthProperty = stringType.Properties.WithName("Length").SingleOrDefault();
 
         var testString = "Hello World";
         var stringValue = Value.Wrap(testString);
@@ -44,7 +44,7 @@ public class ClrTypePropertyTests {
     public async Task Property_ToString_HasCorrectFormat() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        var lengthProperty = stringType.GetMembers("Length").SingleOrDefault() as ClrTypeProperty;
+        var lengthProperty = stringType.Properties.WithName("Length").SingleOrDefault() as ClrTypeProperty;
 
         await Assert.That(lengthProperty).IsNotNull();
         var toStringResult = lengthProperty!.ToString();
@@ -57,7 +57,7 @@ public class ClrTypePropertyTests {
     public async Task StaticProperty_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var dateTimeType = registry.GetTypeDefinition<DateTime>();
-        var nowProperty = dateTimeType.GetMembers("Now").SingleOrDefault();
+        var nowProperty = dateTimeType.Properties.WithName("Now").SingleOrDefault();
 
         await Assert.That(nowProperty).IsNotNull();
         await Assert.That(nowProperty).IsTypeOf<ClrTypeProperty>();
@@ -69,7 +69,7 @@ public class ClrTypePropertyTests {
     public async Task InstanceProperty_GetMemberAccessor_ReturnsCorrectValue() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var dateTimeType = registry.GetTypeDefinition<DateTime>();
-        var dayProperty = dateTimeType.GetMembers("Day").SingleOrDefault();
+        var dayProperty = dateTimeType.Properties.WithName("Day").SingleOrDefault();
 
         var testDate = new DateTime(2025, 10, 23);
         var dateValue = Value.Wrap(testDate);
@@ -89,7 +89,7 @@ public class ClrTypePropertyTests {
     public async Task StaticProperty_GetMemberAccessor_ReturnsCorrectValue() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var dateTimeType = registry.GetTypeDefinition<DateTime>();
-        var utcNowProperty = dateTimeType.GetMembers("UtcNow").SingleOrDefault();
+        var utcNowProperty = dateTimeType.Properties.WithName("UtcNow").SingleOrDefault();
 
         var accessor = utcNowProperty!.GetMemberAccessor(Value.Null);
 

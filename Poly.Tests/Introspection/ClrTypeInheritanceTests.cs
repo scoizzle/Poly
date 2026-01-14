@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Introspection.Extensions;
 
 namespace Poly.Tests.Introspection;
 
@@ -31,7 +32,7 @@ public class ClrTypeInheritanceTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithProperty>();
 
-        var baseMembers = derivedType.GetMembers("BaseName");
+        var baseMembers = derivedType.Properties.WithName("BaseName");
 
         // Property inherited from base should be accessible
         await Assert.That(baseMembers.Count()).IsGreaterThan(0);
@@ -42,7 +43,7 @@ public class ClrTypeInheritanceTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithMethod>();
 
-        var baseMembers = derivedType.GetMembers("BaseMethod");
+        var baseMembers = derivedType.Methods.WithName("BaseMethod");
 
         // Method inherited from base should be accessible
         await Assert.That(baseMembers.Count()).IsGreaterThan(0);
@@ -54,7 +55,7 @@ public class ClrTypeInheritanceTests {
         var implementerType = registry.GetTypeDefinition<InterfaceImplementer>();
 
         // Get all members with "GetValue" name
-        var members = implementerType.GetMembers("GetValue").ToList();
+        var members = implementerType.Methods.WithName("GetValue").ToList();
 
         // Should have at least the interface implementation
         await Assert.That(members.Count()).IsGreaterThan(0);
@@ -81,9 +82,9 @@ public class ClrTypeInheritanceTests {
         var grandchildType = registry.GetTypeDefinition<GrandchildClass>();
 
         // Should be able to access members from all three levels
-        var levelOneMembers = grandchildType.GetMembers("LevelOneMethod");
-        var levelTwoMembers = grandchildType.GetMembers("LevelTwoMethod");
-        var levelThreeMembers = grandchildType.GetMembers("LevelThreeMethod");
+        var levelOneMembers = grandchildType.Methods.WithName("LevelOneMethod");
+        var levelTwoMembers = grandchildType.Methods.WithName("LevelTwoMethod");
+        var levelThreeMembers = grandchildType.Methods.WithName("LevelThreeMethod");
 
         await Assert.That(levelOneMembers.Count()).IsGreaterThan(0);
         await Assert.That(levelTwoMembers.Count()).IsGreaterThan(0);
@@ -127,8 +128,8 @@ public class ClrTypeInheritanceTests {
         var implementerType = registry.GetTypeDefinition<MultiInterfaceImplementer>();
 
         // Should have methods from both interfaces
-        var firstInterfaceMembers = implementerType.GetMembers("FirstInterfaceMethod");
-        var secondInterfaceMembers = implementerType.GetMembers("SecondInterfaceMethod");
+        var firstInterfaceMembers = implementerType.Methods.WithName("FirstInterfaceMethod");
+        var secondInterfaceMembers = implementerType.Methods.WithName("SecondInterfaceMethod");
 
         await Assert.That(firstInterfaceMembers.Count()).IsGreaterThanOrEqualTo(0);
         await Assert.That(secondInterfaceMembers.Count()).IsGreaterThanOrEqualTo(0);
@@ -150,7 +151,7 @@ public class ClrTypeInheritanceTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithProperty>();
 
-        var baseNameMembers = derivedType.GetMembers("BaseName");
+        var baseNameMembers = derivedType.Properties.WithName("BaseName");
         var baseNameProperty = baseNameMembers.First();
 
         var instance = new DerivedWithProperty { BaseName = "TestName" };
@@ -170,7 +171,7 @@ public class ClrTypeInheritanceTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithHiddenMember>();
 
-        var members = derivedType.GetMembers("HiddenProperty").ToList();
+        var members = derivedType.Properties.WithName("HiddenProperty").ToList();
 
         // Should have the hidden member accessible
         await Assert.That(members.Count()).IsGreaterThan(0);

@@ -11,7 +11,7 @@ public class ClrTypeMemberTests {
     public async Task MaxValueMember_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
-        var maxValueMember = intType.GetMembers("MaxValue").SingleOrDefault();
+        var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();
 
         await Assert.That(maxValueMember).IsNotNull();
         await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
@@ -23,7 +23,7 @@ public class ClrTypeMemberTests {
     public async Task GetMemberAccessor_ReturnsValue() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
-        var maxValueMember = intType.GetMembers("MaxValue").SingleOrDefault();
+        var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();
         var accessor = maxValueMember!.GetMemberAccessor(Value.Null);
 
         await Assert.That(accessor).IsNotNull();
@@ -40,7 +40,7 @@ public class ClrTypeMemberTests {
     public async Task StaticMember_IsAccessible() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
-        var maxValueMember = intType.GetMembers("MaxValue").SingleOrDefault();
+        var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();
 
         await Assert.That(maxValueMember).IsNotNull();
         await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
@@ -54,7 +54,7 @@ public class ClrTypeMemberTests {
     public async Task InstanceMember_IsAccessible() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
-        var lengthMember = stringType.GetMembers("Length").SingleOrDefault();
+        var lengthMember = stringType.Properties.WithName("Length").SingleOrDefault();
 
         await Assert.That(lengthMember).IsNotNull();
         await Assert.That(lengthMember!.Name).IsEqualTo("Length");

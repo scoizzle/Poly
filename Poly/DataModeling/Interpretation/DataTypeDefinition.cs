@@ -36,8 +36,6 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     public IEnumerable<ITypeDefinition> Interfaces => Enumerable.Empty<ITypeDefinition>();
     public IEnumerable<IParameter> GenericParameters => [];
 
-    public IEnumerable<ITypeMember> GetMembers(string name) => _members.Value.TryGetValue(name, out var m) ? [m] : [];
-
     private FrozenDictionary<string, DataTypeMember> MemberDictionaryFactory() {
         return _dataType
             .Properties

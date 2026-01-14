@@ -1,6 +1,13 @@
 namespace Poly.Introspection.Extensions;
 
 public static class EnumerableMemberExtensions {
+    public static IEnumerable<T> WithName<T>(this IEnumerable<T> members, string name) where T : ITypeMember {
+        ArgumentNullException.ThrowIfNull(members);
+        ArgumentNullException.ThrowIfNull(name);
+
+        return members.Where(m => m.Name == name);
+    }
+    
     public static ITypeMember? WithParameters(this IEnumerable<ITypeMember> members, params IEnumerable<ITypeDefinition>? parameterTypes) {
         ArgumentNullException.ThrowIfNull(members);
         ArgumentNullException.ThrowIfNull(parameterTypes);

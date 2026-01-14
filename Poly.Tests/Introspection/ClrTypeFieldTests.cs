@@ -18,7 +18,7 @@ public class ClrTypeFieldTests {
     public async Task PublicField_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
-        var publicField = testType.GetMembers("PublicField").SingleOrDefault();
+        var publicField = testType.Fields.WithName("PublicField").SingleOrDefault();
 
         await Assert.That(publicField).IsNotNull();
         await Assert.That(publicField).IsTypeOf<ClrTypeField>();
@@ -31,7 +31,7 @@ public class ClrTypeFieldTests {
     public async Task Field_GetMemberAccessor_ReturnsCorrectValue() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
-        var publicField = testType.GetMembers("PublicField").SingleOrDefault();
+        var publicField = testType.Fields.WithName("PublicField").SingleOrDefault();
 
         var testInstance = new TestClass { PublicField = 99 };
         var instanceValue = Value.Wrap(testInstance);
@@ -51,7 +51,7 @@ public class ClrTypeFieldTests {
     public async Task Field_ToString_HasCorrectFormat() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
-        var publicField = testType.GetMembers("PublicField").SingleOrDefault() as ClrTypeField;
+        var publicField = testType.Fields.WithName("PublicField").SingleOrDefault() as ClrTypeField;
 
         await Assert.That(publicField).IsNotNull();
         var toStringResult = publicField!.ToString();
@@ -64,7 +64,7 @@ public class ClrTypeFieldTests {
     public async Task StaticField_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
-        var staticField = testType.GetMembers("StaticField").SingleOrDefault();
+        var staticField = testType.Fields.WithName("StaticField").SingleOrDefault();
 
         await Assert.That(staticField).IsNotNull();
         await Assert.That(staticField).IsTypeOf<ClrTypeField>();
@@ -76,7 +76,7 @@ public class ClrTypeFieldTests {
     public async Task StaticField_GetMemberAccessor_ReturnsCorrectValue() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
-        var staticField = testType.GetMembers("StaticField").SingleOrDefault();
+        var staticField = testType.Fields.WithName("StaticField").SingleOrDefault();
 
         var accessor = staticField!.GetMemberAccessor(Value.Null);
 
@@ -94,7 +94,7 @@ public class ClrTypeFieldTests {
     public async Task FieldInfo_PropertyIsAccessible() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
-        var publicField = testType.GetMembers("PublicField").SingleOrDefault() as ClrTypeField;
+        var publicField = testType.Fields.WithName("PublicField").SingleOrDefault() as ClrTypeField;
 
         await Assert.That(publicField).IsNotNull();
         await Assert.That(publicField!.FieldInfo).IsNotNull();

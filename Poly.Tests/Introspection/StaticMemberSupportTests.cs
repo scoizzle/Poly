@@ -12,7 +12,7 @@ public class StaticMemberSupportTests {
     [Test]
     public async Task IsStatic_InstanceField_ReturnsFalse() {
         var stringType = _registry.GetTypeDefinition<string>();
-        var lengthProperty = stringType.GetMembers("Length").First() as ClrTypeProperty;
+        var lengthProperty = stringType.Properties.WithName("Length").First() as ClrTypeProperty;
 
         await Assert.That(lengthProperty).IsNotNull();
         await Assert.That(lengthProperty!.IsStatic).IsFalse();
@@ -21,7 +21,7 @@ public class StaticMemberSupportTests {
     [Test]
     public async Task IsStatic_StaticField_ReturnsTrue() {
         var stringType = _registry.GetTypeDefinition<string>();
-        var emptyField = stringType.GetMembers("Empty").FirstOrDefault() as ClrTypeField;
+        var emptyField = stringType.Fields.WithName("Empty").FirstOrDefault() as ClrTypeField;
 
         await Assert.That(emptyField).IsNotNull();
         await Assert.That(emptyField!.IsStatic).IsTrue();
@@ -30,7 +30,7 @@ public class StaticMemberSupportTests {
     [Test]
     public async Task IsStatic_InstanceMethod_ReturnsFalse() {
         var stringType = _registry.GetTypeDefinition<string>();
-        var toUpperMethod = stringType.GetMembers("ToUpper").FirstOrDefault(m => m is ClrMethod) as ClrMethod;
+        var toUpperMethod = stringType.Methods.WithName("ToUpper").FirstOrDefault(m => m is ClrMethod) as ClrMethod;
 
         await Assert.That(toUpperMethod).IsNotNull();
         await Assert.That(toUpperMethod!.IsStatic).IsFalse();
@@ -39,7 +39,7 @@ public class StaticMemberSupportTests {
     [Test]
     public async Task IsStatic_StaticMethod_ReturnsTrue() {
         var stringType = _registry.GetTypeDefinition<string>();
-        var concatMethod = stringType.GetMembers("Concat").FirstOrDefault(m => m is ClrMethod) as ClrMethod;
+        var concatMethod = stringType.Methods.WithName("Concat").FirstOrDefault(m => m is ClrMethod) as ClrMethod;
 
         await Assert.That(concatMethod).IsNotNull();
         await Assert.That(concatMethod!.IsStatic).IsTrue();
@@ -48,7 +48,7 @@ public class StaticMemberSupportTests {
     [Test]
     public async Task IsStatic_ListInstanceCount_ReturnsFalse() {
         var listType = _registry.GetTypeDefinition(typeof(List<int>));
-        var countProperty = listType.GetMembers("Count").First() as ClrTypeProperty;
+        var countProperty = listType.Properties.WithName("Count").First() as ClrTypeProperty;
 
         await Assert.That(countProperty).IsNotNull();
         await Assert.That(countProperty!.IsStatic).IsFalse();
@@ -97,7 +97,7 @@ public class StaticMemberSupportTests {
     [Test]
     public async Task IsStatic_ConsoleOut_ReturnsTrue() {
         var consoleType = _registry.GetTypeDefinition(typeof(Console));
-        var outProperty = consoleType.GetMembers("Out").FirstOrDefault() as ClrTypeProperty;
+        var outProperty = consoleType.Properties.WithName("Out").FirstOrDefault() as ClrTypeProperty;
 
         await Assert.That(outProperty).IsNotNull();
         await Assert.That(outProperty!.IsStatic).IsTrue();

@@ -108,7 +108,7 @@ public class ClrTypeEdgeCasesTests {
         var listType = registry.GetTypeDefinition<List<string>>();
 
         // List<T> has Add(T) method
-        var addMembers = listType.GetMembers("Add");
+        var addMembers = listType.Methods.WithName("Add");
 
         await Assert.That(addMembers.Count()).IsGreaterThan(0);
     }

@@ -37,32 +37,6 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
     public FrozenSet<ClrTypeProperty> Properties { get; }
     public FrozenSet<ClrMethod> Methods { get; }
     public FrozenSet<ClrTypeMember> Members { get; }
-    public IEnumerable<ClrTypeMember> GetMembers(string name)
-        => _membersByName.TryGetValue(name, out var members) ? members : Enumerable.Empty<ClrTypeMember>();
-
-    public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method) {
-        var paramTypes = parameterTypes.ToList();
-        method = Methods.FirstOrDefault(m => 
-            m.Name == name &&
-            m.Parameters.Count() == paramTypes.Count &&
-            m.Parameters.Select(p => ((IParameter)p).ParameterTypeDefinition.ReflectedType).SequenceEqual(paramTypes));
-        return method != null;
-    }
-
-    public ITypeMethod? GetBestMatchingMethod(string name, IEnumerable<Type> argumentTypes) {
-        var argTypes = argumentTypes.ToList();
-        var overloads = Methods.Where(m => m.Name == name).ToList();
-        
-        // Exact match
-        var exact = overloads.FirstOrDefault(m => 
-            m.Parameters.Count() == argTypes.Count &&
-            m.Parameters.Select(p => ((IParameter)p).ParameterTypeDefinition.ReflectedType).SequenceEqual(argTypes));
-        if (exact != null) return exact;
-        
-        // TODO: Implement best-match logic with assignability
-        return null;
-    }
-
 
     ITypeDefinition? ITypeDefinition.BaseType => BaseType;
     IEnumerable<ITypeDefinition> ITypeDefinition.Interfaces => Interfaces;

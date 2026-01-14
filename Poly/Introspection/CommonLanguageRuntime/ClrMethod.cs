@@ -33,12 +33,12 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     /// <summary>
     /// Gets the return type definition.
     /// </summary>
-    public override ClrTypeDefinition MemberType => _memberType.Value;
+    public override ClrTypeDefinition MemberTypeDefinition => _memberType.Value;
 
     /// <summary>
     /// Gets the declaring type definition that owns this method.
     /// </summary>
-    public override ClrTypeDefinition DeclaringType => _declaringType;
+    public override ClrTypeDefinition DeclaringTypeDefinition => _declaringType;
 
     /// <summary>
     /// Gets the ordered method parameters.
@@ -75,5 +75,5 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
         return new ClrMethodInvocationInterpretation(this, instance, args);
     }
 
-    public override string ToString() => $"{MemberType} {DeclaringType}.{Name}({string.Join(", ", _parameters)})";
+    public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}({string.Join(", ", _parameters)})";
 }

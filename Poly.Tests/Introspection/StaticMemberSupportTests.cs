@@ -57,7 +57,7 @@ public class StaticMemberSupportTests {
     [Test]
     public async Task StaticMembers_ReturnsOnlyStaticMembers() {
         ITypeDefinition stringType = _registry.GetTypeDefinition<string>();
-        var staticMembers = stringType.StaticMembers.ToList();
+        var staticMembers = stringType.Members.Where(e => e.IsStatic).ToList();
 
         await Assert.That(staticMembers.Count()).IsGreaterThan(0);
 
@@ -69,7 +69,7 @@ public class StaticMemberSupportTests {
     [Test]
     public async Task InstanceMembers_ReturnsOnlyInstanceMembers() {
         ITypeDefinition stringType = _registry.GetTypeDefinition<string>();
-        var instanceMembers = stringType.InstanceMembers.ToList();
+        var instanceMembers = stringType.Members.Where(e => !e.IsStatic).ToList();
 
         await Assert.That(instanceMembers.Count()).IsGreaterThan(0);
 
@@ -82,8 +82,8 @@ public class StaticMemberSupportTests {
     public async Task StaticAndInstanceMembers_AreDisjoint() {
         ITypeDefinition stringType = _registry.GetTypeDefinition<string>();
         var allMembers = stringType.Members.ToList();
-        var staticMembers = stringType.StaticMembers.ToList();
-        var instanceMembers = stringType.InstanceMembers.ToList();
+        var staticMembers = stringType.Members.Where(e => e.IsStatic).ToList();
+        var instanceMembers = stringType.Members.Where(e => !e.IsStatic).ToList();
 
         // All members should be in either static or instance (but not both)
         await Assert.That(staticMembers.Count() + instanceMembers.Count()).IsEqualTo(allMembers.Count());

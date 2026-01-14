@@ -7,7 +7,7 @@ internal sealed class ClrTypePropertyInterpretationAccessor(Value instance, ClrT
     public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
     public ClrTypeProperty Property { get; init; } = property ?? throw new ArgumentNullException(nameof(property));
 
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => Property.MemberType;
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Property).MemberTypeDefinition;
 
     public override Expression BuildExpression(InterpretationContext context) {
         var instanceExpression = Instance.BuildExpression(context);

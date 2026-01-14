@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;
@@ -22,8 +23,8 @@ public class ClrTypeFieldTests {
         await Assert.That(publicField).IsNotNull();
         await Assert.That(publicField).IsTypeOf<ClrTypeField>();
         await Assert.That(publicField!.Name).IsEqualTo("PublicField");
-        await Assert.That(publicField.DeclaringType).IsEqualTo(testType);
-        await Assert.That(publicField.MemberType.FullName).IsEqualTo("System.Int32");
+        await Assert.That(((ITypeMember)publicField).DeclaringTypeDefinition).IsEqualTo(testType);
+        await Assert.That(((ITypeMember)publicField).MemberTypeDefinition.FullName).IsEqualTo("System.Int32");
     }
 
     [Test]
@@ -68,7 +69,7 @@ public class ClrTypeFieldTests {
         await Assert.That(staticField).IsNotNull();
         await Assert.That(staticField).IsTypeOf<ClrTypeField>();
         await Assert.That(staticField!.Name).IsEqualTo("StaticField");
-        await Assert.That(staticField.MemberType.FullName).IsEqualTo("System.String");
+        await Assert.That(((ITypeMember)staticField).MemberTypeDefinition.FullName).IsEqualTo("System.String");
     }
 
     [Test]

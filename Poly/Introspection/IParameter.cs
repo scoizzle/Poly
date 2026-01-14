@@ -1,9 +1,9 @@
 namespace Poly.Introspection;
 
 public interface IParameter {
-    public int Position { get; }
-    public string Name { get; }
-    public ITypeDefinition ParameterTypeDefinition { get; }
-    public bool IsOptional { get; }
-    public object? DefaultValue { get; }
+    int Position { get; }
+    string Name { get; }
+    ITypeDefinition ParameterTypeDefinition { get; }
+    bool IsOptional { get; }
+    object? DefaultValue { get; }
 }

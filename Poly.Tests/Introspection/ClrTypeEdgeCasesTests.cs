@@ -1,3 +1,4 @@
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;
@@ -35,7 +36,7 @@ public class ClrTypeEdgeCasesTests {
         // Verify the property is discovered and has correct type
         await Assert.That(hasValueProp).IsNotNull();
         await Assert.That(hasValueProp.Name).IsEqualTo("HasValue");
-        await Assert.That(hasValueProp.MemberType.FullName).Contains("Boolean");
+        await Assert.That(((ITypeMember)hasValueProp).MemberTypeDefinition.FullName).Contains("Boolean");
     }
 
     [Test]
@@ -47,7 +48,7 @@ public class ClrTypeEdgeCasesTests {
         // Verify the property is discovered and has correct type
         await Assert.That(valueProp).IsNotNull();
         await Assert.That(valueProp.Name).IsEqualTo("Value");
-        await Assert.That(valueProp.MemberType.FullName).Contains("Int32");
+        await Assert.That(((ITypeMember)valueProp).MemberTypeDefinition.FullName).Contains("Int32");
     }
 
     [Test]
@@ -253,8 +254,8 @@ public class ClrTypeEdgeCasesTests {
         public override void AbstractMethod() { }
     }
 
-    public class ClassWithPrivateMembers {
+    public class ClassWithPrivateMembers(int _) {
         public int PublicField;
-        private readonly int _privateField;
+        private readonly int _privateField = _;
     }
 }

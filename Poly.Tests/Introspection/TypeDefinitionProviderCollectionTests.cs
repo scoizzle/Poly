@@ -73,12 +73,19 @@ public class TypeDefinitionProviderCollectionTests {
         public Type ReflectedType => typeof(object);
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
-        public IEnumerable<IParameter>? GenericParameters => null;
+        public IEnumerable<IParameter> GenericParameters => [];
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public bool IsAssignableTo(ITypeDefinition targetType) => throw new NotImplementedException();
 
+        public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method) {
+            throw new NotImplementedException();
+        }
+
         public string? Tag { get; set; }
+        public IEnumerable<ITypeField> Fields => [];
+        public IEnumerable<ITypeProperty> Properties => [];
+        public IEnumerable<ITypeMethod> Methods => [];
     }
 
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {

@@ -19,7 +19,7 @@ namespace Poly.Text.Matching.Expressions {
             return false;
         }
 
-        static bool SelectStatic(StringView view) {
+        private static bool SelectStatic(StringView view) {
             while (!view.IsEmpty) {
                 if (view.ConsumeUntil(IsToken)) {
                     if (view.First == '\\') {
@@ -38,7 +38,7 @@ namespace Poly.Text.Matching.Expressions {
             return true;
         }
 
-        static bool IsToken(char c) {
+        private static bool IsToken(char c) {
             return c switch {
                 '*' or '^' or '{' or '(' or '?' or '[' => true,
                 _ => false,

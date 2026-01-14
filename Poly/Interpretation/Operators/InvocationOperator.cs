@@ -20,18 +20,17 @@ public sealed class InvocationOperator : Operator {
             .Select(arg => arg.GetTypeDefinition(context))
             .ToList();
 
-        var method = targetTypeDef
-            .GetMembers(MethodName)
-            .SingleOrDefault(e =>
-                e.Parameters is not null &&
-                e.Parameters.Count() == argumentTypeDefs.Count &&
-                e.Parameters.Select(f => f.ParameterTypeDefinition).SequenceEqual(argumentTypeDefs));
+        var methods = targetTypeDef.FindMatchingMethodOverloads(MethodName, argumentTypeDefs);
 
-        if (method == null) {
+        if (methods.Count == 0) {
             throw new InvalidOperationException($"Method '{MethodName}' not found on type '{targetTypeDef}' with the specified argument types.");
         }
+        
+        if (methods.Count > 1) {
+            throw new InvalidOperationException($"Ambiguous method invocation: multiple overloads of '{MethodName}' found on type '{targetTypeDef}' matching the specified argument types.");
+        }
 
-        return method;
+        return methods.Single();
     }
 
     public override Expression BuildExpression(InterpretationContext context) {

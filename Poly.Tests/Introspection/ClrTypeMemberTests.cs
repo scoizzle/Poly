@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;
@@ -14,8 +15,8 @@ public class ClrTypeMemberTests {
 
         await Assert.That(maxValueMember).IsNotNull();
         await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
-        await Assert.That(maxValueMember.DeclaringType).IsEqualTo(intType);
-        await Assert.That(maxValueMember.MemberType.FullName).IsEqualTo("System.Int32");
+        await Assert.That(((ITypeMember)maxValueMember).DeclaringTypeDefinition).IsEqualTo(intType);
+        await Assert.That(((ITypeMember)maxValueMember).MemberTypeDefinition.FullName).IsEqualTo("System.Int32");
     }
 
     [Test]

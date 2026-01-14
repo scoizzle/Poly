@@ -7,7 +7,7 @@ internal sealed class ClrTypeIndexInterpretationAccessor(Value instance, ClrType
     public ClrTypeProperty IndexProperty { get; } = indexProperty ?? throw new ArgumentNullException(nameof(indexProperty));
     public IEnumerable<Value> IndexParameters { get; } = indexParameters ?? throw new ArgumentNullException(nameof(indexParameters));
 
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => IndexProperty.MemberType;
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)IndexProperty).MemberTypeDefinition;
 
     public override Expression BuildExpression(InterpretationContext context) {
         var instanceExpression = Instance.BuildExpression(context);

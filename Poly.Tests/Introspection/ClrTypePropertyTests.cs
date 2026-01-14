@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;
@@ -15,8 +16,8 @@ public class ClrTypePropertyTests {
         await Assert.That(lengthProperty).IsNotNull();
         await Assert.That(lengthProperty).IsTypeOf<ClrTypeProperty>();
         await Assert.That(lengthProperty!.Name).IsEqualTo("Length");
-        await Assert.That(lengthProperty.DeclaringType).IsEqualTo(stringType);
-        await Assert.That(lengthProperty.MemberType.FullName).IsEqualTo("System.Int32");
+        await Assert.That(((ITypeMember)lengthProperty).DeclaringTypeDefinition).IsEqualTo(stringType);
+        await Assert.That(((ITypeMember)lengthProperty).MemberTypeDefinition.FullName).IsEqualTo("System.Int32");
     }
 
     [Test]
@@ -61,7 +62,7 @@ public class ClrTypePropertyTests {
         await Assert.That(nowProperty).IsNotNull();
         await Assert.That(nowProperty).IsTypeOf<ClrTypeProperty>();
         await Assert.That(nowProperty!.Name).IsEqualTo("Now");
-        await Assert.That(nowProperty.MemberType.FullName).IsEqualTo("System.DateTime");
+        await Assert.That(((ITypeMember)nowProperty).MemberTypeDefinition.FullName).IsEqualTo("System.DateTime");
     }
 
     [Test]

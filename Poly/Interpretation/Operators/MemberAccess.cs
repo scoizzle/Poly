@@ -10,6 +10,7 @@ namespace Poly.Interpretation.Operators;
 /// The member is resolved at interpretation time using the type definition system.
 /// </remarks>
 public sealed class MemberAccess(Value value, string memberName) : Operator {
+    private ITypeMember? _cachedMember;
     /// <summary>
     /// Gets the value whose member is being accessed.
     /// </summary>
@@ -27,9 +28,21 @@ public sealed class MemberAccess(Value value, string memberName) : Operator {
     /// <returns>The member metadata.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the member is not found on the type.</exception>
     private ITypeMember GetMember(InterpretationContext context) {
-        ITypeDefinition typeDefinition = Value.GetTypeDefinition(context);
-        return typeDefinition.GetMembers(MemberName).SingleOrDefault()
-            ?? throw new InvalidOperationException($"Member '{MemberName}' not found on type '{typeDefinition.Name}'.");
+        if (_cachedMember is not null)
+            return _cachedMember;
+
+        var typeDefinition = Value.GetTypeDefinition(context);
+        var members = typeDefinition.Members.Where(e => e.Name == MemberName);
+
+        var memberEnumerator = members.GetEnumerator();
+        if (!memberEnumerator.MoveNext())
+            throw new InvalidOperationException($"Member '{MemberName}' not found on type '{typeDefinition.Name}'.");
+
+        var firstMember = memberEnumerator.Current;
+        if (memberEnumerator.MoveNext())
+            throw new InvalidOperationException($"Ambiguous member access: multiple members named '{MemberName}' found on type '{typeDefinition.Name}'.");
+            
+        return _cachedMember = firstMember;
     }
 
     /// <inheritdoc />

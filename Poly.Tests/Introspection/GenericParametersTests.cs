@@ -9,11 +9,11 @@ public class GenericParametersTests {
     private readonly ClrTypeDefinitionRegistry _registry = ClrTypeDefinitionRegistry.Shared;
 
     [Test]
-    public async Task GenericParameters_NonGenericType_ReturnsNull() {
+    public async Task GenericParameters_NonGenericType_ReturnsEmptyCollection() {
         var stringType = _registry.GetTypeDefinition<string>();
         var genericParams = stringType.GenericParameters;
 
-        await Assert.That(genericParams).IsNull();
+        await Assert.That(genericParams).IsEmpty();
     }
 
     [Test]
@@ -21,10 +21,7 @@ public class GenericParametersTests {
         var listIntType = _registry.GetTypeDefinition(typeof(List<int>));
         var genericParams = listIntType.GenericParameters;
 
-        await Assert.That(genericParams).IsNotNull();
-
-        if (genericParams is null) return;
-
+        await Assert.That(genericParams).IsNotEmpty();
         await Assert.That(genericParams.Count()).IsEqualTo(1);
 
         var param = genericParams.First();
@@ -38,10 +35,7 @@ public class GenericParametersTests {
         var dictType = _registry.GetTypeDefinition(typeof(Dictionary<string, int>));
         var genericParams = dictType.GenericParameters;
 
-        await Assert.That(genericParams).IsNotNull();
-
-        if (genericParams is null) return;
-
+        await Assert.That(genericParams).IsNotEmpty();
         await Assert.That(genericParams.Count()).IsEqualTo(2);
 
         var paramList = genericParams.ToList();
@@ -62,10 +56,7 @@ public class GenericParametersTests {
         var openListType = _registry.GetTypeDefinition(typeof(List<>));
         var genericParams = openListType.GenericParameters;
 
-        await Assert.That(genericParams).IsNotNull();
-
-        if (genericParams is null) return;
-
+        await Assert.That(genericParams).IsNotEmpty();
         await Assert.That(genericParams.Count()).IsEqualTo(1);
 
         var param = genericParams.First();
@@ -80,10 +71,7 @@ public class GenericParametersTests {
         var openDictType = _registry.GetTypeDefinition(typeof(Dictionary<,>));
         var genericParams = openDictType.GenericParameters;
 
-        await Assert.That(genericParams).IsNotNull();
-
-        if (genericParams is null) return;
-
+        await Assert.That(genericParams).IsNotEmpty();
         await Assert.That(genericParams.Count()).IsEqualTo(2);
 
         var paramList = genericParams.ToList();
@@ -103,10 +91,7 @@ public class GenericParametersTests {
         var nestedType = _registry.GetTypeDefinition(typeof(List<List<int>>));
         var genericParams = nestedType.GenericParameters;
 
-        await Assert.That(genericParams).IsNotNull();
-
-        if (genericParams is null) return;
-
+        await Assert.That(genericParams).IsNotEmpty();
         await Assert.That(genericParams.Count()).IsEqualTo(1);
 
         var param = genericParams.First();
@@ -120,10 +105,7 @@ public class GenericParametersTests {
         var tupleType = _registry.GetTypeDefinition(typeof((string, int, double)));
         var genericParams = tupleType.GenericParameters;
 
-        await Assert.That(genericParams).IsNotNull();
-
-        if (genericParams is null) return;
-
+        await Assert.That(genericParams).IsNotEmpty();
         await Assert.That(genericParams.Count()).IsEqualTo(3);
 
         var paramList = genericParams.ToList();

@@ -35,12 +35,12 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
     /// <summary>
     /// Gets the property type definition.
     /// </summary>
-    public override ClrTypeDefinition MemberType => _memberType.Value;
+    public override ClrTypeDefinition MemberTypeDefinition => _memberType.Value;
 
     /// <summary>
     /// Gets the declaring type definition that owns this property.
     /// </summary>
-    public override ClrTypeDefinition DeclaringType => _declaringType;
+    public override ClrTypeDefinition DeclaringTypeDefinition => _declaringType;
 
     /// <summary>
     /// Gets the index parameters for an indexer property, or null for regular properties.
@@ -79,5 +79,5 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
         }
     }
 
-    public override string ToString() => $"{MemberType} {DeclaringType}.{Name}{(_parameters is null ? string.Empty : $"[{string.Join(", ", _parameters)}]")}";
+    public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}{(_parameters is null ? string.Empty : $"[{string.Join(", ", _parameters)}]")}";
 }

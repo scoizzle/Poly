@@ -3,17 +3,17 @@ using Poly.Interpretation;
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 internal abstract class ClrTypeMember : ITypeMember {
-    public abstract ClrTypeDefinition MemberType { get; }
-    public abstract ClrTypeDefinition DeclaringType { get; }
+    public abstract ClrTypeDefinition MemberTypeDefinition { get; }
+    public abstract ClrTypeDefinition DeclaringTypeDefinition { get; }
     public abstract IEnumerable<ClrParameter>? Parameters { get; }
     public abstract string Name { get; }
     public abstract bool IsStatic { get; }
 
-    ITypeDefinition ITypeMember.MemberTypeDefinition => MemberType;
-    ITypeDefinition ITypeMember.DeclaringTypeDefinition => DeclaringType;
+    ITypeDefinition ITypeMember.MemberTypeDefinition => MemberTypeDefinition;
+    ITypeDefinition ITypeMember.DeclaringTypeDefinition => DeclaringTypeDefinition;
     IEnumerable<IParameter>? ITypeMember.Parameters => Parameters;
 
     public abstract Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters);
 
-    public override string ToString() => $"{MemberType} {DeclaringType}.{Name}";
+    public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

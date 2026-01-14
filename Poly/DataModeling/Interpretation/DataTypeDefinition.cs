@@ -34,7 +34,7 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     public Type ReflectedType => typeof(IDictionary<string, object>);
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => Enumerable.Empty<ITypeDefinition>();
-    public IEnumerable<IParameter>? GenericParameters => null;
+    public IEnumerable<IParameter> GenericParameters => [];
 
     public IEnumerable<ITypeMember> GetMembers(string name) => _members.Value.TryGetValue(name, out var m) ? [m] : [];
 
@@ -59,8 +59,11 @@ internal sealed class DataTypeMember : ITypeProperty {
     }
 
     public string Name { get; }
-    public ITypeDefinition DeclaringTypeDefinition => _declaring;
-    public ITypeDefinition MemberTypeDefinition => _memberType.Value;
+    public ITypeDefinition DeclaringType => _declaring;
+    public ITypeDefinition MemberType => _memberType.Value;
+
+    ITypeDefinition ITypeMember.MemberTypeDefinition => MemberType;
+    ITypeDefinition ITypeMember.DeclaringTypeDefinition => DeclaringType;
 
     public IEnumerable<IParameter>? Parameters { get; }
 
@@ -69,7 +72,7 @@ internal sealed class DataTypeMember : ITypeProperty {
     /// </summary>
     public bool IsStatic => false;
 
-    public Value GetMemberAccessor(Value instance, params IEnumerable<Value>? _) => new DataModelPropertyAccessor(instance, Name, MemberTypeDefinition);
+    public Value GetMemberAccessor(Value instance, params IEnumerable<Value>? _) => new DataModelPropertyAccessor(instance, Name, MemberType);
 
     private static ITypeDefinition ResolveMemberType(DataProperty property, ITypeDefinitionProvider provider) {
         var clr = ClrTypeDefinitionRegistry.Shared;

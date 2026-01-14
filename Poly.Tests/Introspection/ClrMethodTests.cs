@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
@@ -25,8 +26,8 @@ public class ClrMethodTests {
         var toStringMethod = intType.Methods.First(m => m.Name == "ToString");
 
         await Assert.That(toStringMethod.Name).IsEqualTo("ToString");
-        await Assert.That(toStringMethod.DeclaringType).IsEqualTo(intType);
-        await Assert.That(toStringMethod.MemberType.FullName).IsEqualTo("System.String");
+        await Assert.That(((ITypeMember)toStringMethod).DeclaringTypeDefinition).IsEqualTo(intType);
+        await Assert.That(((ITypeMember)toStringMethod).MemberTypeDefinition.FullName).IsEqualTo("System.String");
     }
 
     [Test]
@@ -49,7 +50,7 @@ public class ClrMethodTests {
         var parseMethod = intType.Methods.First(m => m.Name == "Parse");
 
         await Assert.That(parseMethod.Name).IsEqualTo("Parse");
-        await Assert.That(parseMethod.MemberType.FullName).IsEqualTo("System.Int32");
+        await Assert.That(((ITypeMember)parseMethod).MemberTypeDefinition.FullName).IsEqualTo("System.Int32");
     }
 
     [Test]
@@ -67,8 +68,8 @@ public class ClrMethodTests {
         var listType = registry.GetTypeDefinition<List<int>>();
         var getEnumeratorMethod = listType.Methods.First(m => m.Name == "GetEnumerator");
 
-        await Assert.That(getEnumeratorMethod.MemberType).IsNotNull();
-        await Assert.That(getEnumeratorMethod.MemberType.Name).Contains("Enumerator");
+        await Assert.That(((ITypeMember)getEnumeratorMethod).MemberTypeDefinition).IsNotNull();
+        await Assert.That(((ITypeMember)getEnumeratorMethod).MemberTypeDefinition.Name).Contains("Enumerator");
     }
 
     [Test]

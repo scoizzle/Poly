@@ -29,12 +29,12 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     /// <summary>
     /// Gets the field type definition.
     /// </summary>
-    public override ClrTypeDefinition MemberType => _memberType.Value;
+    public override ClrTypeDefinition MemberTypeDefinition => _memberType.Value;
 
     /// <summary>
     /// Gets the declaring type definition that owns this field.
     /// </summary>
-    public override ClrTypeDefinition DeclaringType => _declaringType;
+    public override ClrTypeDefinition DeclaringTypeDefinition => _declaringType;
 
     /// <summary>
     /// Fields do not have parameters; always null.
@@ -62,5 +62,5 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     /// </summary>
     public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters) => new ClrTypeFieldInterpretationAccessor(instance, this);
 
-    public override string ToString() => $"{MemberType} {DeclaringType}.{Name}";
+    public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

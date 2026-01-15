@@ -1,3 +1,7 @@
+# Under Construction
+
+⚠️ **Warning:** Things are incredibly likely to break at the current rate of development.
+
 # Poly - Fluent Domain Modeling for .NET
 
 Poly provides a fluent, strongly-typed API for defining domain models that can be used for validation, code generation, schema generation, and API creation.

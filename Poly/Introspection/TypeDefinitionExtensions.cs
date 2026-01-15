@@ -1,5 +1,3 @@
-using Poly.Introspection.Extensions;
-
 namespace Poly.Introspection;
 
 public static class TypeDefinitionExtensions {

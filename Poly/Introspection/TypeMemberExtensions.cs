@@ -1,6 +1,6 @@
-namespace Poly.Introspection.Extensions;
+namespace Poly.Introspection;
 
-public static class MemberExtensions {
+public static class TypeMemberExtensions {
     /// <summary>
     /// Filters the given members to those with the specified name.
     /// </summary>
@@ -33,19 +33,18 @@ public static class MemberExtensions {
         var arguments = parameterTypes.ToList();
 
         foreach (var member in members) {
-            if (!TryCalculateParameterScore(member, arguments, out var score)) {
-                continue;
-            }
-
-            if (score > bestScore) {
-                continue;
-            }
-            else if (score < bestScore) {
-                bestScore = score;
-                bestMethods = [member];
-            }
-            else {
-                bestMethods.Add(member);
+            switch (CalculateParameterScore(member, arguments)) {
+                case null:
+                    continue;
+                case int score when score > bestScore:
+                    continue;
+                case int score when score < bestScore:
+                    bestScore = score;
+                    bestMethods = [member];
+                    break;
+                case int score when score == bestScore:
+                    bestMethods.Add(member);
+                    break;
             }
         }
 
@@ -61,28 +60,28 @@ public static class MemberExtensions {
     /// <param name="arguments">The argument types to match against.</param>
     /// <param name="score">The calculated score if compatible.</param>
     /// <returns>True if the member is compatible; otherwise, false.</returns>
-    private static bool TryCalculateParameterScore<T>(T member, List<ITypeDefinition> arguments, out int score) where T : ITypeMember {
-        score = 0;
+    private static int? CalculateParameterScore<T>(T member, List<ITypeDefinition> arguments) where T : ITypeMember {
+        var score = 0;
         var parameters = member.Parameters ?? [];
 
         foreach (var (parameter, argument) in parameters.ZipAll(arguments)) {
             switch (parameter, argument) {
                 case (null, _):
-                    return false;
+                    return null; // Too many arguments
                 case (_, null) when parameter is not null && !parameter.IsOptional:
-                    return false;
+                    return null; // Missing required argument
                 case (_, null):
                     continue; // Skip optional parameters when no argument provided
                 case (_, _) when parameter.ParameterTypeDefinition == argument:
                     continue;
                 case (_, _) when parameter.ParameterTypeDefinition.IsAssignableFrom(argument):
-                    score += 1;
+                    score++; // Assignable but not exact match
                     continue;
                 default:
-                    return false;
+                    return null; // Incompatible types
             }
         }
 
-        return true;
+        return score;
     }
 }

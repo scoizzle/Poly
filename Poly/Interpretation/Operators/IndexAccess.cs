@@ -9,7 +9,7 @@ namespace Poly.Interpretation.Operators;
 /// This operator enables accessing indexed members of a value using bracket notation (e.g., <c>array[0]</c> or <c>dictionary["key"]</c>).
 /// The indexer is resolved at interpretation time using the type definition system, selecting the best match based on index argument types.
 /// </remarks>
-public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArguments) : Operator {
+public sealed class IndexAccess(Value value, params IEnumerable<Value> arguments) : Operator {
     /// <summary>
     /// Gets the value whose indexer is being accessed.
     /// </summary>
@@ -18,7 +18,7 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     /// <summary>
     /// Gets the index arguments for the indexer.
     /// </summary>
-    public IEnumerable<Value> IndexArguments { get; } = indexArguments ?? throw new ArgumentNullException(nameof(indexArguments));
+    public IEnumerable<Value> Arguments { get; } = arguments ?? throw new ArgumentNullException(nameof(arguments));
 
     /// <summary>
     /// Gets the indexer member from the value's type definition.
@@ -30,8 +30,12 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     {
         ITypeDefinition typeDefinition = Value.GetTypeDefinition(context);
 
+        var argumentTypes = Arguments
+            .Select(arg => arg.GetTypeDefinition(context))
+            .ToList();
+
         // Get all members named "Item" (indexers)
-        var indexers = typeDefinition.Members.Where(m => m.Name == "Item").ToList();
+        var indexers = typeDefinition.Members.WithName("Item").WithParameterTypes(argumentTypes).ToList();
 
         if (indexers.Count == 0) {
             return null;
@@ -42,7 +46,7 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
         }
 
         // Multiple indexers found - attempt to resolve based on parameter count and types
-        var argumentCount = IndexArguments.Count();
+        var argumentCount = Arguments.Count();
 
         // TODO: Implement proper overload resolution
         // For now, return the first indexer that matches parameter count
@@ -77,13 +81,13 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     {
         var indexer = GetIndexer(context);
         if (indexer is not null) {
-            Value memberAccessor = indexer.GetMemberAccessor(Value, IndexArguments);
+            Value memberAccessor = indexer.GetMemberAccessor(Value, Arguments);
             return memberAccessor.BuildExpression(context);
         }
 
         // CLR array indexing: use Expression.ArrayIndex
         var valueExpr = Value.BuildExpression(context);
-        var indexArgs = IndexArguments.Select(a => a.BuildExpression(context)).ToArray();
+        var indexArgs = Arguments.Select(a => a.BuildExpression(context)).ToArray();
         if (indexArgs.Length != 1) {
             throw new InvalidOperationException("Array index access requires exactly one index argument.");
         }
@@ -91,5 +95,5 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     }
 
     /// <inheritdoc />
-    public override string ToString() => $"{Value}[{string.Join(", ", IndexArguments)}]";
+    public override string ToString() => $"{Value}[{string.Join(", ", Arguments)}]";
 }

@@ -69,36 +69,4 @@ public interface ITypeDefinition {
     /// Gets the underlying reflected runtime type, when available.
     /// </summary>
     Type ReflectedType { get; }
-
-    /// <summary>
-    /// Determines if values of <paramref name="other"/> can be assigned to this type.
-    /// </summary>
-    /// <remarks>
-    /// Default implementation walks the base type chain and interface list. Implementations
-    /// can override with more precise or faster logic.
-    /// </remarks>
-    bool IsAssignableFrom(ITypeDefinition other)
-    {
-        ArgumentNullException.ThrowIfNull(other);
-        if (this == other) return true;
-
-        var current = other.BaseType;
-        while (current != null) {
-            if (this == current) return true;
-            current = current.BaseType;
-        }
-
-        if (other.Interfaces.Any(i => this == i)) return true;
-
-        return false;
-    }
-
-    /// <summary>
-    /// Determines if this type can be assigned to <paramref name="other"/>.
-    /// </summary>
-    bool IsAssignableTo(ITypeDefinition other)
-    {
-        ArgumentNullException.ThrowIfNull(other);
-        return other.IsAssignableFrom(this);
-    }
 }

@@ -24,15 +24,14 @@ public sealed class InvocationOperator : Operator {
 
         var methods = targetTypeDef.FindMatchingMethodOverloads(MethodName, argumentTypeDefs).ToList();
 
-        if (methods.Count == 0) {
-            throw new InvalidOperationException($"Method '{MethodName}' not found on type '{targetTypeDef}' with the specified argument types.");
+        switch (methods.Count) {
+            case 0:
+                throw new InvalidOperationException($"Method '{MethodName}' not found on type '{targetTypeDef}' with the specified argument types.");
+            case > 1:
+                throw new InvalidOperationException($"Ambiguous method invocation: multiple overloads of '{MethodName}' found on type '{targetTypeDef}' matching the specified argument types.");
+            default:
+                return methods.Single();
         }
-
-        if (methods.Count > 1) {
-            throw new InvalidOperationException($"Ambiguous method invocation: multiple overloads of '{MethodName}' found on type '{targetTypeDef}' matching the specified argument types.");
-        }
-
-        return methods.Single();
     }
 
     public override Expression BuildExpression(InterpretationContext context)

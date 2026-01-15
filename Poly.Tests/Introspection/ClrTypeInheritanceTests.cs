@@ -1,6 +1,6 @@
 using Poly.Interpretation;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Introspection.Extensions;
+using Poly.Introspection;
 
 namespace Poly.Tests.Introspection;
 

@@ -43,6 +43,66 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
+    public async Task IsAssignableFrom_SameType_ReturnsTrue()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var stringType = registry.GetTypeDefinition<string>();
+
+        var result = stringType.IsAssignableFrom(stringType);
+
+        await Assert.That(result).IsTrue();
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_DerivedType_ReturnsTrue()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var exceptionType = registry.GetTypeDefinition<Exception>();
+        var argumentExceptionType = registry.GetTypeDefinition<ArgumentException>();
+
+        var result = exceptionType.IsAssignableFrom(argumentExceptionType);
+
+        await Assert.That(result).IsTrue();
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_UnrelatedType_ReturnsFalse()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var stringType = registry.GetTypeDefinition<string>();
+        var intType = registry.GetTypeDefinition<int>();
+
+        var result = stringType.IsAssignableFrom(intType);
+
+        await Assert.That(result).IsFalse();
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_InterfaceImplementation_ReturnsTrue()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var enumerableType = registry.GetTypeDefinition<IEnumerable<int>>();
+        var listType = registry.GetTypeDefinition<List<int>>();
+
+        var result = enumerableType.IsAssignableFrom(listType);
+
+        await Assert.That(result).IsTrue();
+    }
+
+    [Test]
+    public async Task IsAssignableTo_InverseOf_IsAssignableFrom()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var exceptionType = registry.GetTypeDefinition<Exception>();
+        var argumentExceptionType = registry.GetTypeDefinition<ArgumentException>();
+
+        var assignableFrom = exceptionType.IsAssignableFrom(argumentExceptionType);
+        var assignableTo = argumentExceptionType.IsAssignableTo(exceptionType);
+
+        await Assert.That(assignableTo).IsEqualTo(assignableFrom);
+    }
+
+    [Test]
     public async Task Interfaces_WithImplementedInterface_ContainsInterface()
     {
         var registry = new ClrTypeDefinitionRegistry();
@@ -76,15 +136,6 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_SameType_ReturnsTrue()
-    {
-        var registry = new ClrTypeDefinitionRegistry();
-        var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
-
-        await Assert.That(stringType.IsAssignableFrom(stringType)).IsTrue();
-    }
-
-    [Test]
     public async Task IsAssignableFrom_DerivedFromBase_ReturnsTrue()
     {
         var registry = new ClrTypeDefinitionRegistry();
@@ -105,7 +156,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_InterfaceImplementation_ReturnsTrue()
+    public async Task IsAssignableFrom_InterfaceImplementation_ReturnsTrue_V2()
     {
         var registry = new ClrTypeDefinitionRegistry();
         var comparableType = (ITypeDefinition)registry.GetTypeDefinition(typeof(IComparable));

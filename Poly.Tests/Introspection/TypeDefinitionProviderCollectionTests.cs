@@ -1,4 +1,5 @@
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;
 
@@ -67,6 +68,42 @@ public class TypeDefinitionProviderCollectionTests {
         await Assert.That(result).IsNotNull();
         // The collection uses LIFO (stack) order, so the last added provider (mockProvider2) is checked first
         await Assert.That(((MockTypeDefinition)result!).Tag).IsEqualTo("Provider2");
+    }
+
+    [Test]
+    public async Task FindMatchingMethodOverloads_SingleOverload_ReturnsMethod()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var stringType = registry.GetTypeDefinition<string>();
+
+        var methods = stringType.FindMatchingMethodOverloads("ToString", []);
+
+        await Assert.That(methods).HasSingleItem();
+        await Assert.That(methods.Single().Name).IsEqualTo("ToString");
+    }
+
+    [Test]
+    public async Task FindMatchingMethodOverloads_MultipleOverloads_ReturnsBestMatch()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var stringType = registry.GetTypeDefinition<string>();
+        var charType = registry.GetTypeDefinition<char>();
+
+        var methods = stringType.FindMatchingMethodOverloads("IndexOf", [charType]);
+
+        await Assert.That(methods).HasSingleItem();
+        await Assert.That(methods.Single().Name).IsEqualTo("IndexOf");
+    }
+
+    [Test]
+    public async Task FindMatchingMethodOverloads_NoMatch_ReturnsEmpty()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var stringType = registry.GetTypeDefinition<string>();
+
+        var methods = stringType.FindMatchingMethodOverloads("NonExistentMethod", []);
+
+        await Assert.That(methods).IsEmpty();
     }
 
     // Mock implementations for testing

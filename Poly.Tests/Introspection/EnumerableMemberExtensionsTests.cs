@@ -14,10 +14,10 @@ public class EnumerableMemberExtensionsTests {
         var indexOfMembers = stringType.Methods.WithName("IndexOf");
 
         // Find overload with char parameter
-        var charVersion = indexOfMembers.WithParameters(charType);
+        var charVersion = indexOfMembers.WithParameterTypes(charType).First();
 
         // Find overload with string parameter
-        var stringVersion = indexOfMembers.WithParameters(stringType);
+        var stringVersion = indexOfMembers.WithParameterTypes(stringType).First();
 
         // Verify both exist and are different
         await Assert.That(charVersion).IsNotNull();
@@ -34,7 +34,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Substring");
 
         // String.Substring(int) - need to pass ITypeDefinition, not System.Type
-        var filtered = members.WithParameters(intType);
+        var filtered = members.WithParameterTypes(intType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -48,48 +48,53 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Substring");
 
         // String.Substring(int, int) overload
-        var filtered = members.WithParameters(intType, intType);
+        var filteredMethods = members.WithParameterTypes(intType, intType);
+        await Assert.That(filteredMethods).HasSingleItem();
+        var filtered = filteredMethods.First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(2);
     }
 
     [Test]
-    public async Task WithParameters_NoMatch_ReturnsNull() {
+    public async Task WithParameters_NoMatch_ReturnsEmpty() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var doubleType = registry.GetTypeDefinition<double>();
         var members = stringType.Methods.WithName("Substring");
 
         // Try to find with non-existent parameter signature
-        var filtered = members.WithParameters(doubleType);
+        var filtered = members.WithParameterTypes(doubleType);
 
-        await Assert.That(filtered).IsNull();
+        await Assert.That(filtered).IsNotNull();
+        await Assert.That(filtered).IsEmpty();
     }
 
     [Test]
-    public async Task WithParameters_OnField_ReturnsNull() {
+    public async Task WithParameters_OnField_ReturnsEmpty() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var members = intType.Fields.WithName("MaxValue");
 
-        // MaxValue is a field, not a method, so filtering by parameters returns null
-        var filtered = members.WithParameters(intType);
+        // MaxValue is a field, not a method, so filtering by parameters returns empty
+        var filtered = members.WithParameterTypes(intType);
 
-        await Assert.That(filtered).IsNull();
+        await Assert.That(filtered).IsNotNull();
+        await Assert.That(filtered).IsEmpty();
     }
 
     [Test]
-    public async Task WithParameters_Property_ReturnsNull() {
+    public async Task WithParameters_Property_ReturnsEmpty() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intParamType = registry.GetTypeDefinition<int>();
         var members = stringType.Properties.WithName("Length");
 
-        // Length is a property, not a method, so filtering by parameters returns null
-        var filtered = members.WithParameters(intParamType);
+        // Length is a property, not a method, so filtering by parameters returns empty
+        var filtered = members.WithParameterTypes(intParamType);
 
-        await Assert.That(filtered).IsNull();
+        await Assert.That(filtered).IsNotNull();
+        await Assert.That(filtered).IsEmpty();
     }
 
     [Test]
@@ -100,7 +105,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("IndexOf");
 
         // String.IndexOf(char)
-        var filtered = members.WithParameters(charType);
+        var filtered = members.WithParameterTypes(charType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -115,7 +120,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("IndexOf");
 
         // String.IndexOf(string)
-        var filtered = members.WithParameters(stringType);
+        var filtered = members.WithParameterTypes(stringType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -130,7 +135,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Contains");
 
         // String.Contains(string)
-        var filtered = members.WithParameters(stringType);
+        var filtered = members.WithParameterTypes(stringType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -144,7 +149,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Contains");
 
         // String.Contains(string, StringComparison)
-        var filtered = members.WithParameters(stringType, stringComparisonType);
+        var filtered = members.WithParameterTypes(stringType, stringComparisonType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(2);
@@ -157,7 +162,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("Replace");
 
         // String.Replace(string, string)
-        var filtered = members.WithParameters(stringType, stringType);
+        var filtered = members.WithParameterTypes(stringType, stringType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(2);
@@ -172,7 +177,7 @@ public class EnumerableMemberExtensionsTests {
         var members = registry.GetTypeDefinition<string>().Methods.WithName("Replace");
 
         // String.Replace(char, char)
-        var filtered = members.WithParameters(charType, charType);
+        var filtered = members.WithParameterTypes(charType, charType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(2);
@@ -188,7 +193,7 @@ public class EnumerableMemberExtensionsTests {
         var members = listType.Methods.WithName("Add");
 
         // List<string>.Add(string)
-        var filtered = members.WithParameters(stringType);
+        var filtered = members.WithParameterTypes(stringType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -201,7 +206,7 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("StartsWith");
 
         // String.StartsWith(string)
-        var filtered = members.WithParameters(stringType);
+        var filtered = members.WithParameterTypes(stringType).First();
 
         await Assert.That(filtered).IsNotNull();
         await Assert.That(filtered!.Parameters?.Count()).IsEqualTo(1);
@@ -216,8 +221,8 @@ public class EnumerableMemberExtensionsTests {
         var members = stringType.Methods.WithName("IndexOf");
 
         // Can distinguish between IndexOf(char) and IndexOf(string)
-        var charFiltered = members.WithParameters(charType);
-        var stringFiltered = members.WithParameters(stringType);
+        var charFiltered = members.WithParameterTypes(charType).First();
+        var stringFiltered = members.WithParameterTypes(stringType).First();
 
         await Assert.That(charFiltered).IsNotNull();
         await Assert.That(stringFiltered).IsNotNull();

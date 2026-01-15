@@ -20,7 +20,7 @@ public sealed class InvocationOperator : Operator {
             .Select(arg => arg.GetTypeDefinition(context))
             .ToList();
 
-        var methods = targetTypeDef.FindMatchingMethodOverloads(MethodName, argumentTypeDefs);
+        var methods = targetTypeDef.FindMatchingMethodOverloads(MethodName, argumentTypeDefs).ToList();
 
         if (methods.Count == 0) {
             throw new InvalidOperationException($"Method '{MethodName}' not found on type '{targetTypeDef}' with the specified argument types.");

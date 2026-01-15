@@ -37,9 +37,13 @@ public class ClrTypeComplexScenariosTests {
 
         // Person -> Address -> City
         var addressMembers = personType.Properties.WithName("Address");
+        await Assert.That(addressMembers).IsNotNull();
+        await Assert.That(addressMembers).HasSingleItem();
         var addressProperty = addressMembers.First();
 
         var cityMembers = addressType.Properties.WithName("City");
+        await Assert.That(cityMembers).IsNotNull();
+        await Assert.That(cityMembers).HasSingleItem();
         var cityProperty = cityMembers.First();
 
         var person = new Person { Address = new Address { City = "Portland" } };
@@ -63,16 +67,17 @@ public class ClrTypeComplexScenariosTests {
         var stringType = registry.GetTypeDefinition<string>();
 
         var members = stringType.Methods.WithName("StartsWith");
-        var startWithMethod = members.WithParameters(stringType);
+        var startsWithMethods = members.WithParameterTypes(stringType);
 
-        await Assert.That(startWithMethod).IsNotNull();
+        await Assert.That(startsWithMethods).HasSingleItem();
+        var startsWithMethod = startsWithMethods.First();
 
         var testString = "hello world";
         var stringLiteral = Value.Wrap(testString);
         var prefixLiteral = Value.Wrap("hello");
 
         var context = new InterpretationContext();
-        var methodAccessor = startWithMethod!.GetMemberAccessor(stringLiteral, [prefixLiteral]);
+        var methodAccessor = startsWithMethod!.GetMemberAccessor(stringLiteral, [prefixLiteral]);
         var expression = methodAccessor.BuildExpression(context);
         var lambda = Expression.Lambda<Func<bool>>(expression).Compile();
         var result = lambda();
@@ -87,9 +92,10 @@ public class ClrTypeComplexScenariosTests {
         var charType = registry.GetTypeDefinition<char>();
 
         var members = stringType.Methods.WithName("Contains");
-        var containsMethod = members.WithParameters(charType);
+        var containsMethods = members.WithParameterTypes(charType);
 
-        await Assert.That(containsMethod).IsNotNull();
+        await Assert.That(containsMethods).HasSingleItem();
+        var containsMethod = containsMethods.First();
 
         var testString = "hello";
         var stringLiteral = Value.Wrap(testString);
@@ -110,7 +116,9 @@ public class ClrTypeComplexScenariosTests {
         var intType = registry.GetTypeDefinition<int>();
 
         var members = stringType.Methods.WithName("Substring");
-        var substringMethod = members.WithParameters(intType, intType);
+        var substringMethods = members.WithParameterTypes(intType, intType);
+        await Assert.That(substringMethods).HasSingleItem();
+        var substringMethod = substringMethods.First();
 
         await Assert.That(substringMethod).IsNotNull();
 
@@ -136,9 +144,13 @@ public class ClrTypeComplexScenariosTests {
         var members = stringType.Methods.WithName("Substring");
 
         // Substring(int) 
-        var oneParamVersion = members.WithParameters(intType);
+        var oneParamMethods = members.WithParameterTypes(intType);
+        await Assert.That(oneParamMethods).HasSingleItem();
+        var oneParamVersion = oneParamMethods.First();
         // Substring(int, int)
-        var twoParamVersion = members.WithParameters(intType, intType);
+        var twoParamMethods = members.WithParameterTypes(intType, intType);
+        await Assert.That(twoParamMethods).HasSingleItem();
+        var twoParamVersion = twoParamMethods.First();
 
         await Assert.That(oneParamVersion).IsNotNull();
         await Assert.That(twoParamVersion).IsNotNull();
@@ -168,7 +180,9 @@ public class ClrTypeComplexScenariosTests {
         var intType = registry.GetTypeDefinition<int>();
 
         var members = listType.Methods.WithName("Add");
-        var addMethod = members.WithParameters(intType);
+        var addMethods = members.WithParameterTypes(intType);
+        await Assert.That(addMethods).HasSingleItem();
+        var addMethod = addMethods.First();
 
         await Assert.That(addMethod).IsNotNull();
 
@@ -193,7 +207,9 @@ public class ClrTypeComplexScenariosTests {
         var intType = registry.GetTypeDefinition<int>();
 
         var members = dictType.Methods.WithName("Add");
-        var addMethod = members.WithParameters(stringType, intType);
+        var addMethods = members.WithParameterTypes(stringType, intType);
+        await Assert.That(addMethods).HasSingleItem();
+        var addMethod = addMethods.First();
 
         await Assert.That(addMethod).IsNotNull();
 
@@ -216,6 +232,8 @@ public class ClrTypeComplexScenariosTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var personType = registry.GetTypeDefinition<Person>();
         var addressMembers = personType.Properties.WithName("Address");
+        await Assert.That(addressMembers).IsNotNull();
+        await Assert.That(addressMembers).HasSingleItem();
         var addressProperty = addressMembers.First();
 
         var person = new Person { Address = null };
@@ -236,20 +254,23 @@ public class ClrTypeComplexScenariosTests {
         var personType = registry.GetTypeDefinition<PersonWithFields>();
 
         var firstNameMembers = personType.Fields.WithName("FirstName");
+        await Assert.That(firstNameMembers).IsNotNull();
+        await Assert.That(firstNameMembers).HasSingleItem();
         var lastNameMembers = personType.Fields.WithName("LastName");
-
-        await Assert.That(firstNameMembers.Count()).IsGreaterThan(0);
-        await Assert.That(lastNameMembers.Count()).IsGreaterThan(0);
+        await Assert.That(lastNameMembers).IsNotNull();
+        await Assert.That(lastNameMembers).HasSingleItem();
 
         var person = new PersonWithFields { FirstName = "John", LastName = "Doe" };
         var personLiteral = Value.Wrap(person);
         var context = new InterpretationContext();
 
-        var firstAccessor = firstNameMembers.First().GetMemberAccessor(personLiteral);
+        var firstNameMember = firstNameMembers.First();
+        var firstAccessor = firstNameMember.GetMemberAccessor(personLiteral);
         var firstExpr = firstAccessor.BuildExpression(context);
         var firstName = Expression.Lambda<Func<string>>(firstExpr).Compile()();
 
-        var lastAccessor = lastNameMembers.First().GetMemberAccessor(personLiteral);
+        var lastNameMember = lastNameMembers.First();
+        var lastAccessor = lastNameMember.GetMemberAccessor(personLiteral);
         var lastExpr = lastAccessor.BuildExpression(context);
         var lastName = Expression.Lambda<Func<string>>(lastExpr).Compile()();
 
@@ -264,6 +285,8 @@ public class ClrTypeComplexScenariosTests {
 
         // Get length property and use it
         var lengthMembers = stringType.Properties.WithName("Length");
+        await Assert.That(lengthMembers).IsNotNull();
+        await Assert.That(lengthMembers).HasSingleItem();
         var lengthProperty = lengthMembers.First();
 
         var testString = "hello";
@@ -284,7 +307,9 @@ public class ClrTypeComplexScenariosTests {
         var charType = registry.GetTypeDefinition<char>();
 
         var members = stringType.Methods.WithName("IndexOf");
-        var indexOfMethod = members.WithParameters(charType);
+        var indexOfMethods = members.WithParameterTypes(charType);
+        await Assert.That(indexOfMethods).HasSingleItem();
+        var indexOfMethod = indexOfMethods.First();
 
         await Assert.That(indexOfMethod).IsNotNull();
 
@@ -310,7 +335,9 @@ public class ClrTypeComplexScenariosTests {
         var intType = registry.GetTypeDefinition<int>();
 
         var addMembers = listType.Methods.WithName("Add");
-        var addMethod = addMembers.WithParameters(intType);
+        var addMethods = addMembers.WithParameterTypes(intType);
+        await Assert.That(addMethods).HasSingleItem();
+        var addMethod = addMethods.First();
 
         var list = new List<int>();
         var listLiteral = Value.Wrap(list);

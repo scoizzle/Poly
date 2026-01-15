@@ -1,4 +1,4 @@
-# Poly Introspection System - Code Review & Usability Analysis (Updated January 2026)
+# Poly Introspection System - Code Review & Usability Analysis (Updated January 15, 2026)
 
 ## Executive Summary
 
@@ -18,6 +18,7 @@ The system now provides a cleaner, more focused API while maintaining type safet
 - 🚧 No static/instance member variants (similarly removed)
 - 🚧 Basic error messages in some areas
 - 🚧 No fluent querying or well-known helpers
+- 🚧 Nullability warnings in test code (CS8620: nullability mismatches in extension method calls)
 
 ---
 
@@ -171,7 +172,28 @@ public static List<ITypeMethod> FindMatchingMethodOverloads(
   }
   ```
 
-### Antipattern 7: Parameter Validation Gaps
+### Antipattern 7: Nullability Mismatches in Extension Methods
+**Symptom:** Compiler warnings (CS8620) when passing concrete type definitions to extension methods expecting `IEnumerable<ITypeDefinition>`.
+
+**Pain:**
+- Code compiles and runs but generates warnings, indicating incomplete null-safety implementation.
+- Reduces confidence in the null-safety claims of the API.
+
+**Recommendations:**
+- Review extension method signatures for proper nullability annotations.
+- Ensure concrete implementations (e.g., `ClrTypeDefinition`) align with interface nullability.
+- Consider using `params ITypeDefinition[]` instead of `params IEnumerable<ITypeDefinition>` for better usability.
+
+**Evidence:**
+```csharp
+// Current: Generates CS8620 warning
+var methods = type.Methods.WithParameterTypes(stringType);
+
+// Suggested fix: Adjust method signature
+public IEnumerable<T> WithParameterTypes(params ITypeDefinition[] parameterTypes)
+```
+
+### Antipattern 8: Parameter Validation Gaps
 **Symptom:** `GetMemberAccessor` may fail silently or late if parameters don't match; no upfront validation.
 
 **Pain:**
@@ -193,7 +215,8 @@ public static List<ITypeMethod> FindMatchingMethodOverloads(
 4. **Enhance Error Messages** (Medium): Add context in extension methods and operators
 5. **Implement Fluent Querying** (Low): For advanced use cases
 6. **Add Well-Known Helpers** (Low): For common members
-7. **Improve Parameter Validation** (Medium): Upfront checks in accessors
+7. **Fix Nullability Warnings** (Medium): Resolve CS8620 warnings in extension methods
+8. **Improve Parameter Validation** (Medium): Upfront checks in accessors
 
 ---
 
@@ -215,5 +238,5 @@ public static List<ITypeMethod> FindMatchingMethodOverloads(
 
 The recent refactoring has significantly matured the introspection system, achieving a balance between clean, focused interfaces and powerful functionality via extensions. The implementation of robust overload resolution eliminates a critical usability blocker for dynamic code generation. By intentionally removing some convenience methods from core interfaces, the system maintains extensibility while encouraging best practices (e.g., LINQ for filtering).
 
-The introspection system now provides a solid, production-ready foundation for runtime type manipulation across diverse backends. Remaining enhancements are primarily quality-of-life improvements rather than core functionality gaps. The architecture successfully supports the goal of dynamic code generation and execution in complex type systems.</content>
+However, recent testing revealed nullability warnings that undermine the null-safety enhancements claimed. Addressing these warnings should be prioritized to fully realize the null-safety goals. The introspection system provides a solid foundation for runtime type manipulation, but attention to detail in nullability annotations will enhance its reliability and user confidence. The architecture successfully supports the goal of dynamic code generation and execution in complex type systems.</content>
 <parameter name="filePath">/Users/scoizzle/Projects/Poly/Poly/INTROSPECTION_CODE_REVIEW.md

@@ -33,7 +33,8 @@ internal partial class SourceGenerationContext : JsonSerializerContext;
 
 
 public sealed class DataModelPropertyPolymorphicJsonTypeResolver : DefaultJsonTypeInfoResolver {
-    public override JsonTypeInfo GetTypeInfo(Type type, JsonSerializerOptions options) {
+    public override JsonTypeInfo GetTypeInfo(Type type, JsonSerializerOptions options)
+    {
         JsonTypeInfo jsonTypeInfo = base.GetTypeInfo(type, options);
 
         Type basePointType = typeof(DataProperty);

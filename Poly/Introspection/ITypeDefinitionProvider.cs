@@ -22,7 +22,8 @@ public interface ITypeDefinitionProvider {
     /// </summary>
     /// <param name="name">Fully-qualified type name to resolve.</param>
     /// <exception cref="ArgumentException">Thrown when the name is null/whitespace or the type cannot be resolved.</exception>
-    Lazy<ITypeDefinition> GetDeferredTypeDefinitionResolver(string name) {
+    Lazy<ITypeDefinition> GetDeferredTypeDefinitionResolver(string name)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return new Lazy<ITypeDefinition>(
             () => GetTypeDefinition(name)

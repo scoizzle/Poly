@@ -77,7 +77,8 @@ public interface ITypeDefinition {
     /// Default implementation walks the base type chain and interface list. Implementations
     /// can override with more precise or faster logic.
     /// </remarks>
-    bool IsAssignableFrom(ITypeDefinition other) {
+    bool IsAssignableFrom(ITypeDefinition other)
+    {
         ArgumentNullException.ThrowIfNull(other);
         if (this == other) return true;
 
@@ -95,7 +96,8 @@ public interface ITypeDefinition {
     /// <summary>
     /// Determines if this type can be assigned to <paramref name="other"/>.
     /// </summary>
-    bool IsAssignableTo(ITypeDefinition other) {
+    bool IsAssignableTo(ITypeDefinition other)
+    {
         ArgumentNullException.ThrowIfNull(other);
         return other.IsAssignableFrom(this);
     }

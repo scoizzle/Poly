@@ -16,7 +16,8 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     private readonly ClrTypeDefinition _declaringType;
     private readonly FieldInfo _fieldInfo;
 
-    public ClrTypeField(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, FieldInfo fieldInfo) {
+    public ClrTypeField(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, FieldInfo fieldInfo)
+    {
         ArgumentNullException.ThrowIfNull(memberType);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(fieldInfo);

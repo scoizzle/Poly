@@ -18,7 +18,8 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
     private readonly string _name;
     private readonly bool _isStatic;
 
-    public ClrTypeProperty(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter>? parameters, PropertyInfo propertyInfo) {
+    public ClrTypeProperty(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter>? parameters, PropertyInfo propertyInfo)
+    {
         ArgumentNullException.ThrowIfNull(memberType);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(propertyInfo);
@@ -66,7 +67,8 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
     /// Creates an accessor that reads this property (or indexer) from <paramref name="instance"/>.
     /// Validates parameter counts for indexers.
     /// </summary>
-    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters) {
+    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters)
+    {
         if (_parameters is not null) {
             if (parameters is null || parameters.Count() != _parameters.Count()) {
                 throw new ArgumentException($"Indexer property '{Name}' requires {_parameters.Count()} parameters, but {parameters?.Count() ?? 0} were provided.");

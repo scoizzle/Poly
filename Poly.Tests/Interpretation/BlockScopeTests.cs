@@ -7,7 +7,8 @@ namespace Poly.Tests.Interpretation;
 
 public class BlockScopeTests {
     [Test]
-    public async Task Block_CreatesNewScope_VariablesNotVisibleOutside() {
+    public async Task Block_CreatesNewScope_VariablesNotVisibleOutside()
+    {
         var context = new InterpretationContext();
 
         // Verify 'y' doesn't exist initially
@@ -26,7 +27,8 @@ public class BlockScopeTests {
     }
 
     [Test]
-    public async Task Block_NestedScopes_InnerShadowsOuter() {
+    public async Task Block_NestedScopes_InnerShadowsOuter()
+    {
         var context = new InterpretationContext();
 
         // Declare 'x' in outer scope
@@ -51,7 +53,8 @@ public class BlockScopeTests {
     }
 
     [Test]
-    public async Task Block_ExecutesExpressionsInSequence() {
+    public async Task Block_ExecutesExpressionsInSequence()
+    {
         var context = new InterpretationContext();
         var x = context.AddParameter<int>("x");
         var y = context.AddParameter<int>("y");
@@ -77,7 +80,8 @@ public class BlockScopeTests {
     }
 
     [Test]
-    public async Task Block_CanAccessOuterScopeVariables() {
+    public async Task Block_CanAccessOuterScopeVariables()
+    {
         var context = new InterpretationContext();
 
         // Declare variable in outer scope
@@ -91,7 +95,8 @@ public class BlockScopeTests {
     }
 
     [Test]
-    public async Task Block_MultipleBlocks_IndependentScopes() {
+    public async Task Block_MultipleBlocks_IndependentScopes()
+    {
         var context = new InterpretationContext();
 
         // First block declares 'a'

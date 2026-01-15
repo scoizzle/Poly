@@ -9,7 +9,8 @@ namespace Poly.Tests.Interpretation;
 
 public class BlockTests {
     [Test]
-    public async Task Block_WithSingleExpression_ReturnsValue() {
+    public async Task Block_WithSingleExpression_ReturnsValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var expression = Value.Wrap(42);
@@ -26,7 +27,8 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithMultipleExpressions_ReturnsLastValue() {
+    public async Task Block_WithMultipleExpressions_ReturnsLastValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var expr1 = Value.Wrap(10);
@@ -45,7 +47,8 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithVariableDeclaration_WorksCorrectly() {
+    public async Task Block_WithVariableDeclaration_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
 
@@ -75,7 +78,8 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithArithmeticSequence_EvaluatesCorrectly() {
+    public async Task Block_WithArithmeticSequence_EvaluatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -97,7 +101,8 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithConditionalInside_WorksCorrectly() {
+    public async Task Block_WithConditionalInside_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -118,7 +123,8 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithDifferentTypes_ReturnsLastExpressionType() {
+    public async Task Block_WithDifferentTypes_ReturnsLastExpressionType()
+    {
         // Arrange
         var context = new InterpretationContext();
 
@@ -138,7 +144,8 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_GetTypeDefinition_ReturnsLastExpressionType() {
+    public async Task Block_GetTypeDefinition_ReturnsLastExpressionType()
+    {
         // Arrange
         var context = new InterpretationContext();
         var intExpr = Value.Wrap(42);
@@ -154,7 +161,8 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_ToString_ReturnsExpectedFormat() {
+    public async Task Block_ToString_ReturnsExpectedFormat()
+    {
         // Arrange
         var expr1 = Value.Wrap(10);
         var expr2 = Value.Wrap(20);
@@ -173,21 +181,24 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithEmptyExpressions_ThrowsArgumentException() {
+    public async Task Block_WithEmptyExpressions_ThrowsArgumentException()
+    {
         // Assert
         await Assert.That(() => new Block(Array.Empty<Interpretable>()))
             .Throws<ArgumentException>();
     }
 
     [Test]
-    public async Task Block_WithNullExpressions_ThrowsArgumentNullException() {
+    public async Task Block_WithNullExpressions_ThrowsArgumentNullException()
+    {
         // Assert
         await Assert.That(() => new Block((Interpretable[])null!))
             .Throws<ArgumentNullException>();
     }
 
     [Test]
-    public async Task Block_WithNullVariables_ThrowsArgumentNullException() {
+    public async Task Block_WithNullVariables_ThrowsArgumentNullException()
+    {
         // Assert
         await Assert.That(() => new Block(new[] { Value.Wrap(42) }, null!))
             .Throws<ArgumentNullException>();

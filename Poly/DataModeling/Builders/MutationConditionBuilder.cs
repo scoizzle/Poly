@@ -13,28 +13,32 @@ namespace Poly.DataModeling.Builders;
 public sealed class MutationConditionBuilder {
     private readonly ValueSource _valueSource;
 
-    internal MutationConditionBuilder(ValueSource valueSource) {
+    internal MutationConditionBuilder(ValueSource valueSource)
+    {
         _valueSource = valueSource;
     }
 
     /// <summary>
     /// Creates a precondition that checks if the value is null.
     /// </summary>
-    public MutationCondition Null() {
+    public MutationCondition Null()
+    {
         return new MutationCondition(_valueSource, new EqualityConstraint(null!));
     }
 
     /// <summary>
     /// Creates a precondition that checks if the value is not null.
     /// </summary>
-    public MutationCondition NotNull() {
+    public MutationCondition NotNull()
+    {
         return new MutationCondition(_valueSource, new NotNullConstraint());
     }
 
     /// <summary>
     /// Creates a precondition that checks if the value equals a constant.
     /// </summary>
-    public MutationCondition EqualTo(object value) {
+    public MutationCondition EqualTo(object value)
+    {
         ArgumentNullException.ThrowIfNull(value);
         return new MutationCondition(_valueSource, new EqualityConstraint(value));
     }
@@ -42,7 +46,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value equals another value source.
     /// </summary>
-    public MutationCondition EqualTo(ValueSource valueSource) {
+    public MutationCondition EqualTo(ValueSource valueSource)
+    {
         ArgumentNullException.ThrowIfNull(valueSource);
         return new MutationCondition(_valueSource, new ValueSourceComparisonConstraint(ComparisonType.Equal, valueSource));
     }
@@ -50,7 +55,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is greater than a constant.
     /// </summary>
-    public MutationCondition GreaterThan(object value) {
+    public MutationCondition GreaterThan(object value)
+    {
         ArgumentNullException.ThrowIfNull(value);
         return new MutationCondition(_valueSource, new RangeConstraint(minValue: value, maxValue: null) {
             MinValue = CreateExclusiveMin(value)
@@ -60,7 +66,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is greater than another value source.
     /// </summary>
-    public MutationCondition GreaterThan(ValueSource valueSource) {
+    public MutationCondition GreaterThan(ValueSource valueSource)
+    {
         ArgumentNullException.ThrowIfNull(valueSource);
         return new MutationCondition(_valueSource, new ValueSourceComparisonConstraint(ComparisonType.GreaterThan, valueSource));
     }
@@ -68,7 +75,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is greater than or equal to a constant.
     /// </summary>
-    public MutationCondition GreaterThanOrEqualTo(object value) {
+    public MutationCondition GreaterThanOrEqualTo(object value)
+    {
         ArgumentNullException.ThrowIfNull(value);
         return new MutationCondition(_valueSource, new RangeConstraint(minValue: value, maxValue: null));
     }
@@ -76,7 +84,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is greater than or equal to another value source.
     /// </summary>
-    public MutationCondition GreaterThanOrEqualTo(ValueSource valueSource) {
+    public MutationCondition GreaterThanOrEqualTo(ValueSource valueSource)
+    {
         ArgumentNullException.ThrowIfNull(valueSource);
         return new MutationCondition(_valueSource, new ValueSourceComparisonConstraint(ComparisonType.GreaterThanOrEqual, valueSource));
     }
@@ -84,7 +93,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is less than a constant.
     /// </summary>
-    public MutationCondition LessThan(object value) {
+    public MutationCondition LessThan(object value)
+    {
         ArgumentNullException.ThrowIfNull(value);
         return new MutationCondition(_valueSource, new RangeConstraint(minValue: null, maxValue: value) {
             MaxValue = CreateExclusiveMax(value)
@@ -94,7 +104,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is less than another value source.
     /// </summary>
-    public MutationCondition LessThan(ValueSource valueSource) {
+    public MutationCondition LessThan(ValueSource valueSource)
+    {
         ArgumentNullException.ThrowIfNull(valueSource);
         return new MutationCondition(_valueSource, new ValueSourceComparisonConstraint(ComparisonType.LessThan, valueSource));
     }
@@ -102,7 +113,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is less than or equal to a constant.
     /// </summary>
-    public MutationCondition LessThanOrEqualTo(object value) {
+    public MutationCondition LessThanOrEqualTo(object value)
+    {
         ArgumentNullException.ThrowIfNull(value);
         return new MutationCondition(_valueSource, new RangeConstraint(minValue: null, maxValue: value));
     }
@@ -110,7 +122,8 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is less than or equal to another value source.
     /// </summary>
-    public MutationCondition LessThanOrEqualTo(ValueSource valueSource) {
+    public MutationCondition LessThanOrEqualTo(ValueSource valueSource)
+    {
         ArgumentNullException.ThrowIfNull(valueSource);
         return new MutationCondition(_valueSource, new ValueSourceComparisonConstraint(ComparisonType.LessThanOrEqual, valueSource));
     }
@@ -118,32 +131,37 @@ public sealed class MutationConditionBuilder {
     /// <summary>
     /// Creates a precondition that checks if the value is within a range.
     /// </summary>
-    public MutationCondition InRange(object minValue, object maxValue) {
+    public MutationCondition InRange(object minValue, object maxValue)
+    {
         return new MutationCondition(_valueSource, new RangeConstraint(minValue, maxValue));
     }
 
     /// <summary>
     /// Creates a precondition that checks if the string length is within a range.
     /// </summary>
-    public MutationCondition WithLength(int? minLength = null, int? maxLength = null) {
+    public MutationCondition WithLength(int? minLength = null, int? maxLength = null)
+    {
         return new MutationCondition(_valueSource, new LengthConstraint(minLength, maxLength));
     }
 
     /// <summary>
     /// Creates a precondition that checks if the string length is at least the specified minimum.
     /// </summary>
-    public MutationCondition WithMinLength(int minLength) {
+    public MutationCondition WithMinLength(int minLength)
+    {
         return new MutationCondition(_valueSource, new LengthConstraint(minLength, null));
     }
 
     /// <summary>
     /// Creates a precondition that checks if the string length is at most the specified maximum.
     /// </summary>
-    public MutationCondition WithMaxLength(int maxLength) {
+    public MutationCondition WithMaxLength(int maxLength)
+    {
         return new MutationCondition(_valueSource, new LengthConstraint(null, maxLength));
     }
 
-    private static object CreateExclusiveMin(object value) {
+    private static object CreateExclusiveMin(object value)
+    {
         // For numeric types, we need to add a small epsilon for exclusive comparison
         // For now, we'll use a simple approach - in practice, you might want to handle different numeric types
         return value switch {
@@ -154,7 +172,8 @@ public sealed class MutationConditionBuilder {
         };
     }
 
-    private static object CreateExclusiveMax(object value) {
+    private static object CreateExclusiveMax(object value)
+    {
         return value switch {
             int i => i - 1,
             long l => l - 1,
@@ -182,12 +201,14 @@ internal sealed class ValueSourceComparisonConstraint : Constraint {
     private readonly ComparisonType _comparisonType;
     private readonly ValueSource _rightValueSource;
 
-    public ValueSourceComparisonConstraint(ComparisonType comparisonType, ValueSource rightValueSource) {
+    public ValueSourceComparisonConstraint(ComparisonType comparisonType, ValueSource rightValueSource)
+    {
         _comparisonType = comparisonType;
         _rightValueSource = rightValueSource ?? throw new ArgumentNullException(nameof(rightValueSource));
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    {
         var left = context.Value;
         var right = BuildValueFromSource(_rightValueSource, context);
 
@@ -201,7 +222,8 @@ internal sealed class ValueSourceComparisonConstraint : Constraint {
         };
     }
 
-    private static Value BuildValueFromSource(ValueSource source, RuleBuildingContext context) {
+    private static Value BuildValueFromSource(ValueSource source, RuleBuildingContext context)
+    {
         return source switch {
             ConstantValue cv => Value.Wrap(cv.Value),
             // ParameterValue pv => new Variable(pv.p),
@@ -211,7 +233,8 @@ internal sealed class ValueSourceComparisonConstraint : Constraint {
         };
     }
 
-    public override string ToString() {
+    public override string ToString()
+    {
         var op = _comparisonType switch {
             ComparisonType.Equal => "==",
             ComparisonType.GreaterThan => ">",

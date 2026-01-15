@@ -8,7 +8,8 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeComplexScenariosTests {
     [Test]
-    public async Task ChainedPropertyAccess_SimpleChain() {
+    public async Task ChainedPropertyAccess_SimpleChain()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var personType = registry.GetTypeDefinition<Person>();
 
@@ -30,7 +31,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task ChainedPropertyAccess_TwoLevels() {
+    public async Task ChainedPropertyAccess_TwoLevels()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var personType = registry.GetTypeDefinition<Person>();
         var addressType = registry.GetTypeDefinition<Address>();
@@ -62,7 +64,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task MethodCall_WithSingleStringArgument() {
+    public async Task MethodCall_WithSingleStringArgument()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -86,7 +89,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task MethodCall_WithSingleArgument() {
+    public async Task MethodCall_WithSingleArgument()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
@@ -110,7 +114,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task MethodCall_WithMultipleArguments() {
+    public async Task MethodCall_WithMultipleArguments()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
@@ -136,7 +141,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task MethodOverload_DifferentParameterCounts() {
+    public async Task MethodOverload_DifferentParameterCounts()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
@@ -174,7 +180,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task ListGenericMethod_WithGenericTypeParameter() {
+    public async Task ListGenericMethod_WithGenericTypeParameter()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var intType = registry.GetTypeDefinition<int>();
@@ -200,7 +207,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task DictionaryMethod_WithGenericTypeParameters() {
+    public async Task DictionaryMethod_WithGenericTypeParameters()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var dictType = registry.GetTypeDefinition<Dictionary<string, int>>();
         var stringType = registry.GetTypeDefinition<string>();
@@ -228,7 +236,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task ConditionalPropertyAccess_WithNullCheck() {
+    public async Task ConditionalPropertyAccess_WithNullCheck()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var personType = registry.GetTypeDefinition<Person>();
         var addressMembers = personType.Properties.WithName("Address");
@@ -249,7 +258,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task MultipleFieldAccess() {
+    public async Task MultipleFieldAccess()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var personType = registry.GetTypeDefinition<PersonWithFields>();
 
@@ -279,7 +289,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task PropertyAndMethodCombination() {
+    public async Task PropertyAndMethodCombination()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -301,7 +312,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task DifferentInstanceTypes_SameMethod() {
+    public async Task DifferentInstanceTypes_SameMethod()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
@@ -329,7 +341,8 @@ public class ClrTypeComplexScenariosTests {
     }
 
     [Test]
-    public async Task NestedListOperations() {
+    public async Task NestedListOperations()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var intType = registry.GetTypeDefinition<int>();

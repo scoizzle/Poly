@@ -176,7 +176,8 @@ public class BenchmarkPersonPredicate {
     private Person? _person;
 
     [BenchmarkDotNet.Attributes.GlobalSetup]
-    public void Setup() {
+    public void Setup()
+    {
         _person = new Person("Alice", 30);
 
         RuleSet<Person?> ruleSet = new RuleSetBuilder<Person?>()
@@ -188,7 +189,8 @@ public class BenchmarkPersonPredicate {
     }
 
     [BenchmarkDotNet.Attributes.Benchmark]
-    public bool Handrolled() {
+    public bool Handrolled()
+    {
         if (_person == null) return false;
         if (_person.Name == null) return false;
         if (_person.Name.Length < 1) return false;
@@ -199,7 +201,8 @@ public class BenchmarkPersonPredicate {
     }
 
     [BenchmarkDotNet.Attributes.Benchmark(Baseline = true)]
-    public bool RuleBased() {
+    public bool RuleBased()
+    {
         ArgumentNullException.ThrowIfNull(_rulePredicate);
         return _rulePredicate(_person);
     }

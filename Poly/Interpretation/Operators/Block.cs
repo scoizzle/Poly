@@ -27,7 +27,8 @@ public sealed class Block : Operator {
     /// <param name="expressions">The expressions to execute in sequence.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="expressions"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="expressions"/> is empty.</exception>
-    public Block(params Interpretable[] expressions) : this(expressions, Array.Empty<ParameterExpression>()) {
+    public Block(params Interpretable[] expressions) : this(expressions, Array.Empty<ParameterExpression>())
+    {
     }
 
     /// <summary>
@@ -37,7 +38,8 @@ public sealed class Block : Operator {
     /// <param name="variables">The variables declared within this block's scope.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="expressions"/> or <paramref name="variables"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="expressions"/> is empty.</exception>
-    public Block(IEnumerable<Interpretable> expressions, IEnumerable<ParameterExpression> variables) {
+    public Block(IEnumerable<Interpretable> expressions, IEnumerable<ParameterExpression> variables)
+    {
         ArgumentNullException.ThrowIfNull(expressions);
         ArgumentNullException.ThrowIfNull(variables);
 
@@ -50,7 +52,8 @@ public sealed class Block : Operator {
     }
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         // The block's type is the type of the last expression
         var lastExpression = Expressions[^1];
 
@@ -65,7 +68,8 @@ public sealed class Block : Operator {
     }
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         context.PushScope();
         try {
             var builtExpressions = Expressions
@@ -82,7 +86,8 @@ public sealed class Block : Operator {
     }
 
     /// <inheritdoc />
-    public override string ToString() {
+    public override string ToString()
+    {
         return $"{{ {string.Join("; ", Expressions)} }}";
     }
 }

@@ -4,14 +4,16 @@ namespace Poly.Tests.Validation;
 
 public class RuleEvaluationContextTests {
     [Test]
-    public async Task Constructor_InitializesEmptyErrors() {
+    public async Task Constructor_InitializesEmptyErrors()
+    {
         var context = new RuleEvaluationContext();
 
         await Assert.That(context.Errors.Count()).IsEqualTo(0);
     }
 
     [Test]
-    public async Task AddError_AddsErrorToCollection() {
+    public async Task AddError_AddsErrorToCollection()
+    {
         var context = new RuleEvaluationContext();
         var error = new ValidationError("Name", "required", "Name is required");
 
@@ -22,7 +24,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task AddError_WithNullError_Throws() {
+    public async Task AddError_WithNullError_Throws()
+    {
         var context = new RuleEvaluationContext();
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () => {
@@ -31,7 +34,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task AddError_MultipleErrors_AllStored() {
+    public async Task AddError_MultipleErrors_AllStored()
+    {
         var context = new RuleEvaluationContext();
         var error1 = new ValidationError("Name", "required", "Name is required");
         var error2 = new ValidationError("Email", "invalid", "Email is invalid");
@@ -45,7 +49,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task Evaluate_WithFalseConditionAndFactory_AddsCustomError() {
+    public async Task Evaluate_WithFalseConditionAndFactory_AddsCustomError()
+    {
         var context = new RuleEvaluationContext();
         var customError = new ValidationError("Field", "code", "Custom message");
 
@@ -57,7 +62,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task Evaluate_WithTrueConditionAndFactory_DoesNotAddError() {
+    public async Task Evaluate_WithTrueConditionAndFactory_DoesNotAddError()
+    {
         var context = new RuleEvaluationContext();
         var customError = new ValidationError("Field", "code", "Custom message");
 
@@ -68,7 +74,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task Evaluate_WithNullFactory_Throws() {
+    public async Task Evaluate_WithNullFactory_Throws()
+    {
         var context = new RuleEvaluationContext();
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () => {
@@ -77,7 +84,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task Evaluate_WithFactory_ReturnsContextForChaining() {
+    public async Task Evaluate_WithFactory_ReturnsContextForChaining()
+    {
         var context = new RuleEvaluationContext();
 
         var result = context.Evaluate(true, () => new ValidationError("", "", ""));
@@ -86,7 +94,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task GetResult_WithNoErrors_IsValid() {
+    public async Task GetResult_WithNoErrors_IsValid()
+    {
         var context = new RuleEvaluationContext();
 
         var result = context.GetResult();
@@ -96,7 +105,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task GetResult_WithErrors_IsInvalid() {
+    public async Task GetResult_WithErrors_IsInvalid()
+    {
         var context = new RuleEvaluationContext();
         context.AddError(new ValidationError("Name", "required", "Name is required"));
 
@@ -107,7 +117,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task GetResult_ReturnsCorrectErrors() {
+    public async Task GetResult_ReturnsCorrectErrors()
+    {
         var context = new RuleEvaluationContext();
         var error1 = new ValidationError("Name", "required", "Name is required");
         var error2 = new ValidationError("Email", "invalid", "Email is invalid");
@@ -122,7 +133,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task Evaluate_MultipleConditions_ChainedResults() {
+    public async Task Evaluate_MultipleConditions_ChainedResults()
+    {
         var context = new RuleEvaluationContext();
 
         context.Evaluate(true, () => new ValidationError("", "", ""));
@@ -137,7 +149,8 @@ public class RuleEvaluationContextTests {
     }
 
     [Test]
-    public async Task ValidationError_ToString_FormatsCorrectly() {
+    public async Task ValidationError_ToString_FormatsCorrectly()
+    {
         var error = new ValidationError("Email", "invalid", "Invalid email format");
 
         var stringRep = error.ToString();

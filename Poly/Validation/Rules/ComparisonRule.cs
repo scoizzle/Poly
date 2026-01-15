@@ -19,13 +19,15 @@ public sealed class ComparisonRule : Rule {
     public string RightPropertyName { get; set; }
     public ComparisonOperator Operator { get; set; }
 
-    public ComparisonRule(string leftPropertyName, ComparisonOperator op, string rightPropertyName) {
+    public ComparisonRule(string leftPropertyName, ComparisonOperator op, string rightPropertyName)
+    {
         LeftPropertyName = leftPropertyName;
         RightPropertyName = rightPropertyName;
         Operator = op;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    {
         var leftMember = new MemberAccess(context.Value, LeftPropertyName);
         var rightMember = new MemberAccess(context.Value, RightPropertyName);
 
@@ -42,7 +44,8 @@ public sealed class ComparisonRule : Rule {
         return comparisonResult;
     }
 
-    public override string ToString() {
+    public override string ToString()
+    {
         var opSymbol = Operator switch {
             ComparisonOperator.Equal => "==",
             ComparisonOperator.NotEqual => "!=",

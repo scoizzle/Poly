@@ -32,7 +32,8 @@ public static partial class SpanBoundsUtilities {
             int min,
             int max,
             int index,
-            int length) {
+            int length)
+    {
         return min >= 0
             && max <= array.Length
             && index >= min
@@ -44,7 +45,8 @@ public static partial class SpanBoundsUtilities {
     public static bool TryGet<T>(
         this ReadOnlySpan<T> array,
             int index,
-            out T? value) {
+            out T? value)
+    {
         if (array.BoundsCheck(index)) {
             value = array[index];
             return true;
@@ -60,7 +62,8 @@ public static partial class SpanBoundsUtilities {
             int min,
             int max,
             int index,
-            out T? value) {
+            out T? value)
+    {
         if (array.BoundsCheck(min, max, index)) {
             value = array[index];
             return true;
@@ -74,7 +77,8 @@ public static partial class SpanBoundsUtilities {
     public static bool TrySet<T>(
         this Span<T> array,
             int index,
-            T value) {
+            T value)
+    {
         if (BoundsCheck<T>(array, index)) {
             array[index] = value;
             return true;
@@ -89,7 +93,8 @@ public static partial class SpanBoundsUtilities {
             int min,
             int max,
             int index,
-            T value) {
+            T value)
+    {
         if (BoundsCheck<T>(array, min, max, index)) {
             array[index] = value;
             return true;

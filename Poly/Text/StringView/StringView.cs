@@ -4,12 +4,14 @@ namespace Poly;
 public partial struct StringView {
     public static readonly StringView Empty = new(string.Empty);
 
-    public StringView(string str) {
+    public StringView(string str)
+    {
         ArgumentNullException.ThrowIfNull(str);
         (String, Index, LastIndex) = (str, 0, str.Length);
     }
 
-    public StringView(string str, int begin) {
+    public StringView(string str, int begin)
+    {
         ArgumentNullException.ThrowIfNull(str);
         ArgumentOutOfRangeException.ThrowIfNegative(begin);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(str.Length, begin);
@@ -17,7 +19,8 @@ public partial struct StringView {
         (String, Index, LastIndex) = (str, begin, str.Length);
     }
 
-    public StringView(string str, int begin, int end) {
+    public StringView(string str, int begin, int end)
+    {
         ArgumentNullException.ThrowIfNull(str);
         ArgumentOutOfRangeException.ThrowIfNegative(begin);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(str.Length, end);
@@ -97,7 +100,8 @@ public partial struct StringView {
     public readonly bool BoundsCheck(StringView other) => String.BoundsCheck(Index, LastIndex, other.String, other.Index, other.Length);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool ReferenceEquals(StringView other) {
+    public readonly bool ReferenceEquals(StringView other)
+    {
         if (!BoundsCheck(other))
             return false;
 

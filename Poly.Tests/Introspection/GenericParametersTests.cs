@@ -9,7 +9,8 @@ public class GenericParametersTests {
     private readonly ClrTypeDefinitionRegistry _registry = ClrTypeDefinitionRegistry.Shared;
 
     [Test]
-    public async Task GenericParameters_NonGenericType_ReturnsEmptyCollection() {
+    public async Task GenericParameters_NonGenericType_ReturnsEmptyCollection()
+    {
         var stringType = _registry.GetTypeDefinition<string>();
         var genericParams = stringType.GenericParameters;
 
@@ -17,7 +18,8 @@ public class GenericParametersTests {
     }
 
     [Test]
-    public async Task GenericParameters_ClosedGenericListInt_ReturnsNonNullWithCorrectType() {
+    public async Task GenericParameters_ClosedGenericListInt_ReturnsNonNullWithCorrectType()
+    {
         var listIntType = _registry.GetTypeDefinition(typeof(List<int>));
         var genericParams = listIntType.GenericParameters;
 
@@ -31,7 +33,8 @@ public class GenericParametersTests {
     }
 
     [Test]
-    public async Task GenericParameters_ClosedGenericDictionaryStringInt_ReturnsParametersInOrder() {
+    public async Task GenericParameters_ClosedGenericDictionaryStringInt_ReturnsParametersInOrder()
+    {
         var dictType = _registry.GetTypeDefinition(typeof(Dictionary<string, int>));
         var genericParams = dictType.GenericParameters;
 
@@ -52,7 +55,8 @@ public class GenericParametersTests {
     }
 
     [Test]
-    public async Task GenericParameters_OpenGenericList_ReturnsNonNullWithGenericParameterType() {
+    public async Task GenericParameters_OpenGenericList_ReturnsNonNullWithGenericParameterType()
+    {
         var openListType = _registry.GetTypeDefinition(typeof(List<>));
         var genericParams = openListType.GenericParameters;
 
@@ -67,7 +71,8 @@ public class GenericParametersTests {
     }
 
     [Test]
-    public async Task GenericParameters_OpenGenericDictionary_ReturnsParametersWithGenericPlaceholders() {
+    public async Task GenericParameters_OpenGenericDictionary_ReturnsParametersWithGenericPlaceholders()
+    {
         var openDictType = _registry.GetTypeDefinition(typeof(Dictionary<,>));
         var genericParams = openDictType.GenericParameters;
 
@@ -87,7 +92,8 @@ public class GenericParametersTests {
     }
 
     [Test]
-    public async Task GenericParameters_NestedGenericListOfListInt_ReturnsOuterParameterType() {
+    public async Task GenericParameters_NestedGenericListOfListInt_ReturnsOuterParameterType()
+    {
         var nestedType = _registry.GetTypeDefinition(typeof(List<List<int>>));
         var genericParams = nestedType.GenericParameters;
 
@@ -101,7 +107,8 @@ public class GenericParametersTests {
     }
 
     [Test]
-    public async Task GenericParameters_ClosedGenericTuple_ReturnsAllTypeArguments() {
+    public async Task GenericParameters_ClosedGenericTuple_ReturnsAllTypeArguments()
+    {
         var tupleType = _registry.GetTypeDefinition(typeof((string, int, double)));
         var genericParams = tupleType.GenericParameters;
 
@@ -116,7 +123,8 @@ public class GenericParametersTests {
     }
 
     [Test]
-    public async Task GenericParameters_IsCachedAndStable() {
+    public async Task GenericParameters_IsCachedAndStable()
+    {
         var listIntType = _registry.GetTypeDefinition(typeof(List<int>));
         var params1 = listIntType.GenericParameters;
         var params2 = listIntType.GenericParameters;
@@ -126,7 +134,8 @@ public class GenericParametersTests {
     }
 
     [Test]
-    public async Task GenericParameters_ParametersAreNonOptionalWithNoDefaults() {
+    public async Task GenericParameters_ParametersAreNonOptionalWithNoDefaults()
+    {
         var dictType = _registry.GetTypeDefinition(typeof(Dictionary<string, int>));
         var genericParams = dictType.GenericParameters;
 

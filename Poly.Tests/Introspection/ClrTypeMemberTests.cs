@@ -8,7 +8,8 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeMemberTests {
     [Test]
-    public async Task MaxValueMember_HasCorrectProperties() {
+    public async Task MaxValueMember_HasCorrectProperties()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();
@@ -20,7 +21,8 @@ public class ClrTypeMemberTests {
     }
 
     [Test]
-    public async Task GetMemberAccessor_ReturnsValue() {
+    public async Task GetMemberAccessor_ReturnsValue()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();
@@ -37,7 +39,8 @@ public class ClrTypeMemberTests {
     }
 
     [Test]
-    public async Task StaticMember_IsAccessible() {
+    public async Task StaticMember_IsAccessible()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();
@@ -51,7 +54,8 @@ public class ClrTypeMemberTests {
     }
 
     [Test]
-    public async Task InstanceMember_IsAccessible() {
+    public async Task InstanceMember_IsAccessible()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var lengthMember = stringType.Properties.WithName("Length").SingleOrDefault();

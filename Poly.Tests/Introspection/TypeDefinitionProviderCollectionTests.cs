@@ -4,7 +4,8 @@ namespace Poly.Tests.Introspection;
 
 public class TypeDefinitionProviderCollectionTests {
     [Test]
-    public async Task GetTypeDefinition_ReturnsFromFirstProvider() {
+    public async Task GetTypeDefinition_ReturnsFromFirstProvider()
+    {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
@@ -20,7 +21,8 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ReturnsNullIfNoProviderHasType() {
+    public async Task GetTypeDefinition_ReturnsNullIfNoProviderHasType()
+    {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
@@ -33,7 +35,8 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task AddProvider_AddsProviderToCollection() {
+    public async Task AddProvider_AddsProviderToCollection()
+    {
         var collection = new TypeDefinitionProviderCollection();
         var provider = new MockTypeDefinitionProvider();
 
@@ -45,7 +48,8 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ReturnsFromFirstProviderWhenMultipleHaveSameType() {
+    public async Task GetTypeDefinition_ReturnsFromFirstProviderWhenMultipleHaveSameType()
+    {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
@@ -78,7 +82,8 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public bool IsAssignableTo(ITypeDefinition targetType) => throw new NotImplementedException();
 
-        public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method) {
+        public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method)
+        {
             throw new NotImplementedException();
         }
 
@@ -91,15 +96,18 @@ public class TypeDefinitionProviderCollectionTests {
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {
         private readonly Dictionary<string, ITypeDefinition> _types = [];
 
-        public void AddType(string name, ITypeDefinition type) {
+        public void AddType(string name, ITypeDefinition type)
+        {
             _types[name] = type;
         }
 
-        public ITypeDefinition? GetTypeDefinition(string name) {
+        public ITypeDefinition? GetTypeDefinition(string name)
+        {
             return _types.TryGetValue(name, out var type) ? type : null;
         }
 
-        public ITypeDefinition? GetTypeDefinition(Type type) {
+        public ITypeDefinition? GetTypeDefinition(Type type)
+        {
             throw new NotImplementedException();
         }
     }

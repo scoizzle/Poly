@@ -8,7 +8,8 @@ public static class TypeMemberExtensions {
     /// <param name="members">The members to filter.</param>
     /// <param name="name">The name to filter by.</param>
     /// <returns>The members with the specified name.</returns>
-    public static IEnumerable<T> WithName<T>(this IEnumerable<T> members, string name) where T : ITypeMember {
+    public static IEnumerable<T> WithName<T>(this IEnumerable<T> members, string name) where T : ITypeMember
+    {
         ArgumentNullException.ThrowIfNull(members);
         ArgumentNullException.ThrowIfNull(name);
 
@@ -24,7 +25,8 @@ public static class TypeMemberExtensions {
     /// <returns>The best-matching members, or an empty set if none found.</returns
     public static IEnumerable<T> WithParameterTypes<T>(
         this IEnumerable<T> members,
-        params IEnumerable<ITypeDefinition> parameterTypes) where T : ITypeMember {
+        params IEnumerable<ITypeDefinition> parameterTypes) where T : ITypeMember
+    {
         ArgumentNullException.ThrowIfNull(members);
         ArgumentNullException.ThrowIfNull(parameterTypes);
 
@@ -60,7 +62,8 @@ public static class TypeMemberExtensions {
     /// <param name="arguments">The argument types to match against.</param>
     /// <param name="score">The calculated score if compatible.</param>
     /// <returns>True if the member is compatible; otherwise, false.</returns>
-    private static int? CalculateParameterScore<T>(T member, List<ITypeDefinition> arguments) where T : ITypeMember {
+    private static int? CalculateParameterScore<T>(T member, List<ITypeDefinition> arguments) where T : ITypeMember
+    {
         var score = 0;
         var parameters = member.Parameters ?? [];
 

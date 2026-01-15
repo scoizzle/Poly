@@ -10,13 +10,15 @@ public sealed class PropertyDependencyRule : Rule {
     public string DependentPropertyName { get; set; }
     public bool RequireWhenSourceHasValue { get; set; }
 
-    public PropertyDependencyRule(string sourcePropertyName, string dependentPropertyName, bool requireWhenSourceHasValue = true) {
+    public PropertyDependencyRule(string sourcePropertyName, string dependentPropertyName, bool requireWhenSourceHasValue = true)
+    {
         SourcePropertyName = sourcePropertyName;
         DependentPropertyName = dependentPropertyName;
         RequireWhenSourceHasValue = requireWhenSourceHasValue;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    {
         var sourceMember = new MemberAccess(context.Value, SourcePropertyName);
         var dependentMember = new MemberAccess(context.Value, DependentPropertyName);
 
@@ -38,7 +40,8 @@ public sealed class PropertyDependencyRule : Rule {
         return dependencyResult;
     }
 
-    public override string ToString() {
+    public override string ToString()
+    {
         var action = RequireWhenSourceHasValue ? "requires" : "excludes";
         return $"{SourcePropertyName} {action} {DependentPropertyName}";
     }

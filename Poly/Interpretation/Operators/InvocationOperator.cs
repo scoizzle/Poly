@@ -3,7 +3,8 @@ using Poly.Introspection;
 namespace Poly.Interpretation.Operators;
 
 public sealed class InvocationOperator : Operator {
-    public InvocationOperator(Value target, string methodName, params Value[] arguments) {
+    public InvocationOperator(Value target, string methodName, params Value[] arguments)
+    {
         Target = target;
         MethodName = methodName;
         Arguments = arguments;
@@ -13,7 +14,8 @@ public sealed class InvocationOperator : Operator {
     public string MethodName { get; }
     public Value[] Arguments { get; }
 
-    private ITypeMember GetMethodDefinition(InterpretationContext context) {
+    private ITypeMember GetMethodDefinition(InterpretationContext context)
+    {
         var targetTypeDef = Target.GetTypeDefinition(context);
 
         var argumentTypeDefs = Arguments
@@ -25,7 +27,7 @@ public sealed class InvocationOperator : Operator {
         if (methods.Count == 0) {
             throw new InvalidOperationException($"Method '{MethodName}' not found on type '{targetTypeDef}' with the specified argument types.");
         }
-        
+
         if (methods.Count > 1) {
             throw new InvalidOperationException($"Ambiguous method invocation: multiple overloads of '{MethodName}' found on type '{targetTypeDef}' matching the specified argument types.");
         }
@@ -33,13 +35,15 @@ public sealed class InvocationOperator : Operator {
         return methods.Single();
     }
 
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var method = GetMethodDefinition(context);
         var methodInvocation = method.GetMemberAccessor(Target, Arguments);
         return methodInvocation.BuildExpression(context);
     }
 
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         var method = GetMethodDefinition(context);
         return method.MemberTypeDefinition;
     }

@@ -11,7 +11,8 @@ public sealed class DataTypeBuilder {
     private readonly List<RelationshipBuilder> _relationships;
     private readonly List<Mutation> _mutations;
 
-    public DataTypeBuilder(string name) {
+    public DataTypeBuilder(string name)
+    {
         ArgumentNullException.ThrowIfNull(name);
         _name = name;
         _properties = new List<DataProperty>();
@@ -25,19 +26,22 @@ public sealed class DataTypeBuilder {
     public IEnumerable<RelationshipBuilder> Relationships => _relationships;
     public IEnumerable<Mutation> Mutations => _mutations;
 
-    public DataTypeBuilder SetName(string name) {
+    public DataTypeBuilder SetName(string name)
+    {
         ArgumentNullException.ThrowIfNull(name);
         _name = name;
         return this;
     }
 
-    public DataTypeBuilder AddProperty(DataProperty property) {
+    public DataTypeBuilder AddProperty(DataProperty property)
+    {
         ArgumentNullException.ThrowIfNull(property);
         _properties.Add(property);
         return this;
     }
 
-    public DataTypeBuilder AddProperty(string name, Action<PropertyBuilder> configure) {
+    public DataTypeBuilder AddProperty(string name, Action<PropertyBuilder> configure)
+    {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new PropertyBuilder(name);
@@ -46,25 +50,29 @@ public sealed class DataTypeBuilder {
         return this;
     }
 
-    public RelationshipBuilder HasOne(string? propertyName = null) {
+    public RelationshipBuilder HasOne(string? propertyName = null)
+    {
         var builder = new RelationshipBuilder(_name, propertyName, RelationshipBuilder.SourceCardinality.One);
         _relationships.Add(builder);
         return builder;
     }
 
-    public RelationshipBuilder HasMany(string? propertyName = null) {
+    public RelationshipBuilder HasMany(string? propertyName = null)
+    {
         var builder = new RelationshipBuilder(_name, propertyName, RelationshipBuilder.SourceCardinality.Many);
         _relationships.Add(builder);
         return builder;
     }
 
-    public DataTypeBuilder AddRule(Validation.Rule rule) {
+    public DataTypeBuilder AddRule(Validation.Rule rule)
+    {
         ArgumentNullException.ThrowIfNull(rule);
         _rules.Add(rule);
         return this;
     }
 
-    public DataTypeBuilder HasMutation(string name, Action<MutationBuilder> configure) {
+    public DataTypeBuilder HasMutation(string name, Action<MutationBuilder> configure)
+    {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new MutationBuilder(_name, name);
@@ -73,7 +81,8 @@ public sealed class DataTypeBuilder {
         return this;
     }
 
-    public DataTypeBuilder HasMutation(string name, IEnumerable<Action<PreconditionBuilder>> preconditions, IEnumerable<Action<EffectBuilder>> effects) {
+    public DataTypeBuilder HasMutation(string name, IEnumerable<Action<PreconditionBuilder>> preconditions, IEnumerable<Action<EffectBuilder>> effects)
+    {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(preconditions);
         ArgumentNullException.ThrowIfNull(effects);

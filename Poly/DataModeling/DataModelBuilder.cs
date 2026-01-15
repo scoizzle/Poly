@@ -4,7 +4,8 @@ public sealed class DataModelBuilder {
     private readonly List<DataType> _dataTypes;
     private readonly List<Relationship> _relationships;
 
-    public DataModelBuilder() {
+    public DataModelBuilder()
+    {
         _dataTypes = new List<DataType>();
         _relationships = new List<Relationship>();
     }
@@ -12,19 +13,22 @@ public sealed class DataModelBuilder {
     public IEnumerable<DataType> DataTypes => _dataTypes;
     public IEnumerable<Relationship> Relationships => _relationships;
 
-    public DataModelBuilder(DataModel dataModel) {
+    public DataModelBuilder(DataModel dataModel)
+    {
         ArgumentNullException.ThrowIfNull(dataModel);
         _dataTypes = [.. dataModel.Types];
         _relationships = [.. dataModel.Relationships];
     }
 
-    public DataModelBuilder AddDataType(DataType dataType) {
+    public DataModelBuilder AddDataType(DataType dataType)
+    {
         ArgumentNullException.ThrowIfNull(dataType);
         _dataTypes.Add(dataType);
         return this;
     }
 
-    public DataModelBuilder AddDataType(string name, Action<DataTypeBuilder> configure) {
+    public DataModelBuilder AddDataType(string name, Action<DataTypeBuilder> configure)
+    {
         ArgumentNullException.ThrowIfNull(configure);
         DataTypeBuilder builder = new(name);
         configure(builder);
@@ -38,7 +42,8 @@ public sealed class DataModelBuilder {
         return this;
     }
 
-    public DataModelBuilder AddRelationship(Relationship relationship) {
+    public DataModelBuilder AddRelationship(Relationship relationship)
+    {
         ArgumentNullException.ThrowIfNull(relationship);
         _relationships.Add(relationship);
         return this;

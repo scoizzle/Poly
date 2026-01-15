@@ -4,7 +4,8 @@ namespace Poly.Tests.DataModeling;
 
 public class DataTypeBuilderTests {
     [Test]
-    public async Task CreateDataType_WithName() {
+    public async Task CreateDataType_WithName()
+    {
         var builder = new DataTypeBuilder("Person");
         var result = builder.Build();
 
@@ -13,7 +14,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task AddProperty_WithPropertyBuilder() {
+    public async Task AddProperty_WithPropertyBuilder()
+    {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("Name", b => b.OfType<string>());
 
@@ -25,7 +27,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task AddProperty_MultipleProperties() {
+    public async Task AddProperty_MultipleProperties()
+    {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("FirstName", b => b.OfType<string>());
         builder.AddProperty("LastName", b => b.OfType<string>());
@@ -37,7 +40,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task SetName_UpdatesName() {
+    public async Task SetName_UpdatesName()
+    {
         var builder = new DataTypeBuilder("Person");
         builder.SetName("Employee");
 
@@ -47,7 +51,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task FluentBuilding_ChainedCalls() {
+    public async Task FluentBuilding_ChainedCalls()
+    {
         var result = new DataTypeBuilder("Product")
             .AddProperty("Name", b => b.OfType<string>())
             .AddProperty("Price", b => b.OfType<double>())
@@ -58,7 +63,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task HasOne_CreatesRelationship() {
+    public async Task HasOne_CreatesRelationship()
+    {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("AddressId", b => b.OfType<Guid>());
 
@@ -68,7 +74,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task HasMany_CreatesRelationship() {
+    public async Task HasMany_CreatesRelationship()
+    {
         var builder = new DataTypeBuilder("Person");
 
         var relationshipBuilder = builder.HasMany("Orders");
@@ -77,7 +84,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task HasMutation_WithBuilder() {
+    public async Task HasMutation_WithBuilder()
+    {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("Age", b => b.OfType<int>());
 
@@ -93,7 +101,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task HasMutation_WithActions() {
+    public async Task HasMutation_WithActions()
+    {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("Age", b => b.OfType<int>());
 
@@ -107,7 +116,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task BuilderProperties_Accessible() {
+    public async Task BuilderProperties_Accessible()
+    {
         var builder = new DataTypeBuilder("Product");
         builder.AddProperty("Name", b => b.OfType<string>());
 
@@ -116,7 +126,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task ComplexDataType_WithMultipleElements() {
+    public async Task ComplexDataType_WithMultipleElements()
+    {
         var dataType = new DataTypeBuilder("Order")
             .AddProperty("OrderId", b => b.OfType<Guid>())
             .AddProperty("CustomerName", b => b.OfType<string>())
@@ -135,14 +146,16 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task NameIsRequired() {
+    public async Task NameIsRequired()
+    {
         await Assert.ThrowsAsync<ArgumentNullException>(async () => {
             new DataTypeBuilder(null!);
         });
     }
 
     [Test]
-    public async Task AddProperty_WithNullProperty_Throws() {
+    public async Task AddProperty_WithNullProperty_Throws()
+    {
         var builder = new DataTypeBuilder("Person");
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () => {
@@ -151,7 +164,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task SetName_WithNull_Throws() {
+    public async Task SetName_WithNull_Throws()
+    {
         var builder = new DataTypeBuilder("Person");
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () => {
@@ -160,7 +174,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task PropertyBuilder_Integration_String() {
+    public async Task PropertyBuilder_Integration_String()
+    {
         var builder = new DataTypeBuilder("Person");
         builder.AddProperty("Email", b => b.OfType<string>());
 
@@ -173,7 +188,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task PropertyBuilder_Integration_WithDefault() {
+    public async Task PropertyBuilder_Integration_WithDefault()
+    {
         var builder = new DataTypeBuilder("Settings");
         builder.AddProperty("IsActive", b => {
             b.OfType<bool>();
@@ -189,7 +205,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task PropertyBuilder_MultipleTypes() {
+    public async Task PropertyBuilder_MultipleTypes()
+    {
         var builder = new DataTypeBuilder("Product");
         builder.AddProperty("Name", b => b.OfType<string>());
         builder.AddProperty("Price", b => b.OfType<double>());
@@ -202,7 +219,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task PropertyBuilder_ReferenceType() {
+    public async Task PropertyBuilder_ReferenceType()
+    {
         var builder = new DataTypeBuilder("Order");
         builder.AddProperty("CustomerId", b => b.OfType("Customer"));
 
@@ -214,7 +232,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task HasRelationships_Accessible() {
+    public async Task HasRelationships_Accessible()
+    {
         var builder = new DataTypeBuilder("User");
         builder.HasOne("Profile");
         builder.HasMany("Posts");
@@ -223,7 +242,8 @@ public class DataTypeBuilderTests {
     }
 
     [Test]
-    public async Task HasMutations_Accessible() {
+    public async Task HasMutations_Accessible()
+    {
         var builder = new DataTypeBuilder("Article");
         builder.HasMutation("Publish", m => { });
         builder.HasMutation("Archive", m => { });

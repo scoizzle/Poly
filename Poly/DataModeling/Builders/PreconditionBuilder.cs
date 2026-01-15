@@ -15,7 +15,8 @@ public sealed class PreconditionBuilder {
     /// </summary>
     /// <param name="propertyName">The name of the property on the target type.</param>
     /// <returns>This builder for fluent chaining.</returns>
-    public PreconditionBuilder Property(string propertyName) {
+    public PreconditionBuilder Property(string propertyName)
+    {
         ArgumentNullException.ThrowIfNull(propertyName);
         _valueSource = new PropertyValue(propertyName);
         return this;
@@ -26,7 +27,8 @@ public sealed class PreconditionBuilder {
     /// </summary>
     /// <param name="parameterName">The name of the parameter.</param>
     /// <returns>This builder for fluent chaining.</returns>
-    public PreconditionBuilder Parameter(string parameterName) {
+    public PreconditionBuilder Parameter(string parameterName)
+    {
         ArgumentNullException.ThrowIfNull(parameterName);
         _valueSource = new ParameterValue(parameterName);
         return this;
@@ -37,7 +39,8 @@ public sealed class PreconditionBuilder {
     /// </summary>
     /// <param name="value">The constant value.</param>
     /// <returns>This builder for fluent chaining.</returns>
-    public PreconditionBuilder Constant(object? value) {
+    public PreconditionBuilder Constant(object? value)
+    {
         _valueSource = new ConstantValue(value);
         return this;
     }
@@ -48,7 +51,8 @@ public sealed class PreconditionBuilder {
     /// <param name="memberName">The name of the member to access.</param>
     /// <returns>This builder for fluent chaining.</returns>
     /// <exception cref="InvalidOperationException">Thrown if no value source has been set.</exception>
-    public PreconditionBuilder Member(string memberName) {
+    public PreconditionBuilder Member(string memberName)
+    {
         ArgumentNullException.ThrowIfNull(memberName);
 
         if (_valueSource == null)
@@ -64,7 +68,8 @@ public sealed class PreconditionBuilder {
     /// <param name="constraint">The constraint to apply to the value source.</param>
     /// <returns>A <see cref="MutationCondition"/> representing the precondition.</returns>
     /// <exception cref="InvalidOperationException">Thrown if no value source has been set.</exception>
-    public MutationCondition Must(Constraint constraint) {
+    public MutationCondition Must(Constraint constraint)
+    {
         ArgumentNullException.ThrowIfNull(constraint);
 
         if (_valueSource == null)
@@ -79,7 +84,8 @@ public sealed class PreconditionBuilder {
     /// </summary>
     /// <returns>A <see cref="MutationConditionBuilder"/> for building constraints.</returns>
     /// <exception cref="InvalidOperationException">Thrown if no value source has been set.</exception>
-    public MutationConditionBuilder MustBe() {
+    public MutationConditionBuilder MustBe()
+    {
         if (_valueSource == null)
             throw new InvalidOperationException("Cannot create a precondition without specifying a value source using Property(), Parameter(), or Constant().");
 

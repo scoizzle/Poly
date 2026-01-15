@@ -2,7 +2,8 @@ namespace Poly.Validation.Builders;
 
 public static class NumericConstraintSetBuilderExtensions {
     public static ConstraintSetBuilder<T> Minimum<T, TProp>(this ConstraintSetBuilder<T> builder, TProp value)
-        where TProp : INumber<TProp> {
+        where TProp : INumber<TProp>
+    {
         RangeConstraint? existingRangeConstraint = builder.Constraints
             .OfType<RangeConstraint>()
             .FirstOrDefault();
@@ -16,7 +17,8 @@ public static class NumericConstraintSetBuilderExtensions {
     }
 
     public static ConstraintSetBuilder<T> Maximum<T, TProp>(this ConstraintSetBuilder<T> builder, TProp value)
-        where TProp : INumber<TProp> {
+        where TProp : INumber<TProp>
+    {
         RangeConstraint? existingRangeConstraint = builder.Constraints
             .OfType<RangeConstraint>()
             .FirstOrDefault();

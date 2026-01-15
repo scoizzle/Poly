@@ -7,7 +7,8 @@ public sealed class ConstraintSetBuilder<T>(string propertyName) {
     public string PropertyName => propertyName;
     public IEnumerable<Constraint> Constraints => _constraints;
 
-    internal ConstraintSetBuilder<T> Add(Constraint constraint) {
+    internal ConstraintSetBuilder<T> Add(Constraint constraint)
+    {
         _constraints.Add(constraint);
         return this;
     }

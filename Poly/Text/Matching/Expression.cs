@@ -1,6 +1,7 @@
 namespace Poly.Text.Matching {
     public abstract class Expression {
-        public Expression(bool optional, int minimumLength) {
+        public Expression(bool optional, int minimumLength)
+        {
             Optional = optional;
             MinimumLength = minimumLength;
         }
@@ -17,7 +18,8 @@ namespace Poly.Text.Matching {
 
         public abstract TryCompareDelegate Compare();
 
-        public virtual void Link(Expression? previous, Expression? next) {
+        public virtual void Link(Expression? previous, Expression? next)
+        {
             Previous = previous;
             Next = next;
         }

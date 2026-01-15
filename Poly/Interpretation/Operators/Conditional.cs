@@ -27,14 +27,16 @@ public sealed class Conditional(Value condition, Value ifTrue, Value ifFalse) : 
     public Value IfFalse { get; } = ifFalse ?? throw new ArgumentNullException(nameof(ifFalse));
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         // The result type is the type of the true branch
         // (both branches should have compatible types, but we'll let the expression tree handle validation)
         return IfTrue.GetTypeDefinition(context);
     }
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression conditionExpr = Condition.BuildExpression(context);
         Expression ifTrueExpr = IfTrue.BuildExpression(context);
         Expression ifFalseExpr = IfFalse.BuildExpression(context);

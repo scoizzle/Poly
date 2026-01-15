@@ -8,12 +8,14 @@ namespace Poly.DataModeling;
 public sealed class Validator {
     private readonly DataModel _model;
 
-    public Validator(DataModel model) {
+    public Validator(DataModel model)
+    {
         ArgumentNullException.ThrowIfNull(model);
         _model = model;
     }
 
-    public RuleEvaluationResult Validate(string typeName, IDictionary<string, object?> instance) {
+    public RuleEvaluationResult Validate(string typeName, IDictionary<string, object?> instance)
+    {
         ArgumentNullException.ThrowIfNull(typeName);
         ArgumentNullException.ThrowIfNull(instance);
 

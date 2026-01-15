@@ -21,7 +21,8 @@ public sealed class Add(Value leftHandValue, Value rightHandValue) : Operator {
     public Value RightHandValue { get; init; } = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         // Determine the promoted type based on C# numeric promotion rules
         var leftType = LeftHandValue.GetTypeDefinition(context);
         var rightType = RightHandValue.GetTypeDefinition(context);
@@ -29,7 +30,8 @@ public sealed class Add(Value leftHandValue, Value rightHandValue) : Operator {
     }
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
 

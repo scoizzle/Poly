@@ -6,7 +6,8 @@ namespace Poly.Validation.Rules;
 public sealed class OrRule(params IEnumerable<Rule> rules) : Rule {
     public IEnumerable<Rule> Rules { get; set; } = rules;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    {
         if (Rules == null || !Rules.Any())
             return Value.Wrap(false);
 
@@ -17,7 +18,8 @@ public sealed class OrRule(params IEnumerable<Rule> rules) : Rule {
         return combinedRules;
     }
 
-    public override string ToString() {
+    public override string ToString()
+    {
         if (Rules == null || !Rules.Any())
             return "false";
 

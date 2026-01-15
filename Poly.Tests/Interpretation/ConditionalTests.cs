@@ -8,7 +8,8 @@ namespace Poly.Tests.Interpretation;
 
 public class ConditionalTests {
     [Test]
-    public async Task Conditional_WithTrueCondition_ReturnsIfTrueValue() {
+    public async Task Conditional_WithTrueCondition_ReturnsIfTrueValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var condition = Value.True;
@@ -27,7 +28,8 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithFalseCondition_ReturnsIfFalseValue() {
+    public async Task Conditional_WithFalseCondition_ReturnsIfFalseValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var condition = Value.False;
@@ -46,7 +48,8 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithParameterCondition_EvaluatesCorrectly() {
+    public async Task Conditional_WithParameterCondition_EvaluatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var intTypeDef = context.GetTypeDefinition<int>();
@@ -70,7 +73,8 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithNestedConditionals_WorksCorrectly() {
+    public async Task Conditional_WithNestedConditionals_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -93,7 +97,8 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_GetTypeDefinition_ReturnsIfTrueType() {
+    public async Task Conditional_GetTypeDefinition_ReturnsIfTrueType()
+    {
         // Arrange
         var context = new InterpretationContext();
         var condition = Value.True;
@@ -110,7 +115,8 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_ToString_ReturnsExpectedFormat() {
+    public async Task Conditional_ToString_ReturnsExpectedFormat()
+    {
         // Arrange
         var condition = Value.True;
         var ifTrue = Value.Wrap(42);
@@ -125,7 +131,8 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithNullArguments_ThrowsArgumentNullException() {
+    public async Task Conditional_WithNullArguments_ThrowsArgumentNullException()
+    {
         // Assert
         await Assert.That(() => new Conditional(null!, Value.Wrap(1), Value.Wrap(2)))
             .Throws<ArgumentNullException>();

@@ -32,7 +32,8 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
     /// <param name="name">The name of the variable to retrieve.</param>
     /// <returns>The variable if found; otherwise, <c>null</c>.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
-    public Variable? GetVariable(string name) {
+    public Variable? GetVariable(string name)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         return Variables.TryGetValue(name, out var variable)
@@ -51,7 +52,8 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
     /// This method will create a new variable in this scope even if a variable with the same
     /// name exists in a parent scope, implementing variable shadowing.
     /// </remarks>
-    public Variable SetVariable(string name, Value? value) {
+    public Variable SetVariable(string name, Value? value)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return Variables.GetOrAdd(name, static (name, value) => new Variable(name, value), value);
     }
@@ -60,7 +62,8 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
     /// Creates a shallow copy of this scope with the same parent.
     /// </summary>
     /// <returns>A new scope with copied variables but the same parent reference.</returns>
-    public VariableScope Clone() {
+    public VariableScope Clone()
+    {
         var clone = new VariableScope(ParentScope) {
             Variables = new Dictionary<string, Variable>(Variables)
         };

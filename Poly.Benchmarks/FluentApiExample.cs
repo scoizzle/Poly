@@ -10,7 +10,8 @@ namespace Poly.Benchmarks;
 /// Demonstrates the fluent API for building complex interpretable expressions.
 /// </summary>
 public static class FluentApiExample {
-    public static void Run() {
+    public static void Run()
+    {
         Console.WriteLine("=== Fluent API Examples ===\n");
 
         SimpleArithmetic();
@@ -21,7 +22,8 @@ public static class FluentApiExample {
         MemberAndIndexAccess();
     }
 
-    private static void SimpleArithmetic() {
+    private static void SimpleArithmetic()
+    {
         Console.WriteLine("1. Simple Arithmetic (x * 2 + 5):");
 
         var context = new InterpretationContext();
@@ -37,7 +39,8 @@ public static class FluentApiExample {
         Console.WriteLine();
     }
 
-    private static void ConditionalLogic() {
+    private static void ConditionalLogic()
+    {
         Console.WriteLine("2. Conditional Logic (x > 100 ? x * 2 : x + 10):");
 
         var context = new InterpretationContext();
@@ -56,7 +59,8 @@ public static class FluentApiExample {
         Console.WriteLine();
     }
 
-    private static void ComplexExpressions() {
+    private static void ComplexExpressions()
+    {
         Console.WriteLine("3. Complex Expression ((x + y) > 50 && (x * y) < 1000):");
 
         var context = new InterpretationContext();
@@ -78,7 +82,8 @@ public static class FluentApiExample {
         Console.WriteLine();
     }
 
-    private static void NullCoalescing() {
+    private static void NullCoalescing()
+    {
         Console.WriteLine("4. Null Coalescing (x ?? 42):");
 
         var context = new InterpretationContext();
@@ -94,7 +99,8 @@ public static class FluentApiExample {
         Console.WriteLine();
     }
 
-    private static void TypeOperations() {
+    private static void TypeOperations()
+    {
         Console.WriteLine("5. Type Operations ((double)x + 0.5):");
 
         var context = new InterpretationContext();
@@ -111,7 +117,8 @@ public static class FluentApiExample {
         Console.WriteLine();
     }
 
-    private static void MemberAndIndexAccess() {
+    private static void MemberAndIndexAccess()
+    {
         Console.WriteLine("6. Member and Index Access (list[0] + list.Count):");
 
         var context = new InterpretationContext();
@@ -132,7 +139,8 @@ public static class FluentApiExample {
     private static Func<T, TResult> CompileExpression<T, TResult>(
         InterpretationContext context,
         Value expr,
-        Parameter param) {
+        Parameter param)
+    {
         var expression = expr.BuildExpression(context);
         var paramExpr = param.BuildExpression(context);
         var lambda = Expression.Lambda<Func<T, TResult>>(expression, paramExpr);
@@ -143,7 +151,8 @@ public static class FluentApiExample {
         InterpretationContext context,
         Value expr,
         Parameter param1,
-        Parameter param2) {
+        Parameter param2)
+    {
         var expression = expr.BuildExpression(context);
         var paramExpr1 = param1.BuildExpression(context);
         var paramExpr2 = param2.BuildExpression(context);

@@ -10,12 +10,14 @@ public sealed class MutationBuilder {
     private readonly List<MutationCondition> _preconditions = new();
     private readonly EffectBuilder _effects = new();
 
-    internal MutationBuilder(string targetTypeName, string name) {
+    internal MutationBuilder(string targetTypeName, string name)
+    {
         _targetTypeName = targetTypeName ?? throw new ArgumentNullException(nameof(targetTypeName));
         _name = name ?? throw new ArgumentNullException(nameof(name));
     }
 
-    public MutationBuilder Param(string name, Action<PropertyBuilder> configure) {
+    public MutationBuilder Param(string name, Action<PropertyBuilder> configure)
+    {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(configure);
         var pb = new PropertyBuilder(name);
@@ -25,14 +27,16 @@ public sealed class MutationBuilder {
         return this;
     }
 
-    public MutationBuilder WithPrecondition(Action<PreconditionBuilder> configure) {
+    public MutationBuilder WithPrecondition(Action<PreconditionBuilder> configure)
+    {
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new PreconditionBuilder();
         configure(builder);
         return this;
     }
 
-    public MutationBuilder Precondition(Func<PreconditionBuilder, MutationCondition> configure) {
+    public MutationBuilder Precondition(Func<PreconditionBuilder, MutationCondition> configure)
+    {
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new PreconditionBuilder();
         var condition = configure(builder);
@@ -40,7 +44,8 @@ public sealed class MutationBuilder {
         return this;
     }
 
-    public MutationBuilder HasEffect(Action<EffectBuilder> configure) {
+    public MutationBuilder HasEffect(Action<EffectBuilder> configure)
+    {
         ArgumentNullException.ThrowIfNull(configure);
         configure(_effects);
         return this;

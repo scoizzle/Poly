@@ -38,7 +38,8 @@ internal sealed class ClrMethodInvocationInterpretation(ClrMethod method, Value 
     /// <remarks>
     /// For static methods, the instance expression is ignored and set to null to properly invoke the static method.
     /// </remarks>
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var instanceExpression = Instance.BuildExpression(context);
         var argumentExpressions = Arguments.Select(arg => arg.BuildExpression(context)).ToArray();
 

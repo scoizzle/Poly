@@ -6,7 +6,8 @@ namespace Poly {
         public static bool TryParse(this string text, int index, int lastIndex, out sbyte value)
             => TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out sbyte value) {
+        public static bool TryParse(this string text, ref int index, int lastIndex, out sbyte value)
+        {
             if (!StringIteration.BoundsCheck(text, index, lastIndex))
                 goto failure;
 
@@ -49,7 +50,8 @@ namespace Poly {
         public static bool TryParse(this string text, int index, int lastIndex, out byte value) =>
             TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out byte value) {
+        public static bool TryParse(this string text, ref int index, int lastIndex, out byte value)
+        {
             if (!StringIteration.BoundsCheck(text, index, lastIndex))
                 goto failure;
 

@@ -5,7 +5,8 @@ namespace Poly.DataModeling;
 public sealed class DataModelTypeDefinitionProvider : ITypeDefinitionProvider {
     private readonly Dictionary<string, ITypeDefinition> _typeDefinitions = new();
 
-    public void AddTypeDefinition(ITypeDefinition typeDefinition) {
+    public void AddTypeDefinition(ITypeDefinition typeDefinition)
+    {
         ArgumentNullException.ThrowIfNull(typeDefinition);
         _typeDefinitions.Add(typeDefinition.FullName, typeDefinition);
     }

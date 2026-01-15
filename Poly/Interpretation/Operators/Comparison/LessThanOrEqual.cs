@@ -19,7 +19,8 @@ public sealed class LessThanOrEqual(Value leftHandValue, Value rightHandValue) :
     public Value RightHandValue { get; } = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
         return Expression.LessThanOrEqual(leftExpr, rightExpr);

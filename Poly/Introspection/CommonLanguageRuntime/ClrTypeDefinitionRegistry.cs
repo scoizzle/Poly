@@ -14,7 +14,8 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
     /// Gets a thread-safe lazy resolver for a runtime <see cref="Type"/>.
     /// If the type is already cached, returns a pre-initialized lazy wrapper.
     /// </summary>
-    public Lazy<ClrTypeDefinition> GetDeferredTypeDefinitionResolver(Type type) {
+    public Lazy<ClrTypeDefinition> GetDeferredTypeDefinitionResolver(Type type)
+    {
         ArgumentNullException.ThrowIfNull(type);
         var name = type.FullName ?? type.Name;
 
@@ -33,13 +34,15 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
     /// <summary>
     /// Gets or creates a definition for a runtime <see cref="Type"/>.
     /// </summary>
-    public ClrTypeDefinition GetTypeDefinition(Type type) {
+    public ClrTypeDefinition GetTypeDefinition(Type type)
+    {
         ArgumentNullException.ThrowIfNull(type);
 
         var name = type.FullName ?? type.Name;
         return _types.GetOrAdd(name, CreateTypeDefinition, (type, this));
 
-        static ClrTypeDefinition CreateTypeDefinition(string typeName, (Type clrType, ClrTypeDefinitionRegistry registry) context) {
+        static ClrTypeDefinition CreateTypeDefinition(string typeName, (Type clrType, ClrTypeDefinitionRegistry registry) context)
+        {
             return new ClrTypeDefinition(context.clrType, context.registry);
         }
     }
@@ -47,7 +50,8 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
     /// <summary>
     /// Adds an existing definition instance to the cache.
     /// </summary>
-    public void AddType(ClrTypeDefinition type) {
+    public void AddType(ClrTypeDefinition type)
+    {
         ArgumentNullException.ThrowIfNull(type);
         if (_types.ContainsKey(type.FullName)) throw new ArgumentException($"Type with name '{type.FullName}' already exists.", nameof(type));
         _types.TryAdd(type.FullName, type);
@@ -56,7 +60,8 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
     /// <summary>
     /// Removes an existing definition instance from the cache.
     /// </summary>
-    public void RemoveType(ClrTypeDefinition type) {
+    public void RemoveType(ClrTypeDefinition type)
+    {
         ArgumentNullException.ThrowIfNull(type);
         if (!_types.ContainsKey(type.FullName)) throw new ArgumentException($"Type with name '{type.FullName}' does not exist.", nameof(type));
         _types.TryRemove(type.FullName, out _);
@@ -66,7 +71,8 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
     /// Resolves by fully-qualified name using cache, falling back to <see cref="Type.GetType(string)"/>.
     /// Returns null if the type cannot be resolved.
     /// </summary>
-    public ITypeDefinition? GetTypeDefinition(string name) {
+    public ITypeDefinition? GetTypeDefinition(string name)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         if (_types.TryGetValue(name, out var existing)) {
             return existing;

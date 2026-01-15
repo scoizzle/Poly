@@ -18,7 +18,8 @@ public sealed class RuleSetBuilder<T> {
     /// <returns>This builder for method chaining.</returns>
     public RuleSetBuilder<T> Member<TProperty>(
         Expression<Func<T, TProperty>> propertySelector,
-        Action<ConstraintSetBuilder<TProperty>> constraintsBuilder) {
+        Action<ConstraintSetBuilder<TProperty>> constraintsBuilder)
+    {
 
         ArgumentNullException.ThrowIfNull(propertySelector);
         ArgumentNullException.ThrowIfNull(constraintsBuilder);
@@ -39,7 +40,8 @@ public sealed class RuleSetBuilder<T> {
     /// </summary>
     /// <param name="rule">The rule to add.</param>
     /// <returns>This builder for method chaining.</returns>
-    public RuleSetBuilder<T> AddRule(Rule rule) {
+    public RuleSetBuilder<T> AddRule(Rule rule)
+    {
         ArgumentNullException.ThrowIfNull(rule);
         _rules.Add(rule);
         return this;
@@ -54,7 +56,8 @@ public sealed class RuleSetBuilder<T> {
     /// <summary>
     /// Extracts the property name from a member access expression.
     /// </summary>
-    private static string GetMemberName<TMember>(Expression<Func<T, TMember>> memberExpression) {
+    private static string GetMemberName<TMember>(Expression<Func<T, TMember>> memberExpression)
+    {
         return memberExpression.Body switch {
             MemberExpression me => me.Member.Name,
             UnaryExpression { Operand: MemberExpression me } => me.Member.Name,

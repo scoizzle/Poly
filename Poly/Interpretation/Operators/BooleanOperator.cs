@@ -12,7 +12,8 @@ namespace Poly.Interpretation.Operators;
 public abstract class BooleanOperator : Operator {
     /// <inheritdoc />
     /// <returns>The type definition for <see cref="bool"/>.</returns>
-    public sealed override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public sealed override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         return context.GetTypeDefinition<bool>()
             ?? throw new InvalidOperationException("Type 'bool' is not registered in the context.");
     }

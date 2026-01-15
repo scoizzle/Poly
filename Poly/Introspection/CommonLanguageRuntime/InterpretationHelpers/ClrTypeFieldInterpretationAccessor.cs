@@ -8,7 +8,8 @@ internal sealed class ClrTypeFieldInterpretationAccessor(Value instance, ClrType
 
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Field).MemberTypeDefinition;
 
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var instanceExpression = Instance.BuildExpression(context);
 
         if (Field.FieldInfo.IsStatic && instanceExpression is ConstantExpression constExpr && constExpr.Value is null) {

@@ -26,7 +26,8 @@ public sealed class Assignment(Value destination, Value value) : Operator {
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => Destination.GetTypeDefinition(context);
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression destExpr = Destination.BuildExpression(context);
         Expression valueExpr = Value.BuildExpression(context);
         return Expression.Assign(destExpr, valueExpr);

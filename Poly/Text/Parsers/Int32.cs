@@ -6,7 +6,8 @@ namespace Poly {
         public static bool TryParse(this string text, int index, int lastIndex, out int value)
             => TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out int value) {
+        public static bool TryParse(this string text, ref int index, int lastIndex, out int value)
+        {
             if (!StringIteration.BoundsCheck(text, index, lastIndex)) {
                 value = default;
                 return false;
@@ -53,7 +54,8 @@ namespace Poly {
         public static bool TryParse(this string text, int index, int lastIndex, out uint value) =>
             TryParse(text, ref index, lastIndex, out value) && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out uint value) {
+        public static bool TryParse(this string text, ref int index, int lastIndex, out uint value)
+        {
             if (!StringIteration.BoundsCheck(text, index, lastIndex)) {
                 value = default;
                 return false;

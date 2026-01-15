@@ -25,7 +25,8 @@ public sealed class ComputedValueRule : Rule {
         string leftOperandPropertyName,
         ArithmeticOperation operation,
         string rightOperandPropertyName,
-        ComparisonOperator comparisonOperator = ComparisonOperator.Equal) {
+        ComparisonOperator comparisonOperator = ComparisonOperator.Equal)
+    {
         TargetPropertyName = targetPropertyName;
         LeftOperandPropertyName = leftOperandPropertyName;
         Operation = operation;
@@ -33,7 +34,8 @@ public sealed class ComputedValueRule : Rule {
         ComparisonOperator = comparisonOperator;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context) {
+    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    {
         var target = new MemberAccess(context.Value, TargetPropertyName);
         var left = new MemberAccess(context.Value, LeftOperandPropertyName);
         var right = new MemberAccess(context.Value, RightOperandPropertyName);
@@ -59,7 +61,8 @@ public sealed class ComputedValueRule : Rule {
         return comparisonResult;
     }
 
-    public override string ToString() {
+    public override string ToString()
+    {
         var opSymbol = Operation switch {
             ArithmeticOperation.Add => "+",
             ArithmeticOperation.Subtract => "-",

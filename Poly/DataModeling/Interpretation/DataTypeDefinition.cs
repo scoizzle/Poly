@@ -12,7 +12,8 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     private readonly string _name;
     private readonly ITypeDefinitionProvider _provider;
 
-    public DataTypeDefinition(DataType dataType, ITypeDefinitionProvider provider) {
+    public DataTypeDefinition(DataType dataType, ITypeDefinitionProvider provider)
+    {
         _dataType = dataType ?? throw new ArgumentNullException(nameof(dataType));
         _name = dataType.Name;
         _provider = provider;
@@ -26,7 +27,8 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     public IEnumerable<ITypeProperty> Properties => _members.Value.Values; // Assuming all members are properties
     public IEnumerable<ITypeMethod> Methods => Enumerable.Empty<ITypeMethod>();
 
-    public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method) {
+    public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method)
+    {
         method = null;
         return false;
     }
@@ -36,7 +38,8 @@ internal sealed class DataTypeDefinition : ITypeDefinition {
     public IEnumerable<ITypeDefinition> Interfaces => Enumerable.Empty<ITypeDefinition>();
     public IEnumerable<IParameter> GenericParameters => [];
 
-    private FrozenDictionary<string, DataTypeMember> MemberDictionaryFactory() {
+    private FrozenDictionary<string, DataTypeMember> MemberDictionaryFactory()
+    {
         return _dataType
             .Properties
             .Select(e => new DataTypeMember(this, e, _provider))
@@ -49,7 +52,8 @@ internal sealed class DataTypeMember : ITypeProperty {
     private readonly DataProperty _property;
     private readonly Lazy<ITypeDefinition> _memberType;
 
-    public DataTypeMember(DataTypeDefinition declaring, DataProperty property, ITypeDefinitionProvider provider) {
+    public DataTypeMember(DataTypeDefinition declaring, DataProperty property, ITypeDefinitionProvider provider)
+    {
         _declaring = declaring ?? throw new ArgumentNullException(nameof(declaring));
         _property = property ?? throw new ArgumentNullException(nameof(property));
         _memberType = new Lazy<ITypeDefinition>(() => ResolveMemberType(property, provider));
@@ -72,7 +76,8 @@ internal sealed class DataTypeMember : ITypeProperty {
 
     public Value GetMemberAccessor(Value instance, params IEnumerable<Value>? _) => new DataModelPropertyAccessor(instance, Name, MemberType);
 
-    private static ITypeDefinition ResolveMemberType(DataProperty property, ITypeDefinitionProvider provider) {
+    private static ITypeDefinition ResolveMemberType(DataProperty property, ITypeDefinitionProvider provider)
+    {
         var clr = ClrTypeDefinitionRegistry.Shared;
 
         if (property is ReferenceProperty refProp) {

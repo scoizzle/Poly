@@ -10,7 +10,8 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Adds a provider to the top of the stack.
     /// </summary>
-    public void AddProvider(ITypeDefinitionProvider provider) {
+    public void AddProvider(ITypeDefinitionProvider provider)
+    {
         ArgumentNullException.ThrowIfNull(provider);
         _providers.Push(provider);
     }
@@ -19,7 +20,8 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// Removes the first matching provider instance from the stack.
     /// </summary>
     /// <returns>True if the provider was found and removed.</returns>
-    public bool RemoveProvider(ITypeDefinitionProvider provider) {
+    public bool RemoveProvider(ITypeDefinitionProvider provider)
+    {
         ArgumentNullException.ThrowIfNull(provider);
         if (_providers.Count == 0) return false;
 
@@ -45,7 +47,8 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Removes all providers.
     /// </summary>
-    public void ClearProviders() {
+    public void ClearProviders()
+    {
         _providers.Clear();
     }
 
@@ -62,7 +65,8 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Resolves by name, querying providers from top to bottom. Returns null when not found.
     /// </summary>
-    public ITypeDefinition? GetTypeDefinition(string name) {
+    public ITypeDefinition? GetTypeDefinition(string name)
+    {
         foreach (var provider in _providers) {
             var typeDef = provider.GetTypeDefinition(name);
             if (typeDef is not null) {
@@ -75,7 +79,8 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Resolves by runtime type, querying providers from top to bottom. Returns null when not found.
     /// </summary>
-    public ITypeDefinition? GetTypeDefinition(Type type) {
+    public ITypeDefinition? GetTypeDefinition(Type type)
+    {
         foreach (var provider in _providers) {
             var typeDef = provider.GetTypeDefinition(type);
             if (typeDef is not null) {

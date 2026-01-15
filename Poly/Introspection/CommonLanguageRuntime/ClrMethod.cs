@@ -18,7 +18,8 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     private readonly IEnumerable<ClrParameter> _parameters;
     private readonly string _name;
 
-    public ClrMethod(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter> parameters, MethodInfo methodInfo) {
+    public ClrMethod(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter> parameters, MethodInfo methodInfo)
+    {
         ArgumentNullException.ThrowIfNull(memberType);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(methodInfo);
@@ -69,7 +70,8 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     /// Creates an accessor that invokes this method on <paramref name="instance"/>
     /// with the supplied <paramref name="arguments"/>.
     /// </summary>
-    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? arguments) {
+    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? arguments)
+    {
         // Convert null to empty enumerable for parameterless method calls
         var args = arguments ?? Enumerable.Empty<Value>();
         return new ClrMethodInvocationInterpretation(this, instance, args);

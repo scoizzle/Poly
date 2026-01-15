@@ -16,12 +16,14 @@ public sealed class UnaryMinus(Value operand) : Operator {
     public Value Operand { get; init; } = operand ?? throw new ArgumentNullException(nameof(operand));
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         return Operand.GetTypeDefinition(context);
     }
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression operandExpr = Operand.BuildExpression(context);
         return Expression.Negate(operandExpr);
     }

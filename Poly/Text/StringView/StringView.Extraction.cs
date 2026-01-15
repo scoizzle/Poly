@@ -2,7 +2,8 @@ namespace Poly;
 
 public partial struct StringView {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly StringView? ExtractUntil(char value) {
+    public readonly StringView? ExtractUntil(char value)
+    {
         var (str, index, lastIndex) = this;
 
         int idx = index;
@@ -13,7 +14,8 @@ public partial struct StringView {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool TryExtractUntil(char value, out StringView slice) {
+    public readonly bool TryExtractUntil(char value, out StringView slice)
+    {
         var (str, index, lastIndex) = this;
 
         int idx = index;
@@ -27,7 +29,8 @@ public partial struct StringView {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly StringView? ExtractUntilAny(ReadOnlySpan<char> values) {
+    public readonly StringView? ExtractUntilAny(ReadOnlySpan<char> values)
+    {
         var (str, index, lastIndex) = this;
 
         int idx = index;
@@ -38,7 +41,8 @@ public partial struct StringView {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool TryExtractUntilAny(ReadOnlySpan<char> values, out StringView slice) {
+    public readonly bool TryExtractUntilAny(ReadOnlySpan<char> values, out StringView slice)
+    {
         var (str, index, lastIndex) = this;
 
         int idx = index;
@@ -52,7 +56,8 @@ public partial struct StringView {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public StringView? ExtractAndConsumeUntil(char value) {
+    public StringView? ExtractAndConsumeUntil(char value)
+    {
         var (str, index, lastIndex) = this;
 
         int idx = index;
@@ -64,7 +69,8 @@ public partial struct StringView {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public StringView? ExtractAndConsumeUntilAny(params char[] values) {
+    public StringView? ExtractAndConsumeUntilAny(params char[] values)
+    {
         var (str, index, lastIndex) = this;
 
         int idx = index;
@@ -80,7 +86,8 @@ public partial struct StringView {
         char open,
         char close,
         out StringView section,
-        bool includeBraces = false) {
+        bool includeBraces = false)
+    {
         var (str, index, lastIndex) = this;
 
         var idx = str.FindMatchingBracket(index, lastIndex, open, close);
@@ -104,7 +111,8 @@ public partial struct StringView {
         char open,
         char close,
         out StringView section,
-        bool includeBraces = false) {
+        bool includeBraces = false)
+    {
         var (str, index, lastIndex) = this;
 
         var idx = str.FindMatchingBracket(index, lastIndex, open, close);
@@ -129,19 +137,22 @@ public partial struct StringView {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool ExtractStringLiteral(
         out StringView section,
-        bool includeQuotes = false) {
+        bool includeQuotes = false)
+    {
         return ExtractBetween('"', '"', out section, includeQuotes);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool ExtractAndConsumeStringLiteral(
         out StringView section,
-        bool includeQuotes = false) {
+        bool includeQuotes = false)
+    {
         return ExtractAndConsumeBetween('"', '"', out section, includeQuotes);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool TryParse(out bool value) {
+    public readonly bool TryParse(out bool value)
+    {
         if (!BoundsCheck()) {
             value = default;
             return false;
@@ -167,7 +178,8 @@ public partial struct StringView {
     public readonly bool TryParse<T>(
         [NotNullWhen(returnValue: true)] out T? value,
         IFormatProvider? formatProvider = default)
-            where T : ISpanParsable<T> {
+            where T : ISpanParsable<T>
+    {
         if (!BoundsCheck()) {
             value = default;
             return false;

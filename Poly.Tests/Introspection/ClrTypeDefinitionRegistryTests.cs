@@ -4,7 +4,8 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeDefinitionRegistryTests {
     [Test]
-    public async Task GetTypeDefinition_ReturnsCorrectType() {
+    public async Task GetTypeDefinition_ReturnsCorrectType()
+    {
         var registry = new ClrTypeDefinitionRegistry();
 
         var intType = registry.GetTypeDefinition<int>();
@@ -13,7 +14,8 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ByName_ReturnsCorrectType() {
+    public async Task GetTypeDefinition_ByName_ReturnsCorrectType()
+    {
         var registry = new ClrTypeDefinitionRegistry();
 
         var intType = registry.GetTypeDefinition("System.Int32");
@@ -23,7 +25,8 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task GetDeferredTypeDefinitionResolver_ReturnsLazy() {
+    public async Task GetDeferredTypeDefinitionResolver_ReturnsLazy()
+    {
         var registry = new ClrTypeDefinitionRegistry();
 
         var lazyInt = registry.GetDeferredTypeDefinitionResolver(typeof(int));
@@ -34,7 +37,8 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task SharedRegistry_IsSingleton() {
+    public async Task SharedRegistry_IsSingleton()
+    {
         var registry1 = ClrTypeDefinitionRegistry.Shared;
         var registry2 = ClrTypeDefinitionRegistry.Shared;
 
@@ -42,7 +46,8 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task AddType_AddsTypeToRegistry() {
+    public async Task AddType_AddsTypeToRegistry()
+    {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -56,7 +61,8 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task AddType_ThrowsOnDuplicate() {
+    public async Task AddType_ThrowsOnDuplicate()
+    {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -64,7 +70,8 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task RemoveType_RemovesTypeFromRegistry() {
+    public async Task RemoveType_RemovesTypeFromRegistry()
+    {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -78,7 +85,8 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task RemoveType_ThrowsOnNonExistent() {
+    public async Task RemoveType_ThrowsOnNonExistent()
+    {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -88,7 +96,8 @@ public class ClrTypeDefinitionRegistryTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ByName_ReturnsNullOnInvalidType() {
+    public async Task GetTypeDefinition_ByName_ReturnsNullOnInvalidType()
+    {
         var registry = new ClrTypeDefinitionRegistry();
 
         var result = registry.GetTypeDefinition("NonExistent.InvalidType");

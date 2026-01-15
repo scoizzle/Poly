@@ -9,7 +9,8 @@ internal sealed class ClrTypePropertyInterpretationAccessor(Value instance, ClrT
 
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Property).MemberTypeDefinition;
 
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var instanceExpression = Instance.BuildExpression(context);
 
         // For static properties, always use null as the instance regardless of what was provided

@@ -11,7 +11,8 @@ public static class TypeDefinitionExtensions {
         this ITypeDefinition typeDefinition,
         string name,
         IEnumerable<ITypeDefinition> argumentTypes
-    ) {
+    )
+    {
         ArgumentNullException.ThrowIfNull(typeDefinition);
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(argumentTypes);

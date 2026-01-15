@@ -11,7 +11,8 @@ internal sealed class DataModelPropertyAccessor : Value {
     private readonly string _propertyName;
     private readonly ITypeDefinition _memberType;
 
-    public DataModelPropertyAccessor(Value instance, string propertyName, ITypeDefinition memberType) {
+    public DataModelPropertyAccessor(Value instance, string propertyName, ITypeDefinition memberType)
+    {
         _instance = instance ?? throw new ArgumentNullException(nameof(instance));
         _propertyName = propertyName ?? throw new ArgumentNullException(nameof(propertyName));
         _memberType = memberType ?? throw new ArgumentNullException(nameof(memberType));
@@ -19,7 +20,8 @@ internal sealed class DataModelPropertyAccessor : Value {
 
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => _memberType;
 
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var instanceExpr = _instance.BuildExpression(context);
 
         // Support object -> IDictionary<string, object?> via casting where possible

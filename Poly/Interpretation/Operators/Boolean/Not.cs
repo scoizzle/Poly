@@ -14,7 +14,8 @@ public sealed class Not(Value value) : BooleanOperator {
     public Value Value { get; init; } = value ?? throw new ArgumentNullException(nameof(value));
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var innerExpression = Value.BuildExpression(context);
         return Expression.Not(innerExpression);
     }

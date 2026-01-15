@@ -9,7 +9,8 @@ internal sealed class ClrTypeIndexInterpretationAccessor(Value instance, ClrType
 
     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)IndexProperty).MemberTypeDefinition;
 
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var instanceExpression = Instance.BuildExpression(context);
         var indexExpressions = IndexParameters.Select(p => p.BuildExpression(context)).ToArray();
 

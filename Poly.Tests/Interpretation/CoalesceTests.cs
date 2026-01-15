@@ -7,7 +7,8 @@ namespace Poly.Tests.Interpretation;
 
 public class CoalesceTests {
     [Test]
-    public async Task Coalesce_WithNullLeft_ReturnsRightValue() {
+    public async Task Coalesce_WithNullLeft_ReturnsRightValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int?>("nullable");
@@ -25,7 +26,8 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithNonNullLeft_ReturnsLeftValue() {
+    public async Task Coalesce_WithNonNullLeft_ReturnsLeftValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int?>("nullable");
@@ -43,7 +45,8 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithParameterLeft_EvaluatesCorrectly() {
+    public async Task Coalesce_WithParameterLeft_EvaluatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var stringTypeDef = context.GetTypeDefinition<string>();
@@ -63,7 +66,8 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_ChainedOperators_WorksCorrectly() {
+    public async Task Coalesce_ChainedOperators_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param1 = context.AddParameter<string?>("first");
@@ -89,7 +93,8 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithObjects_WorksCorrectly() {
+    public async Task Coalesce_WithObjects_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var objectTypeDef = context.GetTypeDefinition<object>();
@@ -110,7 +115,8 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_GetTypeDefinition_ReturnsRightHandType() {
+    public async Task Coalesce_GetTypeDefinition_ReturnsRightHandType()
+    {
         // Arrange
         var context = new InterpretationContext();
         var leftValue = Value.Wrap<int?>(null);
@@ -126,7 +132,8 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_ToString_ReturnsExpectedFormat() {
+    public async Task Coalesce_ToString_ReturnsExpectedFormat()
+    {
         // Arrange
         var leftValue = Value.Null;
         var rightValue = Value.Wrap(42);
@@ -140,7 +147,8 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithNullArguments_ThrowsArgumentNullException() {
+    public async Task Coalesce_WithNullArguments_ThrowsArgumentNullException()
+    {
         // Assert
         await Assert.That(() => new Coalesce(null!, Value.Wrap(1)))
             .Throws<ArgumentNullException>();

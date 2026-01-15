@@ -13,7 +13,8 @@ public partial class AssertionStyleTests {
     ];
 
     [Test]
-    public async Task No_Banned_Assertion_Patterns() {
+    public async Task No_Banned_Assertion_Patterns()
+    {
         var root = GetTestsRoot();
         var files = Directory
             .EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
@@ -43,7 +44,8 @@ public partial class AssertionStyleTests {
         await Assert.That(violations.Count).IsEqualTo(0);
     }
 
-    private static string GetTestsRoot() {
+    private static string GetTestsRoot()
+    {
         // During test runs, BaseDirectory is typically bin/<config>/<tfm>.
         // Go up to the project directory.
         var baseDir = AppContext.BaseDirectory;

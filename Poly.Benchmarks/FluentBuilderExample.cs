@@ -17,7 +17,8 @@ namespace Poly.Benchmarks;
 /// This shows how .NET developers can define types and relationships naturally.
 /// </summary>
 public static class FluentBuilderExample {
-    public static DataModel CreateOrderManagementModel() {
+    public static DataModel CreateOrderManagementModel()
+    {
         var model = new DataModelBuilder();
 
         // Define Customer type with fluent property definitions
@@ -177,7 +178,8 @@ public static class FluentBuilderExample {
         return model.Build();
     }
 
-    public static void Run() {
+    public static void Run()
+    {
         Console.WriteLine("=== Fluent Builder API Example ===\n");
 
         var model = CreateOrderManagementModel();

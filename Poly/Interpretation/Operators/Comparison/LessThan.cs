@@ -19,7 +19,8 @@ public sealed class LessThan(Value leftHandValue, Value rightHandValue) : Boolea
     public Value RightHandValue { get; init; } = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
         return Expression.LessThan(leftExpr, rightExpr);

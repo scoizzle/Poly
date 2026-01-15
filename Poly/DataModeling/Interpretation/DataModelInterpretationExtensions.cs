@@ -4,7 +4,8 @@ using Poly.Introspection;
 namespace Poly.DataModeling.Interpretation;
 
 public static class DataModelInterpretationExtensions {
-    public static ITypeDefinitionProvider ToTypeDefinitionProvider(this DataModel model) {
+    public static ITypeDefinitionProvider ToTypeDefinitionProvider(this DataModel model)
+    {
         ArgumentNullException.ThrowIfNull(model);
         var provider = new DataModelTypeDefinitionProvider();
 
@@ -16,7 +17,8 @@ public static class DataModelInterpretationExtensions {
         return provider;
     }
 
-    public static void RegisterIn(this DataModel model, InterpretationContext context) {
+    public static void RegisterIn(this DataModel model, InterpretationContext context)
+    {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(context);
         context.AddTypeDefinitionProvider(model.ToTypeDefinitionProvider());

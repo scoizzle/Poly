@@ -7,7 +7,8 @@ namespace Poly.Validation;
 public sealed record RuleBuildingContext {
     private const string EntryPointName = "@value";
 
-    public RuleBuildingContext(InterpretationContext interpretationContext, ITypeDefinition entryPointTypeDefinition) {
+    public RuleBuildingContext(InterpretationContext interpretationContext, ITypeDefinition entryPointTypeDefinition)
+    {
         Value = interpretationContext.AddParameter(EntryPointName, entryPointTypeDefinition);
     }
 

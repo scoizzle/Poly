@@ -3,7 +3,8 @@
 public static partial class StringConversion {
     public static Stream GetStream(this string This, Encoding encoding) => new MemoryStream(encoding.GetBytes(This), false);
 
-    public static IEnumerable<char> Escape(this string This, int offset, int count) {
+    public static IEnumerable<char> Escape(this string This, int offset, int count)
+    {
         foreach (var character in This.Skip(offset).Take(count)) {
             switch (character) {
                 case '\r':
@@ -49,7 +50,8 @@ public static partial class StringConversion {
         }
     }
 
-    public static IEnumerable<char> Descape(this string This, int offset, int count) {
+    public static IEnumerable<char> Descape(this string This, int offset, int count)
+    {
         var enumerator = This.Skip(offset).Take(count).GetEnumerator();
 
         while (enumerator.MoveNext()) {

@@ -15,7 +15,8 @@ public class ClrTypeFieldTests {
     }
 
     [Test]
-    public async Task PublicField_HasCorrectProperties() {
+    public async Task PublicField_HasCorrectProperties()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
         var publicField = testType.Fields.WithName("PublicField").SingleOrDefault();
@@ -28,7 +29,8 @@ public class ClrTypeFieldTests {
     }
 
     [Test]
-    public async Task Field_GetMemberAccessor_ReturnsCorrectValue() {
+    public async Task Field_GetMemberAccessor_ReturnsCorrectValue()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
         var publicField = testType.Fields.WithName("PublicField").SingleOrDefault();
@@ -48,7 +50,8 @@ public class ClrTypeFieldTests {
     }
 
     [Test]
-    public async Task Field_ToString_HasCorrectFormat() {
+    public async Task Field_ToString_HasCorrectFormat()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
         var publicField = testType.Fields.WithName("PublicField").SingleOrDefault() as ClrTypeField;
@@ -61,7 +64,8 @@ public class ClrTypeFieldTests {
     }
 
     [Test]
-    public async Task StaticField_HasCorrectProperties() {
+    public async Task StaticField_HasCorrectProperties()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
         var staticField = testType.Fields.WithName("StaticField").SingleOrDefault();
@@ -73,7 +77,8 @@ public class ClrTypeFieldTests {
     }
 
     [Test]
-    public async Task StaticField_GetMemberAccessor_ReturnsCorrectValue() {
+    public async Task StaticField_GetMemberAccessor_ReturnsCorrectValue()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
         var staticField = testType.Fields.WithName("StaticField").SingleOrDefault();
@@ -91,7 +96,8 @@ public class ClrTypeFieldTests {
     }
 
     [Test]
-    public async Task FieldInfo_PropertyIsAccessible() {
+    public async Task FieldInfo_PropertyIsAccessible()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var testType = registry.GetTypeDefinition<TestClass>();
         var publicField = testType.Fields.WithName("PublicField").SingleOrDefault() as ClrTypeField;

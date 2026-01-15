@@ -5,7 +5,8 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeEdgeCasesTests {
     [Test]
-    public async Task NullableValueType_CanBeReflected() {
+    public async Task NullableValueType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var nullableIntType = registry.GetTypeDefinition<int?>();
 
@@ -14,7 +15,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task NullableValueType_HasProperties() {
+    public async Task NullableValueType_HasProperties()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var nullableIntType = registry.GetTypeDefinition<int?>();
 
@@ -28,7 +30,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task NullableValueType_HasValue_PropertyWorks() {
+    public async Task NullableValueType_HasValue_PropertyWorks()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var nullableIntType = registry.GetTypeDefinition<int?>();
         var hasValueProp = nullableIntType.Properties.First(p => p.Name == "HasValue");
@@ -40,7 +43,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task NullableValueType_Value_PropertyWorks() {
+    public async Task NullableValueType_Value_PropertyWorks()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var nullableIntType = registry.GetTypeDefinition<int?>();
         var valueProp = nullableIntType.Properties.First(p => p.Name == "Value");
@@ -52,7 +56,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task InterfaceType_CanBeReflected() {
+    public async Task InterfaceType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var enumerableType = registry.GetTypeDefinition<IEnumerable<int>>();
 
@@ -61,7 +66,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task InterfaceType_HasMembers() {
+    public async Task InterfaceType_HasMembers()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var enumerableType = registry.GetTypeDefinition<IEnumerable<int>>();
 
@@ -72,7 +78,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task AbstractType_CanBeReflected() {
+    public async Task AbstractType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var abstractType = registry.GetTypeDefinition<AbstractBase>();
 
@@ -81,7 +88,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task AbstractType_HasMembers() {
+    public async Task AbstractType_HasMembers()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var abstractType = registry.GetTypeDefinition<AbstractBase>();
 
@@ -94,7 +102,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task GenericType_CanBeReflected() {
+    public async Task GenericType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<string>>();
 
@@ -103,7 +112,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task GenericType_TypeParameter_IsResolved() {
+    public async Task GenericType_TypeParameter_IsResolved()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<string>>();
 
@@ -114,7 +124,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task NestedType_CanBeReflected() {
+    public async Task NestedType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var nestedType = registry.GetTypeDefinition<OuterClass.InnerClass>();
 
@@ -123,7 +134,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task DelegateType_CanBeReflected() {
+    public async Task DelegateType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var delegateType = registry.GetTypeDefinition<Action<int>>();
 
@@ -132,7 +144,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task SealedType_CanBeReflected() {
+    public async Task SealedType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var sealedType = registry.GetTypeDefinition<SealedClass>();
 
@@ -141,7 +154,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task EnumType_CanBeReflected() {
+    public async Task EnumType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var enumType = registry.GetTypeDefinition<TestEnum>();
 
@@ -150,7 +164,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task EnumType_HasFields() {
+    public async Task EnumType_HasFields()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var enumType = registry.GetTypeDefinition<TestEnum>();
 
@@ -161,7 +176,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task StructType_CanBeReflected() {
+    public async Task StructType_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var structType = registry.GetTypeDefinition<TestStruct>();
 
@@ -170,7 +186,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task StructType_HasMembers() {
+    public async Task StructType_HasMembers()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var structType = registry.GetTypeDefinition<TestStruct>();
 
@@ -183,7 +200,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task GenericClassConstraint_CanBeReflected() {
+    public async Task GenericClassConstraint_CanBeReflected()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var genericType = registry.GetTypeDefinition<GenericWithConstraint<string>>();
 
@@ -191,7 +209,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task TypeWithInheritance_HasInheritedMembers() {
+    public async Task TypeWithInheritance_HasInheritedMembers()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedClass>();
 
@@ -202,7 +221,8 @@ public class ClrTypeEdgeCasesTests {
     }
 
     [Test]
-    public async Task PrivateMembers_AreDiscoverable() {
+    public async Task PrivateMembers_AreDiscoverable()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var typeType = registry.GetTypeDefinition<ClassWithPrivateMembers>();
 

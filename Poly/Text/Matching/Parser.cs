@@ -2,7 +2,8 @@ namespace Poly.Text.Matching {
     using Expressions;
 
     public static class Parser {
-        public static bool TryParse(StringView view, out Expression? group) {
+        public static bool TryParse(StringView view, out Expression? group)
+        {
             if (TryParse(view, out Expression[]? expressions) && expressions is not null) {
                 var minimumLength = expressions.Sum(exp => exp.MinimumLength);
 
@@ -18,7 +19,8 @@ namespace Poly.Text.Matching {
             return false;
         }
 
-        public static bool TryParse(StringView view, out Expression[]? expressions) {
+        public static bool TryParse(StringView view, out Expression[]? expressions)
+        {
             var list = new List<Expression>();
 
             while (!view.IsEmpty) {

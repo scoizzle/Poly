@@ -4,7 +4,8 @@ namespace Poly.Tests.Introspection;
 
 public class ClrParameterTests {
     [Test]
-    public async Task SubstringMethod_ParametersHaveCorrectProperties() {
+    public async Task SubstringMethod_ParametersHaveCorrectProperties()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var substringMethod = stringType.Methods.First(m => m.Name == "Substring" && m.Parameters.Count() == 2);
@@ -26,7 +27,8 @@ public class ClrParameterTests {
     }
 
     [Test]
-    public async Task OptionalParameter_HasCorrectProperties() {
+    public async Task OptionalParameter_HasCorrectProperties()
+    {
         // Find a method with optional parameter, e.g., string.PadLeft(int totalWidth, char paddingChar = ' ')
         var registry = ClrTypeDefinitionRegistry.Shared;
         var typeDefinition = registry.GetTypeDefinition<ClrParameterTests>();
@@ -42,7 +44,8 @@ public class ClrParameterTests {
         await Assert.That(optionalParam.DefaultValue).IsEqualTo("default");
     }
 
-    private static void DummyMethod(int requiredParam, string optionalParam = "default") {
+    private static void DummyMethod(int requiredParam, string optionalParam = "default")
+    {
         // This method is only for testing purposes.
     }
 }

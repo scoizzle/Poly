@@ -7,7 +7,8 @@ namespace Poly {
             => TryParse(text, ref index, lastIndex, out value)
             && index == lastIndex;
 
-        public static bool TryParse(this string text, ref int index, int lastIndex, out float value) {
+        public static bool TryParse(this string text, ref int index, int lastIndex, out float value)
+        {
             if (!StringIteration.BoundsCheck(text, index, lastIndex)) {
                 value = float.NaN;
                 return false;

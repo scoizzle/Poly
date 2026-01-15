@@ -19,7 +19,8 @@ public sealed class Equal(Value leftHandValue, Value rightHandValue) : BooleanOp
     public Value RightHandValue { get; init; } = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
         return Expression.Equal(leftExpr, rightExpr);

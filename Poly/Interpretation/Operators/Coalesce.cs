@@ -22,14 +22,16 @@ public sealed class Coalesce(Value leftHandValue, Value rightHandValue) : Operat
     public Value RightHandValue { get; } = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         // The result type is typically the non-nullable version of the left type,
         // but for simplicity we return the right-hand type which should be the target type
         return RightHandValue.GetTypeDefinition(context);
     }
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression leftExpr = LeftHandValue.BuildExpression(context);
         Expression rightExpr = RightHandValue.BuildExpression(context);
 

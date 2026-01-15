@@ -6,7 +6,8 @@ namespace Poly.Text.Matching.Expressions {
         public override TryCompareDelegate Compare()
             => compare(Members, Optional, Next);
 
-        private static TryCompareDelegate gotoView(Expression[] members) {
+        private static TryCompareDelegate gotoView(Expression[] members)
+        {
             if (members.Length == 0)
                 return Evaluation.DefaultComparisonTrue;
 
@@ -23,7 +24,8 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate gotoView(Expression[] members, bool optional) {
+        private static TryCompareDelegate gotoView(Expression[] members, bool optional)
+        {
             if (!optional)
                 return gotoView(members);
 
@@ -42,7 +44,8 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate gotoView(Expression[] members, bool optional, Expression? next) {
+        private static TryCompareDelegate gotoView(Expression[] members, bool optional, Expression? next)
+        {
             if (!optional)
                 return gotoView(members);
 
@@ -67,7 +70,8 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate compare(Expression[] members) {
+        private static TryCompareDelegate compare(Expression[] members)
+        {
             if (members.Length == 0)
                 return Evaluation.DefaultComparisonTrue;
 
@@ -76,7 +80,8 @@ namespace Poly.Text.Matching.Expressions {
             return (StringView view) => firstCompare(view);
         }
 
-        private static TryCompareDelegate compare(Expression[] members, bool optional) {
+        private static TryCompareDelegate compare(Expression[] members, bool optional)
+        {
             if (!optional)
                 return compare(members);
 
@@ -95,7 +100,8 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate compare(Expression[] members, bool optional, Expression? next) {
+        private static TryCompareDelegate compare(Expression[] members, bool optional, Expression? next)
+        {
             if (!optional)
                 return compare(members);
 

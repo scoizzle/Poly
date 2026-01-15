@@ -27,7 +27,8 @@ public sealed class MemberAccess(Value value, string memberName) : Operator {
     /// <param name="context">The interpretation context.</param>
     /// <returns>The member metadata.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the member is not found on the type.</exception>
-    private ITypeMember GetMember(InterpretationContext context) {
+    private ITypeMember GetMember(InterpretationContext context)
+    {
         if (_cachedMember is not null)
             return _cachedMember;
 
@@ -41,17 +42,19 @@ public sealed class MemberAccess(Value value, string memberName) : Operator {
         var firstMember = memberEnumerator.Current;
         if (memberEnumerator.MoveNext())
             throw new InvalidOperationException($"Ambiguous member access: multiple members named '{MemberName}' found on type '{typeDefinition.Name}'.");
-            
+
         return _cachedMember = firstMember;
     }
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         return GetMember(context).MemberTypeDefinition;
     }
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         ITypeMember member = GetMember(context);
         Value memberAccessor = member.GetMemberAccessor(Value);
         return memberAccessor.BuildExpression(context);

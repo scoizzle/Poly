@@ -20,7 +20,8 @@ public sealed class And(Value leftHandValue, Value rightHandValue) : BooleanOper
     public Value RightHandValue { get; } = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var leftExpression = LeftHandValue.BuildExpression(context);
         var rightExpression = RightHandValue.BuildExpression(context);
         return Expression.AndAlso(leftExpression, rightExpression);

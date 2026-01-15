@@ -18,7 +18,8 @@ public sealed class RelationshipBuilder {
     private string? _targetPropertyName;
     private bool? _targetIsMany;
 
-    internal RelationshipBuilder(string sourceTypeName, string? sourcePropertyName, SourceCardinality sourceCardinality) {
+    internal RelationshipBuilder(string sourceTypeName, string? sourcePropertyName, SourceCardinality sourceCardinality)
+    {
         ArgumentNullException.ThrowIfNull(sourceTypeName);
         _sourceTypeName = sourceTypeName;
         _sourcePropertyName = sourcePropertyName;
@@ -27,13 +28,15 @@ public sealed class RelationshipBuilder {
         _targetConstraints = [];
     }
 
-    public RelationshipBuilder OfType(string targetTypeName) {
+    public RelationshipBuilder OfType(string targetTypeName)
+    {
         ArgumentNullException.ThrowIfNull(targetTypeName);
         _targetTypeName = targetTypeName;
         return this;
     }
 
-    public RelationshipBuilder WithOne(string? targetPropertyName = null) {
+    public RelationshipBuilder WithOne(string? targetPropertyName = null)
+    {
         if (_targetTypeName == null) {
             throw new InvalidOperationException("Must call OfType before WithOne.");
         }
@@ -42,7 +45,8 @@ public sealed class RelationshipBuilder {
         return this;
     }
 
-    public RelationshipBuilder WithMany(string? targetPropertyName = null) {
+    public RelationshipBuilder WithMany(string? targetPropertyName = null)
+    {
         if (_targetTypeName == null) {
             throw new InvalidOperationException("Must call OfType before WithMany.");
         }
@@ -51,31 +55,36 @@ public sealed class RelationshipBuilder {
         return this;
     }
 
-    public RelationshipBuilder WithSourceConstraint(Constraint constraint) {
+    public RelationshipBuilder WithSourceConstraint(Constraint constraint)
+    {
         ArgumentNullException.ThrowIfNull(constraint);
         _sourceConstraints.Add(constraint);
         return this;
     }
 
-    public RelationshipBuilder WithSourceConstraints(params Constraint[] constraints) {
+    public RelationshipBuilder WithSourceConstraints(params Constraint[] constraints)
+    {
         ArgumentNullException.ThrowIfNull(constraints);
         _sourceConstraints.AddRange(constraints);
         return this;
     }
 
-    public RelationshipBuilder WithTargetConstraint(Constraint constraint) {
+    public RelationshipBuilder WithTargetConstraint(Constraint constraint)
+    {
         ArgumentNullException.ThrowIfNull(constraint);
         _targetConstraints.Add(constraint);
         return this;
     }
 
-    public RelationshipBuilder WithTargetConstraints(params Constraint[] constraints) {
+    public RelationshipBuilder WithTargetConstraints(params Constraint[] constraints)
+    {
         ArgumentNullException.ThrowIfNull(constraints);
         _targetConstraints.AddRange(constraints);
         return this;
     }
 
-    internal Relationship Build() {
+    internal Relationship Build()
+    {
         if (_targetTypeName == null) {
             throw new InvalidOperationException("Target type name must be set. Call OfType.");
         }

@@ -7,7 +7,8 @@ namespace Poly.Tests.Interpretation;
 
 public class UnaryMinusTests {
     [Test]
-    public async Task UnaryMinus_WithPositiveInteger_ReturnsNegative() {
+    public async Task UnaryMinus_WithPositiveInteger_ReturnsNegative()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(42);
@@ -24,7 +25,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithNegativeInteger_ReturnsPositive() {
+    public async Task UnaryMinus_WithNegativeInteger_ReturnsPositive()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(-99);
@@ -41,7 +43,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithZero_ReturnsZero() {
+    public async Task UnaryMinus_WithZero_ReturnsZero()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(0);
@@ -58,7 +61,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithDouble_NegatesCorrectly() {
+    public async Task UnaryMinus_WithDouble_NegatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(3.14);
@@ -75,7 +79,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithParameter_EvaluatesCorrectly() {
+    public async Task UnaryMinus_WithParameter_EvaluatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -93,7 +98,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_DoubleNegation_ReturnsOriginalValue() {
+    public async Task UnaryMinus_DoubleNegation_ReturnsOriginalValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -111,7 +117,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithArithmeticExpression_EvaluatesCorrectly() {
+    public async Task UnaryMinus_WithArithmeticExpression_EvaluatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -131,7 +138,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_GetTypeDefinition_ReturnsOperandType() {
+    public async Task UnaryMinus_GetTypeDefinition_ReturnsOperandType()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(42);
@@ -146,7 +154,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_ToString_ReturnsExpectedFormat() {
+    public async Task UnaryMinus_ToString_ReturnsExpectedFormat()
+    {
         // Arrange
         var operand = Value.Wrap(42);
         var unaryMinus = new UnaryMinus(operand);
@@ -159,7 +168,8 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithNullArgument_ThrowsArgumentNullException() {
+    public async Task UnaryMinus_WithNullArgument_ThrowsArgumentNullException()
+    {
         // Assert
         await Assert.That(() => new UnaryMinus(null!))
             .Throws<ArgumentNullException>();

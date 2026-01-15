@@ -13,7 +13,8 @@ public sealed class RuleSet<T> {
     /// Initializes a new instance of the RuleSet class.
     /// </summary>
     /// <param name="rules">The collection of rules to combine.</param>
-    public RuleSet(IEnumerable<Rule> rules) {
+    public RuleSet(IEnumerable<Rule> rules)
+    {
         // Combine all rules into a single AndRule
         CombinedRules = new AndRule(rules);
 

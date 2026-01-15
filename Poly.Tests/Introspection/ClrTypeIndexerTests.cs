@@ -7,7 +7,8 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeIndexerTests {
     [Test]
-    public async Task ArrayType_HasProperties() {
+    public async Task ArrayType_HasProperties()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var arrayType = registry.GetTypeDefinition<int[]>();
 
@@ -18,7 +19,8 @@ public class ClrTypeIndexerTests {
     }
 
     [Test]
-    public async Task ListType_HasIndexerProperty() {
+    public async Task ListType_HasIndexerProperty()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
 
@@ -31,7 +33,8 @@ public class ClrTypeIndexerTests {
     }
 
     [Test]
-    public async Task DictionaryType_HasIndexerProperty() {
+    public async Task DictionaryType_HasIndexerProperty()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var dictType = registry.GetTypeDefinition<Dictionary<string, int>>();
 
@@ -43,7 +46,8 @@ public class ClrTypeIndexerTests {
     }
 
     [Test]
-    public async Task ListIndexer_HasCorrectProperties() {
+    public async Task ListIndexer_HasCorrectProperties()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var indexer = listType.Properties.First(p => p.Parameters != null);
@@ -55,7 +59,8 @@ public class ClrTypeIndexerTests {
     }
 
     [Test]
-    public async Task ListIndexer_AccessWithValidIndex_ReturnsValue() {
+    public async Task ListIndexer_AccessWithValidIndex_ReturnsValue()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var indexer = listType.Properties.First(p => p.Parameters != null);
@@ -88,7 +93,8 @@ public class ClrTypeIndexerTests {
     // }
 
     [Test]
-    public async Task DictionaryIndexer_AccessWithValidKey_ReturnsValue() {
+    public async Task DictionaryIndexer_AccessWithValidKey_ReturnsValue()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var dictType = registry.GetTypeDefinition<Dictionary<string, int>>();
         var indexer = dictType.Properties.First(p => p.Parameters != null);
@@ -116,7 +122,8 @@ public class ClrTypeIndexerTests {
     }
 
     [Test]
-    public async Task CustomIndexer_AccessWithValidIndex_ReturnsValue() {
+    public async Task CustomIndexer_AccessWithValidIndex_ReturnsValue()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var customType = registry.GetTypeDefinition<CustomIndexerClass>();
         var indexer = customType.Properties.First(p => p.Parameters != null);
@@ -138,7 +145,8 @@ public class ClrTypeIndexerTests {
     }
 
     [Test]
-    public async Task IndexerWithMultipleParameters_ReturnsCorrectValue() {
+    public async Task IndexerWithMultipleParameters_ReturnsCorrectValue()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var customType = registry.GetTypeDefinition<MultiParamIndexerClass>();
         var indexers = customType.Properties.Where(p => p.Parameters != null).ToList();
@@ -167,7 +175,8 @@ public class ClrTypeIndexerTests {
     }
 
     [Test]
-    public async Task Indexer_ToString_HasCorrectFormat() {
+    public async Task Indexer_ToString_HasCorrectFormat()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var indexer = listType.Properties.First(p => p.Parameters != null);

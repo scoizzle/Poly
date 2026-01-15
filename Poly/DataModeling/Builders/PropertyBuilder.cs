@@ -9,7 +9,8 @@ public sealed class PropertyBuilder {
     private string? _dataModelTypeName;
     private object? _defaultValue;
 
-    public PropertyBuilder(string name) {
+    public PropertyBuilder(string name)
+    {
         ArgumentNullException.ThrowIfNull(name);
         _name = name;
         _constraints = [];
@@ -17,41 +18,48 @@ public sealed class PropertyBuilder {
 
     public string Name => _name;
 
-    public PropertyBuilder OfType<T>() {
+    public PropertyBuilder OfType<T>()
+    {
         _propertyType = typeof(T);
         return this;
     }
 
-    public PropertyBuilder OfType(Type type) {
+    public PropertyBuilder OfType(Type type)
+    {
         ArgumentNullException.ThrowIfNull(type);
         _propertyType = type;
         return this;
     }
 
-    public PropertyBuilder OfType(string typeName) {
+    public PropertyBuilder OfType(string typeName)
+    {
         ArgumentNullException.ThrowIfNull(typeName);
         _dataModelTypeName = typeName;
         return this;
     }
 
-    public PropertyBuilder WithConstraint(Constraint constraint) {
+    public PropertyBuilder WithConstraint(Constraint constraint)
+    {
         ArgumentNullException.ThrowIfNull(constraint);
         _constraints.Add(constraint);
         return this;
     }
 
-    public PropertyBuilder WithConstraints(params IEnumerable<Constraint> constraints) {
+    public PropertyBuilder WithConstraints(params IEnumerable<Constraint> constraints)
+    {
         ArgumentNullException.ThrowIfNull(constraints);
         _constraints.AddRange(constraints);
         return this;
     }
 
-    public PropertyBuilder WithDefault(object? defaultValue) {
+    public PropertyBuilder WithDefault(object? defaultValue)
+    {
         _defaultValue = defaultValue;
         return this;
     }
 
-    public DataProperty Build() {
+    public DataProperty Build()
+    {
         if (_dataModelTypeName != null) {
             return new ReferenceProperty(_name, _dataModelTypeName, _constraints, _defaultValue);
         }

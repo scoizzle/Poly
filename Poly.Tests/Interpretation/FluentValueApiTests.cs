@@ -6,7 +6,8 @@ namespace Poly.Tests.Interpretation;
 
 public class FluentValueApiTests {
     [Test]
-    public async Task FluentApi_ArithmeticChaining_WorksCorrectly() {
+    public async Task FluentApi_ArithmeticChaining_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -24,7 +25,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_ComparisonChaining_WorksCorrectly() {
+    public async Task FluentApi_ComparisonChaining_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -43,7 +45,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_BooleanChaining_WorksCorrectly() {
+    public async Task FluentApi_BooleanChaining_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var x = context.AddParameter<int>("x");
@@ -68,7 +71,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_ConditionalExpression_WorksCorrectly() {
+    public async Task FluentApi_ConditionalExpression_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -88,7 +92,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_CoalesceExpression_WorksCorrectly() {
+    public async Task FluentApi_CoalesceExpression_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int?>("x");
@@ -107,7 +112,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_NegateOperation_WorksCorrectly() {
+    public async Task FluentApi_NegateOperation_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -126,7 +132,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_NotOperation_WorksCorrectly() {
+    public async Task FluentApi_NotOperation_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<bool>("x");
@@ -145,7 +152,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_TypeCastOperation_WorksCorrectly() {
+    public async Task FluentApi_TypeCastOperation_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -164,7 +172,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_IndexAccess_WorksCorrectly() {
+    public async Task FluentApi_IndexAccess_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<List<int>>("list");
@@ -183,7 +192,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_MemberAccess_WorksCorrectly() {
+    public async Task FluentApi_MemberAccess_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<string>("str");
@@ -202,7 +212,8 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_ComplexExpression_WorksCorrectly() {
+    public async Task FluentApi_ComplexExpression_WorksCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var x = context.AddParameter<int>("x");

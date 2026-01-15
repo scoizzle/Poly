@@ -27,12 +27,14 @@ public sealed class TypeCast(Value operand, ITypeDefinition targetType, bool isC
     public bool IsChecked { get; } = isChecked;
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         return TargetType;
     }
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         Expression operandExpr = Operand.BuildExpression(context);
         Type targetClrType = TargetType.ReflectedType;
 

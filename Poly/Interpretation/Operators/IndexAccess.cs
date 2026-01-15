@@ -26,7 +26,8 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     /// <param name="context">The interpretation context.</param>
     /// <returns>The indexer member metadata.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no indexer is found on the type.</exception>
-    private ITypeMember? GetIndexer(InterpretationContext context) {
+    private ITypeMember? GetIndexer(InterpretationContext context)
+    {
         ITypeDefinition typeDefinition = Value.GetTypeDefinition(context);
 
         // Get all members named "Item" (indexers)
@@ -52,7 +53,8 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     }
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         var indexer = GetIndexer(context);
         if (indexer is not null) {
             return indexer.MemberTypeDefinition;
@@ -71,7 +73,8 @@ public sealed class IndexAccess(Value value, params IEnumerable<Value> indexArgu
     }
 
     /// <inheritdoc />
-    public override Expression BuildExpression(InterpretationContext context) {
+    public override Expression BuildExpression(InterpretationContext context)
+    {
         var indexer = GetIndexer(context);
         if (indexer is not null) {
             Value memberAccessor = indexer.GetMemberAccessor(Value, IndexArguments);

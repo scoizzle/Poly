@@ -30,7 +30,8 @@ public sealed class InterpretationContext {
     /// <remarks>
     /// The context is initialized with the CLR type definition registry and a global scope.
     /// </remarks>
-    public InterpretationContext() {
+    public InterpretationContext()
+    {
         _typeDefinitionProviderCollection = new TypeDefinitionProviderCollection(ClrTypeDefinitionRegistry.Shared);
         _scopes = new Stack<VariableScope>();
         _currentScope = _globalScope = new VariableScope();
@@ -52,7 +53,8 @@ public sealed class InterpretationContext {
     /// Adds a custom type definition provider to this context.
     /// </summary>
     /// <param name="provider">The type definition provider to add.</param>
-    public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider) {
+    public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider)
+    {
         _typeDefinitionProviderCollection.AddProvider(provider);
     }
 
@@ -84,7 +86,8 @@ public sealed class InterpretationContext {
     /// <param name="initialValue">The initial value, or <c>null</c> for an uninitialized variable.</param>
     /// <returns>The newly declared variable.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
-    public Variable DeclareVariable(string name, Value? initialValue = null) {
+    public Variable DeclareVariable(string name, Value? initialValue = null)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return _currentScope.SetVariable(name, initialValue);
     }
@@ -100,7 +103,8 @@ public sealed class InterpretationContext {
     /// If a variable with the given name exists in any scope, its value is updated.
     /// Otherwise, a new variable is created in the current scope.
     /// </remarks>
-    public Variable SetVariable(string name, Value value) {
+    public Variable SetVariable(string name, Value value)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Variable? variable = GetVariable(name);
         if (variable is not null) {
@@ -116,7 +120,8 @@ public sealed class InterpretationContext {
     /// <param name="name">The name of the variable to retrieve.</param>
     /// <returns>The variable if found; otherwise, <c>null</c>.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
-    public Variable? GetVariable(string name) {
+    public Variable? GetVariable(string name)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return _currentScope.GetVariable(name);
     }
@@ -132,7 +137,8 @@ public sealed class InterpretationContext {
     /// <remarks>
     /// The parameter is added to the global scope as a variable so it can be referenced by name.
     /// </remarks>
-    public Parameter AddParameter(string name, ITypeDefinition type) {
+    public Parameter AddParameter(string name, ITypeDefinition type)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(type);
 
@@ -160,7 +166,8 @@ public sealed class InterpretationContext {
     /// Variables declared after this call will be in the new scope. Use <see cref="PopScope"/>
     /// to return to the previous scope.
     /// </remarks>
-    public void PushScope() {
+    public void PushScope()
+    {
         if (_scopes.Count >= MaxScopeDepth)
             throw new InvalidOperationException("Maximum scope depth exceeded.");
 
@@ -176,7 +183,8 @@ public sealed class InterpretationContext {
     /// <remarks>
     /// Variables declared in the popped scope will no longer be accessible.
     /// </remarks>
-    public void PopScope() {
+    public void PopScope()
+    {
         if (_scopes.Count == 1)
             throw new InvalidOperationException("Cannot pop the global scope.");
 

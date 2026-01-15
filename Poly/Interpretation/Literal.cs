@@ -17,7 +17,8 @@ public sealed class Literal<T>(T value) : Constant {
     public T Value { get; } = value;
 
     /// <inheritdoc />
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) {
+    public override ITypeDefinition GetTypeDefinition(InterpretationContext context)
+    {
         if (_cachedTypeDefinition is not null)
             return _cachedTypeDefinition;
 

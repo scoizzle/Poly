@@ -7,14 +7,16 @@ namespace Poly.Text.Matching.Benchmarks {
         private TryCompareDelegate? compare;
 
         [GlobalSetup]
-        public void Setup() {
+        public void Setup()
+        {
             _ = Parser.TryParse(new StringView(UrlMatchString), out Expression? expr);
             expression = expr;
             compare = expression?.Compare();
         }
 
         [Benchmark]
-        public void GeneratedViewDelegateChain() {
+        public void GeneratedViewDelegateChain()
+        {
             compare?.Invoke(new StringView(UrlTestString));
         }
 

@@ -7,7 +7,8 @@ namespace Poly.Tests.Interpretation;
 
 public class ModuloTests {
     [Test]
-    public async Task Modulo_WithIntegers_ReturnsRemainder() {
+    public async Task Modulo_WithIntegers_ReturnsRemainder()
+    {
         // Arrange
         var context = new InterpretationContext();
         var leftValue = Value.Wrap(10);
@@ -25,7 +26,8 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_WithExactDivision_ReturnsZero() {
+    public async Task Modulo_WithExactDivision_ReturnsZero()
+    {
         // Arrange
         var context = new InterpretationContext();
         var leftValue = Value.Wrap(15);
@@ -43,7 +45,8 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_WithDoubles_ReturnsRemainder() {
+    public async Task Modulo_WithDoubles_ReturnsRemainder()
+    {
         // Arrange
         var context = new InterpretationContext();
         var leftValue = Value.Wrap(10.5);
@@ -61,7 +64,8 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_WithParameters_EvaluatesCorrectly() {
+    public async Task Modulo_WithParameters_EvaluatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param1 = context.AddParameter<int>("a");
@@ -84,7 +88,8 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_WithNegativeNumbers_HandlesCorrectly() {
+    public async Task Modulo_WithNegativeNumbers_HandlesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var leftValue = Value.Wrap(-10);
@@ -102,7 +107,8 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_GetTypeDefinition_ReturnsLeftHandType() {
+    public async Task Modulo_GetTypeDefinition_ReturnsLeftHandType()
+    {
         // Arrange
         var context = new InterpretationContext();
         var leftValue = Value.Wrap(10);
@@ -118,7 +124,8 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_ToString_ReturnsExpectedFormat() {
+    public async Task Modulo_ToString_ReturnsExpectedFormat()
+    {
         // Arrange
         var leftValue = Value.Wrap(10);
         var rightValue = Value.Wrap(3);
@@ -132,7 +139,8 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_WithNullArguments_ThrowsArgumentNullException() {
+    public async Task Modulo_WithNullArguments_ThrowsArgumentNullException()
+    {
         // Assert
         await Assert.That(() => new Modulo(null!, Value.Wrap(3)))
             .Throws<ArgumentNullException>();

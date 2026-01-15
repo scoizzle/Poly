@@ -7,7 +7,8 @@ namespace Poly.Tests.Interpretation;
 
 public class NumericTypePromotionTests {
     [Test]
-    public async Task Add_IntAndDouble_ReturnsDouble() {
+    public async Task Add_IntAndDouble_ReturnsDouble()
+    {
         // Arrange
         var context = new InterpretationContext();
         var intValue = Value.Wrap(42);
@@ -22,7 +23,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Add_IntAndDouble_EvaluatesCorrectly() {
+    public async Task Add_IntAndDouble_EvaluatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var intValue = Value.Wrap(10);
@@ -40,7 +42,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Multiply_FloatAndInt_ReturnsFloat() {
+    public async Task Multiply_FloatAndInt_ReturnsFloat()
+    {
         // Arrange
         var context = new InterpretationContext();
         var floatValue = Value.Wrap(2.5f);
@@ -55,7 +58,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Subtract_LongAndInt_ReturnsLong() {
+    public async Task Subtract_LongAndInt_ReturnsLong()
+    {
         // Arrange
         var context = new InterpretationContext();
         var longValue = Value.Wrap(100L);
@@ -70,7 +74,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Divide_DecimalAndInt_ReturnsDecimal() {
+    public async Task Divide_DecimalAndInt_ReturnsDecimal()
+    {
         // Arrange
         var context = new InterpretationContext();
         var decimalValue = Value.Wrap(100m);
@@ -85,7 +90,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Modulo_DoubleAndFloat_ReturnsDouble() {
+    public async Task Modulo_DoubleAndFloat_ReturnsDouble()
+    {
         // Arrange
         var context = new InterpretationContext();
         var doubleValue = Value.Wrap(10.5);
@@ -100,7 +106,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Add_TwoInts_ReturnsInt() {
+    public async Task Add_TwoInts_ReturnsInt()
+    {
         // Arrange
         var context = new InterpretationContext();
         var intValue1 = Value.Wrap(10);
@@ -115,7 +122,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Add_ByteAndShort_ReturnsInt() {
+    public async Task Add_ByteAndShort_ReturnsInt()
+    {
         // Arrange
         var context = new InterpretationContext();
         var byteValue = Value.Wrap((byte)10);
@@ -130,7 +138,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Multiply_UIntAndLong_ReturnsLong() {
+    public async Task Multiply_UIntAndLong_ReturnsLong()
+    {
         // Arrange
         var context = new InterpretationContext();
         var uintValue = Value.Wrap(10u);
@@ -145,7 +154,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Add_ULongAndInt_ReturnsULong() {
+    public async Task Add_ULongAndInt_ReturnsULong()
+    {
         // Arrange
         var context = new InterpretationContext();
         var ulongValue = Value.Wrap(100UL);
@@ -160,7 +170,8 @@ public class NumericTypePromotionTests {
     }
 
     [Test]
-    public async Task Add_WithParameters_PromotesCorrectly() {
+    public async Task Add_WithParameters_PromotesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var intParam = context.AddParameter<int>("x");

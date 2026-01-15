@@ -5,7 +5,8 @@ namespace Poly.Tests.Validation;
 
 public class RuleTests {
     [Test]
-    public async Task AndRule_AllConditionsTrue_PassesValidation() {
+    public async Task AndRule_AllConditionsTrue_PassesValidation()
+    {
         var rule = new AndRule([
             new NotNullConstraint(),
             new ComparisonRule("Age", ComparisonOperator.GreaterThanOrEqual, "Age")
@@ -20,7 +21,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task AndRule_OneConditionFalse_FailsValidation() {
+    public async Task AndRule_OneConditionFalse_FailsValidation()
+    {
         var rule = new AndRule([
             new NotNullConstraint(),
             new ComparisonRule("Age", ComparisonOperator.LessThan, "Age")
@@ -35,7 +37,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task OrRule_OneConditionTrue_PassesValidation() {
+    public async Task OrRule_OneConditionTrue_PassesValidation()
+    {
         var rule = new OrRule([
             new NotNullConstraint(),
             new ComparisonRule("Age", ComparisonOperator.LessThan, "Age")
@@ -50,7 +53,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task OrRule_AllConditionsFalse_FailsValidation() {
+    public async Task OrRule_AllConditionsFalse_FailsValidation()
+    {
         var rule = new OrRule([
             new ComparisonRule("Age", ComparisonOperator.LessThan, "Age"),
             new ComparisonRule("Age", ComparisonOperator.GreaterThan, "Age")
@@ -65,7 +69,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task NotRule_ConditionTrue_FailsValidation() {
+    public async Task NotRule_ConditionTrue_FailsValidation()
+    {
         var rule = new NotRule(new NotNullConstraint());
 
         var ruleSet = new RuleSet<TestPerson>([rule]);
@@ -77,7 +82,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task NotRule_ConditionFalse_PassesValidation() {
+    public async Task NotRule_ConditionFalse_PassesValidation()
+    {
         var constraint = new RangeConstraint(50, 100);
         var rule = new NotRule(new PropertyConstraintRule("Age", constraint));
 
@@ -90,7 +96,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task ComparisonRule_Equal_PassesValidation() {
+    public async Task ComparisonRule_Equal_PassesValidation()
+    {
         var rule = new ComparisonRule("Age", ComparisonOperator.Equal, "Age");
 
         var ruleSet = new RuleSet<TestPerson>([rule]);
@@ -102,7 +109,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task ComparisonRule_NotEqual_PassesValidation() {
+    public async Task ComparisonRule_NotEqual_PassesValidation()
+    {
         var rule = new ComparisonRule("Age", ComparisonOperator.NotEqual, "Age");
 
         var ruleSet = new RuleSet<TestPerson>([rule]);
@@ -114,7 +122,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task ComparisonRule_GreaterThan_PassesValidation() {
+    public async Task ComparisonRule_GreaterThan_PassesValidation()
+    {
         var rule = new ComparisonRule("Age", ComparisonOperator.GreaterThan, "Age");
 
         var ruleSet = new RuleSet<TestPerson>([rule]);
@@ -126,7 +135,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task ConditionalRule_ConditionTrue_EvaluatesThenRule() {
+    public async Task ConditionalRule_ConditionTrue_EvaluatesThenRule()
+    {
         var conditionalRule = new ConditionalRule(
             condition: new ComparisonRule("Age", ComparisonOperator.GreaterThanOrEqual, "Age"),
             thenRule: new NotNullConstraint()
@@ -141,7 +151,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task ConditionalRule_ConditionFalse_PassesValidation() {
+    public async Task ConditionalRule_ConditionFalse_PassesValidation()
+    {
         // Create a conditional rule that requires Name when Age > 50
         // Since Age is 25, the condition is false, so the rule should pass
         var conditionalRule = new ConditionalRule(
@@ -158,7 +169,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task PropertyDependencyRule_SourceHasValue_DependentMustHaveValue() {
+    public async Task PropertyDependencyRule_SourceHasValue_DependentMustHaveValue()
+    {
         // Both Name properties to test string/null comparison
         var rule = new PropertyDependencyRule("Name", "Description", requireWhenSourceHasValue: true);
 
@@ -175,7 +187,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task PropertyDependencyRule_SourceNull_DependentCanBeAnything() {
+    public async Task PropertyDependencyRule_SourceNull_DependentCanBeAnything()
+    {
         var rule = new PropertyDependencyRule("Name", "Description", requireWhenSourceHasValue: true);
 
         var ruleSet = new RuleSet<TestPerson>([rule]);
@@ -187,7 +200,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task PropertyConstraintRule_AppliesConstraintToProperty() {
+    public async Task PropertyConstraintRule_AppliesConstraintToProperty()
+    {
         var rule = new PropertyConstraintRule("Name", new NotNullConstraint());
 
         var ruleSet = new RuleSet<TestPerson>([rule]);
@@ -199,7 +213,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task PropertyConstraintRule_WithNullProperty_FailsValidation() {
+    public async Task PropertyConstraintRule_WithNullProperty_FailsValidation()
+    {
         var rule = new PropertyConstraintRule("Name", new NotNullConstraint());
 
         var ruleSet = new RuleSet<TestPerson>([rule]);
@@ -211,7 +226,8 @@ public class RuleTests {
     }
 
     [Test]
-    public async Task MutualExclusionRule_OnePropertyHasValue_PassesValidation() {
+    public async Task MutualExclusionRule_OnePropertyHasValue_PassesValidation()
+    {
         var rule = new MutualExclusionRule(["Name", "Description"], maxAllowed: 1);
 
         var ruleSet = new RuleSet<TestPerson>([rule]);

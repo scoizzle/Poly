@@ -20,7 +20,8 @@ public class ClrMethodTests {
             m.Name == methodName && predicate((ClrMethod)m));
 
     [Test]
-    public async Task ToStringMethod_HasCorrectProperties() {
+    public async Task ToStringMethod_HasCorrectProperties()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var toStringMethod = intType.Methods.First(m => m.Name == "ToString");
@@ -31,7 +32,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task ToStringMethod_HasParameters() {
+    public async Task ToStringMethod_HasParameters()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var toStringMethod = intType.Methods.First(m => m.Name == "ToString");
@@ -44,7 +46,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task ParseMethod_HasCorrectMemberType() {
+    public async Task ParseMethod_HasCorrectMemberType()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var parseMethod = intType.Methods.First(m => m.Name == "Parse");
@@ -54,7 +57,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Method_WithNoParameters_HasEmptyParametersList() {
+    public async Task Method_WithNoParameters_HasEmptyParametersList()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -63,7 +67,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Method_WithGenericMemberType_HasCorrectMemberType() {
+    public async Task Method_WithGenericMemberType_HasCorrectMemberType()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var getEnumeratorMethod = listType.Methods.First(m => m.Name == "GetEnumerator");
@@ -73,7 +78,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Method_WithMultipleOverloads_CanBeDistinguished() {
+    public async Task Method_WithMultipleOverloads_CanBeDistinguished()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var indexOfMethods = stringType.Methods.Where(m => m.Name == "IndexOf").ToList();
@@ -92,7 +98,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Constructor_WithValidArguments_CreatesInstance() {
+    public async Task Constructor_WithValidArguments_CreatesInstance()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -107,7 +114,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Constructor_WithNullMethod_ThrowsArgumentNullException() {
+    public async Task Constructor_WithNullMethod_ThrowsArgumentNullException()
+    {
         var instance = Value.Wrap("test");
 
         await Assert.That(() => new ClrMethodInvocationInterpretation(null!, instance, []))
@@ -115,7 +123,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Constructor_WithNullInstance_ThrowsArgumentNullException() {
+    public async Task Constructor_WithNullInstance_ThrowsArgumentNullException()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -125,7 +134,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Constructor_WithNullArguments_ThrowsArgumentNullException() {
+    public async Task Constructor_WithNullArguments_ThrowsArgumentNullException()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -136,7 +146,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ReturnsMethodMemberType() {
+    public async Task GetTypeDefinition_ReturnsMethodMemberType()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -151,7 +162,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ForIntMethod_ReturnsInt32Type() {
+    public async Task GetTypeDefinition_ForIntMethod_ReturnsInt32Type()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var toStringMethod = (ClrMethod)intType.Methods.First(m => m.Name == "ToString" && !m.Parameters.Any());
@@ -166,7 +178,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_ForInstanceMethod_CreatesCallExpression() {
+    public async Task BuildExpression_ForInstanceMethod_CreatesCallExpression()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -185,7 +198,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_CompilesAndExecutes_InstanceMethod() {
+    public async Task BuildExpression_CompilesAndExecutes_InstanceMethod()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -202,7 +216,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_WithArguments_PassesArgumentsToMethod() {
+    public async Task BuildExpression_WithArguments_PassesArgumentsToMethod()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var substringMethod = (ClrMethod)stringType.Methods.First(m =>
@@ -223,7 +238,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_WithMultipleArguments_WorksCorrectly() {
+    public async Task BuildExpression_WithMultipleArguments_WorksCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var indexOfMethod = (ClrMethod)stringType.Methods.First(m =>
@@ -244,7 +260,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_ForStaticMethod_WithNullInstance_CreatesStaticCallExpression() {
+    public async Task BuildExpression_ForStaticMethod_WithNullInstance_CreatesStaticCallExpression()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var parseMethod = (ClrMethod)intType.Methods.First(m =>
@@ -267,7 +284,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_StaticMethod_CompilesAndExecutes() {
+    public async Task BuildExpression_StaticMethod_CompilesAndExecutes()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var parseMethod = (ClrMethod)intType.Methods.First(m =>
@@ -288,7 +306,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_StaticMethodWithMultipleArgs_WorksCorrectly() {
+    public async Task BuildExpression_StaticMethodWithMultipleArgs_WorksCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var concatMethod = (ClrMethod)stringType.Methods.First(m =>
@@ -310,7 +329,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_StaticMethodWithNonNullInstance_IgnoresInstance() {
+    public async Task BuildExpression_StaticMethodWithNonNullInstance_IgnoresInstance()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var parseMethod = (ClrMethod)intType.Methods.First(m =>
@@ -331,7 +351,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_WithParameterAsInstance_WorksCorrectly() {
+    public async Task BuildExpression_WithParameterAsInstance_WorksCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -348,7 +369,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_WithParameterAsArgument_WorksCorrectly() {
+    public async Task BuildExpression_WithParameterAsArgument_WorksCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var indexOfMethod = (ClrMethod)stringType.Methods.First(m =>
@@ -372,7 +394,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task ToString_ReturnsFormattedMethodCall() {
+    public async Task ToString_ReturnsFormattedMethodCall()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -385,7 +408,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task ToString_WithArguments_IncludesArguments() {
+    public async Task ToString_WithArguments_IncludesArguments()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var substringMethod = (ClrMethod)stringType.Methods.First(m =>
@@ -402,7 +426,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task ToString_WithSingleArgument_FormatsCorrectly() {
+    public async Task ToString_WithSingleArgument_FormatsCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var indexOfMethod = (ClrMethod)stringType.Methods.First(m =>
@@ -419,7 +444,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task IntegrationTest_ChainedMethodCalls_WorksCorrectly() {
+    public async Task IntegrationTest_ChainedMethodCalls_WorksCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var trimMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "Trim" && !m.Parameters.Any());
@@ -443,7 +469,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task IntegrationTest_MethodFromGetMethodInvocation_WorksCorrectly() {
+    public async Task IntegrationTest_MethodFromGetMethodInvocation_WorksCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -463,7 +490,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task IntegrationTest_MethodWithComplexTypes_WorksCorrectly() {
+    public async Task IntegrationTest_MethodWithComplexTypes_WorksCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var addMethod = (ClrMethod)listType.Methods.First(m =>
@@ -487,7 +515,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_WithNoArguments_EmptyArgumentsArray() {
+    public async Task BuildExpression_WithNoArguments_EmptyArgumentsArray()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = (ClrMethod)stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -505,7 +534,8 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task BuildExpression_MethodReturningVoid_WorksCorrectly() {
+    public async Task BuildExpression_MethodReturningVoid_WorksCorrectly()
+    {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var clearMethod = (ClrMethod)listType.Methods.First(m => m.Name == "Clear");

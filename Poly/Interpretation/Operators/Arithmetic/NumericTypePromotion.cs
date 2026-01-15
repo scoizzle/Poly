@@ -26,7 +26,8 @@ internal static class NumericTypePromotion {
     public static ITypeDefinition GetPromotedType(
         InterpretationContext context,
         ITypeDefinition leftType,
-        ITypeDefinition rightType) {
+        ITypeDefinition rightType)
+    {
 
         var leftClrType = leftType.ReflectedType;
         var rightClrType = rightType.ReflectedType;
@@ -83,7 +84,8 @@ internal static class NumericTypePromotion {
         Expression leftExpr,
         Expression rightExpr,
         ITypeDefinition leftType,
-        ITypeDefinition rightType) {
+        ITypeDefinition rightType)
+    {
 
         var promotedType = GetPromotedType(context, leftType, rightType);
         var promotedClrType = promotedType.ReflectedType;

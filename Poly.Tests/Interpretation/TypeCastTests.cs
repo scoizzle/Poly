@@ -7,7 +7,8 @@ namespace Poly.Tests.Interpretation;
 
 public class TypeCastTests {
     [Test]
-    public async Task TypeCast_IntToDouble_ConvertsCorrectly() {
+    public async Task TypeCast_IntToDouble_ConvertsCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(42);
@@ -25,7 +26,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_DoubleToInt_TruncatesDecimal() {
+    public async Task TypeCast_DoubleToInt_TruncatesDecimal()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(3.14);
@@ -43,7 +45,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_LongToInt_ConvertsCorrectly() {
+    public async Task TypeCast_LongToInt_ConvertsCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(100L);
@@ -61,7 +64,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_WithParameter_EvaluatesCorrectly() {
+    public async Task TypeCast_WithParameter_EvaluatesCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
@@ -79,7 +83,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_StringToObject_ConvertsCorrectly() {
+    public async Task TypeCast_StringToObject_ConvertsCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<string>("str");
@@ -98,7 +103,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_ObjectToString_DowncastsCorrectly() {
+    public async Task TypeCast_ObjectToString_DowncastsCorrectly()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<object>("obj");
@@ -116,7 +122,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_NullableToNonNullable_UnwrapsValue() {
+    public async Task TypeCast_NullableToNonNullable_UnwrapsValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int?>("nullable");
@@ -133,7 +140,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_NonNullableToNullable_WrapsValue() {
+    public async Task TypeCast_NonNullableToNullable_WrapsValue()
+    {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("value");
@@ -150,7 +158,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_GetTypeDefinition_ReturnsTargetType() {
+    public async Task TypeCast_GetTypeDefinition_ReturnsTargetType()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(42);
@@ -166,7 +175,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_ToString_ReturnsExpectedFormat() {
+    public async Task TypeCast_ToString_ReturnsExpectedFormat()
+    {
         // Arrange
         var context = new InterpretationContext();
         var operand = Value.Wrap(42);
@@ -182,7 +192,8 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException() {
+    public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException()
+    {
         // Arrange
         var context = new InterpretationContext();
         var doubleType = context.GetTypeDefinition<double>()!;

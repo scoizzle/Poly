@@ -15,8 +15,6 @@ public sealed class UnaryOperation(UnaryOperationKind operation, Interpretable o
     public Interpretable Operand { get; } = operand ?? throw new ArgumentNullException(nameof(operand));
 
     /// <inheritdoc />
-
-
     public override TExpr Evaluate<TExpr, TStmt, TParam>(IExecutionPlanBuilder<TExpr, TStmt, TParam> builder)
     {
         var value = Operand.Evaluate(builder);

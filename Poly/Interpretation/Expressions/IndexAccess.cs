@@ -12,14 +12,13 @@ public sealed class IndexAccess(Interpretable target, params IEnumerable<Interpr
     /// Gets the value whose indexer is being accessed.
     /// </summary>
     public Interpretable Target { get; } = target ?? throw new ArgumentNullException(nameof(target));
+    
     /// <summary>
     /// Gets the index arguments for the indexer.
     /// </summary>
     public IEnumerable<Interpretable> Arguments { get; } = arguments ?? throw new ArgumentNullException(nameof(arguments));
 
     /// <inheritdoc />
-
-
     public override TExpr Evaluate<TExpr, TStmt, TParam>(IExecutionPlanBuilder<TExpr, TStmt, TParam> builder)
     {
         var instance = Target.Evaluate(builder);

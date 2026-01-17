@@ -12,8 +12,6 @@ public sealed class MethodInvocation(Interpretable target, string methodName, pa
     public IEnumerable<Interpretable> Arguments { get; } = arguments;
 
     /// <inheritdoc />
-
-
     public override TExpr Evaluate<TExpr, TStmt, TParam>(IExecutionPlanBuilder<TExpr, TStmt, TParam> builder)
     {
         var target = Target.Evaluate(builder);

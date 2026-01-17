@@ -17,8 +17,6 @@ public sealed class TypeCast(Interpretable operand, ITypeDefinition targetType) 
     public ITypeDefinition TargetType { get; } = targetType ?? throw new ArgumentNullException(nameof(targetType));
 
     /// <inheritdoc />
-
-
     public override TExpr Evaluate<TExpr, TStmt, TParam>(IExecutionPlanBuilder<TExpr, TStmt, TParam> builder)
     {
         var value = Operand.Evaluate(builder);

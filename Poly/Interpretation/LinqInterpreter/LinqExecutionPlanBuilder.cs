@@ -9,11 +9,17 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Interpretation.LinqInterpreter {
     public sealed class LinqExecutionPlanBuilder : IExecutionPlanBuilder<Expression, Expression, ParameterExpression> {
         private readonly Dictionary<string, ParameterExpression> _parameters = new(StringComparer.Ordinal);
+        private readonly ITypeDefinitionProvider _typeProvider;
+
+        public LinqExecutionPlanBuilder(ITypeDefinitionProvider? typeProvider = null)
+        {
+            _typeProvider = typeProvider ?? ClrTypeDefinitionRegistry.Shared;
+        }
 
         public ITypeDefinition GetTypeDefinition(string typeName)
         {
-            var resolved = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeName)
-                ?? throw new TypeLoadException($"Unable to resolve CLR type '{typeName}'");
+            var resolved = _typeProvider.GetTypeDefinition(typeName)
+                ?? throw new TypeLoadException($"Unable to resolve type '{typeName}'");
             return resolved;
         }
 

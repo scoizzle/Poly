@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
-
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Arithmetic;
+using Poly.Interpretation.Expressions;
+using Poly.Interpretation.LinqInterpreter;
 
 namespace Poly.Tests.Interpretation;
 
@@ -10,13 +10,13 @@ public class ModuloTests {
     public async Task Modulo_WithIntegers_ReturnsRemainder()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var leftValue = Value.Wrap(10);
-        var rightValue = Value.Wrap(3);
-        var modulo = new Modulo(leftValue, rightValue);
+        var builder = new LinqExecutionPlanBuilder();
+        var left = new Constant(10);
+        var right = new Constant(3);
+        var modulo = new BinaryOperation(BinaryOperationKind.Modulo, left, right);
 
         // Act
-        var expression = modulo.BuildExpression(context);
+        var expression = modulo.Evaluate(builder);
         var lambda = Expression.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
@@ -29,13 +29,13 @@ public class ModuloTests {
     public async Task Modulo_WithExactDivision_ReturnsZero()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var leftValue = Value.Wrap(15);
-        var rightValue = Value.Wrap(5);
-        var modulo = new Modulo(leftValue, rightValue);
+        var builder = new LinqExecutionPlanBuilder();
+        var left = new Constant(15);
+        var right = new Constant(5);
+        var modulo = new BinaryOperation(BinaryOperationKind.Modulo, left, right);
 
         // Act
-        var expression = modulo.BuildExpression(context);
+        var expression = modulo.Evaluate(builder);
         var lambda = Expression.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
@@ -48,13 +48,13 @@ public class ModuloTests {
     public async Task Modulo_WithDoubles_ReturnsRemainder()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var leftValue = Value.Wrap(10.5);
-        var rightValue = Value.Wrap(3.0);
-        var modulo = new Modulo(leftValue, rightValue);
+        var builder = new LinqExecutionPlanBuilder();
+        var left = new Constant(10.5);
+        var right = new Constant(3.0);
+        var modulo = new BinaryOperation(BinaryOperationKind.Modulo, left, right);
 
         // Act
-        var expression = modulo.BuildExpression(context);
+        var expression = modulo.Evaluate(builder);
         var lambda = Expression.Lambda<Func<double>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
@@ -67,18 +67,17 @@ public class ModuloTests {
     public async Task Modulo_WithParameters_EvaluatesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param1 = context.AddParameter<int>("a");
-        var param2 = context.AddParameter<int>("b");
-        var modulo = new Modulo(param1, param2);
+        var builder = new LinqExecutionPlanBuilder();
+        var typeDef = builder.GetTypeDefinition(typeof(int).FullName!);
+        var param1 = builder.Parameter("a", typeDef);
+        var param2 = builder.Parameter("b", typeDef);
+        var paramRef1 = new NamedReference("a");
+        var paramRef2 = new NamedReference("b");
+        var modulo = new BinaryOperation(BinaryOperationKind.Modulo, paramRef1, paramRef2);
 
         // Act
-        var expression = modulo.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int, int>>(
-            expression,
-            param1.BuildExpression(context),
-            param2.BuildExpression(context)
-        );
+        var expression = modulo.Evaluate(builder);
+        var lambda = Expression.Lambda<Func<int, int, int>>(expression, param1, param2);
         var compiled = lambda.Compile();
 
         // Assert
@@ -91,13 +90,13 @@ public class ModuloTests {
     public async Task Modulo_WithNegativeNumbers_HandlesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var leftValue = Value.Wrap(-10);
-        var rightValue = Value.Wrap(3);
-        var modulo = new Modulo(leftValue, rightValue);
+        var builder = new LinqExecutionPlanBuilder();
+        var left = new Constant(-10);
+        var right = new Constant(3);
+        var modulo = new BinaryOperation(BinaryOperationKind.Modulo, left, right);
 
         // Act
-        var expression = modulo.BuildExpression(context);
+        var expression = modulo.Evaluate(builder);
         var lambda = Expression.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
@@ -107,44 +106,25 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_GetTypeDefinition_ReturnsLeftHandType()
+    public async Task Modulo_WithComplexExpression_EvaluatesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var leftValue = Value.Wrap(10);
-        var rightValue = Value.Wrap(3);
-        var modulo = new Modulo(leftValue, rightValue);
+        var builder = new LinqExecutionPlanBuilder();
+        var typeDef = builder.GetTypeDefinition(typeof(int).FullName!);
+        var param = builder.Parameter("x", typeDef);
+        var paramRef = new NamedReference("x");
+
+        // (x * 2) % 5
+        var multiply = new BinaryOperation(BinaryOperationKind.Multiply, paramRef, new Constant(2));
+        var modulo = new BinaryOperation(BinaryOperationKind.Modulo, multiply, new Constant(5));
 
         // Act
-        var typeDef = modulo.GetTypeDefinition(context);
+        var expression = modulo.Evaluate(builder);
+        var lambda = Expression.Lambda<Func<int, int>>(expression, param);
+        var compiled = lambda.Compile();
 
         // Assert
-        await Assert.That(typeDef).IsNotNull();
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(int));
-    }
-
-    [Test]
-    public async Task Modulo_ToString_ReturnsExpectedFormat()
-    {
-        // Arrange
-        var leftValue = Value.Wrap(10);
-        var rightValue = Value.Wrap(3);
-        var modulo = new Modulo(leftValue, rightValue);
-
-        // Act
-        var result = modulo.ToString();
-
-        // Assert
-        await Assert.That(result).IsEqualTo("(10 % 3)");
-    }
-
-    [Test]
-    public async Task Modulo_WithNullArguments_ThrowsArgumentNullException()
-    {
-        // Assert
-        await Assert.That(() => new Modulo(null!, Value.Wrap(3)))
-            .Throws<ArgumentNullException>();
-        await Assert.That(() => new Modulo(Value.Wrap(10), null!))
-            .Throws<ArgumentNullException>();
+        await Assert.That(compiled(7)).IsEqualTo(4);  // (7 * 2) % 5 = 14 % 5 = 4
+        await Assert.That(compiled(3)).IsEqualTo(1);  // (3 * 2) % 5 = 6 % 5 = 1
     }
 }

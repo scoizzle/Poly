@@ -1,4 +1,8 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
+using Poly.Interpretation.LinqInterpreter;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Validation.Rules;
 
@@ -19,20 +23,24 @@ public sealed class RuleSet<T> {
         CombinedRules = new AndRule(rules);
 
         // Build the interpretation tree
-        var interpretationContext = new InterpretationContext();
         var registry = ClrTypeDefinitionRegistry.Shared;
         var typeDefinition = registry.GetTypeDefinition<T>()
             ?? throw new InvalidOperationException($"Type definition for {typeof(T).Name} not found.");
 
-        var buildingContext = new RuleBuildingContext(interpretationContext, typeDefinition);
+        var buildingContext = new RuleBuildingContext(typeDefinition);
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
 
-        // Build the expression tree
-        ExpressionTree = RuleSetInterpretation.BuildExpression(interpretationContext);
+        // Build the expression tree using the neutral LINQ execution plan builder
+        var builder = new LinqExecutionPlanBuilder();
 
-        // Compile to a predicate - use the Value (parameter) from the building context
-        var parameterExpressions = interpretationContext.GetParameterExpressions();
-        var lambda = Expression.Lambda<Predicate<T>>(ExpressionTree, parameterExpressions);
+        // Declare the parameter for the validation lambda
+        var parameterExpr = builder.Parameter("@value", typeDefinition);
+
+        // Evaluate the interpretation tree to build the LINQ expression
+        ExpressionTree = RuleSetInterpretation.Evaluate(builder);
+
+        // Compile to a predicate
+        var lambda = Expression.Lambda<Predicate<T>>(ExpressionTree, parameterExpr);
         Predicate = lambda.Compile();
     }
 
@@ -44,7 +52,7 @@ public sealed class RuleSet<T> {
     /// <summary>
     /// Gets the interpretation tree representation of the rule set.
     /// </summary>
-    public Value RuleSetInterpretation { get; }
+    public Interpretable RuleSetInterpretation { get; }
 
     /// <summary>
     /// Gets the LINQ expression tree representation of the rule set.

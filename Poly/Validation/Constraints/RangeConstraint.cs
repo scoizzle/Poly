@@ -1,6 +1,5 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Boolean;
-using Poly.Interpretation.Operators.Comparison;
+using Poly.Interpretation.Expressions;
 
 namespace Poly.Validation;
 
@@ -8,23 +7,23 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
     public object? MinValue { get; set; } = minValue;
     public object? MaxValue { get; set; } = maxValue;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
         var member = context.Value;
 
-        Value? minCheck = MinValue is null
+        Interpretable? minCheck = MinValue is null
             ? null
-            : new GreaterThanOrEqual(member, Value.Wrap(MinValue));
+            : new BinaryOperation(BinaryOperationKind.GreaterThanOrEqual, member, new Constant(MinValue));
 
-        Value? maxCheck = MaxValue is null
+        Interpretable? maxCheck = MaxValue is null
             ? null
-            : new LessThanOrEqual(member, Value.Wrap(MaxValue));
+            : new BinaryOperation(BinaryOperationKind.LessThanOrEqual, member, new Constant(MaxValue));
 
         var rangeCheck = (minCheck, maxCheck) switch {
-            (Value min, Value max) => new And(min, max),
-            (Value min, null) => min,
-            (null, Value max) => max,
-            _ => Value.True
+            (Interpretable min, Interpretable max) => new BinaryOperation(BinaryOperationKind.And, min, max),
+            (Interpretable min, null) => min,
+            (null, Interpretable max) => max,
+            _ => new Constant(true)
         };
 
         return rangeCheck;

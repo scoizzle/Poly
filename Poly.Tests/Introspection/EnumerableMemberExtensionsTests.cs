@@ -1,5 +1,5 @@
-using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;
 

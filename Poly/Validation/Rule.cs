@@ -17,5 +17,5 @@ namespace Poly.Validation;
 [JsonDerivedType(typeof(Rules.ComputedValueRule), "ComputedValue")]
 [JsonDerivedType(typeof(Rules.PropertyConstraintRule), "PropertyConstraint")]
 public abstract class Rule {
-    public abstract Value BuildInterpretationTree(RuleBuildingContext context);
+    public abstract Interpretable BuildInterpretationTree(RuleBuildingContext context);
 }

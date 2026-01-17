@@ -1,7 +1,5 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Comparison;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.Expressions;
 
 namespace Poly.Validation.Rules;
 
@@ -26,22 +24,27 @@ public sealed class ComparisonRule : Rule {
         Operator = op;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
-        var leftMember = new MemberAccess(context.Value, LeftPropertyName);
-        var rightMember = new MemberAccess(context.Value, RightPropertyName);
+        var leftProperty = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == LeftPropertyName)
+            ?? throw new InvalidOperationException($"Property '{LeftPropertyName}' not found on type '{context.TypeDefinition.Name}'.");
+        var rightProperty = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == RightPropertyName)
+            ?? throw new InvalidOperationException($"Property '{RightPropertyName}' not found on type '{context.TypeDefinition.Name}'.");
 
-        Value comparisonResult = Operator switch {
-            ComparisonOperator.Equal => new Equal(leftMember, rightMember),
-            ComparisonOperator.NotEqual => new NotEqual(leftMember, rightMember),
-            ComparisonOperator.GreaterThan => new GreaterThan(leftMember, rightMember),
-            ComparisonOperator.GreaterThanOrEqual => new GreaterThanOrEqual(leftMember, rightMember),
-            ComparisonOperator.LessThan => new LessThan(leftMember, rightMember),
-            ComparisonOperator.LessThanOrEqual => new LessThanOrEqual(leftMember, rightMember),
+        var leftMember = new MemberAccess(context.Value, leftProperty.Name);
+        var rightMember = new MemberAccess(context.Value, rightProperty.Name);
+
+        var operationKind = Operator switch {
+            ComparisonOperator.Equal => BinaryOperationKind.Equal,
+            ComparisonOperator.NotEqual => BinaryOperationKind.NotEqual,
+            ComparisonOperator.GreaterThan => BinaryOperationKind.GreaterThan,
+            ComparisonOperator.GreaterThanOrEqual => BinaryOperationKind.GreaterThanOrEqual,
+            ComparisonOperator.LessThan => BinaryOperationKind.LessThan,
+            ComparisonOperator.LessThanOrEqual => BinaryOperationKind.LessThanOrEqual,
             _ => throw new ArgumentException($"Unknown operator: {Operator}")
         };
 
-        return comparisonResult;
+        return new BinaryOperation(operationKind, leftMember, rightMember);
     }
 
     public override string ToString()

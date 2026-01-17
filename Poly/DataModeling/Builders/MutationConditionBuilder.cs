@@ -1,7 +1,6 @@
 using Poly.DataModeling.Mutations;
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Comparison;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.Expressions;
 using Poly.Validation;
 using Poly.Validation.Constraints;
 
@@ -207,25 +206,27 @@ internal sealed class ValueSourceComparisonConstraint : Constraint {
         _rightValueSource = rightValueSource ?? throw new ArgumentNullException(nameof(rightValueSource));
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
         var left = context.Value;
         var right = BuildValueFromSource(_rightValueSource, context);
 
-        return _comparisonType switch {
-            ComparisonType.Equal => new Equal(left, right),
-            ComparisonType.GreaterThan => new GreaterThan(left, right),
-            ComparisonType.GreaterThanOrEqual => new GreaterThanOrEqual(left, right),
-            ComparisonType.LessThan => new LessThan(left, right),
-            ComparisonType.LessThanOrEqual => new LessThanOrEqual(left, right),
+        var kind = _comparisonType switch {
+            ComparisonType.Equal => BinaryOperationKind.Equal,
+            ComparisonType.GreaterThan => BinaryOperationKind.GreaterThan,
+            ComparisonType.GreaterThanOrEqual => BinaryOperationKind.GreaterThanOrEqual,
+            ComparisonType.LessThan => BinaryOperationKind.LessThan,
+            ComparisonType.LessThanOrEqual => BinaryOperationKind.LessThanOrEqual,
             _ => throw new InvalidOperationException($"Unknown comparison type: {_comparisonType}")
         };
+
+        return new BinaryOperation(kind, left, right);
     }
 
-    private static Value BuildValueFromSource(ValueSource source, RuleBuildingContext context)
+    private static Interpretable BuildValueFromSource(ValueSource source, RuleBuildingContext context)
     {
         return source switch {
-            ConstantValue cv => Value.Wrap(cv.Value),
+            ConstantValue cv => new Constant(cv.Value),
             // ParameterValue pv => new Variable(pv.p),
             // PropertyValue prop => context.Value.GetMember(prop.PropertyName),
             // MemberAccessValue mav => BuildValueFromSource(mav.Source, context).GetMember(mav.MemberName),

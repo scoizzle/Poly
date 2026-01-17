@@ -1,7 +1,6 @@
 using System.Reflection;
 
 using Poly.Interpretation;
-using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
@@ -10,7 +9,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// name, and ordered parameters, and creates invocation accessors for interpretation.
 /// Instances are immutable and safe for concurrent reads.
 /// </summary>
-[DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
+[DebuggerDisplay("{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}")]
 internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     private readonly Lazy<ClrTypeDefinition> _memberType;
     private readonly ClrTypeDefinition _declaringType;
@@ -66,16 +65,16 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     /// </summary>
     public override bool IsStatic => _methodInfo.IsStatic;
 
-    /// <summary>
-    /// Creates an accessor that invokes this method on <paramref name="instance"/>
-    /// with the supplied <paramref name="arguments"/>.
-    /// </summary>
-    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? arguments)
-    {
-        // Convert null to empty enumerable for parameterless method calls
-        var args = arguments ?? Enumerable.Empty<Value>();
-        return new ClrMethodInvocationInterpretation(this, instance, args);
-    }
+    // /// <summary>
+    // /// Creates an accessor that invokes this method on <paramref name="instance"/>
+    // /// with the supplied <paramref name="arguments"/>.
+    // /// </summary>
+    // public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? arguments)
+    // {
+    //     // Convert null to empty enumerable for parameterless method calls
+    //     var args = arguments ?? Enumerable.Empty<Value>();
+    //     return new ClrMethodInvocationInterpretation(this, instance, args);
+    // }
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}({string.Join(", ", _parameters)})";
 }

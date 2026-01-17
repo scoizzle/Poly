@@ -1,6 +1,6 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Boolean;
-using Poly.Interpretation.Operators.Comparison;
+using Poly.Interpretation.Expressions;
+using Poly.Introspection;
 
 namespace Poly.Validation;
 
@@ -8,23 +8,26 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
     public int? MinLength { get; set; } = minLength;
     public int? MaxLength { get; set; } = maxLength;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
-        var length = context.Value.GetMember("Length");
+        var lengthProperty = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == "Length")
+            ?? throw new InvalidOperationException($"Type '{context.TypeDefinition.Name}' does not have a Length property.");
+
+        var length = new MemberAccess(context.Value, lengthProperty.Name);
 
         var minCheck = MinLength.HasValue
-            ? new GreaterThanOrEqual(length, Value.Wrap(MinLength.Value))
+            ? new BinaryOperation(BinaryOperationKind.GreaterThanOrEqual, length, new Constant(MinLength.Value))
             : null;
 
         var maxCheck = MaxLength.HasValue
-            ? new LessThanOrEqual(length, Value.Wrap(MaxLength.Value))
+            ? new BinaryOperation(BinaryOperationKind.LessThanOrEqual, length, new Constant(MaxLength.Value))
             : null;
 
         var lengthCheck = (minCheck, maxCheck) switch {
-            (Value min, Value max) => new And(min, max),
-            (Value min, null) => min,
-            (null, Value max) => max,
-            _ => Value.Wrap(true)
+            (Interpretable min, Interpretable max) => new BinaryOperation(BinaryOperationKind.And, min, max),
+            (Interpretable min, null) => min,
+            (null, Interpretable max) => max,
+            _ => new Constant(true)
         };
 
         return lengthCheck;

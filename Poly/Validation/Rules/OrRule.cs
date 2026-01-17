@@ -1,19 +1,19 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Boolean;
+using Poly.Interpretation.Expressions;
 
 namespace Poly.Validation.Rules;
 
 public sealed class OrRule(params IEnumerable<Rule> rules) : Rule {
     public IEnumerable<Rule> Rules { get; set; } = rules;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
         if (Rules == null || !Rules.Any())
-            return Value.Wrap(false);
+            return new Constant(false);
 
         var combinedRules = Rules
             .Select(e => e.BuildInterpretationTree(context))
-            .Aggregate(Value.False, (current, rule) => new Or(current, rule));
+            .Aggregate((Interpretable)new Constant(false), (current, rule) => new BinaryOperation(BinaryOperationKind.Or, current, rule));
 
         return combinedRules;
     }

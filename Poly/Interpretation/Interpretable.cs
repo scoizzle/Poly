@@ -1,20 +1,22 @@
 namespace Poly.Interpretation;
 
 /// <summary>
-/// Base class for objects that can be interpreted and compiled into LINQ Expression Trees.
+/// Base class for objects that can be interpreted and evaluated via multiple backends (LINQ, tree-walk, transpilation, etc).
 /// </summary>
 /// <remarks>
-/// This is the root of the interpretation hierarchy, providing a unified way to build
-/// expression trees from a higher-level abstract syntax. Implementations typically
-/// represent literals, variables, parameters, or operations that can be converted
-/// into executable code via System.Linq.Expressions.
+/// Interpretable types form an Abstract Syntax Tree (AST) that is backend-agnostic. The tree structure itself
+/// contains no execution logic; instead, builders implement platform-specific logic. Nodes lower
+/// to a small set of primitive operations defined by IExecutionPlanBuilder.
 /// </remarks>
 public abstract class Interpretable {
+
     /// <summary>
-    /// Builds a LINQ Expression Tree representation of this interpretable object.
+    /// Lowers this AST node to the execution plan builder with expression/statement separation.
     /// </summary>
-    /// <param name="context">The interpretation context containing type definitions, variables, and parameters.</param>
-    /// <returns>An <see cref="Expression"/> that represents this interpretable in the expression tree.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the expression cannot be built due to missing type information or invalid state.</exception>
-    public abstract Expression BuildExpression(InterpretationContext context);
+    /// <typeparam name="TExpr">Backend expression type.</typeparam>
+    /// <typeparam name="TStmt">Backend statement type.</typeparam>
+    /// <typeparam name="TParam">Backend parameter type.</typeparam>
+    /// <param name="builder">The execution plan builder to lower to.</param>
+    /// <returns>The lowered expression value.</returns>
+    public virtual TExpr Evaluate<TExpr, TStmt, TParam>(IExecutionPlanBuilder<TExpr, TStmt, TParam> builder) => throw new NotSupportedException($"{GetType().Name} does not implement Evaluate.");
 }

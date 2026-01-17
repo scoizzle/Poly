@@ -110,21 +110,18 @@ public class TypeDefinitionProviderCollectionTests {
     private class MockTypeDefinition(string name) : ITypeDefinition {
         public string Name { get; } = name;
         public string? Namespace => null;
+        public Type? ClrType => null;
         public IEnumerable<ITypeMember> Members => [];
-        public Type ReflectedType => typeof(object);
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
-        public IEnumerable<IParameter> GenericParameters => [];
-
-        public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
-        public bool IsAssignableTo(ITypeDefinition targetType) => throw new NotImplementedException();
-
-        public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method)
-        {
-            throw new NotImplementedException();
-        }
-
+        public IEnumerable<IParameter>? GenericParameters => null;
         public string? Tag { get; set; }
+
+        public bool IsNullable => false;
+        public bool IsNumeric => false;
+        public bool IsArray => false;
+        public ITypeDefinition? ElementType => null;
+        public ITypeDefinition? UnderlyingType => null;
         public IEnumerable<ITypeField> Fields => [];
         public IEnumerable<ITypeProperty> Properties => [];
         public IEnumerable<ITypeMethod> Methods => [];

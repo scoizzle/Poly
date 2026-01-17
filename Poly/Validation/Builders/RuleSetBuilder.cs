@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 using Poly.Validation.Rules;
 
 namespace Poly.Validation.Builders;
@@ -20,7 +22,6 @@ public sealed class RuleSetBuilder<T> {
         Expression<Func<T, TProperty>> propertySelector,
         Action<ConstraintSetBuilder<TProperty>> constraintsBuilder)
     {
-
         ArgumentNullException.ThrowIfNull(propertySelector);
         ArgumentNullException.ThrowIfNull(constraintsBuilder);
 

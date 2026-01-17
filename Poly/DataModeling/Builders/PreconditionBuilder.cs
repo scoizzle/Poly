@@ -84,11 +84,11 @@ public sealed class PreconditionBuilder {
     /// </summary>
     /// <returns>A <see cref="MutationConditionBuilder"/> for building constraints.</returns>
     /// <exception cref="InvalidOperationException">Thrown if no value source has been set.</exception>
-    public MutationConditionBuilder MustBe()
-    {
-        if (_valueSource == null)
-            throw new InvalidOperationException("Cannot create a precondition without specifying a value source using Property(), Parameter(), or Constant().");
-
-        return new MutationConditionBuilder(_valueSource);
-    }
+    //     public MutationConditionBuilder MustBe()
+    //     {
+    //         if (_valueSource == null)
+    //             throw new InvalidOperationException("Cannot create a precondition without specifying a value source using Property(), Parameter(), or Constant().");
+    // 
+    //         return new MutationConditionBuilder(_valueSource);
+    //     }
 }

@@ -1,8 +1,5 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Arithmetic;
-using Poly.Interpretation.Operators.Comparison;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.Expressions;
 
 namespace Poly.Validation.Rules;
 
@@ -34,31 +31,40 @@ public sealed class ComputedValueRule : Rule {
         ComparisonOperator = comparisonOperator;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
-        var target = new MemberAccess(context.Value, TargetPropertyName);
-        var left = new MemberAccess(context.Value, LeftOperandPropertyName);
-        var right = new MemberAccess(context.Value, RightOperandPropertyName);
+        var targetProperty = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == TargetPropertyName)
+            ?? throw new InvalidOperationException($"Property '{TargetPropertyName}' not found on type '{context.TypeDefinition.Name}'.");
+        var leftProperty = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == LeftOperandPropertyName)
+            ?? throw new InvalidOperationException($"Property '{LeftOperandPropertyName}' not found on type '{context.TypeDefinition.Name}'.");
+        var rightProperty = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == RightOperandPropertyName)
+            ?? throw new InvalidOperationException($"Property '{RightOperandPropertyName}' not found on type '{context.TypeDefinition.Name}'.");
 
-        Value computation = Operation switch {
-            ArithmeticOperation.Add => new Add(left, right),
-            ArithmeticOperation.Subtract => new Subtract(left, right),
-            ArithmeticOperation.Multiply => new Multiply(left, right),
-            ArithmeticOperation.Divide => new Divide(left, right),
+        var target = new MemberAccess(context.Value, targetProperty.Name);
+        var left = new MemberAccess(context.Value, leftProperty.Name);
+        var right = new MemberAccess(context.Value, rightProperty.Name);
+
+        var arithmeticKind = Operation switch {
+            ArithmeticOperation.Add => BinaryOperationKind.Add,
+            ArithmeticOperation.Subtract => BinaryOperationKind.Subtract,
+            ArithmeticOperation.Multiply => BinaryOperationKind.Multiply,
+            ArithmeticOperation.Divide => BinaryOperationKind.Divide,
             _ => throw new ArgumentException($"Unknown operation: {Operation}")
         };
 
-        Value comparisonResult = ComparisonOperator switch {
-            ComparisonOperator.Equal => new Equal(target, computation),
-            ComparisonOperator.NotEqual => new NotEqual(target, computation),
-            ComparisonOperator.GreaterThan => new GreaterThan(target, computation),
-            ComparisonOperator.GreaterThanOrEqual => new GreaterThanOrEqual(target, computation),
-            ComparisonOperator.LessThan => new LessThan(target, computation),
-            ComparisonOperator.LessThanOrEqual => new LessThanOrEqual(target, computation),
+        var computation = new BinaryOperation(arithmeticKind, left, right);
+
+        var comparisonKind = ComparisonOperator switch {
+            ComparisonOperator.Equal => BinaryOperationKind.Equal,
+            ComparisonOperator.NotEqual => BinaryOperationKind.NotEqual,
+            ComparisonOperator.GreaterThan => BinaryOperationKind.GreaterThan,
+            ComparisonOperator.GreaterThanOrEqual => BinaryOperationKind.GreaterThanOrEqual,
+            ComparisonOperator.LessThan => BinaryOperationKind.LessThan,
+            ComparisonOperator.LessThanOrEqual => BinaryOperationKind.LessThanOrEqual,
             _ => throw new ArgumentException($"Unknown comparison: {ComparisonOperator}")
         };
 
-        return comparisonResult;
+        return new BinaryOperation(comparisonKind, target, computation);
     }
 
     public override string ToString()

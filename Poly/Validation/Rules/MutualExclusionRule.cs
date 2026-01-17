@@ -1,7 +1,5 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Boolean;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.Expressions;
 
 namespace Poly.Validation.Rules;
 
@@ -15,12 +13,12 @@ public sealed class MutualExclusionRule : Rule {
         MaxAllowed = maxAllowed;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
         var properties = PropertyNames.ToList();
 
         if (properties.Count <= MaxAllowed) {
-            return Value.True;
+            return new Constant(true);
         }
 
         // For now, implement simple mutual exclusion (only one can have value)
@@ -28,20 +26,29 @@ public sealed class MutualExclusionRule : Rule {
         if (MaxAllowed == 1) {
             // At most one property can be non-null
             var nonNullChecks = properties
-                .Select(name => new MemberAccess(context.Value, name))
-                .Select(member => new NotEqual(member, Value.Null))
+                .Select(name => {
+                    var property = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == name)
+                        ?? throw new InvalidOperationException($"Property '{name}' not found on type '{context.TypeDefinition.Name}'.");
+                    return new MemberAccess(context.Value, property.Name);
+                })
+                .Select(member => new BinaryOperation(BinaryOperationKind.NotEqual, member, new Constant(null)))
                 .ToList();
 
             // Create pairwise exclusions: for each pair, at least one must be null
-            var exclusions = new List<Value>();
+            var exclusions = new List<Interpretable>();
             for (int i = 0; i < nonNullChecks.Count; i++) {
                 for (int j = i + 1; j < nonNullChecks.Count; j++) {
                     // !(prop_i != null AND prop_j != null)
-                    exclusions.Add(new Not(new And(nonNullChecks[i], nonNullChecks[j])));
+                    exclusions.Add(
+                        new UnaryOperation(
+                            UnaryOperationKind.Not,
+                            new BinaryOperation(BinaryOperationKind.And, nonNullChecks[i], nonNullChecks[j])
+                        )
+                    );
                 }
             }
 
-            var exclusionResult = exclusions.Aggregate((current, next) => new And(current, next));
+            var exclusionResult = exclusions.Aggregate((current, next) => new BinaryOperation(BinaryOperationKind.And, current, next));
             return exclusionResult;
         }
 

@@ -1,23 +1,25 @@
-using Poly.Interpretation;
+// using Poly.Interpretation;
 
-namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
+// namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
-internal sealed class ClrTypeFieldInterpretationAccessor(Value instance, ClrTypeField field) : Value {
-    public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
-    public ClrTypeField Field { get; init; } = field ?? throw new ArgumentNullException(nameof(field));
+// internal sealed class ClrTypeFieldInterpretationAccessor(Value instance, ClrTypeField field) : Value {
+//     public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
+//     public ClrTypeField Field { get; init; } = field ?? throw new ArgumentNullException(nameof(field));
 
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Field).MemberTypeDefinition;
+//     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Field).MemberTypeDefinition;
 
-    public override Expression BuildExpression(InterpretationContext context)
-    {
-        var instanceExpression = Instance.BuildExpression(context);
+//     public override Expression BuildExpression(InterpretationContext context)
+//     {
+//         var instanceExpression = Instance.BuildExpression(context);
 
-        if (Field.FieldInfo.IsStatic && instanceExpression is ConstantExpression constExpr && constExpr.Value is null) {
-            return Expression.Field(null, Field.FieldInfo);
-        }
+//         if (Field.FieldInfo.IsStatic && instanceExpression is ConstantExpression constExpr && constExpr.Value is null) {
+//             return Expression.Field(null, Field.FieldInfo);
+//         }
 
-        return Expression.Field(instanceExpression, Field.FieldInfo);
-    }
+//         return Expression.Field(instanceExpression, Field.FieldInfo);
+//     }
 
-    public override string ToString() => $"{Instance}.{Field.Name}";
-}
+//     public override string ToString() => $"{Instance}.{Field.Name}";
+
+//     public override T Evaluate<T>(IExecutionPlanBuilder<T> builder) => throw new NotImplementedException("ClrTypeFieldInterpretationAccessor does not support execution plan builder pattern yet.");
+// }

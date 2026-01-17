@@ -9,7 +9,6 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Thread-safe for concurrent reads after construction.
 /// </summary>
 internal sealed class ClrTypeDefinition : ITypeDefinition {
-    private readonly FrozenDictionary<string, FrozenSet<ClrTypeMember>> _membersByName;
 
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider)
     {
@@ -18,20 +17,33 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
         Type = type;
         BaseType = GetBaseTypeResolver(type, provider);
+        ElementType = GetElementTypeResolver(type, provider);
+        UnderlyingType = GetUnderlyingTypeResolver(type, provider);
         Interfaces = GetInterfacesResolver(type, provider);
         GenericParameters = BuildGenericParameterCollection(type, provider);
         Fields = BuildFieldCollection(type, this, provider);
         Properties = BuildPropertyCollection(type, this, provider);
         Methods = BuildMethodCollection(type, this, provider);
         Members = BuildMemberCollection(Fields, Properties, Methods);
-        _membersByName = BuildMemberDictionary(Members);
     }
 
     public string Name => Type.Name;
     public string? Namespace => Type.Namespace;
     public string FullName => Type.FullName ?? Type.Name;
+    public Type? ClrType => Type;
+    public bool IsArray => Type.IsArray;
+    public bool IsNullable => !Type.IsValueType || UnderlyingType != null;
+
+    public bool IsNumeric {
+        get {
+            return Interfaces.Any(e => e.BaseType is ClrTypeDefinition iface && iface.Type == typeof(INumber<>));
+        }
+    }
+
     public Type Type { get; }
     public ClrTypeDefinition? BaseType { get; }
+    public ClrTypeDefinition? ElementType { get; }
+    public ClrTypeDefinition? UnderlyingType { get; }
     public FrozenSet<ClrTypeDefinition> Interfaces { get; }
     public FrozenSet<ClrParameter> GenericParameters { get; }
     public FrozenSet<ClrTypeField> Fields { get; }
@@ -40,12 +52,13 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
     public FrozenSet<ClrTypeMember> Members { get; }
 
     ITypeDefinition? ITypeDefinition.BaseType => BaseType;
+    ITypeDefinition? ITypeDefinition.ElementType => ElementType;
+    ITypeDefinition? ITypeDefinition.UnderlyingType => UnderlyingType;
     IEnumerable<ITypeDefinition> ITypeDefinition.Interfaces => Interfaces;
     IEnumerable<ITypeField> ITypeDefinition.Fields => Fields;
     IEnumerable<ITypeProperty> ITypeDefinition.Properties => Properties;
     IEnumerable<ITypeMethod> ITypeDefinition.Methods => Methods;
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members;
-    Type ITypeDefinition.ReflectedType => Type;
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
 
     public override string ToString() => FullName;
@@ -163,16 +176,6 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
             .ToFrozenSet();
     }
 
-    private static FrozenDictionary<string, FrozenSet<ClrTypeMember>> BuildMemberDictionary(
-        IEnumerable<ClrTypeMember> members
-    )
-    {
-        ArgumentNullException.ThrowIfNull(members);
-        return members
-            .GroupBy(m => m.Name)
-            .ToFrozenDictionary(g => g.Key, g => g.ToFrozenSet());
-    }
-
     private static FrozenSet<ClrParameter> BuildGenericParameterCollection(Type type, ClrTypeDefinitionRegistry provider)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -214,7 +217,26 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         return default;
     }
 
+    private static ClrTypeDefinition? GetElementTypeResolver(Type type, ClrTypeDefinitionRegistry provider)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(provider);
 
+        if (type.IsArray && type.GetElementType() is Type elementType) {
+            return provider.GetTypeDefinition(elementType);
+        }
+        return default;
+    }
+
+    public static ClrTypeDefinition? GetUnderlyingTypeResolver(Type type, ClrTypeDefinitionRegistry provider)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(provider);
+
+        return Nullable.GetUnderlyingType(type) is Type underlyingType
+            ? provider.GetTypeDefinition(underlyingType)
+            : default;
+    }
 
     private static FrozenSet<ClrTypeDefinition> GetInterfacesResolver(Type type, ClrTypeDefinitionRegistry provider)
     {

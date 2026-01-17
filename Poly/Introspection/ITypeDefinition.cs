@@ -28,6 +28,36 @@ public interface ITypeDefinition {
     string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
 
     /// <summary>
+    /// Gets a value indicating whether this type is nullable (Nullable&lt;T&gt; or reference type).
+    /// </summary>
+    bool IsNullable { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this type represents a numeric type (int, float, decimal, etc.).
+    /// </summary>
+    bool IsNumeric { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this type is an array.
+    /// </summary>
+    bool IsArray { get; }
+
+    /// <summary>
+    /// Gets the CLR System.Type if this is CLR-backed; otherwise null.
+    /// </summary>
+    Type? ClrType { get; }
+
+    /// <summary>
+    /// Gets the element type of an array, or null if this type is not an array.
+    /// </summary>
+    ITypeDefinition? ElementType { get; }
+
+    /// <summary>
+    /// Gets the underlying type for nullable types, or null if this type is not nullable.
+    /// </summary>
+    ITypeDefinition? UnderlyingType { get; }
+
+    /// <summary>
     /// Gets the base type of this type, or null if this is <c>object</c> or an interface.
     /// </summary>
     ITypeDefinition? BaseType { get; }
@@ -43,7 +73,7 @@ public interface ITypeDefinition {
     /// type definitions, these represent the generic parameter placeholders.
     /// Returns null for non-generic types.
     /// </summary>
-    IEnumerable<IParameter> GenericParameters { get; }
+    IEnumerable<IParameter>? GenericParameters { get; }
 
     /// <summary>
     /// Gets all members (fields, properties, methods) defined on the type.
@@ -64,9 +94,4 @@ public interface ITypeDefinition {
     /// Gets all method members defined on the type.
     /// </summary>
     IEnumerable<ITypeMethod> Methods { get; }
-
-    /// <summary>
-    /// Gets the underlying reflected runtime type, when available.
-    /// </summary>
-    Type ReflectedType { get; }
 }

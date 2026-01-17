@@ -11,7 +11,7 @@ namespace Poly.Interpretation;
 /// scopes recursively. This class is NOT thread-safe and should only be used from a
 /// single thread or with external synchronization.
 /// </remarks>
-public sealed class VariableScope(VariableScope? parentScope = null) {
+public sealed class VariableScope<T>(VariableScope<T>? parentScope = null) {
     /// <summary>
     /// Gets the parent scope, if any.
     /// </summary>
@@ -19,12 +19,12 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
     /// The parent scope is searched when a variable is not found in the current scope,
     /// implementing lexical scoping rules.
     /// </remarks>
-    public VariableScope? ParentScope { get; } = parentScope;
+    public VariableScope<T>? ParentScope { get; } = parentScope;
 
     /// <summary>
     /// Gets the dictionary of variables defined in this scope.
     /// </summary>
-    public Dictionary<string, Variable> Variables { get; private init; } = new();
+    public Dictionary<string, VariableReference<T>> Variables { get; private init; } = new();
 
     /// <summary>
     /// Retrieves a variable by name, searching this scope and parent scopes.
@@ -32,7 +32,7 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
     /// <param name="name">The name of the variable to retrieve.</param>
     /// <returns>The variable if found; otherwise, <c>null</c>.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
-    public Variable? GetVariable(string name)
+    public VariableReference<T>? GetVariable(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
@@ -52,20 +52,20 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
     /// This method will create a new variable in this scope even if a variable with the same
     /// name exists in a parent scope, implementing variable shadowing.
     /// </remarks>
-    public Variable SetVariable(string name, Value? value)
+    public VariableReference<T> SetVariable(string name, T value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return Variables.GetOrAdd(name, static (name, value) => new Variable(name, value), value);
+        return Variables.GetOrAdd(name, static (name, value) => new VariableReference<T>(name, value), value);
     }
 
     /// <summary>
     /// Creates a shallow copy of this scope with the same parent.
     /// </summary>
     /// <returns>A new scope with copied variables but the same parent reference.</returns>
-    public VariableScope Clone()
+    public VariableScope<T> Clone()
     {
-        var clone = new VariableScope(ParentScope) {
-            Variables = new Dictionary<string, Variable>(Variables)
+        var clone = new VariableScope<T>(ParentScope) {
+            Variables = new Dictionary<string, VariableReference<T>>(Variables)
         };
         return clone;
     }

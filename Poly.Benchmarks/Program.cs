@@ -5,8 +5,8 @@ using Poly.Validation.Builders;
 
 // Poly.Benchmarks.FluentBuilderExample.Run();
 // Console.WriteLine();
-Poly.Benchmarks.FluentApiExample.Run();
-Console.WriteLine();
+// Poly.Benchmarks.FluentApiExample.Run();
+// Console.WriteLine();
 
 // BenchmarkPersonPredicate test = new();
 // Console.WriteLine("Setting up benchmark...");

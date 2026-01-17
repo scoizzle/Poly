@@ -1,25 +1,27 @@
-using Poly.Extensions;
-using Poly.Interpretation;
+// using Poly.Extensions;
+// using Poly.Interpretation;
 
-namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
+// namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
-internal sealed class ClrTypePropertyInterpretationAccessor(Value instance, ClrTypeProperty property) : Value {
-    public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
-    public ClrTypeProperty Property { get; init; } = property ?? throw new ArgumentNullException(nameof(property));
+// internal sealed class ClrTypePropertyInterpretationAccessor(Value instance, ClrTypeProperty property) : Value {
+//     public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
+//     public ClrTypeProperty Property { get; init; } = property ?? throw new ArgumentNullException(nameof(property));
 
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Property).MemberTypeDefinition;
+//     public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Property).MemberTypeDefinition;
 
-    public override Expression BuildExpression(InterpretationContext context)
-    {
-        var instanceExpression = Instance.BuildExpression(context);
+//     public override Expression BuildExpression(InterpretationContext context)
+//     {
+//         var instanceExpression = Instance.BuildExpression(context);
 
-        // For static properties, always use null as the instance regardless of what was provided
-        if (Property.PropertyInfo.IsStatic()) {
-            return Expression.Property(null, Property.PropertyInfo);
-        }
+//         // For static properties, always use null as the instance regardless of what was provided
+//         if (Property.PropertyInfo.IsStatic()) {
+//             return Expression.Property(null, Property.PropertyInfo);
+//         }
 
-        return Expression.Property(instanceExpression, Property.Name);
-    }
+//         return Expression.Property(instanceExpression, Property.Name);
+//     }
 
-    public override string ToString() => $"{Instance}.{Property.Name}";
-}
+//     public override string ToString() => $"{Instance}.{Property.Name}";
+
+//     public override T Evaluate<T>(IExecutionPlanBuilder<T> builder) => throw new NotImplementedException("ClrTypePropertyInterpretationAccessor does not support execution plan builder pattern yet.");
+// }

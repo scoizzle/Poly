@@ -15,7 +15,7 @@ public sealed class PropertyConstraintRule : Rule {
         PropertyRule = propertyRule;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
         var propertyContext = context.GetPropertyContext(PropertyName);
         var propertyRuleResult = PropertyRule.BuildInterpretationTree(propertyContext);

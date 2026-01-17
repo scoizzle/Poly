@@ -1,7 +1,5 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Boolean;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.Expressions;
 
 namespace Poly.Validation.Rules;
 
@@ -17,24 +15,37 @@ public sealed class PropertyDependencyRule : Rule {
         RequireWhenSourceHasValue = requireWhenSourceHasValue;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
-        var sourceMember = new MemberAccess(context.Value, SourcePropertyName);
-        var dependentMember = new MemberAccess(context.Value, DependentPropertyName);
+        var sourceProperty = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == SourcePropertyName)
+            ?? throw new InvalidOperationException($"Property '{SourcePropertyName}' not found on type '{context.TypeDefinition.Name}'.");
+        var dependentProperty = context.TypeDefinition.Properties.FirstOrDefault(p => p.Name == DependentPropertyName)
+            ?? throw new InvalidOperationException($"Property '{DependentPropertyName}' not found on type '{context.TypeDefinition.Name}'.");
 
-        var sourceHasValue = new NotEqual(sourceMember, Value.Null);
-        var dependentHasValue = new NotEqual(dependentMember, Value.Null);
+        var sourceMember = new MemberAccess(context.Value, sourceProperty.Name);
+        var dependentMember = new MemberAccess(context.Value, dependentProperty.Name);
 
-        Value dependencyResult;
+        var sourceHasValue = new BinaryOperation(BinaryOperationKind.NotEqual, sourceMember, new Constant(null));
+        var dependentHasValue = new BinaryOperation(BinaryOperationKind.NotEqual, dependentMember, new Constant(null));
+
+        Interpretable dependencyResult;
         if (RequireWhenSourceHasValue) {
             // If source has value, then dependent must have value
             // !sourceHasValue OR dependentHasValue
-            dependencyResult = new Or(new Not(sourceHasValue), dependentHasValue);
+            dependencyResult = new BinaryOperation(
+                BinaryOperationKind.Or,
+                new UnaryOperation(UnaryOperationKind.Not, sourceHasValue),
+                dependentHasValue
+            );
         }
         else {
             // If source has value, then dependent must NOT have value
             // !sourceHasValue OR !dependentHasValue
-            dependencyResult = new Or(new Not(sourceHasValue), new Not(dependentHasValue));
+            dependencyResult = new BinaryOperation(
+                BinaryOperationKind.Or,
+                new UnaryOperation(UnaryOperationKind.Not, sourceHasValue),
+                new UnaryOperation(UnaryOperationKind.Not, dependentHasValue)
+            );
         }
 
         return dependencyResult;

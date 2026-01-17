@@ -1,16 +1,16 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.Expressions;
 
 namespace Poly.Validation.Constraints;
 
 public sealed class EqualityConstraint(object value) : Constraint {
     public object Value { get; set; } = value;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Interpretable BuildInterpretationTree(RuleBuildingContext context)
     {
         var member = context.Value;
-        var valueLiteral = Interpretation.Value.Wrap(Value);
-        var equalityCheck = new Equal(member, valueLiteral);
+        var valueLiteral = new Constant(Value);
+        var equalityCheck = new BinaryOperation(BinaryOperationKind.Equal, member, valueLiteral);
         return equalityCheck;
     }
 

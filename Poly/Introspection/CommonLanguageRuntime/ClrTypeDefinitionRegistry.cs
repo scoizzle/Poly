@@ -41,10 +41,8 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
         var name = type.FullName ?? type.Name;
         return _types.GetOrAdd(name, CreateTypeDefinition, (type, this));
 
-        static ClrTypeDefinition CreateTypeDefinition(string typeName, (Type clrType, ClrTypeDefinitionRegistry registry) context)
-        {
-            return new ClrTypeDefinition(context.clrType, context.registry);
-        }
+        static ClrTypeDefinition CreateTypeDefinition(string typeName, (Type clrType, ClrTypeDefinitionRegistry registry) context) 
+            => new ClrTypeDefinition(context.clrType, context.registry);
     }
 
     /// <summary>
@@ -78,13 +76,19 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
             return existing;
         }
 
-        var clrType = Type.GetType(name);
-        if (clrType is null) {
+        try {
+            var clrType = Type.GetType(name);
+            if (clrType is null) {
+                return null;
+            }
+
+            var created = new ClrTypeDefinition(clrType, this);
+            return _types.GetOrAdd(name, created);
+        }
+        catch {
+            Trace.TraceError($"Failed to resolve CLR type for name '{name}'.");
             return null;
         }
-
-        var created = new ClrTypeDefinition(clrType, this);
-        return _types.GetOrAdd(name, created);
     }
 
     ITypeDefinition? ITypeDefinitionProvider.GetTypeDefinition(Type type) => GetTypeDefinition(type);

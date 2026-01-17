@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
-
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
+using Poly.Interpretation.Expressions;
+using Poly.Interpretation.LinqInterpreter;
 
 namespace Poly.Tests.Interpretation;
 
@@ -10,13 +10,13 @@ public class TypeCastTests {
     public async Task TypeCast_IntToDouble_ConvertsCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
-        var doubleType = context.GetTypeDefinition<double>()!;
+        var builder = new LinqExecutionPlanBuilder();
+        var operand = new Constant(42);
+        var doubleType = builder.GetTypeDefinition(typeof(double).FullName!);
         var cast = new TypeCast(operand, doubleType);
 
         // Act
-        var expression = cast.BuildExpression(context);
+        var expression = cast.Evaluate(builder);
         var lambda = Expression.Lambda<Func<double>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
@@ -29,13 +29,13 @@ public class TypeCastTests {
     public async Task TypeCast_DoubleToInt_TruncatesDecimal()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(3.14);
-        var intType = context.GetTypeDefinition<int>()!;
+        var builder = new LinqExecutionPlanBuilder();
+        var operand = new Constant(3.14);
+        var intType = builder.GetTypeDefinition(typeof(int).FullName!);
         var cast = new TypeCast(operand, intType);
 
         // Act
-        var expression = cast.BuildExpression(context);
+        var expression = cast.Evaluate(builder);
         var lambda = Expression.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
@@ -48,13 +48,13 @@ public class TypeCastTests {
     public async Task TypeCast_LongToInt_ConvertsCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(100L);
-        var intType = context.GetTypeDefinition<int>()!;
+        var builder = new LinqExecutionPlanBuilder();
+        var operand = new Constant(100L);
+        var intType = builder.GetTypeDefinition(typeof(int).FullName!);
         var cast = new TypeCast(operand, intType);
 
         // Act
-        var expression = cast.BuildExpression(context);
+        var expression = cast.Evaluate(builder);
         var lambda = Expression.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
@@ -67,14 +67,16 @@ public class TypeCastTests {
     public async Task TypeCast_WithParameter_EvaluatesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-        var doubleType = context.GetTypeDefinition<double>()!;
-        var cast = new TypeCast(param, doubleType);
+        var builder = new LinqExecutionPlanBuilder();
+        var intType = builder.GetTypeDefinition(typeof(int).FullName!);
+        var doubleType = builder.GetTypeDefinition(typeof(double).FullName!);
+        var param = builder.Parameter("x", intType);
+        var paramRef = new NamedReference("x");
+        var cast = new TypeCast(paramRef, doubleType);
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, double>>(expression, param.BuildExpression(context));
+        var expression = cast.Evaluate(builder);
+        var lambda = Expression.Lambda<Func<int, double>>(expression, param);
         var compiled = lambda.Compile();
 
         // Assert
@@ -86,14 +88,16 @@ public class TypeCastTests {
     public async Task TypeCast_StringToObject_ConvertsCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<string>("str");
-        var objectType = context.GetTypeDefinition<object>()!;
-        var cast = new TypeCast(param, objectType);
+        var builder = new LinqExecutionPlanBuilder();
+        var stringType = builder.GetTypeDefinition(typeof(string).FullName!);
+        var objectType = builder.GetTypeDefinition(typeof(object).FullName!);
+        var param = builder.Parameter("str", stringType);
+        var paramRef = new NamedReference("str");
+        var cast = new TypeCast(paramRef, objectType);
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<string, object>>(expression, param.BuildExpression(context));
+        var expression = cast.Evaluate(builder);
+        var lambda = Expression.Lambda<Func<string, object>>(expression, param);
         var compiled = lambda.Compile();
 
         // Assert
@@ -106,14 +110,16 @@ public class TypeCastTests {
     public async Task TypeCast_ObjectToString_DowncastsCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<object>("obj");
-        var stringType = context.GetTypeDefinition<string>()!;
-        var cast = new TypeCast(param, stringType);
+        var builder = new LinqExecutionPlanBuilder();
+        var objectType = builder.GetTypeDefinition(typeof(object).FullName!);
+        var stringType = builder.GetTypeDefinition(typeof(string).FullName!);
+        var param = builder.Parameter("obj", objectType);
+        var paramRef = new NamedReference("obj");
+        var cast = new TypeCast(paramRef, stringType);
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<object, string>>(expression, param.BuildExpression(context));
+        var expression = cast.Evaluate(builder);
+        var lambda = Expression.Lambda<Func<object, string>>(expression, param);
         var compiled = lambda.Compile();
 
         // Assert
@@ -125,14 +131,16 @@ public class TypeCastTests {
     public async Task TypeCast_NullableToNonNullable_UnwrapsValue()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int?>("nullable");
-        var intType = context.GetTypeDefinition<int>()!;
-        var cast = new TypeCast(param, intType);
+        var builder = new LinqExecutionPlanBuilder();
+        var nullableIntType = builder.GetTypeDefinition(typeof(int?).FullName!);
+        var intType = builder.GetTypeDefinition(typeof(int).FullName!);
+        var param = builder.Parameter("nullable", nullableIntType);
+        var paramRef = new NamedReference("nullable");
+        var cast = new TypeCast(paramRef, intType);
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int?, int>>(expression, param.BuildExpression(context));
+        var expression = cast.Evaluate(builder);
+        var lambda = Expression.Lambda<Func<int?, int>>(expression, param);
         var compiled = lambda.Compile();
 
         // Assert
@@ -143,14 +151,16 @@ public class TypeCastTests {
     public async Task TypeCast_NonNullableToNullable_WrapsValue()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("value");
-        var nullableIntType = context.GetTypeDefinition<int?>()!;
-        var cast = new TypeCast(param, nullableIntType);
+        var builder = new LinqExecutionPlanBuilder();
+        var intType = builder.GetTypeDefinition(typeof(int).FullName!);
+        var nullableIntType = builder.GetTypeDefinition(typeof(int?).FullName!);
+        var param = builder.Parameter("value", intType);
+        var paramRef = new NamedReference("value");
+        var cast = new TypeCast(paramRef, nullableIntType);
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int?>>(expression, param.BuildExpression(context));
+        var expression = cast.Evaluate(builder);
+        var lambda = Expression.Lambda<Func<int, int?>>(expression, param);
         var compiled = lambda.Compile();
 
         // Assert
@@ -158,50 +168,16 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_GetTypeDefinition_ReturnsTargetType()
-    {
-        // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
-        var doubleType = context.GetTypeDefinition<double>()!;
-        var cast = new TypeCast(operand, doubleType);
-
-        // Act
-        var typeDef = cast.GetTypeDefinition(context);
-
-        // Assert
-        await Assert.That(typeDef).IsNotNull();
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(double));
-    }
-
-    [Test]
-    public async Task TypeCast_ToString_ReturnsExpectedFormat()
-    {
-        // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
-        var doubleType = context.GetTypeDefinition<double>()!;
-        var cast = new TypeCast(operand, doubleType);
-
-        // Act
-        var result = cast.ToString();
-
-        // Assert
-        await Assert.That(result).Contains("Double");
-        await Assert.That(result).Contains("42");
-    }
-
-    [Test]
     public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var doubleType = context.GetTypeDefinition<double>()!;
+        var builder = new LinqExecutionPlanBuilder();
+        var intType = builder.GetTypeDefinition(typeof(int).FullName!);
 
         // Assert
-        await Assert.That(() => new TypeCast(null!, doubleType))
+        await Assert.That(() => new TypeCast(null!, intType))
             .Throws<ArgumentNullException>();
-        await Assert.That(() => new TypeCast(Value.Wrap(42), null!))
+        await Assert.That(() => new TypeCast(new Constant(42), null!))
             .Throws<ArgumentNullException>();
     }
 }

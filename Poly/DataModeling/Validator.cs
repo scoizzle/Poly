@@ -50,8 +50,9 @@ public sealed class Validator {
         var ruleSetInterpretation = combinedRuleSet.BuildInterpretationTree(ruleBuildingContext);
         
         var builder = new LinqExecutionPlanBuilder(_typeProvider);
-        var param = builder.Parameter("@value", entryPointTypeDefinition);
+        builder.Parameter("@value", entryPointTypeDefinition);
         var expressionTree = ruleSetInterpretation.Evaluate(builder);
+        var param = builder.GetParameter("@value");
 
         var lambda = Expression.Lambda<Func<IDictionary<string, object?>, bool>>(expressionTree, param);
         var compiledRule = lambda.Compile();

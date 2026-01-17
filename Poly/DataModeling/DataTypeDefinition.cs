@@ -78,21 +78,24 @@ internal sealed class DataTypeProperty : ITypeProperty {
                 ?? throw new InvalidOperationException($"Referenced type '{refProp.ReferencedTypeName}' not found.");
         }
 
-        return property switch {
-            StringProperty => provider.GetTypeDefinition(typeof(string).FullName!)!,
-            Int32Property => provider.GetTypeDefinition(typeof(int).FullName!)!,
-            Int64Property => provider.GetTypeDefinition(typeof(long).FullName!)!,
-            DoubleProperty => provider.GetTypeDefinition(typeof(double).FullName!)!,
-            BooleanProperty => provider.GetTypeDefinition(typeof(bool).FullName!)!,
-            GuidProperty => provider.GetTypeDefinition(typeof(Guid).FullName!)!,
-            DateTimeProperty => provider.GetTypeDefinition(typeof(DateTime).FullName!)!,
-            DateOnlyProperty => provider.GetTypeDefinition(typeof(DateOnly).FullName!)!,
-            TimeOnlyProperty => provider.GetTypeDefinition(typeof(TimeOnly).FullName!)!,
-            DecimalProperty => provider.GetTypeDefinition(typeof(decimal).FullName!)!,
-            ByteArrayProperty => provider.GetTypeDefinition(typeof(byte[]).FullName!)!,
-            JsonProperty => provider.GetTypeDefinition(typeof(object).FullName!)!,
-            EnumProperty enumProp => provider.GetTypeDefinition(typeof(string).FullName!)!,
-            _ => provider.GetTypeDefinition(typeof(object).FullName!)!
+        var typeName = property switch {
+            StringProperty => typeof(string).FullName,
+            Int32Property => typeof(int).FullName,
+            Int64Property => typeof(long).FullName,
+            DoubleProperty => typeof(double).FullName,
+            BooleanProperty => typeof(bool).FullName,
+            GuidProperty => typeof(Guid).FullName,
+            DateTimeProperty => typeof(DateTime).FullName,
+            DateOnlyProperty => typeof(DateOnly).FullName,
+            TimeOnlyProperty => typeof(TimeOnly).FullName,
+            DecimalProperty => typeof(decimal).FullName,
+            ByteArrayProperty => typeof(byte[]).FullName,
+            JsonProperty => typeof(object).FullName,
+            EnumProperty _ => typeof(string).FullName,
+            _ => typeof(object).FullName
         };
+
+        return provider.GetTypeDefinition(typeName!)
+            ?? throw new InvalidOperationException($"Unable to resolve CLR type '{typeName}' for property '{property.Name}'.");
     }
 }

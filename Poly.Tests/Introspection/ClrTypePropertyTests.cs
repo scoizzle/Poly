@@ -1,6 +1,8 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Expr = System.Linq.Expressions.Expression;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -29,14 +31,14 @@ public class ClrTypePropertyTests {
         var lengthProperty = stringType.Properties.WithName("Length").SingleOrDefault();
 
         var testString = "Hello World";
-        var stringValue = Value.Wrap(testString);
+        var stringValue = Wrap(testString);
         var accessor = lengthProperty!.GetMemberAccessor(stringValue);
 
         await Assert.That(accessor).IsNotNull();
 
         var interpretationContext = new InterpretationContext();
         var expression = accessor.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Func<int>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<int>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo(testString.Length);
@@ -77,14 +79,14 @@ public class ClrTypePropertyTests {
         var dayProperty = dateTimeType.Properties.WithName("Day").SingleOrDefault();
 
         var testDate = new DateTime(2025, 10, 23);
-        var dateValue = Value.Wrap(testDate);
+        var dateValue = Wrap(testDate);
         var accessor = dayProperty!.GetMemberAccessor(dateValue);
 
         await Assert.That(accessor).IsNotNull();
 
         var interpretationContext = new InterpretationContext();
         var expression = accessor.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Func<int>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<int>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo(23);
@@ -97,13 +99,13 @@ public class ClrTypePropertyTests {
         var dateTimeType = registry.GetTypeDefinition<DateTime>();
         var utcNowProperty = dateTimeType.Properties.WithName("UtcNow").SingleOrDefault();
 
-        var accessor = utcNowProperty!.GetMemberAccessor(Value.Null);
+        var accessor = utcNowProperty!.GetMemberAccessor(Null);
 
         await Assert.That(accessor).IsNotNull();
 
         var interpretationContext = new InterpretationContext();
         var expression = accessor.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Func<DateTime>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<DateTime>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsLessThanOrEqualTo(DateTime.UtcNow);

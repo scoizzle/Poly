@@ -1,4 +1,5 @@
 using Poly.Introspection;
+using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation;
@@ -25,6 +26,42 @@ public sealed class InterpretationContext {
     private VariableScope _currentScope;
 
     /// <summary>
+    /// Gets the type definition provider for resolving types during interpretation.
+    /// </summary>
+    public ITypeDefinitionProvider TypeProvider { get; }
+
+    /// <summary>
+    /// Variable bindings for the current scope.
+    /// </summary>
+    public Dictionary<string, ITypeDefinition> Variables { get; } = new();
+
+    /// <summary>
+    /// Type scope stack for nested scopes.
+    /// </summary>
+    public Stack<ITypeDefinition> ScopeStack { get; } = new();
+
+    /// <summary>
+    /// Request-scoped properties for storing middleware-specific data.
+    /// Similar to HttpContext.Items in ASP.NET Core.
+    /// </summary>
+    public Dictionary<string, object?> Properties { get; } = new();
+
+    /// <summary>
+    /// Cache of ParameterExpression objects for each Parameter node, ensuring the same instance
+    /// is reused when building expression trees within this context.
+    /// Uses reference equality so different Parameter nodes (even with same name) get different ParameterExpressions.
+    /// </summary>
+    internal Dictionary<Parameter, Exprs.ParameterExpression> ParameterExpressionCache { get; } = new();
+
+    /// <summary>
+    /// TEMPORARY: Gets or sets a transformer for compatibility with existing code.
+    /// In the middleware architecture, transformers are composed in the middleware pipeline.
+    /// This property is for backward compatibility during migration.
+    /// </summary>
+    [Obsolete("Use middleware interpreter with ITransformer implementations instead.")]
+    public ITransformer<Expr>? Transformer { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="InterpretationContext"/> class.
     /// </summary>
     /// <remarks>
@@ -33,10 +70,24 @@ public sealed class InterpretationContext {
     public InterpretationContext()
     {
         _typeDefinitionProviderCollection = new TypeDefinitionProviderCollection(ClrTypeDefinitionRegistry.Shared);
+        TypeProvider = _typeDefinitionProviderCollection;
         _scopes = new Stack<VariableScope>();
         _currentScope = _globalScope = new VariableScope();
         _scopes.Push(_currentScope);
     }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InterpretationContext"/> class with a custom type provider.
+    /// </summary>
+    public InterpretationContext(ITypeDefinitionProvider typeProvider)
+    {
+        TypeProvider = typeProvider ?? throw new ArgumentNullException(nameof(typeProvider));
+        _typeDefinitionProviderCollection = new TypeDefinitionProviderCollection(ClrTypeDefinitionRegistry.Shared);
+        _scopes = new Stack<VariableScope>();
+        _currentScope = _globalScope = new VariableScope();
+        _scopes.Push(_currentScope);
+    }
+
 
     /// <summary>
     /// Gets or sets the maximum allowed scope depth to prevent stack overflow from excessive nesting.
@@ -86,7 +137,7 @@ public sealed class InterpretationContext {
     /// <param name="initialValue">The initial value, or <c>null</c> for an uninitialized variable.</param>
     /// <returns>The newly declared variable.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
-    public Variable DeclareVariable(string name, Value? initialValue = null)
+    public Variable DeclareVariable(string name, Node? initialValue = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return _currentScope.SetVariable(name, initialValue);
@@ -103,7 +154,7 @@ public sealed class InterpretationContext {
     /// If a variable with the given name exists in any scope, its value is updated.
     /// Otherwise, a new variable is created in the current scope.
     /// </remarks>
-    public Variable SetVariable(string name, Value value)
+    public Variable SetVariable(string name, Node value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Variable? variable = GetVariable(name);
@@ -193,9 +244,38 @@ public sealed class InterpretationContext {
     }
 
     /// <summary>
+    /// Gets or creates a ParameterExpression for a given Parameter node.
+    /// Ensures the same Parameter node always maps to the same ParameterExpression within this context.
+    /// </summary>
+    /// <param name="parameter">The parameter node to get the expression for.</param>
+    /// <returns>The cached or newly created ParameterExpression.</returns>
+    internal Exprs.ParameterExpression GetOrCreateParameterExpression(Parameter parameter)
+    {
+        if (ParameterExpressionCache.TryGetValue(parameter, out var cached))
+        {
+            return cached;
+        }
+
+        var paramExpr = Exprs.Expression.Parameter(parameter.Type.ReflectedType, parameter.Name);
+        ParameterExpressionCache[parameter] = paramExpr;
+        return paramExpr;
+    }
+
+    /// <summary>
     /// Gets the parameter expressions for all registered parameters.
     /// </summary>
     /// <returns>An enumerable of parameter expressions.</returns>
-    public IEnumerable<ParameterExpression> GetParameterExpressions() =>
-        _parameters.Select(p => p.BuildExpression(this));
+    [Obsolete("Use the middleware interpreter instead.")]
+    public IEnumerable<Exprs.ParameterExpression> GetParameterNodes()
+    {
+        var transformer = new LinqExpressionTransformer();
+        foreach (var param in _parameters)
+        {
+            var expr = param.BuildNode(this);
+            if (expr is Exprs.ParameterExpression paramExpr)
+            {
+                yield return paramExpr;
+            }
+        }
+    }
 }

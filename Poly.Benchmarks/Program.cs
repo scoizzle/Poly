@@ -1,11 +1,28 @@
 using System;
+using System.Linq.Expressions;
 
+using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Validation;
 using Poly.Validation.Builders;
 
+var body = new MethodInvocation(
+    new Constant<string>("Hello, World!"),
+    "Substring",
+    new Constant<int>(7),
+    new Constant<int>(5)
+);
+
+LinqExpressionTransformer transformer = new();
+
+Expression expr = body.Transform(transformer);
+Func<string> compiled = Expression.Lambda<Func<string>>(expr, transformer.ParameterExpressions).Compile();
+string result = compiled();
+Console.WriteLine($"Result of method invocation: {result}");
+
 // Poly.Benchmarks.FluentBuilderExample.Run();
 // Console.WriteLine();
-Poly.Benchmarks.FluentApiExample.Run();
+// Poly.Benchmarks.FluentApiExample.Run();
 Console.WriteLine();
 
 // BenchmarkPersonPredicate test = new();
@@ -18,7 +35,7 @@ Console.WriteLine();
 // var ruleBasedResult = test.RuleBased();
 // Console.WriteLine($"Rule-based result: {ruleBasedResult}");
 
-BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run();
+// BenchmarkDotNet.Running.BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run();
 
 // DataModelBuilder builder = new();
 
@@ -145,8 +162,8 @@ RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
 // Value getName = personName.GetMemberAccessor(personNode);
 // Value getAge = personAge.GetMemberAccessor(personNode);
 
-// Expression nameExpr = getName.BuildExpression(context);
-// Expression ageExpr = getAge.BuildExpression(context);
+// Expression nameExpr = getName.BuildNode(context);
+// Expression ageExpr = getAge.BuildNode(context);
 
 // Console.WriteLine(nameExpr);
 // Console.WriteLine(ageExpr);
@@ -154,14 +171,14 @@ RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
 // Constant constantNode = Value.Wrap("Bob");
 
 // Assignment assignNameExpr = new Assignment(getName, constantNode);
-// Console.WriteLine(assignNameExpr.BuildExpression(context));
+// Console.WriteLine(assignNameExpr.BuildNode(context));
 
 // ITypeMember strLength = personName.MemberTypeDefinition.GetMember(nameof(string.Length));
 
 // Literal valueNode = Value.Wrap("This is a test.");
 // Value getLength = strLength.GetMemberAccessor(valueNode);
 
-// Expression expr = getLength.BuildExpression(context);
+// Expression expr = getLength.BuildNode(context);
 
 // Console.WriteLine(expr);
 

@@ -1,4 +1,6 @@
+using Poly.Tests.TestHelpers;
 using Poly.Interpretation;
+using Expr = System.Linq.Expressions.Expression;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Introspection;
 
@@ -168,12 +170,12 @@ public class ClrTypeInheritanceTests {
         var baseNameProperty = baseNameMembers.First();
 
         var instance = new DerivedWithProperty { BaseName = "TestName" };
-        var instanceLiteral = Value.Wrap(instance);
+        var instanceLiteral = Wrap(instance);
 
         var context = new InterpretationContext();
         var accessor = baseNameProperty.GetMemberAccessor(instanceLiteral);
         var expression = accessor.BuildExpression(context);
-        var lambda = System.Linq.Expressions.Expression.Lambda<System.Func<string>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<string>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo("TestName");

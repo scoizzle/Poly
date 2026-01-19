@@ -1,6 +1,7 @@
 using System.Reflection;
 
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
@@ -61,7 +62,7 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     /// <summary>
     /// Creates an accessor that reads this field from the provided <paramref name="instance"/>.
     /// </summary>
-    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters) => new ClrTypeFieldInterpretationAccessor(instance, this);
+    public override Node GetMemberAccessor(Node instance, params Node[]? parameters) => new ClrTypeFieldInterpretationAccessor(instance, this);
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

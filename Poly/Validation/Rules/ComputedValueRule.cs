@@ -1,8 +1,8 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Arithmetic;
-using Poly.Interpretation.Operators.Comparison;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
+using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+using Poly.Interpretation.AbstractSyntaxTree.Equality;
 
 namespace Poly.Validation.Rules;
 
@@ -34,13 +34,13 @@ public sealed class ComputedValueRule : Rule {
         ComparisonOperator = comparisonOperator;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var target = new MemberAccess(context.Value, TargetPropertyName);
         var left = new MemberAccess(context.Value, LeftOperandPropertyName);
         var right = new MemberAccess(context.Value, RightOperandPropertyName);
 
-        Value computation = Operation switch {
+        Node computation = Operation switch {
             ArithmeticOperation.Add => new Add(left, right),
             ArithmeticOperation.Subtract => new Subtract(left, right),
             ArithmeticOperation.Multiply => new Multiply(left, right),
@@ -48,7 +48,7 @@ public sealed class ComputedValueRule : Rule {
             _ => throw new ArgumentException($"Unknown operation: {Operation}")
         };
 
-        Value comparisonResult = ComparisonOperator switch {
+        Node comparisonResult = ComparisonOperator switch {
             ComparisonOperator.Equal => new Equal(target, computation),
             ComparisonOperator.NotEqual => new NotEqual(target, computation),
             ComparisonOperator.GreaterThan => new GreaterThan(target, computation),

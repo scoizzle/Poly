@@ -15,7 +15,7 @@ The Interpretation system provides a domain-specific language (DSL) for building
 ## Core Concepts
 
 ### Values
-All interpretable elements inherit from `Value`, which represents typed data or operations that produce typed results:
+All expression nodes inherit from `Value`, which represents typed data or operations that produce typed results:
 
 - **`Literal<T>`**: Constant values known at interpretation time
 - **`Parameter`**: Lambda parameters (inputs to compiled expressions)
@@ -254,6 +254,15 @@ var expr = x.Multiply(Value.Wrap(2)).Add(Value.Wrap(5));
 
 ## Architecture
 
+### Two-Layer Interpretation System
+
+The Interpretation module provides two complementary approaches:
+
+1. **Fluent Value API** (Classic) - Lightweight, type-safe expression building
+2. **Middleware Interpreter** (Modern) - Composable, semantic-aware AST transformation pipeline
+
+Both approaches integrate seamlessly with Poly's introspection and validation layers.
+
 ### Type System Integration
 
 The system integrates with Poly's introspection layer through `ITypeDefinition`:
@@ -271,7 +280,7 @@ This abstraction layer enables:
 - Extensible type providers for custom types
 - Unified handling of CLR types, data model types, and custom definitions
 
-### Expression Building Flow
+### Expression Building Flow (Fluent API)
 
 1. **Parse/Compose**: Build operator tree using fluent API
 2. **Type Check**: `GetTypeDefinition()` validates types without side effects
@@ -296,6 +305,125 @@ Block Scope 2 (nested)
 - `PushScope()` / `PopScope()` manage the scope stack
 - Blocks automatically manage their scope lifecycle
 
+### Middleware-Based Interpretation (New)
+
+The middleware interpreter provides a composable, single-pass pipeline for semantic analysis and code generation. This is particularly useful for:
+- **Custom Domain Transformers**: Short-circuit standard processing with domain-specific logic
+- **Semantic Analysis**: Resolve and cache type information during traversal
+- **AST Enrichment**: Annotate nodes with resolved members and type information
+- **Code Generation**: Terminal middleware delegates to `ITransformer<TResult>` for flexible output
+
+#### Pipeline Architecture
+
+```
+Input AST Node
+    ↓
+[Middleware 1: SemanticAnalysis]
+    (Type resolution, member caching)
+    ↓
+[Middleware 2: CustomTransformers]
+    (Registry-based domain-specific handlers)
+    ↓
+[Middleware 3: TerminalTransform]
+    (Delegates to ITransformer<TResult>)
+    ↓
+Output Result<TResult>
+```
+
+#### Key Components
+
+**TransformationDelegate<TResult>**: Context-first pipeline signature
+```csharp
+public delegate Task<TResult> TransformationDelegate<TResult>(
+    InterpretationContext context,
+    Node node,
+    TransformationDelegate<TResult> next);
+```
+
+**ITransformationMiddleware<TResult>**: Middleware contract
+```csharp
+public interface ITransformationMiddleware<TResult>
+{
+    TransformationDelegate<TResult> Build(TransformationDelegate<TResult> next);
+}
+```
+
+**Semantic Caching**: Type information flows through context without mutating nodes
+```csharp
+// In middleware
+context.SetResolvedType(node, resolvedType);
+context.SetResolvedMember(node, resolvedMember);
+
+// In terminal processor or elsewhere
+var type = context.GetResolvedType(node);
+var member = context.GetResolvedMember(node);
+```
+
+**Custom Transformer Registry**: Priority-based, domain-specific handlers
+```csharp
+var registry = new CustomTransformerRegistry<TResult>();
+registry.Register(
+    nodeMatcher: n => n is BinaryOp { Operator: "+" },
+    transformer: (context, node) => /* custom handling */);
+
+var middleware = new CustomTransformMiddleware<TResult>(registry);
+```
+
+#### Quick Start: Middleware Pipeline
+
+```csharp
+var context = new InterpretationContext();
+var typeProvider = new ClrTypeDefinitionProvider();
+context.TypeProvider = typeProvider;
+
+var builder = new InterpreterBuilder<string>(context);
+builder
+    .Use(new SemanticAnalysisMiddleware())
+    .Use(new CustomTransformMiddleware<string>(new CustomTransformerRegistry<string>()))
+    .Use(new TerminalTransformMiddleware<string>(customTransformer));
+
+var interpreter = builder.Build();
+
+var ast = new BinaryOp(
+    new Literal<int>(10),
+    "+",
+    new Literal<int>(20));
+
+var result = await interpreter.Transform(ast);
+// Result contains semantic info in context for inspection
+```
+
+#### Three-Phase Implementation
+
+See [MIDDLEWARE_INTERPRETER_IMPLEMENTATION.md](./MIDDLEWARE_INTERPRETER_IMPLEMENTATION.md) for comprehensive architecture details.
+
+**Phase 1: Core Infrastructure**
+- `TransformationDelegate<TResult>` - Context-first pipeline signature
+- `ITransformationMiddleware<TResult>` - Middleware contract
+- `InterpreterBuilder<TResult>` - Fluent pipeline configuration
+- `Interpreter<TResult>` - Orchestrates middleware chain execution
+- `InterpretationContext` enhancements - TypeProvider, Variables, ScopeStack, Properties dictionary
+
+**Phase 2: Semantic Analysis Middleware**
+- `SemanticAnalysisMiddleware` - Resolves types/members and caches in context
+- `SemanticExtensions` - Helper methods for accessing/storing semantic info
+- `SemanticInfo` record - Immutable semantic information structure
+
+**Phase 3: Custom & Terminal Transformers**
+- `CustomTransformerRegistry<TResult>` - Priority-based handler registry
+- `CustomTransformMiddleware<TResult>` - Applies registry transformers
+- `TerminalTransformMiddleware<TResult>` - Delegates to `ITransformer<TResult>`
+
+#### Integration with Existing System
+
+The middleware interpreter:
+- ✅ Integrates with existing `InterpretationContext`
+- ✅ Respects `ITypeDefinitionProvider` for type resolution
+- ✅ Delegates terminal processing to standard `ITransformer<TResult>`
+- ✅ Does not modify the fluent Value API
+- ✅ Allows gradual adoption alongside existing code
+- ✅ Provides escape hatches for domain-specific logic via custom transformers
+
 ## Current Features
 
 ✅ Comprehensive operator set (arithmetic, comparison, boolean, conditional)  
@@ -309,6 +437,59 @@ Block Scope 2 (nested)
 ✅ Null-coalescing operator  
 ✅ Assignment operations  
 ✅ Parameter and variable management  
+
+## Middleware vs. Fluent API: When to Use Each
+
+### Use the Fluent Value API When:
+- Building expression trees for compilation and execution
+- Working with runtime values and parameters
+- Need lightweight, familiar LINQ expression semantics
+- Building validators, predicates, or calculated fields
+- Compiling to IL for high-performance repeated execution
+- Working within simple, single-concern transformation logic
+
+**Example**: Building a validation rule
+```csharp
+var age = context.AddParameter<int>("age");
+var validator = age.GreaterThanOrEqual(Value.Wrap(18))
+                   .And(age.LessThanOrEqual(Value.Wrap(120)));
+var compiled = CompileToFunc<int, bool>(context, validator, age);
+```
+
+### Use the Middleware Interpreter When:
+- Need multi-stage semantic analysis and enrichment
+- Want to support custom, domain-specific transformations
+- Building language tools (analyzers, code generators, translators)
+- Need to inspect/cache type information during traversal
+- Processing ASTs with complex node hierarchies
+- Want composable, reusable transformation middleware
+- Need to integrate multiple transformation concerns (analysis → custom logic → generation)
+
+**Example**: Building an AST transformer with semantic caching
+```csharp
+var builder = new InterpreterBuilder<string>(context);
+builder
+    .Use(new SemanticAnalysisMiddleware())           // Resolve types
+    .Use(new CustomTransformMiddleware<string>(reg)) // Domain logic
+    .Use(new TerminalTransformMiddleware<string>(codeGen)); // Generate
+
+var interpreter = builder.Build();
+var result = await interpreter.Transform(astNode);
+```
+
+### Side-by-Side Comparison
+
+| Aspect | Fluent API | Middleware |
+|--------|-----------|------------|
+| **Entry Point** | `Value.Wrap()`, `Parameter`, `Variable` | `InterpreterBuilder<T>` |
+| **Composition** | Method chaining, fluent builders | Middleware pipeline |
+| **Type Safety** | Compile-time, Expression Tree validation | Runtime via context semantic cache |
+| **Performance** | Compiles to IL (fastest at execution) | Middleware overhead (but single-pass) |
+| **Semantic Info** | Limited (GetTypeDefinition on values) | Rich (cached in InterpretationContext) |
+| **Extensibility** | Add operators to Value class | Add middleware, custom transformers |
+| **Node Structure** | Operator instances (mutable builders) | Immutable record hierarchy |
+| **Use Case** | Execution, evaluation | Analysis, transformation, generation |
+| **Output** | Expression<T>, compiled delegates | Custom (via ITransformer<TResult>) |
 
 ## Future Plans
 
@@ -422,7 +603,7 @@ Block Scope 2 (nested)
 - **Lambda expressions**: Nested lambdas and closures
 - **Exception handling**: Try/Catch/Finally blocks
 - **Collection operations**: NewArray, NewObject, collection initializers
-- **LINQ integration**: Select, Where, OrderBy as interpretable operators
+- **LINQ integration**: Select, Where, OrderBy as expression node operators
 - **Async support**: Async/await expression building
 
 ## Testing
@@ -460,7 +641,9 @@ for (int i = 0; i < 1000000; i++) {
 
 ## Contributing
 
-When adding new operators or features:
+### Adding Operators (Fluent API)
+
+When adding new operators or features to the fluent API:
 
 1. Inherit from appropriate base class (`Operator`, `BooleanOperator`, etc.)
 2. Implement `GetTypeDefinition()` for type checking
@@ -470,6 +653,48 @@ When adding new operators or features:
 6. Document behavior in XML comments
 7. Update this README with new capabilities
 
+### Extending the Middleware Interpreter
+
+To add custom transformation logic:
+
+1. **Create a middleware**: Implement `ITransformationMiddleware<TResult>` with `Build()` method
+   ```csharp
+   public class MyAnalysisMiddleware : ITransformationMiddleware<string>
+   {
+       public TransformationDelegate<string> Build(TransformationDelegate<string> next)
+       {
+           return async (context, node, _) => {
+               // Pre-processing: analyze node
+               var type = context.TypeProvider.GetTypeDefinition(node.GetType());
+               
+               // Call next middleware
+               var result = await next(context, node, next);
+               
+               // Post-processing if needed
+               return result;
+           };
+       }
+   }
+   ```
+
+2. **Register custom transformers**: Use `CustomTransformerRegistry<TResult>`
+   ```csharp
+   var registry = new CustomTransformerRegistry<TResult>();
+   registry.Register(
+       nodeMatcher: n => n is SpecialNode { Property: "value" },
+       transformer: async (context, node) => { /* custom logic */ },
+       priority: 10); // Higher priority = earlier execution
+   ```
+
+3. **Add to pipeline**: Wire middleware into `InterpreterBuilder<TResult>`
+   ```csharp
+   builder.Use(new MyAnalysisMiddleware());
+   ```
+
+4. **Test thoroughly**: Create integration tests demonstrating the middleware behavior
+5. **Document**: Explain the middleware's purpose and semantic guarantees
+6. **Reference**: Update this README with examples of your middleware
+
 ## Examples
 
 See [FluentApiExample.cs](../../Poly.Benchmarks/FluentApiExample.cs) for runnable demonstrations of all features.
@@ -478,5 +703,4 @@ See [FluentApiExample.cs](../../Poly.Benchmarks/FluentApiExample.cs) for runnabl
 
 - [System.Linq.Expressions Documentation](https://docs.microsoft.com/en-us/dotnet/api/system.linq.expressions)
 - [Expression Trees in C#](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/expression-trees/)
-- [Poly Introspection System](../Introspection/README.md)
-- [Poly Validation System](../Validation/README.md)
+- [Middleware Interpreter Implementation](./MIDDLEWARE_INTERPRETER_IMPLEMENTATION.md) - Detailed architecture and three-phase implementation plan

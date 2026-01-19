@@ -1,5 +1,5 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
+using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Introspection;
 
 namespace Poly.Validation;
@@ -17,7 +17,7 @@ public sealed record RuleBuildingContext {
     /// For property constraints, use GetMemberAccessor to access specific properties.
     /// For type rules, this is the property value.
     /// </summary>
-    public Value Value { get; private init; }
+    public Node Value { get; private init; }
 
     /// <summary>
     /// Creates a new context with the property value as the entry point

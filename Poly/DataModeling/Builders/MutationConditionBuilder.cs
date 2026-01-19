@@ -1,9 +1,11 @@
 using Poly.DataModeling.Mutations;
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Comparison;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+using Poly.Interpretation.AbstractSyntaxTree.Equality;
 using Poly.Validation;
 using Poly.Validation.Constraints;
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.DataModeling.Builders;
 
@@ -207,7 +209,7 @@ internal sealed class ValueSourceComparisonConstraint : Constraint {
         _rightValueSource = rightValueSource ?? throw new ArgumentNullException(nameof(rightValueSource));
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var left = context.Value;
         var right = BuildValueFromSource(_rightValueSource, context);
@@ -222,10 +224,10 @@ internal sealed class ValueSourceComparisonConstraint : Constraint {
         };
     }
 
-    private static Value BuildValueFromSource(ValueSource source, RuleBuildingContext context)
+    private static Node BuildValueFromSource(ValueSource source, RuleBuildingContext context)
     {
         return source switch {
-            ConstantValue cv => Value.Wrap(cv.Value),
+            ConstantValue cv => Wrap(cv.Value),
             // ParameterValue pv => new Variable(pv.p),
             // PropertyValue prop => context.Value.GetMember(prop.PropertyName),
             // MemberAccessValue mav => BuildValueFromSource(mav.Source, context).GetMember(mav.MemberName),

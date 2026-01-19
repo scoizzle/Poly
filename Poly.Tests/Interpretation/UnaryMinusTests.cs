@@ -1,7 +1,9 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Arithmetic;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
@@ -11,12 +13,12 @@ public class UnaryMinusTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
+        var operand = Wrap(42);
         var unaryMinus = new UnaryMinus(operand);
 
         // Act
         var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -29,12 +31,12 @@ public class UnaryMinusTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(-99);
+        var operand = Wrap(-99);
         var unaryMinus = new UnaryMinus(operand);
 
         // Act
         var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -47,12 +49,12 @@ public class UnaryMinusTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(0);
+        var operand = Wrap(0);
         var unaryMinus = new UnaryMinus(operand);
 
         // Act
         var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -65,12 +67,12 @@ public class UnaryMinusTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(3.14);
+        var operand = Wrap(3.14);
         var unaryMinus = new UnaryMinus(operand);
 
         // Act
         var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<double>>(expression);
+        var lambda = Expr.Lambda<Func<double>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -88,7 +90,7 @@ public class UnaryMinusTests {
 
         // Act
         var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -108,7 +110,7 @@ public class UnaryMinusTests {
 
         // Act
         var expression = outerNegate.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -124,12 +126,12 @@ public class UnaryMinusTests {
         var param = context.AddParameter<int>("x");
 
         // -(x + 5)
-        var add = new Add(param, Value.Wrap(5));
+        var add = new Add(param, Wrap(5));
         var negate = new UnaryMinus(add);
 
         // Act
         var expression = negate.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -142,11 +144,11 @@ public class UnaryMinusTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
+        var operand = Wrap(42);
         var unaryMinus = new UnaryMinus(operand);
 
         // Act
-        var typeDef = unaryMinus.GetTypeDefinition(context);
+        var typeDef = unaryMinus.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef).IsNotNull();
@@ -157,7 +159,7 @@ public class UnaryMinusTests {
     public async Task UnaryMinus_ToString_ReturnsExpectedFormat()
     {
         // Arrange
-        var operand = Value.Wrap(42);
+        var operand = Wrap(42);
         var unaryMinus = new UnaryMinus(operand);
 
         // Act
@@ -168,10 +170,12 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithNullArgument_ThrowsArgumentNullException()
+    public async Task UnaryMinus_WithNullArgument_AllowsNull()
     {
+        // Act
+        var u = new UnaryMinus(null!);
+
         // Assert
-        await Assert.That(() => new UnaryMinus(null!))
-            .Throws<ArgumentNullException>();
+        await Assert.That(u).IsNotNull();
     }
 }

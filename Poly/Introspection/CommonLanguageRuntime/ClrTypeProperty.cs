@@ -1,6 +1,7 @@
 using System.Reflection;
 
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
@@ -67,11 +68,11 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
     /// Creates an accessor that reads this property (or indexer) from <paramref name="instance"/>.
     /// Validates parameter counts for indexers.
     /// </summary>
-    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters)
+    public override Node GetMemberAccessor(Node instance, params Node[]? parameters)
     {
         if (_parameters is not null) {
-            if (parameters is null || parameters.Count() != _parameters.Count()) {
-                throw new ArgumentException($"Indexer property '{Name}' requires {_parameters.Count()} parameters, but {parameters?.Count() ?? 0} were provided.");
+            if (parameters is null || parameters.Length != _parameters.Count()) {
+                throw new ArgumentException($"Indexer property '{Name}' requires {_parameters.Count()} parameters, but {parameters?.Length ?? 0} were provided.");
             }
 
             return new ClrTypeIndexInterpretationAccessor(instance, this, parameters);

@@ -1,0 +1,19 @@
+namespace Poly.Interpretation.AbstractSyntaxTree;
+
+/// <summary>
+/// Represents a conditional (ternary) expression that evaluates one of two values based on a condition.
+/// </summary>
+/// <remarks>
+/// Compiles to <see cref="Expr.Condition"/> which evaluates the condition and returns either
+/// the true value or the false value accordingly.
+/// Corresponds to the <c>condition ? trueValue : falseValue</c> operator in C#.
+/// Type information is resolved by semantic analysis middleware.
+/// </remarks>
+public sealed record Conditional(Node Condition, Node IfTrue, Node IfFalse) : Operator
+{
+    /// <inheritdoc />
+    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
+
+    /// <inheritdoc />
+    public override string ToString() => $"({Condition} ? {IfTrue} : {IfFalse})";
+}

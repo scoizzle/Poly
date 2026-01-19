@@ -1,4 +1,6 @@
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.SemanticAnalysis;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Validation.Rules;
 
@@ -27,12 +29,24 @@ public sealed class RuleSet<T> {
         var buildingContext = new RuleBuildingContext(interpretationContext, typeDefinition);
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
 
-        // Build the expression tree
-        ExpressionTree = RuleSetInterpretation.BuildExpression(interpretationContext);
+        // Build the expression tree using middleware pattern
+        // Run semantic analysis on the tree
+        var semanticMiddleware = new SemanticAnalysisMiddleware<Expr>();
+        semanticMiddleware.Transform(interpretationContext, RuleSetInterpretation, (ctx, n) => Expr.Empty());
+        
+        // Transform to LINQ expression
+        var transformer = new LinqExpressionTransformer();
+        transformer.SetContext(interpretationContext);
+        
+        // Ensure the entry point parameter is registered with transformer
+        // even when there are no rules (empty rule sets still need the parameter)
+        buildingContext.Value.Transform(transformer);
+        
+        NodeTree = RuleSetInterpretation.Transform(transformer);
 
-        // Compile to a predicate - use the Value (parameter) from the building context
-        var parameterExpressions = interpretationContext.GetParameterExpressions();
-        var lambda = Expression.Lambda<Predicate<T>>(ExpressionTree, parameterExpressions);
+        // Compile to a predicate - collect parameter expressions from transformer
+        var parameters = transformer.ParameterExpressions.ToArray();
+        var lambda = Expr.Lambda<Predicate<T>>(NodeTree, parameters);
         Predicate = lambda.Compile();
     }
 
@@ -44,12 +58,12 @@ public sealed class RuleSet<T> {
     /// <summary>
     /// Gets the interpretation tree representation of the rule set.
     /// </summary>
-    public Value RuleSetInterpretation { get; }
+    public Node RuleSetInterpretation { get; }
 
     /// <summary>
     /// Gets the LINQ expression tree representation of the rule set.
     /// </summary>
-    public Expression ExpressionTree { get; }
+    public Expr NodeTree { get; }
 
     /// <summary>
     /// Gets the compiled predicate function.

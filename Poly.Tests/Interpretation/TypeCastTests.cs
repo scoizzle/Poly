@@ -1,7 +1,9 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Tests.Interpretation;
 
@@ -11,13 +13,13 @@ public class TypeCastTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
+        var operand = Wrap(42);
         var doubleType = context.GetTypeDefinition<double>()!;
         var cast = new TypeCast(operand, doubleType);
 
         // Act
         var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<double>>(expression);
+        var lambda = Expr.Lambda<Func<double>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -30,13 +32,13 @@ public class TypeCastTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(3.14);
+        var operand = Wrap(3.14);
         var intType = context.GetTypeDefinition<int>()!;
         var cast = new TypeCast(operand, intType);
 
         // Act
         var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -49,13 +51,13 @@ public class TypeCastTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(100L);
+        var operand = Wrap(100L);
         var intType = context.GetTypeDefinition<int>()!;
         var cast = new TypeCast(operand, intType);
 
         // Act
         var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -74,7 +76,7 @@ public class TypeCastTests {
 
         // Act
         var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, double>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, double>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -93,7 +95,7 @@ public class TypeCastTests {
 
         // Act
         var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<string, object>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<string, object>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -113,7 +115,7 @@ public class TypeCastTests {
 
         // Act
         var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<object, string>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<object, string>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -132,7 +134,7 @@ public class TypeCastTests {
 
         // Act
         var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int?, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int?, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -150,7 +152,7 @@ public class TypeCastTests {
 
         // Act
         var expression = cast.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int?>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int?>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -162,12 +164,12 @@ public class TypeCastTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
+        var operand = Wrap(42);
         var doubleType = context.GetTypeDefinition<double>()!;
         var cast = new TypeCast(operand, doubleType);
 
         // Act
-        var typeDef = cast.GetTypeDefinition(context);
+        var typeDef = cast.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef).IsNotNull();
@@ -179,7 +181,7 @@ public class TypeCastTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
+        var operand = Wrap(42);
         var doubleType = context.GetTypeDefinition<double>()!;
         var cast = new TypeCast(operand, doubleType);
 
@@ -192,16 +194,18 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException()
+    public async Task TypeCast_WithNullArguments_AllowsNulls()
     {
         // Arrange
         var context = new InterpretationContext();
         var doubleType = context.GetTypeDefinition<double>()!;
 
+        // Act
+        var c1 = new TypeCast(null!, doubleType);
+        var c2 = new TypeCast(Wrap(42), null!);
+
         // Assert
-        await Assert.That(() => new TypeCast(null!, doubleType))
-            .Throws<ArgumentNullException>();
-        await Assert.That(() => new TypeCast(Value.Wrap(42), null!))
-            .Throws<ArgumentNullException>();
+        await Assert.That(c1).IsNotNull();
+        await Assert.That(c2).IsNotNull();
     }
 }

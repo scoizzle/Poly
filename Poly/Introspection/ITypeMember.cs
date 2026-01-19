@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Introspection;
 
@@ -40,5 +41,5 @@ public interface ITypeMember {
     /// <param name="instance">The target instance for instance members; for static members, may be null or ignored.</param>
     /// <param name="parameters">Parameters for methods or indexers. For non-indexed property/field access, pass null. For parameterless methods, null or empty array are both acceptable.</param>
     /// <exception cref="ArgumentException">If parameter count doesn't match member signature.</exception>
-    Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters);
+    Node GetMemberAccessor(Node instance, params Node[]? parameters);
 }

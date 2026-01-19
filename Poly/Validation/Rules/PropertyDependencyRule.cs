@@ -1,7 +1,8 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Boolean;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Boolean;
+using Poly.Interpretation.AbstractSyntaxTree.Equality;
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Validation.Rules;
 
@@ -17,15 +18,15 @@ public sealed class PropertyDependencyRule : Rule {
         RequireWhenSourceHasValue = requireWhenSourceHasValue;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var sourceMember = new MemberAccess(context.Value, SourcePropertyName);
         var dependentMember = new MemberAccess(context.Value, DependentPropertyName);
 
-        var sourceHasValue = new NotEqual(sourceMember, Value.Null);
-        var dependentHasValue = new NotEqual(dependentMember, Value.Null);
+        var sourceHasValue = new NotEqual(sourceMember, Null);
+        var dependentHasValue = new NotEqual(dependentMember, Null);
 
-        Value dependencyResult;
+        Node dependencyResult;
         if (RequireWhenSourceHasValue) {
             // If source has value, then dependent must have value
             // !sourceHasValue OR dependentHasValue

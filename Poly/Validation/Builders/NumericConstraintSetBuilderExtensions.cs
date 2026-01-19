@@ -1,4 +1,5 @@
 namespace Poly.Validation.Builders;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 public static class NumericConstraintSetBuilderExtensions {
     public static ConstraintSetBuilder<T> Minimum<T, TProp>(this ConstraintSetBuilder<T> builder, TProp value)

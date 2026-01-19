@@ -1,7 +1,7 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Comparison;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+using Poly.Interpretation.AbstractSyntaxTree.Equality;
 
 namespace Poly.Validation.Rules;
 
@@ -26,12 +26,12 @@ public sealed class ComparisonRule : Rule {
         Operator = op;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var leftMember = new MemberAccess(context.Value, LeftPropertyName);
         var rightMember = new MemberAccess(context.Value, RightPropertyName);
 
-        Value comparisonResult = Operator switch {
+        Node comparisonResult = Operator switch {
             ComparisonOperator.Equal => new Equal(leftMember, rightMember),
             ComparisonOperator.NotEqual => new NotEqual(leftMember, rightMember),
             ComparisonOperator.GreaterThan => new GreaterThan(leftMember, rightMember),

@@ -1,5 +1,6 @@
 using Poly.DataModeling.Interpretation;
 using Poly.Interpretation;
+using Poly.Interpretation.SemanticAnalysis;
 using Poly.Validation;
 using Poly.Validation.Rules;
 
@@ -50,10 +51,20 @@ public sealed class Validator {
 
         var combinedRuleSet = new AndRule(rules);
         var ruleSetInterpretation = combinedRuleSet.BuildInterpretationTree(ruleBuildingContext);
-        var expressionTree = ruleSetInterpretation.BuildExpression(interpretationContext);
+        
+        // Build the expression tree using middleware pattern
+        // Run semantic analysis on the tree
+        var semanticMiddleware = new SemanticAnalysisMiddleware<Expr>();
+        semanticMiddleware.Transform(interpretationContext, ruleSetInterpretation, (ctx, n) => Expr.Empty());
+        
+        // Transform to LINQ expression
+        var transformer = new LinqExpressionTransformer();
+        transformer.SetContext(interpretationContext);
+        var expressionTree = ruleSetInterpretation.Transform(transformer);
 
-        var parameters = interpretationContext.Parameters.Select(e => e.BuildExpression(interpretationContext)).ToArray();
-        var lambda = Expression.Lambda<Func<IDictionary<string, object?>, RuleEvaluationContext, bool>>(expressionTree, parameters);
+        // Compile the rule - collect parameter expressions from transformer
+        var parameterExprs = transformer.ParameterExpressions.ToArray();
+        var lambda = Expr.Lambda<Func<IDictionary<string, object?>, RuleEvaluationContext, bool>>(expressionTree, parameterExprs);
 
         var compiledRule = lambda.Compile();
         var isValid = compiledRule(instance, evaluationContext);

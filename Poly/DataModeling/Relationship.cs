@@ -3,7 +3,7 @@ namespace Poly.DataModeling;
 public sealed record RelationshipEnd(
     string TypeName,
     string? PropertyName,
-    IEnumerable<Poly.Validation.Constraint>? Constraints
+    IEnumerable<Validation.Constraint>? Constraints
 );
 
 public abstract record Relationship(

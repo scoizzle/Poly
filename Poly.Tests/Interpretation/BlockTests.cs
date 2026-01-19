@@ -1,9 +1,11 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Arithmetic;
-using Poly.Interpretation.Operators.Comparison;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
+using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 
 namespace Poly.Tests.Interpretation;
 
@@ -13,12 +15,12 @@ public class BlockTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var expression = Value.Wrap(42);
+        var expression = Wrap(42);
         var block = new Block(expression);
 
         // Act
         var builtExpression = block.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(builtExpression);
+        var lambda = Expr.Lambda<Func<int>>(builtExpression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -31,14 +33,14 @@ public class BlockTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var expr1 = Value.Wrap(10);
-        var expr2 = Value.Wrap(20);
-        var expr3 = Value.Wrap(30);
+        var expr1 = Wrap(10);
+        var expr2 = Wrap(20);
+        var expr3 = Wrap(30);
         var block = new Block(expr1, expr2, expr3);
 
         // Act
         var builtExpression = block.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(builtExpression);
+        var lambda = Expr.Lambda<Func<int>>(builtExpression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -53,23 +55,23 @@ public class BlockTests {
         var context = new InterpretationContext();
 
         // Create a local variable
-        var localVar = Expression.Variable(typeof(int), "temp");
+        var localVar = Expr.Variable(typeof(int), "temp");
 
         // Assign 42 to temp
-        var assignExpr = Expression.Assign(localVar, Expression.Constant(42));
+        var assignExpr = Expr.Assign(localVar, Expr.Constant(42));
 
         // Return temp
         var returnExpr = localVar;
 
         // Create block with variable
-        var blockExpr = Expression.Block(
+        var blockExpr = Expr.Block(
             new[] { localVar },
             assignExpr,
             returnExpr
         );
 
         // Act
-        var lambda = Expression.Lambda<Func<int>>(blockExpr);
+        var lambda = Expr.Lambda<Func<int>>(blockExpr);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -85,14 +87,14 @@ public class BlockTests {
         var param = context.AddParameter<int>("x");
 
         // Block: { x + 1; x + 2; x + 3 }
-        var expr1 = new Add(param, Value.Wrap(1));
-        var expr2 = new Add(param, Value.Wrap(2));
-        var expr3 = new Add(param, Value.Wrap(3));
+        var expr1 = new Add(param, Wrap(1));
+        var expr2 = new Add(param, Wrap(2));
+        var expr3 = new Add(param, Wrap(3));
         var block = new Block(expr1, expr2, expr3);
 
         // Act
         var builtExpression = block.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(builtExpression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int>>(builtExpression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -108,13 +110,13 @@ public class BlockTests {
         var param = context.AddParameter<int>("x");
 
         // Block: { x > 10; x > 10 ? x : 0 }
-        var condition = new GreaterThan(param, Value.Wrap(10));
-        var conditional = new Conditional(condition, param, Value.Wrap(0));
+        var condition = new GreaterThan(param, Wrap(10));
+        var conditional = new Conditional(condition, param, Wrap(0));
         var block = new Block(condition, conditional);
 
         // Act
         var builtExpression = block.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(builtExpression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int>>(builtExpression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -129,13 +131,13 @@ public class BlockTests {
         var context = new InterpretationContext();
 
         // Block: { 42; "hello" }
-        var intExpr = Value.Wrap(42);
-        var stringExpr = Value.Wrap("hello");
+        var intExpr = Wrap(42);
+        var stringExpr = Wrap("hello");
         var block = new Block(intExpr, stringExpr);
 
         // Act
         var builtExpression = block.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<string>>(builtExpression);
+        var lambda = Expr.Lambda<Func<string>>(builtExpression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -148,12 +150,12 @@ public class BlockTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var intExpr = Value.Wrap(42);
-        var stringExpr = Value.Wrap("hello");
+        var intExpr = Wrap(42);
+        var stringExpr = Wrap("hello");
         var block = new Block(intExpr, stringExpr);
 
         // Act
-        var typeDef = block.GetTypeDefinition(context);
+        var typeDef = block.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef).IsNotNull();
@@ -164,9 +166,9 @@ public class BlockTests {
     public async Task Block_ToString_ReturnsExpectedFormat()
     {
         // Arrange
-        var expr1 = Value.Wrap(10);
-        var expr2 = Value.Wrap(20);
-        var expr3 = Value.Wrap(30);
+        var expr1 = Wrap(10);
+        var expr2 = Wrap(20);
+        var expr3 = Wrap(30);
         var block = new Block(expr1, expr2, expr3);
 
         // Act
@@ -184,7 +186,7 @@ public class BlockTests {
     public async Task Block_WithEmptyExpressions_ThrowsArgumentException()
     {
         // Assert
-        await Assert.That(() => new Block(Array.Empty<Interpretable>()))
+        await Assert.That(() => new Block(Array.Empty<Node>()))
             .Throws<ArgumentException>();
     }
 
@@ -192,7 +194,7 @@ public class BlockTests {
     public async Task Block_WithNullExpressions_ThrowsArgumentNullException()
     {
         // Assert
-        await Assert.That(() => new Block((Interpretable[])null!))
+        await Assert.That(() => new Block((Node[])null!))
             .Throws<ArgumentNullException>();
     }
 
@@ -200,7 +202,7 @@ public class BlockTests {
     public async Task Block_WithNullVariables_ThrowsArgumentNullException()
     {
         // Assert
-        await Assert.That(() => new Block(new[] { Value.Wrap(42) }, null!))
+        await Assert.That(() => new Block(new[] { Wrap(42) }, null!))
             .Throws<ArgumentNullException>();
     }
 }

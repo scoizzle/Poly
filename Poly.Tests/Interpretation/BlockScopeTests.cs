@@ -1,7 +1,9 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Tests.Interpretation;
 
@@ -17,7 +19,7 @@ public class BlockScopeTests {
 
         // Push scope and declare 'y' within a block's scope
         context.PushScope();
-        var y = context.DeclareVariable("y", Value.Wrap(10));
+        var y = context.DeclareVariable("y", Wrap(10));
         await Assert.That(context.GetVariable("y")).IsNotNull();
         context.PopScope();
 
@@ -32,11 +34,11 @@ public class BlockScopeTests {
         var context = new InterpretationContext();
 
         // Declare 'x' in outer scope
-        var outerX = context.DeclareVariable("x", Value.Wrap(5));
+        var outerX = context.DeclareVariable("x", Wrap(5));
 
         // Inner block declares its own 'x'
         context.PushScope();
-        var innerX = context.DeclareVariable("x", Value.Wrap(10));
+        var innerX = context.DeclareVariable("x", Wrap(10));
 
         // Inner 'x' should be different from outer 'x'
         await Assert.That(innerX).IsNotEqualTo(outerX);
@@ -61,17 +63,17 @@ public class BlockScopeTests {
 
         // Create a block that adds two values
         var block = new Block(
-            x.Add(Value.Wrap(5)),
-            y.Multiply(Value.Wrap(2)),
+            x.Add(Wrap(5)),
+            y.Multiply(Wrap(2)),
             x.Add(y)  // Last expression determines return value
         );
 
         // Build expression - Block pushes/pops its own scope
         var expr = block.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int, int>>(
+        var lambda = Expr.Lambda<Func<int, int, int>>(
             expr,
-            x.BuildExpression(context),
-            y.BuildExpression(context)
+            x.GetParameterExpression(context),
+            y.GetParameterExpression(context)
         );
         var compiled = lambda.Compile();
 
@@ -85,7 +87,7 @@ public class BlockScopeTests {
         var context = new InterpretationContext();
 
         // Declare variable in outer scope
-        var outerVar = context.DeclareVariable("outer", Value.Wrap(100));
+        var outerVar = context.DeclareVariable("outer", Wrap(100));
 
         // Inner block should be able to access 'outer'
         context.PushScope();
@@ -101,7 +103,7 @@ public class BlockScopeTests {
 
         // First block declares 'a'
         context.PushScope();
-        var a1 = context.DeclareVariable("a", Value.Wrap(1));
+        var a1 = context.DeclareVariable("a", Wrap(1));
         context.PopScope();
 
         // 'a' should not be visible
@@ -110,7 +112,7 @@ public class BlockScopeTests {
 
         // Second block declares 'a' independently
         context.PushScope();
-        var a2 = context.DeclareVariable("a", Value.Wrap(2));
+        var a2 = context.DeclareVariable("a", Wrap(2));
         context.PopScope();
 
         // These should be different variables

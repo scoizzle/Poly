@@ -1,6 +1,8 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Expr = System.Linq.Expressions.Expression;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -26,13 +28,13 @@ public class ClrTypeMemberTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();
-        var accessor = maxValueMember!.GetMemberAccessor(Value.Null);
+        var accessor = maxValueMember!.GetMemberAccessor(Null);
 
         await Assert.That(accessor).IsNotNull();
 
         var interpretationContext = new InterpretationContext();
         var expression = accessor!.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Func<int>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<int>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo(int.MaxValue);
@@ -49,7 +51,7 @@ public class ClrTypeMemberTests {
         await Assert.That(maxValueMember!.Name).IsEqualTo("MaxValue");
 
         // Static members should be accessible
-        var accessor = maxValueMember.GetMemberAccessor(Value.Null);
+        var accessor = maxValueMember.GetMemberAccessor(Null);
         await Assert.That(accessor).IsNotNull();
     }
 
@@ -65,7 +67,7 @@ public class ClrTypeMemberTests {
 
         // Instance members should be accessible with an instance
         var testString = "test";
-        var stringValue = Value.Wrap(testString);
+        var stringValue = Wrap(testString);
         var accessor = lengthMember.GetMemberAccessor(stringValue);
         await Assert.That(accessor).IsNotNull();
     }

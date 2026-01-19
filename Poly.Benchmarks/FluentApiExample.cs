@@ -3,11 +3,15 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Expr = System.Linq.Expressions.Expression;
+
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Benchmarks;
 
 /// <summary>
-/// Demonstrates the fluent API for building complex interpretable expressions.
+/// Demonstrates the fluent API for building complex expression node expressions.
 /// </summary>
 public static class FluentApiExample {
     public static void Run()
@@ -30,7 +34,7 @@ public static class FluentApiExample {
         var x = context.AddParameter<int>("x");
 
         // Fluent API: x * 2 + 5
-        var expr = x.Multiply(Value.Wrap(2)).Add(Value.Wrap(5));
+        var expr = x.Multiply(Wrap(2)).Add(Wrap(5));
 
         var compiled = CompileExpression<int, int>(context, expr, x);
 
@@ -47,9 +51,9 @@ public static class FluentApiExample {
         var x = context.AddParameter<int>("x");
 
         // Fluent API: x > 100 ? x * 2 : x + 10
-        var condition = x.GreaterThan(Value.Wrap(100));
-        var ifTrue = x.Multiply(Value.Wrap(2));
-        var ifFalse = x.Add(Value.Wrap(10));
+        var condition = x.GreaterThan(Wrap(100));
+        var ifTrue = x.Multiply(Wrap(2));
+        var ifFalse = x.Add(Wrap(10));
         var expr = condition.Conditional(ifTrue, ifFalse);
 
         var compiled = CompileExpression<int, int>(context, expr, x);
@@ -70,8 +74,8 @@ public static class FluentApiExample {
         // Fluent API: (x + y) > 50 && (x * y) < 1000
         var sum = x.Add(y);
         var product = x.Multiply(y);
-        var condition1 = sum.GreaterThan(Value.Wrap(50));
-        var condition2 = product.LessThan(Value.Wrap(1000));
+        var condition1 = sum.GreaterThan(Wrap(50));
+        var condition2 = product.LessThan(Wrap(1000));
         var expr = condition1.And(condition2);
 
         var compiled = CompileExpression<int, int, bool>(context, expr, x, y);
@@ -90,7 +94,7 @@ public static class FluentApiExample {
         var x = context.AddParameter<int?>("x");
 
         // Fluent API: x ?? 42
-        var expr = x.Coalesce(Value.Wrap(42));
+        var expr = x.Coalesce(Wrap(42));
 
         var compiled = CompileExpression<int?, int>(context, expr, x);
 
@@ -108,7 +112,7 @@ public static class FluentApiExample {
         var doubleType = context.GetTypeDefinition<double>()!;
 
         // Fluent API: (double)x + 0.5
-        var expr = x.CastTo(doubleType).Add(Value.Wrap(0.5));
+        var expr = x.CastTo(doubleType).Add(Wrap(0.5));
 
         var compiled = CompileExpression<int, double>(context, expr, x);
 
@@ -125,7 +129,7 @@ public static class FluentApiExample {
         var list = context.AddParameter<List<int>>("list");
 
         // Fluent API: list[0] + list.Count
-        var firstElement = list.Index(Value.Wrap(0));
+        var firstElement = list.Index(Wrap(0));
         var count = list.GetMember("Count");
         var expr = firstElement.Add(count);
 
@@ -138,25 +142,25 @@ public static class FluentApiExample {
 
     private static Func<T, TResult> CompileExpression<T, TResult>(
         InterpretationContext context,
-        Value expr,
+        Node expr,
         Parameter param)
     {
-        var expression = expr.BuildExpression(context);
-        var paramExpr = param.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<T, TResult>>(expression, paramExpr);
+        var expression = expr.BuildNode(context);
+        var paramExpr = param.ToParameterExpression();
+        var lambda = Expr.Lambda<Func<T, TResult>>(expression, paramExpr);
         return lambda.Compile();
     }
 
     private static Func<T1, T2, TResult> CompileExpression<T1, T2, TResult>(
         InterpretationContext context,
-        Value expr,
+        Node expr,
         Parameter param1,
         Parameter param2)
     {
-        var expression = expr.BuildExpression(context);
-        var paramExpr1 = param1.BuildExpression(context);
-        var paramExpr2 = param2.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<T1, T2, TResult>>(expression, paramExpr1, paramExpr2);
+        var expression = expr.BuildNode(context);
+        var paramExpr1 = param1.ToParameterExpression();
+        var paramExpr2 = param2.ToParameterExpression();
+        var lambda = Expr.Lambda<Func<T1, T2, TResult>>(expression, paramExpr1, paramExpr2);
         return lambda.Compile();
     }
 }

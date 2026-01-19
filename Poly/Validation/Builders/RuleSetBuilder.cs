@@ -1,4 +1,5 @@
 using Poly.Validation.Rules;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Validation.Builders;
 
@@ -13,11 +14,11 @@ public sealed class RuleSetBuilder<T> {
     /// Adds validation rules for a specific property.
     /// </summary>
     /// <typeparam name="TProperty">The type of the property.</typeparam>
-    /// <param name="propertySelector">Expression selecting the property to validate.</param>
+    /// <param name="propertySelector">Node selecting the property to validate.</param>
     /// <param name="constraintsBuilder">Action to configure constraints for the property.</param>
     /// <returns>This builder for method chaining.</returns>
     public RuleSetBuilder<T> Member<TProperty>(
-        Expression<Func<T, TProperty>> propertySelector,
+        Exprs.Expression<Func<T, TProperty>> propertySelector,
         Action<ConstraintSetBuilder<TProperty>> constraintsBuilder)
     {
 
@@ -56,12 +57,12 @@ public sealed class RuleSetBuilder<T> {
     /// <summary>
     /// Extracts the property name from a member access expression.
     /// </summary>
-    private static string GetMemberName<TMember>(Expression<Func<T, TMember>> memberExpression)
+    private static string GetMemberName<TMember>(Exprs.Expression<Func<T, TMember>> memberNode)
     {
-        return memberExpression.Body switch {
-            MemberExpression me => me.Member.Name,
-            UnaryExpression { Operand: MemberExpression me } => me.Member.Name,
-            _ => throw new ArgumentException("Expression must be a member access", nameof(memberExpression))
+        return memberNode.Body switch {
+            Exprs.MemberExpression me => me.Member.Name,
+            Exprs.UnaryExpression { Operand: Exprs.MemberExpression me } => me.Member.Name,
+            _ => throw new ArgumentException("Node must be a member access", nameof(memberNode))
         };
     }
 }

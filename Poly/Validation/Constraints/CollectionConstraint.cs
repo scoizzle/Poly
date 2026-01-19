@@ -1,4 +1,5 @@
 namespace Poly.Validation.Constraints;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 // public sealed class CollectionConstraint(Property property, int? minCount, int? maxCount, List<Rule>? elementRules) : Constraint(property)
 // {
@@ -6,23 +7,23 @@ namespace Poly.Validation.Constraints;
 //     public int? MaxCount { get; set; } = maxCount;
 //     public List<Rule>? ElementRules { get; set; } = elementRules;
 
-//     // public override Expression BuildExpression(Expression param)
+//     // public override Node BuildNode(Node param)
 //     // {
-//     //     var property = Expression.Property(param, Member.Name);
+//     //     var property = Node.Property(param, Member.Name);
 //     //     var propertyType = property.Type;
 
 //     //     if (propertyType.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)) is not { } enumerableInterface)
 //     //         throw new InvalidOperationException($"Property '{Member.Name}' must a type that implements IEnumerable<T>.");
 
-//     //     var countCheck = GetElementCountCheckExpression(property, MinCount, MaxCount);
-//     //     var rulesCheck = GetElementRulesCheckExpression(property, ElementRules);
+//     //     var countCheck = GetElementCountCheckNode(property, MinCount, MaxCount);
+//     //     var rulesCheck = GetElementRulesCheckNode(property, ElementRules);
 
 //     //     return (countCheck, rulesCheck) switch
 //     //     {
-//     //         (null, null) => Expression.Constant(true),
-//     //         (Expression countExpr, null) => countExpr,
-//     //         (null, Expression rulesExpr) => rulesExpr,
-//     //         (Expression countExpr, Expression rulesExpr) => Expression.AndAlso(countExpr, rulesExpr)
+//     //         (null, null) => Node.Constant(true),
+//     //         (Node countExpr, null) => countExpr,
+//     //         (null, Node rulesExpr) => rulesExpr,
+//     //         (Node countExpr, Node rulesExpr) => Node.AndAlso(countExpr, rulesExpr)
 //     //     };
 //     // }
 
@@ -60,79 +61,79 @@ namespace Poly.Validation.Constraints;
 //     //     return sb.ToString();
 //     // }
 
-//     // static Expression? GetElementCountCheckExpression(Expression collectionExpression, int? minCount, int? maxCount)
+//     // static Node? GetElementCountCheckNode(Node collectionNode, int? minCount, int? maxCount)
 //     // {
 //     //     if (minCount == null && maxCount == null)
 //     //         return null;
 
-//     //     var countExpression = GetCountExpression(collectionExpression);
+//     //     var countNode = GetCountNode(collectionNode);
 
 //     //     return (minCount, maxCount) switch
 //     //     {
-//     //         (int min, int max) => Expression.AndAlso(
-//     //             Expression.GreaterThanOrEqual(countExpression, Expression.Constant(min)),
-//     //             Expression.LessThanOrEqual(countExpression, Expression.Constant(max))
+//     //         (int min, int max) => Node.AndAlso(
+//     //             Node.GreaterThanOrEqual(countNode, Node.Constant(min)),
+//     //             Node.LessThanOrEqual(countNode, Node.Constant(max))
 //     //         ),
-//     //         (int min, null) => Expression.GreaterThanOrEqual(countExpression, Expression.Constant(min)),
-//     //         (null, int max) => Expression.LessThanOrEqual(countExpression, Expression.Constant(max)),
+//     //         (int min, null) => Node.GreaterThanOrEqual(countNode, Node.Constant(min)),
+//     //         (null, int max) => Node.LessThanOrEqual(countNode, Node.Constant(max)),
 //     //         _ => null
 //     //     };
 
-//     //     static Expression GetCountExpression(Expression collectionExpression)
+//     //     static Node GetCountNode(Node collectionNode)
 //     //     {
-//     //         var countProperty = collectionExpression.Type.GetProperty("Count");
+//     //         var countProperty = collectionNode.Type.GetProperty("Count");
 //     //         if (countProperty != null)
 //     //         {
-//     //             return Expression.Property(collectionExpression, countProperty);
+//     //             return Node.Property(collectionNode, countProperty);
 //     //         }
 
-//     //         var countMethod = collectionExpression.Type.GetMethod("Count");
+//     //         var countMethod = collectionNode.Type.GetMethod("Count");
 //     //         if (countMethod != null)
 //     //         {
-//     //             return Expression.Call(collectionExpression, countMethod);
+//     //             return Node.Call(collectionNode, countMethod);
 //     //         }
 
 //     //         var enumerableCountMethod = typeof(Enumerable).GetMethods()
 //     //             .FirstOrDefault(m => m.Name == "Count" && m.GetParameters().Length == 1)?
-//     //             .MakeGenericMethod(collectionExpression.Type.GetGenericArguments()[0]);
+//     //             .MakeGenericMethod(collectionNode.Type.GetGenericArguments()[0]);
 
 //     //         if (enumerableCountMethod != null)
 //     //         {
-//     //             return Expression.Call(enumerableCountMethod, collectionExpression);
+//     //             return Node.Call(enumerableCountMethod, collectionNode);
 //     //         }
 
 //     //         throw new InvalidOperationException("Unable to find a suitable Count property or method.");
 //     //     }
 //     // }
 
-//     // static Expression? GetElementRulesCheckExpression(Expression collectionExpression, List<Rule>? rules)
+//     // static Node? GetElementRulesCheckNode(Node collectionNode, List<Rule>? rules)
 //     // {
 //     //     if (rules == null || !rules.Any())
 //     //         return null;
 
-//     //     var elementType = collectionExpression.Type.GetGenericArguments().FirstOrDefault() ?? typeof(object);
-//     //     var elementParam = Expression.Parameter(elementType, "e");
+//     //     var elementType = collectionNode.Type.GetGenericArguments().FirstOrDefault() ?? typeof(object);
+//     //     var elementParam = Node.Parameter(elementType, "e");
 
-//     //     Expression? combinedRuleExpression = rules.Aggregate<Rule, Expression>(
-//     //         seed: Expression.Constant(true),
-//     //         func: (current, rule) => Expression.AndAlso(current, rule.BuildExpression(elementParam))
+//     //     Node? combinedRuleNode = rules.Aggregate<Rule, Node>(
+//     //         seed: Node.Constant(true),
+//     //         func: (current, rule) => Node.AndAlso(current, rule.BuildNode(elementParam))
 //     //     );
 
 //     //     foreach (var rule in rules)
 //     //     {
-//     //         var ruleExpression = rule.BuildExpression(elementParam);
-//     //         combinedRuleExpression = combinedRuleExpression == null
-//     //             ? ruleExpression
-//     //             : Expression.AndAlso(combinedRuleExpression, ruleExpression);
+//     //         var ruleNode = rule.BuildNode(elementParam);
+//     //         combinedRuleNode = combinedRuleNode == null
+//     //             ? ruleNode
+//     //             : Node.AndAlso(combinedRuleNode, ruleNode);
 //     //     }
 
-//     //     if (combinedRuleExpression == null)
+//     //     if (combinedRuleNode == null)
 //     //         return null;
 
 //     //     var anyMethod = typeof(Enumerable).GetMethods()
 //     //         .First(m => m.Name == "All" && m.GetParameters().Length == 2)
 //     //         .MakeGenericMethod(elementType);
 
-//     //     return Expression.Call(anyMethod, collectionExpression, Expression.Lambda(combinedRuleExpression, elementParam));
+//     //     return Node.Call(anyMethod, collectionNode, Node.Lambda(combinedRuleNode, elementParam));
 //     // }
 // }

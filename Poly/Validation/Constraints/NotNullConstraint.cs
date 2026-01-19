@@ -1,12 +1,14 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Equality;
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Validation;
 
 public sealed class NotNullConstraint : Constraint {
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
-        var notNullCheck = new NotEqual(context.Value, Value.Null);
+        var notNullCheck = new NotEqual(context.Value, Null);
         return notNullCheck;
     }
 

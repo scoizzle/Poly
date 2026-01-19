@@ -1,6 +1,8 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -13,11 +15,11 @@ public class FluentValueApiTests {
         var param = context.AddParameter<int>("x");
 
         // x + 5 - 2 * 3
-        var expr = param.Add(Value.Wrap(5)).Subtract(Value.Wrap(2)).Multiply(Value.Wrap(3));
+        var expr = param.Add(Wrap(5)).Subtract(Wrap(2)).Multiply(Wrap(3));
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -32,11 +34,11 @@ public class FluentValueApiTests {
         var param = context.AddParameter<int>("x");
 
         // x > 10
-        var expr = param.GreaterThan(Value.Wrap(10));
+        var expr = param.GreaterThan(Wrap(10));
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, bool>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, bool>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -53,14 +55,14 @@ public class FluentValueApiTests {
         var y = context.AddParameter<int>("y");
 
         // x > 10 && y < 20
-        var expr = x.GreaterThan(Value.Wrap(10)).And(y.LessThan(Value.Wrap(20)));
+        var expr = x.GreaterThan(Wrap(10)).And(y.LessThan(Wrap(20)));
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int, bool>>(
+        var lambda = Expr.Lambda<Func<int, int, bool>>(
             expression,
-            x.BuildExpression(context),
-            y.BuildExpression(context)
+            x.GetParameterExpression(context),
+            y.GetParameterExpression(context)
         );
         var compiled = lambda.Compile();
 
@@ -78,12 +80,12 @@ public class FluentValueApiTests {
         var param = context.AddParameter<int>("x");
 
         // x > 10 ? x * 2 : x + 5
-        var expr = param.GreaterThan(Value.Wrap(10))
-            .Conditional(param.Multiply(Value.Wrap(2)), param.Add(Value.Wrap(5)));
+        var expr = param.GreaterThan(Wrap(10))
+            .Conditional(param.Multiply(Wrap(2)), param.Add(Wrap(5)));
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -99,11 +101,11 @@ public class FluentValueApiTests {
         var param = context.AddParameter<int?>("x");
 
         // x ?? 42
-        var expr = param.Coalesce(Value.Wrap(42));
+        var expr = param.Coalesce(Wrap(42));
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int?, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int?, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -119,11 +121,11 @@ public class FluentValueApiTests {
         var param = context.AddParameter<int>("x");
 
         // -x + 10
-        var expr = param.Negate().Add(Value.Wrap(10));
+        var expr = param.Negate().Add(Wrap(10));
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -143,7 +145,7 @@ public class FluentValueApiTests {
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<bool, bool>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<bool, bool>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -160,11 +162,11 @@ public class FluentValueApiTests {
         var doubleType = context.GetTypeDefinition<double>()!;
 
         // (double)x + 0.5
-        var expr = param.CastTo(doubleType).Add(Value.Wrap(0.5));
+        var expr = param.CastTo(doubleType).Add(Wrap(0.5));
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, double>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, double>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -179,11 +181,11 @@ public class FluentValueApiTests {
         var param = context.AddParameter<List<int>>("list");
 
         // list[0]
-        var expr = param.Index(Value.Wrap(0));
+        var expr = param.Index(Wrap(0));
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<List<int>, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<List<int>, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -203,7 +205,7 @@ public class FluentValueApiTests {
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<string, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<string, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -221,17 +223,17 @@ public class FluentValueApiTests {
 
         // Complex: (x + y) > 100 ? (x * y) : (x - y)
         var sum = x.Add(y);
-        var condition = sum.GreaterThan(Value.Wrap(100));
+        var condition = sum.GreaterThan(Wrap(100));
         var product = x.Multiply(y);
         var difference = x.Subtract(y);
         var expr = condition.Conditional(product, difference);
 
         // Act
         var expression = expr.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int, int>>(
+        var lambda = Expr.Lambda<Func<int, int, int>>(
             expression,
-            x.BuildExpression(context),
-            y.BuildExpression(context)
+            x.GetParameterExpression(context),
+            y.GetParameterExpression(context)
         );
         var compiled = lambda.Compile();
 

@@ -1,8 +1,10 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Comparison;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 
 namespace Poly.Tests.Interpretation;
 
@@ -12,14 +14,14 @@ public class ConditionalTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var condition = Value.True;
-        var ifTrue = Value.Wrap(42);
-        var ifFalse = Value.Wrap(0);
+        var condition = True;
+        var ifTrue = Wrap(42);
+        var ifFalse = Wrap(0);
         var conditional = new Conditional(condition, ifTrue, ifFalse);
 
         // Act
         var expression = conditional.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -32,14 +34,14 @@ public class ConditionalTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var condition = Value.False;
-        var ifTrue = Value.Wrap(42);
-        var ifFalse = Value.Wrap(99);
+        var condition = False;
+        var ifTrue = Wrap(42);
+        var ifFalse = Wrap(99);
         var conditional = new Conditional(condition, ifTrue, ifFalse);
 
         // Act
         var expression = conditional.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -56,14 +58,14 @@ public class ConditionalTests {
         var param = context.AddParameter<int>("x");
 
         // x > 10 ? "big" : "small"
-        var condition = new GreaterThan(param, Value.Wrap(10));
-        var ifTrue = Value.Wrap("big");
-        var ifFalse = Value.Wrap("small");
+        var condition = new GreaterThan(param, Wrap(10));
+        var ifTrue = Wrap("big");
+        var ifFalse = Wrap("small");
         var conditional = new Conditional(condition, ifTrue, ifFalse);
 
         // Act
         var expression = conditional.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, string>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, string>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -80,14 +82,14 @@ public class ConditionalTests {
         var param = context.AddParameter<int>("x");
 
         // x < 0 ? "negative" : (x > 0 ? "positive" : "zero")
-        var lessThanZero = new LessThan(param, Value.Wrap(0));
-        var greaterThanZero = new GreaterThan(param, Value.Wrap(0));
-        var innerConditional = new Conditional(greaterThanZero, Value.Wrap("positive"), Value.Wrap("zero"));
-        var outerConditional = new Conditional(lessThanZero, Value.Wrap("negative"), innerConditional);
+        var lessThanZero = new LessThan(param, Wrap(0));
+        var greaterThanZero = new GreaterThan(param, Wrap(0));
+        var innerConditional = new Conditional(greaterThanZero, Wrap("positive"), Wrap("zero"));
+        var outerConditional = new Conditional(lessThanZero, Wrap("negative"), innerConditional);
 
         // Act
         var expression = outerConditional.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, string>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int, string>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -101,13 +103,13 @@ public class ConditionalTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var condition = Value.True;
-        var ifTrue = Value.Wrap(42);
-        var ifFalse = Value.Wrap(99);
+        var condition = True;
+        var ifTrue = Wrap(42);
+        var ifFalse = Wrap(99);
         var conditional = new Conditional(condition, ifTrue, ifFalse);
 
         // Act
-        var typeDef = conditional.GetTypeDefinition(context);
+        var typeDef = conditional.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef).IsNotNull();
@@ -118,9 +120,9 @@ public class ConditionalTests {
     public async Task Conditional_ToString_ReturnsExpectedFormat()
     {
         // Arrange
-        var condition = Value.True;
-        var ifTrue = Value.Wrap(42);
-        var ifFalse = Value.Wrap(0);
+        var condition = True;
+        var ifTrue = Wrap(42);
+        var ifFalse = Wrap(0);
         var conditional = new Conditional(condition, ifTrue, ifFalse);
 
         // Act
@@ -131,14 +133,16 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithNullArguments_ThrowsArgumentNullException()
+    public async Task Conditional_WithNullArguments_AllowsNulls()
     {
+        // Act
+        var c1 = new Conditional(null!, Wrap(1), Wrap(2));
+        var c2 = new Conditional(True, null!, Wrap(2));
+        var c3 = new Conditional(True, Wrap(1), null!);
+
         // Assert
-        await Assert.That(() => new Conditional(null!, Value.Wrap(1), Value.Wrap(2)))
-            .Throws<ArgumentNullException>();
-        await Assert.That(() => new Conditional(Value.True, null!, Value.Wrap(2)))
-            .Throws<ArgumentNullException>();
-        await Assert.That(() => new Conditional(Value.True, Value.Wrap(1), null!))
-            .Throws<ArgumentNullException>();
+        await Assert.That(c1).IsNotNull();
+        await Assert.That(c2).IsNotNull();
+        await Assert.That(c3).IsNotNull();
     }
 }

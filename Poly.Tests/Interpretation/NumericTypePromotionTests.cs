@@ -1,7 +1,9 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Arithmetic;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
@@ -11,12 +13,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var intValue = Value.Wrap(42);
-        var doubleValue = Value.Wrap(3.14);
+        var intValue = Wrap(42);
+        var doubleValue = Wrap(3.14);
         var add = new Add(intValue, doubleValue);
 
         // Act
-        var typeDef = add.GetTypeDefinition(context);
+        var typeDef = add.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(double));
@@ -27,13 +29,13 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var intValue = Value.Wrap(10);
-        var doubleValue = Value.Wrap(5.5);
+        var intValue = Wrap(10);
+        var doubleValue = Wrap(5.5);
         var add = new Add(intValue, doubleValue);
 
         // Act
         var expression = add.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<double>>(expression);
+        var lambda = Expr.Lambda<Func<double>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -46,12 +48,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var floatValue = Value.Wrap(2.5f);
-        var intValue = Value.Wrap(4);
+        var floatValue = Wrap(2.5f);
+        var intValue = Wrap(4);
         var multiply = new Multiply(floatValue, intValue);
 
         // Act
-        var typeDef = multiply.GetTypeDefinition(context);
+        var typeDef = multiply.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(float));
@@ -62,12 +64,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var longValue = Value.Wrap(100L);
-        var intValue = Value.Wrap(30);
+        var longValue = Wrap(100L);
+        var intValue = Wrap(30);
         var subtract = new Subtract(longValue, intValue);
 
         // Act
-        var typeDef = subtract.GetTypeDefinition(context);
+        var typeDef = subtract.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(long));
@@ -78,12 +80,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var decimalValue = Value.Wrap(100m);
-        var intValue = Value.Wrap(3);
+        var decimalValue = Wrap(100m);
+        var intValue = Wrap(3);
         var divide = new Divide(decimalValue, intValue);
 
         // Act
-        var typeDef = divide.GetTypeDefinition(context);
+        var typeDef = divide.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(decimal));
@@ -94,12 +96,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var doubleValue = Value.Wrap(10.5);
-        var floatValue = Value.Wrap(3.0f);
+        var doubleValue = Wrap(10.5);
+        var floatValue = Wrap(3.0f);
         var modulo = new Modulo(doubleValue, floatValue);
 
         // Act
-        var typeDef = modulo.GetTypeDefinition(context);
+        var typeDef = modulo.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(double));
@@ -110,12 +112,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var intValue1 = Value.Wrap(10);
-        var intValue2 = Value.Wrap(20);
+        var intValue1 = Wrap(10);
+        var intValue2 = Wrap(20);
         var add = new Add(intValue1, intValue2);
 
         // Act
-        var typeDef = add.GetTypeDefinition(context);
+        var typeDef = add.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(int));
@@ -126,12 +128,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var byteValue = Value.Wrap((byte)10);
-        var shortValue = Value.Wrap((short)20);
+        var byteValue = Wrap((byte)10);
+        var shortValue = Wrap((short)20);
         var add = new Add(byteValue, shortValue);
 
         // Act
-        var typeDef = add.GetTypeDefinition(context);
+        var typeDef = add.GetResolvedType(context);
 
         // Assert - byte and short promote to int in C#
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(int));
@@ -142,12 +144,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var uintValue = Value.Wrap(10u);
-        var longValue = Value.Wrap(5L);
+        var uintValue = Wrap(10u);
+        var longValue = Wrap(5L);
         var multiply = new Multiply(uintValue, longValue);
 
         // Act
-        var typeDef = multiply.GetTypeDefinition(context);
+        var typeDef = multiply.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(long));
@@ -158,12 +160,12 @@ public class NumericTypePromotionTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var ulongValue = Value.Wrap(100UL);
-        var intValue = Value.Wrap(50);
+        var ulongValue = Wrap(100UL);
+        var intValue = Wrap(50);
         var add = new Add(ulongValue, intValue);
 
         // Act
-        var typeDef = add.GetTypeDefinition(context);
+        var typeDef = add.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(ulong));
@@ -180,10 +182,10 @@ public class NumericTypePromotionTests {
 
         // Act
         var expression = add.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, double, double>>(
+        var lambda = Expr.Lambda<Func<int, double, double>>(
             expression,
-            intParam.BuildExpression(context),
-            doubleParam.BuildExpression(context)
+            intParam.GetParameterExpression(context),
+            doubleParam.GetParameterExpression(context)
         );
         var compiled = lambda.Compile();
 

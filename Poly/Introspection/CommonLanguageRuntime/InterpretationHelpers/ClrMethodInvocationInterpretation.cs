@@ -1,4 +1,6 @@
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
+using System.Linq.Expressions;
 
 namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
@@ -7,48 +9,28 @@ namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 /// </summary>
 /// <remarks>
 /// Wraps a CLR method call with an instance and arguments, compiling to a 
-/// <see cref="System.Linq.Expressions.MethodCallExpression"/>. Handles both
+/// <see cref="Expression.Call"/>. Handles both
 /// instance and static method invocations. For static methods, the instance
 /// should be a literal null value.
 /// </remarks>
-internal sealed class ClrMethodInvocationInterpretation(ClrMethod method, Value instance, params IEnumerable<Value> arguments) : Value {
-    /// <summary>
-    /// Gets the instance on which the method is invoked.
-    /// </summary>
-    /// <remarks>
-    /// For static methods, this should be a <see cref="Literal"/> containing null.
-    /// </remarks>
-    public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
-
-    /// <summary>
-    /// Gets the CLR method to be invoked.
-    /// </summary>
-    public ClrMethod Method { get; init; } = method ?? throw new ArgumentNullException(nameof(method));
-
-    /// <summary>
-    /// Gets the arguments to pass to the method.
-    /// </summary>
-    public Value[] Arguments { get; init; } = arguments?.ToArray() ?? throw new ArgumentNullException(nameof(arguments));
-
-    /// <inheritdoc />
-    /// <returns>The return type of the method.</returns>
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Method).MemberTypeDefinition;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// For static methods, the instance expression is ignored and set to null to properly invoke the static method.
-    /// </remarks>
-    public override Expression BuildExpression(InterpretationContext context)
+internal sealed record ClrMethodInvocationInterpretation(ClrMethod Method, Node Instance, params Node[] Arguments) : Node {
+    public override TResult Transform<TResult>(ITransformer<TResult> transformer)
     {
-        var instanceExpression = Instance.BuildExpression(context);
-        var argumentExpressions = Arguments.Select(arg => arg.BuildExpression(context)).ToArray();
-
-        // For static methods, always use null as the instance regardless of what was provided
-        if (Method.MethodInfo.IsStatic) {
-            instanceExpression = null;
+        // Special handling for Expression transformers
+        if (transformer is ITransformer<Expression> exprTransformer)
+        {
+            var instanceExpr = Instance.Transform(exprTransformer);
+            var argumentExprs = Arguments.Select(arg => arg.Transform(exprTransformer)).ToArray();
+            
+            var methodInfo = Method.MethodInfo;
+            var callExpr = methodInfo.IsStatic
+                ? Expression.Call(null, methodInfo, argumentExprs)
+                : Expression.Call(instanceExpr, methodInfo, argumentExprs);
+            
+            return (TResult)(object)callExpr;
         }
-
-        return Expression.Call(instanceExpression, Method.MethodInfo, argumentExpressions);
+        
+        throw new NotSupportedException($"ClrMethodInvocationInterpretation transformation is not supported for {typeof(TResult).Name}.");
     }
 
     /// <inheritdoc />

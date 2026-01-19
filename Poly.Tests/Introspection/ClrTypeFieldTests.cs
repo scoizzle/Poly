@@ -1,6 +1,8 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Expr = System.Linq.Expressions.Expression;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -36,14 +38,14 @@ public class ClrTypeFieldTests {
         var publicField = testType.Fields.WithName("PublicField").SingleOrDefault();
 
         var testInstance = new TestClass { PublicField = 99 };
-        var instanceValue = Value.Wrap(testInstance);
+        var instanceValue = Wrap(testInstance);
         var accessor = publicField!.GetMemberAccessor(instanceValue);
 
         await Assert.That(accessor).IsNotNull();
 
         var interpretationContext = new InterpretationContext();
         var expression = accessor.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Func<int>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<int>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo(99);
@@ -83,13 +85,13 @@ public class ClrTypeFieldTests {
         var testType = registry.GetTypeDefinition<TestClass>();
         var staticField = testType.Fields.WithName("StaticField").SingleOrDefault();
 
-        var accessor = staticField!.GetMemberAccessor(Value.Null);
+        var accessor = staticField!.GetMemberAccessor(Null);
 
         await Assert.That(accessor).IsNotNull();
 
         var interpretationContext = new InterpretationContext();
         var expression = accessor.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Func<string>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<string>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo("static value");

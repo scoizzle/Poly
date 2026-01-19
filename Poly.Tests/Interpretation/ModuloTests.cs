@@ -1,7 +1,9 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Arithmetic;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
@@ -11,13 +13,13 @@ public class ModuloTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var leftValue = Value.Wrap(10);
-        var rightValue = Value.Wrap(3);
+        var leftValue = Wrap(10);
+        var rightValue = Wrap(3);
         var modulo = new Modulo(leftValue, rightValue);
 
         // Act
         var expression = modulo.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -30,13 +32,13 @@ public class ModuloTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var leftValue = Value.Wrap(15);
-        var rightValue = Value.Wrap(5);
+        var leftValue = Wrap(15);
+        var rightValue = Wrap(5);
         var modulo = new Modulo(leftValue, rightValue);
 
         // Act
         var expression = modulo.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -49,13 +51,13 @@ public class ModuloTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var leftValue = Value.Wrap(10.5);
-        var rightValue = Value.Wrap(3.0);
+        var leftValue = Wrap(10.5);
+        var rightValue = Wrap(3.0);
         var modulo = new Modulo(leftValue, rightValue);
 
         // Act
         var expression = modulo.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<double>>(expression);
+        var lambda = Expr.Lambda<Func<double>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -74,10 +76,10 @@ public class ModuloTests {
 
         // Act
         var expression = modulo.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int, int>>(
+        var lambda = Expr.Lambda<Func<int, int, int>>(
             expression,
-            param1.BuildExpression(context),
-            param2.BuildExpression(context)
+            param1.GetParameterExpression(context),
+            param2.GetParameterExpression(context)
         );
         var compiled = lambda.Compile();
 
@@ -92,13 +94,13 @@ public class ModuloTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var leftValue = Value.Wrap(-10);
-        var rightValue = Value.Wrap(3);
+        var leftValue = Wrap(-10);
+        var rightValue = Wrap(3);
         var modulo = new Modulo(leftValue, rightValue);
 
         // Act
         var expression = modulo.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
+        var lambda = Expr.Lambda<Func<int>>(expression);
         var compiled = lambda.Compile();
         var result = compiled();
 
@@ -111,12 +113,12 @@ public class ModuloTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var leftValue = Value.Wrap(10);
-        var rightValue = Value.Wrap(3);
+        var leftValue = Wrap(10);
+        var rightValue = Wrap(3);
         var modulo = new Modulo(leftValue, rightValue);
 
         // Act
-        var typeDef = modulo.GetTypeDefinition(context);
+        var typeDef = modulo.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef).IsNotNull();
@@ -127,8 +129,8 @@ public class ModuloTests {
     public async Task Modulo_ToString_ReturnsExpectedFormat()
     {
         // Arrange
-        var leftValue = Value.Wrap(10);
-        var rightValue = Value.Wrap(3);
+        var leftValue = Wrap(10);
+        var rightValue = Wrap(3);
         var modulo = new Modulo(leftValue, rightValue);
 
         // Act
@@ -139,12 +141,14 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_WithNullArguments_ThrowsArgumentNullException()
+    public async Task Modulo_WithNullArguments_AllowsNulls()
     {
+        // Act
+        var m1 = new Modulo(null!, Wrap(3));
+        var m2 = new Modulo(Wrap(10), null!);
+
         // Assert
-        await Assert.That(() => new Modulo(null!, Value.Wrap(3)))
-            .Throws<ArgumentNullException>();
-        await Assert.That(() => new Modulo(Value.Wrap(10), null!))
-            .Throws<ArgumentNullException>();
+        await Assert.That(m1).IsNotNull();
+        await Assert.That(m2).IsNotNull();
     }
 }

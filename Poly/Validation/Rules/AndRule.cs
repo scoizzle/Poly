@@ -1,15 +1,17 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Boolean;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Boolean;
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Validation.Rules;
 
 public sealed class AndRule(params IEnumerable<Rule> rules) : Rule {
     public IEnumerable<Rule> Rules { get; set; } = rules;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         if (Rules == null || !Rules.Any())
-            return Value.Wrap(true);
+            return Wrap(true);
 
         var ruleInterpretationTrees = Rules
             .Select(e => e.BuildInterpretationTree(context))

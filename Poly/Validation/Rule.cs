@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-
+using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation;
 
 namespace Poly.Validation;
@@ -17,5 +17,5 @@ namespace Poly.Validation;
 [JsonDerivedType(typeof(Rules.ComputedValueRule), "ComputedValue")]
 [JsonDerivedType(typeof(Rules.PropertyConstraintRule), "PropertyConstraint")]
 public abstract class Rule {
-    public abstract Value BuildInterpretationTree(RuleBuildingContext context);
+    public abstract Node BuildInterpretationTree(RuleBuildingContext context);
 }

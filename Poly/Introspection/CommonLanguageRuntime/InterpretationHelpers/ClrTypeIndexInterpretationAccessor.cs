@@ -1,20 +1,24 @@
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
+using System.Linq.Expressions;
 
 namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
-internal sealed class ClrTypeIndexInterpretationAccessor(Value instance, ClrTypeProperty indexProperty, params IEnumerable<Value> indexParameters) : Value {
-    public Value Instance { get; } = instance ?? throw new ArgumentNullException(nameof(instance));
-    public ClrTypeProperty IndexProperty { get; } = indexProperty ?? throw new ArgumentNullException(nameof(indexProperty));
-    public IEnumerable<Value> IndexParameters { get; } = indexParameters ?? throw new ArgumentNullException(nameof(indexParameters));
-
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)IndexProperty).MemberTypeDefinition;
-
-    public override Expression BuildExpression(InterpretationContext context)
+internal sealed record ClrTypeIndexInterpretationAccessor(Node Instance, ClrTypeProperty IndexProperty, params IEnumerable<Node> IndexParameters) : Node {
+    public override TResult Transform<TResult>(ITransformer<TResult> transformer)
     {
-        var instanceExpression = Instance.BuildExpression(context);
-        var indexExpressions = IndexParameters.Select(p => p.BuildExpression(context)).ToArray();
-
-        return Expression.MakeIndex(instanceExpression, IndexProperty.PropertyInfo, indexExpressions);
+        // Special handling for Expression transformers
+        if (transformer is ITransformer<Expression> exprTransformer)
+        {
+            var instanceExpr = Instance.Transform(exprTransformer);
+            var indexExprs = IndexParameters.Select(idx => idx.Transform(exprTransformer)).ToArray();
+            var propertyInfo = IndexProperty.PropertyInfo;
+            var indexExpr = Expression.Property(instanceExpr, propertyInfo, indexExprs);
+            
+            return (TResult)(object)indexExpr;
+        }
+        
+        throw new NotSupportedException($"ClrTypeIndexInterpretationAccessor transformation is not supported for {typeof(TResult).Name}.");
     }
 
     public override string ToString() => $"{Instance}[{string.Join(", ", IndexParameters)}]";

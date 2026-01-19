@@ -10,6 +10,8 @@ using Poly.DataModeling.Mutations;
 using Poly.Interpretation;
 using Poly.Validation;
 
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
+
 namespace Poly.Benchmarks;
 
 /// <summary>
@@ -195,10 +197,10 @@ public static class FluentBuilderExample {
             // Build and execute a simple accessor: @obj.Email
             var param = ctx.AddParameter("@obj", customerDef);
             var emailValue = param.GetMember("Email");
-            var body = emailValue.BuildExpression(ctx);
+            var body = emailValue.BuildNode(ctx);
             var lambda = Expression.Lambda<Func<IDictionary<string, object>, string>>(
                 body,
-                param.BuildExpression(ctx)
+                param.ToParameterExpression()
             );
             var fn = lambda.Compile();
             var sample = new Dictionary<string, object> { ["Email"] = "dev@example.com" };

@@ -1,24 +1,33 @@
 using Poly.Extensions;
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
+using System.Linq.Expressions;
 
 namespace Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
-internal sealed class ClrTypePropertyInterpretationAccessor(Value instance, ClrTypeProperty property) : Value {
-    public Value Instance { get; init; } = instance ?? throw new ArgumentNullException(nameof(instance));
-    public ClrTypeProperty Property { get; init; } = property ?? throw new ArgumentNullException(nameof(property));
-
-    public override ITypeDefinition GetTypeDefinition(InterpretationContext context) => ((ITypeMember)Property).MemberTypeDefinition;
-
-    public override Expression BuildExpression(InterpretationContext context)
+internal sealed record ClrTypePropertyInterpretationAccessor(Node Instance, ClrTypeProperty Property) : Node {
+    public override TResult Transform<TResult>(ITransformer<TResult> transformer)
     {
-        var instanceExpression = Instance.BuildExpression(context);
-
-        // For static properties, always use null as the instance regardless of what was provided
-        if (Property.PropertyInfo.IsStatic()) {
-            return Expression.Property(null, Property.PropertyInfo);
+        // Special handling for Expression transformers
+        if (transformer is ITransformer<Expression> exprTransformer)
+        {
+            var propertyInfo = Property.PropertyInfo;
+            
+            // For static properties, instance must be null
+            if (propertyInfo.GetMethod?.IsStatic == true || propertyInfo.SetMethod?.IsStatic == true)
+            {
+                var propertyExpr = Expression.Property(null, propertyInfo);
+                return (TResult)(object)propertyExpr;
+            }
+            else
+            {
+                var instanceExpr = Instance.Transform(exprTransformer);
+                var propertyExpr = Expression.Property(instanceExpr, propertyInfo);
+                return (TResult)(object)propertyExpr;
+            }
         }
-
-        return Expression.Property(instanceExpression, Property.Name);
+        
+        throw new NotSupportedException($"ClrTypePropertyInterpretationAccessor transformation is not supported for {typeof(TResult).Name}.");
     }
 
     public override string ToString() => $"{Instance}.{Property.Name}";

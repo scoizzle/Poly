@@ -1,7 +1,9 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Tests.Interpretation;
 
@@ -12,12 +14,12 @@ public class CoalesceTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int?>("nullable");
-        var rightValue = Value.Wrap(42);
+        var rightValue = Wrap(42);
         var coalesce = new Coalesce(param, rightValue);
 
         // Act
         var expression = coalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int?, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int?, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
         var result = compiled(null);
 
@@ -31,12 +33,12 @@ public class CoalesceTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int?>("nullable");
-        var fallback = Value.Wrap(42);
+        var fallback = Wrap(42);
         var coalesce = new Coalesce(param, fallback);
 
         // Act
         var expression = coalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int?, int>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<int?, int>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -53,11 +55,11 @@ public class CoalesceTests {
         var param = context.AddParameter<string?>("input");
 
         // input ?? "default"
-        var coalesce = new Coalesce(param, Value.Wrap("default"));
+        var coalesce = new Coalesce(param, Wrap("default"));
 
         // Act
         var expression = coalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<string?, string>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<string?, string>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -75,14 +77,14 @@ public class CoalesceTests {
 
         // first ?? second ?? "fallback"
         var innerCoalesce = new Coalesce(param1, param2);
-        var outerCoalesce = new Coalesce(innerCoalesce, Value.Wrap("fallback"));
+        var outerCoalesce = new Coalesce(innerCoalesce, Wrap("fallback"));
 
         // Act
         var expression = outerCoalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<string?, string?, string>>(
+        var lambda = Expr.Lambda<Func<string?, string?, string>>(
             expression,
-            param1.BuildExpression(context),
-            param2.BuildExpression(context)
+            param1.GetParameterExpression(context),
+            param2.GetParameterExpression(context)
         );
         var compiled = lambda.Compile();
 
@@ -101,11 +103,11 @@ public class CoalesceTests {
         var param = context.AddParameter<object?>("obj");
 
         var fallback = new { Value = 42 };
-        var coalesce = new Coalesce(param, Value.Wrap(fallback));
+        var coalesce = new Coalesce(param, Wrap(fallback));
 
         // Act
         var expression = coalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<object?, object>>(expression, param.BuildExpression(context));
+        var lambda = Expr.Lambda<Func<object?, object>>(expression, param.GetParameterExpression(context));
         var compiled = lambda.Compile();
 
         // Assert
@@ -119,12 +121,12 @@ public class CoalesceTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var leftValue = Value.Wrap<int?>(null);
-        var rightValue = Value.Wrap(42);
+        var leftValue = Wrap<int?>(null);
+        var rightValue = Wrap(42);
         var coalesce = new Coalesce(leftValue, rightValue);
 
         // Act
-        var typeDef = coalesce.GetTypeDefinition(context);
+        var typeDef = coalesce.GetResolvedType(context);
 
         // Assert
         await Assert.That(typeDef).IsNotNull();
@@ -135,8 +137,8 @@ public class CoalesceTests {
     public async Task Coalesce_ToString_ReturnsExpectedFormat()
     {
         // Arrange
-        var leftValue = Value.Null;
-        var rightValue = Value.Wrap(42);
+        var leftValue = Null;
+        var rightValue = Wrap(42);
         var coalesce = new Coalesce(leftValue, rightValue);
 
         // Act
@@ -147,12 +149,14 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithNullArguments_ThrowsArgumentNullException()
+    public async Task Coalesce_WithNullArguments_AllowsNulls()
     {
+        // Act
+        var coalesceLeftNull = new Coalesce(null!, Wrap(1));
+        var coalesceRightNull = new Coalesce(Null, null!);
+
         // Assert
-        await Assert.That(() => new Coalesce(null!, Value.Wrap(1)))
-            .Throws<ArgumentNullException>();
-        await Assert.That(() => new Coalesce(Value.Null, null!))
-            .Throws<ArgumentNullException>();
+        await Assert.That(coalesceLeftNull).IsNotNull();
+        await Assert.That(coalesceRightNull).IsNotNull();
     }
 }

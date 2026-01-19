@@ -1,6 +1,8 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Expr = System.Linq.Expressions.Expression;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;
@@ -66,8 +68,8 @@ public class ClrTypeIndexerTests {
         var indexer = listType.Properties.First(p => p.Parameters != null);
 
         var list = new List<int> { 10, 20, 30 };
-        var listValue = Value.Wrap(list);
-        var indexValue = Value.Wrap(1);
+        var listValue = Wrap(list);
+        var indexValue = Wrap(1);
 
         var accessor = indexer.GetMemberAccessor(listValue, [indexValue]);
 
@@ -76,8 +78,8 @@ public class ClrTypeIndexerTests {
         var context = new InterpretationContext();
         var expression = accessor.BuildExpression(context);
         // Convert to object since the expression type might be specific but we're testing generic access
-        var converted = Expression.Convert(expression, typeof(object));
-        var lambda = Expression.Lambda<Func<object>>(converted).Compile();
+        var converted = Expr.Convert(expression, typeof(object));
+        var lambda = Expr.Lambda<Func<object>>(converted).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo(20);
@@ -104,8 +106,8 @@ public class ClrTypeIndexerTests {
             ["two"] = 2,
             ["three"] = 3
         };
-        var dictValue = Value.Wrap(dict);
-        var keyValue = Value.Wrap("two");
+        var dictValue = Wrap(dict);
+        var keyValue = Wrap("two");
 
         var accessor = indexer.GetMemberAccessor(dictValue, [keyValue]);
 
@@ -114,8 +116,8 @@ public class ClrTypeIndexerTests {
         var context = new InterpretationContext();
         var expression = accessor.BuildExpression(context);
         // Convert to object since the expression type might be specific but we're testing generic access
-        var converted = Expression.Convert(expression, typeof(object));
-        var lambda = Expression.Lambda<Func<object>>(converted).Compile();
+        var converted = Expr.Convert(expression, typeof(object));
+        var lambda = Expr.Lambda<Func<object>>(converted).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo(2);
@@ -129,8 +131,8 @@ public class ClrTypeIndexerTests {
         var indexer = customType.Properties.First(p => p.Parameters != null);
 
         var instance = new CustomIndexerClass();
-        var instanceValue = Value.Wrap(instance);
-        var indexValue = Value.Wrap(5);
+        var instanceValue = Wrap(instance);
+        var indexValue = Wrap(5);
 
         var accessor = indexer.GetMemberAccessor(instanceValue, [indexValue]);
 
@@ -138,7 +140,7 @@ public class ClrTypeIndexerTests {
 
         var context = new InterpretationContext();
         var expression = accessor.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<int>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo(50); // 5 * 10
@@ -158,9 +160,9 @@ public class ClrTypeIndexerTests {
         await Assert.That(twoParamIndexer.Parameters!.Count()).IsEqualTo(2);
 
         var instance = new MultiParamIndexerClass();
-        var instanceValue = Value.Wrap(instance);
-        var index1 = Value.Wrap(3);
-        var index2 = Value.Wrap(4);
+        var instanceValue = Wrap(instance);
+        var index1 = Wrap(3);
+        var index2 = Wrap(4);
 
         var accessor = twoParamIndexer.GetMemberAccessor(instanceValue, [index1, index2]);
 
@@ -168,7 +170,7 @@ public class ClrTypeIndexerTests {
 
         var context = new InterpretationContext();
         var expression = accessor.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression).Compile();
+        var lambda = Expr.Lambda<Func<int>>(expression).Compile();
         var result = lambda();
 
         await Assert.That(result).IsEqualTo(7); // 3 + 4
@@ -182,8 +184,8 @@ public class ClrTypeIndexerTests {
         var indexer = listType.Properties.First(p => p.Parameters != null);
 
         var list = new List<int> { 1, 2, 3 };
-        var listValue = Value.Wrap(list);
-        var indexValue = Value.Wrap(0);
+        var listValue = Wrap(list);
+        var indexValue = Wrap(0);
 
         var accessor = indexer.GetMemberAccessor(listValue, [indexValue]);
 

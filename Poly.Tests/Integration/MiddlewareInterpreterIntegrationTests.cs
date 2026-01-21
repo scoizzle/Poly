@@ -336,10 +336,9 @@ public class MiddlewareInterpreterIntegrationTests
     {
         // Arrange
         var context = new InterpretationContext();
-        var doubleType = context.GetTypeDefinition<double>();
 
         // Act - Build: (double)42
-        var ast = new TypeCast(Wrap(42), doubleType);
+        var ast = new TypeCast(Wrap(42), nameof(Double));
         var expr = ast.BuildExpression(context);
 
         var lambda = Expression.Lambda<Func<double>>(expr);

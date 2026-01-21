@@ -10,8 +10,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Comparison;
 /// </remarks>
 public sealed record GreaterThanOrEqual(Node LeftHandValue, Node RightHandValue) : BooleanOperator
 {
-    /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
     public override string ToString() => $"{LeftHandValue} >= {RightHandValue}";
 }

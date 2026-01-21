@@ -12,8 +12,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 public sealed record IndexAccess(Node Value, params Node[] Arguments) : Operator
 {
     /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
-    /// <inheritdoc />
     public override string ToString() => $"{Value}[{string.Join(", ", Arguments)}]";
 }

@@ -11,8 +11,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 public sealed record Subtract(Node LeftHandValue, Node RightHandValue) : Operator
 {
     /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
-    /// <inheritdoc />
     public override string ToString() => $"({LeftHandValue} - {RightHandValue})";
 }

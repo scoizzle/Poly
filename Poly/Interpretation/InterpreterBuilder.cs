@@ -1,4 +1,5 @@
-using Poly.Introspection;
+using Poly.Interpretation.TransformationPipeline;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation;
 
@@ -9,6 +10,11 @@ public sealed class InterpreterBuilder<TResult>
 {
     private readonly ITypeDefinitionProvider _typeProvider;
     private readonly List<ITransformationMiddleware<TResult>> _middlewares = new();
+
+    public InterpreterBuilder()
+    {
+        _typeProvider = ClrTypeDefinitionRegistry.Shared;
+    }
 
     public InterpreterBuilder(ITypeDefinitionProvider typeProvider)
     {
@@ -22,6 +28,11 @@ public sealed class InterpreterBuilder<TResult>
     {
         _middlewares.Add(middleware);
         return this;
+    }
+
+    public InterpreterBuilder<TResult> Use(Func<InterpretationContext<TResult>, Node, TransformationDelegate<TResult>, TResult> transformFunc)
+    {
+        return Use(new DelegateTransformationMiddleware<TResult>(transformFunc));
     }
 
     /// <summary>

@@ -11,8 +11,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 public sealed record UnaryMinus(Node Operand) : Operator
 {
     /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
-    /// <inheritdoc />
     public override string ToString() => $"-{Operand}";
 }

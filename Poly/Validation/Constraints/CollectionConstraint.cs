@@ -1,5 +1,4 @@
 namespace Poly.Validation.Constraints;
-using Poly.Interpretation.AbstractSyntaxTree;
 
 // public sealed class CollectionConstraint(Property property, int? minCount, int? maxCount, List<Rule>? elementRules) : Constraint(property)
 // {

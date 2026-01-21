@@ -1,10 +1,7 @@
-using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
-using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
 
 namespace Poly.Interpretation.SemanticAnalysis;
 
@@ -13,75 +10,29 @@ namespace Poly.Interpretation.SemanticAnalysis;
 /// </summary>
 public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddleware<TResult>
 {
-    public TResult Transform(InterpretationContext context, Node node, TransformationDelegate<TResult> next)
-    {
-        // Skip if already analyzed
-        if (context.HasSemanticInfo(node))
-        {
-            return next(context, node);
+    public TResult Transform(InterpretationContext<TResult> context, Node node, TransformationDelegate<TResult> next) {
+        if (context.GetResolvedType(node) is null) {
+            var resolvedType = ResolveNodeType(context, node);
+            if (resolvedType != null) {
+                context.SetResolvedType(node, resolvedType);
+            }
         }
 
-        // Resolve and cache type information via provider (nodes do not resolve themselves)
-        var resolvedType = context.GetResolvedType(node) ?? ResolveNodeType(context, node);
-        if (resolvedType != null)
-        {
-            context.SetResolvedType(node, resolvedType);
-        }
-
-        // Handle specific node types
-        switch (node)
-        {
-            case MemberAccess memberAccess:
-                AnalyzeMemberAccess(context, memberAccess);
-                break;
-        }
-
-        // Pass enriched node to next middleware
         return next(context, node);
     }
 
-    private void AnalyzeMemberAccess(InterpretationContext context, MemberAccess memberAccess)
-    {
-        var instanceType = context.GetResolvedType(memberAccess.Value)
-            ?? ResolveNodeType(context, memberAccess.Value);
-
-        if (instanceType != null)
-        {
-            // TODO: Evaluate whether to handle more than just first matching member
-            var member = instanceType.Members.WithName(memberAccess.MemberName).FirstOrDefault();
-            if (member != null)
-            {
-                context.SetResolvedMember(memberAccess, member);
-                context.SetResolvedType(memberAccess, member.MemberTypeDefinition);
-            }
-        }
-    }
-
-    private static ITypeDefinition? ResolveNodeType(InterpretationContext context, Node node)
+    private static ITypeDefinition? ResolveNodeType(InterpretationContext<TResult> context, Node node)
     {
         return node switch
         {
             // Constants have their type directly available
-            Constant<int> => context.GetTypeDefinition<int>(),
-            Constant<long> => context.GetTypeDefinition<long>(),
-            Constant<uint> => context.GetTypeDefinition<uint>(),
-            Constant<ulong> => context.GetTypeDefinition<ulong>(),
-            Constant<short> => context.GetTypeDefinition<short>(),
-            Constant<ushort> => context.GetTypeDefinition<ushort>(),
-            Constant<byte> => context.GetTypeDefinition<byte>(),
-            Constant<sbyte> => context.GetTypeDefinition<sbyte>(),
-            Constant<float> => context.GetTypeDefinition<float>(),
-            Constant<double> => context.GetTypeDefinition<double>(),
-            Constant<decimal> => context.GetTypeDefinition<decimal>(),
-            Constant<bool> => context.GetTypeDefinition<bool>(),
-            Constant<string> => context.GetTypeDefinition<string>(),
-            Constant<char> => context.GetTypeDefinition<char>(),
+            Constant c => context.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
             
-            // Parameters have their type from the Type property
-            Parameter p => p.Type,
+            // Parameters: resolve from type hint or fail (pre-resolved types are handled by Transform's early return)
+            Parameter p => ResolveParameterType(context, p),
             
             // Variables need to be looked up in the scope
-            Variable v => context.Variables.TryGetValue(v.Name, out var varType) ? varType : null,
+            Variable v => v.Value is null ? context.GetTypeDefinition<object>() : ResolveNodeType(context, v.Value),
             
             // Arithmetic operations - use numeric type promotion
             Add add => ResolveArithmeticType(context, add.LeftHandValue, add.RightHandValue),
@@ -111,8 +62,8 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
             // Index access - resolve element type
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             
-            // Type cast returns the target type
-            TypeCast cast => cast.TargetType,
+            // Type cast: resolve target type from type name
+            TypeCast cast => ResolveTypeFromName(context, cast.TargetTypeName),
             
             // Conditional returns the type of the ifTrue branch
             Conditional cond => ResolveNodeType(context, cond.IfTrue),
@@ -128,17 +79,12 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
             // Assignment returns the type of the value being assigned
             Assignment assign => ResolveNodeType(context, assign.Value),
             
-            // CLR-specific helper types
-            ClrMethodInvocationInterpretation clrMethodInv => clrMethodInv.Method.MemberTypeDefinition,
-            ClrTypeFieldInterpretationAccessor clrFieldAccess => clrFieldAccess.Field.MemberTypeDefinition,
-            ClrTypePropertyInterpretationAccessor clrPropAccess => clrPropAccess.Property.MemberTypeDefinition,
-            
             _ => null
         };
     }
     
     private static ITypeDefinition? ResolveArithmeticType(
-        InterpretationContext context,
+        InterpretationContext<TResult> context,
         Node left,
         Node right)
     {
@@ -147,12 +93,14 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
         
         if (leftType == null || rightType == null)
             return null;
-            
-        return NumericTypePromotion.GetPromotedType(context, leftType, rightType);
+
+        return leftType;
+        // TODO: Numeric type promotion, maybe as a middleware?!
+         //return NumericTypePromotion.GetPromotedType(context, leftType, rightType);
     }
     
     private static ITypeDefinition? ResolveMemberAccessType(
-        InterpretationContext context,
+        InterpretationContext<TResult> context,
         MemberAccess memberAccess)
     {
         var instanceType = ResolveNodeType(context, memberAccess.Value);
@@ -163,6 +111,7 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
         if (member != null)
         {
             context.SetResolvedMember(memberAccess, member);
+            context.SetResolvedType(memberAccess, member.MemberTypeDefinition);
             return member.MemberTypeDefinition;
         }
         
@@ -170,7 +119,7 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
     }
     
     private static ITypeDefinition? ResolveMethodInvocationType(
-        InterpretationContext context,
+        InterpretationContext<TResult> context,
         MethodInvocation methodInv)
     {
         var instanceType = ResolveNodeType(context, methodInv.Target);
@@ -192,7 +141,7 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
     }
     
     private static ITypeDefinition? ResolveIndexAccessType(
-        InterpretationContext context,
+        InterpretationContext<TResult> context,
         IndexAccess indexAccess)
     {
         var instanceType = ResolveNodeType(context, indexAccess.Value);
@@ -201,8 +150,7 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
             
         // Check for indexer properties (properties with parameters)
         var indexer = instanceType.Properties
-            .Where(p => p.Parameters != null && p.Parameters.Any())
-            .FirstOrDefault();
+            .FirstOrDefault(p => p.Parameters != null && p.Parameters.Any());
             
         if (indexer != null)
         {
@@ -216,10 +164,30 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
             var elementType = instanceType.ReflectedType.GetElementType();
             if (elementType != null)
             {
-                return context.TypeProvider.GetTypeDefinition(elementType);
+                return context.GetTypeDefinition(elementType);
             }
         }
         
         return null;
+    }
+    
+    private static ITypeDefinition? ResolveParameterType(InterpretationContext<TResult> context, Parameter parameter)
+    {
+        // If the parameter has a type hint, try to resolve it by name
+        if (!string.IsNullOrWhiteSpace(parameter.TypeHint))
+        {
+            return context.GetTypeDefinition(parameter.TypeHint);
+        }
+        
+        // Otherwise, type must have been provided via AddParameter (pre-resolved in semantic cache)
+        return null;
+    }
+    
+    private static ITypeDefinition? ResolveTypeFromName(InterpretationContext<TResult> context, string? typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+            return null;
+        
+        return context.GetTypeDefinition(typeName);
     }
 }

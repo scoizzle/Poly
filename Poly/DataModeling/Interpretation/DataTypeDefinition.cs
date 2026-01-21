@@ -1,8 +1,5 @@
 using System.Collections.Frozen;
 
-using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.DataModeling.Interpretation;

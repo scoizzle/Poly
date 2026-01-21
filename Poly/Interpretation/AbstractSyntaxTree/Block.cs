@@ -1,5 +1,3 @@
-using Poly.Introspection;
-
 namespace Poly.Interpretation.AbstractSyntaxTree;
 
 /// <summary>
@@ -51,9 +49,6 @@ public sealed record Block : Operator {
             throw new ArgumentException("Block must contain at least one expression.", nameof(expressions));
         }
     }
-
-    /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
 
     /// <inheritdoc />
     public override string ToString()

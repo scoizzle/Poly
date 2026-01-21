@@ -3,22 +3,34 @@ using System.Linq.Expressions;
 
 using Poly.Interpretation;
 using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.SemanticAnalysis;
+using Poly.Interpretation.LinqExpressions;
 using Poly.Validation;
 using Poly.Validation.Builders;
 
 var body = new MethodInvocation(
-    new Constant<string>("Hello, World!"),
+    new Constant("Hello, World!"),
     "Substring",
-    new Constant<int>(7),
-    new Constant<int>(5)
+    new Constant(7),
+    new Constant(5)
 );
 
-LinqExpressionTransformer transformer = new();
+Interpreter<Expression> interpreter = new InterpreterBuilder<Expression>()
+    .Use(static (ctx, node, next) => {
+        Console.WriteLine($"Interpreting AST Node: {node}");
+        var expr = next(ctx, node);
+        Console.WriteLine($"Generated Expression from AST Node: {expr}");
+        return expr;
+    })
+    .WithSemanticAnalysis()
+    .WithLinqExpressionCompilation()
+    .Build();
 
-Expression expr = body.Transform(transformer);
-Func<string> compiled = Expression.Lambda<Func<string>>(expr, transformer.ParameterExpressions).Compile();
-string result = compiled();
-Console.WriteLine($"Result of method invocation: {result}");
+var result = interpreter.Interpret(body);
+var expr = result.Value;
+Func<string> compiled = Expression.Lambda<Func<string>>(expr).Compile();
+string resultValue = compiled();
+Console.WriteLine($"Result of method invocation: {resultValue}");
 
 // Poly.Benchmarks.FluentBuilderExample.Run();
 // Console.WriteLine();

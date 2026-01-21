@@ -12,8 +12,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 public sealed record Assignment(Node Destination, Node Value) : Operator
 {
     /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
-    /// <inheritdoc />
     public override string ToString() => $"{Destination} = {Value}";
 }

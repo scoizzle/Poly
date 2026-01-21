@@ -11,8 +11,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Boolean;
 public sealed record Not(Node Value) : BooleanOperator
 {
     /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
-    /// <inheritdoc />
     public override string ToString() => $"!{Value}";
 }

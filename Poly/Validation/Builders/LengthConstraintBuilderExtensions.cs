@@ -1,5 +1,4 @@
 namespace Poly.Validation.Builders;
-using Poly.Interpretation.AbstractSyntaxTree;
 
 public static class LengthConstraintBuilderExtensions {
     public static ConstraintSetBuilder<string> MinLength(this ConstraintSetBuilder<string> builder, int minLength)

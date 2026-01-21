@@ -121,7 +121,7 @@ public class CoalesceTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var leftValue = Wrap<int?>(null);
+        var leftValue = Wrap(null);
         var rightValue = Wrap(42);
         var coalesce = new Coalesce(leftValue, rightValue);
 

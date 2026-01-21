@@ -1,13 +1,13 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Introspection;
 
 namespace Poly.Validation;
 
 public sealed record RuleBuildingContext {
     private const string EntryPointName = "@value";
 
-    public RuleBuildingContext(InterpretationContext interpretationContext, ITypeDefinition entryPointTypeDefinition)
+    public RuleBuildingContext(InterpretationContext<Expression> interpretationContext, ITypeDefinition entryPointTypeDefinition)
     {
         Value = interpretationContext.AddParameter(EntryPointName, entryPointTypeDefinition);
     }

@@ -9,11 +9,8 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// serves as a marker to distinguish constant values from mutable variables or parameters.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record Constant<T>(T Value) : Node
+public sealed record Constant(object? Value) : Node
 {
-    /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
     /// <inheritdoc />
     public override string ToString() => Value?.ToString() ?? "null";
 }

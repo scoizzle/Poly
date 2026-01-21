@@ -159,10 +159,9 @@ public class FluentValueApiTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        var doubleType = context.GetTypeDefinition<double>()!;
 
         // (double)x + 0.5
-        var expr = param.CastTo(doubleType).Add(Wrap(0.5));
+        var expr = param.CastTo(nameof(Double)).Add(Wrap(0.5));
 
         // Act
         var expression = expr.BuildExpression(context);

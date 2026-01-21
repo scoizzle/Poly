@@ -12,8 +12,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 public sealed record Conditional(Node Condition, Node IfTrue, Node IfFalse) : Operator
 {
     /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
-    /// <inheritdoc />
     public override string ToString() => $"({Condition} ? {IfTrue} : {IfFalse})";
 }

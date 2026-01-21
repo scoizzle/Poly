@@ -10,6 +10,4 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// </remarks>
 public sealed record MethodInvocation(Node Target, string MethodName, params Node[] Arguments) : Operator
 {
-    /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
 }

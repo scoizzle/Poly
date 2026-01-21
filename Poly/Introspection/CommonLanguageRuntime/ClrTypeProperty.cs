@@ -1,9 +1,5 @@
 using System.Reflection;
 
-using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
-
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>
@@ -63,24 +59,6 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
     /// Gets whether this property's getter or setter is static.
     /// </summary>
     public override bool IsStatic => _isStatic;
-
-    /// <summary>
-    /// Creates an accessor that reads this property (or indexer) from <paramref name="instance"/>.
-    /// Validates parameter counts for indexers.
-    /// </summary>
-    public override Node GetMemberAccessor(Node instance, params Node[]? parameters)
-    {
-        if (_parameters is not null) {
-            if (parameters is null || parameters.Length != _parameters.Count()) {
-                throw new ArgumentException($"Indexer property '{Name}' requires {_parameters.Count()} parameters, but {parameters?.Length ?? 0} were provided.");
-            }
-
-            return new ClrTypeIndexInterpretationAccessor(instance, this, parameters);
-        }
-        else {
-            return new ClrTypePropertyInterpretationAccessor(instance, this);
-        }
-    }
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}{(_parameters is null ? string.Empty : $"[{string.Join(", ", _parameters)}]")}";
 }

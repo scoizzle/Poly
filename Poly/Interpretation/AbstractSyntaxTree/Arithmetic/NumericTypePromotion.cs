@@ -1,7 +1,5 @@
 using System.Linq.Expressions;
 
-using Poly.Introspection;
-
 namespace Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 /// <summary>
@@ -26,7 +24,7 @@ internal static class NumericTypePromotion {
     /// - Otherwise, the result is int
     /// </remarks>
     public static ITypeDefinition GetPromotedType(
-        InterpretationContext context,
+        InterpretationContext<Expression> context,
         ITypeDefinition leftType,
         ITypeDefinition rightType)
     {
@@ -82,7 +80,7 @@ internal static class NumericTypePromotion {
     /// <param name="rightType">The type definition of the right operand.</param>
     /// <returns>A tuple of converted expressions at the promoted type.</returns>
     public static (Expression Left, Expression Right) ConvertToPromotedType(
-        InterpretationContext context,
+        InterpretationContext<Expression> context,
         Expression leftExpr,
         Expression rightExpr,
         ITypeDefinition leftType,

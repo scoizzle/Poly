@@ -28,47 +28,49 @@ public sealed class Validator {
             return evaluationContext.GetResult();
         }
 
-        var interpretationContext = new InterpretationContext();
-        _model.RegisterIn(interpretationContext);
+        return default!;
 
-        var entryPointTypeDefinition = interpretationContext.GetTypeDefinition(typeName);
-        if (entryPointTypeDefinition == null) {
-            evaluationContext.AddError(new ValidationError("", "type.notfound", $"Type definition for '{typeName}' not found in interpretation context."));
-            return evaluationContext.GetResult();
-        }
+        // var interpretationContext = new InterpretationContext();
+        // _model.RegisterIn(interpretationContext);
 
-        var ruleBuildingContext = new RuleBuildingContext(interpretationContext, entryPointTypeDefinition);
-        var rules = new List<Rule>();
+        // var entryPointTypeDefinition = interpretationContext.GetTypeDefinition(typeName);
+        // if (entryPointTypeDefinition == null) {
+        //     evaluationContext.AddError(new ValidationError("", "type.notfound", $"Type definition for '{typeName}' not found in interpretation context."));
+        //     return evaluationContext.GetResult();
+        // }
 
-        foreach (var property in dataType.Properties) {
+        // var ruleBuildingContext = new RuleBuildingContext(interpretationContext, entryPointTypeDefinition);
+        // var rules = new List<Rule>();
 
-            var combinedRules = new AndRule(property.Constraints);
-            var rule = new PropertyConstraintRule(property.Name, combinedRules);
-            rules.Add(rule);
-        }
+        // foreach (var property in dataType.Properties) {
 
-        rules.AddRange(dataType.Rules);
+        //     var combinedRules = new AndRule(property.Constraints);
+        //     var rule = new PropertyConstraintRule(property.Name, combinedRules);
+        //     rules.Add(rule);
+        // }
 
-        var combinedRuleSet = new AndRule(rules);
-        var ruleSetInterpretation = combinedRuleSet.BuildInterpretationTree(ruleBuildingContext);
+        // rules.AddRange(dataType.Rules);
+
+        // var combinedRuleSet = new AndRule(rules);
+        // var ruleSetInterpretation = combinedRuleSet.BuildInterpretationTree(ruleBuildingContext);
         
-        // Build the expression tree using middleware pattern
-        // Run semantic analysis on the tree
-        var semanticMiddleware = new SemanticAnalysisMiddleware<Expr>();
-        semanticMiddleware.Transform(interpretationContext, ruleSetInterpretation, (ctx, n) => Expr.Empty());
+        // // Transform to LINQ expression using the interpreter with middleware
+        // var interpreter = new InterpreterBuilder<Expr>()
+        //     .WithSemanticAnalysis()
+        //     .WithLinqExpressionCompilation()
+        //     .Build();
         
-        // Transform to LINQ expression
-        var transformer = new LinqExpressionTransformer();
-        transformer.SetContext(interpretationContext);
-        var expressionTree = ruleSetInterpretation.Transform(transformer);
+        // var result = interpreter.Interpret(ruleSetInterpretation);
+        // var expressionTree = result.Value;
 
-        // Compile the rule - collect parameter expressions from transformer
-        var parameterExprs = transformer.ParameterExpressions.ToArray();
-        var lambda = Expr.Lambda<Func<IDictionary<string, object?>, RuleEvaluationContext, bool>>(expressionTree, parameterExprs);
+        // // Compile the rule - extract parameters from LINQ metadata
+        // var linqMetadata = result.GetMetadata<LinqMetadata>();
+        // var parameterExprs = linqMetadata?.Parameters.Values.ToArray() ?? [];
+        // var lambda = Expr.Lambda<Func<IDictionary<string, object?>, RuleEvaluationContext, bool>>(expressionTree, parameterExprs);
 
-        var compiledRule = lambda.Compile();
-        var isValid = compiledRule(instance, evaluationContext);
+        // var compiledRule = lambda.Compile();
+        // var isValid = compiledRule(instance, evaluationContext);
 
-        return evaluationContext.GetResult();
+        // return evaluationContext.GetResult();
     }
 }

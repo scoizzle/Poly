@@ -1,5 +1,3 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-
 namespace Poly.Interpretation.AbstractSyntaxTree;
 
 /// <summary>

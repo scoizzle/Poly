@@ -14,8 +14,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var operand = Wrap(42);
-        var doubleType = context.GetTypeDefinition<double>()!;
-        var cast = new TypeCast(operand, doubleType);
+        var cast = new TypeCast(operand, nameof(Double));
 
         // Act
         var expression = cast.BuildExpression(context);
@@ -33,8 +32,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var operand = Wrap(3.14);
-        var intType = context.GetTypeDefinition<int>()!;
-        var cast = new TypeCast(operand, intType);
+        var cast = new TypeCast(operand, nameof(Int32));
 
         // Act
         var expression = cast.BuildExpression(context);
@@ -52,8 +50,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var operand = Wrap(100L);
-        var intType = context.GetTypeDefinition<int>()!;
-        var cast = new TypeCast(operand, intType);
+        var cast = new TypeCast(operand, nameof(Int32));
 
         // Act
         var expression = cast.BuildExpression(context);
@@ -71,8 +68,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("x");
-        var doubleType = context.GetTypeDefinition<double>()!;
-        var cast = new TypeCast(param, doubleType);
+        var cast = new TypeCast(param, nameof(Double));
 
         // Act
         var expression = cast.BuildExpression(context);
@@ -90,8 +86,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<string>("str");
-        var objectType = context.GetTypeDefinition<object>()!;
-        var cast = new TypeCast(param, objectType);
+        var cast = new TypeCast(param, nameof(Object));
 
         // Act
         var expression = cast.BuildExpression(context);
@@ -110,8 +105,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<object>("obj");
-        var stringType = context.GetTypeDefinition<string>()!;
-        var cast = new TypeCast(param, stringType);
+        var cast = new TypeCast(param, nameof(String));
 
         // Act
         var expression = cast.BuildExpression(context);
@@ -129,8 +123,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int?>("nullable");
-        var intType = context.GetTypeDefinition<int>()!;
-        var cast = new TypeCast(param, intType);
+        var cast = new TypeCast(param, nameof(Int32));
 
         // Act
         var expression = cast.BuildExpression(context);
@@ -147,8 +140,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var param = context.AddParameter<int>("value");
-        var nullableIntType = context.GetTypeDefinition<int?>()!;
-        var cast = new TypeCast(param, nullableIntType);
+        var cast = new TypeCast(param, "System.Nullable`1");
 
         // Act
         var expression = cast.BuildExpression(context);
@@ -165,8 +157,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var operand = Wrap(42);
-        var doubleType = context.GetTypeDefinition<double>()!;
-        var cast = new TypeCast(operand, doubleType);
+        var cast = new TypeCast(operand, nameof(Double));
 
         // Act
         var typeDef = cast.GetResolvedType(context);
@@ -182,8 +173,7 @@ public class TypeCastTests {
         // Arrange
         var context = new InterpretationContext();
         var operand = Wrap(42);
-        var doubleType = context.GetTypeDefinition<double>()!;
-        var cast = new TypeCast(operand, doubleType);
+        var cast = new TypeCast(operand, nameof(Double));
 
         // Act
         var result = cast.ToString();
@@ -198,10 +188,9 @@ public class TypeCastTests {
     {
         // Arrange
         var context = new InterpretationContext();
-        var doubleType = context.GetTypeDefinition<double>()!;
 
         // Act
-        var c1 = new TypeCast(null!, doubleType);
+        var c1 = new TypeCast(null!, nameof(Double));
         var c2 = new TypeCast(Wrap(42), null!);
 
         // Assert

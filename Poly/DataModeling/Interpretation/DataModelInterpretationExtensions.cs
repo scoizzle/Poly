@@ -1,5 +1,4 @@
 using Poly.Interpretation;
-using Poly.Introspection;
 
 namespace Poly.DataModeling.Interpretation;
 
@@ -17,7 +16,7 @@ public static class DataModelInterpretationExtensions {
         return provider;
     }
 
-    public static void RegisterIn(this DataModel model, InterpretationContext context)
+    public static void RegisterIn<TResult>(this DataModel model, InterpretationContext<TResult> context)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(context);

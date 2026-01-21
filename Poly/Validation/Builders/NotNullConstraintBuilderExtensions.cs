@@ -1,5 +1,4 @@
 namespace Poly.Validation.Builders;
-using Poly.Interpretation.AbstractSyntaxTree;
 
 public static class NotNullConstraintBuilderExtensions {
     // For nullable reference types

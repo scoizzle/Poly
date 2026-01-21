@@ -1,9 +1,7 @@
-using Poly.Introspection;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
-using Poly.Interpretation.SemanticAnalysis;
 
 namespace Poly.Interpretation.AbstractSyntaxTree;
 
@@ -202,10 +200,10 @@ public static class NodeExtensions
     /// Creates a type cast operation.
     /// </summary>
     /// <param name="operand">The operand.</param>
-    /// <param name="targetType">The type to cast to.</param>
+    /// <param name="targetTypeName">The name of the type to cast to.</param>
     /// <param name="isChecked">Whether to use checked conversion.</param>
     /// <returns>A <see cref="TypeCast"/> operator.</returns>
-    public static TypeCast CastTo(this Node operand, ITypeDefinition targetType, bool isChecked = false) => new TypeCast(operand, targetType, isChecked);
+    public static TypeCast CastTo(this Node operand, string targetTypeName, bool isChecked = false) => new TypeCast(operand, targetTypeName, isChecked);
 
     #endregion
 
@@ -226,17 +224,17 @@ public static class NodeExtensions
     /// <summary>
     /// A predefined null literal expression.
     /// </summary>
-    public static Constant<object?> Null = new Constant<object?>(null);
+    public static Constant Null = new Constant(null);
 
     /// <summary>
     /// A predefined literal representing the boolean value <c>true</c>.
     /// </summary>
-    public static Constant<bool> True = new Constant<bool>(true);
+    public static Constant True = new Constant(true);
 
     /// <summary>
     /// A predefined literal representing the boolean value <c>false</c>.
     /// </summary>
-    public static Constant<bool> False = new Constant<bool>(false);
+    public static Constant False = new Constant(false);
 
     /// <summary>
     /// Creates a literal expression wrapping the specified constant.
@@ -244,174 +242,7 @@ public static class NodeExtensions
     /// <typeparam name="T">The type of the literal value.</typeparam>
     /// <param name="value">The constant value to wrap.</param>
     /// <returns>A literal expression representing the specified constant.</returns>
-    public static Constant<T> Wrap<T>(T value) => new Constant<T>(value);
-
-    #endregion
-
-    #region Temporary Compatibility (for migration to middleware architecture)
-
-    /// <summary>
-    /// TEMPORARY: Builds a LINQ Expression Tree representation of this node.
-    /// This is a compatibility shim for existing code that still uses the old BuildNode pattern.
-    /// In the middleware architecture, BuildNode is delegated to ITransformer implementations.
-    /// </summary>
-    /// <param name="node">The node to transform.</param>
-    /// <param name="context">The interpretation context.</param>
-    /// <returns>A LINQ Expression representation.</returns>
-    [Obsolete("Use the middleware interpreter with ITransformer implementations instead. This method will be removed when migration is complete.")]
-    public static Expr BuildNode(this Node node, InterpretationContext context)
-    {
-        // Run semantic analysis on the entire tree first
-        AnalyzeNodeTree(context, node);
-        
-        // Create transformer with context
-        var transformer = context.Transformer as LinqExpressionTransformer 
-            ?? new LinqExpressionTransformer();
-        
-        if (transformer is LinqExpressionTransformer linq)
-        {
-            linq.SetContext(context);
-        }
-        
-        return node.Transform(transformer);
-    }
-    
-    private static void AnalyzeNodeTree(InterpretationContext context, Node node)
-    {
-        var semanticMiddleware = new SemanticAnalysis.SemanticAnalysisMiddleware<Expr>();
-        semanticMiddleware.Transform(context, node, (ctx, n) => Expr.Empty());
-        
-        // Recursively analyze child nodes
-        switch (node)
-        {
-            case Add add:
-                AnalyzeNodeTree(context, add.LeftHandValue);
-                AnalyzeNodeTree(context, add.RightHandValue);
-                break;
-            case Subtract sub:
-                AnalyzeNodeTree(context, sub.LeftHandValue);
-                AnalyzeNodeTree(context, sub.RightHandValue);
-                break;
-            case Multiply mul:
-                AnalyzeNodeTree(context, mul.LeftHandValue);
-                AnalyzeNodeTree(context, mul.RightHandValue);
-                break;
-            case Divide div:
-                AnalyzeNodeTree(context, div.LeftHandValue);
-                AnalyzeNodeTree(context, div.RightHandValue);
-                break;
-            case Modulo mod:
-                AnalyzeNodeTree(context, mod.LeftHandValue);
-                AnalyzeNodeTree(context, mod.RightHandValue);
-                break;
-            case UnaryMinus minus:
-                AnalyzeNodeTree(context, minus.Operand);
-                break;
-            case And and:
-                AnalyzeNodeTree(context, and.LeftHandValue);
-                AnalyzeNodeTree(context, and.RightHandValue);
-                break;
-            case Or or:
-                AnalyzeNodeTree(context, or.LeftHandValue);
-                AnalyzeNodeTree(context, or.RightHandValue);
-                break;
-            case Not not:
-                AnalyzeNodeTree(context, not.Value);
-                break;
-            case Equal eq:
-                AnalyzeNodeTree(context, eq.LeftHandValue);
-                AnalyzeNodeTree(context, eq.RightHandValue);
-                break;
-            case NotEqual ne:
-                AnalyzeNodeTree(context, ne.LeftHandValue);
-                AnalyzeNodeTree(context, ne.RightHandValue);
-                break;
-            case LessThan lt:
-                AnalyzeNodeTree(context, lt.LeftHandValue);
-                AnalyzeNodeTree(context, lt.RightHandValue);
-                break;
-            case LessThanOrEqual lte:
-                AnalyzeNodeTree(context, lte.LeftHandValue);
-                AnalyzeNodeTree(context, lte.RightHandValue);
-                break;
-            case GreaterThan gt:
-                AnalyzeNodeTree(context, gt.LeftHandValue);
-                AnalyzeNodeTree(context, gt.RightHandValue);
-                break;
-            case GreaterThanOrEqual gte:
-                AnalyzeNodeTree(context, gte.LeftHandValue);
-                AnalyzeNodeTree(context, gte.RightHandValue);
-                break;
-            case MemberAccess ma:
-                AnalyzeNodeTree(context, ma.Value);
-                break;
-            case MethodInvocation mi:
-                AnalyzeNodeTree(context, mi.Target);
-                foreach (var arg in mi.Arguments)
-                    AnalyzeNodeTree(context, arg);
-                break;
-            case IndexAccess ia:
-                AnalyzeNodeTree(context, ia.Value);
-                foreach (var arg in ia.Arguments)
-                    AnalyzeNodeTree(context, arg);
-                break;
-            case TypeCast tc:
-                AnalyzeNodeTree(context, tc.Operand);
-                break;
-            case Conditional cond:
-                AnalyzeNodeTree(context, cond.Condition);
-                AnalyzeNodeTree(context, cond.IfTrue);
-                AnalyzeNodeTree(context, cond.IfFalse);
-                break;
-            case Coalesce coal:
-                AnalyzeNodeTree(context, coal.LeftHandValue);
-                AnalyzeNodeTree(context, coal.RightHandValue);
-                break;
-            case Assignment assign:
-                AnalyzeNodeTree(context, assign.Destination);
-                AnalyzeNodeTree(context, assign.Value);
-                break;
-            case Block block:
-                foreach (var expr in block.Nodes)
-                    AnalyzeNodeTree(context, expr);
-                foreach (var v in block.Variables)
-                    AnalyzeNodeTree(context, v);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// TEMPORARY: Converts a Parameter node to a ParameterExpression for use with Expression.Lambda.
-    /// In the new middleware architecture, use LinqExpressionTransformer.GetParameterExpression(parameter, context) instead.
-    /// </summary>
-    [Obsolete("Use LinqExpressionTransformer.GetParameterExpression(parameter, context) with the interpretation context instead.")]
-    public static Exprs.ParameterExpression ToParameterExpression(this Parameter parameter)
-    {
-        throw new InvalidOperationException(
-            "ToParameterExpression() requires an InterpretationContext. " +
-            "Use LinqExpressionTransformer.GetParameterExpression(parameter, context) instead.");
-    }
-
-    /// <summary>
-    /// TEMPORARY: Gets the type definition of a node.
-    /// This is a compatibility shim for existing code.
-    /// In the middleware architecture, type resolution happens via semantic analysis middleware.
-    /// </summary>
-    /// <param name="node">The node to get the type of.</param>
-    /// <param name="context">The interpretation context.</param>
-    /// <returns>The type definition, or null if unknown.</returns>
-    [Obsolete("Use semantic analysis middleware to resolve types. This method will be removed when migration is complete.")]
-    public static ITypeDefinition? GetTypeDefinition(this Node node, InterpretationContext context)
-    {
-        // Use semantic analysis to resolve type
-        var semanticMiddleware = new SemanticAnalysis.SemanticAnalysisMiddleware<ITypeDefinition>();
-        
-        // Run semantic analysis
-        semanticMiddleware.Transform(context, node, (ctx, n) => null!);
-        
-        // Return the resolved type
-        return context.GetResolvedType(node);
-    }
+    public static Constant Wrap(object? value) => new Constant(value);
 
     #endregion
 }

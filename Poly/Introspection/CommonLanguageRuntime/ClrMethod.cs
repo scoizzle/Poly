@@ -1,9 +1,5 @@
 using System.Reflection;
 
-using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
-
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>
@@ -66,17 +62,6 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     /// Gets whether this method is static.
     /// </summary>
     public override bool IsStatic => _methodInfo.IsStatic;
-
-    /// <summary>
-    /// Creates an accessor that invokes this method on <paramref name="instance"/>
-    /// with the supplied <paramref name="arguments"/>.
-    /// </summary>
-    public override Node GetMemberAccessor(Node instance, params Node[]? arguments)
-    {
-        // Convert null to empty array for parameterless method calls
-        var args = arguments ?? Array.Empty<Node>();
-        return new ClrMethodInvocationInterpretation(this, instance, args.ToArray());
-    }
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}({string.Join(", ", _parameters)})";
 }

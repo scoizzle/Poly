@@ -7,13 +7,10 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// Compiles to <see cref="Expr.Convert"/> which performs an explicit type conversion.
 /// Corresponds to the <c>(TargetType)value</c> cast operator in C#.
 /// For checked conversions that throw on overflow, use <see cref="Expr.ConvertChecked"/>.
-/// Type information is resolved by semantic analysis middleware.
+/// The target type is specified by name; semantic analysis middleware resolves it to an ITypeDefinition.
 /// </remarks>
-public sealed record TypeCast(Node Operand, ITypeDefinition TargetType, bool IsChecked = false) : Operator
+public sealed record TypeCast(Node Operand, string TargetTypeName, bool IsChecked = false) : Operator
 {
     /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
-    /// <inheritdoc />
-    public override string ToString() => $"(({TargetType.Name}){Operand})";
+    public override string ToString() => $"(({TargetTypeName}){Operand})";
 }

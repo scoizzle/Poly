@@ -1,5 +1,3 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-
 namespace Poly.Interpretation;
 
 /// <summary>
@@ -8,4 +6,4 @@ namespace Poly.Interpretation;
 /// <param name="context">The interpretation context containing type information and state.</param>
 /// <param name="node">The AST node to transform.</param>
 /// <returns>The transformation result.</returns>
-public delegate TResult TransformationDelegate<TResult>(InterpretationContext context, Node node);
+public delegate TResult TransformationDelegate<TResult>(InterpretationContext<TResult> context, Node node);

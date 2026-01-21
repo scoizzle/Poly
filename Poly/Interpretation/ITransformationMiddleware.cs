@@ -1,5 +1,3 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-
 namespace Poly.Interpretation;
 
 /// <summary>
@@ -13,7 +11,8 @@ public interface ITransformationMiddleware<TResult>
     /// </summary>
     /// <param name="context">The interpretation context.</param>
     /// <param name="node">The AST node to transform.</param>
+    /// <param name="transform">The root transformation delegate for recursively processing child nodes.</param>
     /// <param name="next">The next middleware in the pipeline.</param>
     /// <returns>The transformation result.</returns>
-    TResult Transform(InterpretationContext context, Node node, TransformationDelegate<TResult> next);
+    TResult Transform(InterpretationContext<TResult> context, Node node, TransformationDelegate<TResult> next);
 }

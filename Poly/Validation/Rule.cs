@@ -1,6 +1,4 @@
 using System.Text.Json.Serialization;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation;
 
 namespace Poly.Validation;
 

@@ -1,5 +1,3 @@
-using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 
 namespace Poly.Validation.Rules;

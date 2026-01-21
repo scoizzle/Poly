@@ -1,6 +1,3 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Introspection;
-
 namespace Poly.Interpretation;
 
 /// <summary>
@@ -20,15 +17,17 @@ public sealed class Interpreter<TResult>
     /// <summary>
     /// Interprets an AST node by running it through the configured middleware pipeline.
     /// </summary>
-    public TResult Interpret(Node root)
+    public InterpretationResult<TResult> Interpret(Node root)
     {
-        var context = new InterpretationContext(_typeProvider);
         var pipeline = BuildPipeline();
-        return pipeline(context, root);
+        var context = new InterpretationContext<TResult>(_typeProvider, pipeline);
+        var result = pipeline(context, root);
+        return new InterpretationResult<TResult>(context, result);
     }
 
     private TransformationDelegate<TResult> BuildPipeline()
     {
+        TransformationDelegate<TResult> pipeline = null!;
         TransformationDelegate<TResult> next = (ctx, node) =>
             throw new InvalidOperationException("No middleware handled this node.");
 
@@ -40,6 +39,7 @@ public sealed class Interpreter<TResult>
             next = (ctx, node) => middleware.Transform(ctx, node, nextDelegate);
         }
 
-        return next;
+        pipeline = next;
+        return pipeline;
     }
 }

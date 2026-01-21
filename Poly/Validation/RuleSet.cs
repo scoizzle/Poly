@@ -1,5 +1,3 @@
-using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.SemanticAnalysis;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Validation.Rules;
@@ -21,33 +19,33 @@ public sealed class RuleSet<T> {
         CombinedRules = new AndRule(rules);
 
         // Build the interpretation tree
-        var interpretationContext = new InterpretationContext();
-        var registry = ClrTypeDefinitionRegistry.Shared;
-        var typeDefinition = registry.GetTypeDefinition<T>()
-            ?? throw new InvalidOperationException($"Type definition for {typeof(T).Name} not found.");
+        // var interpretationContext = new InterpretationContext();
+        // var registry = ClrTypeDefinitionRegistry.Shared;
+        // var typeDefinition = registry.GetTypeDefinition<T>()
+        //     ?? throw new InvalidOperationException($"Type definition for {typeof(T).Name} not found.");
 
-        var buildingContext = new RuleBuildingContext(interpretationContext, typeDefinition);
-        RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
+        // var buildingContext = new RuleBuildingContext(interpretationContext, typeDefinition);
+        // RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
 
-        // Build the expression tree using middleware pattern
-        // Run semantic analysis on the tree
-        var semanticMiddleware = new SemanticAnalysisMiddleware<Expr>();
-        semanticMiddleware.Transform(interpretationContext, RuleSetInterpretation, (ctx, n) => Expr.Empty());
+        // // Build the expression tree using middleware pattern
+        // // Run semantic analysis on the tree
+        // var semanticMiddleware = new SemanticAnalysisMiddleware<Expr>();
+        // semanticMiddleware.Transform(interpretationContext, RuleSetInterpretation, (ctx, n) => Expr.Empty());
         
-        // Transform to LINQ expression
-        var transformer = new LinqExpressionTransformer();
-        transformer.SetContext(interpretationContext);
+        // // Transform to LINQ expression
+        // var transformer = new LinqExpressionTransformer();
+        // transformer.SetContext(interpretationContext);
         
-        // Ensure the entry point parameter is registered with transformer
-        // even when there are no rules (empty rule sets still need the parameter)
-        buildingContext.Value.Transform(transformer);
+        // // Ensure the entry point parameter is registered with transformer
+        // // even when there are no rules (empty rule sets still need the parameter)
+        // buildingContext.Value.Transform(transformer);
         
-        NodeTree = RuleSetInterpretation.Transform(transformer);
+        // NodeTree = RuleSetInterpretation.Transform(transformer);
 
-        // Compile to a predicate - collect parameter expressions from transformer
-        var parameters = transformer.ParameterExpressions.ToArray();
-        var lambda = Expr.Lambda<Predicate<T>>(NodeTree, parameters);
-        Predicate = lambda.Compile();
+        // // Compile to a predicate - collect parameter expressions from transformer
+        // var parameters = transformer.ParameterExpressions.ToArray();
+        // var lambda = Expr.Lambda<Predicate<T>>(NodeTree, parameters);
+        // Predicate = lambda.Compile();
     }
 
     /// <summary>

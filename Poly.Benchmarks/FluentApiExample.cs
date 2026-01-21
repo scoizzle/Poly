@@ -1,166 +1,175 @@
-using System;
-using System.Collections.Generic;
-using System.Linq.Expressions;
+// using System;
+// using System.Collections.Generic;
+// using System.Linq.Expressions;
 
-using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Expr = System.Linq.Expressions.Expression;
+// using Poly.Interpretation;
+// using Poly.Interpretation.AbstractSyntaxTree;
+// using Poly.Interpretation.SemanticAnalysis;
+// using Poly.Interpretation.LinqExpressions;
+// using Expr = System.Linq.Expressions.Expression;
 
-using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
+// using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
-namespace Poly.Benchmarks;
+// namespace Poly.Benchmarks;
 
-/// <summary>
-/// Demonstrates the fluent API for building complex expression node expressions.
-/// </summary>
-public static class FluentApiExample {
-    public static void Run()
-    {
-        Console.WriteLine("=== Fluent API Examples ===\n");
+// /// <summary>
+// /// Demonstrates the fluent API for building complex expression node expressions.
+// /// </summary>
+// public static class FluentApiExample {
+//     public static void Run()
+//     {
+//         Console.WriteLine("=== Fluent API Examples ===\n");
 
-        SimpleArithmetic();
-        ConditionalLogic();
-        ComplexExpressions();
-        NullCoalescing();
-        TypeOperations();
-        MemberAndIndexAccess();
-    }
+//         SimpleArithmetic();
+//         ConditionalLogic();
+//         ComplexExpressions();
+//         NullCoalescing();
+//         TypeOperations();
+//         MemberAndIndexAccess();
+//     }
 
-    private static void SimpleArithmetic()
-    {
-        Console.WriteLine("1. Simple Arithmetic (x * 2 + 5):");
+//     private static void SimpleArithmetic()
+//     {
+//         Console.WriteLine("1. Simple Arithmetic (x * 2 + 5):");
 
-        var context = new InterpretationContext();
-        var x = context.AddParameter<int>("x");
+//         var interpreter = new InterpreterBuilder<Expr>()
+//             .WithSemanticAnalysis()
+//             .WithLinqExpressionCompilation()
+//             .Build();
 
-        // Fluent API: x * 2 + 5
-        var expr = x.Multiply(Wrap(2)).Add(Wrap(5));
+//         var x = context.AddParameter<int>("x");
 
-        var compiled = CompileExpression<int, int>(context, expr, x);
+//         // Fluent API: x * 2 + 5
+//         var ast = new Parameter("x", "System.Int32").Multiply(Wrap(2)).Add(Wrap(5));
+        
+//         var expr = interpreter.Interpret(ast, ctx => {
+//             ctx.AddParameter<int>("x");
+//         });
 
-        Console.WriteLine($"   x = 10: {compiled(10)}");  // 25
-        Console.WriteLine($"   x = 7:  {compiled(7)}");   // 19
-        Console.WriteLine();
-    }
+//         var compiled = CompileExpression<int, int>(context, expr, x);
 
-    private static void ConditionalLogic()
-    {
-        Console.WriteLine("2. Conditional Logic (x > 100 ? x * 2 : x + 10):");
+//         Console.WriteLine($"   x = 10: {compiled(10)}");  // 25
+//         Console.WriteLine($"   x = 7:  {compiled(7)}");   // 19
+//         Console.WriteLine();
+//     }
 
-        var context = new InterpretationContext();
-        var x = context.AddParameter<int>("x");
+//     private static void ConditionalLogic()
+//     {
+//         Console.WriteLine("2. Conditional Logic (x > 100 ? x * 2 : x + 10):");
 
-        // Fluent API: x > 100 ? x * 2 : x + 10
-        var condition = x.GreaterThan(Wrap(100));
-        var ifTrue = x.Multiply(Wrap(2));
-        var ifFalse = x.Add(Wrap(10));
-        var expr = condition.Conditional(ifTrue, ifFalse);
+//         var context = new InterpretationContext();
+//         var x = context.AddParameter<int>("x");
 
-        var compiled = CompileExpression<int, int>(context, expr, x);
+//         // Fluent API: x > 100 ? x * 2 : x + 10
+//         var condition = x.GreaterThan(Wrap(100));
+//         var ifTrue = x.Multiply(Wrap(2));
+//         var ifFalse = x.Add(Wrap(10));
+//         var expr = condition.Conditional(ifTrue, ifFalse);
 
-        Console.WriteLine($"   x = 150: {compiled(150)}");  // 300
-        Console.WriteLine($"   x = 50:  {compiled(50)}");   // 60
-        Console.WriteLine();
-    }
+//         var compiled = CompileExpression<int, int>(context, expr, x);
 
-    private static void ComplexExpressions()
-    {
-        Console.WriteLine("3. Complex Expression ((x + y) > 50 && (x * y) < 1000):");
+//         Console.WriteLine($"   x = 150: {compiled(150)}");  // 300
+//         Console.WriteLine($"   x = 50:  {compiled(50)}");   // 60
+//         Console.WriteLine();
+//     }
 
-        var context = new InterpretationContext();
-        var x = context.AddParameter<int>("x");
-        var y = context.AddParameter<int>("y");
+//     private static void ComplexExpressions()
+//     {
+//         Console.WriteLine("3. Complex Expression ((x + y) > 50 && (x * y) < 1000):");
 
-        // Fluent API: (x + y) > 50 && (x * y) < 1000
-        var sum = x.Add(y);
-        var product = x.Multiply(y);
-        var condition1 = sum.GreaterThan(Wrap(50));
-        var condition2 = product.LessThan(Wrap(1000));
-        var expr = condition1.And(condition2);
+//         var context = new InterpretationContext();
+//         var x = context.AddParameter<int>("x");
+//         var y = context.AddParameter<int>("y");
 
-        var compiled = CompileExpression<int, int, bool>(context, expr, x, y);
+//         // Fluent API: (x + y) > 50 && (x * y) < 1000
+//         var sum = x.Add(y);
+//         var product = x.Multiply(y);
+//         var condition1 = sum.GreaterThan(Wrap(50));
+//         var condition2 = product.LessThan(Wrap(1000));
+//         var expr = condition1.And(condition2);
 
-        Console.WriteLine($"   x = 30, y = 30: {compiled(30, 30)}");  // true (60 > 50 && 900 < 1000)
-        Console.WriteLine($"   x = 10, y = 10: {compiled(10, 10)}");  // false (20 < 50)
-        Console.WriteLine($"   x = 40, y = 40: {compiled(40, 40)}");  // false (1600 > 1000)
-        Console.WriteLine();
-    }
+//         var compiled = CompileExpression<int, int, bool>(context, expr, x, y);
 
-    private static void NullCoalescing()
-    {
-        Console.WriteLine("4. Null Coalescing (x ?? 42):");
+//         Console.WriteLine($"   x = 30, y = 30: {compiled(30, 30)}");  // true (60 > 50 && 900 < 1000)
+//         Console.WriteLine($"   x = 10, y = 10: {compiled(10, 10)}");  // false (20 < 50)
+//         Console.WriteLine($"   x = 40, y = 40: {compiled(40, 40)}");  // false (1600 > 1000)
+//         Console.WriteLine();
+//     }
 
-        var context = new InterpretationContext();
-        var x = context.AddParameter<int?>("x");
+//     private static void NullCoalescing()
+//     {
+//         Console.WriteLine("4. Null Coalescing (x ?? 42):");
 
-        // Fluent API: x ?? 42
-        var expr = x.Coalesce(Wrap(42));
+//         var context = new InterpretationContext();
+//         var x = context.AddParameter<int?>("x");
 
-        var compiled = CompileExpression<int?, int>(context, expr, x);
+//         // Fluent API: x ?? 42
+//         var expr = x.Coalesce(Wrap(42));
 
-        Console.WriteLine($"   x = 100:  {compiled(100)}");   // 100
-        Console.WriteLine($"   x = null: {compiled(null)}");  // 42
-        Console.WriteLine();
-    }
+//         var compiled = CompileExpression<int?, int>(context, expr, x);
 
-    private static void TypeOperations()
-    {
-        Console.WriteLine("5. Type Operations ((double)x + 0.5):");
+//         Console.WriteLine($"   x = 100:  {compiled(100)}");   // 100
+//         Console.WriteLine($"   x = null: {compiled(null)}");  // 42
+//         Console.WriteLine();
+//     }
 
-        var context = new InterpretationContext();
-        var x = context.AddParameter<int>("x");
-        var doubleType = context.GetTypeDefinition<double>()!;
+//     private static void TypeOperations()
+//     {
+//         Console.WriteLine("5. Type Operations ((double)x + 0.5):");
 
-        // Fluent API: (double)x + 0.5
-        var expr = x.CastTo(doubleType).Add(Wrap(0.5));
+//         var context = new InterpretationContext();
+//         var x = context.AddParameter<int>("x");
 
-        var compiled = CompileExpression<int, double>(context, expr, x);
+//         // Fluent API: (double)x + 0.5
+//         var expr = x.CastTo(nameof(Double)).Add(Wrap(0.5));
 
-        Console.WriteLine($"   x = 10: {compiled(10)}");  // 10.5
-        Console.WriteLine($"   x = 25: {compiled(25)}");  // 25.5
-        Console.WriteLine();
-    }
+//         var compiled = CompileExpression<int, double>(context, expr, x);
 
-    private static void MemberAndIndexAccess()
-    {
-        Console.WriteLine("6. Member and Index Access (list[0] + list.Count):");
+//         Console.WriteLine($"   x = 10: {compiled(10)}");  // 10.5
+//         Console.WriteLine($"   x = 25: {compiled(25)}");  // 25.5
+//         Console.WriteLine();
+//     }
 
-        var context = new InterpretationContext();
-        var list = context.AddParameter<List<int>>("list");
+//     private static void MemberAndIndexAccess()
+//     {
+//         Console.WriteLine("6. Member and Index Access (list[0] + list.Count):");
 
-        // Fluent API: list[0] + list.Count
-        var firstElement = list.Index(Wrap(0));
-        var count = list.GetMember("Count");
-        var expr = firstElement.Add(count);
+//         var context = new InterpretationContext();
+//         var list = context.AddParameter<List<int>>("list");
 
-        var compiled = CompileExpression<List<int>, int>(context, expr, list);
+//         // Fluent API: list[0] + list.Count
+//         var firstElement = list.Index(Wrap(0));
+//         var count = list.GetMember("Count");
+//         var expr = firstElement.Add(count);
 
-        var testList = new List<int> { 10, 20, 30 };
-        Console.WriteLine($"   list = [10, 20, 30]: {compiled(testList)}");  // 13 (10 + 3)
-        Console.WriteLine();
-    }
+//         var compiled = CompileExpression<List<int>, int>(context, expr, list);
 
-    private static Func<T, TResult> CompileExpression<T, TResult>(
-        InterpretationContext context,
-        Node expr,
-        Parameter param)
-    {
-        var expression = expr.BuildNode(context);
-        var paramExpr = param.ToParameterExpression();
-        var lambda = Expr.Lambda<Func<T, TResult>>(expression, paramExpr);
-        return lambda.Compile();
-    }
+//         var testList = new List<int> { 10, 20, 30 };
+//         Console.WriteLine($"   list = [10, 20, 30]: {compiled(testList)}");  // 13 (10 + 3)
+//         Console.WriteLine();
+//     }
 
-    private static Func<T1, T2, TResult> CompileExpression<T1, T2, TResult>(
-        InterpretationContext context,
-        Node expr,
-        Parameter param1,
-        Parameter param2)
-    {
-        var expression = expr.BuildNode(context);
-        var paramExpr1 = param1.ToParameterExpression();
-        var paramExpr2 = param2.ToParameterExpression();
-        var lambda = Expr.Lambda<Func<T1, T2, TResult>>(expression, paramExpr1, paramExpr2);
-        return lambda.Compile();
-    }
-}
+//     private static Func<T, TResult> CompileExpression<T, TResult>(
+//         InterpretationContext<TResult> context,
+//         Node expr,
+//         Parameter param)
+//     {
+//         var expression = expr.BuildNode(context);
+//         var paramExpr = param.ToParameterExpression();
+//         var lambda = Expr.Lambda<Func<T, TResult>>(expression, paramExpr);
+//         return lambda.Compile();
+//     }
+
+//     private static Func<T1, T2, TResult> CompileExpression<T1, T2, TResult>(
+//         InterpretationContext<TResult> context,
+//         Node expr,
+//         Parameter param1,
+//         Parameter param2)
+//     {
+//         var expression = expr.BuildNode(context);
+//         var paramExpr1 = param1.ToParameterExpression();
+//         var paramExpr2 = param2.ToParameterExpression();
+//         var lambda = Expr.Lambda<Func<T1, T2, TResult>>(expression, paramExpr1, paramExpr2);
+//         return lambda.Compile();
+//     }
+// }

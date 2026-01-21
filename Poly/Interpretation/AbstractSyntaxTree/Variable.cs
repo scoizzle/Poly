@@ -23,8 +23,5 @@ public sealed record Variable(string Name, Node? Value = null) : Node
     public Node? Value { get; set; } = Value;
 
     /// <inheritdoc />
-    public override TResult Transform<TResult>(ITransformer<TResult> transformer) => transformer.Transform(this);
-
-    /// <inheritdoc />
     public override string ToString() => Name;
 }

@@ -1,6 +1,5 @@
-using Poly.Introspection;
-using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Interpretation.SemanticAnalysis;
 
 namespace Poly.Interpretation;
 
@@ -18,75 +17,45 @@ namespace Poly.Interpretation;
 /// external synchronization.
 /// </para>
 /// </remarks>
-public sealed class InterpretationContext {
+public sealed record InterpretationContext<TResult> {
     private readonly TypeDefinitionProviderCollection _typeDefinitionProviderCollection;
-    private readonly List<Parameter> _parameters = new();
+    private readonly Dictionary<Type, object> _metadata;
+    private readonly List<Parameter> _parameters;
     private readonly Stack<VariableScope> _scopes;
     private readonly VariableScope _globalScope;
+    private readonly TransformationDelegate<TResult> _pipeline;
     private VariableScope _currentScope;
 
-    /// <summary>
-    /// Gets the type definition provider for resolving types during interpretation.
-    /// </summary>
-    public ITypeDefinitionProvider TypeProvider { get; }
-
-    /// <summary>
-    /// Variable bindings for the current scope.
-    /// </summary>
-    public Dictionary<string, ITypeDefinition> Variables { get; } = new();
-
-    /// <summary>
-    /// Type scope stack for nested scopes.
-    /// </summary>
-    public Stack<ITypeDefinition> ScopeStack { get; } = new();
-
-    /// <summary>
-    /// Request-scoped properties for storing middleware-specific data.
-    /// Similar to HttpContext.Items in ASP.NET Core.
-    /// </summary>
-    public Dictionary<string, object?> Properties { get; } = new();
-
-    /// <summary>
-    /// Cache of ParameterExpression objects for each Parameter node, ensuring the same instance
-    /// is reused when building expression trees within this context.
-    /// Uses reference equality so different Parameter nodes (even with same name) get different ParameterExpressions.
-    /// </summary>
-    internal Dictionary<Parameter, Exprs.ParameterExpression> ParameterExpressionCache { get; } = new();
-
-    /// <summary>
-    /// TEMPORARY: Gets or sets a transformer for compatibility with existing code.
-    /// In the middleware architecture, transformers are composed in the middleware pipeline.
-    /// This property is for backward compatibility during migration.
-    /// </summary>
-    [Obsolete("Use middleware interpreter with ITransformer implementations instead.")]
-    public ITransformer<Expr>? Transformer { get; set; }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="InterpretationContext"/> class.
+    /// Initializes a new instance of the <see cref="InterpretationContext{TResult}"/> class.
     /// </summary>
     /// <remarks>
     /// The context is initialized with the CLR type definition registry and a global scope.
     /// </remarks>
-    public InterpretationContext()
+    public InterpretationContext(TransformationDelegate<TResult> pipeline)
     {
+        ArgumentNullException.ThrowIfNull(pipeline);
+        _pipeline = pipeline;
+        _metadata = new();
         _typeDefinitionProviderCollection = new TypeDefinitionProviderCollection(ClrTypeDefinitionRegistry.Shared);
-        TypeProvider = _typeDefinitionProviderCollection;
-        _scopes = new Stack<VariableScope>();
-        _currentScope = _globalScope = new VariableScope();
+        _parameters = new();
+        _currentScope = _globalScope = new();
+        _scopes = new();
         _scopes.Push(_currentScope);
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="InterpretationContext"/> class with a custom type provider.
+    /// Initializes a new instance of the <see cref="InterpretationContext{TResult}"/> class with a custom type provider.
     /// </summary>
-    public InterpretationContext(ITypeDefinitionProvider typeProvider)
+    public InterpretationContext(ITypeDefinitionProvider typeProvider, TransformationDelegate<TResult> pipeline) : this(pipeline)
     {
-        TypeProvider = typeProvider ?? throw new ArgumentNullException(nameof(typeProvider));
-        _typeDefinitionProviderCollection = new TypeDefinitionProviderCollection(ClrTypeDefinitionRegistry.Shared);
-        _scopes = new Stack<VariableScope>();
-        _currentScope = _globalScope = new VariableScope();
-        _scopes.Push(_currentScope);
+        ArgumentNullException.ThrowIfNull(typeProvider);
+        _typeDefinitionProviderCollection.Add(typeProvider);
     }
+
+    /// <summary>
+    /// Executes the interpretation pipeline on the given AST node.
+    /// </summary>
+    public TResult Transform(Node node) => _pipeline(this, node);
 
 
     /// <summary>
@@ -96,9 +65,62 @@ public sealed class InterpretationContext {
     public int MaxScopeDepth { get; set; } = 256;
 
     /// <summary>
-    /// Gets a read-only collection of all parameters registered in this context.
+    /// Stores strongly-typed metadata contributed by middleware.
+    /// Each middleware can define its own metadata type without coupling to others.
     /// </summary>
-    public IEnumerable<Parameter> Parameters => _parameters.AsReadOnly();
+    /// <typeparam name="TMetadata">The metadata type to store.</typeparam>
+    /// <param name="data">The metadata instance.</param>
+    /// <exception cref="ArgumentNullException">Thrown when data is null.</exception>
+    public void SetMetadata<TMetadata>(TMetadata data) where TMetadata : class
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        _metadata[typeof(TMetadata)] = data;
+    }
+
+    /// <summary>
+    /// Retrieves strongly-typed metadata by type.
+    /// </summary>
+    /// <typeparam name="TMetadata">The metadata type to retrieve.</typeparam>
+    /// <returns>The metadata instance if it exists; otherwise, null.</returns>
+    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class
+    {
+        return _metadata.TryGetValue(typeof(TMetadata), out var data) ? (TMetadata)data : null;
+    }
+
+
+    /// <summary>
+    /// Retrieves strongly-typed metadata by type.
+    /// </summary>
+    /// <typeparam name="TMetadata">The metadata type to retrieve.</typeparam>
+    /// <returns>The metadata instance if it exists; otherwise, null.</returns>
+    public TMetadata GetOrAddMetadata<TMetadata>(Func<TMetadata> factory) where TMetadata : class
+    {
+        if (!_metadata.TryGetValue(typeof(TMetadata), out var data)) {
+            data = factory();
+            _metadata[typeof(TMetadata)] = data;
+        }
+
+        return (TMetadata)data;
+    }
+
+    /// <summary>
+    /// Checks whether metadata of a given type has been set.
+    /// </summary>
+    /// <typeparam name="TMetadata">The metadata type to check for.</typeparam>
+    /// <returns>True if metadata of this type exists; otherwise, false.</returns>
+    public bool HasMetadata<TMetadata>() where TMetadata : class
+    {
+        return _metadata.ContainsKey(typeof(TMetadata));
+    }
+
+    /// <summary>
+    /// Removes metadata of a given type.
+    /// </summary>
+    /// <typeparam name="TMetadata">The metadata type to remove.</typeparam>
+    public void RemoveMetadata<TMetadata>() where TMetadata : class
+    {
+        _metadata.Remove(typeof(TMetadata));
+    }
 
     /// <summary>
     /// Adds a custom type definition provider to this context.
@@ -106,7 +128,7 @@ public sealed class InterpretationContext {
     /// <param name="provider">The type definition provider to add.</param>
     public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider)
     {
-        _typeDefinitionProviderCollection.AddProvider(provider);
+        _typeDefinitionProviderCollection.Add(provider);
     }
 
     /// <summary>
@@ -186,15 +208,17 @@ public sealed class InterpretationContext {
     /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="type"/> is <c>null</c>.</exception>
     /// <remarks>
-    /// The parameter is added to the global scope as a variable so it can be referenced by name.
+    /// Creates a Parameter node (AST) and stores its type information through the semantic analysis system.
+    /// The Parameter node itself remains pure syntax; type resolution flows through context.SetResolvedType.
     /// </remarks>
     public Parameter AddParameter(string name, ITypeDefinition type)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(type);
 
-        Parameter param = new Parameter(name, type);
+        Parameter param = new Parameter(name);
         _parameters.Add(param);
+        this.SetResolvedType(param, type);
         _globalScope.SetVariable(name, param);
         return param;
     }
@@ -241,41 +265,5 @@ public sealed class InterpretationContext {
 
         _scopes.Pop();
         _currentScope = _scopes.Peek();
-    }
-
-    /// <summary>
-    /// Gets or creates a ParameterExpression for a given Parameter node.
-    /// Ensures the same Parameter node always maps to the same ParameterExpression within this context.
-    /// </summary>
-    /// <param name="parameter">The parameter node to get the expression for.</param>
-    /// <returns>The cached or newly created ParameterExpression.</returns>
-    internal Exprs.ParameterExpression GetOrCreateParameterExpression(Parameter parameter)
-    {
-        if (ParameterExpressionCache.TryGetValue(parameter, out var cached))
-        {
-            return cached;
-        }
-
-        var paramExpr = Exprs.Expression.Parameter(parameter.Type.ReflectedType, parameter.Name);
-        ParameterExpressionCache[parameter] = paramExpr;
-        return paramExpr;
-    }
-
-    /// <summary>
-    /// Gets the parameter expressions for all registered parameters.
-    /// </summary>
-    /// <returns>An enumerable of parameter expressions.</returns>
-    [Obsolete("Use the middleware interpreter instead.")]
-    public IEnumerable<Exprs.ParameterExpression> GetParameterNodes()
-    {
-        var transformer = new LinqExpressionTransformer();
-        foreach (var param in _parameters)
-        {
-            var expr = param.BuildNode(this);
-            if (expr is Exprs.ParameterExpression paramExpr)
-            {
-                yield return paramExpr;
-            }
-        }
     }
 }

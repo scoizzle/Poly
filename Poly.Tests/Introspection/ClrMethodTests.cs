@@ -5,6 +5,7 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Tests.Introspection;
 
 public class ClrMethodTests {
+    [Test]
     public async Task ToStringMethod_HasCorrectProperties()
     {
         var registry = ClrTypeDefinitionRegistry.Shared;

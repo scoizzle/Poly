@@ -23,22 +23,14 @@ public class MiddlewareInterpreterIntegrationTests
     {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
-        var xExpr = x.GetParameterExpression();
 
         // Act - Interpret first AST: x + 10
         var add10 = new Add(x, Wrap(10));
-        var expr1 = add10.BuildExpression();
+        var compiled1 = add10.CompileLambda<Func<int, int>>((x, typeof(int)));
 
         // Interpret second AST: x * 2
         var mul2 = new Multiply(x, Wrap(2));
-        var expr2 = mul2.BuildExpression();
-
-        // Compile both expressions with the same parameter
-        var lambda1 = Expression.Lambda<Func<int, int>>(expr1, xExpr);
-        var lambda2 = Expression.Lambda<Func<int, int>>(expr2, xExpr);
-
-        var compiled1 = lambda1.Compile();
-        var compiled2 = lambda2.Compile();
+        var compiled2 = mul2.CompileLambda<Func<int, int>>((x, typeof(int)));
 
         // Assert
         await Assert.That(compiled1(5)).IsEqualTo(15);  // 5 + 10 = 15
@@ -57,15 +49,9 @@ public class MiddlewareInterpreterIntegrationTests
         var x = new Parameter("x", TypeReference.To<int>());
         var y = new Parameter("y", TypeReference.To<int>());
 
-        var xExpr = x.GetParameterExpression();
-        var yExpr = y.GetParameterExpression();
-
         // Act - Build AST: x + y
         var ast = new Add(x, y);
-        var expr = ast.BuildExpression();
-
-        var lambda = Expression.Lambda<Func<int, int, int>>(expr, xExpr, yExpr);
-        var compiled = lambda.Compile();
+        var compiled = ast.CompileLambda<Func<int, int, int>>((x, typeof(int)), (y, typeof(int)));
 
         // Assert
         await Assert.That(compiled(3, 7)).IsEqualTo(10);
@@ -121,17 +107,11 @@ public class MiddlewareInterpreterIntegrationTests
     {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
-        var xExpr = x.GetParameterExpression();
 
         // Act - Build and interpret: (x + 10) * 2
         var addTen = new Add(x, Wrap(10));
         var timesTwo = new Multiply(addTen, Wrap(2));
-
-        var expr = timesTwo.BuildExpression();
-
-        // Assert - Should compile and execute
-        var lambda = Expression.Lambda<Func<int, int>>(expr, xExpr);
-        var compiled = lambda.Compile();
+        var compiled = timesTwo.CompileLambda<Func<int, int>>((x, typeof(int)));
 
         await Assert.That(compiled(5)).IsEqualTo(30);   // (5 + 10) * 2 = 30
         await Assert.That(compiled(10)).IsEqualTo(40);  // (10 + 10) * 2 = 40
@@ -206,16 +186,12 @@ public class MiddlewareInterpreterIntegrationTests
     {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
-        var xExpr = x.GetParameterExpression();
 
         // Act - Build: ((x + 5) * 2) - 3
         var addFive = new Add(x, Wrap(5));
         var timesTwo = new Multiply(addFive, Wrap(2));
         var minusThree = new Subtract(timesTwo, Wrap(3));
-
-        var expr = minusThree.BuildExpression();
-        var lambda = Expression.Lambda<Func<int, int>>(expr, xExpr);
-        var compiled = lambda.Compile();
+        var compiled = minusThree.CompileLambda<Func<int, int>>((x, typeof(int)));
 
         // Assert
         await Assert.That(compiled(0)).IsEqualTo(7);    // ((0 + 5) * 2) - 3 = 7
@@ -231,14 +207,10 @@ public class MiddlewareInterpreterIntegrationTests
     {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int?>());
-        var xExpr = x.GetParameterExpression();
 
         // Act - Build: x ?? 42
         var ast = new Coalesce(x, Wrap(42));
-        var expr = ast.BuildExpression();
-
-        var lambda = Expression.Lambda<Func<int?, int>>(expr, xExpr);
-        var compiled = lambda.Compile();
+        var compiled = ast.CompileLambda<Func<int?, int>>((x, typeof(int?)));
 
         // Assert
         await Assert.That(compiled(null)).IsEqualTo(42);
@@ -328,13 +300,15 @@ public class MiddlewareInterpreterIntegrationTests
     {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
+        var node = new Add(x, x);
 
-        // Act - Get parameter expression twice
-        var xExpr1 = x.GetParameterExpression();
-        var xExpr2 = x.GetParameterExpression();
+        // Act
+        var (expr, parameters) = node.BuildExpressionWithParameters((x, typeof(int)));
+        var binary = (BinaryExpression)expr;
 
-        // Assert - Should be the same object (reference equality)
-        await Assert.That(ReferenceEquals(xExpr1, xExpr2)).IsTrue();
+        // Assert - Interpreter should reuse the same ParameterExpression instance
+        await Assert.That(ReferenceEquals(binary.Left, binary.Right)).IsTrue();
+        await Assert.That(ReferenceEquals(binary.Left, parameters[0])).IsTrue();
     }
 
     /// <summary>

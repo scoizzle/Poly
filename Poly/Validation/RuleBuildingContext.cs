@@ -1,15 +1,20 @@
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Validation;
 
 public sealed record RuleBuildingContext {
     private const string EntryPointName = "@value";
 
-    public RuleBuildingContext(InterpretationContext<Expression> interpretationContext, ITypeDefinition entryPointTypeDefinition)
+    public RuleBuildingContext(ITypeDefinition entryPointTypeDefinition)
     {
-        // Value = interpretationContext.AddParameter(EntryPointName, entryPointTypeDefinition);
+        ArgumentNullException.ThrowIfNull(entryPointTypeDefinition);
+
+        // Use the entry point type as a type hint to aid semantic analysis.
+        var typeName = entryPointTypeDefinition.FullName ?? entryPointTypeDefinition.Name;
+        Value = new Parameter(EntryPointName, new TypeReference(typeName));
     }
 
     /// <summary>

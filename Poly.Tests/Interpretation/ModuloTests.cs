@@ -64,9 +64,7 @@ public class ModuloTests
         var node = new Modulo(param1, param2);
 
         // Act
-        var expr = node.BuildExpression();
-        var paramExprs = new[] { param1.GetParameterExpression(), param2.GetParameterExpression() };
-        var compiled = Expr.Lambda<Func<int, int, int>>(expr, paramExprs).Compile();
+        var compiled = node.CompileLambda<Func<int, int, int>>((param1, typeof(int)), (param2, typeof(int)));
         var result = compiled(17, 5);
 
         // Assert

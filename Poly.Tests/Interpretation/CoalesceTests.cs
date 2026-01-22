@@ -47,9 +47,7 @@ public class CoalesceTests
         var node = new Coalesce(param, Wrap(99));
 
         // Act
-        var expr = node.BuildExpression();
-        var paramExpr = param.GetParameterExpression();
-        var compiled = Expr.Lambda<Func<int?, int>>(expr, paramExpr).Compile();
+        var compiled = node.CompileLambda<Func<int?, int>>((param, typeof(int?)));
 
         // Assert
         await Assert.That(compiled(50)).IsEqualTo(50);

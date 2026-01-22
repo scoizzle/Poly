@@ -154,9 +154,7 @@ public class NumericTypePromotionTests
         var node = new Add(param1, param2);
 
         // Act
-        var expr = node.BuildExpression();
-        var paramExprs = new[] { param1.GetParameterExpression(), param2.GetParameterExpression() };
-        var compiled = Expr.Lambda<Func<int, double, double>>(expr, paramExprs).Compile();
+        var compiled = node.CompileLambda<Func<int, double, double>>((param1, typeof(int)), (param2, typeof(double)));
         var result = compiled(10, 3.14);
 
         // Assert

@@ -56,12 +56,7 @@ public class ConditionalNodeTests
             param,
             new Constant("yes"),
             new Constant("no"));
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<bool, string>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<bool, string>>((param, typeof(bool)));
 
         // Assert
         await Assert.That(compiled(true)).IsEqualTo("yes");
@@ -78,12 +73,7 @@ public class ConditionalNodeTests
             comparison,
             new Constant(10),
             new Constant(0));
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(10)).IsEqualTo(10);
@@ -149,12 +139,9 @@ public class ConditionalNodeTests
         // Arrange - x ?? 100
         var param = new Parameter("x", TypeReference.To<int?>());
         var node = new Coalesce(param, new Constant(100));
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int?, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int?, int>>((param, typeof(int?)));
 
         // Assert
         await Assert.That(compiled(null)).IsEqualTo(100);
@@ -215,12 +202,9 @@ public class ConditionalNodeTests
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new UnaryMinus(param);
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(5)).IsEqualTo(-5);

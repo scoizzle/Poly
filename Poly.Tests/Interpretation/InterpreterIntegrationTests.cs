@@ -37,12 +37,7 @@ public class InterpreterIntegrationTests
         var param = new Parameter("x", TypeReference.To<int>());
         var multiply = new Multiply(param, new Constant(2));
         var node = new Add(multiply, new Constant(10));
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(5)).IsEqualTo(20);    // (5 * 2) + 10 = 20
@@ -59,14 +54,7 @@ public class InterpreterIntegrationTests
         var z = new Parameter("z", TypeReference.To<int>());
         var add = new Add(x, y);
         var node = new Multiply(add, z);
-        var xExpr = x.GetParameterExpression();
-        var yExpr = y.GetParameterExpression();
-        var zExpr = z.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int, int, int>>(expr, xExpr, yExpr, zExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int, int, int>>((x, typeof(int)), (y, typeof(int)), (z, typeof(int)));
 
         // Assert
         await Assert.That(compiled(2, 3, 4)).IsEqualTo(20);   // (2 + 3) * 4 = 20
@@ -83,12 +71,7 @@ public class InterpreterIntegrationTests
         var ifTrue = new Multiply(param, new Constant(2));
         var ifFalse = new Add(param, new Constant(5));
         var node = new Conditional(condition, ifTrue, ifFalse);
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(15)).IsEqualTo(30);    // 15 > 10: true -> 15 * 2 = 30
@@ -120,12 +103,9 @@ public class InterpreterIntegrationTests
         var param = new Parameter("x", TypeReference.To<int?>());
         var coalesce = new Coalesce(param, new Constant(10));
         var node = new Add(coalesce, new Constant(5));
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int?, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int?, int>>((param, typeof(int?)));
 
         // Assert
         await Assert.That(compiled(null)).IsEqualTo(15);    // (null ?? 10) + 5 = 15
@@ -159,12 +139,9 @@ public class InterpreterIntegrationTests
         var innerConditional = new Conditional(innerCondition, new Constant(100), new Constant(50));
         var outerCondition = new GreaterThan(param, new Constant(10));
         var node = new Conditional(outerCondition, innerConditional, new Constant(0));
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(25)).IsEqualTo(100);    // 25 > 10 && 25 > 20
@@ -222,15 +199,9 @@ public class InterpreterIntegrationTests
         var fourA = new Multiply(new Constant(4), a);
         var fourAC = new Multiply(fourA, c);
         var node = new Subtract(bSquared, fourAC);
-        
-        var bExpr = b.GetParameterExpression();
-        var aExpr = a.GetParameterExpression();
-        var cExpr = c.GetParameterExpression();
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int, int, int>>(expr, bExpr, aExpr, cExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int, int, int>>((b, typeof(int)), (a, typeof(int)), (c, typeof(int)));
 
         // Assert
         await Assert.That(compiled(5, 1, 6)).IsEqualTo(1);     // 25 - 24 = 1
@@ -259,12 +230,9 @@ public class InterpreterIntegrationTests
         // Arrange
         var param = new Parameter("name", TypeReference.To<string>());
         var node = new Add(new Constant("Hello, "), param);
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<string, string>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<string, string>>((param, typeof(string)));
 
         // Assert
         await Assert.That(compiled("Alice")).IsEqualTo("Hello, Alice");

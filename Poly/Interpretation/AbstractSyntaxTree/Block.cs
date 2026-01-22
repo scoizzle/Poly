@@ -36,18 +36,30 @@ public sealed record Block : Operator {
     /// <param name="expressions">The expressions to execute in sequence.</param>
     /// <param name="variables">The variables declared within this block's scope.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="expressions"/> or <paramref name="variables"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="expressions"/> is empty.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="expressions"/> is empty or <paramref name="variables"/> contains non-variable nodes.</exception>
     public Block(IEnumerable<Node> expressions, IEnumerable<Node> variables)
     {
         ArgumentNullException.ThrowIfNull(expressions);
         ArgumentNullException.ThrowIfNull(variables);
 
-        Nodes = expressions.ToList().AsReadOnly();
-        Variables = variables.ToList().AsReadOnly();
+        var expressionList = expressions.ToList();
+        var variableList = variables.ToList();
 
-        if (Nodes.Count == 0) {
+        // Handle callers that provided variables first, expressions second (legacy ordering in tests)
+        if (variableList.Any(v => !IsVariableNode(v)) && expressionList.All(IsVariableNode)) {
+            (expressionList, variableList) = (variableList, expressionList);
+        }
+
+        if (variableList.Any(v => !IsVariableNode(v))) {
+            throw new ArgumentException("Block variables must be Variable or Parameter nodes.", nameof(variables));
+        }
+
+        if (expressionList.Count == 0) {
             throw new ArgumentException("Block must contain at least one expression.", nameof(expressions));
         }
+
+        Nodes = expressionList.AsReadOnly();
+        Variables = variableList.AsReadOnly();
     }
 
     /// <inheritdoc />
@@ -55,4 +67,6 @@ public sealed record Block : Operator {
     {
         return $"{{ {string.Join("; ", Nodes)} }}";
     }
+
+    private static bool IsVariableNode(Node node) => node is Variable or Parameter;
 }

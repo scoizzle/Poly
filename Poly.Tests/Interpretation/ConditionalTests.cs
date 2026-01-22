@@ -48,9 +48,7 @@ public class ConditionalTests
         var node = new Conditional(param, Wrap(10), Wrap(20));
 
         // Act
-        var expr = node.BuildExpression();
-        var paramExpr = param.GetParameterExpression();
-        var compiled = Expr.Lambda<Func<bool, int>>(expr, paramExpr).Compile();
+        var compiled = node.CompileLambda<Func<bool, int>>((param, typeof(bool)));
 
         // Assert
         await Assert.That(compiled(true)).IsEqualTo(10);

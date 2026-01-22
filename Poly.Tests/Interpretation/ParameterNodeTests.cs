@@ -1,4 +1,5 @@
 using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -13,12 +14,9 @@ public class ParameterNodeTests
     {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = param.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = param.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(42)).IsEqualTo(42);
@@ -30,12 +28,9 @@ public class ParameterNodeTests
     {
         // Arrange
         var param = new Parameter("name", TypeReference.To<string>());
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = param.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<string, string>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = param.CompileLambda<Func<string, string>>((param, typeof(string)));
 
         // Assert
         await Assert.That(compiled("hello")).IsEqualTo("hello");
@@ -47,12 +42,9 @@ public class ParameterNodeTests
     {
         // Arrange
         var param = new Parameter("value", TypeReference.To<double>());
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = param.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<double, double>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = param.CompileLambda<Func<double, double>>((param, typeof(double)));
 
         // Assert
         await Assert.That(compiled(3.14)).IsEqualTo(3.14);
@@ -64,12 +56,9 @@ public class ParameterNodeTests
     {
         // Arrange
         var param = new Parameter("flag", TypeReference.To<bool>());
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = param.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<bool, bool>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = param.CompileLambda<Func<bool, bool>>((param, typeof(bool)));
 
         // Assert
         await Assert.That(compiled(true)).IsTrue();
@@ -82,13 +71,9 @@ public class ParameterNodeTests
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
         var y = new Parameter("y", TypeReference.To<int>());
-        var xExpr = x.GetParameterExpression();
-        var yExpr = y.GetParameterExpression();
 
         // Act - Just return the first parameter
-        var expr = x.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int, int>>(expr, xExpr, yExpr);
-        var compiled = lambda.Compile();
+        var compiled = x.CompileLambda<Func<int, int, int>>((x, typeof(int)), (y, typeof(int)));
 
         // Assert
         await Assert.That(compiled(10, 20)).IsEqualTo(10);
@@ -100,12 +85,9 @@ public class ParameterNodeTests
     {
         // Arrange
         var param = new Parameter("value");
-        var paramExpr = param.GetParameterExpression();
 
         // Act
-        var expr = param.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<object, object>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = param.CompileLambda<Func<object, object>>((param, typeof(object)));
 
         // Assert - Can accept any object
         await Assert.That(compiled(42)).IsEqualTo(42);
@@ -117,12 +99,14 @@ public class ParameterNodeTests
     {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
+        var node = new Add(param, param);
 
         // Act
-        var expr1 = param.GetParameterExpression();
-        var expr2 = param.GetParameterExpression();
+        var (expr, parameters) = node.BuildExpressionWithParameters((param, typeof(int)));
+        var binary = (System.Linq.Expressions.BinaryExpression)expr;
 
-        // Assert - Should return the same ParameterExpression instance
-        await Assert.That(ReferenceEquals(expr1, expr2)).IsTrue();
+        // Assert - Both uses of the parameter should share the same expression instance
+        await Assert.That(ReferenceEquals(binary.Left, binary.Right)).IsTrue();
+        await Assert.That(ReferenceEquals(binary.Left, parameters[0])).IsTrue();
     }
 }

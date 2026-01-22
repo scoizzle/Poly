@@ -62,9 +62,7 @@ public class TypeCastTests
         var node = new TypeCast(param, TypeReference.To<double>());
 
         // Act
-        var expr = node.BuildExpression();
-        var paramExpr = param.GetParameterExpression();
-        var compiled = Expr.Lambda<Func<int, double>>(expr, paramExpr).Compile();
+        var compiled = node.CompileLambda<Func<int, double>>((param, typeof(int)));
         var result = compiled(42);
 
         // Assert

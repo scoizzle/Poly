@@ -25,60 +25,6 @@ public static class NodeTestHelpers
     }
 
     /// <summary>
-    /// Helper to create a Parameter expression from a Parameter node.
-    /// Used to match the parameter expressions created during interpretation.
-    /// </summary>
-    public static Exprs.ParameterExpression GetParameterExpression(this Parameter param)
-    {
-        // Extract the type from the type hint if present, otherwise default to object
-        var type = GetTypeFromHint(param.TypeReference switch {
-            TypeReference tr => tr.TypeName,
-            null => null,
-            _ => param.TypeReference.ToString()
-        }) ?? typeof(object);
-
-        return Expr.Parameter(type, param.Name);
-    }
-
-    /// <summary>
-    /// Helper to create Parameter expressions for multiple parameters.
-    /// </summary>
-    public static Exprs.ParameterExpression[] GetParameterExpressions(params Parameter[] parameters)
-    {
-        return parameters.Select(p => p.GetParameterExpression()).ToArray();
-    }
-
-    /// <summary>
-    /// Resolves a type from a type hint string.
-    /// </summary>
-    private static Type? GetTypeFromHint(string? typeHint)
-    {
-        if (string.IsNullOrWhiteSpace(typeHint))
-            return null;
-
-        return typeHint switch
-        {
-            "System.Int32" => typeof(int),
-            "System.Double" => typeof(double),
-            "System.String" => typeof(string),
-            "System.Boolean" => typeof(bool),
-            "System.Decimal" => typeof(decimal),
-            "System.Single" => typeof(float),
-            "System.Int64" => typeof(long),
-            "System.Int16" => typeof(short),
-            "System.Byte" => typeof(byte),
-            "System.SByte" => typeof(sbyte),
-            "System.UInt32" => typeof(uint),
-            "System.UInt64" => typeof(ulong),
-            "System.DateTime" => typeof(DateTime),
-            "System.DateOnly" => typeof(DateOnly),
-            "System.TimeOnly" => typeof(TimeOnly),
-            "System.Guid" => typeof(Guid),
-            _ => null
-        };
-    }
-
-    /// <summary>
     /// Builds a LINQ Expression Tree from a node using the standard test interpreter pipeline.
     /// </summary>
     /// <param name="node">The node to transform.</param>
@@ -112,6 +58,43 @@ public static class NodeTestHelpers
         
         var result = interpreter.Interpret(node);
         return result.Value;
+    }
+
+    /// <summary>
+    /// Builds a LINQ Expression and collects generated parameter expressions based on declared parameters.
+    /// </summary>
+    /// <param name="node">The node to transform.</param>
+    /// <param name="parameters">Parameter declarations (node, CLR type) to register before interpretation.</param>
+    /// <returns>Tuple of expression and generated parameter expressions.</returns>
+    public static (Expr Expression, Exprs.ParameterExpression[] Parameters) BuildExpressionWithParameters(
+        this Node node,
+        params (Parameter param, Type clrType)[] parameters)
+    {
+        var interpreter = new InterpreterBuilder<Expr>()
+            .UseSemanticAnalysis()
+            .UseLinqExpressionCompilation()
+            .Build();
+
+        IInterpreterResultProvider<Expr> pipeline = interpreter;
+
+        foreach (var (param, clrType) in parameters)
+        {
+            pipeline = pipeline.WithParameter(param, clrType);
+        }
+
+        var result = pipeline.Interpret(node);
+        var parameterExpressions = result.GetParameters().ToArray();
+        return (result.Value, parameterExpressions);
+    }
+
+    /// <summary>
+    /// Compiles a node into a delegate, registering provided parameters and using emitted parameter expressions.
+    /// </summary>
+    public static TDelegate CompileLambda<TDelegate>(this Node node, params (Parameter param, Type clrType)[] parameters)
+        where TDelegate : Delegate
+    {
+        var (expression, parameterExpressions) = node.BuildExpressionWithParameters(parameters);
+        return (TDelegate)System.Linq.Expressions.Expression.Lambda(expression, parameterExpressions).Compile();
     }
 
 }

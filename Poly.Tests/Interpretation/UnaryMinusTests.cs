@@ -78,9 +78,7 @@ public class UnaryMinusTests
         var node = new UnaryMinus(param);
 
         // Act
-        var expr = node.BuildExpression();
-        var paramExpr = param.GetParameterExpression();
-        var compiled = Expr.Lambda<Func<int, int>>(expr, paramExpr).Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(10)).IsEqualTo(-10);
@@ -96,9 +94,7 @@ public class UnaryMinusTests
         var node = new UnaryMinus(new UnaryMinus(param));
 
         // Act
-        var expr = node.BuildExpression();
-        var paramExpr = param.GetParameterExpression();
-        var compiled = Expr.Lambda<Func<int, int>>(expr, paramExpr).Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(42)).IsEqualTo(42);
@@ -113,9 +109,7 @@ public class UnaryMinusTests
         var node = new UnaryMinus(new Add(param, Wrap(5)));
 
         // Act
-        var expr = node.BuildExpression();
-        var paramExpr = param.GetParameterExpression();
-        var compiled = Expr.Lambda<Func<int, int>>(expr, paramExpr).Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(10)).IsEqualTo(-15);

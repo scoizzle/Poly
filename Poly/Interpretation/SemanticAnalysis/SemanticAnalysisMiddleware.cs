@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
@@ -71,13 +73,11 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
             // Coalesce returns the type of the rightHandValue (non-nullable)
             Coalesce coal => ResolveNodeType(context, coal.RightHandValue),
 
-            // Block returns the type of the last expression
-            Block block => block.Nodes.Any()
-                ? ResolveNodeType(context, block.Nodes.Last())
-                : null,
+            // Block returns the type of the last expression and seeds variable types from assignments
+            Block block => ResolveBlockType(context, block),
 
             // Assignment returns the type of the value being assigned
-            Assignment assign => ResolveNodeType(context, assign.Value),
+            Assignment assign => ResolveAssignmentType(context, assign),
 
             _ => null
         };
@@ -94,9 +94,11 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
         if (leftType == null || rightType == null)
             return null;
 
+        if (context is InterpretationContext<Expression> expressionContext) {
+            return NumericTypePromotion.GetPromotedType(expressionContext, leftType, rightType);
+        }
+
         return leftType;
-        // TODO: Numeric type promotion, maybe as a middleware?!
-        //return NumericTypePromotion.GetPromotedType(context, leftType, rightType);
     }
 
     private static ITypeDefinition? ResolveMemberAccessType(
@@ -163,6 +165,45 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
         }
 
         return null;
+    }
+
+    private static ITypeDefinition? ResolveAssignmentType(
+        InterpretationContext<TResult> context,
+        Assignment assignment)
+    {
+        var valueType = ResolveNodeType(context, assignment.Value);
+
+        if (assignment.Destination is Variable variable && valueType != null) {
+            context.SetResolvedType(variable, valueType);
+        }
+
+        return valueType;
+    }
+
+    private static ITypeDefinition? ResolveBlockType(
+        InterpretationContext<TResult> context,
+        Block block)
+    {
+        foreach (var variable in block.Variables.OfType<Variable>()) {
+            var firstAssignment = block.Nodes.OfType<Assignment>().FirstOrDefault(a => ReferenceEquals(a.Destination, variable));
+
+            if (firstAssignment != null) {
+                var resolved = ResolveNodeType(context, firstAssignment.Value);
+                if (resolved != null) {
+                    context.SetResolvedType(variable, resolved);
+                }
+            }
+            else if (variable.Value is not null) {
+                var resolved = ResolveNodeType(context, variable.Value);
+                if (resolved != null) {
+                    context.SetResolvedType(variable, resolved);
+                }
+            }
+        }
+
+        return block.Nodes.Any()
+            ? ResolveNodeType(context, block.Nodes.Last())
+            : null;
     }
 
     private static ITypeDefinition? ResolveParameterType(InterpretationContext<TResult> context, Parameter parameter)

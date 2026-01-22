@@ -32,12 +32,7 @@ public class ArithmeticNodeTests
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Add(param, new Constant(10));
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(5)).IsEqualTo(15);
@@ -96,12 +91,7 @@ public class ArithmeticNodeTests
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Subtract(param, new Constant(5));
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(15)).IsEqualTo(10);
@@ -145,12 +135,7 @@ public class ArithmeticNodeTests
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Multiply(param, new Constant(3));
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(4)).IsEqualTo(12);
@@ -224,12 +209,7 @@ public class ArithmeticNodeTests
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Divide(param, new Constant(2));
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(10)).IsEqualTo(5);
@@ -273,12 +253,7 @@ public class ArithmeticNodeTests
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Modulo(param, new Constant(7));
-        var paramExpr = param.GetParameterExpression();
-
-        // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(15)).IsEqualTo(1);

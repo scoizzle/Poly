@@ -36,7 +36,7 @@ public static class NodeTestHelpers
             null => null,
             _ => param.TypeReference.ToString()
         }) ?? typeof(object);
-        
+
         return Expr.Parameter(type, param.Name);
     }
 

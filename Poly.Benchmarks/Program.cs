@@ -26,7 +26,10 @@ Interpreter<Expression> interpreter = new InterpreterBuilder<Expression>()
     .UseLinqExpressionCompilation()
     .Build();
 
-var result = interpreter.Interpret(body, e => e.SetResolvedType(param, e.TypeDefinitionProviders.GetTypeDefinition<string>()!));
+var result = interpreter
+    .WithParameter<string>(param)
+    .Interpret(body);
+
 var expr = result.Value;
 Func<string, string> compiled = Expression.Lambda<Func<string, string>>(expr, result.GetParameters()).Compile();
 string resultValue = compiled("hello");

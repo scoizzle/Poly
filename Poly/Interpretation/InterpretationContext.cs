@@ -1,3 +1,5 @@
+using System.IO.Pipelines;
+
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation;
@@ -16,7 +18,7 @@ namespace Poly.Interpretation;
 /// external synchronization.
 /// </para>
 /// </remarks>
-public sealed record InterpretationContext<TResult> {
+public sealed record InterpretationContext<TResult> : IInterpreterResultProvider<TResult> {
     private readonly TypeDefinitionProviderCollection _typeDefinitionProviderCollection;
     private readonly InterpretationMetadataStore _metadataStore;
     private readonly InterpretationScopeManager _scopeManager;
@@ -64,5 +66,31 @@ public sealed record InterpretationContext<TResult> {
     /// <summary>
     /// Executes the interpretation pipeline on the given AST node.
     /// </summary>
+    /// <param name="node">The AST node to interpret.</param>
+    /// <returns>The interpreted result.</returns>
     public TResult Transform(Node node) => _pipeline(this, node);
+
+    /// <summary>
+    /// Applies the specified context initializer to this context.
+    /// </summary>
+    /// <param name="contextInitializer">The action to initialize the context.</param>
+    /// <returns>The updated interpretation context.</returns>
+    public InterpretationContext<TResult> With(Action<InterpretationContext<TResult>> contextInitializer)
+    {
+        ArgumentNullException.ThrowIfNull(contextInitializer);
+        contextInitializer(this);
+        return this;
+    }
+
+    /// <summary>
+    /// Interprets an AST node by running it through the configured middleware pipeline.
+    /// </summary>
+    /// <param name="root">The AST node to interpret.</param>
+    /// <returns>The interpretation result.</returns>
+    public InterpretationResult<TResult> Interpret(Node root)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        var result = _pipeline(this, root);
+        return new InterpretationResult<TResult>(this, result);
+    }
 }

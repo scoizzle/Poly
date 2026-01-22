@@ -38,13 +38,40 @@ public static class LinqExpressionMiddlewareExtensions
             ArgumentNullException.ThrowIfNull(factory);
 
             var linqData = context.Metadata.GetOrAdd(static () => new LinqMetadata());
-            if (!linqData.Parameters.TryGetValue(param.Name, out var expr))
-            {
+            if (!linqData.Parameters.TryGetValue(param.Name, out var expr)) {
                 expr = factory();
                 linqData.Parameters[param.Name] = expr;
             }
             return expr;
         }
+    }
+
+    extension(IInterpreterResultProvider<Expression> context) {
+
+        /// <summary>
+        /// Adds a parameter to the LINQ expression metadata with the specified CLR type.
+        /// </summary>
+        /// <param name="param">The parameter to add.</param>
+        /// <param name="type">The CLR type of the parameter.</param>
+        /// <returns>The updated interpretation context.</returns>
+        public InterpretationContext<Expression> WithParameter(Parameter param, Type type)
+        {
+            ArgumentNullException.ThrowIfNull(param);
+            ArgumentNullException.ThrowIfNull(type);
+
+            return context.With(ctx => {
+                ctx.GetOrAddLinqParameter(param, () => Expression.Parameter(type, param.Name));
+            });
+        }
+
+        /// <summary>
+        /// Adds a parameter to the LINQ expression metadata with the specified CLR type.
+        /// </summary>
+        /// <typeparam name="TClr">The CLR type of the parameter.</typeparam>
+        /// <param name="param">The parameter to add.</param>
+        /// <returns>The updated interpretation context.</returns>
+        public InterpretationContext<Expression> WithParameter<TClr>(Parameter param) =>
+            context.WithParameter(param, typeof(TClr));
     }
 
     extension(InterpretationResult<Expression> result) {

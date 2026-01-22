@@ -15,17 +15,15 @@ namespace Poly.Interpretation.LinqExpressions;
 /// </summary>
 public sealed class LinqExpressionMiddleware : ITransformationMiddleware<Expression>
 {
-    private readonly Dictionary<string, ParameterExpression> _parameters = new();
-
+    private readonly Dictionary<string, ParameterExpression> _parameterExpressions = new();
     public Expression Transform(InterpretationContext<Expression> context, Node node, TransformationDelegate<Expression> next)
     {
 
         // Transform child nodes through the pipeline first, then compile to LINQ Expression
-        return node switch
-        {
+        return node switch {
             // Leaf nodes - no recursion needed
             Constant constant => Expression.Constant(constant.Value),
-            Variable variable => GetVariable(variable.Name),
+            Variable variable => variable.Value is null ? Expression.Constant(null) : context.Transform(variable.Value),
             Parameter parameter => CompileParameter(context, parameter),
 
             // Binary arithmetic operations - transform children first
@@ -66,6 +64,9 @@ public sealed class LinqExpressionMiddleware : ITransformationMiddleware<Express
                 Type.EmptyTypes,
                 method.Arguments.Select(arg => context.Transform(arg)).ToArray()),
 
+            // Type reference
+            TypeReference => Expression.Constant(null),
+
             // Type cast
             TypeCast cast => CompileTypeCast(context, cast),
 
@@ -96,21 +97,16 @@ public sealed class LinqExpressionMiddleware : ITransformationMiddleware<Express
         return typeDef.Type;
     }
 
-    private ParameterExpression GetVariable(string name)
-    {
-        if (!_parameters.TryGetValue(name, out var paramExpr))
-        {
-            throw new InvalidOperationException($"Variable '{name}' is not declared.");
-        }
-        return paramExpr;
-    }
-
     private ParameterExpression CompileParameter(InterpretationContext<Expression> context, Parameter parameter)
     {
+        if (_parameterExpressions.TryGetValue(parameter.Name, out var existingParam)) {
+            return existingParam;
+        }
+        
         var semanticProvider = context.GetSemanticProvider();
         var type = GetClrType(semanticProvider, parameter);
         var paramExpr = Expression.Parameter(type, parameter.Name);
-        _parameters[parameter.Name] = paramExpr;
+        _parameterExpressions[parameter.Name] = paramExpr;
         return paramExpr;
     }
 

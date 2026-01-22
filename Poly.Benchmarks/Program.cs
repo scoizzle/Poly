@@ -8,11 +8,11 @@ using Poly.Interpretation.LinqExpressions;
 using Poly.Validation;
 using Poly.Validation.Builders;
 
+var param = new Parameter("text");
+
 var body = new MethodInvocation(
-    new Constant("Hello, World!"),
-    "Substring",
-    new Constant(7),
-    new Constant(5)
+    param,
+    nameof(string.ToUpper)
 );
 
 Interpreter<Expression> interpreter = new InterpreterBuilder<Expression>()
@@ -22,14 +22,14 @@ Interpreter<Expression> interpreter = new InterpreterBuilder<Expression>()
         Console.WriteLine($"Generated Expression from AST Node: {expr}");
         return expr;
     })
-    .WithSemanticAnalysis()
-    .WithLinqExpressionCompilation()
+    .UseSemanticAnalysis()
+    .UseLinqExpressionCompilation()
     .Build();
 
 var result = interpreter.Interpret(body);
 var expr = result.Value;
-Func<string> compiled = Expression.Lambda<Func<string>>(expr).Compile();
-string resultValue = compiled();
+Func<string, string> compiled = Expression.Lambda<Func<string, string>>(expr).Compile();
+string resultValue = compiled("hello");
 Console.WriteLine($"Result of method invocation: {resultValue}");
 
 // Poly.Benchmarks.FluentBuilderExample.Run();

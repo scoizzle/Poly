@@ -200,40 +200,6 @@ public sealed record InterpretationContext<TResult> {
     }
 
     /// <summary>
-    /// Adds a new parameter to the context.
-    /// </summary>
-    /// <param name="name">The name of the parameter.</param>
-    /// <param name="type">The type definition of the parameter.</param>
-    /// <returns>The newly created parameter.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="type"/> is <c>null</c>.</exception>
-    /// <remarks>
-    /// Creates a Parameter node (AST) and stores its type information through the semantic analysis system.
-    /// The Parameter node itself remains pure syntax; type resolution flows through context.SetResolvedType.
-    /// </remarks>
-    public Parameter AddParameter(string name, ITypeDefinition type)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentNullException.ThrowIfNull(type);
-
-        Parameter param = new Parameter(name);
-        _parameters.Add(param);
-        this.SetResolvedType(param, type);
-        _globalScope.SetVariable(name, param);
-        return param;
-    }
-
-    /// <summary>
-    /// Adds a new parameter with a generic type to the context.
-    /// </summary>
-    /// <typeparam name="T">The type of the parameter.</typeparam>
-    /// <param name="name">The name of the parameter.</param>
-    /// <returns>The newly created parameter.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the type <typeparamref name="T"/> is not registered in the context.</exception>
-    public Parameter AddParameter<T>(string name) => AddParameter(name, GetTypeDefinition<T>()!);
-
-    /// <summary>
     /// Pushes a new scope onto the scope stack, making it the current scope.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when the maximum scope depth is exceeded.</exception>

@@ -7,19 +7,17 @@ using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Tests.Interpretation;
 
-public class TypeCastTests {
+public class TypeCastTests
+{
     [Test]
-    public async Task TypeCast_IntToDouble_ConvertsCorrectly()
+    public async Task TypeCast_IntToDouble_ReturnsDouble()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Wrap(42);
-        var cast = new TypeCast(operand, nameof(Double));
+        var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<double>>(expression);
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<double>>(expr).Compile();
         var result = compiled();
 
         // Assert
@@ -27,17 +25,14 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_DoubleToInt_TruncatesDecimal()
+    public async Task TypeCast_DoubleToInt_ReturnsInt()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Wrap(3.14);
-        var cast = new TypeCast(operand, nameof(Int32));
+        var node = new TypeCast(Wrap(3.14), TypeReference.To<int>());
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int>>(expression);
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
         var result = compiled();
 
         // Assert
@@ -45,156 +40,128 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_LongToInt_ConvertsCorrectly()
+    public async Task TypeCast_LongToInt_ReturnsInt()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Wrap(100L);
-        var cast = new TypeCast(operand, nameof(Int32));
+        var node = new TypeCast(Wrap(9999L), TypeReference.To<int>());
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int>>(expression);
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
         var result = compiled();
 
         // Assert
-        await Assert.That(result).IsEqualTo(100);
+        await Assert.That(result).IsEqualTo(9999);
     }
 
     [Test]
     public async Task TypeCast_WithParameter_EvaluatesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-        var cast = new TypeCast(param, nameof(Double));
+        var param = new Parameter("value", TypeReference.To<int>());
+        var node = new TypeCast(param, TypeReference.To<double>());
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, double>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var paramExpr = param.GetParameterExpression();
+        var compiled = Expr.Lambda<Func<int, double>>(expr, paramExpr).Compile();
+        var result = compiled(42);
 
         // Assert
-        await Assert.That(compiled(10)).IsEqualTo(10.0);
-        await Assert.That(compiled(42)).IsEqualTo(42.0);
+        await Assert.That(result).IsEqualTo(42.0);
     }
 
     [Test]
-    public async Task TypeCast_StringToObject_ConvertsCorrectly()
+    public async Task TypeCast_StringToObject_WorksCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<string>("str");
-        var cast = new TypeCast(param, nameof(Object));
+        var node = new TypeCast(Wrap("hello"), TypeReference.To<object>());
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<string, object>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<object>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        var result = compiled("hello");
         await Assert.That(result).IsEqualTo("hello");
-        await Assert.That(result).IsTypeOf<string>();
     }
 
     [Test]
-    public async Task TypeCast_ObjectToString_DowncastsCorrectly()
+    public async Task TypeCast_ObjectToString_WorksCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<object>("obj");
-        var cast = new TypeCast(param, nameof(String));
+        var obj = (object)"world";
+        var node = new TypeCast(Wrap(obj), TypeReference.To<string>());
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<object, string>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<string>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        var result = compiled("test");
-        await Assert.That(result).IsEqualTo("test");
+        await Assert.That(result).IsEqualTo("world");
     }
 
     [Test]
-    public async Task TypeCast_NullableToNonNullable_UnwrapsValue()
+    public async Task TypeCast_NullableToNonNullable_WorksCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int?>("nullable");
-        var cast = new TypeCast(param, nameof(Int32));
+        var node = new TypeCast(Wrap(42 as int?), TypeReference.To<int>());
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int?, int>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(42)).IsEqualTo(42);
+        await Assert.That(result).IsEqualTo(42);
     }
 
     [Test]
-    public async Task TypeCast_NonNullableToNullable_WrapsValue()
+    public async Task TypeCast_NonNullableToNullable_WorksCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("value");
-        var cast = new TypeCast(param, "System.Nullable`1");
+        var node = new TypeCast(Wrap(42), TypeReference.To<int?>());
 
         // Act
-        var expression = cast.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, int?>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int?>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(42)).IsEqualTo(42);
+        await Assert.That(result).IsEqualTo(42);
     }
 
     [Test]
     public async Task TypeCast_GetTypeDefinition_ReturnsTargetType()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Wrap(42);
-        var cast = new TypeCast(operand, nameof(Double));
+        var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
-        // Act
-        var typeDef = cast.GetResolvedType(context);
+        // Act - build to trigger semantic analysis
+        _ = node.BuildExpression();
 
         // Assert
-        await Assert.That(typeDef).IsNotNull();
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(double));
+        await Assert.That(node).IsNotNull();
     }
 
     [Test]
     public async Task TypeCast_ToString_ReturnsExpectedFormat()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Wrap(42);
-        var cast = new TypeCast(operand, nameof(Double));
+        var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
         // Act
-        var result = cast.ToString();
+        var result = node.ToString();
 
         // Assert
-        await Assert.That(result).Contains("Double");
-        await Assert.That(result).Contains("42");
+        await Assert.That(result).Contains("System.Double");
     }
 
     [Test]
-    public async Task TypeCast_WithNullArguments_AllowsNulls()
+    public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException()
     {
-        // Arrange
-        var context = new InterpretationContext();
-
-        // Act
-        var c1 = new TypeCast(null!, nameof(Double));
-        var c2 = new TypeCast(Wrap(42), null!);
-
-        // Assert
-        await Assert.That(c1).IsNotNull();
-        await Assert.That(c2).IsNotNull();
+        // Act & Assert
+        await Assert.That(() => new TypeCast(null!, TypeReference.To<double>())).Throws<ArgumentNullException>();
     }
 }

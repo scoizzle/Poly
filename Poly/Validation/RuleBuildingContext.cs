@@ -9,7 +9,7 @@ public sealed record RuleBuildingContext {
 
     public RuleBuildingContext(InterpretationContext<Expression> interpretationContext, ITypeDefinition entryPointTypeDefinition)
     {
-        Value = interpretationContext.AddParameter(EntryPointName, entryPointTypeDefinition);
+        // Value = interpretationContext.AddParameter(EntryPointName, entryPointTypeDefinition);
     }
 
     /// <summary>

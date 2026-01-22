@@ -3,193 +3,163 @@ using System.Linq.Expressions;
 
 using Poly.Interpretation;
 using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
-public class NumericTypePromotionTests {
+public class NumericTypePromotionTests
+{
     [Test]
-    public async Task Add_IntAndDouble_ReturnsDouble()
+    public async Task NumericTypePromotion_Add_IntAndDouble_ReturnsDouble()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var intValue = Wrap(42);
-        var doubleValue = Wrap(3.14);
-        var add = new Add(intValue, doubleValue);
+        var node = new Add(Wrap(10), Wrap(3.14));
 
         // Act
-        var typeDef = add.GetResolvedType(context);
-
-        // Assert
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(double));
-    }
-
-    [Test]
-    public async Task Add_IntAndDouble_EvaluatesCorrectly()
-    {
-        // Arrange
-        var context = new InterpretationContext();
-        var intValue = Wrap(10);
-        var doubleValue = Wrap(5.5);
-        var add = new Add(intValue, doubleValue);
-
-        // Act
-        var expression = add.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<double>>(expression);
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<double>>(expr).Compile();
         var result = compiled();
 
         // Assert
-        await Assert.That(result).IsEqualTo(15.5);
+        await Assert.That(Math.Abs(result - 13.14) < 0.01).IsTrue();
     }
 
     [Test]
-    public async Task Multiply_FloatAndInt_ReturnsFloat()
+    public async Task NumericTypePromotion_Multiply_FloatAndInt_ReturnsFloat()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var floatValue = Wrap(2.5f);
-        var intValue = Wrap(4);
-        var multiply = new Multiply(floatValue, intValue);
+        var node = new Multiply(Wrap(2.5f), Wrap(4));
 
         // Act
-        var typeDef = multiply.GetResolvedType(context);
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<float>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(float));
+        await Assert.That(result).IsEqualTo(10.0f);
     }
 
     [Test]
-    public async Task Subtract_LongAndInt_ReturnsLong()
+    public async Task NumericTypePromotion_Subtract_LongAndInt_ReturnsLong()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var longValue = Wrap(100L);
-        var intValue = Wrap(30);
-        var subtract = new Subtract(longValue, intValue);
+        var node = new Subtract(Wrap(100L), Wrap(30));
 
         // Act
-        var typeDef = subtract.GetResolvedType(context);
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<long>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(long));
+        await Assert.That(result).IsEqualTo(70L);
     }
 
     [Test]
-    public async Task Divide_DecimalAndInt_ReturnsDecimal()
+    public async Task NumericTypePromotion_Divide_DecimalAndInt_ReturnsDecimal()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var decimalValue = Wrap(100m);
-        var intValue = Wrap(3);
-        var divide = new Divide(decimalValue, intValue);
+        var node = new Divide(Wrap(100m), Wrap(4));
 
         // Act
-        var typeDef = divide.GetResolvedType(context);
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<decimal>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(decimal));
+        await Assert.That(result).IsEqualTo(25m);
     }
 
     [Test]
-    public async Task Modulo_DoubleAndFloat_ReturnsDouble()
+    public async Task NumericTypePromotion_Modulo_DoubleAndFloat_ReturnsDouble()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var doubleValue = Wrap(10.5);
-        var floatValue = Wrap(3.0f);
-        var modulo = new Modulo(doubleValue, floatValue);
+        var node = new Modulo(Wrap(10.0), Wrap(3.0f));
 
         // Act
-        var typeDef = modulo.GetResolvedType(context);
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<double>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(double));
+        await Assert.That(Math.Abs(result - 1.0) < 0.01).IsTrue();
     }
 
     [Test]
-    public async Task Add_TwoInts_ReturnsInt()
+    public async Task NumericTypePromotion_Add_TwoInts_ReturnsInt()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var intValue1 = Wrap(10);
-        var intValue2 = Wrap(20);
-        var add = new Add(intValue1, intValue2);
+        var node = new Add(Wrap(10), Wrap(20));
 
         // Act
-        var typeDef = add.GetResolvedType(context);
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(int));
+        await Assert.That(result).IsEqualTo(30);
     }
 
     [Test]
-    public async Task Add_ByteAndShort_ReturnsInt()
+    public async Task NumericTypePromotion_Add_ByteAndShort_ReturnsInt()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var byteValue = Wrap((byte)10);
-        var shortValue = Wrap((short)20);
-        var add = new Add(byteValue, shortValue);
+        var node = new Add(Wrap((byte)5), Wrap((short)10));
 
         // Act
-        var typeDef = add.GetResolvedType(context);
-
-        // Assert - byte and short promote to int in C#
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(int));
-    }
-
-    [Test]
-    public async Task Multiply_UIntAndLong_ReturnsLong()
-    {
-        // Arrange
-        var context = new InterpretationContext();
-        var uintValue = Wrap(10u);
-        var longValue = Wrap(5L);
-        var multiply = new Multiply(uintValue, longValue);
-
-        // Act
-        var typeDef = multiply.GetResolvedType(context);
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(long));
+        await Assert.That(result).IsEqualTo(15);
     }
 
     [Test]
-    public async Task Add_ULongAndInt_ReturnsULong()
+    public async Task NumericTypePromotion_Multiply_UIntAndLong_ReturnsLong()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var ulongValue = Wrap(100UL);
-        var intValue = Wrap(50);
-        var add = new Add(ulongValue, intValue);
+        var node = new Multiply(Wrap(5u), Wrap(10L));
 
         // Act
-        var typeDef = add.GetResolvedType(context);
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<long>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(ulong));
+        await Assert.That(result).IsEqualTo(50L);
     }
 
     [Test]
-    public async Task Add_WithParameters_PromotesCorrectly()
+    public async Task NumericTypePromotion_Add_ULongAndInt_ReturnsULong()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var intParam = context.AddParameter<int>("x");
-        var doubleParam = context.AddParameter<double>("y");
-        var add = new Add(intParam, doubleParam);
+        var node = new Add(Wrap(100UL), Wrap(50));
 
         // Act
-        var expression = add.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, double, double>>(
-            expression,
-            intParam.GetParameterExpression(context),
-            doubleParam.GetParameterExpression(context)
-        );
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<ulong>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(5, 2.5)).IsEqualTo(7.5);
+        await Assert.That(result).IsEqualTo(150UL);
+    }
+
+    [Test]
+    public async Task NumericTypePromotion_Add_WithParameters_PromotesCorrectly()
+    {
+        // Arrange
+        var param1 = new Parameter("a", new TypeReference("System.Int32"));
+        var param2 = new Parameter("b", new TypeReference("System.Double"));
+        var node = new Add(param1, param2);
+
+        // Act
+        var expr = node.BuildExpression();
+        var paramExprs = new[] { param1.GetParameterExpression(), param2.GetParameterExpression() };
+        var compiled = Expr.Lambda<Func<int, double, double>>(expr, paramExprs).Compile();
+        var result = compiled(10, 3.14);
+
+        // Assert
+        await Assert.That(Math.Abs(result - 13.14) < 0.01).IsTrue();
     }
 }

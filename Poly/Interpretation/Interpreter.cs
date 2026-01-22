@@ -8,7 +8,10 @@ public sealed class Interpreter<TResult>
     private readonly ITypeDefinitionProvider _typeProvider;
     private readonly List<ITransformationMiddleware<TResult>> _middlewares;
 
-    internal Interpreter(ITypeDefinitionProvider typeProvider, List<ITransformationMiddleware<TResult>> middlewares)
+    internal Interpreter(
+        ITypeDefinitionProvider typeProvider,
+        List<ITransformationMiddleware<TResult>> middlewares,
+        List<Action<InterpretationContext<TResult>>> contextInitializers = null!)
     {
         _typeProvider = typeProvider;
         _middlewares = middlewares;
@@ -20,7 +23,7 @@ public sealed class Interpreter<TResult>
     public InterpretationResult<TResult> Interpret(Node root)
     {
         var pipeline = BuildPipeline();
-        var context = new InterpretationContext<TResult>(_typeProvider, pipeline);
+        var context = new InterpretationContext<TResult>(_typeProvider, pipeline);        
         var result = pipeline(context, root);
         return new InterpretationResult<TResult>(context, result);
     }

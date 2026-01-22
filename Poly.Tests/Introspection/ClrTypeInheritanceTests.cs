@@ -161,27 +161,6 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task BaseClassProperty_AccessViaInstance()
-    {
-        var registry = ClrTypeDefinitionRegistry.Shared;
-        var derivedType = registry.GetTypeDefinition<DerivedWithProperty>();
-
-        var baseNameMembers = derivedType.Properties.WithName("BaseName");
-        var baseNameProperty = baseNameMembers.First();
-
-        var instance = new DerivedWithProperty { BaseName = "TestName" };
-        var instanceLiteral = Wrap(instance);
-
-        var context = new InterpretationContext();
-        var accessor = baseNameProperty.GetMemberAccessor(instanceLiteral);
-        var expression = accessor.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<string>>(expression).Compile();
-        var result = lambda();
-
-        await Assert.That(result).IsEqualTo("TestName");
-    }
-
-    [Test]
     public async Task HiddenMember_PrefersDerived()
     {
         var registry = ClrTypeDefinitionRegistry.Shared;

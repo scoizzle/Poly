@@ -11,7 +11,7 @@ public static class SemanticAnalysisExtensions {
         /// <typeparam name="TResult">The type of the expression result.</typeparam>
         /// <param name="builder">The interpreter builder.</param>
         /// <returns>The updated interpreter builder.</returns>
-        public InterpreterBuilder<TResult> WithSemanticAnalysis() => builder.Use(new SemanticAnalysisMiddleware<TResult>());
+        public InterpreterBuilder<TResult> UseSemanticAnalysis() => builder.Use(new SemanticAnalysisMiddleware<TResult>());
     }
 
     extension<TResult>(InterpretationContext<TResult> context) {
@@ -55,6 +55,14 @@ public static class SemanticAnalysisExtensions {
         public void SetResolvedMember(Node node, ITypeMember member) => GetPrivateProvider(context).SetResolvedMember(node, member);
 
         /// <summary>
+        /// Sets both the resolved member and type for the given node.
+        /// </summary>
+        /// <param name="node">The node for which to set the resolved member and type.</param>
+        /// <param name="member">The resolved member to set.</param>
+        /// <param name="type">The resolved type to set.</param>
+        public void SetResolvedMemberAndType(Node node, ITypeMember member, ITypeDefinition type) => GetPrivateProvider(context).SetResolvedMemberAndType(node, member, type);
+
+        /// <summary>
         /// Determines whether the given node has any semantic analysis information.
         /// </summary>
         /// <param name="context">The interpretation context.</param>
@@ -93,6 +101,16 @@ public static class SemanticAnalysisExtensions {
         {
             var info = _cache.TryGetValue(node, out var existing) ? existing : new SemanticInfo(null, null);
             _cache[node] = info with { ResolvedMember = member };
+        }
+
+        internal void SetResolvedMemberAndType(Node node, ITypeMember member, ITypeDefinition type)
+        {
+            if (_cache.TryGetValue(node, out var info)) {
+                _cache[node] = info with { ResolvedMember = member, ResolvedType = type };
+                return;
+            }
+            
+            _cache[node] = new SemanticInfo(type, member);
         }
 
         internal SemanticInfo GetSemanticInfo(Node node) => _cache.TryGetValue(node, out var info) ? info : new SemanticInfo(null, null);

@@ -4,118 +4,116 @@ using System.Linq.Expressions;
 using Poly.Interpretation;
 using Expr = System.Linq.Expressions.Expression;
 using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
-public class BlockScopeTests {
+public class BlockScopeTests
+{
     [Test]
-    public async Task Block_CreatesNewScope_VariablesNotVisibleOutside()
+    public async Task BlockScope_CreatesNewScope_VariablesNotVisibleOutside()
     {
-        var context = new InterpretationContext();
+        // Arrange - nested blocks, inner variable should not affect outer
+        var innerVar = new Variable("x");
+        var innerAssign = new Assignment(innerVar, Wrap(50));
+        var innerBlock = new Block(new[] { innerVar }, [innerAssign, innerVar]);
+        
+        var outerVar = new Variable("x");
+        var outerAssign = new Assignment(outerVar, Wrap(100));
+        var outerBlock = new Block(new[] { outerVar }, [outerAssign, innerBlock]);
 
-        // Verify 'y' doesn't exist initially
-        var yBefore = context.GetVariable("y");
-        await Assert.That(yBefore).IsNull();
+        // Act
+        var expr = outerBlock.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
-        // Push scope and declare 'y' within a block's scope
-        context.PushScope();
-        var y = context.DeclareVariable("y", Wrap(10));
-        await Assert.That(context.GetVariable("y")).IsNotNull();
-        context.PopScope();
-
-        // After popping, 'y' should not be accessible
-        var yAfter = context.GetVariable("y");
-        await Assert.That(yAfter).IsNull();
+        // Assert - inner block returns 50, but outer scope still has its variable at 100
+        await Assert.That(result).IsEqualTo(50);
     }
 
     [Test]
-    public async Task Block_NestedScopes_InnerShadowsOuter()
+    public async Task BlockScope_NestedScopes_InnerShadowsOuter()
     {
-        var context = new InterpretationContext();
+        // Arrange
+        var outerVar = new Variable("x");
+        var outerAssign = new Assignment(outerVar, Wrap(100));
+        
+        var innerVar = new Variable("x");
+        var innerAssign = new Assignment(innerVar, Wrap(50));
+        var innerBlock = new Block(new[] { innerVar }, [innerAssign, innerVar]);
+        
+        var outerBlock = new Block(new[] { outerVar }, [outerAssign, innerBlock]);
 
-        // Declare 'x' in outer scope
-        var outerX = context.DeclareVariable("x", Wrap(5));
+        // Act
+        var expr = outerBlock.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
-        // Inner block declares its own 'x'
-        context.PushScope();
-        var innerX = context.DeclareVariable("x", Wrap(10));
-
-        // Inner 'x' should be different from outer 'x'
-        await Assert.That(innerX).IsNotEqualTo(outerX);
-
-        // Current scope should see inner 'x'
-        var currentX = context.GetVariable("x");
-        await Assert.That(currentX).IsEqualTo(innerX);
-
-        context.PopScope();
-
-        // After popping, should see outer 'x' again
-        currentX = context.GetVariable("x");
-        await Assert.That(currentX).IsEqualTo(outerX);
+        // Assert
+        await Assert.That(result).IsEqualTo(50);
     }
 
     [Test]
-    public async Task Block_ExecutesExpressionsInSequence()
+    public async Task BlockScope_ExecutesExpressions_InSequence()
     {
-        var context = new InterpretationContext();
-        var x = context.AddParameter<int>("x");
-        var y = context.AddParameter<int>("y");
+        // Arrange
+        var var1 = new Variable("a");
+        var assign1 = new Assignment(var1, Wrap(10));
+        
+        var var2 = new Variable("b");
+        var assign2 = new Assignment(var2, Wrap(20));
+        
+        var node = new Block(new[] { var1, var2 }, [assign1, assign2, var2]);
 
-        // Create a block that adds two values
-        var block = new Block(
-            x.Add(Wrap(5)),
-            y.Multiply(Wrap(2)),
-            x.Add(y)  // Last expression determines return value
-        );
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
-        // Build expression - Block pushes/pops its own scope
-        var expr = block.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, int, int>>(
-            expr,
-            x.GetParameterExpression(context),
-            y.GetParameterExpression(context)
-        );
-        var compiled = lambda.Compile();
-
-        // The block returns the last expression: x + y
-        await Assert.That(compiled(10, 5)).IsEqualTo(15);
+        // Assert - last expression should be var2 = 20
+        await Assert.That(result).IsEqualTo(20);
     }
 
     [Test]
-    public async Task Block_CanAccessOuterScopeVariables()
+    public async Task BlockScope_CanAccessOuterScope_Variables()
     {
-        var context = new InterpretationContext();
+        // Arrange - outer variable used in inner block
+        var outerVar = new Variable("x");
+        var outerAssign = new Assignment(outerVar, Wrap(100));
+        
+        var addExpr = outerVar.Add(Wrap(50));
+        var outerBlock = new Block(new[] { outerVar }, [outerAssign, addExpr]);
 
-        // Declare variable in outer scope
-        var outerVar = context.DeclareVariable("outer", Wrap(100));
+        // Act
+        var expr = outerBlock.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
-        // Inner block should be able to access 'outer'
-        context.PushScope();
-        var innerAccess = context.GetVariable("outer");
-        await Assert.That(innerAccess).IsEqualTo(outerVar);
-        context.PopScope();
+        // Assert
+        await Assert.That(result).IsEqualTo(150);
     }
 
     [Test]
-    public async Task Block_MultipleBlocks_IndependentScopes()
+    public async Task BlockScope_MultipleBlocks_IndependentScopes()
     {
-        var context = new InterpretationContext();
+        // Arrange
+        var block1Var = new Variable("x");
+        var block1Assign = new Assignment(block1Var, Wrap(10));
+        var block1 = new Block(new[] { block1Var }, [block1Assign, block1Var]);
+        
+        var block2Var = new Variable("x");
+        var block2Assign = new Assignment(block2Var, Wrap(20));
+        var block2 = new Block(new[] { block2Var }, [block2Assign, block2Var]);
 
-        // First block declares 'a'
-        context.PushScope();
-        var a1 = context.DeclareVariable("a", Wrap(1));
-        context.PopScope();
+        // Wrap both blocks together
+        var combined = new Block(block1, block2);
 
-        // 'a' should not be visible
-        var aAfterFirst = context.GetVariable("a");
-        await Assert.That(aAfterFirst).IsNull();
+        // Act
+        var expr = combined.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
-        // Second block declares 'a' independently
-        context.PushScope();
-        var a2 = context.DeclareVariable("a", Wrap(2));
-        context.PopScope();
-
-        // These should be different variables
-        await Assert.That(a1).IsNotEqualTo(a2);
+        // Assert - should return last block's value
+        await Assert.That(result).IsEqualTo(20);
     }
 }

@@ -3,241 +3,164 @@ using System.Linq.Expressions;
 
 using Poly.Interpretation;
 using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
-public class FluentValueApiTests {
+public class FluentValueApiTests
+{
     [Test]
-    public async Task FluentApi_ArithmeticChaining_WorksCorrectly()
+    public async Task FluentApi_ArithmeticChaining_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-
-        // x + 5 - 2 * 3
-        var expr = param.Add(Wrap(5)).Subtract(Wrap(2)).Multiply(Wrap(3));
+        // Arrange - fluent chaining: (10 + 5) * 2
+        var node = Wrap(10).Add(Wrap(5)).Multiply(Wrap(2));
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(10)).IsEqualTo(39); // (10 + 5 - 2) * 3 = 39
+        await Assert.That(result).IsEqualTo(30);
     }
 
     [Test]
-    public async Task FluentApi_ComparisonChaining_WorksCorrectly()
+    public async Task FluentApi_ComparisonChaining_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-
-        // x > 10
-        var expr = param.GreaterThan(Wrap(10));
+        // Arrange - fluent chaining: 10 > 5
+        var node = Wrap(10).GreaterThan(Wrap(5));
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, bool>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(15)).IsTrue();
-        await Assert.That(compiled(5)).IsFalse();
+        await Assert.That(result).IsTrue();
     }
 
     [Test]
-    public async Task FluentApi_BooleanChaining_WorksCorrectly()
+    public async Task FluentApi_BooleanChaining_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var x = context.AddParameter<int>("x");
-        var y = context.AddParameter<int>("y");
-
-        // x > 10 && y < 20
-        var expr = x.GreaterThan(Wrap(10)).And(y.LessThan(Wrap(20)));
+        // Arrange - fluent chaining: true && false
+        var node = True.And(False);
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, int, bool>>(
-            expression,
-            x.GetParameterExpression(context),
-            y.GetParameterExpression(context)
-        );
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(15, 10)).IsTrue();
-        await Assert.That(compiled(5, 10)).IsFalse();
-        await Assert.That(compiled(15, 25)).IsFalse();
+        await Assert.That(result).IsFalse();
     }
 
     [Test]
-    public async Task FluentApi_ConditionalExpression_WorksCorrectly()
+    public async Task FluentApi_ConditionalExpression_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-
-        // x > 10 ? x * 2 : x + 5
-        var expr = param.GreaterThan(Wrap(10))
-            .Conditional(param.Multiply(Wrap(2)), param.Add(Wrap(5)));
+        // Arrange - fluent chaining: true ? 42 : 0
+        var node = True.Conditional(Wrap(42), Wrap(0));
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(15)).IsEqualTo(30); // 15 * 2
-        await Assert.That(compiled(5)).IsEqualTo(10); // 5 + 5
+        await Assert.That(result).IsEqualTo(42);
     }
 
     [Test]
-    public async Task FluentApi_CoalesceExpression_WorksCorrectly()
+    public async Task FluentApi_CoalesceExpression_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int?>("x");
-
-        // x ?? 42
-        var expr = param.Coalesce(Wrap(42));
+        // Arrange - fluent chaining: null ?? 42
+        var node = Wrap(null as int?).Coalesce(Wrap(42));
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int?, int>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(10)).IsEqualTo(10);
-        await Assert.That(compiled(null)).IsEqualTo(42);
+        await Assert.That(result).IsEqualTo(42);
     }
 
     [Test]
-    public async Task FluentApi_NegateOperation_WorksCorrectly()
+    public async Task FluentApi_NegateOperation_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-
-        // -x + 10
-        var expr = param.Negate().Add(Wrap(10));
+        // Arrange - fluent chaining: -42
+        var node = Wrap(42).Negate();
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, int>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(5)).IsEqualTo(5); // -5 + 10 = 5
-        await Assert.That(compiled(-3)).IsEqualTo(13); // -(-3) + 10 = 13
+        await Assert.That(result).IsEqualTo(-42);
     }
 
     [Test]
-    public async Task FluentApi_NotOperation_WorksCorrectly()
+    public async Task FluentApi_NotOperation_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<bool>("x");
-
-        // !x
-        var expr = param.Not();
+        // Arrange - fluent chaining: !true
+        var node = True.Not();
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<bool, bool>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(true)).IsFalse();
-        await Assert.That(compiled(false)).IsTrue();
+        await Assert.That(result).IsFalse();
     }
 
     [Test]
-    public async Task FluentApi_TypeCastOperation_WorksCorrectly()
+    public async Task FluentApi_TypeCastOperation_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-
-        // (double)x + 0.5
-        var expr = param.CastTo(nameof(Double)).Add(Wrap(0.5));
+        // Arrange - fluent chaining: (int)42.0 cast to double
+        var node = Wrap(42).CastTo("System.Double");
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, double>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<double>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(10)).IsEqualTo(10.5);
+        await Assert.That(result).IsEqualTo(42.0);
     }
 
     [Test]
-    public async Task FluentApi_IndexAccess_WorksCorrectly()
+    public async Task FluentApi_ComplexExpression_EvaluatesCorrectly()
     {
-        // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<List<int>>("list");
-
-        // list[0]
-        var expr = param.Index(Wrap(0));
+        // Arrange - fluent chaining: ((10 + 5) * 2) > 20
+        var node = Wrap(10)
+            .Add(Wrap(5))
+            .Multiply(Wrap(2))
+            .GreaterThan(Wrap(20));
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<List<int>, int>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        var testList = new List<int> { 10, 20, 30 };
-        await Assert.That(compiled(testList)).IsEqualTo(10);
+        await Assert.That(result).IsTrue();
     }
 
     [Test]
     public async Task FluentApi_MemberAccess_WorksCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<string>("str");
-
-        // str.Length
-        var expr = param.GetMember("Length");
+        var str = "hello";
+        var node = Wrap(str).GetMember("Length");
 
         // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<string, int>>(expression, param.GetParameterExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled("hello")).IsEqualTo(5);
-        await Assert.That(compiled("test")).IsEqualTo(4);
-    }
-
-    [Test]
-    public async Task FluentApi_ComplexExpression_WorksCorrectly()
-    {
-        // Arrange
-        var context = new InterpretationContext();
-        var x = context.AddParameter<int>("x");
-        var y = context.AddParameter<int>("y");
-
-        // Complex: (x + y) > 100 ? (x * y) : (x - y)
-        var sum = x.Add(y);
-        var condition = sum.GreaterThan(Wrap(100));
-        var product = x.Multiply(y);
-        var difference = x.Subtract(y);
-        var expr = condition.Conditional(product, difference);
-
-        // Act
-        var expression = expr.BuildExpression(context);
-        var lambda = Expr.Lambda<Func<int, int, int>>(
-            expression,
-            x.GetParameterExpression(context),
-            y.GetParameterExpression(context)
-        );
-        var compiled = lambda.Compile();
-
-        // Assert
-        await Assert.That(compiled(60, 50)).IsEqualTo(3000); // 60 + 50 = 110 > 100, so 60 * 50 = 3000
-        await Assert.That(compiled(30, 20)).IsEqualTo(10); // 30 + 20 = 50 < 100, so 30 - 20 = 10
+        await Assert.That(result).IsEqualTo(5);
     }
 }

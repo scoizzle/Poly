@@ -203,7 +203,7 @@ public static class NodeExtensions
     /// <param name="targetTypeName">The name of the type to cast to.</param>
     /// <param name="isChecked">Whether to use checked conversion.</param>
     /// <returns>A <see cref="TypeCast"/> operator.</returns>
-    public static TypeCast CastTo(this Node operand, string targetTypeName, bool isChecked = false) => new TypeCast(operand, targetTypeName, isChecked);
+    public static TypeCast CastTo(this Node operand, string targetTypeName, bool isChecked = false) => new TypeCast(operand, new TypeReference(targetTypeName), isChecked);
 
     #endregion
 

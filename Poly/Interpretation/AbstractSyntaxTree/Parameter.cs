@@ -9,8 +9,16 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// The parameter expression is created once and cached to ensure referential equality across multiple uses,
 /// which is required for proper expression tree compilation.
 /// </remarks>
-public sealed record Parameter(string Name, string? TypeHint = null) : Node
+public sealed record Parameter(string Name, Node? TypeReference = null, Node? DefaultValue = null) : Node
 {
     /// <inheritdoc />
-    public override string ToString() => TypeHint is not null ? $"{TypeHint} {Name}" : Name;
+    public override string ToString() {
+        StringBuilder sb = new();
+        sb.Append(TypeReference != null ? $"{TypeReference} " : "");
+        sb.Append(Name);
+        if (DefaultValue != null) {
+            sb.Append($" = {DefaultValue}");
+        }
+        return sb.ToString();
+    }
 }

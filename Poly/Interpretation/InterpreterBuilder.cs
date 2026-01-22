@@ -30,6 +30,11 @@ public sealed class InterpreterBuilder<TResult>
         return this;
     }
 
+    /// <summary>
+    /// Adds a middleware to the pipeline using a delegate.
+    /// </summary>
+    /// <param name="transformFunc">The transformation function delegate.</param>
+    /// <returns></returns>
     public InterpreterBuilder<TResult> Use(Func<InterpretationContext<TResult>, Node, TransformationDelegate<TResult>, TResult> transformFunc)
     {
         return Use(new DelegateTransformationMiddleware<TResult>(transformFunc));

@@ -9,8 +9,8 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// For checked conversions that throw on overflow, use <see cref="Expr.ConvertChecked"/>.
 /// The target type is specified by name; semantic analysis middleware resolves it to an ITypeDefinition.
 /// </remarks>
-public sealed record TypeCast(Node Operand, string TargetTypeName, bool IsChecked = false) : Operator
+public sealed record TypeCast(Node Operand, Node TargetTypeReference, bool IsChecked = false) : Operator
 {
     /// <inheritdoc />
-    public override string ToString() => $"(({TargetTypeName}){Operand})";
+    public override string ToString() => $"(({TargetTypeReference}){Operand})";
 }

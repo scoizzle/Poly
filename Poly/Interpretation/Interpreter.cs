@@ -20,10 +20,19 @@ public sealed class Interpreter<TResult>
     /// <summary>
     /// Interprets an AST node by running it through the configured middleware pipeline.
     /// </summary>
-    public InterpretationResult<TResult> Interpret(Node root)
+    public InterpretationResult<TResult> Interpret(Node root) => Interpret(root, static _ => { });
+
+    /// <summary>
+    /// Interprets an AST node by running it through the configured middleware pipeline.
+    /// </summary>
+    public InterpretationResult<TResult> Interpret(Node root, Action<InterpretationContext<TResult>> contextInitializer)
     {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(contextInitializer);
+
         var pipeline = BuildPipeline();
-        var context = new InterpretationContext<TResult>(_typeProvider, pipeline);        
+        var context = new InterpretationContext<TResult>(_typeProvider, pipeline);
+        contextInitializer(context);      
         var result = pipeline(context, root);
         return new InterpretationResult<TResult>(context, result);
     }

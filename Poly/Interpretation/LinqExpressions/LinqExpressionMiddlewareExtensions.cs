@@ -25,12 +25,34 @@ public static class LinqExpressionMiddlewareExtensions
             builder.UseLinqExpressionCompilation(null);
     }
 
+    extension(InterpretationContext<Expression> context) {
+        /// <summary>
+        /// Gets the LINQ expression metadata from the interpretation context, if available.
+        /// </summary>
+        /// <returns>The LINQ expression metadata; otherwise, null.</returns>
+        public LinqMetadata? GetLinqMetadata() => context.Metadata.Get<LinqMetadata>();
+
+        internal ParameterExpression GetOrAddLinqParameter(Parameter param, Func<ParameterExpression> factory)
+        {
+            ArgumentNullException.ThrowIfNull(param);
+            ArgumentNullException.ThrowIfNull(factory);
+
+            var linqData = context.Metadata.GetOrAdd(static () => new LinqMetadata());
+            if (!linqData.Parameters.TryGetValue(param.Name, out var expr))
+            {
+                expr = factory();
+                linqData.Parameters[param.Name] = expr;
+            }
+            return expr;
+        }
+    }
+
     extension(InterpretationResult<Expression> result) {
         /// <summary>
         /// Gets the LINQ expression metadata from the interpretation result, if available.
         /// </summary>
         /// <returns>The LINQ expression metadata; otherwise, null.</returns>
-        public LinqMetadata? GetMetadata() => result.GetMetadata<LinqMetadata>();
+        public LinqMetadata? GetLinqMetadata() => result.GetMetadata<LinqMetadata>();
 
         /// <summary>
         /// Gets the parameters defined in the LINQ expression metadata.
@@ -38,7 +60,7 @@ public static class LinqExpressionMiddlewareExtensions
         /// <returns>The collection of parameter expressions; otherwise, an empty collection.</returns>
         public IEnumerable<ParameterExpression> GetParameters()
         {
-            var metadata = result.GetMetadata();
+            var metadata = result.GetLinqMetadata();
             return metadata?.Parameters?.Values ?? Enumerable.Empty<ParameterExpression>();
         }
     }

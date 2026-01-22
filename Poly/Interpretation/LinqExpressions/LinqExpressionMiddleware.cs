@@ -99,15 +99,12 @@ public sealed class LinqExpressionMiddleware : ITransformationMiddleware<Express
 
     private ParameterExpression CompileParameter(InterpretationContext<Expression> context, Parameter parameter)
     {
-        if (_parameterExpressions.TryGetValue(parameter.Name, out var existingParam)) {
-            return existingParam;
-        }
-        
-        var semanticProvider = context.GetSemanticProvider();
-        var type = GetClrType(semanticProvider, parameter);
-        var paramExpr = Expression.Parameter(type, parameter.Name);
-        _parameterExpressions[parameter.Name] = paramExpr;
-        return paramExpr;
+        return context.GetOrAddLinqParameter(parameter, () =>
+        {
+            var semanticProvider = context.GetSemanticProvider();
+            var type = GetClrType(semanticProvider, parameter);
+            return Expression.Parameter(type, parameter.Name);
+        });
     }
 
     private Expression CompileIndexAccess(InterpretationContext<Expression> context, IndexAccess indexAccess)

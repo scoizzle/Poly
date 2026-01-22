@@ -26,9 +26,9 @@ Interpreter<Expression> interpreter = new InterpreterBuilder<Expression>()
     .UseLinqExpressionCompilation()
     .Build();
 
-var result = interpreter.Interpret(body);
+var result = interpreter.Interpret(body, e => e.SetResolvedType(param, e.TypeDefinitionProviders.GetTypeDefinition<string>()!));
 var expr = result.Value;
-Func<string, string> compiled = Expression.Lambda<Func<string, string>>(expr).Compile();
+Func<string, string> compiled = Expression.Lambda<Func<string, string>>(expr, result.GetParameters()).Compile();
 string resultValue = compiled("hello");
 Console.WriteLine($"Result of method invocation: {resultValue}");
 

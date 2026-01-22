@@ -38,36 +38,36 @@ internal static class NumericTypePromotion {
 
         // Decimal has highest precedence
         if (leftUnderlyingType == typeof(decimal) || rightUnderlyingType == typeof(decimal)) {
-            return context.GetTypeDefinition<decimal>()!;
+            return context.TypeDefinitionProviders.GetTypeDefinition<decimal>()!;
         }
 
         // Double
         if (leftUnderlyingType == typeof(double) || rightUnderlyingType == typeof(double)) {
-            return context.GetTypeDefinition<double>()!;
+            return context.TypeDefinitionProviders.GetTypeDefinition<double>()!;
         }
 
         // Float
         if (leftUnderlyingType == typeof(float) || rightUnderlyingType == typeof(float)) {
-            return context.GetTypeDefinition<float>()!;
+            return context.TypeDefinitionProviders.GetTypeDefinition<float>()!;
         }
 
         // ULong
         if (leftUnderlyingType == typeof(ulong) || rightUnderlyingType == typeof(ulong)) {
-            return context.GetTypeDefinition<ulong>()!;
+            return context.TypeDefinitionProviders.GetTypeDefinition<ulong>()!;
         }
 
         // Long
         if (leftUnderlyingType == typeof(long) || rightUnderlyingType == typeof(long)) {
-            return context.GetTypeDefinition<long>()!;
+            return context.TypeDefinitionProviders.GetTypeDefinition<long>()!;
         }
 
         // UInt
         if (leftUnderlyingType == typeof(uint) || rightUnderlyingType == typeof(uint)) {
-            return context.GetTypeDefinition<uint>()!;
+            return context.TypeDefinitionProviders.GetTypeDefinition<uint>()!;
         }
 
         // Default to int (includes byte, sbyte, short, ushort, int)
-        return context.GetTypeDefinition<int>()!;
+        return context.TypeDefinitionProviders.GetTypeDefinition<int>()!;
     }
 
     /// <summary>

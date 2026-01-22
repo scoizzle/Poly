@@ -25,13 +25,13 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
     {
         return node switch {
             // Constants have their type directly available
-            Constant c => context.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
+            Constant c => context.TypeDefinitionProviders.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
 
             // Parameters: resolve from type hint or fail (pre-resolved types are handled by Transform's early return)
             Parameter p => ResolveParameterType(context, p),
 
             // Variables need to be looked up in the scope
-            Variable v => v.Value is null ? context.GetTypeDefinition<object>() : ResolveNodeType(context, v.Value),
+            Variable v => v.Value is null ? context.TypeDefinitionProviders.GetTypeDefinition<object>() : ResolveNodeType(context, v.Value),
 
             // Arithmetic operations - use numeric type promotion
             Add add => ResolveArithmeticType(context, add.LeftHandValue, add.RightHandValue),
@@ -42,15 +42,15 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
             UnaryMinus minus => ResolveNodeType(context, minus.Operand),
 
             // Boolean and comparison operations always return bool
-            And => context.GetTypeDefinition<bool>(),
-            Or => context.GetTypeDefinition<bool>(),
-            Not => context.GetTypeDefinition<bool>(),
-            Equal => context.GetTypeDefinition<bool>(),
-            NotEqual => context.GetTypeDefinition<bool>(),
-            LessThan => context.GetTypeDefinition<bool>(),
-            LessThanOrEqual => context.GetTypeDefinition<bool>(),
-            GreaterThan => context.GetTypeDefinition<bool>(),
-            GreaterThanOrEqual => context.GetTypeDefinition<bool>(),
+            And => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
+            Or => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
+            Not => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
+            Equal => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
+            NotEqual => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
+            LessThan => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
+            LessThanOrEqual => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
+            GreaterThan => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
+            GreaterThanOrEqual => context.TypeDefinitionProviders.GetTypeDefinition<bool>(),
 
             // Member access - resolve through member lookup
             MemberAccess memberAccess => ResolveMemberAccessType(context, memberAccess),
@@ -61,7 +61,7 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
             // Index access - resolve element type
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
 
-            TypeReference typeRef => context.GetTypeDefinition(typeRef.TypeName),
+            TypeReference typeRef => context.TypeDefinitionProviders.GetTypeDefinition(typeRef.TypeName),
             // Type cast: resolve target type from type name
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
 
@@ -158,7 +158,7 @@ public sealed class SemanticAnalysisMiddleware<TResult> : ITransformationMiddlew
         if (instanceType.ReflectedType.IsArray) {
             var elementType = instanceType.ReflectedType.GetElementType();
             if (elementType != null) {
-                return context.GetTypeDefinition(elementType);
+                return context.TypeDefinitionProviders.GetTypeDefinition(elementType);
             }
         }
 

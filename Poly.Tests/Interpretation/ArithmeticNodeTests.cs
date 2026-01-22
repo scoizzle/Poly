@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Tests.TestHelpers;
@@ -18,7 +19,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -35,7 +36,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
+        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
         var compiled = lambda.Compile();
 
         // Assert
@@ -51,7 +52,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<double>>(expr);
+        var lambda = Expression.Lambda<Func<double>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -66,7 +67,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<double>>(expr);
+        var lambda = Expression.Lambda<Func<double>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -82,7 +83,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -99,7 +100,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
+        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
         var compiled = lambda.Compile();
 
         // Assert
@@ -115,7 +116,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -131,7 +132,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -148,7 +149,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
+        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
         var compiled = lambda.Compile();
 
         // Assert
@@ -164,7 +165,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<double>>(expr);
+        var lambda = Expression.Lambda<Func<double>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -180,7 +181,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -195,7 +196,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -210,7 +211,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<double>>(expr);
+        var lambda = Expression.Lambda<Func<double>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -227,7 +228,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
+        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
         var compiled = lambda.Compile();
 
         // Assert
@@ -244,7 +245,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -259,7 +260,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -276,7 +277,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int, int>>(expr, paramExpr);
+        var lambda = Expression.Lambda<Func<int, int>>(expr, paramExpr);
         var compiled = lambda.Compile();
 
         // Assert
@@ -294,7 +295,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -310,7 +311,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert
@@ -327,7 +328,7 @@ public class ArithmeticNodeTests
 
         // Act
         var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
+        var lambda = Expression.Lambda<Func<int>>(expr);
         var result = lambda.Compile()();
 
         // Assert

@@ -20,7 +20,7 @@ public static class SemanticAnalysisExtensions {
         /// <summary>
         /// Gets or creates the semantic info provider for this context.
         /// </summary>
-        public ISemanticInfoProvider GetSemanticProvider() => context.GetOrAddMetadata<ISemanticInfoProvider>(static () => new ContextSemanticProvider());
+        public ISemanticInfoProvider GetSemanticProvider() => context.Metadata.GetOrAdd<ISemanticInfoProvider>(static () => new ContextSemanticProvider());
 
         /// <summary>
         /// Gets the resolved type for the given node, if available.

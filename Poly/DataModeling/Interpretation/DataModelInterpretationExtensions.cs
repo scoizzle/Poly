@@ -20,6 +20,6 @@ public static class DataModelInterpretationExtensions {
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(context);
-        context.AddTypeDefinitionProvider(model.ToTypeDefinitionProvider());
+        context.TypeDefinitionProviders.Add(model.ToTypeDefinitionProvider());
     }
 }

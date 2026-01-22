@@ -17,12 +17,5 @@ public sealed class InterpretationResult<TResult>(InterpretationContext<TResult>
     /// </summary>
     /// <typeparam name="TMetadata">The metadata type to retrieve.</typeparam>
     /// <returns>The metadata instance if it exists; otherwise, null.</returns>
-    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class => context.GetMetadata<TMetadata>();
-
-    /// <summary>
-    /// Checks whether metadata of a given type has been set.
-    /// </summary>
-    /// <typeparam name="TMetadata">The metadata type to check for.</typeparam>
-    /// <returns>True if metadata of this type exists; otherwise, false.</returns>
-    public bool HasMetadata<TMetadata>() where TMetadata : class => context.HasMetadata<TMetadata>();
+    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class => context.Metadata.Get<TMetadata>();
 }

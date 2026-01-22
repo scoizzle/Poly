@@ -83,6 +83,13 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     }
 
     /// <summary>
+    /// Resolves by generic type parameter, querying providers from top to bottom. Returns null when not found.
+    /// </summary>
+    /// <typeparam name="T">The generic type parameter to resolve.</typeparam>
+    /// <returns>The type definition if found; otherwise, null.</returns>
+    public ITypeDefinition? GetTypeDefinition<T>() => GetTypeDefinition(typeof(T));
+
+    /// <summary>
     /// Determines whether the collection contains the specified provider.
     /// </summary>
     /// <param name="item">The provider to locate in the collection.</param>

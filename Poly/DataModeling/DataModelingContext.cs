@@ -11,7 +11,6 @@ public sealed class DataModelingContext {
     public DataModelingContext()
     {
         _typeDefinitionProvider = new DataModelTypeDefinitionProvider();
-        // _interpretationContext = new InterpretationContext<Expression>();
-        _interpretationContext.AddTypeDefinitionProvider(_typeDefinitionProvider);
+        _interpretationContext = new InterpretationContext<Expression>(_typeDefinitionProvider, null!);
     }
 }

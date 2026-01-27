@@ -5,8 +5,6 @@ using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
 
-internal record TypeResolutionMetadata(Dictionary<Node, ITypeDefinition> TypeMap);
-
 internal sealed class TypeResolutionPass : IAnalysisPass {
     public void Analyze(AnalysisContext context, Node node)
     {
@@ -220,6 +218,8 @@ internal sealed class TypeResolutionPass : IAnalysisPass {
 }
 
 public static class TypeResolutionMetadataExtensions {
+    internal record TypeResolutionMetadata(Dictionary<Node, ITypeDefinition> TypeMap);
+
     extension(ITypedMetadataProvider typedMetadataProvider) {
         private Dictionary<Node, ITypeDefinition> GetTypeResolutionMap()
         {

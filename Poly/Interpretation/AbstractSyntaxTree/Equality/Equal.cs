@@ -11,5 +11,8 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Equality;
 public sealed record Equal(Node LeftHandValue, Node RightHandValue) : BooleanOperator
 {
     /// <inheritdoc />
+    public override IEnumerable<Node?> Children => [LeftHandValue, RightHandValue];
+
+    /// <inheritdoc />
     public override string ToString() => $"{LeftHandValue} == {RightHandValue}";
 }

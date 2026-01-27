@@ -8,8 +8,9 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Boolean;
 /// Corresponds to the <c>!</c> operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record Not(Node Value) : BooleanOperator
-{
+public sealed record Not(Node Value) : BooleanOperator {
+    /// <inheritdoc />
+    public override IEnumerable<Node?> Children => [Value];
     /// <inheritdoc />
     public override string ToString() => $"!{Value}";
 }

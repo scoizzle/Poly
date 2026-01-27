@@ -8,4 +8,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// </summary>
 public abstract record Node
 {
+    public virtual IEnumerable<Node?> Children => Enumerable.Empty<Node>();
 }

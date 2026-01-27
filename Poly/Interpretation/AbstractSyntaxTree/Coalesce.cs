@@ -21,6 +21,8 @@ public sealed record Coalesce : Operator
 
     public Node RightHandValue { get; }
 
+    public override IEnumerable<Node?> Children => [LeftHandValue, RightHandValue];
+
     /// <inheritdoc />
     public override string ToString() => $"({LeftHandValue} ?? {RightHandValue})";
 }

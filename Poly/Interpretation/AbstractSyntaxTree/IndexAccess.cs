@@ -9,8 +9,9 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// not on the node itself.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record IndexAccess(Node Value, params Node[] Arguments) : Operator
-{
+public sealed record IndexAccess(Node Value, params Node[] Arguments) : Operator {
+    public override IEnumerable<Node?> Children => [Value, .. Arguments];
+    
     /// <inheritdoc />
     public override string ToString() => $"{Value}[{string.Join(", ", Arguments)}]";
 }

@@ -8,8 +8,10 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 /// Corresponds to the <c>-</c> prefix operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record UnaryMinus(Node Operand) : Operator
-{
+public sealed record UnaryMinus(Node Operand) : Operator {
+    /// <inheritdoc />
+    public override IEnumerable<Node?> Children => [Operand];
+
     /// <inheritdoc />
     public override string ToString() => $"-{Operand}";
 }

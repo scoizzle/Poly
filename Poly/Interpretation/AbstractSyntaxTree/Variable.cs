@@ -22,6 +22,8 @@ public sealed record Variable(string Name, Node? Value = null) : Node
     /// </remarks>
     public Node? Value { get; set; } = Value;
 
+    public override IEnumerable<Node?> Children => [Value];
+
     /// <inheritdoc />
     public override string ToString() => Name;
 }

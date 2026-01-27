@@ -11,6 +11,8 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// </remarks>
 public sealed record Parameter(string Name, Node? TypeReference = null, Node? DefaultValue = null) : Node
 {
+    public override IEnumerable<Node?> Children => [TypeReference, DefaultValue];
+
     /// <inheritdoc />
     public override string ToString() {
         StringBuilder sb = new();

@@ -21,5 +21,8 @@ public sealed record Modulo : Operator
     public Node RightHandValue { get; }
 
     /// <inheritdoc />
+    public override IEnumerable<Node?> Children => [LeftHandValue, RightHandValue];
+
+    /// <inheritdoc />
     public override string ToString() => $"({LeftHandValue} % {RightHandValue})";
 }

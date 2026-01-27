@@ -62,6 +62,8 @@ public sealed record Block : Operator {
         Variables = variableList.AsReadOnly();
     }
 
+    public override IEnumerable<Node?> Children => [..Variables, ..Nodes];
+
     /// <inheritdoc />
     public override string ToString()
     {

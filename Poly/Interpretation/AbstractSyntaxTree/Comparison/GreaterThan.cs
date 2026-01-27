@@ -8,7 +8,9 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Comparison;
 /// Corresponds to the <c>&gt;</c> operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record GreaterThan(Node LeftHandValue, Node RightHandValue) : BooleanOperator
-{
+public sealed record GreaterThan(Node LeftHandValue, Node RightHandValue) : BooleanOperator {
+    /// <inheritdoc />
+    public override IEnumerable<Node?> Children => [LeftHandValue, RightHandValue];
+    
     public override string ToString() => $"{LeftHandValue} > {RightHandValue}";
 }

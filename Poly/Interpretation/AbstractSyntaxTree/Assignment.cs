@@ -11,6 +11,8 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// </remarks>
 public sealed record Assignment(Node Destination, Node Value) : Operator
 {
+    public override IEnumerable<Node?> Children => [Destination, Value];
+    
     /// <inheritdoc />
     public override string ToString() => $"{Destination} = {Value}";
 }

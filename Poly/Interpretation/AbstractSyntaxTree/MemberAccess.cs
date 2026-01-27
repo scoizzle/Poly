@@ -9,8 +9,9 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// not on the node itself.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record MemberAccess(Node Value, string MemberName) : Operator
-{
+public sealed record MemberAccess(Node Value, string MemberName) : Operator {
+    public override IEnumerable<Node?> Children => [Value];
+    
     /// <inheritdoc />
     public override string ToString() => $"{Value}.{MemberName}";
 }

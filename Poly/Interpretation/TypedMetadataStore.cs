@@ -1,7 +1,7 @@
 namespace Poly.Interpretation;
 
 public sealed class TypedMetadataStore {
-    private readonly ConditionalWeakTable<Type, IAnalysisMetadata> _metadata = new();
+    private readonly Dictionary<Type, IAnalysisMetadata> _metadata = new();
 
     /// <summary>
     /// Initializes a new empty metadata store.

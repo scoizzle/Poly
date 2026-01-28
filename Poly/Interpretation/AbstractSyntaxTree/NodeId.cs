@@ -12,7 +12,11 @@ public readonly record struct NodeId {
         Value = value;
     }
 
+    /// <summary>
+    /// The string value of the node identifier.
+    /// </summary>
     public string Value { get; }
+
     /// <summary>
     /// Creates a new unique node identifier using a GUID.
     /// Used for synthetic or programmatically-created nodes.
@@ -45,7 +49,7 @@ public readonly record struct NodeId {
     /// </summary>
     public static NodeId Parse(string value)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        ArgumentException.ThrowIfNullOrEmpty(value);
         return new(value);
     }
 
@@ -57,5 +61,5 @@ public readonly record struct NodeId {
     /// <summary>
     /// Implicit conversion to string for compatibility.
     /// </summary>
-    public static implicit operator string(NodeId id) => id.Value;
+    public static explicit operator string(NodeId id) => id.Value;
 }

@@ -4,10 +4,10 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// Represents a block expression that executes a sequence of expressions and returns the result of the last expression.
 /// </summary>
 /// <remarks>
-/// Compiles to <see cref="Expr.Block(IEnumerable{Expr})"/> which executes expressions in sequence.
+/// Executes expressions in sequence and evaluates to the type of the last expression.
 /// This is useful for combining multiple operations, variable declarations, and statements into a single expression.
 /// The block's type is determined by the type of the last expression in the sequence.
-/// Type information is resolved by semantic analysis middleware.
+/// Type information is resolved by semantic analysis passes (INodeAnalyzer implementations).
 /// </remarks>
 public sealed record Block : Operator {
     /// <summary>
@@ -45,11 +45,6 @@ public sealed record Block : Operator {
         var expressionList = expressions.ToList();
         var variableList = variables.ToList();
 
-        // Handle callers that provided variables first, expressions second (legacy ordering in tests)
-        if (variableList.Any(v => !IsVariableNode(v)) && expressionList.All(IsVariableNode)) {
-            (expressionList, variableList) = (variableList, expressionList);
-        }
-
         if (variableList.Any(v => !IsVariableNode(v))) {
             throw new ArgumentException("Block variables must be Variable or Parameter nodes.", nameof(variables));
         }
@@ -62,7 +57,7 @@ public sealed record Block : Operator {
         Variables = variableList.AsReadOnly();
     }
 
-    public override IEnumerable<Node?> Children => [..Variables, ..Nodes];
+    public override IEnumerable<Node?> Children => [.. Variables, .. Nodes];
 
     /// <inheritdoc />
     public override string ToString()

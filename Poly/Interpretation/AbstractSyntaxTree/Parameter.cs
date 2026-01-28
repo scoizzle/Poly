@@ -5,16 +5,15 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// </summary>
 /// <remarks>
 /// Parameters are structural syntax nodes containing only the parameter name and optional type hint.
-/// The actual type definition is resolved by semantic analysis middleware and stored in the context.
-/// The parameter expression is created once and cached to ensure referential equality across multiple uses,
-/// which is required for proper expression tree compilation.
+/// The actual type definition is resolved by semantic analysis passes (INodeAnalyzer implementations) and stored in the context.
+/// Expression caching for referential equality is handled by the interpretation middleware, not the node itself.
 /// </remarks>
-public sealed record Parameter(string Name, Node? TypeReference = null, Node? DefaultValue = null) : Node
-{
+public sealed record Parameter(string Name, Node? TypeReference = null, Node? DefaultValue = null) : Node {
     public override IEnumerable<Node?> Children => [TypeReference, DefaultValue];
 
     /// <inheritdoc />
-    public override string ToString() {
+    public override string ToString()
+    {
         StringBuilder sb = new();
         sb.Append(TypeReference != null ? $"{TypeReference} " : "");
         sb.Append(Name);

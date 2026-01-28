@@ -3,19 +3,36 @@ namespace Poly.Interpretation.Analysis;
 /// <summary>
 /// Provides context for analysis operations, including type definitions and metadata storage.
 /// </summary>
-/// <param name="typeDefinitions">The type definition provider for resolving type information.</param>
-public sealed class AnalysisContext(ITypeDefinitionProvider typeDefinitions) : ITypedMetadataProvider {
+public sealed class AnalysisContext : ITypedMetadataProvider {
     private readonly List<Diagnostic> _diagnostics = new();
+
+    /// <summary>
+    /// Initializes a new instance with type definitions.
+    /// </summary>
+    public AnalysisContext(ITypeDefinitionProvider typeDefinitions)
+    {
+        TypeDefinitions = typeDefinitions;
+        Metadata = new TypedMetadataStore();
+    }
+
+    /// <summary>
+    /// Initializes a new instance with type definitions and pre-populated metadata from a previous analysis.
+    /// </summary>
+    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, TypedMetadataStore previousMetadata)
+    {
+        TypeDefinitions = typeDefinitions;
+        Metadata = new TypedMetadataStore(previousMetadata);
+    }
 
     /// <summary>
     /// Gets the metadata store for associating arbitrary data with AST nodes during analysis.
     /// </summary>
-    public TypedMetadataStore Metadata { get; } = new();
+    public TypedMetadataStore Metadata { get; }
 
     /// <summary>
     /// Gets the type definition provider used for resolving type information.
     /// </summary>
-    public ITypeDefinitionProvider TypeDefinitions { get; } = typeDefinitions;
+    public ITypeDefinitionProvider TypeDefinitions { get; }
 
     /// <summary>
     /// Gets the diagnostics collected during analysis.

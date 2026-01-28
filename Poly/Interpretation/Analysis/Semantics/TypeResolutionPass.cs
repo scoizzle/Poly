@@ -224,8 +224,10 @@ internal sealed class TypeResolver : INodeAnalyzer {
 }
 
 public static class TypeResolutionMetadataExtensions {
-    private record TypeResolutionMetadata {
+    private sealed class TypeResolutionMetadata : IAnalysisMetadata {
         public Dictionary<NodeId, ITypeDefinition> TypeMapById { get; } = new();
+
+        public void ClearNodeCache(NodeId nodeId) => TypeMapById.Remove(nodeId);
     };
 
     extension(AnalyzerBuilder builder) {

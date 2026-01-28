@@ -59,8 +59,10 @@ internal sealed class MemberResolver : INodeAnalyzer {
 
 
 public static class MemberResolutionMetadataExtensions {
-    private record MemberResolutionMetadata {
+    private sealed class MemberResolutionMetadata : IAnalysisMetadata {
         public Dictionary<NodeId, ITypeMember> TypeMapById { get; } = new();
+
+        public void ClearNodeCache(NodeId nodeId) => TypeMapById.Remove(nodeId);
     };
 
     extension(AnalyzerBuilder builder) {

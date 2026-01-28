@@ -49,6 +49,6 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
             analyzer.Analyze(context, root);
         }
 
-        return new AnalysisResult(context.Metadata);
+        return new AnalysisResult(context.Metadata, context.Diagnostics);
     }
 }

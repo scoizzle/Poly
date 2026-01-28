@@ -20,7 +20,7 @@ public sealed record AnalysisResult : ITypedMetadataProvider {
     /// </summary>
     public bool HasErrors => Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
 
-    public IEnumerable<object> Metadata => _metadata.GetAll();
+    public IEnumerable<IAnalysisMetadata> Metadata => _metadata.GetAll();
 
-    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class => _metadata.Get<TMetadata>();
+    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class, IAnalysisMetadata => _metadata.Get<TMetadata>();
 }

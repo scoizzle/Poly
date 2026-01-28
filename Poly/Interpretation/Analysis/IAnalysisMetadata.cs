@@ -9,5 +9,5 @@ public interface IAnalysisMetadata {
     /// Clears all cached data associated with the specified node.
     /// </summary>
     /// <param name="nodeId">The ID of the node whose metadata should be cleared.</param>
-    void ClearNodeCache(NodeId nodeId);
+    void ClearNodeCache(NodeId nodeId) { }
 }

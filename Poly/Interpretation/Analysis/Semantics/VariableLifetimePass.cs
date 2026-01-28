@@ -4,7 +4,7 @@ internal record VariableScopeMetadata(
     Dictionary<Block, HashSet<Variable>> BlockScopes,
     Dictionary<Variable, Variable?> VariableReferences, // Maps Variable uses → declarations
     List<VariableScopeError> Errors
-);
+) : IAnalysisMetadata;
 
 internal record VariableScopeError(Node Node, string Message);
 

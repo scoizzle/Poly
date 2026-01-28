@@ -22,6 +22,9 @@ public sealed class LinqExpressionGenerator {
     private readonly AnalysisResult _analysisResult;
     private readonly Dictionary<Variable, ParameterExpression> _variableCache = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<Parameter, ParameterExpression> _parameterCache = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, LabelTarget> _labelMap = new();
+    private LabelTarget? _currentBreakLabel;
+    private LabelTarget? _currentContinueLabel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LinqExpressionGenerator"/> class.
@@ -210,6 +213,29 @@ public sealed class LinqExpressionGenerator {
             // Assignment
             Assignment assign => CompileAssignment(assign),
 
+            // Control flow - conditionals
+            IfStatement ifStmt => CompileIfStatement(ifStmt),
+            SwitchStatement switchStmt => CompileSwitchStatement(switchStmt),
+
+            // Control flow - loops
+            WhileLoop whileLoop => CompileWhileLoop(whileLoop),
+            DoWhileLoop doWhileLoop => CompileDoWhileLoop(doWhileLoop),
+            ForLoop forLoop => CompileForLoop(forLoop),
+
+            // Control flow - jumps
+            BreakStatement breakStmt => CompileBreakStatement(breakStmt),
+            ContinueStatement continueStmt => CompileContinueStatement(continueStmt),
+            GotoStatement gotoStmt => Expression.Goto(GetOrCreateLabel(gotoStmt.Target)),
+            LabelDeclaration labelDecl => CompileLabelDeclaration(labelDecl),
+            ReturnStatement returnStmt => CompileReturnStatement(returnStmt),
+
+            // Exception handling
+            ThrowStatement throwStmt => Expression.Throw(CompileNode(throwStmt.Exception)),
+            TryCatchFinally tryCatch => CompileTryCatchFinally(tryCatch),
+
+            // Resource management
+            UsingStatement usingStmt => CompileUsingStatement(usingStmt),
+
             _ => throw new InvalidOperationException($"Unsupported node type: {node.GetType().Name}")
         };
     }
@@ -356,5 +382,242 @@ public sealed class LinqExpressionGenerator {
         return typeCast.IsChecked
             ? Expression.ConvertChecked(operand, type)
             : Expression.Convert(operand, type);
+    }
+
+    private Expression CompileIfStatement(IfStatement ifStmt)
+    {
+        var condition = CompileNode(ifStmt.Condition);
+        var thenBranch = CompileNode(ifStmt.ThenBranch);
+
+        if (ifStmt.ElseBranch != null) {
+            var elseBranch = CompileNode(ifStmt.ElseBranch);
+            // For IfThenElse, both branches should have compatible types
+            if (thenBranch.Type == elseBranch.Type) {
+                return Expression.IfThenElse(condition, thenBranch, elseBranch);
+            }
+            // If types differ, try to convert to common type
+            if (thenBranch.Type == typeof(void))
+                return Expression.IfThenElse(condition, thenBranch, elseBranch);
+            else if (elseBranch.Type == typeof(void))
+                return Expression.IfThenElse(condition, thenBranch, elseBranch);
+        }
+
+        // No else branch - use IfThen (returns void)
+        return Expression.IfThen(condition, thenBranch);
+    }
+
+    private Expression CompileSwitchStatement(SwitchStatement switchStmt)
+    {
+        var switchValue = CompileNode(switchStmt.Value);
+        var switchType = switchValue.Type;
+
+        var cases = switchStmt.Cases.Select(caseNode => {
+            var pattern = CompileNode(caseNode.Pattern);
+            var body = CompileNode(caseNode.Body);
+            // SwitchCase expects Expression array for test values
+            return Expression.SwitchCase(body, pattern);
+        }).ToArray();
+
+        var defaultCase = switchStmt.DefaultCase != null ? CompileNode(switchStmt.DefaultCase) : null;
+
+        return Expression.Switch(switchType, switchValue, defaultCase, null, cases);
+    }
+
+    private Expression CompileWhileLoop(WhileLoop whileLoop)
+    {
+        var breakLabel = Expression.Label("break");
+        var continueLabel = Expression.Label("continue");
+
+        var savedBreak = _currentBreakLabel;
+        var savedContinue = _currentContinueLabel;
+        _currentBreakLabel = breakLabel;
+        _currentContinueLabel = continueLabel;
+
+        var condition = CompileNode(whileLoop.Condition);
+        var body = CompileNode(whileLoop.Body);
+
+        _currentBreakLabel = savedBreak;
+        _currentContinueLabel = savedContinue;
+
+        var loopBody = Expression.Block(
+            Expression.IfThen(
+                Expression.Not(condition),
+                Expression.Break(breakLabel)),
+            body,
+            Expression.Label(continueLabel));
+
+        return Expression.Block(
+            Expression.Loop(loopBody, breakLabel),
+            Expression.Label(breakLabel));
+    }
+
+    private Expression CompileDoWhileLoop(DoWhileLoop doWhileLoop)
+    {
+        var breakLabel = Expression.Label("break");
+        var continueLabel = Expression.Label("continue");
+
+        var savedBreak = _currentBreakLabel;
+        var savedContinue = _currentContinueLabel;
+        _currentBreakLabel = breakLabel;
+        _currentContinueLabel = continueLabel;
+
+        var body = CompileNode(doWhileLoop.Body);
+        var condition = CompileNode(doWhileLoop.Condition);
+
+        _currentBreakLabel = savedBreak;
+        _currentContinueLabel = savedContinue;
+
+        var loopBody = Expression.Block(
+            body,
+            Expression.Label(continueLabel),
+            Expression.IfThen(
+                Expression.Not(condition),
+                Expression.Break(breakLabel)));
+
+        return Expression.Block(
+            Expression.Loop(loopBody, breakLabel),
+            Expression.Label(breakLabel));
+    }
+
+    private Expression CompileForLoop(ForLoop forLoop)
+    {
+        var breakLabel = Expression.Label("break");
+        var continueLabel = Expression.Label("continue");
+
+        var savedBreak = _currentBreakLabel;
+        var savedContinue = _currentContinueLabel;
+        _currentBreakLabel = breakLabel;
+        _currentContinueLabel = continueLabel;
+
+        var initializer = forLoop.Initializer != null ? CompileNode(forLoop.Initializer) : null;
+        var condition = forLoop.Condition != null ? CompileNode(forLoop.Condition) : null;
+        var increment = forLoop.Increment != null ? CompileNode(forLoop.Increment) : null;
+        var body = CompileNode(forLoop.Body);
+
+        _currentBreakLabel = savedBreak;
+        _currentContinueLabel = savedContinue;
+
+        var loopBody = Expression.Block(
+            condition != null
+                ? Expression.IfThen(Expression.Not(condition), Expression.Break(breakLabel))
+                : Expression.Empty(),
+            body,
+            Expression.Label(continueLabel),
+            increment ?? Expression.Empty());
+
+        var blockExpressions = new List<Expression>();
+        if (initializer != null)
+            blockExpressions.Add(initializer);
+
+        blockExpressions.Add(Expression.Loop(loopBody, breakLabel));
+        blockExpressions.Add(Expression.Label(breakLabel));
+
+        return blockExpressions.Count == 1 ? blockExpressions[0] : Expression.Block(blockExpressions);
+    }
+
+    private Expression CompileBreakStatement(BreakStatement breakStmt)
+    {
+        var label = breakStmt.Label ?? "break";
+        return Expression.Break(GetOrCreateLabel(label));
+    }
+
+    private Expression CompileContinueStatement(ContinueStatement continueStmt)
+    {
+        var label = continueStmt.Label ?? "continue";
+        return Expression.Continue(GetOrCreateLabel(label));
+    }
+
+    private Expression CompileLabelDeclaration(LabelDeclaration labelDecl)
+    {
+        var label = GetOrCreateLabel(labelDecl.Name);
+        var statement = CompileNode(labelDecl.Statement);
+        return Expression.Block(
+            Expression.Label(label),
+            statement);
+    }
+
+    private Expression CompileReturnStatement(ReturnStatement returnStmt)
+    {
+        if (returnStmt.Value != null) {
+            var value = CompileNode(returnStmt.Value);
+            var returnLabel = GetOrCreateLabel("return");
+            return Expression.Return(returnLabel, value);
+        }
+
+        var voidReturnLabel = GetOrCreateLabel("return");
+        return Expression.Return(voidReturnLabel);
+    }
+
+    private Expression CompileTryCatchFinally(TryCatchFinally tryCatch)
+    {
+        var tryBlock = CompileNode(tryCatch.TryBlock);
+
+        var catchClauses = tryCatch.CatchClauses?.Select(catchClause => {
+            var exceptionType = catchClause.ExceptionType != null
+                ? GetClrType(catchClause.ExceptionType)
+                : typeof(Exception);
+
+            var exceptionParam = Expression.Parameter(exceptionType, catchClause.VariableName ?? "ex");
+
+            // Create a synthetic Parameter node to bind the exception variable to the cache
+            // This allows references to the exception variable in the catch body
+            if (catchClause.VariableName != null) {
+                var exceptionVarNode = new Parameter(catchClause.VariableName, catchClause.ExceptionType);
+                _parameterCache[exceptionVarNode] = exceptionParam;
+            }
+
+            var catchBody = CompileNode(catchClause.Body);
+
+            // Remove from cache after compilation to avoid pollution
+            if (catchClause.VariableName != null) {
+                var keyToRemove = _parameterCache.Keys.FirstOrDefault(k => k is Parameter p && p.Name == catchClause.VariableName);
+                if (keyToRemove != null)
+                    _parameterCache.Remove(keyToRemove);
+            }
+
+            return Expression.Catch(exceptionParam, catchBody);
+        }).ToArray() ?? Array.Empty<CatchBlock>();
+
+        var finallyBlock = tryCatch.FinallyBlock != null ? CompileNode(tryCatch.FinallyBlock) : null;
+
+        if (catchClauses.Length > 0 && finallyBlock != null) {
+            return Expression.TryCatchFinally(tryBlock, finallyBlock, catchClauses);
+        }
+        else if (catchClauses.Length > 0) {
+            return Expression.TryCatch(tryBlock, catchClauses);
+        }
+        else if (finallyBlock != null) {
+            return Expression.TryFinally(tryBlock, finallyBlock);
+        }
+
+        return tryBlock;
+    }
+
+    private Expression CompileUsingStatement(UsingStatement usingStmt)
+    {
+        var resourceType = GetClrType(usingStmt.Resource);
+        var resource = CompileNode(usingStmt.Resource);
+        var body = CompileNode(usingStmt.Body);
+
+        // using statement is: try { body } finally { resource.Dispose() }
+        var disposeMethod = resourceType.GetMethod(nameof(IDisposable.Dispose));
+        if (disposeMethod != null) {
+            // Call Dispose on the compiled resource expression
+            var disposeCall = Expression.Call(resource, disposeMethod);
+            return Expression.TryFinally(body, disposeCall);
+        }
+
+        // Fallback: if no Dispose method found, just execute the body
+        return body;
+    }
+
+    private LabelTarget GetOrCreateLabel(string name)
+    {
+        if (!_labelMap.TryGetValue(name, out var label)) {
+            label = Expression.Label(name);
+            _labelMap[name] = label;
+        }
+
+        return label;
     }
 }

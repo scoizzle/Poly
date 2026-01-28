@@ -225,7 +225,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
 public static class TypeResolutionMetadataExtensions {
     private record TypeResolutionMetadata {
-        public Dictionary<Node, ITypeDefinition> TypeMap { get; } = new();
+        public Dictionary<NodeId, ITypeDefinition> TypeMapById { get; } = new();
     };
 
     extension(AnalyzerBuilder builder) {
@@ -239,8 +239,8 @@ public static class TypeResolutionMetadataExtensions {
     extension(AnalysisContext context) {
         public void SetResolvedType(Node node, ITypeDefinition type)
         {
-            var map = context.GetOrAddMetadata(static () => new TypeResolutionMetadata()).TypeMap;
-            map[node] = type;
+            var map = context.GetOrAddMetadata(static () => new TypeResolutionMetadata()).TypeMapById;
+            map[node.Id] = type;
         }
     }
 
@@ -248,7 +248,7 @@ public static class TypeResolutionMetadataExtensions {
         public ITypeDefinition? GetResolvedType(Node node)
         {
             if (typedMetadataProvider.GetMetadata<TypeResolutionMetadata>() is TypeResolutionMetadata metadata) {
-                if (metadata.TypeMap.TryGetValue(node, out var type)) {
+                if (metadata.TypeMapById.TryGetValue(node.Id, out var type)) {
                     return type;
                 }
             }

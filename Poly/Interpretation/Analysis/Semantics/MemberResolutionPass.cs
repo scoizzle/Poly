@@ -60,7 +60,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
 
 public static class MemberResolutionMetadataExtensions {
     private record MemberResolutionMetadata {
-        public Dictionary<Node, ITypeMember> TypeMap { get; } = new();
+        public Dictionary<NodeId, ITypeMember> TypeMapById { get; } = new();
     };
 
     extension(AnalyzerBuilder builder) {
@@ -74,8 +74,8 @@ public static class MemberResolutionMetadataExtensions {
     extension(AnalysisContext context) {
         public void SetResolvedMember(Node node, ITypeMember member)
         {
-            var map = context.GetOrAddMetadata(static () => new MemberResolutionMetadata()).TypeMap;
-            map[node] = member;
+            var map = context.GetOrAddMetadata(static () => new MemberResolutionMetadata()).TypeMapById;
+            map[node.Id] = member;
 
             context.SetResolvedType(node, member.MemberTypeDefinition);
         }
@@ -85,7 +85,7 @@ public static class MemberResolutionMetadataExtensions {
         public ITypeMember? GetResolvedMember(Node node)
         {
             if (typedMetadataProvider.GetMetadata<MemberResolutionMetadata>() is MemberResolutionMetadata metadata) {
-                if (metadata.TypeMap.TryGetValue(node, out var member)) {
+                if (metadata.TypeMapById.TryGetValue(node.Id, out var member)) {
                     return member;
                 }
             }

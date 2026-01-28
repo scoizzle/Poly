@@ -1,5 +1,3 @@
-using System;
-
 namespace Poly.Interpretation.Analysis;
 
 internal record VariableScopeMetadata(
@@ -128,7 +126,7 @@ public static class VariableScopeMetadataExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder AddVariableScopePass()
         {
-            builder.AddPass(new VariableScopePass());
+            builder.AddAnalyzer(new ScopeValidator());
             return builder;
         }
     }

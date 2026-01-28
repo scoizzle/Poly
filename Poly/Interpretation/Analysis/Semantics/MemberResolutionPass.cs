@@ -66,7 +66,7 @@ public static class MemberResolutionMetadataExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder AddMemberResolutionPass()
         {
-            builder.AddPass(new MemberResolutionPass());
+            builder.AddAnalyzer(new MemberResolver());
             return builder;
         }
     }

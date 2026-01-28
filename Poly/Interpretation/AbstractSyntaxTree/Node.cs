@@ -6,7 +6,6 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// Type information is resolved by semantic analysis middleware.
 /// Transformation is handled entirely by middleware in the interpretation pipeline.
 /// </summary>
-public abstract record Node
-{
+public abstract record Node {
     public virtual IEnumerable<Node?> Children => Enumerable.Empty<Node>();
 }

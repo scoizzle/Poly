@@ -225,7 +225,7 @@ public static class TypeResolutionMetadataExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder AddTypeResolutionPass()
         {
-            builder.AddPass(new TypeResolutionPass());
+            builder.AddAnalyzer(new TypeResolver());
             return builder;
         }
     }
@@ -246,7 +246,7 @@ public static class TypeResolutionMetadataExtensions {
                     return type;
                 }
             }
-            
+
             return default;
         }
     }

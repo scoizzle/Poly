@@ -6,7 +6,6 @@ using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
-using Poly.Interpretation.SemanticAnalysis;
 using Poly.Validation;
 using Poly.Validation.Builders;
 

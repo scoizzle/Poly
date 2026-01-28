@@ -1,16 +1,69 @@
 # Poly Interpretation System
 
-A fluent, strongly-typed interpretation and expression building system for .NET that compiles to System.Linq.Expressions for optimal runtime performance.
+A fluent, strongly-typed analysis and code generation system for .NET that compiles AST expressions to System.Linq.Expressions for optimal runtime performance.
 
 ## Overview
 
-The Interpretation system provides a domain-specific language (DSL) for building expression trees through composable, type-safe operators. It bridges the gap between high-level intent and low-level Expression Tree construction, offering:
+The Interpretation system provides a domain-specific language (DSL) for building and analyzing expression trees through composable, type-safe operators. It follows a two-phase architecture:
 
-- **Type-safe composition**: All operations verify type compatibility at build time
+1. **Analysis Phase**: Semantic analysis passes validate and annotate the AST
+2. **Generation Phase**: Code generators transform analyzed AST into executable artifacts
+
+### Key Features
+
+- **Type-safe composition**: All operations verify type compatibility during analysis
 - **Fluent API**: Natural method chaining for readable expression construction
 - **Expression Tree compilation**: Compiles to optimized IL via System.Linq.Expressions
 - **Lexical scoping**: Block-based variable scoping with proper shadowing
 - **Automatic type promotion**: Numeric operations follow C# promotion rules
+- **Diagnostic reporting**: Errors, warnings, and hints collected during analysis
+
+## Architecture
+
+### Analysis System
+
+The analysis system validates and annotates AST nodes with semantic information:
+
+```csharp
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()       // Resolves types for all nodes
+    .UseMemberResolver()     // Resolves properties, methods, indexers
+    .UseVariableScopeValidator()  // Validates variable declarations and references
+    .Build();
+
+var result = analyzer.Analyze(astNode);
+
+// Check for diagnostics
+if (result.Context.Diagnostics.Any())
+{
+    foreach (var diagnostic in result.Context.Diagnostics)
+    {
+        Console.WriteLine($"{diagnostic.Severity}: {diagnostic.Message}");
+    }
+}
+```
+
+**Analysis Passes:**
+- **TypeResolver**: Infers and validates types for constants, variables, operations, member access
+- **MemberResolver**: Resolves property/method/indexer access with type checking
+- **ScopeValidator**: Tracks variable lifetime, detects undeclared variables and shadowing
+
+### Code Generation System
+
+The `LinqExpressionGenerator` transforms analyzed AST into System.Linq.Expressions:
+
+```csharp
+var generator = new LinqExpressionGenerator(analysisResult);
+
+// Compile to Expression
+Expression expr = generator.Compile(astNode);
+
+// Or compile directly to delegate
+var param = new Parameter("x", TypeReference.To<int>());
+Func<int, int> compiled = (Func<int, int>)generator.CompileAsDelegate(astNode, param);
+
+int result = compiled(42);
+```
 
 ## Core Concepts
 
@@ -305,316 +358,38 @@ Block Scope 2 (nested)
 - `PushScope()` / `PopScope()` manage the scope stack
 - Blocks automatically manage their scope lifecycle
 
-### Middleware-Based Interpretation (New)
+## Helper Methods
 
-The middleware interpreter provides a composable, single-pass pipeline for semantic analysis and code generation. This is particularly useful for:
-- **Custom Domain Transformers**: Short-circuit standard processing with domain-specific logic
-- **Semantic Analysis**: Resolve and cache type information during traversal
-- **AST Enrichment**: Annotate nodes with resolved members and type information
-- **Code Generation**: Terminal middleware delegates to `ITransformer<TResult>` for flexible output
-
-#### Pipeline Architecture
-
-```
-Input AST Node
-    ↓
-[Middleware 1: SemanticAnalysis]
-    (Type resolution, member caching)
-    ↓
-[Middleware 2: CustomTransformers]
-    (Registry-based domain-specific handlers)
-    ↓
-[Middleware 3: TerminalTransform]
-    (Delegates to ITransformer<TResult>)
-    ↓
-Output Result<TResult>
-```
-
-#### Key Components
-
-**TransformationDelegate<TResult>**: Context-first pipeline signature
-```csharp
-public delegate Task<TResult> TransformationDelegate<TResult>(
-    InterpretationContext context,
-    Node node,
-    TransformationDelegate<TResult> next);
-```
-
-**ITransformationMiddleware<TResult>**: Middleware contract
-```csharp
-public interface ITransformationMiddleware<TResult>
-{
-    TransformationDelegate<TResult> Build(TransformationDelegate<TResult> next);
-}
-```
-
-**Semantic Caching**: Type information flows through context without mutating nodes
-```csharp
-// In middleware
-context.SetResolvedType(node, resolvedType);
-context.SetResolvedMember(node, resolvedMember);
-
-// In terminal processor or elsewhere
-var type = context.GetResolvedType(node);
-var member = context.GetResolvedMember(node);
-```
-
-**Custom Transformer Registry**: Priority-based, domain-specific handlers
-```csharp
-var registry = new CustomTransformerRegistry<TResult>();
-registry.Register(
-    nodeMatcher: n => n is BinaryOp { Operator: "+" },
-    transformer: (context, node) => /* custom handling */);
-
-var middleware = new CustomTransformMiddleware<TResult>(registry);
-```
-
-#### Quick Start: Middleware Pipeline
+For easier testing and usage, use the helper extension methods:
 
 ```csharp
-var context = new InterpretationContext();
-var typeProvider = new ClrTypeDefinitionProvider();
-context.TypeProvider = typeProvider;
+using Poly.Tests.TestHelpers;
 
-var builder = new InterpreterBuilder<string>(context);
-builder
-    .Use(new SemanticAnalysisMiddleware())
-    .Use(new CustomTransformMiddleware<string>(new CustomTransformerRegistry<string>()))
-    .Use(new TerminalTransformMiddleware<string>(customTransformer));
+// BuildExpression - analyzes and generates Expression
+var expr = astNode.BuildExpression();
+var lambda = Expression.Lambda<Func<int>>(expr);
+int result = lambda.Compile()();
 
-var interpreter = builder.Build();
+// BuildExpressionWithParameters - pre-registers parameter types
+var param = new Parameter("x");
+var expr = astNode.BuildExpressionWithParameters((param, typeof(int)));
+var lambda = Expression.Lambda<Func<int, int>>(expr, /* parameter expressions */);
 
-var ast = new BinaryOp(
-    new Literal<int>(10),
-    "+",
-    new Literal<int>(20));
-
-var result = await interpreter.Transform(ast);
-// Result contains semantic info in context for inspection
+// CompileLambda - builds and compiles in one step
+var compiled = astNode.CompileLambda<Func<int, int>>((param, typeof(int)));
+int result = compiled(42);
 ```
-
-#### Three-Phase Implementation
-
-See [MIDDLEWARE_INTERPRETER_IMPLEMENTATION.md](./MIDDLEWARE_INTERPRETER_IMPLEMENTATION.md) for comprehensive architecture details.
-
-**Phase 1: Core Infrastructure**
-- `TransformationDelegate<TResult>` - Context-first pipeline signature
-- `ITransformationMiddleware<TResult>` - Middleware contract
-- `InterpreterBuilder<TResult>` - Fluent pipeline configuration
-- `Interpreter<TResult>` - Orchestrates middleware chain execution
-- `InterpretationContext` enhancements - TypeProvider, Variables, ScopeStack, Properties dictionary
-
-**Phase 2: Semantic Analysis Middleware**
-- `SemanticAnalysisMiddleware` - Resolves types/members and caches in context
-- `SemanticExtensions` - Helper methods for accessing/storing semantic info
-- `SemanticInfo` record - Immutable semantic information structure
-
-**Phase 3: Custom & Terminal Transformers**
-- `CustomTransformerRegistry<TResult>` - Priority-based handler registry
-- `CustomTransformMiddleware<TResult>` - Applies registry transformers
-- `TerminalTransformMiddleware<TResult>` - Delegates to `ITransformer<TResult>`
-
-#### Integration with Existing System
-
-The middleware interpreter:
-- ✅ Integrates with existing `InterpretationContext`
-- ✅ Respects `ITypeDefinitionProvider` for type resolution
-- ✅ Delegates terminal processing to standard `ITransformer<TResult>`
-- ✅ Does not modify the fluent Value API
-- ✅ Allows gradual adoption alongside existing code
-- ✅ Provides escape hatches for domain-specific logic via custom transformers
-
-## Current Features
-
-✅ Comprehensive operator set (arithmetic, comparison, boolean, conditional)  
-✅ Fluent API for natural composition  
-✅ Automatic numeric type promotion in arithmetic  
-✅ Block expressions with lexical scoping  
-✅ Member access (properties, fields, methods)  
-✅ Array and indexer access  
-✅ Method invocation  
-✅ Type casting with overflow checking  
-✅ Null-coalescing operator  
-✅ Assignment operations  
-✅ Parameter and variable management  
-
-## Middleware vs. Fluent API: When to Use Each
-
-### Use the Fluent Value API When:
-- Building expression trees for compilation and execution
-- Working with runtime values and parameters
-- Need lightweight, familiar LINQ expression semantics
-- Building validators, predicates, or calculated fields
-- Compiling to IL for high-performance repeated execution
-- Working within simple, single-concern transformation logic
-
-**Example**: Building a validation rule
-```csharp
-var age = context.AddParameter<int>("age");
-var validator = age.GreaterThanOrEqual(Value.Wrap(18))
-                   .And(age.LessThanOrEqual(Value.Wrap(120)));
-var compiled = CompileToFunc<int, bool>(context, validator, age);
-```
-
-### Use the Middleware Interpreter When:
-- Need multi-stage semantic analysis and enrichment
-- Want to support custom, domain-specific transformations
-- Building language tools (analyzers, code generators, translators)
-- Need to inspect/cache type information during traversal
-- Processing ASTs with complex node hierarchies
-- Want composable, reusable transformation middleware
-- Need to integrate multiple transformation concerns (analysis → custom logic → generation)
-
-**Example**: Building an AST transformer with semantic caching
-```csharp
-var builder = new InterpreterBuilder<string>(context);
-builder
-    .Use(new SemanticAnalysisMiddleware())           // Resolve types
-    .Use(new CustomTransformMiddleware<string>(reg)) // Domain logic
-    .Use(new TerminalTransformMiddleware<string>(codeGen)); // Generate
-
-var interpreter = builder.Build();
-var result = await interpreter.Transform(astNode);
-```
-
-### Side-by-Side Comparison
-
-| Aspect | Fluent API | Middleware |
-|--------|-----------|------------|
-| **Entry Point** | `Value.Wrap()`, `Parameter`, `Variable` | `InterpreterBuilder<T>` |
-| **Composition** | Method chaining, fluent builders | Middleware pipeline |
-| **Type Safety** | Compile-time, Expression Tree validation | Runtime via context semantic cache |
-| **Performance** | Compiles to IL (fastest at execution) | Middleware overhead (but single-pass) |
-| **Semantic Info** | Limited (GetTypeDefinition on values) | Rich (cached in InterpretationContext) |
-| **Extensibility** | Add operators to Value class | Add middleware, custom transformers |
-| **Node Structure** | Operator instances (mutable builders) | Immutable record hierarchy |
-| **Use Case** | Execution, evaluation | Analysis, transformation, generation |
-| **Output** | Expression<T>, compiled delegates | Custom (via ITransformer<TResult>) |
-
-## Future Plans
-
-### High Priority Enhancements
-
-#### 1. Variable Type Safety Validation
-**Goal:** Prevent runtime type errors from variable reassignment.
-
-- Store declared type in `Variable` at construction
-- Validate type compatibility on reassignment
-- Use numeric promotion rules for compatible assignments
-- Provide clear error messages for incompatible types
-
-**Impact:** Eliminates entire class of type-safety bugs.
-
-#### 2. Overload Resolution for Methods/Indexers
-**Goal:** Support method/indexer overloading with proper resolution.
-
-- Implement C#-style overload resolution with type distance scoring
-- Exact match: 0, Numeric promotion: 1, Implicit conversion: 2
-- Handle tie-breaking with specificity rules
-- Support generic method instantiation
-
-**Impact:** Enables realistic method invocation scenarios.
-
-#### 3. Numeric Promotion in Comparison Operators
-**Goal:** Allow mixed-type comparisons (int vs double, etc.).
-
-- Apply `NumericTypePromotion` to all comparison operators
-- Promote both operands to common type before comparison
-- Consistent behavior with arithmetic operators
-
-**Impact:** Natural comparisons work like C# (x > 5.5 where x is int).
-
-#### 4. Circular Reference Detection
-**Goal:** Prevent stack overflow from circular variable references.
-
-- Track visiting variables in `InterpretationContext`
-- Detect cycles during `GetTypeDefinition()` / `BuildExpression()`
-- Provide clear error with reference chain path
-- Use thread-local or context-scoped tracking
-
-**Impact:** Robust error handling, prevents crashes.
-
-#### 5. Member Resolution Disambiguation
-**Goal:** Properly handle types with fields, properties, and methods of the same name.
-
-- Prioritize member types: Properties > Fields > Methods
-- Document disambiguation behavior
-- Support explicit member type selection if needed
-
-**Impact:** Predictable behavior with complex types.
-
-#### 6. Assignment Target Validation
-**Goal:** Validate assignment targets at build time.
-
-- Only allow assignment to `Parameter` or mutable `Variable`
-- Reject assignments to `Constant`, `Operator`, or uninitialized variables
-- Clear error messages for invalid targets
-
-**Impact:** Catch errors early with clear diagnostics.
-
-### Medium Priority Enhancements
-
-#### 7. Multi-Dimensional Array Support
-**Goal:** Support multi-dimensional and jagged arrays.
-
-- Accept multiple indices: `arr.Index(i, j)` → `arr[i, j]`
-- Use `Expression.ArrayIndex` with rank validation
-- Handle both rectangular (`int[,]`) and jagged (`int[][]`) arrays
-
-**Impact:** Full array support for .NET scenarios.
-
-#### 8. Type Definition Lookup Fallbacks
-**Goal:** Graceful handling of type resolution failures.
-
-- Fallback chain: registered providers → CLR reflection → error
-- Handle generic types, nested types, dynamic assemblies
-- Detailed error messages listing where type was searched
-
-**Impact:** Better error messages, robust type resolution.
-
-#### 9. Scope Exception Handling
-**Goal:** Properly clean up scope state on exceptions.
-
-- Wrap scope operations in try/catch/finally
-- Ensure PopScope() runs even on error
-- Consider context reset/recovery methods
-
-**Impact:** Context remains usable after build errors.
-
-### Low Priority / Optimization
-
-#### 10. Expression Caching
-**Goal:** Avoid rebuilding identical subexpressions.
-
-- Optional cache in `InterpretationContext`
-- Key by (Value identity, context hash)
-- Profile first to verify benefit
-- Clear cache as needed for memory management
-
-**Impact:** Performance optimization for complex trees (if needed).
-
-### Additional Future Features
-
-- **Bitwise operators**: And, Or, Xor, ShiftLeft, ShiftRight for integral types
-- **Type checks**: TypeIs, TypeAs for safe runtime type testing
-- **Increment/Decrement**: Pre/post increment and decrement operators
-- **Compound assignments**: +=, -=, *=, /=, etc.
-- **Loop constructs**: For, While, ForEach with break/continue
-- **Lambda expressions**: Nested lambdas and closures
-- **Exception handling**: Try/Catch/Finally blocks
-- **Collection operations**: NewArray, NewObject, collection initializers
-- **LINQ integration**: Select, Where, OrderBy as expression node operators
-- **Async support**: Async/await expression building
 
 ## Testing
 
 The system has comprehensive test coverage:
 
-- **313 tests** across all operators and features
-- Unit tests for each operator type
+- **383 tests** across all operators and features
+- Unit tests for each operator type and analysis pass
 - Integration tests for complex expression scenarios
 - Scope management and variable isolation tests
 - Type promotion and compatibility tests
+- Diagnostic collection and error reporting tests
 - Edge case and error condition coverage
 
 Run tests:
@@ -639,19 +414,35 @@ for (int i = 0; i < 1000000; i++) {
 }
 ```
 
+## Future Enhancements
+
+### High Priority
+- **Circular reference detection**: Prevent stack overflow from variable cycles
+- **Enhanced diagnostics**: Better error messages with source location tracking
+- **Incremental analysis**: LSP integration for real-time validation
+
+### Medium Priority  
+- **Control flow analysis**: Reachability and definite assignment checking
+- **Constant folding**: Compile-time evaluation of constant expressions
+- **Multi-dimensional arrays**: Full support for rectangular and jagged arrays
+
+### Future Features
+- **Bitwise operators**: And, Or, Xor, ShiftLeft, ShiftRight
+- **Type checks**: TypeIs, TypeAs for runtime type testing
+- **Loop constructs**: For, While, ForEach with break/continue
+- **Exception handling**: Try/Catch/Finally blocks
+- **Async support**: Async/await expression building
+
 ## Contributing
 
-### Adding Operators (Fluent API)
+When adding new operators or features:
 
-When adding new operators or features to the fluent API:
-
-1. Inherit from appropriate base class (`Operator`, `BooleanOperator`, etc.)
-2. Implement `GetTypeDefinition()` for type checking
-3. Implement `BuildExpression()` for code generation
-4. Add fluent methods to `Value` class for composition
+1. Define AST node class inheriting from `Node`
+2. Implement `Children` property for traversal
+3. Add analysis logic to appropriate `INodeAnalyzer` pass
+4. Add code generation logic to `LinqExpressionGenerator`
 5. Write comprehensive tests covering normal and edge cases
-6. Document behavior in XML comments
-7. Update this README with new capabilities
+6. Update this README with new capabilities
 
 ### Extending the Middleware Interpreter
 

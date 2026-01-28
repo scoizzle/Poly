@@ -15,8 +15,11 @@ internal sealed class TypeResolver : INodeAnalyzer {
             // Parameters: resolve from type hint if available
             Parameter p => ResolveParameterType(context, p),
 
-            // Variables: resolve from their assigned value
-            Variable v => v.Value is null ? context.TypeDefinitions.GetTypeDefinition(typeof(object)) : ResolveNodeType(context, v.Value),
+            // Variables: check if already resolved (e.g., by Block), otherwise resolve from Value or default to object
+            Variable v => context.GetResolvedType(v)
+                ?? (v.Value is null
+                    ? context.TypeDefinitions.GetTypeDefinition(typeof(object))
+                    : ResolveNodeType(context, v.Value)),
 
             // Arithmetic operations - all return the promoted numeric type
             Add add => ResolveArithmeticType(context, add.LeftHandValue, add.RightHandValue),
@@ -77,7 +80,10 @@ internal sealed class TypeResolver : INodeAnalyzer {
         return node switch {
             Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
             Parameter p => ResolveParameterType(context, p),
-            Variable v => v.Value is null ? context.TypeDefinitions.GetTypeDefinition(typeof(object)) : ResolveNodeType(context, v.Value),
+            Variable v => context.GetResolvedType(v)
+                ?? (v.Value is null
+                    ? context.TypeDefinitions.GetTypeDefinition(typeof(object))
+                    : ResolveNodeType(context, v.Value)),
             Add add => ResolveArithmeticType(context, add.LeftHandValue, add.RightHandValue),
             Subtract sub => ResolveArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
             Multiply mul => ResolveArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
@@ -218,7 +224,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 }
 
 public static class TypeResolutionMetadataExtensions {
-    internal record TypeResolutionMetadata {
+    private record TypeResolutionMetadata {
         public Dictionary<Node, ITypeDefinition> TypeMap { get; } = new();
     };
 

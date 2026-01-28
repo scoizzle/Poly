@@ -1,9 +1,9 @@
-using Poly.Interpretation;
 using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.SemanticAnalysis;
+using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.LinqExpressions;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Validation.Rules;
-using Poly.Interpretation.LinqExpressions;
 
 namespace Poly.Validation;
 
@@ -27,17 +27,31 @@ public sealed class RuleSet<T> {
         var buildingContext = new RuleBuildingContext(typeDefinition);
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
 
-        var interpreter = new InterpreterBuilder<Expr>()
-            .UseSemanticAnalysis()
-            .UseLinqExpressionCompilation()
+        var analyzer = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .UseVariableScopeValidator()
             .Build();
 
-        var result = interpreter
-            .WithParameter<T>((Parameter)buildingContext.Value)
-            .Interpret(RuleSetInterpretation);
+        var analysisResult = analyzer.Analyze(RuleSetInterpretation);
+        var generator = new LinqExpressionGenerator(analysisResult);
 
-        NodeTree = result.Value;
-        Predicate = Expr.Lambda<Predicate<T>>(NodeTree, result.GetParameters()).Compile();
+        NodeTree = generator.Compile(RuleSetInterpretation);
+
+        // Collect parameters generated during compilation
+        var parameterExpressions = generator.GetParameters().ToList();
+
+        // Ensure we have the main parameter for the type being validated
+        // If it wasn't generated (e.g., due to empty rules), create it manually
+        var mainParam = (Parameter)buildingContext.Value;
+        var mainParamExpr = parameterExpressions.FirstOrDefault(p => p.Name == mainParam.Name);
+        if (mainParamExpr == null) {
+            mainParamExpr = Expr.Parameter(typeof(T), mainParam.Name);
+            parameterExpressions.Clear();
+            parameterExpressions.Add(mainParamExpr);
+        }
+
+        Predicate = Expr.Lambda<Predicate<T>>(NodeTree, parameterExpressions).Compile();
     }
 
     /// <summary>

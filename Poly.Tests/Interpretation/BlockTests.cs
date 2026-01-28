@@ -1,15 +1,15 @@
-using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Expr = System.Linq.Expressions.Expression;
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
+using Poly.Tests.TestHelpers;
+
+using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
-public class BlockTests
-{
+public class BlockTests {
     [Test]
     public async Task Block_WithSingleExpression_ReturnsValue()
     {
@@ -46,7 +46,7 @@ public class BlockTests
         // Arrange - block with a variable that's assigned and used
         var varNode = new Variable("x");
         var assignNode = new Assignment(varNode, Wrap(50));
-        var node = new Block(new[] { varNode }, [assignNode, varNode]);
+        var node = new Block([assignNode, varNode], new[] { varNode });
 
         // Act
         var expr = node.BuildExpression();

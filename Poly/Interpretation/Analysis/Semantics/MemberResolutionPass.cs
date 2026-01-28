@@ -59,7 +59,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
 
 
 public static class MemberResolutionMetadataExtensions {
-    internal record MemberResolutionMetadata {
+    private record MemberResolutionMetadata {
         public Dictionary<Node, ITypeMember> TypeMap { get; } = new();
     };
 

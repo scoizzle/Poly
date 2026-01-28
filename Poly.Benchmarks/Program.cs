@@ -27,6 +27,16 @@ var analysisResult = analyzer
     .With(ctx => ctx.SetResolvedType(param, ctx.TypeDefinitions.GetTypeDefinition(typeof(string))!))
     .Analyze(body);
 
+if (analysisResult.Diagnostics.Count > 0) {
+    Console.WriteLine("Analysis Diagnostics:");
+    foreach (var diagnostic in analysisResult.Diagnostics) {
+        Console.WriteLine($"  {diagnostic.Severity}: {diagnostic.Message}");
+    }
+}
+else {
+    Console.WriteLine("Analysis completed with no diagnostics.");
+}
+
 var generator = new LinqExpressionGenerator(analysisResult);
 Func<string, string> compiled = (Func<string, string>)generator.CompileAsDelegate(body, param);
 

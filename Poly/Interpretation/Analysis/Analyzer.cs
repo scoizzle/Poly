@@ -1,33 +1,18 @@
-using Poly.Introspection.CommonLanguageRuntime;
-
 namespace Poly.Interpretation.Analysis;
 
-public sealed class AnalyzerBuilder {
-    private readonly TypeDefinitionProviderCollection _typeDefinitions = [ClrTypeDefinitionRegistry.Shared];
-    private readonly List<INodeAnalyzer> _analyzers = new();
-
-    public void AddAnalyzer(INodeAnalyzer analyzer)
-    {
-        ArgumentNullException.ThrowIfNull(analyzer);
-        _analyzers.Add(analyzer);
-    }
-
-    public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider)
-    {
-        ArgumentNullException.ThrowIfNull(provider);
-        _typeDefinitions.Add(provider);
-    }
-
-    public Analyzer Build()
-    {
-        TypeDefinitionProviderCollection typeDefinitionProviders = [.. _typeDefinitions.Providers];
-        return new Analyzer(typeDefinitionProviders, _analyzers.ToArray());
-    }
-}
-
+/// <summary>
+/// Analyzes abstract syntax tree nodes using a collection of node analyzers.
+/// </summary>
+/// <param name="typeDefinitions">The provider for type definitions used during analysis.</param>
+/// <param name="analyzers">The collection of node analyzers to apply.</param>
 public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerable<INodeAnalyzer> analyzers) {
     private readonly List<Action<AnalysisContext>> _actions = [];
 
+    /// <summary>
+    /// Adds a custom action to be executed prior to analysis.
+    /// </summary>
+    /// <param name="action">The action to add.</param>
+    /// <returns>The current Analyzer instance.</returns>
     public Analyzer With(Action<AnalysisContext> action)
     {
         ArgumentNullException.ThrowIfNull(action);
@@ -35,6 +20,11 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
         return this;
     }
 
+    /// <summary>
+    /// Analyzes the given AST node and produces an analysis result.
+    /// </summary>
+    /// <param name="root">The root AST node to analyze.</param>
+    /// <returns>The result of the analysis.</returns>
     public AnalysisResult Analyze(Node root)
     {
         ArgumentNullException.ThrowIfNull(root);

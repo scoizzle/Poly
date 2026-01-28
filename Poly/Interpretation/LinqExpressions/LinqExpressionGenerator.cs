@@ -272,14 +272,10 @@ public sealed class LinqExpressionGenerator {
             return Expression.Call(concat, leftExpr, rightExpr);
         }
 
-        // Apply numeric type promotion if needed
-        if (_analysisResult.GetResolvedType(leftNode) is ClrTypeDefinition leftType &&
-            _analysisResult.GetResolvedType(rightNode) is ClrTypeDefinition rightType) {
-            var promotedType = GetPromotedNumericType(leftType.Type, rightType.Type);
-            if (promotedType != null) {
-                leftExpr = leftExpr.Type == promotedType ? leftExpr : Expression.Convert(leftExpr, promotedType);
-                rightExpr = rightExpr.Type == promotedType ? rightExpr : Expression.Convert(rightExpr, promotedType);
-            }
+        var promotedType = GetPromotedNumericType(leftExpr.Type, rightExpr.Type);
+        if (promotedType != null) {
+            leftExpr = leftExpr.Type == promotedType ? leftExpr : Expression.Convert(leftExpr, promotedType);
+            rightExpr = rightExpr.Type == promotedType ? rightExpr : Expression.Convert(rightExpr, promotedType);
         }
 
         return factory(leftExpr, rightExpr);
@@ -610,6 +606,12 @@ public sealed class LinqExpressionGenerator {
         // Fallback: if no Dispose method found, just execute the body
         return body;
     }
+
+    /// <summary>
+    /// Gets the parameter expressions that were created during compilation.
+    /// </summary>
+    /// <returns>The collection of parameter expressions created.</returns>
+    public IEnumerable<ParameterExpression> GetParameters() => _parameterCache.Values;
 
     private LabelTarget GetOrCreateLabel(string name)
     {

@@ -1,26 +1,26 @@
-using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Expr = System.Linq.Expressions.Expression;
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
+using Poly.Tests.TestHelpers;
+
+using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
-public class BlockScopeTests
-{
+public class BlockScopeTests {
     [Test]
     public async Task BlockScope_CreatesNewScope_VariablesNotVisibleOutside()
     {
         // Arrange - nested blocks, inner variable should not affect outer
         var innerVar = new Variable("x");
         var innerAssign = new Assignment(innerVar, Wrap(50));
-        var innerBlock = new Block(new[] { innerVar }, [innerAssign, innerVar]);
-        
+        var innerBlock = new Block([innerAssign, innerVar], new[] { innerVar });
+
         var outerVar = new Variable("x");
         var outerAssign = new Assignment(outerVar, Wrap(100));
-        var outerBlock = new Block(new[] { outerVar }, [outerAssign, innerBlock]);
+        var outerBlock = new Block([outerAssign, innerBlock], new[] { outerVar });
 
         // Act
         var expr = outerBlock.BuildExpression();
@@ -37,12 +37,12 @@ public class BlockScopeTests
         // Arrange
         var outerVar = new Variable("x");
         var outerAssign = new Assignment(outerVar, Wrap(100));
-        
+
         var innerVar = new Variable("x");
         var innerAssign = new Assignment(innerVar, Wrap(50));
-        var innerBlock = new Block(new[] { innerVar }, [innerAssign, innerVar]);
-        
-        var outerBlock = new Block(new[] { outerVar }, [outerAssign, innerBlock]);
+        var innerBlock = new Block([innerAssign, innerVar], new[] { innerVar });
+
+        var outerBlock = new Block([outerAssign, innerBlock], new[] { outerVar });
 
         // Act
         var expr = outerBlock.BuildExpression();
@@ -59,11 +59,11 @@ public class BlockScopeTests
         // Arrange
         var var1 = new Variable("a");
         var assign1 = new Assignment(var1, Wrap(10));
-        
+
         var var2 = new Variable("b");
         var assign2 = new Assignment(var2, Wrap(20));
-        
-        var node = new Block(new[] { var1, var2 }, [assign1, assign2, var2]);
+
+        var node = new Block([assign1, assign2, var2], new[] { var1, var2 });
 
         // Act
         var expr = node.BuildExpression();
@@ -80,9 +80,9 @@ public class BlockScopeTests
         // Arrange - outer variable used in inner block
         var outerVar = new Variable("x");
         var outerAssign = new Assignment(outerVar, Wrap(100));
-        
+
         var addExpr = outerVar.Add(Wrap(50));
-        var outerBlock = new Block(new[] { outerVar }, [outerAssign, addExpr]);
+        var outerBlock = new Block([outerAssign, addExpr], new[] { outerVar });
 
         // Act
         var expr = outerBlock.BuildExpression();
@@ -99,11 +99,11 @@ public class BlockScopeTests
         // Arrange
         var block1Var = new Variable("x");
         var block1Assign = new Assignment(block1Var, Wrap(10));
-        var block1 = new Block(new[] { block1Var }, [block1Assign, block1Var]);
-        
+        var block1 = new Block([block1Assign, block1Var], new[] { block1Var });
+
         var block2Var = new Variable("x");
         var block2Assign = new Assignment(block2Var, Wrap(20));
-        var block2 = new Block(new[] { block2Var }, [block2Assign, block2Var]);
+        var block2 = new Block([block2Assign, block2Var], new[] { block2Var });
 
         // Wrap both blocks together
         var combined = new Block(block1, block2);

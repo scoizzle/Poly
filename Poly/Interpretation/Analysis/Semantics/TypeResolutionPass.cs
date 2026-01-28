@@ -223,7 +223,7 @@ public static class TypeResolutionMetadataExtensions {
     };
 
     extension(AnalyzerBuilder builder) {
-        public AnalyzerBuilder AddTypeResolutionPass()
+        public AnalyzerBuilder UseTypeResolver()
         {
             builder.AddAnalyzer(new TypeResolver());
             return builder;

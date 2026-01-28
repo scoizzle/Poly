@@ -3,17 +3,17 @@ using System.Linq.Expressions;
 
 using Poly.Interpretation;
 using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.SemanticAnalysis;
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Interpretation.SemanticAnalysis;
 using Poly.Validation;
 using Poly.Validation.Builders;
-using Poly.Interpretation.Analysis;
 
 var analyzer = new AnalyzerBuilder()
-    .AddTypeResolutionPass()
-    .AddMemberResolutionPass()
-    .AddVariableScopePass()
+    .UseTypeResolver()
+    .UseMemberResolver()
+    .UseVariableScopeValidator()
     .Build();
 
 var param = new Parameter("text");
@@ -27,23 +27,9 @@ var analysisResult = analyzer
     .With(ctx => ctx.SetResolvedType(param, ctx.TypeDefinitions.GetTypeDefinition(typeof(string))!))
     .Analyze(body);
 
-Interpreter<Expression> interpreter = new InterpreterBuilder<Expression>()
-    .Use(static (ctx, node, next) => {
-        Console.WriteLine($"Interpreting AST Node: {node}");
-        var expr = next(ctx, node);
-        Console.WriteLine($"Generated Expression from AST Node: {expr}");
-        return expr;
-    })
-    .UseSemanticAnalysis()
-    .UseLinqExpressionCompilation()
-    .Build();
+var generator = new LinqExpressionGenerator(analysisResult);
+Func<string, string> compiled = (Func<string, string>)generator.CompileAsDelegate(body, param);
 
-var result = interpreter
-    .WithParameter<string>(param)
-    .Interpret(body);
-
-var expr = result.Value;
-Func<string, string> compiled = Expression.Lambda<Func<string, string>>(expr, result.GetParameters()).Compile();
 string resultValue = compiled("hello");
 Console.WriteLine($"Result of method invocation: {resultValue}");
 

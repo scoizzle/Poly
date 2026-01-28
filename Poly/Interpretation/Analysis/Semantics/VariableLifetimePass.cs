@@ -124,7 +124,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 
 public static class VariableScopeMetadataExtensions {
     extension(AnalyzerBuilder builder) {
-        public AnalyzerBuilder AddVariableScopePass()
+        public AnalyzerBuilder UseVariableScopeValidator()
         {
             builder.AddAnalyzer(new ScopeValidator());
             return builder;

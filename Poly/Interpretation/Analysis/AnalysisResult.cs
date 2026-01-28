@@ -9,5 +9,7 @@ public sealed record AnalysisResult : ITypedMetadataProvider {
         _metadata = metadata;
     }
 
+    public IEnumerable<object> Metadata => _metadata.GetAll();
+
     public TMetadata? GetMetadata<TMetadata>() where TMetadata : class => _metadata.Get<TMetadata>();
 }

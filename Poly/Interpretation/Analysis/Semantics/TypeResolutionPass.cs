@@ -5,7 +5,7 @@ using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
 
-internal sealed class TypeResolutionPass : IAnalysisPass {
+internal sealed class TypeResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node)
     {
         var resolvedType = node switch {
@@ -218,28 +218,36 @@ internal sealed class TypeResolutionPass : IAnalysisPass {
 }
 
 public static class TypeResolutionMetadataExtensions {
-    internal record TypeResolutionMetadata(Dictionary<Node, ITypeDefinition> TypeMap);
+    internal record TypeResolutionMetadata {
+        public Dictionary<Node, ITypeDefinition> TypeMap { get; } = new();
+    };
 
-    extension(ITypedMetadataProvider typedMetadataProvider) {
-        private Dictionary<Node, ITypeDefinition> GetTypeResolutionMap()
+    extension(AnalyzerBuilder builder) {
+        public AnalyzerBuilder AddTypeResolutionPass()
         {
-            var map = typedMetadataProvider.GetMetadata<TypeResolutionMetadata>()?.TypeMap;
-            if (map is null) {
-                throw new InvalidOperationException("Type resolution metadata is not available in this analysis result.");
-            }
-            return map;
+            builder.AddPass(new TypeResolutionPass());
+            return builder;
         }
+    }
 
-        public ITypeDefinition? GetResolvedType(Node node)
-        {
-            var map = typedMetadataProvider.GetTypeResolutionMap();
-            return map.TryGetValue(node, out var type) ? type : null;
-        }
-
+    extension(AnalysisContext context) {
         public void SetResolvedType(Node node, ITypeDefinition type)
         {
-            var map = typedMetadataProvider.GetTypeResolutionMap();
+            var map = context.GetOrAddMetadata(static () => new TypeResolutionMetadata()).TypeMap;
             map[node] = type;
+        }
+    }
+
+    extension(ITypedMetadataProvider typedMetadataProvider) {
+        public ITypeDefinition? GetResolvedType(Node node)
+        {
+            if (typedMetadataProvider.GetMetadata<TypeResolutionMetadata>() is TypeResolutionMetadata metadata) {
+                if (metadata.TypeMap.TryGetValue(node, out var type)) {
+                    return type;
+                }
+            }
+            
+            return default;
         }
     }
 }

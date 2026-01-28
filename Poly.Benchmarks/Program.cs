@@ -4,9 +4,17 @@ using System.Linq.Expressions;
 using Poly.Interpretation;
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.SemanticAnalysis;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Validation;
 using Poly.Validation.Builders;
+using Poly.Interpretation.Analysis;
+
+var analyzer = new AnalyzerBuilder()
+    .AddTypeResolutionPass()
+    .AddMemberResolutionPass()
+    .AddVariableScopePass()
+    .Build();
 
 var param = new Parameter("text");
 
@@ -14,6 +22,10 @@ var body = new MethodInvocation(
     param,
     nameof(string.ToUpper)
 );
+
+var analysisResult = analyzer
+    .With(ctx => ctx.SetResolvedType(param, ctx.TypeDefinitions.GetTypeDefinition(typeof(string))!))
+    .Analyze(body);
 
 Interpreter<Expression> interpreter = new InterpreterBuilder<Expression>()
     .Use(static (ctx, node, next) => {

@@ -4,6 +4,17 @@ public sealed class TypedMetadataStore {
     private readonly ConditionalWeakTable<Type, object> _metadata = new();
 
     /// <summary>
+    /// Retrieves all stored metadata instances.
+    /// </summary>
+    /// <returns>An enumerable of all metadata instances.</returns>
+    public IEnumerable<object> GetAll()
+    {
+        foreach (var entry in _metadata) {
+            yield return entry.Value;
+        }
+    }
+
+    /// <summary>
     /// Stores strongly-typed metadata contributed by middleware.
     /// Each middleware can define its own metadata type without coupling to others.
     /// </summary>

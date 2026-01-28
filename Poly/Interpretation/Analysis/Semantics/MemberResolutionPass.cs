@@ -1,7 +1,7 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
 
-internal sealed class MemberResolutionPass : IAnalysisPass {
+internal sealed class MemberResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node)
     {
         var resolvedMember = node switch {
@@ -57,29 +57,40 @@ internal sealed class MemberResolutionPass : IAnalysisPass {
     }
 }
 
+
 public static class MemberResolutionMetadataExtensions {
-    internal record MemberResolutionMetadata(Dictionary<Node, ITypeMember> MemberMap);
-    
-    extension(ITypedMetadataProvider result) {
-        private Dictionary<Node, ITypeMember> GetMemberResolutionMap()
-        {
-            var map = result.GetMetadata<MemberResolutionMetadata>()?.MemberMap;
-            if (map is null) {
-                throw new InvalidOperationException("Member resolution metadata is not available in this analysis result.");
-            }
-            return map;
-        }
+    internal record MemberResolutionMetadata {
+        public Dictionary<Node, ITypeMember> TypeMap { get; } = new();
+    };
 
-        public ITypeMember? GetResolvedMember(Node node)
+    extension(AnalyzerBuilder builder) {
+        public AnalyzerBuilder AddMemberResolutionPass()
         {
-            var map = result.GetMemberResolutionMap();
-            return map.TryGetValue(node, out var member) ? member : null;
+            builder.AddPass(new MemberResolutionPass());
+            return builder;
         }
+    }
 
+    extension(AnalysisContext context) {
         public void SetResolvedMember(Node node, ITypeMember member)
         {
-            var map = result.GetMemberResolutionMap();
+            var map = context.GetOrAddMetadata(static () => new MemberResolutionMetadata()).TypeMap;
             map[node] = member;
+
+            context.SetResolvedType(node, member.MemberTypeDefinition);
+        }
+    }
+
+    extension(ITypedMetadataProvider typedMetadataProvider) {
+        public ITypeMember? GetResolvedMember(Node node)
+        {
+            if (typedMetadataProvider.GetMetadata<MemberResolutionMetadata>() is MemberResolutionMetadata metadata) {
+                if (metadata.TypeMap.TryGetValue(node, out var member)) {
+                    return member;
+                }
+            }
+
+            return default;
         }
     }
 }

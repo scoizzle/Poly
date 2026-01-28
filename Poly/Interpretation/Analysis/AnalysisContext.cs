@@ -5,4 +5,8 @@ public sealed class AnalysisContext(ITypeDefinitionProvider typeDefinitions) : I
     public ITypeDefinitionProvider TypeDefinitions { get; } = typeDefinitions;
 
     public TMetadata? GetMetadata<TMetadata>() where TMetadata : class => Metadata.Get<TMetadata>();
+
+    public TMetadata GetOrAddMetadata<TMetadata>(Func<TMetadata> factory) where TMetadata : class => Metadata.GetOrAdd(factory);
+
+    public void SetMetadata<TMetadata>(TMetadata metadata) where TMetadata : class => Metadata.Set(metadata);
 }

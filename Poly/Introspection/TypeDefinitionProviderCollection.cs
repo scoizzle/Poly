@@ -5,7 +5,7 @@ namespace Poly.Introspection;
 /// querying the most recently added provider first. Useful for layering overrides above defaults.
 /// </summary>
 public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDefinitionProvider> providers) : ITypeDefinitionProvider, ICollection<ITypeDefinitionProvider> {
-    private readonly List<ITypeDefinitionProvider> _providers = new(providers);
+    private readonly List<ITypeDefinitionProvider> _providers = [.. providers];
 
     /// <summary>
     /// Adds a provider to the top of the stack.
@@ -42,7 +42,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Gets a snapshot of the providers in query order (top to bottom).
     /// </summary>
-    public IReadOnlyList<ITypeDefinitionProvider> Providers => _providers.ToList().AsReadOnly();
+    public IReadOnlyList<ITypeDefinitionProvider> Providers => _providers.AsReadOnly();
 
     /// <summary>
     /// Gets the number of providers in the collection.

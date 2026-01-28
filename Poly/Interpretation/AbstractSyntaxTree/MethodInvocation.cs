@@ -10,5 +10,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// </remarks>
 public sealed record MethodInvocation(Node Target, string MethodName, params Node[] Arguments) : Operator
 {
-    public override IEnumerable<Node?> Children => [Target, ..Arguments];
+    public override IEnumerable<Node?> Children => [Target, .. Arguments];
+    
+    public override string ToString() => $"{Target}.{MethodName}({string.Join(", ", Arguments)})";
 }

@@ -1,18 +1,18 @@
 namespace Poly.Interpretation.Analysis;
 
-public interface IAnalysisPass {
+public interface INodeAnalyzer {
     void Analyze(AnalysisContext context, Node node);
 }
 
-public static class AnalysisPassExtensions
+public static class NodeAnalyzerExtensions
 {
-    extension(IAnalysisPass pass)
+    extension(INodeAnalyzer analyzer)
     {
         public void AnalyzeChildren(AnalysisContext context, Node node)
         {
             foreach (var child in node.Children.Where(static c => c is not null))
             {
-                pass.Analyze(context, child!);
+                analyzer.Analyze(context, child!);
             }
         }
     }

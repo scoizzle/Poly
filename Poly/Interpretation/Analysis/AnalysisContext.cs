@@ -49,7 +49,7 @@ public sealed class AnalysisContext : ITypedMetadataProvider {
     /// </summary>
     /// <typeparam name="TMetadata">The type of metadata to retrieve.</typeparam>
     /// <returns>The metadata of the specified type, or null if not found.</returns>
-    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class => Metadata.Get<TMetadata>();
+    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class, IAnalysisMetadata => Metadata.Get<TMetadata>();
 
     /// <summary>
     /// Gets or adds metadata of the specified type.
@@ -57,12 +57,12 @@ public sealed class AnalysisContext : ITypedMetadataProvider {
     /// <typeparam name="TMetadata">The type of metadata to get or add.</typeparam>
     /// <param name="factory">A factory function to create the metadata if it does not exist.</param>
     /// <returns>The existing or newly added metadata of the specified type.</returns>
-    public TMetadata GetOrAddMetadata<TMetadata>(Func<TMetadata> factory) where TMetadata : class => Metadata.GetOrAdd(factory);
+    public TMetadata GetOrAddMetadata<TMetadata>(Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata => Metadata.GetOrAdd(factory);
 
     /// <summary>
     /// Sets metadata of the specified type.
     /// </summary>
     /// <typeparam name="TMetadata">The type of metadata to set.</typeparam>
     /// <param name="metadata">The metadata instance to set.</param>
-    public void SetMetadata<TMetadata>(TMetadata metadata) where TMetadata : class => Metadata.Set(metadata);
+    public void SetMetadata<TMetadata>(TMetadata metadata) where TMetadata : class, IAnalysisMetadata => Metadata.Set(metadata);
 }

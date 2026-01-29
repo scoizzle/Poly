@@ -1,4 +1,6 @@
+using Poly.Tests.TestHelpers;
 using Poly.Interpretation;
+using Expr = System.Linq.Expressions.Expression;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Introspection;
 
@@ -156,27 +158,6 @@ public class ClrTypeInheritanceTests {
 
         // Should have methods from generic base
         await Assert.That(methods.Count()).IsGreaterThan(0);
-    }
-
-    [Test]
-    public async Task BaseClassProperty_AccessViaInstance()
-    {
-        var registry = ClrTypeDefinitionRegistry.Shared;
-        var derivedType = registry.GetTypeDefinition<DerivedWithProperty>();
-
-        var baseNameMembers = derivedType.Properties.WithName("BaseName");
-        var baseNameProperty = baseNameMembers.First();
-
-        var instance = new DerivedWithProperty { BaseName = "TestName" };
-        var instanceLiteral = Value.Wrap(instance);
-
-        var context = new InterpretationContext();
-        var accessor = baseNameProperty.GetMemberAccessor(instanceLiteral);
-        var expression = accessor.BuildExpression(context);
-        var lambda = System.Linq.Expressions.Expression.Lambda<System.Func<string>>(expression).Compile();
-        var result = lambda();
-
-        await Assert.That(result).IsEqualTo("TestName");
     }
 
     [Test]

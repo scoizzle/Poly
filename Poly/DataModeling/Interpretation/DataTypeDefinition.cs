@@ -1,7 +1,5 @@
 using System.Collections.Frozen;
 
-using Poly.Interpretation;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.DataModeling.Interpretation;
@@ -74,7 +72,7 @@ internal sealed class DataTypeMember : ITypeProperty {
     /// </summary>
     public bool IsStatic => false;
 
-    public Value GetMemberAccessor(Value instance, params IEnumerable<Value>? _) => new DataModelPropertyAccessor(instance, Name, MemberType);
+    public Node GetMemberAccessor(Node instance, params Node[]? parameters) => new DataModelPropertyAccessor(instance, Name, MemberType);
 
     private static ITypeDefinition ResolveMemberType(DataProperty property, ITypeDefinitionProvider provider)
     {

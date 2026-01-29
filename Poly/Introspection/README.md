@@ -38,7 +38,7 @@ Represents a single member (property, field, method) on a type.
 - `Parameters` - Parameters if member is a method
 
 **Methods:**
-- `GetMemberAccessor(Value instance, IEnumerable<Value> parameters)` - Create an interpretable `Value` for accessing this member
+- `GetMemberAccessor(Value instance, IEnumerable<Value> parameters)` - Create an expression node `Value` for accessing this member
 
 ### Type Definition Provider (`ITypeDefinitionProvider`)
 Interface for pluggable type sources.
@@ -282,7 +282,7 @@ When adding provider types:
 1. Implement `ITypeDefinitionProvider` interface
 2. Implement `ITypeDefinition` for your type representation
 3. Implement `ITypeMember` for your member types
-4. Add `GetMemberAccessor()` to create interpretable `Value` instances
+4. Add `GetMemberAccessor()` to create expression node `Value` instances
 5. Ensure thread-safety if caching
 6. Document provider-specific behavior
 7. Add comprehensive tests

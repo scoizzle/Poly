@@ -123,7 +123,7 @@ You can create custom rules by inheriting from `Rule` and implementing `BuildInt
 
 ```csharp
 public class CustomRule : Rule {
-    public override Value BuildInterpretationTree(RuleBuildingContext context) {
+    public override Expression BuildInterpretationTree(RuleBuildingContext context) {
         // Build your interpretation tree here
     }
 }

@@ -1,8 +1,5 @@
 using System.Reflection;
 
-using Poly.Interpretation;
-using Poly.Introspection.CommonLanguageRuntime.InterpretationHelpers;
-
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>
@@ -57,11 +54,6 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     /// Gets whether this field is static.
     /// </summary>
     public override bool IsStatic => _fieldInfo.IsStatic;
-
-    /// <summary>
-    /// Creates an accessor that reads this field from the provided <paramref name="instance"/>.
-    /// </summary>
-    public override Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters) => new ClrTypeFieldInterpretationAccessor(instance, this);
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

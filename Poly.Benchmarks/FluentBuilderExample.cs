@@ -7,8 +7,9 @@ using System.Text.Json;
 using Poly.DataModeling;
 using Poly.DataModeling.Interpretation;
 using Poly.DataModeling.Mutations;
-using Poly.Interpretation;
 using Poly.Validation;
+
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Benchmarks;
 
@@ -180,116 +181,116 @@ public static class FluentBuilderExample {
 
     public static void Run()
     {
-        Console.WriteLine("=== Fluent Builder API Example ===\n");
+        // Console.WriteLine("=== Fluent Builder API Example ===\n");
 
-        var model = CreateOrderManagementModel();
+        // var model = CreateOrderManagementModel();
 
-        // Register model types into the Interpretation type system
-        var ctx = new InterpretationContext();
-        model.RegisterIn(ctx);
-        var customerDef = ctx.GetTypeDefinition("Customer");
-        if (customerDef is not null) {
-            Console.WriteLine("\nRegistered type in Interpretation system: Customer");
-            Console.WriteLine("Members: " + string.Join(", ", customerDef.Members.Select(m => m.Name)));
+        // // Register model types into the Interpretation type system
+        // var ctx = new InterpretationContext();
+        // model.RegisterIn(ctx);
+        // var customerDef = ctx.GetTypeDefinition("Customer");
+        // if (customerDef is not null) {
+        //     Console.WriteLine("\nRegistered type in Interpretation system: Customer");
+        //     Console.WriteLine("Members: " + string.Join(", ", customerDef.Members.Select(m => m.Name)));
 
-            // Build and execute a simple accessor: @obj.Email
-            var param = ctx.AddParameter("@obj", customerDef);
-            var emailValue = param.GetMember("Email");
-            var body = emailValue.BuildExpression(ctx);
-            var lambda = Expression.Lambda<Func<IDictionary<string, object>, string>>(
-                body,
-                param.BuildExpression(ctx)
-            );
-            var fn = lambda.Compile();
-            var sample = new Dictionary<string, object> { ["Email"] = "dev@example.com" };
-            Console.WriteLine($"Accessor test (@obj.Email) => {fn(sample)}");
+        //     // Build and execute a simple accessor: @obj.Email
+        //     var param = ctx.AddParameter("@obj", customerDef);
+        //     var emailValue = param.GetMember("Email");
+        //     var body = emailValue.BuildNode(ctx);
+        //     var lambda = Expression.Lambda<Func<IDictionary<string, object>, string>>(
+        //         body,
+        //         param.ToParameterExpression()
+        //     );
+        //     var fn = lambda.Compile();
+        //     var sample = new Dictionary<string, object> { ["Email"] = "dev@example.com" };
+        //     Console.WriteLine($"Accessor test (@obj.Email) => {fn(sample)}");
 
-            // Validation Examples
-            Console.WriteLine("\n=== Validation Examples ===");
-            var validator = new Validator(model);
+        //     // Validation Examples
+        //     Console.WriteLine("\n=== Validation Examples ===");
+        //     var validator = new Validator(model);
 
-            // Valid customer
-            var validCustomer = new Dictionary<string, object?> {
-                ["Id"] = Guid.NewGuid(),
-                ["Email"] = "john.doe@example.com",
-                ["Name"] = "John Doe",
-                ["CreatedAt"] = DateTime.UtcNow,
-                ["IsActive"] = true
-            };
+        //     // Valid customer
+        //     var validCustomer = new Dictionary<string, object?> {
+        //         ["Id"] = Guid.NewGuid(),
+        //         ["Email"] = "john.doe@example.com",
+        //         ["Name"] = "John Doe",
+        //         ["CreatedAt"] = DateTime.UtcNow,
+        //         ["IsActive"] = true
+        //     };
 
-            var result1 = validator.Validate("Customer", validCustomer);
-            Console.WriteLine($"\nValid customer: {result1}");
+        //     var result1 = validator.Validate("Customer", validCustomer);
+        //     Console.WriteLine($"\nValid customer: {result1}");
 
-            // Invalid customer - missing required field
-            var invalidCustomer1 = new Dictionary<string, object?> {
-                ["Id"] = Guid.NewGuid(),
-                ["Name"] = "Jane Doe"
-                // Email is missing (required by NotNull constraint)
-            };
+        //     // Invalid customer - missing required field
+        //     var invalidCustomer1 = new Dictionary<string, object?> {
+        //         ["Id"] = Guid.NewGuid(),
+        //         ["Name"] = "Jane Doe"
+        //         // Email is missing (required by NotNull constraint)
+        //     };
 
-            var result2 = validator.Validate("Customer", invalidCustomer1);
-            Console.WriteLine($"\nMissing email: {result2}");
-            if (!result2.IsValid) {
-                foreach (var error in result2.Errors) {
-                    Console.WriteLine($"  - {error}");
-                }
-            }
+        //     var result2 = validator.Validate("Customer", invalidCustomer1);
+        //     Console.WriteLine($"\nMissing email: {result2}");
+        //     if (!result2.IsValid) {
+        //         foreach (var error in result2.Errors) {
+        //             Console.WriteLine($"  - {error}");
+        //         }
+        //     }
 
-            // Invalid customer - email too short
-            var invalidCustomer2 = new Dictionary<string, object?> {
-                ["Id"] = Guid.NewGuid(),
-                ["Email"] = "a@b", // Too short (min 5 chars)
-                ["Name"] = "Bob Smith",
-                ["CreatedAt"] = DateTime.UtcNow,
-                ["IsActive"] = false
-            };
+        //     // Invalid customer - email too short
+        //     var invalidCustomer2 = new Dictionary<string, object?> {
+        //         ["Id"] = Guid.NewGuid(),
+        //         ["Email"] = "a@b", // Too short (min 5 chars)
+        //         ["Name"] = "Bob Smith",
+        //         ["CreatedAt"] = DateTime.UtcNow,
+        //         ["IsActive"] = false
+        //     };
 
-            var result3 = validator.Validate("Customer", invalidCustomer2);
-            Console.WriteLine($"\nEmail too short: {result3}");
-            if (!result3.IsValid) {
-                foreach (var error in result3.Errors) {
-                    Console.WriteLine($"  - {error}");
-                }
-            }
+        //     var result3 = validator.Validate("Customer", invalidCustomer2);
+        //     Console.WriteLine($"\nEmail too short: {result3}");
+        //     if (!result3.IsValid) {
+        //         foreach (var error in result3.Errors) {
+        //             Console.WriteLine($"  - {error}");
+        //         }
+        //     }
 
-            // Invalid product - negative price
-            var invalidProduct = new Dictionary<string, object?> {
-                ["Id"] = Guid.NewGuid(),
-                ["SKU"] = "WIDGET-001",
-                ["Name"] = "Test Widget",
-                ["Price"] = -10.0, // Negative price (min 0.0)
-                ["StockQuantity"] = 50
-            };
+        //     // Invalid product - negative price
+        //     var invalidProduct = new Dictionary<string, object?> {
+        //         ["Id"] = Guid.NewGuid(),
+        //         ["SKU"] = "WIDGET-001",
+        //         ["Name"] = "Test Widget",
+        //         ["Price"] = -10.0, // Negative price (min 0.0)
+        //         ["StockQuantity"] = 50
+        //     };
 
-            var result4 = validator.Validate("Product", invalidProduct);
-            Console.WriteLine($"\nNegative price: {result4}");
-            if (!result4.IsValid) {
-                foreach (var error in result4.Errors) {
-                    Console.WriteLine($"  - {error}");
-                }
-            }
-        }
+        //     var result4 = validator.Validate("Product", invalidProduct);
+        //     Console.WriteLine($"\nNegative price: {result4}");
+        //     if (!result4.IsValid) {
+        //         foreach (var error in result4.Errors) {
+        //             Console.WriteLine($"  - {error}");
+        //         }
+        //     }
+        // }
 
-        var options = new JsonSerializerOptions {
-            WriteIndented = true,
-            TypeInfoResolver = DataModelPropertyPolymorphicJsonTypeResolver.Shared
-        };
+        // var options = new JsonSerializerOptions {
+        //     WriteIndented = true,
+        //     TypeInfoResolver = DataModelPropertyPolymorphicJsonTypeResolver.Shared
+        // };
 
-        Console.WriteLine("Generated Order Management Domain Model:\n");
-        Console.WriteLine(JsonSerializer.Serialize(model, options));
+        // Console.WriteLine("Generated Order Management Domain Model:\n");
+        // Console.WriteLine(JsonSerializer.Serialize(model, options));
 
-        Console.WriteLine("\n=== Model Summary ===");
-        Console.WriteLine($"Types: {model.Types.Count()}");
-        Console.WriteLine($"Relationships: {model.Relationships.Count()}");
+        // Console.WriteLine("\n=== Model Summary ===");
+        // Console.WriteLine($"Types: {model.Types.Count()}");
+        // Console.WriteLine($"Relationships: {model.Relationships.Count()}");
 
-        Console.WriteLine("\nTypes defined:");
-        foreach (var type in model.Types) {
-            Console.WriteLine($"  - {type.Name} ({type.Properties.Count()} properties)");
-        }
+        // Console.WriteLine("\nTypes defined:");
+        // foreach (var type in model.Types) {
+        //     Console.WriteLine($"  - {type.Name} ({type.Properties.Count()} properties)");
+        // }
 
-        Console.WriteLine("\nRelationships defined:");
-        foreach (var rel in model.Relationships) {
-            Console.WriteLine($"  - {rel.Name}: {rel.Source.TypeName} → {rel.Target.TypeName}");
-        }
+        // Console.WriteLine("\nRelationships defined:");
+        // foreach (var rel in model.Relationships) {
+        //     Console.WriteLine($"  - {rel.Name}: {rel.Source.TypeName} → {rel.Target.TypeName}");
+        // }
     }
 }

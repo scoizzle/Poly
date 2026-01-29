@@ -1,6 +1,7 @@
-using Poly.Interpretation;
-using Poly.Interpretation.Operators.Boolean;
-using Poly.Interpretation.Operators.Comparison;
+using Poly.Interpretation.AbstractSyntaxTree.Boolean;
+using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Validation;
 
@@ -8,23 +9,23 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
     public object? MinValue { get; set; } = minValue;
     public object? MaxValue { get; set; } = maxValue;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var member = context.Value;
 
-        Value? minCheck = MinValue is null
+        Node? minCheck = MinValue is null
             ? null
-            : new GreaterThanOrEqual(member, Value.Wrap(MinValue));
+            : new GreaterThanOrEqual(member, Wrap(MinValue));
 
-        Value? maxCheck = MaxValue is null
+        Node? maxCheck = MaxValue is null
             ? null
-            : new LessThanOrEqual(member, Value.Wrap(MaxValue));
+            : new LessThanOrEqual(member, Wrap(MaxValue));
 
         var rangeCheck = (minCheck, maxCheck) switch {
-            (Value min, Value max) => new And(min, max),
-            (Value min, null) => min,
-            (null, Value max) => max,
-            _ => Value.True
+            (Node min, Node max) => new And(min, max),
+            (Node min, null) => min,
+            (null, Node max) => max,
+            _ => True
         };
 
         return rangeCheck;

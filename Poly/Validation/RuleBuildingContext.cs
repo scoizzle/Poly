@@ -1,15 +1,20 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Introspection;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Validation;
 
 public sealed record RuleBuildingContext {
     private const string EntryPointName = "@value";
 
-    public RuleBuildingContext(InterpretationContext interpretationContext, ITypeDefinition entryPointTypeDefinition)
+    public RuleBuildingContext(ITypeDefinition entryPointTypeDefinition)
     {
-        Value = interpretationContext.AddParameter(EntryPointName, entryPointTypeDefinition);
+        ArgumentNullException.ThrowIfNull(entryPointTypeDefinition);
+
+        // Use the entry point type as a type hint to aid semantic analysis.
+        var typeName = entryPointTypeDefinition.FullName ?? entryPointTypeDefinition.Name;
+        Value = new Parameter(EntryPointName, new TypeReference(typeName));
     }
 
     /// <summary>
@@ -17,7 +22,7 @@ public sealed record RuleBuildingContext {
     /// For property constraints, use GetMemberAccessor to access specific properties.
     /// For type rules, this is the property value.
     /// </summary>
-    public Value Value { get; private init; }
+    public Node Value { get; private init; }
 
     /// <summary>
     /// Creates a new context with the property value as the entry point

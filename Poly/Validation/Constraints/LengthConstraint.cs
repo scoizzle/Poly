@@ -1,6 +1,7 @@
-using Poly.Interpretation;
-using Poly.Interpretation.Operators.Boolean;
-using Poly.Interpretation.Operators.Comparison;
+using Poly.Interpretation.AbstractSyntaxTree.Boolean;
+using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Validation;
 
@@ -8,23 +9,23 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
     public int? MinLength { get; set; } = minLength;
     public int? MaxLength { get; set; } = maxLength;
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var length = context.Value.GetMember("Length");
 
         var minCheck = MinLength.HasValue
-            ? new GreaterThanOrEqual(length, Value.Wrap(MinLength.Value))
+            ? new GreaterThanOrEqual(length, Wrap(MinLength.Value))
             : null;
 
         var maxCheck = MaxLength.HasValue
-            ? new LessThanOrEqual(length, Value.Wrap(MaxLength.Value))
+            ? new LessThanOrEqual(length, Wrap(MaxLength.Value))
             : null;
 
         var lengthCheck = (minCheck, maxCheck) switch {
-            (Value min, Value max) => new And(min, max),
-            (Value min, null) => min,
-            (null, Value max) => max,
-            _ => Value.Wrap(true)
+            (Node min, Node max) => new And(min, max),
+            (Node min, null) => min,
+            (null, Node max) => max,
+            _ => Wrap(true)
         };
 
         return lengthCheck;

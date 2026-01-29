@@ -1,482 +1,419 @@
 # Poly Interpretation System
 
-A fluent, strongly-typed interpretation and expression building system for .NET that compiles to System.Linq.Expressions for optimal runtime performance.
+A fluent, strongly-typed AST analysis and code generation system for .NET that compiles expression trees to System.Linq.Expressions for optimal runtime performance.
 
 ## Overview
 
-The Interpretation system provides a domain-specific language (DSL) for building expression trees through composable, type-safe operators. It bridges the gap between high-level intent and low-level Expression Tree construction, offering:
+The Interpretation system provides:
 
-- **Type-safe composition**: All operations verify type compatibility at build time
-- **Fluent API**: Natural method chaining for readable expression construction
-- **Expression Tree compilation**: Compiles to optimized IL via System.Linq.Expressions
-- **Lexical scoping**: Block-based variable scoping with proper shadowing
-- **Automatic type promotion**: Numeric operations follow C# promotion rules
+- **AST Foundation**: Composable node types for building abstract syntax trees
+- **Semantic Analysis**: Type inference, member resolution, and scope validation
+- **Code Generation**: Transform analyzed AST to System.Linq.Expressions
+- **Type Safety**: Compile-time and semantic verification of all operations
+- **Diagnostic Reporting**: Collect errors, warnings, and hints during analysis
 
-## Core Concepts
+## Architecture
 
-### Values
-All interpretable elements inherit from `Value`, which represents typed data or operations that produce typed results:
+### Two-Phase Design
 
-- **`Literal<T>`**: Constant values known at interpretation time
-- **`Parameter`**: Lambda parameters (inputs to compiled expressions)
-- **`Variable`**: Named references in lexical scopes
-- **`Operator`**: Operations that transform or combine values
+```
+AST Construction
+    ↓
+[Analysis Phase]
+    - TypeResolver: Infer and validate types
+    - MemberResolver: Resolve property/method access
+    - ScopeValidator: Track variables and detect errors
+    ↓
+AnalysisResult (with metadata)
+    ↓
+[Generation Phase]
+    - LinqExpressionGenerator: Transform to Expression<T>
+    ↓
+Compiled Delegate (optimized IL)
+```
+
+### Analysis Phase
+
+The analysis system validates and annotates AST nodes with semantic information:
+
+```csharp
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()              // Resolves types for all nodes
+    .UseMemberResolver()            // Resolves properties, methods, indexers
+    .UseVariableScopeValidator()    // Validates variable declarations
+    .Build();
+
+var result = analyzer.Analyze(astNode);
+
+// Check for errors
+if (result.Context.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+{
+    foreach (var diag in result.Context.Diagnostics)
+    {
+        Console.WriteLine($"[{diag.Severity}] {diag.Message}");
+    }
+    return;
+}
+```
+
+**Available Passes:**
+- **`TypeResolver`**: Infers types for constants, variables, operations, member/method access, blocks
+- **`MemberResolver`**: Resolves properties, methods, and indexers; validates access
+- **`ScopeValidator`**: Validates variable declarations, detects undeclared variables and shadowing
+
+### Generation Phase
+
+The `LinqExpressionGenerator` transforms analyzed AST into System.Linq.Expressions:
+
+```csharp
+var generator = new LinqExpressionGenerator(analysisResult);
+
+// Compile to Expression tree
+Expression expr = generator.Compile(astNode);
+
+// Or create a compiled delegate directly
+var param = new Parameter("x", TypeReference.To<int>());
+var compiled = generator.CompileAsDelegate(astNode, param) 
+    as Func<int, int>;
+
+int result = compiled(42);
+```
+
+## AST Node Types
+
+### Core Nodes
+
+**`Constant`**: Literal values
+```csharp
+new Constant(42)
+new Constant("hello")
+new Constant(3.14)
+```
+
+**`Parameter`**: Lambda parameters with optional type hints
+```csharp
+new Parameter("x")
+new Parameter("name", TypeReference.To<string>())
+```
+
+**`Variable`**: Named references in block scopes
+```csharp
+var x = new Variable("counter");
+var assign = new Assignment(x, new Constant(0));
+var increment = new Assignment(x, new Add(x, new Constant(1)));
+```
+
+**`Block`**: Statement sequences with local scope
+```csharp
+var x = new Variable("temp");
+var block = new Block(
+    [new Assignment(x, new Constant(10)), new Multiply(x, new Constant(2))],
+    [x]  // Variables in scope
+);
+```
 
 ### Operators
 
-Operators are composable building blocks organized by category:
+**Arithmetic**: `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `UnaryMinus`
 
-#### Arithmetic
-- `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`
-- `UnaryMinus` (negation)
-- Automatic numeric type promotion (int + double → double)
+```csharp
+new Add(new Constant(10), new Constant(20))
+new Multiply(param, new Constant(2))
+new UnaryMinus(param)
+```
 
-#### Comparison
-- `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`
+**Comparison**: `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`
 
-#### Equality
-- `Equal`, `NotEqual`
+```csharp
+new GreaterThan(age, new Constant(18))
+new LessThanOrEqual(price, new Constant(100.0))
+```
 
-#### Boolean Logic
-- `And`, `Or`, `Not`
-- Short-circuit evaluation
+**Equality**: `Equal`, `NotEqual`
 
-#### Conditional
-- `Conditional` (ternary: `condition ? ifTrue : ifFalse`)
-- `Coalesce` (null-coalescing: `value ?? fallback`)
+```csharp
+new Equal(status, new Constant("active"))
+new NotEqual(count, new Constant(0))
+```
 
-#### Type Operations
-- `TypeCast`: Explicit type conversion with optional overflow checking
+**Boolean**: `And`, `Or`, `Not`
 
-#### Control Flow
-- `Block`: Statement sequences with local variables and scoping
-- `Assignment`: Value assignment
+```csharp
+new And(isAdult, hasLicense)
+new Or(isVip, isPlatinum)
+new Not(isExpired)
+```
 
-#### Member Access
-- `MemberAccess`: Property/field/method access by name
-- `IndexAccess`: Array and indexer access
-- `InvocationOperator`: Method invocation with arguments
+**Conditional**: `Conditional`, `Coalesce`
 
-### Interpretation Context
+```csharp
+// age > 18 ? "adult" : "minor"
+new Conditional(
+    new GreaterThan(age, new Constant(18)),
+    new Constant("adult"),
+    new Constant("minor")
+)
 
-`InterpretationContext` manages:
-- **Type definitions**: Resolves CLR types to `ITypeDefinition` abstractions
-- **Parameters**: Registers lambda parameters
-- **Variable scopes**: Stack-based lexical scoping with push/pop
-- **Type providers**: Extensible type resolution system
+// name ?? "Unknown"
+new Coalesce(name, new Constant("Unknown"))
+```
+
+**Member Access**: `MemberAccess`, `IndexAccess`, `MethodInvocation`
+
+```csharp
+new MemberAccess(person, "Name")
+new IndexAccess(array, new Constant(0))
+new MethodInvocation(text, "ToUpper")
+```
+
+**Type Operations**: `TypeCast`, `TypeReference`
+
+```csharp
+new TypeCast(value, TypeReference.To<string>())
+```
+
+**Control Flow**: `Assignment`
+
+```csharp
+new Assignment(variable, new Constant(42))
+```
 
 ## Quick Start
 
-### Basic Arithmetic
+### Basic Arithmetic Expression
 
 ```csharp
-var context = new InterpretationContext();
-var x = context.AddParameter<int>("x");
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.Analysis;
+using Poly.Interpretation.LinqExpressions;
+using System.Linq.Expressions;
 
-// Build: x * 2 + 5
-var expr = x.Multiply(Value.Wrap(2)).Add(Value.Wrap(5));
+// Build AST: (10 + 20) * 2
+var add = new Add(new Constant(10), new Constant(20));
+var multiply = new Multiply(add, new Constant(2));
 
-// Compile to lambda
-var expression = expr.BuildExpression(context);
-var lambda = Expression.Lambda<Func<int, int>>(expression, x.BuildExpression(context));
-var compiled = lambda.Compile();
+// Analyze
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()
+    .Build();
+var result = analyzer.Analyze(multiply);
 
-Console.WriteLine(compiled(10)); // Output: 25
+// Generate
+var generator = new LinqExpressionGenerator(result);
+var expr = generator.Compile(multiply);
+
+// Compile and execute
+var lambda = Expression.Lambda<Func<int>>(expr);
+int value = lambda.Compile()();  // 60
+```
+
+### Using Parameters
+
+```csharp
+// AST: x * 2 + 10
+var x = new Parameter("x", TypeReference.To<int>());
+var expr = new Add(
+    new Multiply(x, new Constant(2)),
+    new Constant(10)
+);
+
+// Analyze
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()
+    .Build();
+var result = analyzer.Analyze(expr);
+
+// Generate delegate
+var generator = new LinqExpressionGenerator(result);
+var compiled = (Func<int, int>)generator.CompileAsDelegate(expr, x);
+
+int value = compiled(5);  // 20
 ```
 
 ### Conditional Logic
 
 ```csharp
-var context = new InterpretationContext();
-var x = context.AddParameter<int>("x");
-
-// Build: x > 100 ? x * 2 : x + 10
-var condition = x.GreaterThan(Value.Wrap(100));
-var ifTrue = x.Multiply(Value.Wrap(2));
-var ifFalse = x.Add(Value.Wrap(10));
-var expr = condition.Conditional(ifTrue, ifFalse);
-
-var compiled = CompileToFunc<int, int>(context, expr, x);
-Console.WriteLine(compiled(150)); // Output: 300
-Console.WriteLine(compiled(50));  // Output: 60
-```
-
-### Complex Expressions
-
-```csharp
-var context = new InterpretationContext();
-var x = context.AddParameter<int>("x");
-var y = context.AddParameter<int>("y");
-
-// Build: (x + y) > 50 && (x * y) < 1000
-var sum = x.Add(y);
-var product = x.Multiply(y);
-var condition1 = sum.GreaterThan(Value.Wrap(50));
-var condition2 = product.LessThan(Value.Wrap(1000));
-var expr = condition1.And(condition2);
-
-var compiled = CompileToFunc<int, int, bool>(context, expr, x, y);
-Console.WriteLine(compiled(30, 30)); // true (60 > 50 && 900 < 1000)
-Console.WriteLine(compiled(10, 10)); // false (20 < 50)
-```
-
-### Blocks and Scoping
-
-```csharp
-var context = new InterpretationContext();
-var x = context.AddParameter<int>("x");
-
-// Block automatically manages scope
-var block = new Block(
-    x.Add(Value.Wrap(5)),
-    x.Multiply(Value.Wrap(2)),
-    x.Subtract(Value.Wrap(3))  // Last expression is the return value
+// age > 18 ? "adult" : "minor"
+var age = new Parameter("age", TypeReference.To<int>());
+var condition = new GreaterThan(age, new Constant(18));
+var ast = new Conditional(
+    condition,
+    new Constant("adult"),
+    new Constant("minor")
 );
 
-var compiled = CompileToFunc<int, int>(context, block, x);
-Console.WriteLine(compiled(10)); // Output: 7
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()
+    .Build();
+var result = analyzer.Analyze(ast);
+
+var generator = new LinqExpressionGenerator(result);
+var compiled = (Func<int, string>)generator.CompileAsDelegate(ast, age);
+
+Console.WriteLine(compiled(25));  // "adult"
+Console.WriteLine(compiled(10));  // "minor"
 ```
 
-### Member and Index Access
+### Block with Variables
 
 ```csharp
-var context = new InterpretationContext();
-var str = context.AddParameter<string>("str");
+// { var x = 10; x * 2 }
+var x = new Variable("x");
+var assignment = new Assignment(x, new Constant(10));
+var multiply = new Multiply(x, new Constant(2));
+var block = new Block([assignment, multiply], [x]);
 
-// str.Length + 1
-var length = str.GetMember("Length");
-var result = length.Add(Value.Wrap(1));
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()
+    .UseVariableScopeValidator()
+    .Build();
+var result = analyzer.Analyze(block);
 
-var compiled = CompileToFunc<string, int>(context, result, str);
-Console.WriteLine(compiled("hello")); // Output: 6
+var generator = new LinqExpressionGenerator(result);
+var expr = generator.Compile(block);
 
-// Array/list indexing
-var list = context.AddParameter<int[]>("arr");
-var firstElement = list.Index(Value.Wrap(0));
+var lambda = Expression.Lambda<Func<int>>(expr);
+int value = lambda.Compile()();  // 20
 ```
 
-## Fluent API Reference
+### Member Access
 
-### All Available Methods on Value
-
-**Member Access:**
-- `GetMember(string memberName)` - Access property/field by name
-- `Index(params Value[] indices)` - Array/indexer access
-- `Invoke(string methodName, params Value[] arguments)` - Method invocation
-
-**Arithmetic:**
-- `Add(Value other)`, `Subtract(Value other)`, `Multiply(Value other)`, `Divide(Value other)`, `Modulo(Value other)`, `Negate()`
-
-**Comparison:**
-- `GreaterThan(Value other)`, `GreaterThanOrEqual(Value other)`, `LessThan(Value other)`, `LessThanOrEqual(Value other)`
-
-**Equality:**
-- `Equal(Value other)`, `NotEqual(Value other)`
-
-**Boolean:**
-- `And(Value other)`, `Or(Value other)`, `Not()`
-
-**Conditional:**
-- `Conditional(Value ifTrue, Value ifFalse)` - Ternary operator
-- `Coalesce(Value fallback)` - Null-coalescing
-
-**Type Operations:**
-- `CastTo(ITypeDefinition targetType, bool isChecked = false)` - Type cast
-
-**Assignment:**
-- `Assign(Value value)` - Assignment
-
-### Design Patterns
-
-**Expression Builder Pattern:**
 ```csharp
-public static Value BuildDiscountCalculation(Parameter totalPrice, Parameter customerTier) {
-    var goldDiscount = totalPrice.Multiply(Value.Wrap(0.80)); // 20% off
-    var silverDiscount = totalPrice.Multiply(Value.Wrap(0.90)); // 10% off
-    
-    return customerTier.Equal(Value.Wrap("Gold"))
-        .Conditional(goldDiscount,
-            customerTier.Equal(Value.Wrap("Silver"))
-                .Conditional(silverDiscount, totalPrice));
+// text.Length
+var text = new Parameter("text", TypeReference.To<string>());
+var length = new MemberAccess(text, "Length");
+
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()
+    .UseMemberResolver()
+    .Build();
+var result = analyzer.Analyze(length);
+
+var generator = new LinqExpressionGenerator(result);
+var compiled = (Func<string, int>)generator.CompileAsDelegate(length, text);
+
+Console.WriteLine(compiled("hello"));  // 5
+```
+
+## Test Helpers
+
+For convenience in tests, use the helper extension methods from `Poly.Tests.TestHelpers`:
+
+```csharp
+// Wrap constant values
+var five = Wrap(5);
+var pi = Wrap(3.14);
+
+// BuildExpression - analyze and generate in one step
+var expr = new Add(Wrap(10), Wrap(20)).BuildExpression();
+var result = Expression.Lambda<Func<int>>(expr).Compile()();  // 30
+
+// BuildExpressionWithParameters - pre-register parameter types
+var x = new Parameter("x");
+var expr = new Multiply(x, Wrap(2))
+    .BuildExpressionWithParameters((x, typeof(int)));
+
+// CompileLambda - build, generate, and compile in one step
+var compiled = new Add(Wrap(10), Wrap(20))
+    .CompileLambda<Func<int>>();
+var result = compiled();  // 30
+```
+
+## Diagnostics
+
+The analyzer collects diagnostics during analysis:
+
+```csharp
+var result = analyzer.Analyze(ast);
+
+// Check for errors
+if (result.Context.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+{
+    foreach (var diag in result.Context.Diagnostics)
+    {
+        Console.WriteLine($"[{diag.Severity}] {diag.Message}");
+    }
 }
 ```
 
-**Validation Rules:**
+**Diagnostic Severities:**
+- `Error`: Critical issues preventing compilation
+- `Warning`: Potential problems (e.g., variable shadowing)
+- `Information`: Informational messages
+- `Hint`: Suggestions for improvements
+
+## Scope and Variables
+
+Variables have lexical scope within blocks:
+
 ```csharp
-public static Value BuildAgeValidation(Parameter age) {
-    // age >= 18 && age <= 120
-    return age.GreaterThanOrEqual(Value.Wrap(18))
-              .And(age.LessThanOrEqual(Value.Wrap(120)));
+// Valid: variable declared in block scope
+var x = new Variable("x");
+var block = new Block([new Assignment(x, new Constant(10))], [x]);
+
+// Invalid: variable used without declaration
+var y = new Variable("y");
+var ref = y;  // Error: y not in scope
+```
+
+**Scope Rules:**
+- Variables must be declared in the block's variable list
+- Variables are only visible within their declaring block
+- Inner blocks can shadow outer variables
+- References must match declarations (by name)
+
+## AST Traversal
+
+All nodes implement `IEnumerable<Node>` via the `Children` property:
+
+```csharp
+public static void VisitAllNodes(Node node, Action<Node> visit)
+{
+    visit(node);
+    foreach (var child in node.Children)
+    {
+        VisitAllNodes(child, visit);
+    }
 }
-```
-
-### Operator Mapping
-
-| Fluent Method | Operator Class | Expression Tree |
-|--------------|----------------|-----------------|
-| `Add` | `Operators.Arithmetic.Add` | `Expression.Add` |
-| `Subtract` | `Operators.Arithmetic.Subtract` | `Expression.Subtract` |
-| `Multiply` | `Operators.Arithmetic.Multiply` | `Expression.Multiply` |
-| `Divide` | `Operators.Arithmetic.Divide` | `Expression.Divide` |
-| `Modulo` | `Operators.Arithmetic.Modulo` | `Expression.Modulo` |
-| `Negate` | `Operators.Arithmetic.UnaryMinus` | `Expression.Negate` |
-| `GreaterThan` | `Operators.Comparison.GreaterThan` | `Expression.GreaterThan` |
-| `LessThan` | `Operators.Comparison.LessThan` | `Expression.LessThan` |
-| `Equal` | `Operators.Equality.Equal` | `Expression.Equal` |
-| `NotEqual` | `Operators.Equality.NotEqual` | `Expression.NotEqual` |
-| `And` | `Operators.Boolean.And` | `Expression.AndAlso` |
-| `Or` | `Operators.Boolean.Or` | `Expression.OrElse` |
-| `Not` | `Operators.Boolean.Not` | `Expression.Not` |
-| `Conditional` | `Operators.Conditional` | `Expression.Condition` |
-| `Coalesce` | `Operators.Coalesce` | `Expression.Coalesce` |
-| `CastTo` | `Operators.TypeCast` | `Expression.Convert` |
-| `GetMember` | `Operators.MemberAccess` | `Expression.Property/Field` |
-| `Index` | `Operators.IndexAccess` | `Expression.ArrayIndex` |
-| `Invoke` | `Operators.InvocationOperator` | `Expression.Call` |
-| `Assign` | `Operators.Assignment` | `Expression.Assign` |
-
-### Benefits of the Fluent API
-
-1. **Readability**: Natural method chaining mirrors mathematical and logical notation
-2. **Type Safety**: Compile-time type checking for all operations
-3. **Composability**: Expressions build incrementally without nested constructors
-4. **Discoverability**: IDE autocomplete reveals available operations
-5. **Maintainability**: Fluent chains are easier to modify than nested operator trees
-
-**Migration from direct construction:**
-```csharp
-// Before
-var expr = new Add(new Multiply(x, new Literal<int>(2)), new Literal<int>(5));
-
-// After (fluent)
-var expr = x.Multiply(Value.Wrap(2)).Add(Value.Wrap(5));
-```
-
-## Architecture
-
-### Type System Integration
-
-The system integrates with Poly's introspection layer through `ITypeDefinition`:
-
-```
-InterpretationContext
-    ↓
-TypeDefinitionProviderCollection
-    ↓
-ClrTypeDefinitionRegistry → ClrTypeDefinition → ClrTypeMember
-```
-
-This abstraction layer enables:
-- Type resolution across different type systems
-- Extensible type providers for custom types
-- Unified handling of CLR types, data model types, and custom definitions
-
-### Expression Building Flow
-
-1. **Parse/Compose**: Build operator tree using fluent API
-2. **Type Check**: `GetTypeDefinition()` validates types without side effects
-3. **Build**: `BuildExpression()` generates Expression Tree nodes
-4. **Compile**: Expression.Lambda compiles to optimized IL
-5. **Execute**: Compiled lambda executes at native speed
-
-### Scope Management
-
-Variable scopes form a parent-child chain:
-
-```
-GlobalScope (contains parameters)
-    ↓
-Block Scope 1
-    ↓
-Block Scope 2 (nested)
-```
-
-- Variables declared in inner scopes shadow outer ones
-- `GetVariable()` searches current → parent → ... → global
-- `PushScope()` / `PopScope()` manage the scope stack
-- Blocks automatically manage their scope lifecycle
-
-## Current Features
-
-✅ Comprehensive operator set (arithmetic, comparison, boolean, conditional)  
-✅ Fluent API for natural composition  
-✅ Automatic numeric type promotion in arithmetic  
-✅ Block expressions with lexical scoping  
-✅ Member access (properties, fields, methods)  
-✅ Array and indexer access  
-✅ Method invocation  
-✅ Type casting with overflow checking  
-✅ Null-coalescing operator  
-✅ Assignment operations  
-✅ Parameter and variable management  
-
-## Future Plans
-
-### High Priority Enhancements
-
-#### 1. Variable Type Safety Validation
-**Goal:** Prevent runtime type errors from variable reassignment.
-
-- Store declared type in `Variable` at construction
-- Validate type compatibility on reassignment
-- Use numeric promotion rules for compatible assignments
-- Provide clear error messages for incompatible types
-
-**Impact:** Eliminates entire class of type-safety bugs.
-
-#### 2. Overload Resolution for Methods/Indexers
-**Goal:** Support method/indexer overloading with proper resolution.
-
-- Implement C#-style overload resolution with type distance scoring
-- Exact match: 0, Numeric promotion: 1, Implicit conversion: 2
-- Handle tie-breaking with specificity rules
-- Support generic method instantiation
-
-**Impact:** Enables realistic method invocation scenarios.
-
-#### 3. Numeric Promotion in Comparison Operators
-**Goal:** Allow mixed-type comparisons (int vs double, etc.).
-
-- Apply `NumericTypePromotion` to all comparison operators
-- Promote both operands to common type before comparison
-- Consistent behavior with arithmetic operators
-
-**Impact:** Natural comparisons work like C# (x > 5.5 where x is int).
-
-#### 4. Circular Reference Detection
-**Goal:** Prevent stack overflow from circular variable references.
-
-- Track visiting variables in `InterpretationContext`
-- Detect cycles during `GetTypeDefinition()` / `BuildExpression()`
-- Provide clear error with reference chain path
-- Use thread-local or context-scoped tracking
-
-**Impact:** Robust error handling, prevents crashes.
-
-#### 5. Member Resolution Disambiguation
-**Goal:** Properly handle types with fields, properties, and methods of the same name.
-
-- Prioritize member types: Properties > Fields > Methods
-- Document disambiguation behavior
-- Support explicit member type selection if needed
-
-**Impact:** Predictable behavior with complex types.
-
-#### 6. Assignment Target Validation
-**Goal:** Validate assignment targets at build time.
-
-- Only allow assignment to `Parameter` or mutable `Variable`
-- Reject assignments to `Constant`, `Operator`, or uninitialized variables
-- Clear error messages for invalid targets
-
-**Impact:** Catch errors early with clear diagnostics.
-
-### Medium Priority Enhancements
-
-#### 7. Multi-Dimensional Array Support
-**Goal:** Support multi-dimensional and jagged arrays.
-
-- Accept multiple indices: `arr.Index(i, j)` → `arr[i, j]`
-- Use `Expression.ArrayIndex` with rank validation
-- Handle both rectangular (`int[,]`) and jagged (`int[][]`) arrays
-
-**Impact:** Full array support for .NET scenarios.
-
-#### 8. Type Definition Lookup Fallbacks
-**Goal:** Graceful handling of type resolution failures.
-
-- Fallback chain: registered providers → CLR reflection → error
-- Handle generic types, nested types, dynamic assemblies
-- Detailed error messages listing where type was searched
-
-**Impact:** Better error messages, robust type resolution.
-
-#### 9. Scope Exception Handling
-**Goal:** Properly clean up scope state on exceptions.
-
-- Wrap scope operations in try/catch/finally
-- Ensure PopScope() runs even on error
-- Consider context reset/recovery methods
-
-**Impact:** Context remains usable after build errors.
-
-### Low Priority / Optimization
-
-#### 10. Expression Caching
-**Goal:** Avoid rebuilding identical subexpressions.
-
-- Optional cache in `InterpretationContext`
-- Key by (Value identity, context hash)
-- Profile first to verify benefit
-- Clear cache as needed for memory management
-
-**Impact:** Performance optimization for complex trees (if needed).
-
-### Additional Future Features
-
-- **Bitwise operators**: And, Or, Xor, ShiftLeft, ShiftRight for integral types
-- **Type checks**: TypeIs, TypeAs for safe runtime type testing
-- **Increment/Decrement**: Pre/post increment and decrement operators
-- **Compound assignments**: +=, -=, *=, /=, etc.
-- **Loop constructs**: For, While, ForEach with break/continue
-- **Lambda expressions**: Nested lambdas and closures
-- **Exception handling**: Try/Catch/Finally blocks
-- **Collection operations**: NewArray, NewObject, collection initializers
-- **LINQ integration**: Select, Where, OrderBy as interpretable operators
-- **Async support**: Async/await expression building
-
-## Testing
-
-The system has comprehensive test coverage:
-
-- **313 tests** across all operators and features
-- Unit tests for each operator type
-- Integration tests for complex expression scenarios
-- Scope management and variable isolation tests
-- Type promotion and compatibility tests
-- Edge case and error condition coverage
-
-Run tests:
-```bash
-cd Poly.Tests
-dotnet test
 ```
 
 ## Performance
 
-Expression trees compile to optimized IL, offering:
-- **Native execution speed** after compilation
-- **One-time compilation cost** per expression
-- **Reusable compiled delegates** for repeated evaluation
-- **Zero reflection overhead** at execution time
+Expression trees compile to optimized IL via `Expression.Lambda<T>().Compile()`:
 
-For repeated evaluations, always compile once and reuse the delegate:
+- **Native execution speed** after compilation
+- **One-time compilation cost** amortized over many calls
+- **Zero reflection overhead** at execution time
+- **Cache compiled delegates** for repeated use
+
 ```csharp
 var compiled = lambda.Compile();  // Once
-for (int i = 0; i < 1000000; i++) {
-    var result = compiled(i);  // Fast
+for (int i = 0; i < 1_000_000; i++)
+{
+    var result = compiled(i);  // Native speed
 }
 ```
 
-## Contributing
+## Testing
 
-When adding new operators or features:
+383 tests validate:
+- Type resolution for all operators
+- Member resolution for properties and methods
+- Variable scope tracking and shadowing
+- Numeric type promotion
+- Complex nested expressions
+- Block expressions with variables
+- Diagnostic reporting
 
-1. Inherit from appropriate base class (`Operator`, `BooleanOperator`, etc.)
-2. Implement `GetTypeDefinition()` for type checking
-3. Implement `BuildExpression()` for code generation
-4. Add fluent methods to `Value` class for composition
-5. Write comprehensive tests covering normal and edge cases
-6. Document behavior in XML comments
-7. Update this README with new capabilities
+Run tests:
+```bash
+dotnet test Poly.Tests/Poly.Tests.csproj
+```
 
-## Examples
+## Future Enhancements
 
-See [FluentApiExample.cs](../../Poly.Benchmarks/FluentApiExample.cs) for runnable demonstrations of all features.
-
-## References
-
-- [System.Linq.Expressions Documentation](https://docs.microsoft.com/en-us/dotnet/api/system.linq.expressions)
-- [Expression Trees in C#](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/expression-trees/)
-- [Poly Introspection System](../Introspection/README.md)
-- [Poly Validation System](../Validation/README.md)
+- **Control flow analysis**: Reachability and definite assignment
+- **Constant folding**: Compile-time evaluation of constants
+- **Optimization passes**: Dead code elimination, expression simplification
+- **Additional generators**: IL emission, source code generation
+- **Incremental analysis**: LSP integration for real-time validation

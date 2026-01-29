@@ -1,4 +1,7 @@
-using Poly.Interpretation;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.LinqExpressions;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Validation.Rules;
 
@@ -17,23 +20,38 @@ public sealed class RuleSet<T> {
     {
         // Combine all rules into a single AndRule
         CombinedRules = new AndRule(rules);
-
-        // Build the interpretation tree
-        var interpretationContext = new InterpretationContext();
         var registry = ClrTypeDefinitionRegistry.Shared;
         var typeDefinition = registry.GetTypeDefinition<T>()
             ?? throw new InvalidOperationException($"Type definition for {typeof(T).Name} not found.");
 
-        var buildingContext = new RuleBuildingContext(interpretationContext, typeDefinition);
+        var buildingContext = new RuleBuildingContext(typeDefinition);
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
 
-        // Build the expression tree
-        ExpressionTree = RuleSetInterpretation.BuildExpression(interpretationContext);
+        var analyzer = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .UseVariableScopeValidator()
+            .Build();
 
-        // Compile to a predicate - use the Value (parameter) from the building context
-        var parameterExpressions = interpretationContext.GetParameterExpressions();
-        var lambda = Expression.Lambda<Predicate<T>>(ExpressionTree, parameterExpressions);
-        Predicate = lambda.Compile();
+        var analysisResult = analyzer.Analyze(RuleSetInterpretation);
+        var generator = new LinqExpressionGenerator(analysisResult);
+
+        NodeTree = generator.Compile(RuleSetInterpretation);
+
+        // Collect parameters generated during compilation
+        var parameterExpressions = generator.GetParameters().ToList();
+
+        // Ensure we have the main parameter for the type being validated
+        // If it wasn't generated (e.g., due to empty rules), create it manually
+        var mainParam = (Parameter)buildingContext.Value;
+        var mainParamExpr = parameterExpressions.FirstOrDefault(p => p.Name == mainParam.Name);
+        if (mainParamExpr == null) {
+            mainParamExpr = Expr.Parameter(typeof(T), mainParam.Name);
+            parameterExpressions.Clear();
+            parameterExpressions.Add(mainParamExpr);
+        }
+
+        Predicate = Expr.Lambda<Predicate<T>>(NodeTree, parameterExpressions).Compile();
     }
 
     /// <summary>
@@ -44,12 +62,12 @@ public sealed class RuleSet<T> {
     /// <summary>
     /// Gets the interpretation tree representation of the rule set.
     /// </summary>
-    public Value RuleSetInterpretation { get; }
+    public Node RuleSetInterpretation { get; }
 
     /// <summary>
     /// Gets the LINQ expression tree representation of the rule set.
     /// </summary>
-    public Expression ExpressionTree { get; }
+    public Expr NodeTree { get; }
 
     /// <summary>
     /// Gets the compiled predicate function.

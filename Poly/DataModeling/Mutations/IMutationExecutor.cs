@@ -10,4 +10,4 @@ public interface IMutationExecutor {
         IDictionary<string, object?> parameters);
 }
 
-public sealed record MutationResult(bool Success, Poly.Validation.RuleEvaluationResult Validation, IDictionary<string, object?> UpdatedInstance);
+public sealed record MutationResult(bool Success, Validation.RuleEvaluationResult Validation, IDictionary<string, object?> UpdatedInstance);

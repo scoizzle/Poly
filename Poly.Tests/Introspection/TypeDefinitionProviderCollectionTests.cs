@@ -10,8 +10,8 @@ public class TypeDefinitionProviderCollectionTests {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
-        collection.AddProvider(mockProvider1);
-        collection.AddProvider(mockProvider2);
+        collection.Add(mockProvider1);
+        collection.Add(mockProvider2);
 
         // Mock provider1 returns a type for "TestType"
         mockProvider1.AddType("TestType", new MockTypeDefinition("TestType"));
@@ -27,8 +27,8 @@ public class TypeDefinitionProviderCollectionTests {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
-        collection.AddProvider(mockProvider1);
-        collection.AddProvider(mockProvider2);
+        collection.Add(mockProvider1);
+        collection.Add(mockProvider2);
 
         var result = collection.GetTypeDefinition("NonExistentType");
 
@@ -41,7 +41,7 @@ public class TypeDefinitionProviderCollectionTests {
         var collection = new TypeDefinitionProviderCollection();
         var provider = new MockTypeDefinitionProvider();
 
-        collection.AddProvider(provider);
+        collection.Add(provider);
 
         provider.AddType("AddedType", new MockTypeDefinition("AddedType"));
         var result = collection.GetTypeDefinition("AddedType");
@@ -54,8 +54,8 @@ public class TypeDefinitionProviderCollectionTests {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
-        collection.AddProvider(mockProvider1);
-        collection.AddProvider(mockProvider2);
+        collection.Add(mockProvider1);
+        collection.Add(mockProvider2);
 
         // Both providers have "SharedType", but with different instances
         var type1 = new MockTypeDefinition("SharedType") { Tag = "Provider1" };

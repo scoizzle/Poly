@@ -1,5 +1,7 @@
 using Poly.Validation.Builders;
 
+using Exprs = System.Linq.Expressions;
+
 namespace Poly.Tests.Validation;
 
 public class RuleSetBuilderTests {
@@ -202,7 +204,7 @@ public class RuleSetBuilderTests {
 
         var ruleSet = builder.Build();
 
-        await Assert.That(ruleSet.ExpressionTree).IsNotNull();
+        await Assert.That(ruleSet.NodeTree).IsNotNull();
         await Assert.That(ruleSet.RuleSetInterpretation).IsNotNull();
     }
 

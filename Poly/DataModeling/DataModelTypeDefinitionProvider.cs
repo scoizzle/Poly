@@ -1,5 +1,3 @@
-using Poly.Introspection;
-
 namespace Poly.DataModeling;
 
 public sealed class DataModelTypeDefinitionProvider : ITypeDefinitionProvider {

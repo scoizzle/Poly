@@ -9,8 +9,6 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Thread-safe for concurrent reads after construction.
 /// </summary>
 internal sealed class ClrTypeDefinition : ITypeDefinition {
-    private readonly FrozenDictionary<string, FrozenSet<ClrTypeMember>> _membersByName;
-
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -24,7 +22,6 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         Properties = BuildPropertyCollection(type, this, provider);
         Methods = BuildMethodCollection(type, this, provider);
         Members = BuildMemberCollection(Fields, Properties, Methods);
-        _membersByName = BuildMemberDictionary(Members);
     }
 
     public string Name => Type.Name;

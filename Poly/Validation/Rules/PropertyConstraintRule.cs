@@ -1,5 +1,3 @@
-using Poly.Interpretation;
-
 namespace Poly.Validation.Rules;
 
 /// <summary>
@@ -15,7 +13,7 @@ public sealed class PropertyConstraintRule : Rule {
         PropertyRule = propertyRule;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var propertyContext = context.GetPropertyContext(PropertyName);
         var propertyRuleResult = PropertyRule.BuildInterpretationTree(propertyContext);

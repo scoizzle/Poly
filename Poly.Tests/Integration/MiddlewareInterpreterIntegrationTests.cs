@@ -1,7 +1,8 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Tests.TestHelpers;
-using System.Linq.Expressions;
 
 namespace Poly.Tests.Integration;
 
@@ -9,8 +10,7 @@ namespace Poly.Tests.Integration;
 /// Integration tests demonstrating middleware interpreter patterns.
 /// Tests the full pipeline with semantic analysis, custom middleware, and code generation.
 /// </summary>
-public class MiddlewareInterpreterIntegrationTests
-{
+public class MiddlewareInterpreterIntegrationTests {
     private static Node Wrap(object? value) => new Constant(value);
 
     /// <summary>
@@ -118,32 +118,22 @@ public class MiddlewareInterpreterIntegrationTests
     }
 
     /// <summary>
-    /// Test type mismatch detection in semantic analysis.
-    /// Verifies that incompatible type operations are caught or handled.
+    /// Test type mismatch detection.
+    /// Verifies that incompatible type operations throw during code generation.
     /// </summary>
     [Test]
-    public async Task SemanticAnalysis_IncompatibleTypes_HandlesGracefully()
+    public async Task IncompatibleTypes_IntPlusString_ThrowsDuringCodeGeneration()
     {
-        // Act & Assert - int + string may fail during compilation depending on transformer
+        // Arrange
         var ast = new Add(Wrap(5), Wrap("hello"));
-        
-        try
-        {
-            _ = ast.BuildExpression();
-            // If it compiles, the transformer handled the type mismatch
-        }
-        catch
-        {
-            // If it throws, the semantic analysis caught the error
-            // Both outcomes are acceptable for this test
-        }
 
-        await Assert.That(ast).IsNotNull();
+        // Act & Assert - Code generator should throw for incompatible types
+        await Assert.That(() => ast.BuildExpression()).Throws<Exception>();
     }
 
     /// <summary>
     /// Test numeric type promotion in arithmetic operations.
-    /// Verifies that int + double operations are handled correctly.
+    /// Verifies that the code generator (LinqExpressionGenerator) correctly promotes int + double to double.
     /// </summary>
     [Test]
     public async Task NumericTypePromotion_IntPlusDouble_ProducesCorrectResult()
@@ -162,6 +152,7 @@ public class MiddlewareInterpreterIntegrationTests
 
     /// <summary>
     /// Test mixed numeric types in multiplication.
+    /// Verifies that the code generator promotes int * double to double.
     /// </summary>
     [Test]
     public async Task NumericTypePromotion_IntTimesDouble_ProducesCorrectResult()

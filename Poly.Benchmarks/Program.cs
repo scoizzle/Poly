@@ -3,9 +3,13 @@ using System.Linq.Expressions;
 
 using Poly.Interpretation;
 using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
+using Poly.Interpretation.AbstractSyntaxTree.Boolean;
+using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Interpretation.Mermaid;
 using Poly.Validation;
 using Poly.Validation.Builders;
 
@@ -15,15 +19,47 @@ var analyzer = new AnalyzerBuilder()
     .UseVariableScopeValidator()
     .Build();
 
-var param = new Parameter("text");
+// Create a complex demo AST showcasing various node types and nesting
+// Expression: ((age >= 18 && age <= 65) ? (salary * 1.1 + bonus) : salary) ?? 0
 
-var body = new MethodInvocation(
-    param,
-    nameof(string.ToUpper)
+var age = new Parameter("age", TypeReference.To<int?>());
+var salary = new Parameter("salary", TypeReference.To<double?>());
+var bonus = new Parameter("bonus", TypeReference.To<double?>());
+
+// Build the condition: (age >= 18 && age <= 65)
+var ageGreaterOrEqual18 = new GreaterThanOrEqual(
+    new Coalesce(age, new Constant(0)),  // age ?? 0
+    new Constant(18)
 );
 
+var ageLessOrEqual65 = new LessThanOrEqual(
+    new Coalesce(age, new Constant(0)),  // age ?? 0
+    new Constant(65)
+);
+
+var ageInRange = new And(ageGreaterOrEqual18, ageLessOrEqual65);
+
+// Build the "true" branch: (salary * 1.1 + bonus)
+var salaryValue = new Coalesce(salary, new Constant(0.0));
+var salaryMultiplied = new Multiply(salaryValue, new Constant(1.1));
+var bonusValue = new Coalesce(bonus, new Constant(0.0));
+var trueBranch = new Add(salaryMultiplied, bonusValue);
+
+// Build the "false" branch: salary
+var falseBranch = new Coalesce(salary, new Constant(0.0));
+
+// Build the conditional: condition ? trueBranch : falseBranch
+var conditional = new Conditional(ageInRange, trueBranch, falseBranch);
+
+// Wrap in coalesce for final safety: result ?? 0
+var body = new Coalesce(conditional, new Constant(0.0));
+
 var analysisResult = analyzer
-    .With(ctx => ctx.SetResolvedType(param, ctx.TypeDefinitions.GetTypeDefinition(typeof(string))!))
+    .With(ctx => {
+        ctx.SetResolvedType(age, ctx.TypeDefinitions.GetTypeDefinition(typeof(int?))!);
+        ctx.SetResolvedType(salary, ctx.TypeDefinitions.GetTypeDefinition(typeof(double?))!);
+        ctx.SetResolvedType(bonus, ctx.TypeDefinitions.GetTypeDefinition(typeof(double?))!);
+    })
     .Analyze(body);
 
 if (analysisResult.Diagnostics.Count > 0) {
@@ -37,15 +73,24 @@ else {
 }
 
 var generator = new LinqExpressionGenerator(analysisResult);
-Func<string, string> compiled = (Func<string, string>)generator.CompileAsDelegate(body, param);
+Func<int?, double?, double?, double> compiled = (Func<int?, double?, double?, double>)generator.CompileAsDelegate(body, age, salary, bonus);
 
-string resultValue = compiled("hello");
-Console.WriteLine($"Result of method invocation: {resultValue}");
+// Test with various inputs
+Console.WriteLine("\nDemo Expression: ((age >= 18 && age <= 65) ? (salary * 1.1 + bonus) : salary) ?? 0\n");
+Console.WriteLine("Test Cases:");
+Console.WriteLine($"  Age 30, Salary 50000, Bonus 5000: {compiled(30, 50000, 5000)}");  // 60000
+Console.WriteLine($"  Age 17, Salary 50000, Bonus 5000: {compiled(17, 50000, 5000)}");  // 50000
+Console.WriteLine($"  Age 70, Salary 50000, Bonus 5000: {compiled(70, 50000, 5000)}");  // 50000
+Console.WriteLine($"  Age null, Salary null, Bonus null: {compiled(null, null, null)}"); // 0
 
 // Poly.Benchmarks.FluentBuilderExample.Run();
 // Console.WriteLine();
 // Poly.Benchmarks.FluentApiExample.Run();
 Console.WriteLine();
+
+var mermaid = new MermaidAstGenerator().Generate(body);
+Console.WriteLine("Mermaid Diagram of AST:");
+Console.WriteLine(mermaid);
 
 // BenchmarkPersonPredicate test = new();
 // Console.WriteLine("Setting up benchmark...");

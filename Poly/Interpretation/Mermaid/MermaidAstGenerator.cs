@@ -6,6 +6,7 @@ using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
 using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 
 namespace Poly.Interpretation.Mermaid;
@@ -73,6 +74,15 @@ public sealed class MermaidAstGenerator {
         var label = GetNodeLabel(node);
         var shape = GetNodeShape(node);
 
+        // Add type information to label if available
+        if (_analysisResult != null) {
+            var resolvedType = _analysisResult.GetResolvedType(node);
+            if (resolvedType != null) {
+                var typeLabel = FormatTypeName(resolvedType);
+                label = $"{typeLabel} {label}";
+            }
+        }
+
         // Define the node with its label and shape
         var nodeDefinition = shape switch {
             NodeShape.Rectangle => $"{nodeId}[\"{label}\"]",
@@ -85,6 +95,10 @@ public sealed class MermaidAstGenerator {
 
         _output.AppendLine($"    {nodeDefinition}");
 
+        // Add styling annotations if analysis result is available
+        if (_analysisResult != null) {
+            AddStyleAnnotations(nodeId, node);
+        }
 
         // Process children
         foreach (var (child, edgeLabel) in GetChildren(node)) {
@@ -104,6 +118,52 @@ public sealed class MermaidAstGenerator {
         }
 
         return nodeId;
+    }
+
+    private void AddStyleAnnotations(string nodeId, Node node)
+    {
+        if (_analysisResult == null) {
+            return;
+        }
+
+        // Check for diagnostics related to this node
+        var nodeDiagnostics = _analysisResult.Diagnostics
+            .Where(d => d.Node.Id == node.Id)
+            .ToList();
+
+        if (nodeDiagnostics.Count > 0) {
+            // Apply error/warning styling
+            var severity = nodeDiagnostics.Max(d => d.Severity);
+            var styleColor = severity switch {
+                DiagnosticSeverity.Error => "fill:#ffcccc,stroke:#cc0000,stroke-width:3px",
+                DiagnosticSeverity.Warning => "fill:#fff4cc,stroke:#ff9900,stroke-width:2px",
+                _ => "fill:#e6f3ff,stroke:#0066cc,stroke-width:1px"
+            };
+            _output.AppendLine($"    style {nodeId} {styleColor}");
+
+            // Add diagnostic notes
+            foreach (var diagnostic in nodeDiagnostics.Take(1)) // Show first diagnostic
+            {
+                var diagId = $"{nodeId}_diag";
+                var message = diagnostic.Message.Replace("\"", "'");
+                _output.AppendLine($"    {diagId}[\"⚠ {message}\"]");
+                _output.AppendLine($"    {nodeId} -.- {diagId}");
+                _output.AppendLine($"    style {diagId} fill:#fff,stroke:#999,stroke-dasharray: 5 5");
+            }
+        }
+        else {
+            // Apply default styling based on node type
+            string? styleColor = node switch {
+                Constant => "fill:#e8f5e9,stroke:#4caf50",
+                Parameter => "fill:#e3f2fd,stroke:#2196f3",
+                Variable => "fill:#fff3e0,stroke:#ff9800",
+                _ => null
+            };
+
+            if (styleColor != null) {
+                _output.AppendLine($"    style {nodeId} {styleColor}");
+            }
+        }
     }
 
     private string GetNodeId(Node node)
@@ -281,6 +341,27 @@ public sealed class MermaidAstGenerator {
             bool b => b.ToString().ToLowerInvariant(),
             _ => value.ToString() ?? "null"
         };
+    }
+
+    private static string FormatTypeName(ITypeDefinition type)
+    {
+        var name = type.Name ?? "Unknown";
+
+        // Handle generic types (e.g., "Nullable`1" -> "Nullable<T>")
+        if (name.Contains('`')) {
+            var parts = name.Split('`');
+            var baseName = parts[0];
+            var argCount = int.Parse(parts[1]);
+
+            // Generate placeholder type parameters
+            var typeParams = argCount == 1
+                ? "T"
+                : string.Join(", ", Enumerable.Range(1, argCount).Select(i => $"T{i}"));
+
+            return $"{baseName}<{typeParams}>";
+        }
+
+        return name;
     }
 
     private enum NodeShape {

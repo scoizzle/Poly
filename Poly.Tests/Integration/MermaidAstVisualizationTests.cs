@@ -174,8 +174,8 @@ public class MermaidAstVisualizationTests {
         await Assert.That(mermaid).Contains("Subtract (-)");
         await Assert.That(mermaid).Contains("Multiply (*)");
         await Assert.That(mermaid).Contains("Add (+)");
-        await Assert.That(mermaid).Contains("Constant\\n4");
-        await Assert.That(mermaid).Contains("Constant\\n1");
+        await Assert.That(mermaid).Contains("Constant 4");
+        await Assert.That(mermaid).Contains("Constant 1");
     }
 
     /// <summary>

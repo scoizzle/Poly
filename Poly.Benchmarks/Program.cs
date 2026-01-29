@@ -88,8 +88,8 @@ Console.WriteLine($"  Age null, Salary null, Bonus null: {compiled(null, null, n
 // Poly.Benchmarks.FluentApiExample.Run();
 Console.WriteLine();
 
-var mermaid = new MermaidAstGenerator().Generate(body);
-Console.WriteLine("Mermaid Diagram of AST:");
+var mermaid = new MermaidAstGenerator(analysisResult).Generate(body);
+Console.WriteLine("Mermaid Diagram of AST (with metadata):");
 Console.WriteLine(mermaid);
 
 // BenchmarkPersonPredicate test = new();

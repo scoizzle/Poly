@@ -21,7 +21,7 @@ public readonly record struct NodeId {
     /// Creates a new unique node identifier using a GUID.
     /// Used for synthetic or programmatically-created nodes.
     /// </summary>
-    public static NodeId NewId() => new(Guid.NewGuid().ToString("N"));
+    public static NodeId NewId() => new(Guid.CreateVersion7().ToString("N"));
 
     /// <summary>
     /// Creates a node identifier from source position.

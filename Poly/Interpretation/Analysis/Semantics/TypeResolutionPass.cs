@@ -244,7 +244,7 @@ public static class TypeResolutionMetadataExtensions {
         }
     }
 
-    extension(ITypedMetadataProvider typedMetadataProvider) {
+    extension(INodeMetadataProvider typedMetadataProvider) {
         public ITypeDefinition? GetResolvedType(Node node)
         {
             return typedMetadataProvider.GetMetadata<TypeResolutionMetadata>(node)?.ResolvedTypeDefinition;

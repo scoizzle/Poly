@@ -3,7 +3,7 @@ namespace Poly.Interpretation.Analysis;
 /// <summary>
 /// Provides context for analysis operations, including type definitions and metadata storage.
 /// </summary>
-public sealed class AnalysisContext : ITypedMetadataProvider {
+public sealed class AnalysisContext : INodeMetadataProvider {
     private readonly List<Diagnostic> _diagnostics = new();
 
     /// <summary>

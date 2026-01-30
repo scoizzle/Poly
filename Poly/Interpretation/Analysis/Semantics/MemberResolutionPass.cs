@@ -83,7 +83,7 @@ public static class MemberResolutionMetadataExtensions {
         }
     }
 
-    extension(ITypedMetadataProvider typedMetadataProvider) {
+    extension(INodeMetadataProvider typedMetadataProvider) {
         public ITypeMember? GetResolvedMember(Node node)
         {
             return typedMetadataProvider.GetMetadata<MemberResolutionMetadata>(node)?.ResolvedMember;

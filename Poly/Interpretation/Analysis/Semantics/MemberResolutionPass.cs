@@ -60,9 +60,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
 
 public static class MemberResolutionMetadataExtensions {
     private sealed class MemberResolutionMetadata : IAnalysisMetadata {
-        public Dictionary<NodeId, ITypeMember> TypeMapById { get; } = new();
-
-        public void ClearNodeCache(NodeId nodeId) => TypeMapById.Remove(nodeId);
+        public ITypeMember? ResolvedMember { get; set; }
     };
 
     extension(AnalyzerBuilder builder) {
@@ -76,8 +74,10 @@ public static class MemberResolutionMetadataExtensions {
     extension(AnalysisContext context) {
         public void SetResolvedMember(Node node, ITypeMember member)
         {
-            var map = context.GetOrAddMetadata(static () => new MemberResolutionMetadata()).TypeMapById;
-            map[node.Id] = member;
+            ArgumentNullException.ThrowIfNull(member);
+
+            var metadata = context.GetOrAddMetadata(node, static () => new MemberResolutionMetadata());
+            metadata.ResolvedMember = member;
 
             context.SetResolvedType(node, member.MemberTypeDefinition);
         }
@@ -86,13 +86,7 @@ public static class MemberResolutionMetadataExtensions {
     extension(ITypedMetadataProvider typedMetadataProvider) {
         public ITypeMember? GetResolvedMember(Node node)
         {
-            if (typedMetadataProvider.GetMetadata<MemberResolutionMetadata>() is MemberResolutionMetadata metadata) {
-                if (metadata.TypeMapById.TryGetValue(node.Id, out var member)) {
-                    return member;
-                }
-            }
-
-            return default;
+            return typedMetadataProvider.GetMetadata<MemberResolutionMetadata>(node)?.ResolvedMember;
         }
     }
 }

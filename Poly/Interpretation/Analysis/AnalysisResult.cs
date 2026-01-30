@@ -1,9 +1,9 @@
 namespace Poly.Interpretation.Analysis;
 
 public sealed record AnalysisResult : ITypedMetadataProvider {
-    private readonly TypedMetadataStore _metadata;
+    private readonly NodeMetadataStore _metadata;
 
-    public AnalysisResult(TypedMetadataStore metadata, IReadOnlyList<Diagnostic>? diagnostics = null)
+    public AnalysisResult(NodeMetadataStore metadata, IReadOnlyList<Diagnostic>? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(metadata);
         _metadata = metadata;
@@ -20,7 +20,5 @@ public sealed record AnalysisResult : ITypedMetadataProvider {
     /// </summary>
     public bool HasErrors => Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
 
-    public IEnumerable<IAnalysisMetadata> Metadata => _metadata.GetAll();
-
-    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class, IAnalysisMetadata => _metadata.Get<TMetadata>();
+    public TMetadata? GetMetadata<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata => _metadata.Get<TMetadata>(node);
 }

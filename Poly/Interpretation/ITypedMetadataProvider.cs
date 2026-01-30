@@ -1,5 +1,5 @@
 namespace Poly.Interpretation;
 
 public interface ITypedMetadataProvider {
-    public TMetadata? GetMetadata<TMetadata>() where TMetadata : class, IAnalysisMetadata;
+    public TMetadata? GetMetadata<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata;
 }

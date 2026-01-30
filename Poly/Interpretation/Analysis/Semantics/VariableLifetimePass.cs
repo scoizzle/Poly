@@ -72,7 +72,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         stack.Push(variable);
 
         // Track which block owns this variable
-        var metadata = GetOrCreateMetadata(context);
+        var metadata = GetOrCreateMetadata(context, variable);
         if (!metadata.BlockScopes.TryGetValue(scope, out var scopeVars)) {
             scopeVars = new HashSet<Variable>();
             metadata.BlockScopes[scope] = scopeVars;
@@ -92,7 +92,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         if (_variablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0) {
             // Valid reference - link to declaration
             var declaration = stack.Peek();
-            var metadata = GetOrCreateMetadata(context);
+            var metadata = GetOrCreateMetadata(context, variable);
             metadata.VariableReferences[variable] = declaration;
         }
         else {
@@ -101,9 +101,9 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         }
     }
 
-    private VariableScopeMetadata GetOrCreateMetadata(AnalysisContext context)
+    private VariableScopeMetadata GetOrCreateMetadata(AnalysisContext context, Node node)
     {
-        return context.Metadata.GetOrAdd(() => new VariableScopeMetadata(
+        return context.Metadata.GetOrAdd(node, () => new VariableScopeMetadata(
             new Dictionary<Block, HashSet<Variable>>(),
             new Dictionary<Variable, Variable?>(),
             new List<VariableScopeError>()
@@ -112,7 +112,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 
     private void AddError(AnalysisContext context, Node node, string message)
     {
-        var metadata = GetOrCreateMetadata(context);
+        var metadata = GetOrCreateMetadata(context, node);
         metadata.Errors.Add(new VariableScopeError(node, message));
     }
 

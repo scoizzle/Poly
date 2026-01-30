@@ -1,32 +1,21 @@
 namespace Poly.Interpretation;
 
-public sealed class TypedMetadataStore {
-    private readonly Dictionary<Type, IAnalysisMetadata> _metadata = new();
+public sealed class NodeMetadataStore {
+    private readonly Dictionary<(NodeId, Type), IAnalysisMetadata> _metadata = new();
 
     /// <summary>
     /// Initializes a new empty metadata store.
     /// </summary>
-    public TypedMetadataStore() { }
+    public NodeMetadataStore() { }
 
     /// <summary>
     /// Initializes a new metadata store with data copied from another store.
     /// </summary>
-    public TypedMetadataStore(TypedMetadataStore source)
+    public NodeMetadataStore(NodeMetadataStore source)
     {
         ArgumentNullException.ThrowIfNull(source);
         foreach (var entry in source._metadata) {
             _metadata.Add(entry.Key, entry.Value);
-        }
-    }
-
-    /// <summary>
-    /// Retrieves all stored metadata instances.
-    /// </summary>
-    /// <returns>An enumerable of all metadata instances.</returns>
-    public IEnumerable<IAnalysisMetadata> GetAll()
-    {
-        foreach (var entry in _metadata) {
-            yield return entry.Value;
         }
     }
 
@@ -37,10 +26,10 @@ public sealed class TypedMetadataStore {
     /// <typeparam name="TMetadata">The metadata type to store.</typeparam>
     /// <param name="data">The metadata instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when data is null.</exception>
-    public void Set<TMetadata>(TMetadata data) where TMetadata : class, IAnalysisMetadata
+    public void Set<TMetadata>(Node node, TMetadata data) where TMetadata : class, IAnalysisMetadata
     {
         ArgumentNullException.ThrowIfNull(data);
-        _metadata.Add(typeof(TMetadata), data);
+        _metadata.Add((node.Id, typeof(TMetadata)), data);
     }
 
     /// <summary>
@@ -48,9 +37,9 @@ public sealed class TypedMetadataStore {
     /// </summary>
     /// <typeparam name="TMetadata">The metadata type to retrieve.</typeparam>
     /// <returns>The metadata instance if it exists; otherwise, null.</returns>
-    public TMetadata? Get<TMetadata>() where TMetadata : class, IAnalysisMetadata
+    public TMetadata? Get<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata
     {
-        return _metadata.TryGetValue(typeof(TMetadata), out var data) ? (TMetadata)data : null;
+        return _metadata.TryGetValue((node.Id, typeof(TMetadata)), out var data) ? (TMetadata)data : null;
     }
 
 
@@ -59,11 +48,11 @@ public sealed class TypedMetadataStore {
     /// </summary>
     /// <typeparam name="TMetadata">The metadata type to retrieve.</typeparam>
     /// <returns>The metadata instance if it exists; otherwise, null.</returns>
-    public TMetadata GetOrAdd<TMetadata>(Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata
+    public TMetadata GetOrAdd<TMetadata>(Node node, Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata
     {
-        if (!_metadata.TryGetValue(typeof(TMetadata), out var data)) {
+        if (!_metadata.TryGetValue((node.Id, typeof(TMetadata)), out var data)) {
             data = factory();
-            _metadata.Add(typeof(TMetadata), data);
+            _metadata.Add((node.Id, typeof(TMetadata)), data);
         }
 
         return (TMetadata)data;
@@ -73,8 +62,8 @@ public sealed class TypedMetadataStore {
     /// Removes metadata of a given type.
     /// </summary>
     /// <typeparam name="TMetadata">The metadata type to remove.</typeparam>
-    public void Remove<TMetadata>() where TMetadata : class, IAnalysisMetadata
+    public void Remove<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata
     {
-        _metadata.Remove(typeof(TMetadata));
+        _metadata.Remove((node.Id, typeof(TMetadata)));
     }
 }

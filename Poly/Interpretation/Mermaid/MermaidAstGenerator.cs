@@ -22,7 +22,7 @@ public sealed class MermaidAstGenerator {
     private readonly AnalysisResult? _analysisResult;
     private readonly StringBuilder _output;
     private readonly HashSet<string> _visitedEdges;
-    private int _nodeCounter;
+    private readonly StringBuilder _scratch;
 
     /// <summary>
     /// Initializes a new instance without analysis metadata.
@@ -31,7 +31,7 @@ public sealed class MermaidAstGenerator {
     {
         _output = new StringBuilder();
         _visitedEdges = new HashSet<string>();
-        _nodeCounter = 0;
+        _scratch = new StringBuilder();
     }
 
     /// <summary>
@@ -44,7 +44,7 @@ public sealed class MermaidAstGenerator {
         _analysisResult = analysisResult;
         _output = new StringBuilder();
         _visitedEdges = new HashSet<string>();
-        _nodeCounter = 0;
+        _scratch = new StringBuilder();
     }
 
     /// <summary>
@@ -59,45 +59,65 @@ public sealed class MermaidAstGenerator {
 
         _output.Clear();
         _visitedEdges.Clear();
-        _nodeCounter = 0;
 
         _output.AppendLine($"graph {direction}");
+
+        // First, collect and generate all Parameter nodes to put them at the beginning
+        var parameterNodes = CollectParameterNodes(node);
+        foreach (var paramNode in parameterNodes) {
+            var nodeId = GetNodeId(paramNode);
+            var shape = GetNodeShape(paramNode);
+            AppendNodeDefinition(paramNode, nodeId, shape);
+
+            // Add styling annotations if analysis result is available
+            if (_analysisResult != null) {
+                AddStyleAnnotations(nodeId, paramNode);
+            }
+        }
 
         GenerateNode(node);
 
         return _output.ToString();
     }
 
-    private string GenerateNode(Node node)
+    private List<Parameter> CollectParameterNodes(Node node)
     {
-        var nodeId = GetNodeId(node);
-        var label = GetNodeLabel(node);
-        var shape = GetNodeShape(node);
+        var parameters = new List<Parameter>();
+        var visited = new HashSet<Node>();
 
-        // Add type information to label if available
-        if (_analysisResult != null) {
-            var resolvedType = _analysisResult.GetResolvedType(node);
-            if (resolvedType != null) {
-                var typeLabel = FormatTypeName(resolvedType);
-                label = $"{typeLabel} {label}";
+        void Visit(Node n)
+        {
+            if (!visited.Add(n)) {
+                return; // Already visited
+            }
+
+            if (n is Parameter param) {
+                parameters.Add(param);
+            }
+
+            // Visit all children
+            foreach (var (child, _) in GetChildren(n)) {
+                Visit(child);
             }
         }
 
-        // Define the node with its label and shape
-        var nodeDefinition = shape switch {
-            NodeShape.Rectangle => $"{nodeId}[\"{label}\"]",
-            NodeShape.RoundedRectangle => $"{nodeId}(\"{label}\")",
-            NodeShape.Circle => $"{nodeId}((\"{label}\"))",
-            NodeShape.Rhombus => $"{nodeId}{{\"{label}\"}}",
-            NodeShape.Hexagon => $"{nodeId}{{{{\"{label}\"}}}}",
-            _ => $"{nodeId}[\"{label}\"]"
-        };
+        Visit(node);
+        return parameters;
+    }
 
-        _output.AppendLine($"    {nodeDefinition}");
+    private string GenerateNode(Node node)
+    {
+        var nodeId = GetNodeId(node);
 
-        // Add styling annotations if analysis result is available
-        if (_analysisResult != null) {
-            AddStyleAnnotations(nodeId, node);
+        // Skip definition for Parameter nodes as they were already defined at the beginning
+        if (!(node is Parameter)) {
+            var shape = GetNodeShape(node);
+            AppendNodeDefinition(node, nodeId, shape);
+
+            // Add styling annotations if analysis result is available
+            if (_analysisResult != null) {
+                AddStyleAnnotations(nodeId, node);
+            }
         }
 
         // Process children
@@ -118,6 +138,59 @@ public sealed class MermaidAstGenerator {
         }
 
         return nodeId;
+    }
+
+    private void AppendNodeDefinition(Node node, string nodeId, NodeShape shape)
+    {
+        _scratch.Clear();
+        // Add type information to label if available
+        if (_analysisResult != null) {
+            var resolvedType = _analysisResult.GetResolvedType(node);
+            if (resolvedType != null) {
+                AppendTypeName(_scratch, resolvedType);
+                _scratch.Append(' ');
+            }
+        }
+
+        AppendNodeLabel(_scratch, node);
+
+        _output.Append("    ");
+        _output.Append(nodeId);
+
+        switch (shape) {
+            case NodeShape.Rectangle:
+                _output.Append("[\"");
+                _output.Append(_scratch);
+                _output.Append("\"]");
+                break;
+            case NodeShape.RoundedRectangle:
+                _output.Append("(\"");
+                _output.Append(_scratch);
+                _output.Append("\")");
+                break;
+            case NodeShape.Circle:
+                _output.Append("((\"");
+                _output.Append(_scratch);
+                _output.Append("\"))");
+                break;
+            case NodeShape.Rhombus:
+                _output.Append("{\"");
+                _output.Append(_scratch);
+                _output.Append("\"}");
+                break;
+            case NodeShape.Hexagon:
+                _output.Append("{{\"");
+                _output.Append(_scratch);
+                _output.Append("\"}}}");
+                break;
+            default:
+                _output.Append("[\"");
+                _output.Append(_scratch);
+                _output.Append("\"]");
+                break;
+        }
+
+        _output.AppendLine();
     }
 
     private void AddStyleAnnotations(string nodeId, Node node)
@@ -168,75 +241,165 @@ public sealed class MermaidAstGenerator {
 
     private string GetNodeId(Node node)
     {
-        return $"n{_nodeCounter++}";
+        // Use the node's stable NodeId instead of auto-generated counter
+        return node.Id.Value;
     }
 
-    private string GetNodeLabel(Node node)
+    private void AppendNodeLabel(StringBuilder builder, Node node)
     {
-        return node switch {
+        switch (node) {
             // Leaf nodes with values
-            Constant constant => $"Constant {FormatValue(constant.Value)}",
-            Parameter param => $"Parameter {param.Name}",
-            Variable variable => $"Variable {variable.Name}",
+            case Constant constant:
+                builder.Append("Constant ");
+                AppendValue(builder, constant.Value);
+                break;
+            case Parameter param:
+                builder.Append("Parameter ");
+                builder.Append(param.Name);
+                break;
+            case Variable variable:
+                builder.Append("Variable ");
+                builder.Append(variable.Name);
+                break;
 
             // Binary arithmetic
-            Add => "Add (+)",
-            Subtract => "Subtract (-)",
-            Multiply => "Multiply (*)",
-            Divide => "Divide (/)",
-            Modulo => "Modulo (%)",
+            case Add:
+                builder.Append("Add (+)");
+                break;
+            case Subtract:
+                builder.Append("Subtract (-)");
+                break;
+            case Multiply:
+                builder.Append("Multiply (*)");
+                break;
+            case Divide:
+                builder.Append("Divide (/)");
+                break;
+            case Modulo:
+                builder.Append("Modulo (%)");
+                break;
 
             // Unary operations
-            UnaryMinus => "Negate (-)",
-            Not => "Not (!)",
+            case UnaryMinus:
+                builder.Append("Negate (-)");
+                break;
+            case Not:
+                builder.Append("Not (!)");
+                break;
 
             // Comparison
-            Equal => "Equal (==)",
-            NotEqual => "Not Equal (!=)",
-            LessThan => "Less Than (<)",
-            LessThanOrEqual => "Less Than or Equal (<=)",
-            GreaterThan => "Greater Than (>)",
-            GreaterThanOrEqual => "Greater Than or Equal (>=)",
+            case Equal:
+                builder.Append("Equal (==)");
+                break;
+            case NotEqual:
+                builder.Append("Not Equal (!=)");
+                break;
+            case LessThan:
+                builder.Append("Less Than (<)");
+                break;
+            case LessThanOrEqual:
+                builder.Append("Less Than or Equal (<=)");
+                break;
+            case GreaterThan:
+                builder.Append("Greater Than (>)");
+                break;
+            case GreaterThanOrEqual:
+                builder.Append("Greater Than or Equal (>=)");
+                break;
 
             // Boolean operations
-            And => "And (&&)",
-            Or => "Or (||)",
+            case And:
+                builder.Append("And (&&)");
+                break;
+            case Or:
+                builder.Append("Or (||)");
+                break;
 
             // Other operations
-            Conditional => "Conditional (?:)",
-            Coalesce => "Coalesce (??)",
-            TypeCast cast => $"Cast to {cast.TargetTypeReference}",
-            MemberAccess member => $"Member Access .{member.MemberName}",
-            IndexAccess => "Index Access",
-            MethodInvocation method => $"Method Call {method.MethodName}()",
+            case Conditional:
+                builder.Append("Conditional (?:)");
+                break;
+            case Coalesce:
+                builder.Append("Coalesce (??)");
+                break;
+            case TypeCast cast:
+                builder.Append("Cast to ");
+                builder.Append(cast.TargetTypeReference);
+                break;
+            case MemberAccess member:
+                builder.Append("Member Access .");
+                builder.Append(member.MemberName);
+                break;
+            case IndexAccess:
+                builder.Append("Index Access");
+                break;
+            case MethodInvocation method:
+                builder.Append("Method Call ");
+                builder.Append(method.MethodName);
+                builder.Append("()");
+                break;
 
             // Control flow
-            Block => "Block",
-            IfStatement => "If Statement",
-            WhileLoop => "While Loop",
-            DoWhileLoop => "Do-While Loop",
-            ForLoop => "For Loop",
-            SwitchStatement => "Switch",
+            case Block:
+                builder.Append("Block");
+                break;
+            case IfStatement:
+                builder.Append("If Statement");
+                break;
+            case WhileLoop:
+                builder.Append("While Loop");
+                break;
+            case DoWhileLoop:
+                builder.Append("Do-While Loop");
+                break;
+            case ForLoop:
+                builder.Append("For Loop");
+                break;
+            case SwitchStatement:
+                builder.Append("Switch");
+                break;
 
             // Assignments
-            Assignment => "Assignment (=)",
+            case Assignment:
+                builder.Append("Assignment (=)");
+                break;
 
             // Jumps
-            BreakStatement => "Break",
-            ContinueStatement => "Continue",
-            ReturnStatement => "Return",
-            GotoStatement goto_ => $"Goto {goto_.Target}",
-            LabelDeclaration label => $"Label {label.Name}",
+            case BreakStatement:
+                builder.Append("Break");
+                break;
+            case ContinueStatement:
+                builder.Append("Continue");
+                break;
+            case ReturnStatement:
+                builder.Append("Return");
+                break;
+            case GotoStatement goto_:
+                builder.Append("Goto ");
+                builder.Append(goto_.Target);
+                break;
+            case LabelDeclaration label:
+                builder.Append("Label ");
+                builder.Append(label.Name);
+                break;
 
             // Exception handling
-            ThrowStatement => "Throw",
-            TryCatchFinally => "Try-Catch-Finally",
+            case ThrowStatement:
+                builder.Append("Throw");
+                break;
+            case TryCatchFinally:
+                builder.Append("Try-Catch-Finally");
+                break;
 
             // Resource management
-            UsingStatement => "Using",
+            case UsingStatement:
+                builder.Append("Using");
+                break;
 
-            _ => node.GetType().Name
-        };
+            default:
+                builder.Append(node.GetType().Name);
+                break;
+        }
     }
 
     private NodeShape GetNodeShape(Node node)
@@ -332,36 +495,53 @@ public sealed class MermaidAstGenerator {
         };
     }
 
-    private static string FormatValue(object? value)
+    private static void AppendValue(StringBuilder builder, object? value)
     {
-        return value switch {
-            null => "null",
-            string s => $"\\\"{s}\\\"",
-            char c => $"\\'{c}\\'",
-            bool b => b.ToString().ToLowerInvariant(),
-            _ => value.ToString() ?? "null"
-        };
+        switch (value) {
+            case null:
+                builder.Append("null");
+                break;
+            case string s:
+                builder.Append("\\\"");
+                builder.Append(s);
+                builder.Append("\\\"");
+                break;
+            case char c:
+                builder.Append("\\'");
+                builder.Append(c);
+                builder.Append("\\'");
+                break;
+            case bool b:
+                builder.Append(b ? "true" : "false");
+                break;
+            default:
+                builder.Append(value.ToString() ?? "null");
+                break;
+        }
     }
 
-    private static string FormatTypeName(ITypeDefinition type)
+    private static void AppendTypeName(StringBuilder builder, ITypeDefinition type)
     {
         var name = type.Name ?? "Unknown";
 
-        // Handle generic types (e.g., "Nullable`1" -> "Nullable<T>")
-        if (name.Contains('`')) {
-            var parts = name.Split('`');
-            var baseName = parts[0];
-            var argCount = int.Parse(parts[1]);
+        var index = name.IndexOf('`');
+        var paramCount = type.GenericParameters.Count();
 
-            // Generate placeholder type parameters
-            var typeParams = argCount == 1
-                ? "T"
-                : string.Join(", ", Enumerable.Range(1, argCount).Select(i => $"T{i}"));
-
-            return $"{baseName}<{typeParams}>";
+        if (index == -1 || paramCount == 0) {
+            builder.Append(name);
+            return;
         }
 
-        return name;
+        builder.Append(name, 0, index);
+        builder.Append('<');
+
+        foreach (var (idx, param) in type.GenericParameters.Index()) {
+            builder.Append(param.ParameterTypeDefinition.Name);
+
+            if (idx < paramCount - 1)
+                builder.Append(", ");
+        }
+        builder.Append('>');
     }
 
     private enum NodeShape {

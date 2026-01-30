@@ -164,22 +164,19 @@ public sealed class LinqExpressionGenerator {
             Not not => Expression.Not(CompileNode(not.Value)),
 
             // Comparison operations
-            Equal eq => Expression.Equal(CompileNode(eq.LeftHandValue), CompileNode(eq.RightHandValue)),
-            NotEqual neq => Expression.NotEqual(CompileNode(neq.LeftHandValue), CompileNode(neq.RightHandValue)),
-            LessThan lt => Expression.LessThan(CompileNode(lt.LeftHandValue), CompileNode(lt.RightHandValue)),
-            LessThanOrEqual lte => Expression.LessThanOrEqual(CompileNode(lte.LeftHandValue), CompileNode(lte.RightHandValue)),
-            GreaterThan gt => Expression.GreaterThan(CompileNode(gt.LeftHandValue), CompileNode(gt.RightHandValue)),
-            GreaterThanOrEqual gte => Expression.GreaterThanOrEqual(CompileNode(gte.LeftHandValue), CompileNode(gte.RightHandValue)),
+            Equal eq => CompileBinaryComparison(eq.LeftHandValue, eq.RightHandValue, Expression.Equal),
+            NotEqual neq => CompileBinaryComparison(neq.LeftHandValue, neq.RightHandValue, Expression.NotEqual),
+            LessThan lt => CompileBinaryComparison(lt.LeftHandValue, lt.RightHandValue, Expression.LessThan),
+            LessThanOrEqual lte => CompileBinaryComparison(lte.LeftHandValue, lte.RightHandValue, Expression.LessThanOrEqual),
+            GreaterThan gt => CompileBinaryComparison(gt.LeftHandValue, gt.RightHandValue, Expression.GreaterThan),
+            GreaterThanOrEqual gte => CompileBinaryComparison(gte.LeftHandValue, gte.RightHandValue, Expression.GreaterThanOrEqual),
 
             // Boolean operations
             And and => Expression.AndAlso(CompileNode(and.LeftHandValue), CompileNode(and.RightHandValue)),
             Or or => Expression.OrElse(CompileNode(or.LeftHandValue), CompileNode(or.RightHandValue)),
 
             // Conditional
-            Conditional cond => Expression.Condition(
-                CompileNode(cond.Condition),
-                CompileNode(cond.IfTrue),
-                CompileNode(cond.IfFalse)),
+            Conditional cond => CompileConditional(cond),
 
             // Member and index access
             MemberAccess member => Expression.PropertyOrField(CompileNode(member.Value), member.MemberName),
@@ -257,6 +254,39 @@ public sealed class LinqExpressionGenerator {
         return Expression.Assign(destination, valueExpr);
     }
 
+    private Expression CompileBinaryComparison(
+        Node leftNode,
+        Node rightNode,
+        Func<Expression, Expression, BinaryExpression> factory)
+    {
+        var leftExpr = CompileNode(leftNode);
+        var rightExpr = CompileNode(rightNode);
+
+        var promotedType = GetPromotedNumericType(leftExpr.Type, rightExpr.Type);
+        if (promotedType != null) {
+            leftExpr = leftExpr.Type == promotedType ? leftExpr : Expression.Convert(leftExpr, promotedType);
+            rightExpr = rightExpr.Type == promotedType ? rightExpr : Expression.Convert(rightExpr, promotedType);
+        }
+
+        return factory(leftExpr, rightExpr);
+    }
+
+    private Expression CompileConditional(Conditional cond)
+    {
+        var condition = CompileNode(cond.Condition);
+        var ifTrue = CompileNode(cond.IfTrue);
+        var ifFalse = CompileNode(cond.IfFalse);
+
+        // Ensure both branches have compatible types
+        var commonType = GetCommonType(ifTrue.Type, ifFalse.Type);
+        if (commonType != null) {
+            ifTrue = ifTrue.Type == commonType ? ifTrue : Expression.Convert(ifTrue, commonType);
+            ifFalse = ifFalse.Type == commonType ? ifFalse : Expression.Convert(ifFalse, commonType);
+        }
+
+        return Expression.Condition(condition, ifTrue, ifFalse);
+    }
+
     private Expression CompileBinaryArithmetic(
         Node leftNode,
         Node rightNode,
@@ -295,6 +325,52 @@ public sealed class LinqExpressionGenerator {
         var numericTypes = new[] { typeof(int), typeof(short), typeof(byte), typeof(sbyte), typeof(ushort) };
         if (numericTypes.Contains(left) || numericTypes.Contains(right)) return typeof(int);
 
+        return null;
+    }
+
+    private static Type? GetCommonType(Type left, Type right)
+    {
+        // Same types are already compatible
+        if (left == right) return left;
+
+        // Handle void types (for statements)
+        if (left == typeof(void) || right == typeof(void)) return null;
+
+        // Numeric promotion
+        var promoted = GetPromotedNumericType(left, right);
+        if (promoted != null) return promoted;
+
+        // Reference types - find common base or interface
+        if (!left.IsValueType && !right.IsValueType) {
+            // If one is assignable to the other, use the more general one
+            if (left.IsAssignableFrom(right)) return left;
+            if (right.IsAssignableFrom(left)) return right;
+
+            // Otherwise, use object as the common type
+            return typeof(object);
+        }
+
+        // Nullable types
+        var leftUnderlying = Nullable.GetUnderlyingType(left);
+        var rightUnderlying = Nullable.GetUnderlyingType(right);
+
+        if (leftUnderlying != null && rightUnderlying != null) {
+            // Both nullable - promote underlying types
+            var commonUnderlying = GetCommonType(leftUnderlying, rightUnderlying);
+            return commonUnderlying != null ? typeof(Nullable<>).MakeGenericType(commonUnderlying) : null;
+        }
+        else if (leftUnderlying != null && right.IsValueType) {
+            // Left is nullable, right is value type
+            var commonUnderlying = GetCommonType(leftUnderlying, right);
+            return commonUnderlying != null ? typeof(Nullable<>).MakeGenericType(commonUnderlying) : null;
+        }
+        else if (rightUnderlying != null && left.IsValueType) {
+            // Right is nullable, left is value type
+            var commonUnderlying = GetCommonType(left, rightUnderlying);
+            return commonUnderlying != null ? typeof(Nullable<>).MakeGenericType(commonUnderlying) : null;
+        }
+
+        // No common type found
         return null;
     }
 

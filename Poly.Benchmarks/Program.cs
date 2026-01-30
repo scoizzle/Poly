@@ -22,9 +22,9 @@ var analyzer = new AnalyzerBuilder()
 // Create a complex demo AST showcasing various node types and nesting
 // Expression: ((age >= 18 && age <= 65) ? (salary * 1.1 + bonus) : salary) ?? 0
 
-var age = new Parameter("age", TypeReference.To<int?>());
-var salary = new Parameter("salary", TypeReference.To<double?>());
-var bonus = new Parameter("bonus", TypeReference.To<double?>());
+var age = new Parameter("age");
+var salary = new Parameter("salary");
+var bonus = new Parameter("bonus");
 
 // Build the condition: (age >= 18 && age <= 65)
 var ageGreaterOrEqual18 = new GreaterThanOrEqual(

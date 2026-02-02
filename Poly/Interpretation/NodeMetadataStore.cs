@@ -42,6 +42,18 @@ public sealed class NodeMetadataStore {
         return _metadata.TryGetValue((node.Id, typeof(TMetadata)), out var data) ? (TMetadata)data : null;
     }
 
+    /// <summary>
+    /// Retrieves all metadata attached to a node.
+    /// </summary>
+    /// <param name="node">The node to query.</param>
+    /// <returns>All metadata instances for the node.</returns>
+    public IEnumerable<IAnalysisMetadata> GetAll(Node node)
+    {
+        return _metadata
+            .Where(kvp => kvp.Key.Item1 == node.Id)
+            .Select(kvp => kvp.Value);
+    }
+
 
     /// <summary>
     /// Retrieves strongly-typed metadata by type.

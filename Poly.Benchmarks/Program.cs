@@ -12,6 +12,8 @@ using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Mermaid;
 using Poly.Validation;
 using Poly.Validation.Builders;
+Poly.Benchmarks.FluentBuilderExample.Run();
+return;
 
 var analyzer = new AnalyzerBuilder()
     .UseTypeResolver()
@@ -83,7 +85,7 @@ Console.WriteLine($"  Age 17, Salary 50000, Bonus 5000: {compiled(17, 50000, 500
 Console.WriteLine($"  Age 70, Salary 50000, Bonus 5000: {compiled(70, 50000, 5000)}");  // 50000
 Console.WriteLine($"  Age null, Salary null, Bonus null: {compiled(null, null, null)}"); // 0
 
-// Poly.Benchmarks.FluentBuilderExample.Run();
+Console.WriteLine();
 // Console.WriteLine();
 // Poly.Benchmarks.FluentApiExample.Run();
 Console.WriteLine();

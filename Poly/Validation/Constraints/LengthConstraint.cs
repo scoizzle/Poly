@@ -1,5 +1,6 @@
 using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+using Poly.Introspection;
 
 using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
@@ -8,6 +9,11 @@ namespace Poly.Validation;
 public sealed class LengthConstraint(int? minLength, int? maxLength) : Constraint {
     public int? MinLength { get; set; } = minLength;
     public int? MaxLength { get; set; } = maxLength;
+
+    /// <summary>
+    /// Length constraints apply to Text and Collection types.
+    /// </summary>
+    public override TypeCategory ApplicableCategories => TypeCategory.Text | TypeCategory.Collection | TypeCategory.Binary;
 
     public override Node BuildInterpretationTree(RuleBuildingContext context)
     {

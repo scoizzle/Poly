@@ -2,26 +2,28 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
+using Poly.DataModeling.Builders;
+using Poly.DataModeling.Mutations;
+using Poly.DataModeling.TypeExpressions;
+using Poly.Validation;
+
 namespace Poly.DataModeling;
 
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(DataModel))]
 [JsonSerializable(typeof(DataType))]
 [JsonSerializable(typeof(DataProperty))]
-[JsonSerializable(typeof(Int32Property))]
-[JsonSerializable(typeof(Int64Property))]
-[JsonSerializable(typeof(StringProperty))]
-[JsonSerializable(typeof(DecimalProperty))]
-[JsonSerializable(typeof(DoubleProperty))]
-[JsonSerializable(typeof(BooleanProperty))]
-[JsonSerializable(typeof(DateTimeProperty))]
-[JsonSerializable(typeof(DateOnlyProperty))]
-[JsonSerializable(typeof(TimeOnlyProperty))]
-[JsonSerializable(typeof(GuidProperty))]
-[JsonSerializable(typeof(EnumProperty))]
-[JsonSerializable(typeof(ByteArrayProperty))]
-[JsonSerializable(typeof(JsonProperty))]
-[JsonSerializable(typeof(ReferenceProperty))]
+// TypeExpression hierarchy
+[JsonSerializable(typeof(TypeExpression))]
+[JsonSerializable(typeof(PrimitiveType))]
+[JsonSerializable(typeof(OptionalType))]
+[JsonSerializable(typeof(CollectionType))]
+[JsonSerializable(typeof(MapType))]
+[JsonSerializable(typeof(ReferenceType))]
+[JsonSerializable(typeof(UnionType))]
+[JsonSerializable(typeof(TupleType))]
+[JsonSerializable(typeof(EnumType))]
+// Relationships
 [JsonSerializable(typeof(Relationship))]
 [JsonSerializable(typeof(OneToOneRelationship))]
 [JsonSerializable(typeof(OneToManyRelationship))]
@@ -29,6 +31,18 @@ namespace Poly.DataModeling;
 [JsonSerializable(typeof(ManyToManyRelationship))]
 [JsonSerializable(typeof(InheritanceRelationship))]
 [JsonSerializable(typeof(AssociationRelationship))]
+// Constraint hierarchy
+[JsonSerializable(typeof(Constraint))]
+[JsonSerializable(typeof(RangeConstraint))]
+[JsonSerializable(typeof(NotNullConstraint))]
+[JsonSerializable(typeof(LengthConstraint))]
+[JsonSerializable(typeof(Validation.Constraints.EqualityConstraint))]
+[JsonSerializable(typeof(ValueSourceComparisonConstraint))]
+// ValueSource hierarchy
+[JsonSerializable(typeof(ValueSource))]
+[JsonSerializable(typeof(ConstantValue))]
+[JsonSerializable(typeof(ParameterValue))]
+[JsonSerializable(typeof(PropertyValue))]
 internal partial class SourceGenerationContext : JsonSerializerContext;
 
 
@@ -37,36 +51,30 @@ public sealed class DataModelPropertyPolymorphicJsonTypeResolver : DefaultJsonTy
     {
         JsonTypeInfo jsonTypeInfo = base.GetTypeInfo(type, options);
 
-        Type basePointType = typeof(DataProperty);
-        if (jsonTypeInfo.Type == basePointType) {
+        // TypeExpression polymorphism
+        if (jsonTypeInfo.Type == typeof(TypeExpression)) {
             jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions {
-                TypeDiscriminatorPropertyName = "Type",
+                TypeDiscriminatorPropertyName = "$type",
                 IgnoreUnrecognizedTypeDiscriminators = true,
                 UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
                 DerivedTypes =
                 {
-                    new JsonDerivedType(typeof(Int32Property), "Int32"),
-                    new JsonDerivedType(typeof(Int64Property), "Int64"),
-                    new JsonDerivedType(typeof(StringProperty), "String"),
-                    new JsonDerivedType(typeof(DecimalProperty), "Decimal"),
-                    new JsonDerivedType(typeof(DoubleProperty), "Double"),
-                    new JsonDerivedType(typeof(BooleanProperty), "Bool"),
-                    new JsonDerivedType(typeof(DateTimeProperty), "DateTime"),
-                    new JsonDerivedType(typeof(DateOnlyProperty), "Date"),
-                    new JsonDerivedType(typeof(TimeOnlyProperty), "Time"),
-                    new JsonDerivedType(typeof(GuidProperty), "Guid"),
-                    new JsonDerivedType(typeof(EnumProperty), "Enum"),
-                    new JsonDerivedType(typeof(ByteArrayProperty), "Bytes"),
-                    new JsonDerivedType(typeof(JsonProperty), "Json"),
-                    new JsonDerivedType(typeof(ReferenceProperty), "Reference")
+                    new JsonDerivedType(typeof(PrimitiveType), "Primitive"),
+                    new JsonDerivedType(typeof(OptionalType), "Optional"),
+                    new JsonDerivedType(typeof(CollectionType), "Collection"),
+                    new JsonDerivedType(typeof(MapType), "Map"),
+                    new JsonDerivedType(typeof(ReferenceType), "Reference"),
+                    new JsonDerivedType(typeof(UnionType), "Union"),
+                    new JsonDerivedType(typeof(TupleType), "Tuple"),
+                    new JsonDerivedType(typeof(EnumType), "Enum")
                 }
             };
         }
 
-        Type relationshipBaseType = typeof(Relationship);
-        if (jsonTypeInfo.Type == relationshipBaseType) {
+        // Relationship polymorphism
+        if (jsonTypeInfo.Type == typeof(Relationship)) {
             jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions {
-                TypeDiscriminatorPropertyName = "Type",
+                TypeDiscriminatorPropertyName = "$type",
                 IgnoreUnrecognizedTypeDiscriminators = true,
                 UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
                 DerivedTypes =
@@ -77,6 +85,38 @@ public sealed class DataModelPropertyPolymorphicJsonTypeResolver : DefaultJsonTy
                     new JsonDerivedType(typeof(ManyToManyRelationship), "ManyToMany"),
                     new JsonDerivedType(typeof(InheritanceRelationship), "Inheritance"),
                     new JsonDerivedType(typeof(AssociationRelationship), "Association")
+                }
+            };
+        }
+
+        // Constraint polymorphism
+        if (jsonTypeInfo.Type == typeof(Constraint)) {
+            jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions {
+                TypeDiscriminatorPropertyName = "Type",
+                IgnoreUnrecognizedTypeDiscriminators = true,
+                UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
+                DerivedTypes =
+                {
+                    new JsonDerivedType(typeof(RangeConstraint), "Range"),
+                    new JsonDerivedType(typeof(NotNullConstraint), "NotNull"),
+                    new JsonDerivedType(typeof(LengthConstraint), "Length"),
+                    new JsonDerivedType(typeof(Validation.Constraints.EqualityConstraint), "Equality"),
+                    new JsonDerivedType(typeof(ValueSourceComparisonConstraint), "ValueSourceComparison")
+                }
+            };
+        }
+
+        // ValueSource polymorphism
+        if (jsonTypeInfo.Type == typeof(ValueSource)) {
+            jsonTypeInfo.PolymorphismOptions = new JsonPolymorphismOptions {
+                TypeDiscriminatorPropertyName = "$type",
+                IgnoreUnrecognizedTypeDiscriminators = true,
+                UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
+                DerivedTypes =
+                {
+                    new JsonDerivedType(typeof(ConstantValue), "Constant"),
+                    new JsonDerivedType(typeof(ParameterValue), "Parameter"),
+                    new JsonDerivedType(typeof(PropertyValue), "Property")
                 }
             };
         }

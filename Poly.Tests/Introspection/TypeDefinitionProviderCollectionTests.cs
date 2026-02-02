@@ -106,6 +106,34 @@ public class TypeDefinitionProviderCollectionTests {
         await Assert.That(methods).IsEmpty();
     }
 
+    [Test]
+    public async Task PrimitiveTypeIdAndTypeCategory_AreExposedForClrTypes()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+
+        // Test primitive types
+        ITypeDefinition intType = registry.GetTypeDefinition(typeof(int));
+        ITypeDefinition stringType = registry.GetTypeDefinition(typeof(string));
+        ITypeDefinition dateTimeType = registry.GetTypeDefinition(typeof(DateTime));
+        ITypeDefinition listType = registry.GetTypeDefinition(typeof(List<int>));
+
+        // int should be primitive
+        await Assert.That(intType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.Int32);
+        await Assert.That(intType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed);
+
+        // string should be primitive
+        await Assert.That(stringType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.String);
+        await Assert.That(stringType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Text);
+
+        // DateTime should be primitive
+        await Assert.That(dateTimeType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.DateTime);
+        await Assert.That(dateTimeType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Temporal);
+
+        // List<int> should not be primitive
+        await Assert.That(listType.PrimitiveTypeId).IsNull();
+        await Assert.That(listType.TypeCategory).IsEqualTo(TypeCategory.Collection);
+    }
+
     // Mock implementations for testing
     private class MockTypeDefinition(string name) : ITypeDefinition {
         public string Name { get; } = name;
@@ -115,6 +143,8 @@ public class TypeDefinitionProviderCollectionTests {
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
+        public PrimitiveTypeId? PrimitiveTypeId => null;
+        public TypeCategory TypeCategory => TypeCategory.None;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public bool IsAssignableTo(ITypeDefinition targetType) => throw new NotImplementedException();

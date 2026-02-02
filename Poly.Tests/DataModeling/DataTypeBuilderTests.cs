@@ -1,4 +1,6 @@
 using Poly.DataModeling;
+using Poly.DataModeling.TypeExpressions;
+using Poly.Introspection;
 
 namespace Poly.Tests.DataModeling;
 
@@ -184,7 +186,9 @@ public class DataTypeBuilderTests {
         await Assert.That(result.Properties.Count()).IsEqualTo(1);
         var property = result.Properties.First();
         await Assert.That(property.Name).IsEqualTo("Email");
-        await Assert.That(property).IsOfType(typeof(StringProperty));
+        await Assert.That(property.Type).IsOfType(typeof(PrimitiveType));
+        var primitiveType = (PrimitiveType)property.Type;
+        await Assert.That(primitiveType.Id).IsEqualTo(PrimitiveTypeId.String);
     }
 
     [Test]
@@ -228,7 +232,9 @@ public class DataTypeBuilderTests {
 
         await Assert.That(result.Properties.Count()).IsEqualTo(1);
         var property = result.Properties.First();
-        await Assert.That(property).IsOfType(typeof(ReferenceProperty));
+        await Assert.That(property.Type).IsOfType(typeof(ReferenceType));
+        var refType = (ReferenceType)property.Type;
+        await Assert.That(refType.TypeName).IsEqualTo("Customer");
     }
 
     [Test]

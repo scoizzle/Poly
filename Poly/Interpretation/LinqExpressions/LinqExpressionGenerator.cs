@@ -23,6 +23,7 @@ public sealed class LinqExpressionGenerator {
     private readonly Dictionary<Variable, ParameterExpression> _variableCache = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<Parameter, ParameterExpression> _parameterCache = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, LabelTarget> _labelMap = new();
+    private readonly List<INodeCompiler> _customCompilers = new();
     private LabelTarget? _currentBreakLabel;
     private LabelTarget? _currentContinueLabel;
 
@@ -34,6 +35,18 @@ public sealed class LinqExpressionGenerator {
     {
         ArgumentNullException.ThrowIfNull(analysisResult);
         _analysisResult = analysisResult;
+    }
+
+    /// <summary>
+    /// Registers a custom compiler for handling domain-specific node types.
+    /// </summary>
+    /// <param name="compiler">The compiler to register.</param>
+    /// <returns>This generator for fluent chaining.</returns>
+    public LinqExpressionGenerator RegisterCompiler(INodeCompiler compiler)
+    {
+        ArgumentNullException.ThrowIfNull(compiler);
+        _customCompilers.Add(compiler);
+        return this;
     }
 
     /// <summary>
@@ -146,6 +159,26 @@ public sealed class LinqExpressionGenerator {
 
     private Expression CompileNode(Node node)
     {
+        // Check if this node has a replacement from analysis passes (e.g., DataModel transforms)
+        // This allows analyzers to transform nodes without modifying the original AST
+        var allMetadata = _analysisResult.GetAllMetadata(node);
+        foreach (var metadata in allMetadata) {
+            var replacementProperty = metadata.GetType().GetProperty("Replacement");
+            if (replacementProperty?.PropertyType.IsAssignableTo(typeof(Node)) == true) {
+                if (replacementProperty.GetValue(metadata) is Node replacement) {
+                    node = replacement;
+                    break;
+                }
+            }
+        }
+
+        // Try custom compilers (allows external systems to handle their node types)
+        foreach (var compiler in _customCompilers) {
+            if (compiler.TryCompile(node, CompileNode, out var customExpr)) {
+                return customExpr!;
+            }
+        }
+
         return node switch {
             // Leaf nodes
             Constant constant => Expression.Constant(constant.Value),
@@ -397,10 +430,14 @@ public sealed class LinqExpressionGenerator {
 
     private Type GetClrType(Node node)
     {
-        if (_analysisResult.GetResolvedType(node) is not ClrTypeDefinition typeDef)
+        var typeDef = _analysisResult.GetResolvedType(node);
+        if (typeDef == null)
             throw new InvalidOperationException($"Type for node '{node}' was not resolved by semantic analysis.");
 
-        return typeDef.Type;
+        // Prefer ClrTypeDefinition, but fall back to ReflectedType for non-CLR types like DataModels
+        return typeDef is ClrTypeDefinition clrTypeDef
+            ? clrTypeDef.Type
+            : typeDef.ReflectedType;
     }
 
     private ParameterExpression CompileParameter(Parameter parameter)

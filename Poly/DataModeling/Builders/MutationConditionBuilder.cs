@@ -1,6 +1,8 @@
 using Poly.DataModeling.Mutations;
+using Poly.DataModeling.TypeExpressions;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
+using Poly.Introspection;
 using Poly.Validation;
 using Poly.Validation.Constraints;
 
@@ -187,7 +189,7 @@ public sealed class MutationConditionBuilder {
 /// <summary>
 /// Comparison type for building comparative preconditions.
 /// </summary>
-internal enum ComparisonType {
+public enum ComparisonType {
     Equal,
     GreaterThan,
     GreaterThanOrEqual,
@@ -198,7 +200,7 @@ internal enum ComparisonType {
 /// <summary>
 /// A constraint that compares the current value against another value source.
 /// </summary>
-internal sealed class ValueSourceComparisonConstraint : Constraint {
+public sealed class ValueSourceComparisonConstraint : Constraint {
     private readonly ComparisonType _comparisonType;
     private readonly ValueSource _rightValueSource;
 
@@ -207,6 +209,12 @@ internal sealed class ValueSourceComparisonConstraint : Constraint {
         _comparisonType = comparisonType;
         _rightValueSource = rightValueSource ?? throw new ArgumentNullException(nameof(rightValueSource));
     }
+    public ComparisonType ComparisonType => _comparisonType;
+    public ValueSource RightValueSource => _rightValueSource;
+    /// <summary>
+    /// Comparison constraint is universally applicable to types that support comparison operators.
+    /// </summary>
+    public override TypeCategory ApplicableCategories => TypeCategory.None;
 
     public override Node BuildInterpretationTree(RuleBuildingContext context)
     {

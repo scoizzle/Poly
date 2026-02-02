@@ -51,6 +51,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
             // Type cast: resolve target type from type reference
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
+            TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
 
             // Conditional returns the type of the ifTrue branch
@@ -103,6 +104,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
             MethodInvocation methodInv => ResolveMethodInvocationType(context, methodInv),
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
+            TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
             Conditional cond => ResolveNodeType(context, cond.IfTrue),
             Coalesce coal => ResolveNodeType(context, coal.RightHandValue),

@@ -21,4 +21,6 @@ public sealed record AnalysisResult : INodeMetadataProvider {
     public bool HasErrors => Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
 
     public TMetadata? GetMetadata<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata => _metadata.Get<TMetadata>(node);
+
+    public IEnumerable<IAnalysisMetadata> GetAllMetadata(Node node) => _metadata.GetAll(node);
 }

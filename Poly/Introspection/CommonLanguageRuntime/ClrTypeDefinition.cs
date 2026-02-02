@@ -43,8 +43,8 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
     IEnumerable<ITypeMethod> ITypeDefinition.Methods => Methods;
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members;
     Type ITypeDefinition.ReflectedType => Type;
-    IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
-
+    IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters; PrimitiveTypeId? ITypeDefinition.PrimitiveTypeId => GetPrimitiveTypeId(Type);
+    TypeCategory ITypeDefinition.TypeCategory => GetTypeCategory(Type);
     public override string ToString() => FullName;
 
     private static readonly BindingFlags MemberSearchCriteria = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
@@ -220,5 +220,63 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
         var interfaces = type.GetInterfaces();
         return interfaces.Select(provider.GetTypeDefinition).ToFrozenSet();
+    }
+
+    private static PrimitiveTypeId? GetPrimitiveTypeId(Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        return type switch {
+            Type t when t == typeof(bool) => PrimitiveTypeId.Boolean,
+            Type t when t == typeof(sbyte) => PrimitiveTypeId.Int8,
+            Type t when t == typeof(short) => PrimitiveTypeId.Int16,
+            Type t when t == typeof(int) => PrimitiveTypeId.Int32,
+            Type t when t == typeof(long) => PrimitiveTypeId.Int64,
+            Type t when t == typeof(byte) => PrimitiveTypeId.UInt8,
+            Type t when t == typeof(ushort) => PrimitiveTypeId.UInt16,
+            Type t when t == typeof(uint) => PrimitiveTypeId.UInt32,
+            Type t when t == typeof(ulong) => PrimitiveTypeId.UInt64,
+            Type t when t == typeof(float) => PrimitiveTypeId.Float32,
+            Type t when t == typeof(double) => PrimitiveTypeId.Float64,
+            Type t when t == typeof(decimal) => PrimitiveTypeId.Decimal,
+            Type t when t == typeof(string) => PrimitiveTypeId.String,
+            Type t when t == typeof(char) => PrimitiveTypeId.Char,
+            Type t when t == typeof(DateTime) => PrimitiveTypeId.DateTime,
+            Type t when t == typeof(DateOnly) => PrimitiveTypeId.DateOnly,
+            Type t when t == typeof(TimeOnly) => PrimitiveTypeId.TimeOnly,
+            Type t when t == typeof(TimeSpan) => PrimitiveTypeId.TimeSpan,
+            Type t when t == typeof(Guid) => PrimitiveTypeId.Guid,
+            Type t when t == typeof(byte[]) => PrimitiveTypeId.ByteArray,
+            _ => null
+        };
+    }
+
+    private static TypeCategory GetTypeCategory(Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        var primitiveId = GetPrimitiveTypeId(type);
+        if (primitiveId.HasValue) {
+            return primitiveId.Value.GetCategory();
+        }
+
+        // Handle complex types
+        if (type.IsArray || type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))) {
+            return TypeCategory.Collection;
+        }
+
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>)) {
+            return TypeCategory.Nullable;
+        }
+
+        if (type.IsEnum) {
+            return TypeCategory.Enumeration;
+        }
+
+        if (type.IsClass || type.IsInterface) {
+            return TypeCategory.None; // Complex reference types
+        }
+
+        return TypeCategory.None;
     }
 }

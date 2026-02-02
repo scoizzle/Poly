@@ -1,5 +1,6 @@
 using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+using Poly.Introspection;
 
 using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
@@ -8,6 +9,11 @@ namespace Poly.Validation;
 public sealed class RangeConstraint(object? minValue, object? maxValue) : Constraint {
     public object? MinValue { get; set; } = minValue;
     public object? MaxValue { get; set; } = maxValue;
+
+    /// <summary>
+    /// Range constraints apply to Numeric and Temporal types.
+    /// </summary>
+    public override TypeCategory ApplicableCategories => TypeCategory.Numeric | TypeCategory.Temporal;
 
     public override Node BuildInterpretationTree(RuleBuildingContext context)
     {

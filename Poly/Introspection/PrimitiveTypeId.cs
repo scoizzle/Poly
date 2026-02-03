@@ -90,27 +90,56 @@ public static class PrimitiveTypeIdExtensions {
     /// Gets a human-readable display name for this primitive type.
     /// </summary>
     public static string GetDisplayName(this PrimitiveTypeId id) => id switch {
-        PrimitiveTypeId.Boolean => "bool",
-        PrimitiveTypeId.Int8 => "sbyte",
-        PrimitiveTypeId.Int16 => "short",
-        PrimitiveTypeId.Int32 => "int",
-        PrimitiveTypeId.Int64 => "long",
-        PrimitiveTypeId.UInt8 => "byte",
-        PrimitiveTypeId.UInt16 => "ushort",
-        PrimitiveTypeId.UInt32 => "uint",
-        PrimitiveTypeId.UInt64 => "ulong",
-        PrimitiveTypeId.Float32 => "float",
-        PrimitiveTypeId.Float64 => "double",
-        PrimitiveTypeId.Decimal => "decimal",
-        PrimitiveTypeId.String => "string",
-        PrimitiveTypeId.Char => "char",
+        PrimitiveTypeId.Boolean => "Boolean",
+        PrimitiveTypeId.Int8 => "Int8",
+        PrimitiveTypeId.Int16 => "Int16",
+        PrimitiveTypeId.Int32 => "Int32",
+        PrimitiveTypeId.Int64 => "Int64",
+        PrimitiveTypeId.UInt8 => "UInt8",
+        PrimitiveTypeId.UInt16 => "UInt16",
+        PrimitiveTypeId.UInt32 => "UInt32",
+        PrimitiveTypeId.UInt64 => "UInt64",
+        PrimitiveTypeId.Float32 => "Float32",
+        PrimitiveTypeId.Float64 => "Float64",
+        PrimitiveTypeId.Decimal => "Decimal",
+        PrimitiveTypeId.String => "String",
+        PrimitiveTypeId.Char => "Char",
         PrimitiveTypeId.DateTime => "DateTime",
         PrimitiveTypeId.DateOnly => "DateOnly",
         PrimitiveTypeId.TimeOnly => "TimeOnly",
         PrimitiveTypeId.TimeSpan => "TimeSpan",
         PrimitiveTypeId.Guid => "Guid",
-        PrimitiveTypeId.ByteArray => "byte[]",
-        PrimitiveTypeId.Json => "json",
+        PrimitiveTypeId.ByteArray => "ByteArray",
+        PrimitiveTypeId.Json => "Json",
         _ => id.ToString()
+    };
+
+    /// <summary>
+    /// Gets the corresponding CLR <see cref="Type"/> for this primitive type.
+    /// Returns null for types without a direct CLR mapping.
+    /// </summary>
+    public static Type? GetClrType(this PrimitiveTypeId id) => id switch {
+        PrimitiveTypeId.Boolean => typeof(bool),
+        PrimitiveTypeId.Int8 => typeof(sbyte),
+        PrimitiveTypeId.Int16 => typeof(short),
+        PrimitiveTypeId.Int32 => typeof(int),
+        PrimitiveTypeId.Int64 => typeof(long),
+        PrimitiveTypeId.UInt8 => typeof(byte),
+        PrimitiveTypeId.UInt16 => typeof(ushort),
+        PrimitiveTypeId.UInt32 => typeof(uint),
+        PrimitiveTypeId.UInt64 => typeof(ulong),
+        PrimitiveTypeId.Float32 => typeof(float),
+        PrimitiveTypeId.Float64 => typeof(double),
+        PrimitiveTypeId.Decimal => typeof(decimal),
+        PrimitiveTypeId.String => typeof(string),
+        PrimitiveTypeId.Char => typeof(char),
+        PrimitiveTypeId.DateTime => typeof(DateTime),
+        PrimitiveTypeId.DateOnly => typeof(DateOnly),
+        PrimitiveTypeId.TimeOnly => typeof(TimeOnly),
+        PrimitiveTypeId.TimeSpan => typeof(TimeSpan),
+        PrimitiveTypeId.Guid => typeof(Guid),
+        PrimitiveTypeId.ByteArray => typeof(byte[]),
+        PrimitiveTypeId.Json => typeof(object), // JSON maps to object
+        _ => null
     };
 }

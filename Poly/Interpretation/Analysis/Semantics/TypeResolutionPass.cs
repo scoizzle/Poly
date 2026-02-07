@@ -8,66 +8,7 @@ using Poly.Interpretation.AbstractSyntaxTree.Equality;
 internal sealed class TypeResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node)
     {
-        var resolvedType = node switch {
-            // Constants have their type directly available
-            Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
-
-            // Parameters: resolve from type hint if available
-            Parameter p => ResolveParameterType(context, p),
-
-            // Variables: check if already resolved (e.g., by Block), otherwise resolve from Value or default to object
-            Variable v => context.GetResolvedType(v)
-                ?? (v.Value is null
-                    ? context.TypeDefinitions.GetTypeDefinition(typeof(object))
-                    : ResolveNodeType(context, v.Value)),
-
-            // Arithmetic operations - all return the promoted numeric type
-            Add add => ResolveArithmeticType(context, add.LeftHandValue, add.RightHandValue),
-            Subtract sub => ResolveArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
-            Multiply mul => ResolveArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
-            Divide div => ResolveArithmeticType(context, div.LeftHandValue, div.RightHandValue),
-            Modulo mod => ResolveArithmeticType(context, mod.LeftHandValue, mod.RightHandValue),
-            UnaryMinus minus => ResolveNodeType(context, minus.Operand),
-
-            // Boolean and comparison operations always return bool
-            And => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            Or => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            Not => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            Equal => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            NotEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            LessThan => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            LessThanOrEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            GreaterThan => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            GreaterThanOrEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-
-            // Member access - resolve through member lookup
-            MemberAccess memberAccess => ResolveMemberAccessType(context, memberAccess),
-
-            // Method invocation - resolve return type
-            MethodInvocation methodInv => ResolveMethodInvocationType(context, methodInv),
-
-            // Index access - resolve element type
-            IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
-
-            // Type cast: resolve target type from type reference
-            TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
-            TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
-            TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
-
-            // Conditional returns the type of the ifTrue branch
-            Conditional cond => ResolveNodeType(context, cond.IfTrue),
-
-            // Coalesce returns the type of the rightHandValue (non-nullable)
-            Coalesce coal => ResolveNodeType(context, coal.RightHandValue),
-
-            // Block returns the type of the last expression
-            Block block => ResolveBlockType(context, block),
-
-            // Assignment returns the type of the value being assigned
-            Assignment assign => ResolveAssignmentType(context, assign),
-
-            _ => null
-        };
+        var resolvedType = ResolveNodeType(context, node);
 
         if (resolvedType != null) {
             context.SetResolvedType(node, resolvedType!);

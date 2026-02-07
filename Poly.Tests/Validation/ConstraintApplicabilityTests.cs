@@ -1,6 +1,6 @@
-using Poly.DataModeling;
-using Poly.DataModeling.Builders;
-using Poly.DataModeling.TypeExpressions;
+using Poly.DomainModeling;
+using Poly.DomainModeling.Builders;
+using Poly.DomainModeling.TypeExpressions;
 using Poly.Introspection;
 using Poly.Validation;
 

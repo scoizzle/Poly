@@ -291,4 +291,4 @@ When adding provider types:
 
 - [System.Reflection Documentation](https://docs.microsoft.com/en-us/dotnet/api/system.reflection)
 - [Poly Interpretation System](../Interpretation/README.md)
-- [Poly Data Modeling](../DataModeling/README.md)
+- [Poly Data Modeling](../DomainModeling/README.md)

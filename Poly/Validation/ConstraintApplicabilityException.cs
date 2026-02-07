@@ -1,4 +1,4 @@
-using Poly.DataModeling.TypeExpressions;
+using Poly.DomainModeling.TypeExpressions;
 using Poly.Introspection;
 
 namespace Poly.Validation;

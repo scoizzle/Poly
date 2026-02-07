@@ -4,9 +4,9 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Text.Json;
 
-using Poly.DataModeling;
-using Poly.DataModeling.IntrospectionBridge;
-using Poly.DataModeling.Mutations;
+using Poly.DomainModeling;
+using Poly.DomainModeling.IntrospectionBridge;
+using Poly.DomainModeling.Mutations;
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
 using Poly.Interpretation.Analysis;

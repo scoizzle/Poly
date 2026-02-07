@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-using Poly.DataModeling.TypeExpressions;
+using Poly.DomainModeling.TypeExpressions;
 using Poly.Introspection;
 
 namespace Poly.Validation;
@@ -10,7 +10,7 @@ namespace Poly.Validation;
 [JsonDerivedType(typeof(NotNullConstraint), "NotNull")]
 [JsonDerivedType(typeof(LengthConstraint), "Length")]
 [JsonDerivedType(typeof(Constraints.EqualityConstraint), "Equality")]
-[JsonDerivedType(typeof(DataModeling.Builders.ValueSourceComparisonConstraint), "ValueSourceComparison")]
+[JsonDerivedType(typeof(DomainModeling.Builders.ValueSourceComparisonConstraint), "ValueSourceComparison")]
 public abstract class Constraint : Rule {
     /// <summary>
     /// Gets the type categories this constraint can be applied to.

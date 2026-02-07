@@ -1,6 +1,7 @@
 using System;
 using System.Linq.Expressions;
 
+using Poly.Benchmarks;
 using Poly.Interpretation;
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
@@ -12,8 +13,6 @@ using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Mermaid;
 using Poly.Validation;
 using Poly.Validation.Builders;
-Poly.Benchmarks.FluentBuilderExample.Run();
-return;
 
 var analyzer = new AnalyzerBuilder()
     .UseTypeResolver()

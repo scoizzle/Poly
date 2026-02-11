@@ -1,7 +1,7 @@
 namespace Poly.Introspection;
 
 /// <summary>
-/// Provides <see cref="ITypeDefinition"/> instances by name or runtime <see cref="Type"/>.
+/// Provides <see cref="ITypeDefinition"/> instances by name, runtime <see cref="Type"/>, or <see cref="PrimitiveTypeId"/>.
 /// Implementations may compose other providers and should be safe for concurrent use.
 /// </summary>
 public interface ITypeDefinitionProvider {
@@ -16,6 +16,16 @@ public interface ITypeDefinitionProvider {
     /// Returns null when not found.
     /// </summary>
     ITypeDefinition? GetTypeDefinition(Type type);
+
+    /// <summary>
+    /// Resolves a type definition by <see cref="PrimitiveTypeId"/>.
+    /// Returns null when the primitive type is not supported.
+    /// </summary>
+    ITypeDefinition? GetTypeDefinition(PrimitiveTypeId primitiveTypeId)
+    {
+        var clrType = primitiveTypeId.GetClrType();
+        return clrType is not null ? GetTypeDefinition(clrType) : null;
+    }
 
     /// <summary>
     /// Creates a thread-safe deferred resolver for a named type that throws if not found.

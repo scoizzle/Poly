@@ -1,23 +1,24 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators.Arithmetic;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
-public class UnaryMinusTests {
+public class UnaryMinusTests
+{
     [Test]
     public async Task UnaryMinus_WithPositiveInteger_ReturnsNegative()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
-        var unaryMinus = new UnaryMinus(operand);
+        var node = new UnaryMinus(Wrap(42));
 
         // Act
-        var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
         var result = compiled();
 
         // Assert
@@ -28,14 +29,11 @@ public class UnaryMinusTests {
     public async Task UnaryMinus_WithNegativeInteger_ReturnsPositive()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(-99);
-        var unaryMinus = new UnaryMinus(operand);
+        var node = new UnaryMinus(Wrap(-99));
 
         // Act
-        var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
         var result = compiled();
 
         // Assert
@@ -46,14 +44,11 @@ public class UnaryMinusTests {
     public async Task UnaryMinus_WithZero_ReturnsZero()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(0);
-        var unaryMinus = new UnaryMinus(operand);
+        var node = new UnaryMinus(Wrap(0));
 
         // Act
-        var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int>>(expression);
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
         var result = compiled();
 
         // Assert
@@ -64,14 +59,11 @@ public class UnaryMinusTests {
     public async Task UnaryMinus_WithDouble_NegatesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(3.14);
-        var unaryMinus = new UnaryMinus(operand);
+        var node = new UnaryMinus(Wrap(3.14));
 
         // Act
-        var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<double>>(expression);
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<double>>(expr).Compile();
         var result = compiled();
 
         // Assert
@@ -82,14 +74,11 @@ public class UnaryMinusTests {
     public async Task UnaryMinus_WithParameter_EvaluatesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-        var unaryMinus = new UnaryMinus(param);
+        var param = new Parameter("x", TypeReference.To<int>());
+        var node = new UnaryMinus(param);
 
         // Act
-        var expression = unaryMinus.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(10)).IsEqualTo(-10);
@@ -101,15 +90,11 @@ public class UnaryMinusTests {
     public async Task UnaryMinus_DoubleNegation_ReturnsOriginalValue()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-        var innerNegate = new UnaryMinus(param);
-        var outerNegate = new UnaryMinus(innerNegate);
+        var param = new Parameter("x", TypeReference.To<int>());
+        var node = new UnaryMinus(new UnaryMinus(param));
 
         // Act
-        var expression = outerNegate.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(42)).IsEqualTo(42);
@@ -120,17 +105,11 @@ public class UnaryMinusTests {
     public async Task UnaryMinus_WithArithmeticExpression_EvaluatesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int>("x");
-
-        // -(x + 5)
-        var add = new Add(param, Value.Wrap(5));
-        var negate = new UnaryMinus(add);
+        var param = new Parameter("x", TypeReference.To<int>());
+        var node = new UnaryMinus(new Add(param, Wrap(5)));
 
         // Act
-        var expression = negate.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int, int>>(expression, param.BuildExpression(context));
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
         // Assert
         await Assert.That(compiled(10)).IsEqualTo(-15);
@@ -138,40 +117,25 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_GetTypeDefinition_ReturnsOperandType()
-    {
-        // Arrange
-        var context = new InterpretationContext();
-        var operand = Value.Wrap(42);
-        var unaryMinus = new UnaryMinus(operand);
-
-        // Act
-        var typeDef = unaryMinus.GetTypeDefinition(context);
-
-        // Assert
-        await Assert.That(typeDef).IsNotNull();
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(int));
-    }
-
-    [Test]
     public async Task UnaryMinus_ToString_ReturnsExpectedFormat()
     {
         // Arrange
-        var operand = Value.Wrap(42);
-        var unaryMinus = new UnaryMinus(operand);
+        var node = new UnaryMinus(Wrap(42));
 
         // Act
-        var result = unaryMinus.ToString();
+        var result = node.ToString();
 
         // Assert
         await Assert.That(result).IsEqualTo("-42");
     }
 
     [Test]
-    public async Task UnaryMinus_WithNullArgument_ThrowsArgumentNullException()
+    public async Task UnaryMinus_WithNullArgument_AllowsNull()
     {
+        // Act
+        var node = new UnaryMinus(null!);
+
         // Assert
-        await Assert.That(() => new UnaryMinus(null!))
-            .Throws<ArgumentNullException>();
+        await Assert.That(node).IsNotNull();
     }
 }

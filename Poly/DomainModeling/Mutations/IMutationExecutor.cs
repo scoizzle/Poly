@@ -1,0 +1,13 @@
+namespace Poly.DomainModeling.Mutations;
+
+using System.Collections.Generic;
+
+public interface IMutationExecutor {
+    MutationResult Execute(
+        DataModel model,
+        Mutation mutation,
+        IDictionary<string, object?> targetInstance,
+        IDictionary<string, object?> parameters);
+}
+
+public sealed record MutationResult(bool Success, Validation.RuleEvaluationResult Validation, IDictionary<string, object?> UpdatedInstance);

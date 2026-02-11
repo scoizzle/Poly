@@ -69,4 +69,16 @@ public interface ITypeDefinition {
     /// Gets the underlying reflected runtime type, when available.
     /// </summary>
     Type ReflectedType { get; }
+
+    /// <summary>
+    /// Gets the primitive type identifier if this type is a primitive type, null otherwise.
+    /// Primitive types are the atomic building blocks from which all other types are composed.
+    /// </summary>
+    PrimitiveTypeId? PrimitiveTypeId { get; }
+
+    /// <summary>
+    /// Gets the type categories that apply to this type.
+    /// Multiple categories can be combined using bitwise operations.
+    /// </summary>
+    TypeCategory TypeCategory { get; }
 }

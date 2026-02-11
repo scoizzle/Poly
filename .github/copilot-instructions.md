@@ -12,7 +12,7 @@ These instructions help AI coding agents work productively in this .NET solution
   - `DataTypeBuilder` → defines a type, properties, and rules.
   - `PropertyBuilder` → sets property types and constraints.
   - `RelationshipBuilder` → creates `HasOne/HasMany` and `WithOne/WithMany` relationships.
-- **Serialization:** Portable JSON for models; see `DataModeling/DataModelPropertyPolymorphicJsonTypeResolver.cs` for custom polymorphic handling.
+- **Serialization:** Portable JSON for models; see `DomainModeling/DataModelPropertyPolymorphicJsonTypeResolver.cs` for custom polymorphic handling.
  - **Module boundaries (critical):** One-way dependencies are enforced.
    - `Interpretation` depends on `Introspection` interfaces.
    - `Validation` depends on `Interpretation` (rules and evaluation consume the DSL).
@@ -60,7 +60,7 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 - **New constraint:** Implement in [Poly/Validation/Constraints](Poly/Validation/Constraints) and integrate via `PropertyBuilder`.
 - **New rule:** Implement in [Poly/Validation/Rules](Poly/Validation/Rules) and expose through `DataTypeBuilder.AddRule()`.
 - **New operator:** Add under [Poly/Interpretation/Operators](Poly/Interpretation/Operators), ensuring compatibility with `InterpretationContext`.
-- **New relationship types:** Extend `Relationship` in [Poly/DataModeling/Relationship.cs](Poly/DataModeling/Relationship.cs) and builder methods in `DataTypeBuilder`.
+- **New relationship types:** Extend `Relationship` in [Poly/DomainModeling/Relationship.cs](Poly/DomainModeling/Relationship.cs) and builder methods in `DataTypeBuilder`.
 
 ## Coding Style
 - Keep changes minimal and aligned to existing fluent APIs.
@@ -69,7 +69,7 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 
 ## Useful References
 - High-level intro and examples: [README.md](README.md)
-- Core modeling: [Poly/DataModeling](Poly/DataModeling)
+- Core modeling: [Poly/DomainModeling](Poly/DomainModeling)
 - Validation: [Poly/Validation](Poly/Validation)
 - Interpretation DSL: [Poly/Interpretation](Poly/Interpretation)
 - Benchmarks/samples: [Poly.Benchmarks](Poly.Benchmarks)

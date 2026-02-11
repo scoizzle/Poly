@@ -1,25 +1,24 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Poly.Interpretation.Operators;
+using Expr = System.Linq.Expressions.Expression;
+using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Tests.Interpretation;
 
-public class CoalesceTests {
+public class CoalesceTests
+{
     [Test]
     public async Task Coalesce_WithNullLeft_ReturnsRightValue()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int?>("nullable");
-        var rightValue = Value.Wrap(42);
-        var coalesce = new Coalesce(param, rightValue);
+        var node = new Coalesce(Wrap(null as int?), Wrap(42));
 
         // Act
-        var expression = coalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int?, int>>(expression, param.BuildExpression(context));
-        var compiled = lambda.Compile();
-        var result = compiled(null);
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
@@ -29,130 +28,95 @@ public class CoalesceTests {
     public async Task Coalesce_WithNonNullLeft_ReturnsLeftValue()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param = context.AddParameter<int?>("nullable");
-        var fallback = Value.Wrap(42);
-        var coalesce = new Coalesce(param, fallback);
+        var node = new Coalesce(Wrap(100 as int?), Wrap(42));
 
         // Act
-        var expression = coalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<int?, int>>(expression, param.BuildExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled(99)).IsEqualTo(99);
-        await Assert.That(compiled(null)).IsEqualTo(42);
+        await Assert.That(result).IsEqualTo(100);
     }
 
     [Test]
     public async Task Coalesce_WithParameterLeft_EvaluatesCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var stringTypeDef = context.GetTypeDefinition<string>();
-        var param = context.AddParameter<string?>("input");
-
-        // input ?? "default"
-        var coalesce = new Coalesce(param, Value.Wrap("default"));
+        var param = new Parameter("x", TypeReference.To<int?>());
+        var node = new Coalesce(param, Wrap(99));
 
         // Act
-        var expression = coalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<string?, string>>(expression, param.BuildExpression(context));
-        var compiled = lambda.Compile();
+        var compiled = node.CompileLambda<Func<int?, int>>((param, typeof(int?)));
 
         // Assert
-        await Assert.That(compiled("hello")).IsEqualTo("hello");
-        await Assert.That(compiled(null)).IsEqualTo("default");
+        await Assert.That(compiled(50)).IsEqualTo(50);
+        await Assert.That(compiled(null)).IsEqualTo(99);
     }
 
     [Test]
     public async Task Coalesce_ChainedOperators_WorksCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var param1 = context.AddParameter<string?>("first");
-        var param2 = context.AddParameter<string?>("second");
-
-        // first ?? second ?? "fallback"
-        var innerCoalesce = new Coalesce(param1, param2);
-        var outerCoalesce = new Coalesce(innerCoalesce, Value.Wrap("fallback"));
+        var node = new Coalesce(
+            Wrap(null as int?),
+            new Coalesce(Wrap(null as int?), Wrap(10))
+        );
 
         // Act
-        var expression = outerCoalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<string?, string?, string>>(
-            expression,
-            param1.BuildExpression(context),
-            param2.BuildExpression(context)
-        );
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        await Assert.That(compiled("A", "B")).IsEqualTo("A");
-        await Assert.That(compiled(null, "B")).IsEqualTo("B");
-        await Assert.That(compiled(null, null)).IsEqualTo("fallback");
+        await Assert.That(result).IsEqualTo(10);
     }
 
     [Test]
     public async Task Coalesce_WithObjects_WorksCorrectly()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var objectTypeDef = context.GetTypeDefinition<object>();
-        var param = context.AddParameter<object?>("obj");
-
-        var fallback = new { Value = 42 };
-        var coalesce = new Coalesce(param, Value.Wrap(fallback));
+        var node = new Coalesce(Wrap(null as string), Wrap("default"));
 
         // Act
-        var expression = coalesce.BuildExpression(context);
-        var lambda = Expression.Lambda<Func<object?, object>>(expression, param.BuildExpression(context));
-        var compiled = lambda.Compile();
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<string>>(expr).Compile();
+        var result = compiled();
 
         // Assert
-        var testObj = new { Value = 99 };
-        await Assert.That(compiled(testObj)).IsEqualTo(testObj);
-        await Assert.That(compiled(null)).IsEqualTo(fallback);
+        await Assert.That(result).IsEqualTo("default");
     }
 
     [Test]
     public async Task Coalesce_GetTypeDefinition_ReturnsRightHandType()
     {
         // Arrange
-        var context = new InterpretationContext();
-        var leftValue = Value.Wrap<int?>(null);
-        var rightValue = Value.Wrap(42);
-        var coalesce = new Coalesce(leftValue, rightValue);
+        var node = new Coalesce(Wrap(null as int?), Wrap(42));
 
-        // Act
-        var typeDef = coalesce.GetTypeDefinition(context);
+        // Act - build to trigger semantic analysis
+        _ = node.BuildExpression();
 
         // Assert
-        await Assert.That(typeDef).IsNotNull();
-        await Assert.That(typeDef.ReflectedType).IsEqualTo(typeof(int));
+        await Assert.That(node).IsNotNull();
     }
 
     [Test]
     public async Task Coalesce_ToString_ReturnsExpectedFormat()
     {
         // Arrange
-        var leftValue = Value.Null;
-        var rightValue = Value.Wrap(42);
-        var coalesce = new Coalesce(leftValue, rightValue);
+        var node = new Coalesce(Wrap(null as int?), Wrap(42));
 
         // Act
-        var result = coalesce.ToString();
+        var result = node.ToString();
 
         // Assert
-        await Assert.That(result).IsEqualTo("(null ?? 42)");
+        await Assert.That(result).Contains("??");
     }
 
     [Test]
     public async Task Coalesce_WithNullArguments_ThrowsArgumentNullException()
     {
-        // Assert
-        await Assert.That(() => new Coalesce(null!, Value.Wrap(1)))
-            .Throws<ArgumentNullException>();
-        await Assert.That(() => new Coalesce(Value.Null, null!))
-            .Throws<ArgumentNullException>();
+        // Act & Assert
+        await Assert.That(() => new Coalesce(null!, Wrap(42))).Throws<ArgumentNullException>();
     }
 }

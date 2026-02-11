@@ -10,8 +10,8 @@ public class TypeDefinitionProviderCollectionTests {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
-        collection.AddProvider(mockProvider1);
-        collection.AddProvider(mockProvider2);
+        collection.Add(mockProvider1);
+        collection.Add(mockProvider2);
 
         // Mock provider1 returns a type for "TestType"
         mockProvider1.AddType("TestType", new MockTypeDefinition("TestType"));
@@ -27,8 +27,8 @@ public class TypeDefinitionProviderCollectionTests {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
-        collection.AddProvider(mockProvider1);
-        collection.AddProvider(mockProvider2);
+        collection.Add(mockProvider1);
+        collection.Add(mockProvider2);
 
         var result = collection.GetTypeDefinition("NonExistentType");
 
@@ -41,7 +41,7 @@ public class TypeDefinitionProviderCollectionTests {
         var collection = new TypeDefinitionProviderCollection();
         var provider = new MockTypeDefinitionProvider();
 
-        collection.AddProvider(provider);
+        collection.Add(provider);
 
         provider.AddType("AddedType", new MockTypeDefinition("AddedType"));
         var result = collection.GetTypeDefinition("AddedType");
@@ -54,8 +54,8 @@ public class TypeDefinitionProviderCollectionTests {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
-        collection.AddProvider(mockProvider1);
-        collection.AddProvider(mockProvider2);
+        collection.Add(mockProvider1);
+        collection.Add(mockProvider2);
 
         // Both providers have "SharedType", but with different instances
         var type1 = new MockTypeDefinition("SharedType") { Tag = "Provider1" };
@@ -106,6 +106,34 @@ public class TypeDefinitionProviderCollectionTests {
         await Assert.That(methods).IsEmpty();
     }
 
+    [Test]
+    public async Task PrimitiveTypeIdAndTypeCategory_AreExposedForClrTypes()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+
+        // Test primitive types
+        ITypeDefinition intType = registry.GetTypeDefinition(typeof(int));
+        ITypeDefinition stringType = registry.GetTypeDefinition(typeof(string));
+        ITypeDefinition dateTimeType = registry.GetTypeDefinition(typeof(DateTime));
+        ITypeDefinition listType = registry.GetTypeDefinition(typeof(List<int>));
+
+        // int should be primitive
+        await Assert.That(intType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.Int32);
+        await Assert.That(intType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed);
+
+        // string should be primitive
+        await Assert.That(stringType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.String);
+        await Assert.That(stringType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Text);
+
+        // DateTime should be primitive
+        await Assert.That(dateTimeType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.DateTime);
+        await Assert.That(dateTimeType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Temporal);
+
+        // List<int> should not be primitive
+        await Assert.That(listType.PrimitiveTypeId).IsNull();
+        await Assert.That(listType.TypeCategory).IsEqualTo(TypeCategory.Collection);
+    }
+
     // Mock implementations for testing
     private class MockTypeDefinition(string name) : ITypeDefinition {
         public string Name { get; } = name;
@@ -115,6 +143,8 @@ public class TypeDefinitionProviderCollectionTests {
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
+        public PrimitiveTypeId? PrimitiveTypeId => null;
+        public TypeCategory TypeCategory => TypeCategory.None;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public bool IsAssignableTo(ITypeDefinition targetType) => throw new NotImplementedException();

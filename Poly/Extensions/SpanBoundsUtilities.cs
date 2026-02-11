@@ -79,7 +79,7 @@ public static partial class SpanBoundsUtilities {
             int index,
             T value)
     {
-        if (BoundsCheck<T>(array, index)) {
+        if (BoundsCheck(array, index)) {
             array[index] = value;
             return true;
         }
@@ -95,7 +95,7 @@ public static partial class SpanBoundsUtilities {
             int index,
             T value)
     {
-        if (BoundsCheck<T>(array, min, max, index)) {
+        if (BoundsCheck(array, min, max, index)) {
             array[index] = value;
             return true;
         }

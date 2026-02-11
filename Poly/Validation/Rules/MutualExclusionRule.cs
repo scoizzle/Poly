@@ -1,7 +1,7 @@
-using Poly.Interpretation;
-using Poly.Interpretation.Operators;
-using Poly.Interpretation.Operators.Boolean;
-using Poly.Interpretation.Operators.Equality;
+using Poly.Interpretation.AbstractSyntaxTree.Boolean;
+using Poly.Interpretation.AbstractSyntaxTree.Equality;
+
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Validation.Rules;
 
@@ -15,12 +15,12 @@ public sealed class MutualExclusionRule : Rule {
         MaxAllowed = maxAllowed;
     }
 
-    public override Value BuildInterpretationTree(RuleBuildingContext context)
+    public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var properties = PropertyNames.ToList();
 
         if (properties.Count <= MaxAllowed) {
-            return Value.True;
+            return True;
         }
 
         // For now, implement simple mutual exclusion (only one can have value)
@@ -29,11 +29,11 @@ public sealed class MutualExclusionRule : Rule {
             // At most one property can be non-null
             var nonNullChecks = properties
                 .Select(name => new MemberAccess(context.Value, name))
-                .Select(member => new NotEqual(member, Value.Null))
+                .Select(member => new NotEqual(member, Null))
                 .ToList();
 
             // Create pairwise exclusions: for each pair, at least one must be null
-            var exclusions = new List<Value>();
+            var exclusions = new List<Node>();
             for (int i = 0; i < nonNullChecks.Count; i++) {
                 for (int j = i + 1; j < nonNullChecks.Count; j++) {
                     // !(prop_i != null AND prop_j != null)

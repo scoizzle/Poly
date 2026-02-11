@@ -1,10 +1,8 @@
-# Under Construction
+# Poly - Fluent Domain Modeling & Code Generation for .NET
 
-⚠️ **Warning:** Things are incredibly likely to break at the current rate of development.
+Poly provides a comprehensive, strongly-typed framework for domain modeling, abstract syntax tree (AST) analysis, semantic validation, and LINQ expression code generation. Build complex data models with fluent APIs, analyze and transform code at runtime, and generate optimized executable expressions.
 
-# Poly - Fluent Domain Modeling for .NET
-
-Poly provides a fluent, strongly-typed API for defining domain models that can be used for validation, code generation, schema generation, and API creation.
+> **Note:** This project is under active development. APIs may evolve as we expand functionality.
 
 ## Quick Start
 
@@ -13,112 +11,165 @@ using Poly.DataModeling;
 using Poly.DataModeling.Builders;
 using Poly.Validation;
 
+// Define domain models with fluent API
 var model = new DataModelBuilder();
 
-// Define types with fluent API
-model.AddDataType(type => {
-    type.SetName("Customer")
-        .AddProperty("Id", p => p.OfType<Guid>())
+model.AddDataType("Customer", type => {
+    type.AddProperty("Id", p => p.OfType<Guid>())
         .AddProperty("Email", p => p
             .OfType<string>()
             .WithConstraint(new NotNullConstraint())
             .WithConstraint(new LengthConstraint(5, 255)))
-        .AddProperty("Name", p => p
-            .OfType<string>()
-            .WithConstraint(new NotNullConstraint())
-            .WithConstraint(new LengthConstraint(1, 100)))
-        // Define relationships inline
+        .AddProperty("Orders", p => p
+            .OfType("Order")  // Reference to another type
+            .AsList())        // Collection type
         .HasMany("Order", "Orders")
             .WithOne("Order", "Customer");
 });
 
 var dataModel = model.Build();
+
+// Convert to AST for analysis and code generation
+var astNodes = dataModel.ToAst();
+
+// Analyze and compile expressions
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()
+    .UseMemberResolver()
+    .UseVariableScopeValidator()
+    .UseDataModelTransforms()
+    .Build();
+
+var result = analyzer.Analyze(astNodes);
+
+// Generate LINQ expressions
+var generator = new LinqExpressionGenerator(result);
+var compiledLambda = generator.CompileAsLambda(someAstNode, parameter);
 ```
 
 ## Features
 
-### 🔧 Fluent Property Definition
+### 🔧 Fluent Domain Modeling
 
-Define properties with type safety and inline constraints:
+Define complex data models with a strongly-typed, fluent API:
 
 ```csharp
-type.AddProperty("Email", p => p
-    .OfType<string>()
-    .WithConstraint(new NotNullConstraint())
-    .WithConstraint(new LengthConstraint(5, 255))
-);
+model.AddDataType("Order", type => {
+    type.AddProperty("Id", p => p.OfType<int>())
+        .AddProperty("Items", p => p
+            .OfType("Product")  // Reference type
+            .AsList()           // Collection
+            .Optional())        // Nullable
+        .AddProperty("Metadata", p => p
+            .OfTypeExpression(new MapType(  // Complex type expressions
+                new PrimitiveType(PrimitiveTypeId.String),
+                new PrimitiveType(PrimitiveTypeId.Json))))
+        .HasMutation("AddItem", preconditions => preconditions
+            .WithCondition(new PropertyValue("Status"), new EqualityConstraint("Active")),
+            effects => effects
+                .WithEffect(new PropertyEffect("Items", new AppendEffect(new ParameterValue("item")))));
+});
 ```
 
-**Supported Types:**
-- `string`, `int`, `long`, `double`, `bool`
-- `Guid`, `DateTime`, `DateOnly`, `TimeOnly`
+### 🎯 Advanced Type System
 
-### 🔗 Intuitive Relationship Syntax
+**Primitive Types:**
+- All .NET primitives: `bool`, `int8`/`int16`/`int32`/`int64`, `uint8`/`uint16`/`uint32`/`uint64`
+- `float32`/`float64`, `decimal`, `string`, `char`
+- Temporal: `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`
+- Special: `Guid`, `byte[]`, `object` (JSON)
 
-Define relationships naturally with `HasOne`, `HasMany`, `WithOne`, `WithMany`:
+**Composite Types:**
+- **Optional**: `Type?` - Nullable types
+- **Collections**: `Type[]`, `List<Type>`, `Set<Type>` - Arrays, lists, and sets
+- **Maps**: `Dictionary<TKey, TValue>` - Key-value mappings
+- **References**: References to other model types
+- **Tuples**: Fixed-size heterogeneous collections
+- **Unions**: Type-safe discriminated unions
+- **Enums**: Named value sets
+
+### 🔗 Relationship Modeling
+
+Define complex relationships with full cardinality support:
 
 ```csharp
-// One-to-Many: Customer has many Orders
-type.HasMany("Order", "Orders")
-    .WithOne("Order", "Customer");
-
-// Many-to-Many: Order has many Products
-type.HasMany("Product", "Products")
-    .WithMany("Product", "Orders");
-
-// One-to-One: User has one Profile
+// One-to-One
 type.HasOne("Profile", "Profile")
     .WithOne("User", "User");
+
+// One-to-Many
+type.HasMany("Order", "Orders")
+    .WithOne("Customer", "Customer");
+
+// Many-to-Many
+type.HasMany("Product", "Products")
+    .WithMany("Orders", "OrderItems");
+
+// Inheritance
+type.HasBase("BaseEntity");
+
+// Association
+type.HasAssociation("AuditLog", "Logs");
 ```
 
-### ✅ Built-in Constraints
+### ✅ Comprehensive Validation
 
-**Property-level constraints:**
-- `NotNullConstraint()` - Value cannot be null
-- `LengthConstraint(min, max)` - String/collection length validation
-- `RangeConstraint(min, max)` - Numeric range validation
-- `EqualityConstraint(value)` - Must equal specific value
+**Property Constraints:**
+- `NotNullConstraint()` - Required fields
+- `LengthConstraint(min, max)` - String/collection length
+- `RangeConstraint(min, max)` - Numeric bounds
+- `EqualityConstraint(value)` - Exact value matching
+- `ValueSourceComparisonConstraint` - Cross-property comparisons
 
-**Type-level rules:**
-- `ConditionalRule` - If condition, then apply rule
-- `MutualExclusionRule` - Only N properties can have values
-- `PropertyDependencyRule` - Property A requires Property B
-- `ComparisonRule` - Compare two properties
-- `ComputedValueRule` - Calculate derived values
+**Type Rules:**
+- `ConditionalRule` - Conditional validation logic
+- `MutualExclusionRule` - XOR relationships
+- `PropertyDependencyRule` - Required combinations
+- `ComparisonRule` - Property comparisons
+- `ComputedValueRule` - Derived calculations
 
-### 🎯 Relationship Constraints
+**Mutation Preconditions:**
+- Validate state before allowing changes
+- Cross-property validation
+- Business rule enforcement
 
-Add validation to relationship ends:
+### 🚀 AST Analysis & Code Generation
+
+Transform models into executable code through multi-phase analysis:
 
 ```csharp
-type.HasMany("Pet", "Pets")
-    .WithOne("Customer", "Owner")
-    .WithTargetConstraint(new NotNullConstraint()); // Pet must have owner
+// Phase 1: Semantic Analysis
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver()              // Infer types
+    .UseMemberResolver()            // Resolve properties/methods
+    .UseVariableScopeValidator()    // Validate scoping
+    .UseControlFlowAnalysis()       // Analyze control flow
+    .UseConstantFolding()           // Optimize constants
+    .Build();
+
+// Phase 2: Code Generation
+var generator = new LinqExpressionGenerator(analysisResult)
+    .RegisterCompiler(new DataModelPropertyAccessorCompiler());
+
+Expression compiledExpr = generator.Compile(astNode);
 ```
 
-## Complete Example
+### 🔄 Runtime Mutations
 
-See `FluentBuilderExample.cs` for a full order management system with:
-- 4 types (Customer, Order, Product, Address)
-- 3 relationships (Customer→Orders, Customer→Addresses, Order↔Products)
-- Property constraints (length, range, not-null)
+Define and execute complex state changes with preconditions and effects:
 
-Run it:
-```bash
-cd Poly.Benchmarks
-dotnet run
+```csharp
+type.HasMutation("ProcessOrder", 
+    preconditions => preconditions
+        .WithCondition(new PropertyValue("Status"), new EqualityConstraint("Pending")),
+    effects => effects
+        .WithEffect(new PropertyEffect("Status", new ConstantValue("Processing")))
+        .WithEffect(new PropertyEffect("ProcessedAt", new CurrentTimeEffect())));
 ```
 
-## Architecture
+### 📊 JSON Serialization
 
-**DataModelBuilder** → Collection of types and relationships  
-**DataTypeBuilder** → Type with properties and rules  
-**PropertyBuilder** → Property with type and constraints  
-**RelationshipBuilder** → Source + Target ends with constraints
-
-### JSON Serialization
-
-Models serialize to clean, portable JSON:
+Full polymorphic serialization with clean, portable JSON:
 
 ```json
 {
@@ -127,11 +178,177 @@ Models serialize to clean, portable JSON:
       "Name": "Customer",
       "Properties": [
         {
-          "Type": "string",
           "Name": "Email",
+          "Type": { "$type": "Primitive", "Id": "String" },
           "Constraints": [
-            { "ConstraintType": "NotNull" },
-            { "ConstraintType": "Length", "MinLength": 5, "MaxLength": 255 }
+            { "Type": "NotNull" },
+            { "Type": "Length", "MinLength": 5, "MaxLength": 255 }
+          ]
+        },
+        {
+          "Name": "Orders",
+          "Type": {
+            "$type": "Collection",
+            "Element": { "$type": "Reference", "TypeName": "Order" },
+            "Kind": "List"
+          }
+        }
+      ],
+      "Mutations": [
+        {
+          "Name": "UpdateEmail",
+          "Parameters": [{ "Name": "newEmail", "Type": "String" }],
+          "Preconditions": [
+            {
+              "ValueSource": { "$type": "Property", "PropertyName": "IsActive" },
+              "Constraint": { "Type": "Equality", "Value": true }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Examples & Benchmarks
+
+### Running Examples
+
+Explore the fluent API with complete examples:
+
+```bash
+# Run the main benchmark suite
+cd Poly.Benchmarks
+dotnet run
+
+# View available examples
+ls *.cs
+# FluentApiExample.cs - Basic fluent API usage
+# FluentBuilderExample.cs - Complete order management system
+# FunctionCalling.cs - Advanced expression compilation
+```
+
+### Benchmark Results
+
+The framework includes comprehensive benchmarks for performance validation:
+
+```bash
+# Run benchmarks
+cd Poly.Benchmarks
+dotnet run -- --filter "*"
+
+# Key benchmark categories:
+# - DataModel construction and serialization
+# - AST analysis and transformation
+# - LINQ expression compilation
+# - Type resolution performance
+# - Validation rule evaluation
+```
+
+### Example: Complete Order System
+
+```csharp
+var model = new DataModelBuilder();
+
+model.AddDataType("Customer", customer => {
+    customer.AddProperty("Id", p => p.OfType<Guid>())
+            .AddProperty("Email", p => p.OfType<string>().WithConstraint(new NotNullConstraint()))
+            .AddProperty("Name", p => p.OfType<string>().WithConstraint(new NotNullConstraint()))
+            .HasMany("Order", "Orders").WithOne("Customer", "Customer");
+});
+
+model.AddDataType("Order", order => {
+    order.AddProperty("Id", p => p.OfType<int>())
+         .AddProperty("Total", p => p.OfType<decimal>())
+         .AddProperty("Items", p => p.OfType("OrderItem").AsList())
+         .HasMutation("AddItem", mutation => mutation
+             .AddParameter("item", new ReferenceType("OrderItem"))
+             .WithPrecondition(pre => pre.WithCondition(
+                 new PropertyValue("Status"), 
+                 new EqualityConstraint("Active")))
+             .HasEffect(effect => effect.WithEffect(
+                 new PropertyEffect("Items", new AppendEffect(new ParameterValue("item"))))));
+});
+
+var dataModel = model.Build();
+```
+
+## Architecture
+
+### Core Systems
+
+**DataModeling** → Fluent API for defining domain models with types, properties, relationships, and mutations  
+**Interpretation** → AST analysis, semantic validation, and LINQ expression code generation  
+**Introspection** → Type system abstraction and reflection bridge  
+**Validation** → Constraint and rule evaluation engine
+
+### DataModeling Pipeline
+
+```
+DataModelBuilder → DataTypeBuilder → PropertyBuilder → TypeExpression
+                      ↓
+                RelationshipBuilder → Relationship
+                      ↓
+                MutationBuilder → Mutation
+                      ↓
+DataModel (Types + Relationships + Mutations)
+```
+
+### Interpretation Pipeline
+
+```
+AST Construction → [Analysis Phase] → AnalysisResult → [Generation Phase] → Compiled Delegate
+                      ↓
+            TypeResolver → MemberResolver → ScopeValidator → ControlFlowAnalysis
+                      ↓
+            LinqExpressionGenerator → Expression<T> → Compile()
+```
+
+### Key Components
+
+- **TypeExpression**: Composable type system (primitives, collections, maps, references, unions)
+- **AST Nodes**: Abstract syntax tree for code representation and transformation
+- **Analysis Passes**: Semantic validation, type inference, member resolution, control flow
+- **Code Generation**: LINQ Expression tree compilation for optimal runtime performance
+- **Introspection Bridge**: Seamless integration between static models and dynamic execution
+
+### JSON Serialization
+
+Models serialize to clean, portable JSON with full type information:
+
+```json
+{
+  "Types": [
+    {
+      "Name": "Customer",
+      "Properties": [
+        {
+          "Name": "Email",
+          "Type": { "$type": "Primitive", "Id": "String" },
+          "Constraints": [
+            { "Type": "NotNull" },
+            { "Type": "Length", "MinLength": 5, "MaxLength": 255 }
+          ]
+        },
+        {
+          "Name": "Orders",
+          "Type": {
+            "$type": "Collection",
+            "Element": { "$type": "Reference", "TypeName": "Order" },
+            "Kind": "List"
+          }
+        }
+      ],
+      "Mutations": [
+        {
+          "Name": "UpdateEmail",
+          "Parameters": [{ "Name": "newEmail", "Type": "String" }],
+          "Preconditions": [
+            {
+              "ValueSource": { "$type": "Property", "PropertyName": "IsActive" },
+              "Constraint": { "Type": "Equality", "Value": true }
+            }
           ]
         }
       ]
@@ -139,7 +356,6 @@ Models serialize to clean, portable JSON:
   ],
   "Relationships": [
     {
-      "Type": "ManyToOne",
       "Name": "Customer.Orders_Order.Customer",
       "Source": { "TypeName": "Customer", "PropertyName": "Orders" },
       "Target": { "TypeName": "Order", "PropertyName": "Customer" }
@@ -150,59 +366,160 @@ Models serialize to clean, portable JSON:
 
 ## Roadmap
 
-- ✅ Fluent type and property builders
-- ✅ Relationship definitions with constraints
-- ✅ Property and type-level validation rules
-- 🚧 Runtime validation engine
-- 🚧 SQL schema generation
-- 🚧 Migration diff engine
-- 🚧 Query/filter DSL
+### ✅ Completed Features
+
+- ✅ Fluent type and property builders with complex type expressions
+- ✅ Relationship definitions with full cardinality support (1:1, 1:N, N:M, inheritance, associations)
+- ✅ Comprehensive property and type-level validation rules
+- ✅ Advanced type system (primitives, collections, maps, unions, tuples, enums)
+- ✅ Runtime mutation system with preconditions and effects
+- ✅ AST-based interpretation system with semantic analysis
+- ✅ LINQ Expression code generation and compilation
+- ✅ Control flow analysis and optimization passes
+- ✅ Introspection bridge for dynamic execution
+- ✅ Polymorphic JSON serialization
+- ✅ Benchmark suite and performance testing
+
+### 🚧 In Development
+
+- 🚧 Runtime validation engine integration
+- 🚧 SQL schema generation from data models
+- 🚧 Migration diff engine for schema evolution
+- 🚧 Query/filter DSL for data access
 - 🚧 API code generation (Minimal APIs + OpenAPI)
-- 🚧 Authorization model
+- 🚧 Authorization model integration
+- 🚧 GraphQL schema generation
+- 🚧 Code generation for multiple target languages
 
 ## API Reference
 
-### DataModelBuilder
+### DataModeling API
+
+#### DataModelBuilder
 
 ```csharp
-DataModelBuilder AddDataType(Action<DataTypeBuilder> configure)
+DataModelBuilder AddDataType(string name, Action<DataTypeBuilder> configure)
 DataModelBuilder AddDataType(DataType dataType)
 DataModelBuilder AddRelationship(Relationship relationship)
 DataModel Build()
+IReadOnlyList<TypeDefinitionNode> ToAst()  // Convert to AST
 ```
 
-### DataTypeBuilder
+#### DataTypeBuilder
 
 ```csharp
-DataTypeBuilder SetName(string name)
 DataTypeBuilder AddProperty(string name, Action<PropertyBuilder> configure)
-DataTypeBuilder AddProperty(DataProperty property)
 DataTypeBuilder AddRule(Rule rule)
-RelationshipBuilder HasOne(string targetTypeName, string? propertyName = null)
-RelationshipBuilder HasMany(string targetTypeName, string? propertyName = null)
+RelationshipBuilder HasOne(string targetType, string? propertyName = null)
+RelationshipBuilder HasMany(string targetType, string? propertyName = null)
+RelationshipBuilder HasBase(string baseType)  // Inheritance
+RelationshipBuilder HasAssociation(string targetType, string? propertyName = null)
+DataTypeBuilder HasMutation(string name, Action<MutationBuilder> configure)
 DataType Build()
 ```
 
-### PropertyBuilder
+#### PropertyBuilder
 
 ```csharp
 PropertyBuilder OfType<T>()
 PropertyBuilder OfType(Type type)
+PropertyBuilder OfType(string typeName)  // Reference to model type
+PropertyBuilder OfTypeExpression(TypeExpression typeExpr)
+PropertyBuilder Optional()  // Make nullable
+PropertyBuilder AsList() / AsArray() / AsSet()  // Collections
 PropertyBuilder WithConstraint(Constraint constraint)
-PropertyBuilder WithConstraints(params Constraint[] constraints)
+PropertyBuilder WithDefault(object? value)
 DataProperty Build()
 ```
 
-### RelationshipBuilder
+### Interpretation API
+
+#### AnalyzerBuilder
 
 ```csharp
-RelationshipBuilder WithOne(string targetTypeName, string? targetPropertyName = null)
-RelationshipBuilder WithMany(string targetTypeName, string? targetPropertyName = null)
-RelationshipBuilder WithSourceConstraint(Constraint constraint)
-RelationshipBuilder WithSourceConstraints(params Constraint[] constraints)
-RelationshipBuilder WithTargetConstraint(Constraint constraint)
-RelationshipBuilder WithTargetConstraints(params Constraint[] constraints)
-Relationship Build()
+AnalyzerBuilder AddTypeDefinitionProvider(ITypeDefinitionProvider provider)
+AnalyzerBuilder UseTypeResolver()
+AnalyzerBuilder UseMemberResolver()
+AnalyzerBuilder UseVariableScopeValidator()
+AnalyzerBuilder UseControlFlowAnalysis()
+AnalyzerBuilder UseConstantFolding()
+AnalyzerBuilder UseDataModelTransforms()
+Analyzer Build()
+```
+
+#### LinqExpressionGenerator
+
+```csharp
+LinqExpressionGenerator RegisterCompiler(INodeCompiler compiler)
+Expression Compile(Node node)
+LambdaExpression CompileAsLambda(Node node, Parameter parameter)
+LambdaExpression CompileAsLambda(Node node, params Parameter[] parameters)
+```
+
+#### Analysis Extensions
+
+```csharp
+// Get analysis results
+ITypeDefinition? GetResolvedType(this AnalysisResult result, Node node)
+ITypeMember? GetResolvedMember(this AnalysisResult result, Node node)
+DataModelPropertyAccessor? GetDataModelReplacement(this AnalysisResult result, Node node)
+```
+
+### Type Expressions
+
+```csharp
+// Primitives
+new PrimitiveType(PrimitiveTypeId.String)
+
+// Composites
+new OptionalType(innerType)
+new CollectionType(elementType, CollectionKind.List)
+new MapType(keyType, valueType)
+new ReferenceType("TypeName")
+new UnionType([case1, case2, ...])
+new TupleType([type1, type2, ...])
+new EnumType("EnumName", [value1, value2, ...])
+```
+
+### Validation API
+
+#### Constraints
+
+```csharp
+new NotNullConstraint()
+new LengthConstraint(min, max)
+new RangeConstraint<T>(min, max)
+new EqualityConstraint(expectedValue)
+new ValueSourceComparisonConstraint(leftSource, rightSource, ComparisonOperator.Equal)
+```
+
+#### Rules
+
+```csharp
+new ConditionalRule(condition, consequence)
+new MutualExclusionRule(propertyNames)
+new PropertyDependencyRule(dependentProp, requiredProp)
+new ComparisonRule(leftProp, rightProp, ComparisonOperator.GreaterThan)
+new ComputedValueRule(targetProp, computation)
+```
+
+### Mutation API
+
+#### MutationBuilder
+
+```csharp
+MutationBuilder WithPrecondition(Action<PreconditionBuilder> configure)
+MutationBuilder HasEffect(Action<EffectBuilder> configure)
+MutationBuilder AddParameter(string name, TypeExpression type)
+Mutation Build()
+```
+
+#### Effects
+
+```csharp
+new PropertyEffect("PropertyName", new ConstantValue(value))
+new PropertyEffect("PropertyName", new AppendEffect(item))
+new PropertyEffect("PropertyName", new CurrentTimeEffect())
 ```
 
 ## License

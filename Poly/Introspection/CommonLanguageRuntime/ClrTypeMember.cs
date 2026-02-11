@@ -1,5 +1,3 @@
-using Poly.Interpretation;
-
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 internal abstract class ClrTypeMember : ITypeMember {
@@ -12,8 +10,6 @@ internal abstract class ClrTypeMember : ITypeMember {
     ITypeDefinition ITypeMember.MemberTypeDefinition => MemberTypeDefinition;
     ITypeDefinition ITypeMember.DeclaringTypeDefinition => DeclaringTypeDefinition;
     IEnumerable<IParameter>? ITypeMember.Parameters => Parameters;
-
-    public abstract Value GetMemberAccessor(Value instance, params IEnumerable<Value>? parameters);
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

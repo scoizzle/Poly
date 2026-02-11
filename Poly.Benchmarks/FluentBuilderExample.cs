@@ -4,11 +4,17 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Text.Json;
 
-using Poly.DataModeling;
-using Poly.DataModeling.Interpretation;
-using Poly.DataModeling.Mutations;
-using Poly.Interpretation;
+using Poly.DomainModeling;
+using Poly.DomainModeling.IntrospectionBridge;
+using Poly.DomainModeling.Mutations;
+using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
+using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.LinqExpressions;
 using Poly.Validation;
+
+using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Benchmarks;
 
@@ -184,90 +190,69 @@ public static class FluentBuilderExample {
 
         var model = CreateOrderManagementModel();
 
-        // Register model types into the Interpretation type system
-        var ctx = new InterpretationContext();
-        model.RegisterIn(ctx);
-        var customerDef = ctx.GetTypeDefinition("Customer");
-        if (customerDef is not null) {
-            Console.WriteLine("\nRegistered type in Interpretation system: Customer");
-            Console.WriteLine("Members: " + string.Join(", ", customerDef.Members.Select(m => m.Name)));
+        // Convert DataModel to AST - the universal exchange format
+        Console.WriteLine("--- AST-Based Type Definition Approach ---\n");
+        var typeDefinitionAsts = model.ToAst();
+        Console.WriteLine($"Converted {typeDefinitionAsts.Count} types to AST nodes:");
+        foreach (var typeDef in typeDefinitionAsts) {
+            Console.WriteLine($"  - {typeDef.Name}: {typeDef.Properties?.Count ?? 0} properties");
+        }
 
-            // Build and execute a simple accessor: @obj.Email
-            var param = ctx.AddParameter("@obj", customerDef);
-            var emailValue = param.GetMember("Email");
-            var body = emailValue.BuildExpression(ctx);
-            var lambda = Expression.Lambda<Func<IDictionary<string, object>, string>>(
-                body,
-                param.BuildExpression(ctx)
-            );
-            var fn = lambda.Compile();
+        // Create analyzer that extracts ITypeDefinition from AST nodes
+        var typeDefAnalyzer = new TypeDefinitionNodeAnalyzer();
+
+        // Analyze each type definition AST node
+        // Note: For AST-only contexts, we use an empty provider initially
+        // The typeDefAnalyzer itself becomes the provider after analysis
+        var emptyProvider = new DataModelTypeDefinitionProvider();
+        var astAnalysisContext = new AnalysisContext(emptyProvider);
+        foreach (var typeDefAst in typeDefinitionAsts) {
+            typeDefAnalyzer.Analyze(astAnalysisContext, typeDefAst);
+        }
+        typeDefAnalyzer.Freeze();
+
+        // Now typeDefAnalyzer is an ITypeDefinitionProvider!
+        var customerFromAst = typeDefAnalyzer.GetTypeDefinition("Customer");
+        if (customerFromAst is not null) {
+            Console.WriteLine($"\nCustomer type from AST:");
+            Console.WriteLine("Members: " + string.Join(", ", customerFromAst.Members.Select(m => m.Name)));
+
+            // Build expression AST: @obj.Email (accessing dictionary-backed property)
+            var param = new Parameter("obj", new TypeDefinitionReference(customerFromAst));
+            var emailAccess = param.GetMember("Email");
+
+            // Run semantic analysis using the AST-extracted types
+            var analyzer = new AnalyzerBuilder();
+            analyzer.AddTypeDefinitionProvider(typeDefAnalyzer); // Uses AST-extracted types!
+            analyzer.UseTypeResolver();
+            analyzer.UseMemberResolver();
+            analyzer.AddAnalyzer(new DataModelMemberAccessAnalyzer());
+
+            var analysisResult = analyzer.Build().Analyze(emailAccess);
+
+            // Check for diagnostics
+            if (analysisResult.Diagnostics.Any()) {
+                Console.WriteLine("\nDiagnostics:");
+                foreach (var diag in analysisResult.Diagnostics) {
+                    Console.WriteLine($"  [{diag.Severity}] {diag.Message}");
+                }
+            }
+
+            // Debug: Check if the replacement happened
+            var replacement = analysisResult.GetDataModelReplacement(emailAccess);
+            Console.WriteLine($"\nReplacement node: {replacement?.GetType().Name ?? "null"}");
+            Console.WriteLine($"Original node: {emailAccess.GetType().Name}");
+
+            // Compile to LINQ Expression with DataModel compiler registered
+            var generator = new LinqExpressionGenerator(analysisResult)
+                .RegisterCompiler(new DataModelPropertyAccessorCompiler());
+
+            var lambda = generator.CompileAsLambda(emailAccess, param);
+            var fn = (Func<IDictionary<string, object>, string>)lambda.Compile();
+
+            // Test execution
             var sample = new Dictionary<string, object> { ["Email"] = "dev@example.com" };
-            Console.WriteLine($"Accessor test (@obj.Email) => {fn(sample)}");
-
-            // Validation Examples
-            Console.WriteLine("\n=== Validation Examples ===");
-            var validator = new Validator(model);
-
-            // Valid customer
-            var validCustomer = new Dictionary<string, object?> {
-                ["Id"] = Guid.NewGuid(),
-                ["Email"] = "john.doe@example.com",
-                ["Name"] = "John Doe",
-                ["CreatedAt"] = DateTime.UtcNow,
-                ["IsActive"] = true
-            };
-
-            var result1 = validator.Validate("Customer", validCustomer);
-            Console.WriteLine($"\nValid customer: {result1}");
-
-            // Invalid customer - missing required field
-            var invalidCustomer1 = new Dictionary<string, object?> {
-                ["Id"] = Guid.NewGuid(),
-                ["Name"] = "Jane Doe"
-                // Email is missing (required by NotNull constraint)
-            };
-
-            var result2 = validator.Validate("Customer", invalidCustomer1);
-            Console.WriteLine($"\nMissing email: {result2}");
-            if (!result2.IsValid) {
-                foreach (var error in result2.Errors) {
-                    Console.WriteLine($"  - {error}");
-                }
-            }
-
-            // Invalid customer - email too short
-            var invalidCustomer2 = new Dictionary<string, object?> {
-                ["Id"] = Guid.NewGuid(),
-                ["Email"] = "a@b", // Too short (min 5 chars)
-                ["Name"] = "Bob Smith",
-                ["CreatedAt"] = DateTime.UtcNow,
-                ["IsActive"] = false
-            };
-
-            var result3 = validator.Validate("Customer", invalidCustomer2);
-            Console.WriteLine($"\nEmail too short: {result3}");
-            if (!result3.IsValid) {
-                foreach (var error in result3.Errors) {
-                    Console.WriteLine($"  - {error}");
-                }
-            }
-
-            // Invalid product - negative price
-            var invalidProduct = new Dictionary<string, object?> {
-                ["Id"] = Guid.NewGuid(),
-                ["SKU"] = "WIDGET-001",
-                ["Name"] = "Test Widget",
-                ["Price"] = -10.0, // Negative price (min 0.0)
-                ["StockQuantity"] = 50
-            };
-
-            var result4 = validator.Validate("Product", invalidProduct);
-            Console.WriteLine($"\nNegative price: {result4}");
-            if (!result4.IsValid) {
-                foreach (var error in result4.Errors) {
-                    Console.WriteLine($"  - {error}");
-                }
-            }
+            Console.WriteLine($"\nAccessor test (@obj.Email) => {fn(sample)}");
         }
 
         var options = new JsonSerializerOptions {
@@ -275,7 +260,7 @@ public static class FluentBuilderExample {
             TypeInfoResolver = DataModelPropertyPolymorphicJsonTypeResolver.Shared
         };
 
-        Console.WriteLine("Generated Order Management Domain Model:\n");
+        Console.WriteLine("\nGenerated Order Management Domain Model:\n");
         Console.WriteLine(JsonSerializer.Serialize(model, options));
 
         Console.WriteLine("\n=== Model Summary ===");

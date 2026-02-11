@@ -1,6 +1,8 @@
+using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Expr = System.Linq.Expressions.Expression;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -29,27 +31,6 @@ public class ClrTypeFieldTests {
     }
 
     [Test]
-    public async Task Field_GetMemberAccessor_ReturnsCorrectValue()
-    {
-        var registry = ClrTypeDefinitionRegistry.Shared;
-        var testType = registry.GetTypeDefinition<TestClass>();
-        var publicField = testType.Fields.WithName("PublicField").SingleOrDefault();
-
-        var testInstance = new TestClass { PublicField = 99 };
-        var instanceValue = Value.Wrap(testInstance);
-        var accessor = publicField!.GetMemberAccessor(instanceValue);
-
-        await Assert.That(accessor).IsNotNull();
-
-        var interpretationContext = new InterpretationContext();
-        var expression = accessor.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Func<int>>(expression).Compile();
-        var result = lambda();
-
-        await Assert.That(result).IsEqualTo(99);
-    }
-
-    [Test]
     public async Task Field_ToString_HasCorrectFormat()
     {
         var registry = ClrTypeDefinitionRegistry.Shared;
@@ -74,25 +55,6 @@ public class ClrTypeFieldTests {
         await Assert.That(staticField).IsTypeOf<ClrTypeField>();
         await Assert.That(staticField!.Name).IsEqualTo("StaticField");
         await Assert.That(((ITypeMember)staticField).MemberTypeDefinition.FullName).IsEqualTo("System.String");
-    }
-
-    [Test]
-    public async Task StaticField_GetMemberAccessor_ReturnsCorrectValue()
-    {
-        var registry = ClrTypeDefinitionRegistry.Shared;
-        var testType = registry.GetTypeDefinition<TestClass>();
-        var staticField = testType.Fields.WithName("StaticField").SingleOrDefault();
-
-        var accessor = staticField!.GetMemberAccessor(Value.Null);
-
-        await Assert.That(accessor).IsNotNull();
-
-        var interpretationContext = new InterpretationContext();
-        var expression = accessor.BuildExpression(interpretationContext);
-        var lambda = Expression.Lambda<Func<string>>(expression).Compile();
-        var result = lambda();
-
-        await Assert.That(result).IsEqualTo("static value");
     }
 
     [Test]

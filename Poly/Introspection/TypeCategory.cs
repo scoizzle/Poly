@@ -66,3 +66,34 @@ public enum TypeCategory {
     /// <summary>An unsigned numeric type.</summary>
     Unsigned = 1 << 18
 }
+
+public static class TypeCategoryExtensions {
+    extension(TypeCategory category) {
+        /// <summary>
+        /// Returns true if the specified category flag is set on this type category.
+        /// </summary>
+        /// <param name="flag">The category flag to check.</param>
+        /// <returns>True if the flag is set; otherwise, false.</returns>
+        public bool Is(TypeCategory flag) => (category & flag) == flag;
+
+        /// <summary>
+        /// Returns true if this type category includes the Nullable flag.
+        /// </summary>
+        public bool IsNullable => category.Is(TypeCategory.Nullable);
+
+        /// <summary>
+        /// Returns true if this type category includes the Collection flag.
+        /// </summary>
+        public bool IsCollection => category.Is(TypeCategory.Collection);
+
+        /// <summary>
+        /// Returns true if this type category includes the Numeric flag.
+        /// </summary>
+        public bool IsNumeric => category.Is(TypeCategory.Numeric);
+
+        /// <summary>
+        /// Returns true if this type category includes the Reference flag.
+        /// </summary>
+        public bool IsReference => category.Is(TypeCategory.Reference);
+    }
+}

@@ -378,6 +378,13 @@ public class ArithmeticParserEvaluatorTests {
     }
 
     [Test]
+    public async Task InvalidOperation_DivideByZero_ThrowsException()
+    {
+        await Assert.That(() => Evaluate<int>("2 / 0"))
+            .Throws<DivideByZeroException>();
+    }
+
+    [Test]
     public async Task ZeroValues_Operations_HandlesCorrectly()
     {
         await Assert.That(Evaluate<int>("0 + 5")).IsEqualTo(5);

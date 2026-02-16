@@ -27,44 +27,50 @@ public enum TypeCategory {
     /// <summary>A temporal type (date, time, datetime, timespan).</summary>
     Temporal = 1 << 5,
 
+    /// <summary>An instant type (point in time).</summary>
+    Instant = Temporal | 1 << 6,
+
+    /// <summary>A duration type (timespan, etc).</summary>
+    Duration = Temporal | 1 << 7,
+
     /// <summary>A text type (string, char).</summary>
-    Text = 1 << 6,
+    Text = 1 << 8,
 
     /// <summary>A binary type (byte array).</summary>
-    Binary = 1 << 7,
+    Binary = 1 << 9,
 
     /// <summary>A nullable/optional type.</summary>
-    Nullable = 1 << 8,
+    Nullable = 1 << 10,
 
     /// <summary>A collection type (array, list, set).</summary>
-    Collection = 1 << 9,
+    Collection = 1 << 11,
 
     /// <summary>A keyed collection (dictionary, map).</summary>
-    Keyed = 1 << 10,
+    Keyed = 1 << 12,
 
     /// <summary>A reference to another type in the model.</summary>
-    Reference = 1 << 11,
+    Reference = 1 << 13,
 
     /// <summary>A union/sum type (discriminated union).</summary>
-    Union = 1 << 12,
+    Union = 1 << 14,
 
     /// <summary>A product/tuple type.</summary>
-    Product = 1 << 13,
+    Product = 1 << 15,
 
     /// <summary>An enumeration type.</summary>
-    Enumeration = 1 << 14,
+    Enumeration = 1 << 16,
 
     /// <summary>A structured type (JSON, etc).</summary>
-    Structured = 1 << 15,
+    Structured = 1 << 17,
 
     /// <summary>An identifier type (Guid, etc).</summary>
-    Identifier = 1 << 16,
+    Identifier = 1 << 18,
 
     /// <summary>A signed numeric type.</summary>
-    Signed = 1 << 17,
+    Signed = 1 << 19,
 
     /// <summary>An unsigned numeric type.</summary>
-    Unsigned = 1 << 18
+    Unsigned = 1 << 20,
 }
 
 public static class TypeCategoryExtensions {

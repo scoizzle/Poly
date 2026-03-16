@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
 using Poly.DomainModeling.Builders;
+using Poly.DomainModeling.Events;
 using Poly.DomainModeling.Mutations;
 using Poly.DomainModeling.TypeExpressions;
 using Poly.Validation;
@@ -13,6 +14,14 @@ namespace Poly.DomainModeling;
 [JsonSerializable(typeof(DataModel))]
 [JsonSerializable(typeof(DataType))]
 [JsonSerializable(typeof(DataProperty))]
+[JsonSerializable(typeof(Identity))]
+[JsonSerializable(typeof(Lifecycle))]
+[JsonSerializable(typeof(LifecycleState))]
+[JsonSerializable(typeof(StateTransition))]
+[JsonSerializable(typeof(PropertyFacets))]
+[JsonSerializable(typeof(StateFacetOverride))]
+[JsonSerializable(typeof(DomainEvent))]
+[JsonSerializable(typeof(DomainEventProperty))]
 // TypeExpression hierarchy
 [JsonSerializable(typeof(TypeExpression))]
 [JsonSerializable(typeof(PrimitiveType))]

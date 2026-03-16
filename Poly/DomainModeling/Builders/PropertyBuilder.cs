@@ -9,14 +9,17 @@ namespace Poly.DomainModeling.Builders;
 public sealed class PropertyBuilder {
     private readonly string _name;
     private readonly List<Constraint> _constraints;
+    private readonly List<StateFacetOverride> _stateFacetOverrides;
     private TypeExpression? _typeExpression;
     private object? _defaultValue;
+    private PropertyFacets? _facets;
 
     public PropertyBuilder(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
         _name = name;
         _constraints = [];
+        _stateFacetOverrides = [];
     }
 
     public string Name => _name;
@@ -151,6 +154,51 @@ public sealed class PropertyBuilder {
         return this;
     }
 
+    /// <summary>
+    /// Sets the behavioral facets for this property (requirement, accessibility).
+    /// </summary>
+    public PropertyBuilder WithFacets(PropertyFacets facets)
+    {
+        ArgumentNullException.ThrowIfNull(facets);
+        _facets = facets;
+        return this;
+    }
+
+    /// <summary>
+    /// Marks this property as required (must be provided).
+    /// </summary>
+    public PropertyBuilder Required()
+    {
+        _facets = new PropertyFacets(
+            PropertyRequirement.Required,
+            _facets?.Accessibility ?? PropertyAccessibility.ReadWrite);
+        return this;
+    }
+
+    /// <summary>
+    /// Marks this property as read-only (cannot be written after creation).
+    /// </summary>
+    public PropertyBuilder ReadOnly()
+    {
+        _facets = new PropertyFacets(
+            _facets?.Requirement ?? PropertyRequirement.Optional,
+            PropertyAccessibility.ReadOnly);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a state-specific facet override for this property.
+    /// </summary>
+    /// <param name="stateName">The lifecycle state this override applies to.</param>
+    /// <param name="facets">The facets to apply when in the named state.</param>
+    public PropertyBuilder WhenInState(string stateName, PropertyFacets facets)
+    {
+        ArgumentNullException.ThrowIfNull(stateName);
+        ArgumentNullException.ThrowIfNull(facets);
+        _stateFacetOverrides.Add(new StateFacetOverride(stateName, facets));
+        return this;
+    }
+
     public DataProperty Build()
     {
         if (_typeExpression == null)
@@ -163,7 +211,13 @@ public sealed class PropertyBuilder {
             }
         }
 
-        return new DataProperty(_name, _typeExpression, _constraints, _defaultValue);
+        return new DataProperty(
+            _name,
+            _typeExpression,
+            _constraints,
+            _defaultValue,
+            _facets,
+            _stateFacetOverrides.Count > 0 ? _stateFacetOverrides : null);
     }
 
     private static TypeExpression MapClrTypeToPrimitive(Type type) => type switch {

@@ -10,6 +10,8 @@ public sealed class DataTypeBuilder {
     private readonly List<Validation.Rule> _rules;
     private readonly List<RelationshipBuilder> _relationships;
     private readonly List<Mutation> _mutations;
+    private Identity? _identity;
+    private Lifecycle? _lifecycle;
 
     public DataTypeBuilder(string name)
     {
@@ -97,5 +99,39 @@ public sealed class DataTypeBuilder {
         return this;
     }
 
-    public DataType Build() => new DataType(_name, _properties, _rules, _mutations);
+    public DataType Build() => new DataType(_name, _properties, _rules, _mutations, _identity, _lifecycle);
+
+    /// <summary>
+    /// Sets the identity (primary key) for this type using the specified property names.
+    /// </summary>
+    public DataTypeBuilder WithIdentity(params string[] propertyNames)
+    {
+        ArgumentNullException.ThrowIfNull(propertyNames);
+        if (propertyNames.Length == 0)
+            throw new ArgumentException("At least one property name is required for identity.", nameof(propertyNames));
+        _identity = new Identity(propertyNames);
+        return this;
+    }
+
+    /// <summary>
+    /// Defines a lifecycle state machine for this type.
+    /// </summary>
+    public DataTypeBuilder WithLifecycle(Action<LifecycleBuilder> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new LifecycleBuilder();
+        configure(builder);
+        _lifecycle = builder.Build();
+        return this;
+    }
+
+    /// <summary>
+    /// Sets a pre-built lifecycle on this type.
+    /// </summary>
+    public DataTypeBuilder WithLifecycle(Lifecycle lifecycle)
+    {
+        ArgumentNullException.ThrowIfNull(lifecycle);
+        _lifecycle = lifecycle;
+        return this;
+    }
 }

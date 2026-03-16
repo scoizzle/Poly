@@ -13,6 +13,8 @@ public sealed class RelationshipBuilder {
     private readonly SourceCardinality _sourceCardinality;
     private readonly List<Constraint> _sourceConstraints;
     private readonly List<Constraint> _targetConstraints;
+    private readonly List<DataProperty> _relationshipProperties;
+    private readonly List<Constraint> _relationshipConstraints;
 
     private string? _targetTypeName;
     private string? _targetPropertyName;
@@ -26,6 +28,8 @@ public sealed class RelationshipBuilder {
         _sourceCardinality = sourceCardinality;
         _sourceConstraints = [];
         _targetConstraints = [];
+        _relationshipProperties = [];
+        _relationshipConstraints = [];
     }
 
     public RelationshipBuilder OfType(string targetTypeName)
@@ -83,6 +87,39 @@ public sealed class RelationshipBuilder {
         return this;
     }
 
+    /// <summary>
+    /// Adds a property to the relationship itself (e.g., StartDate on an Employment relationship).
+    /// </summary>
+    public RelationshipBuilder AddProperty(string name, Action<PropertyBuilder> configure)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(configure);
+        var builder = new PropertyBuilder(name);
+        configure(builder);
+        _relationshipProperties.Add(builder.Build());
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a pre-built property to the relationship.
+    /// </summary>
+    public RelationshipBuilder AddProperty(DataProperty property)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        _relationshipProperties.Add(property);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a constraint to the relationship itself (across its properties).
+    /// </summary>
+    public RelationshipBuilder WithRelationshipConstraint(Constraint constraint)
+    {
+        ArgumentNullException.ThrowIfNull(constraint);
+        _relationshipConstraints.Add(constraint);
+        return this;
+    }
+
     internal Relationship Build()
     {
         if (_targetTypeName == null) {
@@ -104,11 +141,14 @@ public sealed class RelationshipBuilder {
 
         var relationshipName = _sourcePropertyName ?? _targetPropertyName ?? $"{_sourceTypeName}_{_targetTypeName}";
 
+        var properties = _relationshipProperties.Count > 0 ? _relationshipProperties : null;
+        var relConstraints = _relationshipConstraints.Count > 0 ? _relationshipConstraints : null;
+
         return (_sourceCardinality, _targetIsMany.Value) switch {
-            (SourceCardinality.One, false) => new OneToOneRelationship(relationshipName, sourceEnd, targetEnd),
-            (SourceCardinality.One, true) => new OneToManyRelationship(relationshipName, sourceEnd, targetEnd),
-            (SourceCardinality.Many, false) => new ManyToOneRelationship(relationshipName, sourceEnd, targetEnd),
-            (SourceCardinality.Many, true) => new ManyToManyRelationship(relationshipName, sourceEnd, targetEnd),
+            (SourceCardinality.One, false) => new OneToOneRelationship(relationshipName, sourceEnd, targetEnd, properties, relConstraints),
+            (SourceCardinality.One, true) => new OneToManyRelationship(relationshipName, sourceEnd, targetEnd, properties, relConstraints),
+            (SourceCardinality.Many, false) => new ManyToOneRelationship(relationshipName, sourceEnd, targetEnd, properties, relConstraints),
+            (SourceCardinality.Many, true) => new ManyToManyRelationship(relationshipName, sourceEnd, targetEnd, properties, relConstraints),
             _ => throw new InvalidOperationException($"Unknown cardinality combination: {_sourceCardinality}, {_targetIsMany}")
         };
     }

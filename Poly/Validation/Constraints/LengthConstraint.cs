@@ -15,6 +15,9 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
     /// </summary>
     public override TypeCategory ApplicableCategories => TypeCategory.Text | TypeCategory.Collection | TypeCategory.Binary;
 
+    /// <inheritdoc />
+    public override ConstraintScope Scope => ConstraintScope.Structural;
+
     public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var length = context.Value.GetMember("Length");

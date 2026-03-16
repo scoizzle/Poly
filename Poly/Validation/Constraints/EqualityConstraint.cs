@@ -13,6 +13,9 @@ public sealed class EqualityConstraint(object value) : Constraint {
     /// </summary>
     public override TypeCategory ApplicableCategories => TypeCategory.None;
 
+    /// <inheritdoc />
+    public override ConstraintScope Scope => ConstraintScope.Structural;
+
     public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var member = context.Value;

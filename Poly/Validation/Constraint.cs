@@ -19,6 +19,12 @@ public abstract class Constraint : Rule {
     public abstract TypeCategory ApplicableCategories { get; }
 
     /// <summary>
+    /// Gets the evaluation scope required to check this constraint.
+    /// Determines what external state (if any) is needed for enforcement.
+    /// </summary>
+    public abstract ConstraintScope Scope { get; }
+
+    /// <summary>
     /// Returns true if this constraint can be applied to a type with the given categories.
     /// </summary>
     public bool IsApplicableTo(TypeCategory typeCategories)

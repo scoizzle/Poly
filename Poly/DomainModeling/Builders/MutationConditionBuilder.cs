@@ -216,6 +216,15 @@ public sealed class ValueSourceComparisonConstraint : Constraint {
     /// </summary>
     public override TypeCategory ApplicableCategories => TypeCategory.None;
 
+    /// <summary>
+    /// Scope depends on the value source: constant values are structural,
+    /// property/parameter references are intra-entity.
+    /// </summary>
+    public override ConstraintScope Scope => _rightValueSource switch {
+        ConstantValue => ConstraintScope.Structural,
+        _ => ConstraintScope.IntraEntity
+    };
+
     public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var left = context.Value;

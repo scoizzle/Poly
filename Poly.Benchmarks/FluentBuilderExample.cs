@@ -218,7 +218,7 @@ public static class FluentBuilderExample {
             Console.WriteLine("Members: " + string.Join(", ", customerFromAst.Members.Select(m => m.Name)));
 
             // Build expression AST: @obj.Email (accessing dictionary-backed property)
-            var param = new Parameter("obj", new TypeDefinitionReference(customerFromAst));
+            var param = new Poly.Interpretation.AbstractSyntaxTree.Parameter("obj", new TypeDefinitionReference(customerFromAst));
             var emailAccess = param.GetMember("Email");
 
             // Run semantic analysis using the AST-extracted types

@@ -10,11 +10,15 @@ namespace Poly.DomainModeling;
 /// <param name="Type">The type expression defining this property's type.</param>
 /// <param name="Constraints">Validation constraints applied to this property.</param>
 /// <param name="DefaultValue">Optional default value for this property.</param>
+/// <param name="Facets">Behavioral facets (requirement, accessibility). Null means default facets.</param>
+/// <param name="StateFacetOverrides">State-specific facet overrides tied to the owning type's lifecycle.</param>
 public sealed record DataProperty(
     string Name,
     TypeExpression Type,
     IEnumerable<Constraint> Constraints,
-    object? DefaultValue = null
+    object? DefaultValue = null,
+    PropertyFacets? Facets = null,
+    IEnumerable<StateFacetOverride>? StateFacetOverrides = null
 ) {
     /// <summary>
     /// Returns true if this property is nullable/optional.

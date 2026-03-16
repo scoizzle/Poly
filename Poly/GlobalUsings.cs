@@ -10,7 +10,9 @@ global using System.Runtime.CompilerServices;
 global using System.Text;
 global using System.Text.RegularExpressions;
 
-global using Exprs = System.Linq.Expressions;
+global using Poly.Extensions;
+
 global using Expr = System.Linq.Expressions.Expression;
+global using Exprs = System.Linq.Expressions;
 
 [assembly: InternalsVisibleTo("Poly.Tests")]

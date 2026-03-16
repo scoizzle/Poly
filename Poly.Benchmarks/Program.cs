@@ -14,6 +14,8 @@ using Poly.Interpretation.Mermaid;
 using Poly.Validation;
 using Poly.Validation.Builders;
 
+// Playground.Main();
+
 var analyzer = new AnalyzerBuilder()
     .UseTypeResolver()
     .UseMemberResolver()
@@ -55,43 +57,52 @@ var conditional = new Conditional(ageInRange, trueBranch, falseBranch);
 // Wrap in coalesce for final safety: result ?? 0
 var body = new Coalesce(conditional, new Constant(0.0));
 
-var analysisResult = analyzer
-    .With(ctx => {
-        ctx.SetResolvedType(age, ctx.TypeDefinitions.GetTypeDefinition(typeof(int?))!);
-        ctx.SetResolvedType(salary, ctx.TypeDefinitions.GetTypeDefinition(typeof(double?))!);
-        ctx.SetResolvedType(bonus, ctx.TypeDefinitions.GetTypeDefinition(typeof(double?))!);
-    })
-    .Analyze(body);
+var configuredAnalyzer = analyzer.With(ctx => {
+    // Pre-populate the context with parameter types for accurate analysis
+    ctx.SetResolvedType(age, ctx.TypeDefinitions.GetTypeDefinition(typeof(int?))!);
+    ctx.SetResolvedType(salary, ctx.TypeDefinitions.GetTypeDefinition(typeof(double?))!);
+    ctx.SetResolvedType(bonus, ctx.TypeDefinitions.GetTypeDefinition(typeof(double?))!);
+});
 
-if (analysisResult.Diagnostics.Count > 0) {
-    Console.WriteLine("Analysis Diagnostics:");
-    foreach (var diagnostic in analysisResult.Diagnostics) {
-        Console.WriteLine($"  {diagnostic.Severity}: {diagnostic.Message}");
-    }
-}
-else {
-    Console.WriteLine("Analysis completed with no diagnostics.");
+
+GC.Collect();
+var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+for (long i = 0; i < 10; i++) {
+    _ = configuredAnalyzer.Analyze(body);
 }
 
-var generator = new LinqExpressionGenerator(analysisResult);
-Func<int?, double?, double?, double> compiled = (Func<int?, double?, double?, double>)generator.CompileAsDelegate(body, age, salary, bonus);
+stopwatch.Stop();
+Console.WriteLine($"Total time for 10 analyses: {stopwatch.Elapsed}");
 
-// Test with various inputs
-Console.WriteLine("\nDemo Expression: ((age >= 18 && age <= 65) ? (salary * 1.1 + bonus) : salary) ?? 0\n");
-Console.WriteLine("Test Cases:");
-Console.WriteLine($"  Age 30, Salary 50000, Bonus 5000: {compiled(30, 50000, 5000)}");  // 60000
-Console.WriteLine($"  Age 17, Salary 50000, Bonus 5000: {compiled(17, 50000, 5000)}");  // 50000
-Console.WriteLine($"  Age 70, Salary 50000, Bonus 5000: {compiled(70, 50000, 5000)}");  // 50000
-Console.WriteLine($"  Age null, Salary null, Bonus null: {compiled(null, null, null)}"); // 0
+// if (analysisResult.Diagnostics.Count > 0) {
+//     Console.WriteLine("Analysis Diagnostics:");
+//     foreach (var diagnostic in analysisResult.Diagnostics) {
+//         Console.WriteLine($"  {diagnostic.Severity}: {diagnostic.Message}");
+//     }
+// }
+// else {
+//     Console.WriteLine("Analysis completed with no diagnostics.");
+// }
 
-Console.WriteLine();
-// Console.WriteLine();
-// Poly.Benchmarks.FluentApiExample.Run();
-Console.WriteLine();
+// var generator = new LinqExpressionGenerator(analysisResult);
+// Func<int?, double?, double?, double> compiled = (Func<int?, double?, double?, double>)generator.CompileAsDelegate(body, age, salary, bonus);
 
-var mermaid = new MermaidAstGenerator(analysisResult).Generate(body);
-Console.WriteLine("Mermaid Diagram of AST (with metadata):");
-Console.WriteLine(mermaid);
+// // Test with various inputs
+// Console.WriteLine("\nDemo Expression: ((age >= 18 && age <= 65) ? (salary * 1.1 + bonus) : salary) ?? 0\n");
+// Console.WriteLine("Test Cases:");
+// Console.WriteLine($"  Age 30, Salary 50000, Bonus 5000: {compiled(30, 50000, 5000)}");  // 60000
+// Console.WriteLine($"  Age 17, Salary 50000, Bonus 5000: {compiled(17, 50000, 5000)}");  // 50000
+// Console.WriteLine($"  Age 70, Salary 50000, Bonus 5000: {compiled(70, 50000, 5000)}");  // 50000
+// Console.WriteLine($"  Age null, Salary null, Bonus null: {compiled(null, null, null)}"); // 0
+
+// // Console.WriteLine();
+// // // Console.WriteLine();
+// // // Poly.Benchmarks.FluentApiExample.Run();
+// // Console.WriteLine();
+
+// var mermaid = new MermaidAstGenerator(analysisResult).Generate(body);
+// Console.WriteLine("Mermaid Diagram of AST (with metadata):");
+// Console.WriteLine(mermaid);
 
 // BenchmarkPersonPredicate test = new();
 // Console.WriteLine("Setting up benchmark...");

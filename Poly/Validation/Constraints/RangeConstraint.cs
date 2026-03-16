@@ -15,6 +15,9 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
     /// </summary>
     public override TypeCategory ApplicableCategories => TypeCategory.Numeric | TypeCategory.Temporal;
 
+    /// <inheritdoc />
+    public override ConstraintScope Scope => ConstraintScope.Structural;
+
     public override Node BuildInterpretationTree(RuleBuildingContext context)
     {
         var member = context.Value;

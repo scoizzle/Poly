@@ -4,8 +4,7 @@ namespace Poly.Interpretation;
 /// Equality comparer that uses reference equality (ReferenceEquals) instead of value equality.
 /// Useful for caching keyed on node references where identity matters, not value.
 /// </summary>
-public sealed class ReferenceEqualityComparer : IEqualityComparer<object>
-{
+public sealed class ReferenceEqualityComparer : IEqualityComparer<object> {
     /// <summary>
     /// Gets the singleton instance of the ReferenceEqualityComparer.
     /// </summary>
@@ -19,8 +18,7 @@ public sealed class ReferenceEqualityComparer : IEqualityComparer<object>
 /// <summary>
 /// Generic version of reference equality comparer for use with generic types.
 /// </summary>
-public sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T> where T : class
-{
+public sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T> where T : class {
     /// <summary>
     /// Gets the singleton instance of the ReferenceEqualityComparer{T}.
     /// </summary>

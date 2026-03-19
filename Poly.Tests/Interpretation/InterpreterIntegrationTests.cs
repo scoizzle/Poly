@@ -9,8 +9,7 @@ namespace Poly.Tests.Interpretation;
 /// Integration tests for the Interpreter with complex multi-node expressions.
 /// Tests the full middleware pipeline including semantic analysis and LINQ compilation.
 /// </summary>
-public class InterpreterIntegrationTests
-{
+public class InterpreterIntegrationTests {
     [Test]
     public async Task ComplexExpression_MultipleNestedOperations_EvaluatesCorrectly()
     {
@@ -194,7 +193,7 @@ public class InterpreterIntegrationTests
         var b = new Parameter("b", TypeReference.To<int>());
         var a = new Parameter("a", TypeReference.To<int>());
         var c = new Parameter("c", TypeReference.To<int>());
-        
+
         var bSquared = new Multiply(b, b);
         var fourA = new Multiply(new Constant(4), a);
         var fourAC = new Multiply(fourA, c);

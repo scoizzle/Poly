@@ -8,8 +8,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 /// Corresponds to the <c>%</c> operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record Modulo : Operator
-{
+public sealed record Modulo : Operator {
     public Modulo(Node leftHandValue, Node rightHandValue)
     {
         LeftHandValue = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));

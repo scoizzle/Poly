@@ -8,8 +8,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// <summary>
 /// Extension methods for <see cref="Node"/> that provide a fluent API for building expressions.
 /// </summary>
-public static class NodeExtensions
-{
+public static class NodeExtensions {
     #region Member Access
 
     /// <summary>

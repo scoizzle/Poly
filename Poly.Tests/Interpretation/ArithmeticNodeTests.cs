@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Tests.TestHelpers;
@@ -8,8 +9,7 @@ namespace Poly.Tests.Interpretation;
 /// <summary>
 /// Unit tests for arithmetic operation AST nodes (Add, Subtract, Multiply, Divide, Modulo).
 /// </summary>
-public class ArithmeticNodeTests
-{
+public class ArithmeticNodeTests {
     // Add Tests
     [Test]
     public async Task Add_TwoIntegers_ReturnsSum()

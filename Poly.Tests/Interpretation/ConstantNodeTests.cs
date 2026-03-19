@@ -7,8 +7,7 @@ namespace Poly.Tests.Interpretation;
 /// <summary>
 /// Unit tests for Constant AST nodes and their LINQ expression compilation.
 /// </summary>
-public class ConstantNodeTests
-{
+public class ConstantNodeTests {
     [Test]
     public async Task Constant_IntegerValue_CompilesAndExecutes()
     {

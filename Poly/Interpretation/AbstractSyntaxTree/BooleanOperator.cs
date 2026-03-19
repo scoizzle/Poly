@@ -8,6 +8,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// and are guaranteed to return a boolean type definition.
 /// Note: Type information is now resolved by semantic analysis middleware, not by the record itself.
 /// </remarks>
-public abstract record BooleanOperator : Operator
-{
+public abstract record BooleanOperator : Operator {
 }

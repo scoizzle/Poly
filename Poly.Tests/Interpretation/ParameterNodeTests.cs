@@ -7,8 +7,7 @@ namespace Poly.Tests.Interpretation;
 /// <summary>
 /// Unit tests for Parameter AST nodes and their LINQ expression compilation.
 /// </summary>
-public class ParameterNodeTests
-{
+public class ParameterNodeTests {
     [Test]
     public async Task Parameter_IntType_CompilesAndExecutesWithValue()
     {

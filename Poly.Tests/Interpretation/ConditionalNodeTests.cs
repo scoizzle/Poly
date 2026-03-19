@@ -8,8 +8,7 @@ namespace Poly.Tests.Interpretation;
 /// <summary>
 /// Unit tests for conditional and control flow AST nodes.
 /// </summary>
-public class ConditionalNodeTests
-{
+public class ConditionalNodeTests {
     // Conditional (Ternary) Tests
     [Test]
     public async Task Conditional_TrueCondition_ReturnsIfTrueValue()

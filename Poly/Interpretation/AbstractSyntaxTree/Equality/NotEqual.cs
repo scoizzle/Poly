@@ -11,6 +11,6 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Equality;
 public sealed record NotEqual(Node LeftHandValue, Node RightHandValue) : BooleanOperator {
     /// <inheritdoc />
     public override IEnumerable<Node?> Children => [LeftHandValue, RightHandValue];
-    
+
     public override string ToString() => $"{LeftHandValue} != {RightHandValue}";
 }

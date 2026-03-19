@@ -1,15 +1,15 @@
-using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Expr = System.Linq.Expressions.Expression;
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
+using Poly.Tests.TestHelpers;
+
+using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
-public class ModuloTests
-{
+public class ModuloTests {
     [Test]
     public async Task Modulo_WithIntegers_ReturnsRemainder()
     {

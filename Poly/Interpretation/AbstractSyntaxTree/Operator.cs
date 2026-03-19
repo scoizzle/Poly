@@ -8,6 +8,5 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// arithmetic operations, logical operations, comparisons, assignments, and member access.
 /// This abstract record serves as a marker to distinguish operations from simple values.
 /// </remarks>
-public abstract record Operator : Node
-{
+public abstract record Operator : Node {
 }

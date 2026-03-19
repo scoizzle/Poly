@@ -1,14 +1,14 @@
-using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Expr = System.Linq.Expressions.Expression;
 using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Tests.TestHelpers;
+
+using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
-public class CoalesceTests
-{
+public class CoalesceTests {
     [Test]
     public async Task Coalesce_WithNullLeft_ReturnsRightValue()
     {

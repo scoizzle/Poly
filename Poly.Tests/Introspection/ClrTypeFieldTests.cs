@@ -1,10 +1,11 @@
-using Poly.Tests.TestHelpers;
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
-using Expr = System.Linq.Expressions.Expression;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Tests.TestHelpers;
+
+using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Introspection;
 

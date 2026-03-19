@@ -11,8 +11,7 @@ public sealed record IfStatement(Node Condition, Node ThenBranch, Node? ElseBran
     public override IEnumerable<Node?> Children => [Condition, ThenBranch, ElseBranch];
 
     /// <inheritdoc />
-    public override string ToString()
-    {
+    public override string ToString() {
         var result = $"if ({Condition}) {{ {ThenBranch} }}";
         if (ElseBranch is not null) {
             result += $" else {{ {ElseBranch} }}";

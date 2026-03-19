@@ -5,8 +5,7 @@ namespace Poly.Tests.Introspection;
 
 public class EnumerableMemberExtensionsTests {
     [Test]
-    public async Task WithParameters_MultipleOverloads_Distinguishable()
-    {
+    public async Task WithParameters_MultipleOverloads_Distinguishable() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -28,8 +27,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_SingleInt_FindsCorrectOverload()
-    {
+    public async Task WithParameters_SingleInt_FindsCorrectOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
@@ -43,8 +41,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_IntInt_FindsCorrectOverload()
-    {
+    public async Task WithParameters_IntInt_FindsCorrectOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
@@ -60,8 +57,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_NoMatch_ReturnsEmpty()
-    {
+    public async Task WithParameters_NoMatch_ReturnsEmpty() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var doubleType = registry.GetTypeDefinition<double>();
@@ -75,8 +71,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_OnField_ReturnsEmpty()
-    {
+    public async Task WithParameters_OnField_ReturnsEmpty() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var members = intType.Fields.WithName("MaxValue");
@@ -89,8 +84,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_Property_ReturnsEmpty()
-    {
+    public async Task WithParameters_Property_ReturnsEmpty() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var intParamType = registry.GetTypeDefinition<int>();
@@ -104,8 +98,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_IndexOf_CharOverload()
-    {
+    public async Task WithParameters_IndexOf_CharOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
@@ -121,8 +114,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_IndexOf_StringOverload()
-    {
+    public async Task WithParameters_IndexOf_StringOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var members = stringType.Methods.WithName("IndexOf");
@@ -137,8 +129,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_Contains_SingleStringOverload()
-    {
+    public async Task WithParameters_Contains_SingleStringOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var members = stringType.Methods.WithName("Contains");
@@ -151,8 +142,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_Contains_WithStringComparison()
-    {
+    public async Task WithParameters_Contains_WithStringComparison() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var stringComparisonType = registry.GetTypeDefinition<StringComparison>();
@@ -166,8 +156,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_Replace_StringOverload()
-    {
+    public async Task WithParameters_Replace_StringOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var members = stringType.Methods.WithName("Replace");
@@ -182,8 +171,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_Replace_CharOverload()
-    {
+    public async Task WithParameters_Replace_CharOverload() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var charType = registry.GetTypeDefinition<char>();
         var members = registry.GetTypeDefinition<string>().Methods.WithName("Replace");
@@ -198,8 +186,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_ListAdd_ByType()
-    {
+    public async Task WithParameters_ListAdd_ByType() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<string>>();
         var stringType = registry.GetTypeDefinition<string>();
@@ -213,8 +200,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_StartsWith()
-    {
+    public async Task WithParameters_StartsWith() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var members = stringType.Methods.WithName("StartsWith");
@@ -227,8 +213,7 @@ public class EnumerableMemberExtensionsTests {
     }
 
     [Test]
-    public async Task WithParameters_DistinguishesOverloads()
-    {
+    public async Task WithParameters_DistinguishesOverloads() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();

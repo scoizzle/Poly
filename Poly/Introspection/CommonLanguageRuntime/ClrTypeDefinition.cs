@@ -9,8 +9,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Thread-safe for concurrent reads after construction.
 /// </summary>
 internal sealed class ClrTypeDefinition : ITypeDefinition {
-    public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider)
-    {
+    public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
@@ -49,8 +48,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
     private static readonly BindingFlags MemberSearchCriteria = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
-    private static FrozenSet<ClrTypeField> BuildFieldCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider)
-    {
+    private static FrozenSet<ClrTypeField> BuildFieldCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(provider);
@@ -62,8 +60,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
         return fields;
 
-        ClrTypeField ConstructMemberField(FieldInfo fi)
-        {
+        ClrTypeField ConstructMemberField(FieldInfo fi) {
             ArgumentNullException.ThrowIfNull(fi);
             ArgumentNullException.ThrowIfNull(fi.FieldType);
             ArgumentException.ThrowIfNullOrWhiteSpace(fi.Name);
@@ -74,8 +71,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
     }
 
 
-    private static FrozenSet<ClrTypeProperty> BuildPropertyCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider)
-    {
+    private static FrozenSet<ClrTypeProperty> BuildPropertyCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(provider);
@@ -86,8 +82,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
         return properties;
 
-        ClrTypeProperty ConstructMemberProperty(PropertyInfo pi)
-        {
+        ClrTypeProperty ConstructMemberProperty(PropertyInfo pi) {
             ArgumentNullException.ThrowIfNull(pi);
             ArgumentNullException.ThrowIfNull(pi.PropertyType);
             ArgumentException.ThrowIfNullOrWhiteSpace(pi.Name);
@@ -107,8 +102,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
     }
 
 
-    private static FrozenSet<ClrMethod> BuildMethodCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider)
-    {
+    private static FrozenSet<ClrMethod> BuildMethodCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(provider);
@@ -121,8 +115,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
         return methods;
 
-        ClrMethod ConstructMethod(MethodInfo mi)
-        {
+        ClrMethod ConstructMethod(MethodInfo mi) {
             ArgumentNullException.ThrowIfNull(mi);
 
             Lazy<ClrTypeDefinition> returnType = provider.GetDeferredTypeDefinitionResolver(mi.ReturnType);
@@ -131,8 +124,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         }
     }
 
-    private static ClrParameter ConstructParameter(ClrTypeDefinitionRegistry provider, ParameterInfo pi)
-    {
+    private static ClrParameter ConstructParameter(ClrTypeDefinitionRegistry provider, ParameterInfo pi) {
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(pi);
 
@@ -147,8 +139,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         IEnumerable<ClrTypeField> fields,
         IEnumerable<ClrTypeProperty> properties,
         IEnumerable<ClrMethod> methods
-    )
-    {
+    ) {
         ArgumentNullException.ThrowIfNull(fields);
         ArgumentNullException.ThrowIfNull(properties);
         ArgumentNullException.ThrowIfNull(methods);
@@ -162,16 +153,14 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
     private static FrozenDictionary<string, FrozenSet<ClrTypeMember>> BuildMemberDictionary(
         IEnumerable<ClrTypeMember> members
-    )
-    {
+    ) {
         ArgumentNullException.ThrowIfNull(members);
         return members
             .GroupBy(m => m.Name)
             .ToFrozenDictionary(g => g.Key, g => g.ToFrozenSet());
     }
 
-    private static FrozenSet<ClrParameter> BuildGenericParameterCollection(Type type, ClrTypeDefinitionRegistry provider)
-    {
+    private static FrozenSet<ClrParameter> BuildGenericParameterCollection(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
@@ -196,8 +185,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         return parameters.ToFrozenSet();
     }
 
-    private static ClrTypeDefinition? GetBaseTypeResolver(Type type, ClrTypeDefinitionRegistry provider)
-    {
+    private static ClrTypeDefinition? GetBaseTypeResolver(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
@@ -209,8 +197,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
 
 
 
-    private static FrozenSet<ClrTypeDefinition> GetInterfacesResolver(Type type, ClrTypeDefinitionRegistry provider)
-    {
+    private static FrozenSet<ClrTypeDefinition> GetInterfacesResolver(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
@@ -218,8 +205,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         return interfaces.Select(provider.GetTypeDefinition).ToFrozenSet();
     }
 
-    private static PrimitiveTypeId? GetPrimitiveTypeId(Type type)
-    {
+    private static PrimitiveTypeId? GetPrimitiveTypeId(Type type) {
         ArgumentNullException.ThrowIfNull(type);
 
         return type switch {
@@ -247,8 +233,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         };
     }
 
-    private static TypeCategory GetTypeCategory(Type type)
-    {
+    private static TypeCategory GetTypeCategory(Type type) {
         ArgumentNullException.ThrowIfNull(type);
 
         var primitiveId = GetPrimitiveTypeId(type);

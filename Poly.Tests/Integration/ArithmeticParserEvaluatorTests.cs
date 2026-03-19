@@ -40,14 +40,12 @@ public class ArithmeticParserEvaluatorTests {
         private readonly string _input;
         private int _position;
 
-        public ArithmeticLexer(string input)
-        {
+        public ArithmeticLexer(string input) {
             _input = input;
             _position = 0;
         }
 
-        public List<Token> Tokenize()
-        {
+        public List<Token> Tokenize() {
             var tokens = new List<Token>();
 
             while (_position < _input.Length) {
@@ -102,14 +100,12 @@ public class ArithmeticParserEvaluatorTests {
         private readonly List<Token> _tokens;
         private int _current;
 
-        public ArithmeticParser(List<Token> tokens)
-        {
+        public ArithmeticParser(List<Token> tokens) {
             _tokens = tokens;
             _current = 0;
         }
 
-        public Node Parse()
-        {
+        public Node Parse() {
             var result = ParseExpression();
 
             if (_tokens[_current].Type != TokenType.End) {
@@ -119,8 +115,7 @@ public class ArithmeticParserEvaluatorTests {
             return result;
         }
 
-        private Node ParseExpression()
-        {
+        private Node ParseExpression() {
             var left = ParseTerm();
 
             while (_tokens[_current].Type is TokenType.Plus or TokenType.Minus) {
@@ -136,8 +131,7 @@ public class ArithmeticParserEvaluatorTests {
             return left;
         }
 
-        private Node ParseTerm()
-        {
+        private Node ParseTerm() {
             var left = ParseFactor();
 
             while (_tokens[_current].Type is TokenType.Multiply or TokenType.Divide or TokenType.Modulo) {
@@ -156,8 +150,7 @@ public class ArithmeticParserEvaluatorTests {
             return left;
         }
 
-        private Node ParseFactor()
-        {
+        private Node ParseFactor() {
             var token = _tokens[_current];
 
             // Handle parentheses
@@ -199,8 +192,7 @@ public class ArithmeticParserEvaluatorTests {
     /// <summary>
     /// Helper method to evaluate an arithmetic expression string.
     /// </summary>
-    private static T Evaluate<T>(string expression)
-    {
+    private static T Evaluate<T>(string expression) {
         // Lex
         var lexer = new ArithmeticLexer(expression);
         var tokens = lexer.Tokenize();
@@ -216,137 +208,119 @@ public class ArithmeticParserEvaluatorTests {
     }
 
     [Test]
-    public async Task SimpleAddition_TwoPlusThree_ReturnsFive()
-    {
+    public async Task SimpleAddition_TwoPlusThree_ReturnsFive() {
         var result = Evaluate<int>("2 + 3");
         await Assert.That(result).IsEqualTo(5);
     }
 
     [Test]
-    public async Task SimpleSubtraction_TenMinusFour_ReturnsSix()
-    {
+    public async Task SimpleSubtraction_TenMinusFour_ReturnsSix() {
         var result = Evaluate<int>("10 - 4");
         await Assert.That(result).IsEqualTo(6);
     }
 
     [Test]
-    public async Task SimpleMultiplication_ThreeTimesFour_ReturnsTwelve()
-    {
+    public async Task SimpleMultiplication_ThreeTimesFour_ReturnsTwelve() {
         var result = Evaluate<int>("3 * 4");
         await Assert.That(result).IsEqualTo(12);
     }
 
     [Test]
-    public async Task SimpleDivision_TwentyDividedByFive_ReturnsFour()
-    {
+    public async Task SimpleDivision_TwentyDividedByFive_ReturnsFour() {
         var result = Evaluate<int>("20 / 5");
         await Assert.That(result).IsEqualTo(4);
     }
 
     [Test]
-    public async Task SimpleModulo_TenModThree_ReturnsOne()
-    {
+    public async Task SimpleModulo_TenModThree_ReturnsOne() {
         var result = Evaluate<int>("10 % 3");
         await Assert.That(result).IsEqualTo(1);
     }
 
     [Test]
-    public async Task OperatorPrecedence_AdditionAndMultiplication_MultipliesFirst()
-    {
+    public async Task OperatorPrecedence_AdditionAndMultiplication_MultipliesFirst() {
         // 2 + 3 * 4 = 2 + 12 = 14
         var result = Evaluate<int>("2 + 3 * 4");
         await Assert.That(result).IsEqualTo(14);
     }
 
     [Test]
-    public async Task OperatorPrecedence_SubtractionAndDivision_DividesFirst()
-    {
+    public async Task OperatorPrecedence_SubtractionAndDivision_DividesFirst() {
         // 20 - 10 / 2 = 20 - 5 = 15
         var result = Evaluate<int>("20 - 10 / 2");
         await Assert.That(result).IsEqualTo(15);
     }
 
     [Test]
-    public async Task Parentheses_OverridesPrecedence_AddsFirst()
-    {
+    public async Task Parentheses_OverridesPrecedence_AddsFirst() {
         // (2 + 3) * 4 = 5 * 4 = 20
         var result = Evaluate<int>("(2 + 3) * 4");
         await Assert.That(result).IsEqualTo(20);
     }
 
     [Test]
-    public async Task NestedParentheses_ComplexExpression_EvaluatesCorrectly()
-    {
+    public async Task NestedParentheses_ComplexExpression_EvaluatesCorrectly() {
         // ((2 + 3) * (4 + 1)) - 10 = (5 * 5) - 10 = 25 - 10 = 15
         var result = Evaluate<int>("((2 + 3) * (4 + 1)) - 10");
         await Assert.That(result).IsEqualTo(15);
     }
 
     [Test]
-    public async Task ComplexExpression_MultipleOperators_EvaluatesCorrectly()
-    {
+    public async Task ComplexExpression_MultipleOperators_EvaluatesCorrectly() {
         // 10 + 5 * 2 - 8 / 4 = 10 + 10 - 2 = 18
         var result = Evaluate<int>("10 + 5 * 2 - 8 / 4");
         await Assert.That(result).IsEqualTo(18);
     }
 
     [Test]
-    public async Task UnaryMinus_NegativeNumber_ReturnsNegative()
-    {
+    public async Task UnaryMinus_NegativeNumber_ReturnsNegative() {
         var result = Evaluate<int>("-5");
         await Assert.That(result).IsEqualTo(-5);
     }
 
     [Test]
-    public async Task UnaryMinus_InExpression_EvaluatesCorrectly()
-    {
+    public async Task UnaryMinus_InExpression_EvaluatesCorrectly() {
         // 10 + -5 = 10 + (-5) = 5
         var result = Evaluate<int>("10 + -5");
         await Assert.That(result).IsEqualTo(5);
     }
 
     [Test]
-    public async Task UnaryMinus_WithParentheses_EvaluatesCorrectly()
-    {
+    public async Task UnaryMinus_WithParentheses_EvaluatesCorrectly() {
         // -(10 + 5) = -(15) = -15
         var result = Evaluate<int>("-(10 + 5)");
         await Assert.That(result).IsEqualTo(-15);
     }
 
     [Test]
-    public async Task DecimalNumbers_Addition_ReturnsDouble()
-    {
+    public async Task DecimalNumbers_Addition_ReturnsDouble() {
         var result = Evaluate<double>("2.5 + 3.7");
         await Assert.That(result).IsEqualTo(6.2);
     }
 
     [Test]
-    public async Task MixedTypes_IntAndDouble_PromotesToDouble()
-    {
+    public async Task MixedTypes_IntAndDouble_PromotesToDouble() {
         // 10 + 2.5 = 12.5 (type promotion handled by code generator)
         var result = Evaluate<double>("10 + 2.5");
         await Assert.That(result).IsEqualTo(12.5);
     }
 
     [Test]
-    public async Task MixedTypes_ComplexExpression_PromotesCorrectly()
-    {
+    public async Task MixedTypes_ComplexExpression_PromotesCorrectly() {
         // 10 * 2.5 - 5 / 2.0 = 25.0 - 2.5 = 22.5
         var result = Evaluate<double>("10 * 2.5 - 5 / 2.0");
         await Assert.That(result).IsEqualTo(22.5);
     }
 
     [Test]
-    public async Task LongExpression_ManyOperations_EvaluatesCorrectly()
-    {
+    public async Task LongExpression_ManyOperations_EvaluatesCorrectly() {
         // 1 + 2 * 3 - 4 / 2 + 5 * (6 - 2) = 1 + 6 - 2 + 5 * 4 = 1 + 6 - 2 + 20 = 25
         var result = Evaluate<int>("1 + 2 * 3 - 4 / 2 + 5 * (6 - 2)");
         await Assert.That(result).IsEqualTo(25);
     }
 
     [Test]
-    public async Task WhitespaceHandling_VariousSpacing_ParsesCorrectly()
-    {
+    public async Task WhitespaceHandling_VariousSpacing_ParsesCorrectly() {
         var result1 = Evaluate<int>("2+3*4");
         var result2 = Evaluate<int>("2 + 3 * 4");
         var result3 = Evaluate<int>("  2  +  3  *  4  ");
@@ -357,36 +331,31 @@ public class ArithmeticParserEvaluatorTests {
     }
 
     [Test]
-    public async Task InvalidSyntax_MissingRightParen_ThrowsException()
-    {
+    public async Task InvalidSyntax_MissingRightParen_ThrowsException() {
         await Assert.That(() => Evaluate<int>("(2 + 3"))
             .Throws<InvalidOperationException>();
     }
 
     [Test]
-    public async Task InvalidSyntax_UnexpectedToken_ThrowsException()
-    {
+    public async Task InvalidSyntax_UnexpectedToken_ThrowsException() {
         await Assert.That(() => Evaluate<int>("2 + + 3"))
             .Throws<InvalidOperationException>();
     }
 
     [Test]
-    public async Task InvalidSyntax_InvalidCharacter_ThrowsException()
-    {
+    public async Task InvalidSyntax_InvalidCharacter_ThrowsException() {
         await Assert.That(() => Evaluate<int>("2 + @ 3"))
             .Throws<InvalidOperationException>();
     }
 
     [Test]
-    public async Task InvalidOperation_DivideByZero_ThrowsException()
-    {
+    public async Task InvalidOperation_DivideByZero_ThrowsException() {
         await Assert.That(() => Evaluate<int>("2 / 0"))
             .Throws<DivideByZeroException>();
     }
 
     [Test]
-    public async Task ZeroValues_Operations_HandlesCorrectly()
-    {
+    public async Task ZeroValues_Operations_HandlesCorrectly() {
         await Assert.That(Evaluate<int>("0 + 5")).IsEqualTo(5);
         await Assert.That(Evaluate<int>("5 - 0")).IsEqualTo(5);
         await Assert.That(Evaluate<int>("0 * 5")).IsEqualTo(0);
@@ -394,23 +363,20 @@ public class ArithmeticParserEvaluatorTests {
     }
 
     [Test]
-    public async Task LargeNumbers_Addition_HandlesCorrectly()
-    {
+    public async Task LargeNumbers_Addition_HandlesCorrectly() {
         var result = Evaluate<int>("1000000 + 2000000");
         await Assert.That(result).IsEqualTo(3000000);
     }
 
     [Test]
-    public async Task ChainedOperations_LeftToRight_EvaluatesCorrectly()
-    {
+    public async Task ChainedOperations_LeftToRight_EvaluatesCorrectly() {
         // 10 - 5 - 2 = (10 - 5) - 2 = 5 - 2 = 3
         var result = Evaluate<int>("10 - 5 - 2");
         await Assert.That(result).IsEqualTo(3);
     }
 
     [Test]
-    public async Task ChainedMultiplication_LeftToRight_EvaluatesCorrectly()
-    {
+    public async Task ChainedMultiplication_LeftToRight_EvaluatesCorrectly() {
         // 2 * 3 * 4 = (2 * 3) * 4 = 6 * 4 = 24
         var result = Evaluate<int>("2 * 3 * 4");
         await Assert.That(result).IsEqualTo(24);

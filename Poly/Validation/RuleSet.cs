@@ -18,8 +18,7 @@ public sealed class RuleSet<T> {
     /// </summary>
     /// <param name="rules">The collection of rules to combine.</param>
     public RuleSet(IEnumerable<Rule> rules)
-        : this(rules, [ClrTypeDefinitionRegistry.Shared])
-    {
+        : this(rules, [ClrTypeDefinitionRegistry.Shared]) {
     }
 
     /// <summary>
@@ -28,8 +27,7 @@ public sealed class RuleSet<T> {
     /// <param name="rules">The collection of rules to combine.</param>
     /// <param name="typeDefinitionProvider">The type definition provider to use for rule analysis.</param>
     public RuleSet(IEnumerable<Rule> rules, ITypeDefinitionProvider typeDefinitionProvider)
-        : this(rules, [typeDefinitionProvider])
-    {
+        : this(rules, [typeDefinitionProvider]) {
     }
 
     /// <summary>
@@ -37,8 +35,7 @@ public sealed class RuleSet<T> {
     /// </summary>
     /// <param name="rules">The collection of rules to combine.</param>
     /// <param name="typeDefinitionProviders">The type definition providers to use for rule analysis.</param>
-    public RuleSet(IEnumerable<Rule> rules, IEnumerable<ITypeDefinitionProvider> typeDefinitionProviders)
-    {
+    public RuleSet(IEnumerable<Rule> rules, IEnumerable<ITypeDefinitionProvider> typeDefinitionProviders) {
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(typeDefinitionProviders);
 

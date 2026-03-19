@@ -31,8 +31,7 @@ public sealed record PropertyDefinitionNode(
         }
     }
 
-    public override string ToString()
-    {
+    public override string ToString() {
         var suffix = DefaultValue != null ? $" = {DefaultValue}" : "";
         var staticPrefix = IsStatic ? "static " : "";
         return $"{staticPrefix}{PropertyType} {Name}{suffix}";

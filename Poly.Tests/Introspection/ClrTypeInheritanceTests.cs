@@ -9,8 +9,7 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeInheritanceTests {
     [Test]
-    public async Task VirtualMethod_OnBaseClass()
-    {
+    public async Task VirtualMethod_OnBaseClass() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var baseType = registry.GetTypeDefinition<VirtualMethodBase>();
 
@@ -21,8 +20,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task VirtualMethod_Inherited()
-    {
+    public async Task VirtualMethod_Inherited() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<VirtualMethodDerived>();
 
@@ -33,8 +31,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task InheritedProperty_FromBase()
-    {
+    public async Task InheritedProperty_FromBase() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithProperty>();
 
@@ -45,8 +42,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task InheritedMethod_FromBase()
-    {
+    public async Task InheritedMethod_FromBase() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithMethod>();
 
@@ -57,8 +53,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task InterfaceImplementation_ExplicitMembers()
-    {
+    public async Task InterfaceImplementation_ExplicitMembers() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var implementerType = registry.GetTypeDefinition<InterfaceImplementer>();
 
@@ -70,8 +65,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task AbstractBase_WithConcreteDerived()
-    {
+    public async Task AbstractBase_WithConcreteDerived() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var abstractType = registry.GetTypeDefinition<AbstractBase2>();
         var concreteType = registry.GetTypeDefinition<ConcreteImplementation>();
@@ -86,8 +80,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task MultiLevelInheritance_ThreeLevels()
-    {
+    public async Task MultiLevelInheritance_ThreeLevels() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var grandchildType = registry.GetTypeDefinition<GrandchildClass>();
 
@@ -102,8 +95,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task PropertyOverride_DerivedVersion()
-    {
+    public async Task PropertyOverride_DerivedVersion() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithOverride>();
 
@@ -114,8 +106,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task SealedDerived_CannotBeSubclassed()
-    {
+    public async Task SealedDerived_CannotBeSubclassed() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var sealedType = registry.GetTypeDefinition<SealedDerived>();
 
@@ -124,8 +115,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task InterfaceType_HasInterfaceMembers()
-    {
+    public async Task InterfaceType_HasInterfaceMembers() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var interfaceType = registry.GetTypeDefinition<ITestInterface>();
 
@@ -136,8 +126,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task MultipleInterfaceInheritance_HasAllMembers()
-    {
+    public async Task MultipleInterfaceInheritance_HasAllMembers() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var implementerType = registry.GetTypeDefinition<MultiInterfaceImplementer>();
 
@@ -150,8 +139,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task GenericBase_WithTypeParameter()
-    {
+    public async Task GenericBase_WithTypeParameter() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var concreteDerived = registry.GetTypeDefinition<ConcreteGenericDerived>();
 
@@ -162,8 +150,7 @@ public class ClrTypeInheritanceTests {
     }
 
     [Test]
-    public async Task HiddenMember_PrefersDerived()
-    {
+    public async Task HiddenMember_PrefersDerived() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithHiddenMember>();
 

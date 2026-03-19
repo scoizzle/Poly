@@ -9,8 +9,7 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// <summary>
     /// Initializes a new instance with type definitions.
     /// </summary>
-    public AnalysisContext(ITypeDefinitionProvider typeDefinitions)
-    {
+    public AnalysisContext(ITypeDefinitionProvider typeDefinitions) {
         TypeDefinitions = typeDefinitions;
         Metadata = new NodeMetadataStore();
     }
@@ -18,8 +17,7 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// <summary>
     /// Initializes a new instance with type definitions and pre-populated metadata from a previous analysis.
     /// </summary>
-    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, NodeMetadataStore previousMetadata)
-    {
+    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, NodeMetadataStore previousMetadata) {
         TypeDefinitions = typeDefinitions;
         Metadata = new NodeMetadataStore(previousMetadata);
     }

@@ -6,8 +6,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// Ensures correct incremental analysis by providing node identity across parser runs.
 /// </summary>
 public readonly record struct NodeId {
-    private NodeId(string value)
-    {
+    private NodeId(string value) {
         ArgumentException.ThrowIfNullOrEmpty(value);
         Value = value;
     }
@@ -37,8 +36,7 @@ public readonly record struct NodeId {
     /// Creates a node identifier from structural hash.
     /// Useful for non-positional sources or when position tracking is unavailable.
     /// </summary>
-    public static NodeId FromHash(string content)
-    {
+    public static NodeId FromHash(string content) {
         using var sha256 = System.Security.Cryptography.SHA256.Create();
         var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(content));
         return new(Convert.ToHexString(hashBytes)[..16].ToLowerInvariant());
@@ -47,8 +45,7 @@ public readonly record struct NodeId {
     /// <summary>
     /// Parses a string into a NodeId.
     /// </summary>
-    public static NodeId Parse(string value)
-    {
+    public static NodeId Parse(string value) {
         ArgumentException.ThrowIfNullOrEmpty(value);
         return new(value);
     }

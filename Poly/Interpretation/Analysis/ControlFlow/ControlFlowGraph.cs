@@ -44,8 +44,7 @@ public sealed class ControlFlowGraph {
     /// <summary>
     /// Creates a new basic block and adds it to the CFG.
     /// </summary>
-    internal BasicBlock CreateBlock()
-    {
+    internal BasicBlock CreateBlock() {
         var block = new BasicBlock(_blocks.Count);
         _blocks.Add(block);
         return block;
@@ -54,24 +53,21 @@ public sealed class ControlFlowGraph {
     /// <summary>
     /// Associates a node with its containing basic block.
     /// </summary>
-    internal void MapNodeToBlock(Node node, BasicBlock block)
-    {
+    internal void MapNodeToBlock(Node node, BasicBlock block) {
         _nodeToBlock[node] = block;
     }
 
     /// <summary>
     /// Gets the basic block containing the specified node.
     /// </summary>
-    public BasicBlock? GetBlockForNode(Node node)
-    {
+    public BasicBlock? GetBlockForNode(Node node) {
         return _nodeToBlock.TryGetValue(node, out var block) ? block : null;
     }
 
     /// <summary>
     /// Performs reachability analysis to mark reachable blocks.
     /// </summary>
-    internal void ComputeReachability()
-    {
+    internal void ComputeReachability() {
         if (_blocks.Count == 0) return;
 
         var visited = new HashSet<BasicBlock>();
@@ -96,8 +92,7 @@ public sealed class ControlFlowGraph {
     /// <summary>
     /// Marks exit blocks based on blocks with no successors or containing return/throw.
     /// </summary>
-    internal void IdentifyExitBlocks()
-    {
+    internal void IdentifyExitBlocks() {
         foreach (var block in _blocks) {
             if (block.Successors.Count == 0) {
                 block.IsExit = true;

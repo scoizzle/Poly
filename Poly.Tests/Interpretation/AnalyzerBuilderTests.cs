@@ -8,8 +8,7 @@ namespace Poly.Tests.Interpretation;
 
 public class AnalyzerBuilderTests {
     [Test]
-    public async Task Builder_WithExplicitTypeDefinitionProvider_UsesProvider()
-    {
+    public async Task Builder_WithExplicitTypeDefinitionProvider_UsesProvider() {
         var provider = new TrackingTypeDefinitionProvider(ClrTypeDefinitionRegistry.Shared);
         var analyzer = new AnalyzerBuilder(provider)
             .UseTypeResolver()
@@ -23,8 +22,7 @@ public class AnalyzerBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithExplicitEmptyProviderSet_DoesNotFallbackToShared()
-    {
+    public async Task Builder_WithExplicitEmptyProviderSet_DoesNotFallbackToShared() {
         var analyzer = new AnalyzerBuilder(Array.Empty<ITypeDefinitionProvider>())
             .UseTypeResolver()
             .Build();
@@ -42,8 +40,7 @@ public class AnalyzerBuilderTests {
 
         public ITypeDefinition? GetTypeDefinition(string name) => innerProvider.GetTypeDefinition(name);
 
-        public ITypeDefinition? GetTypeDefinition(Type type)
-        {
+        public ITypeDefinition? GetTypeDefinition(Type type) {
             _requestedTypes.Add(type);
             return innerProvider.GetTypeDefinition(type);
         }

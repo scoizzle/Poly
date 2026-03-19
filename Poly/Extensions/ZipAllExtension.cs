@@ -24,8 +24,7 @@ public static class ZipAllExtension {
         /// // Result: (1, "a"), (2, "b"), (3, null)
         /// </code>
         /// </example>
-        public IEnumerable<ValueTuple<T1?, T2?>> ZipAll<T2>(IEnumerable<T2> second)
-        {
+        public IEnumerable<ValueTuple<T1?, T2?>> ZipAll<T2>(IEnumerable<T2> second) {
             ArgumentNullException.ThrowIfNull(first);
             ArgumentNullException.ThrowIfNull(second);
 

@@ -13,8 +13,7 @@ public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? 
         [TryBlock, .. (CatchClauses ?? new List<CatchClause>()).SelectMany(c => c.Children), FinallyBlock];
 
     /// <inheritdoc />
-    public override string ToString()
-    {
+    public override string ToString() {
         var catches = CatchClauses != null ? string.Join(" ", CatchClauses.Select(c => c.ToString())) : "";
         var finallyStr = FinallyBlock is not null ? $" finally {{ {FinallyBlock} }}" : "";
         return $"try {{ {TryBlock} }} {catches}{finallyStr}";
@@ -32,8 +31,7 @@ public sealed record CatchClause(Node? ExceptionType, string? VariableName, Node
     public IEnumerable<Node?> Children => [ExceptionType, Body];
 
     /// <inheritdoc />
-    public override string ToString()
-    {
+    public override string ToString() {
         var exceptionPart = ExceptionType is not null ? ExceptionType.ToString() : "Exception";
         var varPart = VariableName is not null ? $" {VariableName}" : "";
         return $"catch ({exceptionPart}{varPart}) {{ {Body} }}";

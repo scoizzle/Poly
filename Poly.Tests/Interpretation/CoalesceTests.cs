@@ -10,8 +10,7 @@ namespace Poly.Tests.Interpretation;
 
 public class CoalesceTests {
     [Test]
-    public async Task Coalesce_WithNullLeft_ReturnsRightValue()
-    {
+    public async Task Coalesce_WithNullLeft_ReturnsRightValue() {
         // Arrange
         var node = new Coalesce(Wrap(null as int?), Wrap(42));
 
@@ -25,8 +24,7 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithNonNullLeft_ReturnsLeftValue()
-    {
+    public async Task Coalesce_WithNonNullLeft_ReturnsLeftValue() {
         // Arrange
         var node = new Coalesce(Wrap(100 as int?), Wrap(42));
 
@@ -40,8 +38,7 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithParameterLeft_EvaluatesCorrectly()
-    {
+    public async Task Coalesce_WithParameterLeft_EvaluatesCorrectly() {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int?>());
         var node = new Coalesce(param, Wrap(99));
@@ -55,8 +52,7 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_ChainedOperators_WorksCorrectly()
-    {
+    public async Task Coalesce_ChainedOperators_WorksCorrectly() {
         // Arrange
         var node = new Coalesce(
             Wrap(null as int?),
@@ -73,8 +69,7 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithObjects_WorksCorrectly()
-    {
+    public async Task Coalesce_WithObjects_WorksCorrectly() {
         // Arrange
         var node = new Coalesce(Wrap(null as string), Wrap("default"));
 
@@ -88,8 +83,7 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_GetTypeDefinition_ReturnsRightHandType()
-    {
+    public async Task Coalesce_GetTypeDefinition_ReturnsRightHandType() {
         // Arrange
         var node = new Coalesce(Wrap(null as int?), Wrap(42));
 
@@ -101,8 +95,7 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_ToString_ReturnsExpectedFormat()
-    {
+    public async Task Coalesce_ToString_ReturnsExpectedFormat() {
         // Arrange
         var node = new Coalesce(Wrap(null as int?), Wrap(42));
 
@@ -114,8 +107,7 @@ public class CoalesceTests {
     }
 
     [Test]
-    public async Task Coalesce_WithNullArguments_ThrowsArgumentNullException()
-    {
+    public async Task Coalesce_WithNullArguments_ThrowsArgumentNullException() {
         // Act & Assert
         await Assert.That(() => new Coalesce(null!, Wrap(42))).Throws<ArgumentNullException>();
     }

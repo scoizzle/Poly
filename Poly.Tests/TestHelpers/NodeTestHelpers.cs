@@ -16,8 +16,7 @@ public static class NodeTestHelpers {
     /// <summary>
     /// Creates a standard analyzer for testing that performs semantic analysis passes.
     /// </summary>
-    public static Analyzer CreateTestAnalyzer()
-    {
+    public static Analyzer CreateTestAnalyzer() {
         return new AnalyzerBuilder()
             .UseTypeResolver()
             .UseMemberResolver()
@@ -30,8 +29,7 @@ public static class NodeTestHelpers {
     /// </summary>
     /// <param name="node">The node to transform.</param>
     /// <returns>A LINQ Expression representation.</returns>
-    public static Expr BuildExpression(this Node node)
-    {
+    public static Expr BuildExpression(this Node node) {
         var analyzer = CreateTestAnalyzer();
         var analysisResult = analyzer.Analyze(node);
         var generator = new LinqExpressionGenerator(analysisResult);
@@ -46,8 +44,7 @@ public static class NodeTestHelpers {
     /// <returns>Tuple of expression and generated parameter expressions.</returns>
     public static (Expr Expression, Exprs.ParameterExpression[] Parameters) BuildExpressionWithParameters(
         this Node node,
-        params (Parameter param, Type clrType)[] parameters)
-    {
+        params (Parameter param, Type clrType)[] parameters) {
         var analyzer = CreateTestAnalyzer();
 
         // Pre-register parameter types with a custom action before analysis
@@ -94,8 +91,7 @@ public static class NodeTestHelpers {
     /// Compiles a node into a delegate, registering provided parameters and using emitted parameter expressions.
     /// </summary>
     public static TDelegate CompileLambda<TDelegate>(this Node node, params (Parameter param, Type clrType)[] parameters)
-        where TDelegate : Delegate
-    {
+        where TDelegate : Delegate {
         var (expression, parameterExpressions) = node.BuildExpressionWithParameters(parameters);
         return (TDelegate)System.Linq.Expressions.Expression.Lambda(expression, parameterExpressions).Compile();
     }
@@ -103,8 +99,7 @@ public static class NodeTestHelpers {
     /// <summary>
     /// Analyzes a node using the standard test analyzer pipeline.
     /// </summary>
-    public static AnalysisResult AnalyzeNode(this Node node)
-    {
+    public static AnalysisResult AnalyzeNode(this Node node) {
         var analyzer = CreateTestAnalyzer();
         return analyzer.Analyze(node);
     }

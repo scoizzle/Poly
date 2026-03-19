@@ -18,8 +18,7 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
     /// <inheritdoc />
     public override ConstraintScope Scope => ConstraintScope.Structural;
 
-    public override Node BuildInterpretationTree(RuleBuildingContext context)
-    {
+    public override Node BuildInterpretationTree(RuleBuildingContext context) {
         var member = context.Value;
 
         Node? minCheck = MinValue is null

@@ -9,8 +9,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
 public sealed record Modulo : Operator {
-    public Modulo(Node leftHandValue, Node rightHandValue)
-    {
+    public Modulo(Node leftHandValue, Node rightHandValue) {
         LeftHandValue = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
         RightHandValue = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
     }

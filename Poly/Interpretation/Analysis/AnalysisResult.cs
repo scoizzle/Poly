@@ -3,8 +3,7 @@ namespace Poly.Interpretation.Analysis;
 public sealed record AnalysisResult : INodeMetadataProvider {
     private readonly NodeMetadataStore _metadata;
 
-    public AnalysisResult(NodeMetadataStore metadata, IReadOnlyList<Diagnostic>? diagnostics = null)
-    {
+    public AnalysisResult(NodeMetadataStore metadata, IReadOnlyList<Diagnostic>? diagnostics = null) {
         ArgumentNullException.ThrowIfNull(metadata);
         _metadata = metadata;
         Diagnostics = diagnostics ?? Array.Empty<Diagnostic>();

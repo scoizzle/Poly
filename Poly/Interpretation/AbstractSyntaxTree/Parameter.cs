@@ -12,8 +12,7 @@ public sealed record Parameter(string Name, Node? TypeReference = null, Node? De
     public override IEnumerable<Node?> Children => [TypeReference, DefaultValue];
 
     /// <inheritdoc />
-    public override string ToString()
-    {
+    public override string ToString() {
         StringBuilder sb = new();
         sb.Append(TypeReference != null ? $"{TypeReference} " : "");
         sb.Append(Name);

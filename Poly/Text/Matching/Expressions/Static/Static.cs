@@ -1,14 +1,12 @@
 namespace Poly.Text.Matching.Expressions {
     public partial class Static : Expression {
-        public Static(string value, bool optional = false, int minimumLength = 0) : base(optional, minimumLength)
-        {
+        public Static(string value, bool optional = false, int minimumLength = 0) : base(optional, minimumLength) {
             Value = value;
         }
 
         public string Value { get; }
 
-        public static bool Parse(StringView view, out Expression? expression)
-        {
+        public static bool Parse(StringView view, out Expression? expression) {
             //if (view.Extract(SelectStatic, out var content)) {
             //    var value = Conversion.Descape(content);
             //    var minimumLength = value.Length;
@@ -21,8 +19,7 @@ namespace Poly.Text.Matching.Expressions {
             return false;
         }
 
-        private static bool SelectStatic(StringView view)
-        {
+        private static bool SelectStatic(StringView view) {
             while (!view.IsEmpty) {
                 if (view.ConsumeUntil(IsToken)) {
                     if (view.First == '\\') {
@@ -41,8 +38,7 @@ namespace Poly.Text.Matching.Expressions {
             return true;
         }
 
-        private static bool IsToken(char c)
-        {
+        private static bool IsToken(char c) {
             return c switch {
                 '*' or '^' or '{' or '(' or '?' or '[' => true,
                 _ => false,

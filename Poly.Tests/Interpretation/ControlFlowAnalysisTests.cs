@@ -8,8 +8,7 @@ namespace Poly.Tests.Interpretation;
 
 public class ControlFlowAnalysisTests {
     [Test]
-    public async Task SimpleSequence_HasSingleBlock()
-    {
+    public async Task SimpleSequence_HasSingleBlock() {
         // Arrange: a simple block with sequential statements
         var ast = new Block(
             Wrap(1),
@@ -33,8 +32,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task IfStatement_CreatesBranches()
-    {
+    public async Task IfStatement_CreatesBranches() {
         // Arrange: if statement with both branches
         var condition = new Variable("x");
         var thenBranch = Wrap(1);
@@ -57,8 +55,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task ReturnStatement_TerminatesBlock()
-    {
+    public async Task ReturnStatement_TerminatesBlock() {
         // Arrange: block with return followed by code
         var ast = new Block(
             Wrap(1),
@@ -83,8 +80,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task WhileLoop_CreatesBackEdge()
-    {
+    public async Task WhileLoop_CreatesBackEdge() {
         // Arrange: while loop
         var condition = new Variable("x");
         var body = Wrap(1);
@@ -106,8 +102,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task BreakStatement_JumpsToLoopExit()
-    {
+    public async Task BreakStatement_JumpsToLoopExit() {
         // Arrange: while loop with break
         var condition = Wrap(true);
         var body = new Block(
@@ -135,8 +130,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task GotoAndLabel_ConnectsBlocks()
-    {
+    public async Task GotoAndLabel_ConnectsBlocks() {
         // Arrange: goto statement to a label
         var ast = new Block(
             Wrap(1),
@@ -161,8 +155,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task ForLoop_HasProperStructure()
-    {
+    public async Task ForLoop_HasProperStructure() {
         // Arrange: for loop with all components
         var init = new Variable("i", Wrap(0));
         var condition = new Variable("i");
@@ -186,8 +179,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task NestedIf_AllPathsReachable()
-    {
+    public async Task NestedIf_AllPathsReachable() {
         // Arrange: nested if statements
         var innerIf = new IfStatement(
             new Variable("y"),
@@ -218,8 +210,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task DoWhileLoop_BodyExecutesOnce()
-    {
+    public async Task DoWhileLoop_BodyExecutesOnce() {
         // Arrange: do-while loop
         var body = Wrap(1);
         var condition = new Variable("x");
@@ -241,8 +232,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task UnreachableBlocks_AreDetected()
-    {
+    public async Task UnreachableBlocks_AreDetected() {
         // Arrange: code after return in an if branch
         var ast = new Block(
             new IfStatement(
@@ -273,8 +263,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task ContinueStatement_JumpsToLoopCondition()
-    {
+    public async Task ContinueStatement_JumpsToLoopCondition() {
         // Arrange: while loop with continue
         var condition = new Variable("x");
         var body = new Block(
@@ -301,8 +290,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task ThrowStatement_TerminatesBlock()
-    {
+    public async Task ThrowStatement_TerminatesBlock() {
         // Arrange: block with throw followed by code
         var ast = new Block(
             Wrap(1),

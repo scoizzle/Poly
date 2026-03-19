@@ -18,8 +18,7 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
     /// <inheritdoc />
     public override ConstraintScope Scope => ConstraintScope.Structural;
 
-    public override Node BuildInterpretationTree(RuleBuildingContext context)
-    {
+    public override Node BuildInterpretationTree(RuleBuildingContext context) {
         var length = context.Value.GetMember("Length");
 
         var minCheck = MinLength.HasValue
@@ -40,8 +39,7 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
         return lengthCheck;
     }
 
-    public override string ToString()
-    {
+    public override string ToString() {
         if (MinLength.HasValue && MaxLength.HasValue) {
             return $"value.Length >= {MinLength.Value} && value.Length <= {MaxLength.Value}";
         }

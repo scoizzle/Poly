@@ -6,8 +6,7 @@ namespace Poly.Tests.Validation;
 
 public class ConstraintTests {
     [Test]
-    public async Task NotNullConstraint_WithNullValue_FailsValidation()
-    {
+    public async Task NotNullConstraint_WithNullValue_FailsValidation() {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", new NotNullConstraint())
         ]);
@@ -19,8 +18,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task NotNullConstraint_WithValue_PassesValidation()
-    {
+    public async Task NotNullConstraint_WithValue_PassesValidation() {
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", new NotNullConstraint())
         ]);
@@ -32,8 +30,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task RangeConstraint_WithinRange_PassesValidation()
-    {
+    public async Task RangeConstraint_WithinRange_PassesValidation() {
         var constraint = new RangeConstraint(0, 150);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
@@ -46,8 +43,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task RangeConstraint_BelowMin_FailsValidation()
-    {
+    public async Task RangeConstraint_BelowMin_FailsValidation() {
         var constraint = new RangeConstraint(0, 150);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
@@ -60,8 +56,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task RangeConstraint_AboveMax_FailsValidation()
-    {
+    public async Task RangeConstraint_AboveMax_FailsValidation() {
         var constraint = new RangeConstraint(0, 150);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
@@ -74,8 +69,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task RangeConstraint_AtMinBoundary_PassesValidation()
-    {
+    public async Task RangeConstraint_AtMinBoundary_PassesValidation() {
         var constraint = new RangeConstraint(0, 150);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
@@ -88,8 +82,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task RangeConstraint_AtMaxBoundary_PassesValidation()
-    {
+    public async Task RangeConstraint_AtMaxBoundary_PassesValidation() {
         var constraint = new RangeConstraint(0, 150);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
@@ -102,8 +95,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task RangeConstraint_MinOnly_PassesValidation()
-    {
+    public async Task RangeConstraint_MinOnly_PassesValidation() {
         var constraint = new RangeConstraint(0, null);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
@@ -116,8 +108,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task RangeConstraint_MaxOnly_PassesValidation()
-    {
+    public async Task RangeConstraint_MaxOnly_PassesValidation() {
         var constraint = new RangeConstraint(null, 150);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
@@ -130,8 +121,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task LengthConstraint_WithinLength_PassesValidation()
-    {
+    public async Task LengthConstraint_WithinLength_PassesValidation() {
         var constraint = new LengthConstraint(1, 100);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
@@ -144,8 +134,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task LengthConstraint_TooShort_FailsValidation()
-    {
+    public async Task LengthConstraint_TooShort_FailsValidation() {
         var constraint = new LengthConstraint(5, 100);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
@@ -158,8 +147,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task LengthConstraint_TooLong_FailsValidation()
-    {
+    public async Task LengthConstraint_TooLong_FailsValidation() {
         var constraint = new LengthConstraint(1, 5);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
@@ -172,8 +160,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task LengthConstraint_MinLength_PassesValidation()
-    {
+    public async Task LengthConstraint_MinLength_PassesValidation() {
         var constraint = new LengthConstraint(3, null);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
@@ -186,8 +173,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task LengthConstraint_MaxLength_PassesValidation()
-    {
+    public async Task LengthConstraint_MaxLength_PassesValidation() {
         var constraint = new LengthConstraint(null, 100);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Name", constraint)
@@ -200,8 +186,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task EqualityConstraint_MatchingValue_PassesValidation()
-    {
+    public async Task EqualityConstraint_MatchingValue_PassesValidation() {
         var constraint = new EqualityConstraint(25);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)
@@ -214,8 +199,7 @@ public class ConstraintTests {
     }
 
     [Test]
-    public async Task EqualityConstraint_NonMatchingValue_FailsValidation()
-    {
+    public async Task EqualityConstraint_NonMatchingValue_FailsValidation() {
         var constraint = new EqualityConstraint(25);
         var ruleSet = new RuleSet<Person>([
             new PropertyConstraintRule("Age", constraint)

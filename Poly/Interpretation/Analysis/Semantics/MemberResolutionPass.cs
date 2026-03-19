@@ -1,8 +1,7 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal static class MethodInvocationSemanticResolver {
-    public static ITypeMethod? ResolveMethod(AnalysisContext context, MethodInvocation methodInv)
-    {
+    public static ITypeMethod? ResolveMethod(AnalysisContext context, MethodInvocation methodInv) {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(methodInv);
 
@@ -27,8 +26,7 @@ internal static class MethodInvocationSemanticResolver {
 
 
 internal sealed class MemberResolver : INodeAnalyzer {
-    public void Analyze(AnalysisContext context, Node node)
-    {
+    public void Analyze(AnalysisContext context, Node node) {
         var resolvedMember = node switch {
             // Member access - resolve the member being accessed
             MemberAccess memberAccess => ResolveMemberAccessMember(context, memberAccess),
@@ -49,8 +47,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
         this.AnalyzeChildren(context, node);
     }
 
-    private static ITypeMember? ResolveMemberAccessMember(AnalysisContext context, MemberAccess memberAccess)
-    {
+    private static ITypeMember? ResolveMemberAccessMember(AnalysisContext context, MemberAccess memberAccess) {
         var instanceType = context.GetResolvedType(memberAccess.Value);
         if (instanceType == null)
             return null;
@@ -59,13 +56,11 @@ internal sealed class MemberResolver : INodeAnalyzer {
         return member;
     }
 
-    private static ITypeMember? ResolveMethodInvocationMember(AnalysisContext context, MethodInvocation methodInv)
-    {
+    private static ITypeMember? ResolveMethodInvocationMember(AnalysisContext context, MethodInvocation methodInv) {
         return MethodInvocationSemanticResolver.ResolveMethod(context, methodInv);
     }
 
-    private static ITypeMember? ResolveIndexAccessMember(AnalysisContext context, IndexAccess indexAccess)
-    {
+    private static ITypeMember? ResolveIndexAccessMember(AnalysisContext context, IndexAccess indexAccess) {
         var instanceType = context.GetResolvedType(indexAccess.Value);
         if (instanceType == null)
             return null;
@@ -84,16 +79,14 @@ public static class MemberResolutionMetadataExtensions {
     };
 
     extension(AnalyzerBuilder builder) {
-        public AnalyzerBuilder UseMemberResolver()
-        {
+        public AnalyzerBuilder UseMemberResolver() {
             builder.AddAnalyzer(new MemberResolver());
             return builder;
         }
     }
 
     extension(AnalysisContext context) {
-        public void SetResolvedMember(Node node, ITypeMember member)
-        {
+        public void SetResolvedMember(Node node, ITypeMember member) {
             ArgumentNullException.ThrowIfNull(member);
 
             var metadata = context.GetOrAddMetadata(node, static () => new MemberResolutionMetadata());
@@ -104,8 +97,7 @@ public static class MemberResolutionMetadataExtensions {
     }
 
     extension(INodeMetadataProvider typedMetadataProvider) {
-        public ITypeMember? GetResolvedMember(Node node)
-        {
+        public ITypeMember? GetResolvedMember(Node node) {
             return typedMetadataProvider.GetMetadata<MemberResolutionMetadata>(node)?.ResolvedMember;
         }
     }

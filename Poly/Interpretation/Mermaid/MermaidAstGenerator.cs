@@ -27,8 +27,7 @@ public sealed class MermaidAstGenerator {
     /// <summary>
     /// Initializes a new instance without analysis metadata.
     /// </summary>
-    public MermaidAstGenerator()
-    {
+    public MermaidAstGenerator() {
         _output = new StringBuilder();
         _visitedEdges = new HashSet<string>();
         _scratch = new StringBuilder();
@@ -38,8 +37,7 @@ public sealed class MermaidAstGenerator {
     /// Initializes a new instance with semantic analysis results for enhanced output.
     /// </summary>
     /// <param name="analysisResult">The semantic analysis result containing type information.</param>
-    public MermaidAstGenerator(AnalysisResult analysisResult)
-    {
+    public MermaidAstGenerator(AnalysisResult analysisResult) {
         ArgumentNullException.ThrowIfNull(analysisResult);
         _analysisResult = analysisResult;
         _output = new StringBuilder();
@@ -53,8 +51,7 @@ public sealed class MermaidAstGenerator {
     /// <param name="node">The root node to visualize.</param>
     /// <param name="direction">The flow direction: TB (top-bottom), LR (left-right), etc.</param>
     /// <returns>Mermaid markdown syntax as a string.</returns>
-    public string Generate(Node node, string direction = "TB")
-    {
+    public string Generate(Node node, string direction = "TB") {
         ArgumentNullException.ThrowIfNull(node);
 
         _output.Clear();
@@ -80,13 +77,11 @@ public sealed class MermaidAstGenerator {
         return _output.ToString();
     }
 
-    private List<Parameter> CollectParameterNodes(Node node)
-    {
+    private List<Parameter> CollectParameterNodes(Node node) {
         var parameters = new List<Parameter>();
         var visited = new HashSet<Node>();
 
-        void Visit(Node n)
-        {
+        void Visit(Node n) {
             if (!visited.Add(n)) {
                 return; // Already visited
             }
@@ -105,8 +100,7 @@ public sealed class MermaidAstGenerator {
         return parameters;
     }
 
-    private string GenerateNode(Node node)
-    {
+    private string GenerateNode(Node node) {
         var nodeId = GetNodeId(node);
 
         // Skip definition for Parameter nodes as they were already defined at the beginning
@@ -140,8 +134,7 @@ public sealed class MermaidAstGenerator {
         return nodeId;
     }
 
-    private void AppendNodeDefinition(Node node, string nodeId, NodeShape shape)
-    {
+    private void AppendNodeDefinition(Node node, string nodeId, NodeShape shape) {
         _scratch.Clear();
         // Add type information to label if available
         if (_analysisResult != null) {
@@ -193,8 +186,7 @@ public sealed class MermaidAstGenerator {
         _output.AppendLine();
     }
 
-    private void AddStyleAnnotations(string nodeId, Node node)
-    {
+    private void AddStyleAnnotations(string nodeId, Node node) {
         if (_analysisResult == null) {
             return;
         }
@@ -239,14 +231,12 @@ public sealed class MermaidAstGenerator {
         }
     }
 
-    private string GetNodeId(Node node)
-    {
+    private string GetNodeId(Node node) {
         // Use the node's stable NodeId instead of auto-generated counter
         return node.Id.Value;
     }
 
-    private void AppendNodeLabel(StringBuilder builder, Node node)
-    {
+    private void AppendNodeLabel(StringBuilder builder, Node node) {
         switch (node) {
             // Leaf nodes with values
             case Constant constant:
@@ -402,8 +392,7 @@ public sealed class MermaidAstGenerator {
         }
     }
 
-    private NodeShape GetNodeShape(Node node)
-    {
+    private NodeShape GetNodeShape(Node node) {
         return node switch {
             // Leaf nodes - rounded rectangles
             Constant or Parameter or Variable => NodeShape.RoundedRectangle,
@@ -419,8 +408,7 @@ public sealed class MermaidAstGenerator {
         };
     }
 
-    private IEnumerable<(Node Child, string EdgeLabel)> GetChildren(Node node)
-    {
+    private IEnumerable<(Node Child, string EdgeLabel)> GetChildren(Node node) {
         return node switch {
             // Binary operations
             Add add => [(add.LeftHandValue, "left"), (add.RightHandValue, "right")],
@@ -495,8 +483,7 @@ public sealed class MermaidAstGenerator {
         };
     }
 
-    private static void AppendValue(StringBuilder builder, object? value)
-    {
+    private static void AppendValue(StringBuilder builder, object? value) {
         switch (value) {
             case null:
                 builder.Append("null");
@@ -520,8 +507,7 @@ public sealed class MermaidAstGenerator {
         }
     }
 
-    private static void AppendTypeName(StringBuilder builder, ITypeDefinition type)
-    {
+    private static void AppendTypeName(StringBuilder builder, ITypeDefinition type) {
         var name = type.Name ?? "Unknown";
 
         var index = name.IndexOf('`');

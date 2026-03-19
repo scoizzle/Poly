@@ -12,8 +12,7 @@ namespace Poly.Tests.Interpretation;
 
 public class ConstantFoldingTests {
     [Test]
-    public async Task AddConstants_FoldsToSum()
-    {
+    public async Task AddConstants_FoldsToSum() {
         // Arrange: 1 + 2
         var ast = new Add(Wrap(1), Wrap(2));
 
@@ -30,8 +29,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task SubtractConstants_FoldsToDifference()
-    {
+    public async Task SubtractConstants_FoldsToDifference() {
         // Arrange: 10 - 3
         var ast = new Subtract(Wrap(10), Wrap(3));
 
@@ -48,8 +46,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task MultiplyConstants_FoldsToProduct()
-    {
+    public async Task MultiplyConstants_FoldsToProduct() {
         // Arrange: 4 * 5
         var ast = new Multiply(Wrap(4), Wrap(5));
 
@@ -66,8 +63,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task DivideConstants_FoldsToQuotient()
-    {
+    public async Task DivideConstants_FoldsToQuotient() {
         // Arrange: 20 / 4
         var ast = new Divide(Wrap(20), Wrap(4));
 
@@ -84,8 +80,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task ModuloConstants_FoldsToRemainder()
-    {
+    public async Task ModuloConstants_FoldsToRemainder() {
         // Arrange: 17 % 5
         var ast = new Modulo(Wrap(17), Wrap(5));
 
@@ -102,8 +97,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task UnaryMinus_FoldsToNegation()
-    {
+    public async Task UnaryMinus_FoldsToNegation() {
         // Arrange: -42
         var ast = new UnaryMinus(Wrap(42));
 
@@ -120,8 +114,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task NestedArithmetic_FoldsRecursively()
-    {
+    public async Task NestedArithmetic_FoldsRecursively() {
         // Arrange: (1 + 2) * (3 + 4) = 3 * 7 = 21
         var left = new Add(Wrap(1), Wrap(2));
         var right = new Add(Wrap(3), Wrap(4));
@@ -144,8 +137,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task AndBoolean_FoldsCorrectly()
-    {
+    public async Task AndBoolean_FoldsCorrectly() {
         // Arrange: true && false
         var ast = new And(Wrap(true), Wrap(false));
 
@@ -162,8 +154,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task OrBoolean_FoldsCorrectly()
-    {
+    public async Task OrBoolean_FoldsCorrectly() {
         // Arrange: true || false
         var ast = new Or(Wrap(true), Wrap(false));
 
@@ -180,8 +171,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task NotBoolean_FoldsCorrectly()
-    {
+    public async Task NotBoolean_FoldsCorrectly() {
         // Arrange: !true
         var ast = new Not(Wrap(true));
 
@@ -198,8 +188,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task GreaterThan_FoldsCorrectly()
-    {
+    public async Task GreaterThan_FoldsCorrectly() {
         // Arrange: 5 > 3
         var ast = new GreaterThan(Wrap(5), Wrap(3));
 
@@ -216,8 +205,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task LessThanOrEqual_FoldsCorrectly()
-    {
+    public async Task LessThanOrEqual_FoldsCorrectly() {
         // Arrange: 3 <= 3
         var ast = new LessThanOrEqual(Wrap(3), Wrap(3));
 
@@ -234,8 +222,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task Equal_FoldsCorrectly()
-    {
+    public async Task Equal_FoldsCorrectly() {
         // Arrange: 42 == 42
         var ast = new Equal(Wrap(42), Wrap(42));
 
@@ -252,8 +239,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task NotEqual_FoldsCorrectly()
-    {
+    public async Task NotEqual_FoldsCorrectly() {
         // Arrange: 42 != 43
         var ast = new NotEqual(Wrap(42), Wrap(43));
 
@@ -270,8 +256,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task ConditionalWithTrueCondition_FoldsToThenBranch()
-    {
+    public async Task ConditionalWithTrueCondition_FoldsToThenBranch() {
         // Arrange: true ? 1 : 2
         var ast = new Conditional(Wrap(true), Wrap(1), Wrap(2));
 
@@ -288,8 +273,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task ConditionalWithFalseCondition_FoldsToElseBranch()
-    {
+    public async Task ConditionalWithFalseCondition_FoldsToElseBranch() {
         // Arrange: false ? 1 : 2
         var ast = new Conditional(Wrap(false), Wrap(1), Wrap(2));
 
@@ -306,8 +290,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task NonConstantExpression_DoesNotFold()
-    {
+    public async Task NonConstantExpression_DoesNotFold() {
         // Arrange: x + 1 (where x is a variable)
         var variable = new Variable("x");
         var ast = new Add(variable, Wrap(1));
@@ -325,8 +308,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task DivisionByZero_DoesNotFold()
-    {
+    public async Task DivisionByZero_DoesNotFold() {
         // Arrange: 10 / 0
         var ast = new Divide(Wrap(10), Wrap(0));
 
@@ -342,8 +324,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task FloatingPointArithmetic_FoldsCorrectly()
-    {
+    public async Task FloatingPointArithmetic_FoldsCorrectly() {
         // Arrange: 3.5 + 2.5
         var ast = new Add(Wrap(3.5), Wrap(2.5));
 
@@ -360,8 +341,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task StringConcatenation_FoldsCorrectly()
-    {
+    public async Task StringConcatenation_FoldsCorrectly() {
         // Arrange: "Hello" + " World"
         var ast = new Add(Wrap("Hello"), Wrap(" World"));
 
@@ -378,8 +358,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task Coalesce_WithNonNullLeft_FoldsToLeft()
-    {
+    public async Task Coalesce_WithNonNullLeft_FoldsToLeft() {
         // Arrange: "value" ?? "default"
         var ast = new Coalesce(Wrap("value"), Wrap("default"));
 
@@ -396,8 +375,7 @@ public class ConstantFoldingTests {
     }
 
     [Test]
-    public async Task ComplexExpression_FoldsCompletely()
-    {
+    public async Task ComplexExpression_FoldsCompletely() {
         // Arrange: ((2 + 3) * 4 - 5) / 3 = (5 * 4 - 5) / 3 = (20 - 5) / 3 = 15 / 3 = 5
         var add = new Add(Wrap(2), Wrap(3));
         var mul = new Multiply(add, Wrap(4));

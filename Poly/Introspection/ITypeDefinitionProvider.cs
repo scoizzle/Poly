@@ -21,8 +21,7 @@ public interface ITypeDefinitionProvider {
     /// Resolves a type definition by <see cref="PrimitiveTypeId"/>.
     /// Returns null when the primitive type is not supported.
     /// </summary>
-    ITypeDefinition? GetTypeDefinition(PrimitiveTypeId primitiveTypeId)
-    {
+    ITypeDefinition? GetTypeDefinition(PrimitiveTypeId primitiveTypeId) {
         var clrType = primitiveTypeId.GetClrType();
         return clrType is not null ? GetTypeDefinition(clrType) : null;
     }
@@ -32,8 +31,7 @@ public interface ITypeDefinitionProvider {
     /// </summary>
     /// <param name="name">Fully-qualified type name to resolve.</param>
     /// <exception cref="ArgumentException">Thrown when the name is null/whitespace or the type cannot be resolved.</exception>
-    Lazy<ITypeDefinition> GetDeferredTypeDefinitionResolver(string name)
-    {
+    Lazy<ITypeDefinition> GetDeferredTypeDefinitionResolver(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return new Lazy<ITypeDefinition>(
             () => GetTypeDefinition(name)

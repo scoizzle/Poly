@@ -31,8 +31,7 @@ public sealed class LinqExpressionGenerator {
     /// Initializes a new instance of the <see cref="LinqExpressionGenerator"/> class.
     /// </summary>
     /// <param name="analysisResult">The semantic analysis result containing type and member information.</param>
-    public LinqExpressionGenerator(AnalysisResult analysisResult)
-    {
+    public LinqExpressionGenerator(AnalysisResult analysisResult) {
         ArgumentNullException.ThrowIfNull(analysisResult);
         _analysisResult = analysisResult;
     }
@@ -42,8 +41,7 @@ public sealed class LinqExpressionGenerator {
     /// </summary>
     /// <param name="compiler">The compiler to register.</param>
     /// <returns>This generator for fluent chaining.</returns>
-    public LinqExpressionGenerator RegisterCompiler(INodeCompiler compiler)
-    {
+    public LinqExpressionGenerator RegisterCompiler(INodeCompiler compiler) {
         ArgumentNullException.ThrowIfNull(compiler);
         _customCompilers.Add(compiler);
         return this;
@@ -56,8 +54,7 @@ public sealed class LinqExpressionGenerator {
     /// <returns>The compiled LINQ Expression.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="node"/> is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the expression cannot be compiled.</exception>
-    public Expression Compile(Node node)
-    {
+    public Expression Compile(Node node) {
         ArgumentNullException.ThrowIfNull(node);
         return CompileNode(node);
     }
@@ -69,8 +66,7 @@ public sealed class LinqExpressionGenerator {
     /// <param name="parameter">The lambda parameter.</param>
     /// <returns>A compiled lambda expression.</returns>
     /// <exception cref="ArgumentNullException">Thrown when arguments are null.</exception>
-    public LambdaExpression CompileAsLambda(Node node, Parameter parameter)
-    {
+    public LambdaExpression CompileAsLambda(Node node, Parameter parameter) {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameter);
 
@@ -90,8 +86,7 @@ public sealed class LinqExpressionGenerator {
     /// <param name="parameters">The lambda parameters.</param>
     /// <returns>A compiled lambda expression.</returns>
     /// <exception cref="ArgumentNullException">Thrown when arguments are null.</exception>
-    public LambdaExpression CompileAsLambda(Node node, params Parameter[] parameters)
-    {
+    public LambdaExpression CompileAsLambda(Node node, params Parameter[] parameters) {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameters);
 
@@ -114,8 +109,7 @@ public sealed class LinqExpressionGenerator {
     /// <param name="parameter">The lambda parameter.</param>
     /// <returns>A compiled and invokable delegate.</returns>
     /// <exception cref="ArgumentNullException">Thrown when arguments are null.</exception>
-    public Delegate CompileAsDelegate(Node node, Parameter parameter)
-    {
+    public Delegate CompileAsDelegate(Node node, Parameter parameter) {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameter);
 
@@ -130,8 +124,7 @@ public sealed class LinqExpressionGenerator {
     /// <param name="parameters">The lambda parameters.</param>
     /// <returns>A compiled and invokable delegate.</returns>
     /// <exception cref="ArgumentNullException">Thrown when arguments are null.</exception>
-    public Delegate CompileAsDelegate(Node node, params Parameter[] parameters)
-    {
+    public Delegate CompileAsDelegate(Node node, params Parameter[] parameters) {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameters);
 
@@ -148,8 +141,7 @@ public sealed class LinqExpressionGenerator {
     /// <returns>A compiled and invokable strongly-typed delegate.</returns>
     /// <exception cref="ArgumentNullException">Thrown when arguments are null.</exception>
     public TDelegate CompileAsDelegate<TDelegate>(Node node, params Parameter[] parameters)
-        where TDelegate : Delegate
-    {
+        where TDelegate : Delegate {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameters);
 
@@ -157,8 +149,7 @@ public sealed class LinqExpressionGenerator {
         return (TDelegate)(object)lambda.Compile();
     }
 
-    private Expression CompileNode(Node node)
-    {
+    private Expression CompileNode(Node node) {
         // Check if this node has a replacement from analysis passes (e.g., DataModel transforms)
         // This allows analyzers to transform nodes without modifying the original AST
         var allMetadata = _analysisResult.GetAllMetadata(node);
@@ -270,8 +261,7 @@ public sealed class LinqExpressionGenerator {
         };
     }
 
-    private Expression CompileAssignment(Assignment assignment)
-    {
+    private Expression CompileAssignment(Assignment assignment) {
         Expression destination = assignment.Destination switch {
             Variable variable => CompileVariable(variable),
             Parameter parameter => CompileParameter(parameter),
@@ -290,8 +280,7 @@ public sealed class LinqExpressionGenerator {
     private Expression CompileBinaryComparison(
         Node leftNode,
         Node rightNode,
-        Func<Expression, Expression, BinaryExpression> factory)
-    {
+        Func<Expression, Expression, BinaryExpression> factory) {
         var leftExpr = CompileNode(leftNode);
         var rightExpr = CompileNode(rightNode);
 
@@ -304,8 +293,7 @@ public sealed class LinqExpressionGenerator {
         return factory(leftExpr, rightExpr);
     }
 
-    private Expression CompileConditional(Conditional cond)
-    {
+    private Expression CompileConditional(Conditional cond) {
         var condition = CompileNode(cond.Condition);
         var ifTrue = CompileNode(cond.IfTrue);
         var ifFalse = CompileNode(cond.IfFalse);
@@ -323,8 +311,7 @@ public sealed class LinqExpressionGenerator {
     private Expression CompileBinaryArithmetic(
         Node leftNode,
         Node rightNode,
-        Func<Expression, Expression, BinaryExpression> factory)
-    {
+        Func<Expression, Expression, BinaryExpression> factory) {
         var leftExpr = CompileNode(leftNode);
         var rightExpr = CompileNode(rightNode);
 
@@ -344,8 +331,7 @@ public sealed class LinqExpressionGenerator {
         return factory(leftExpr, rightExpr);
     }
 
-    private static Type? GetPromotedNumericType(Type left, Type right)
-    {
+    private static Type? GetPromotedNumericType(Type left, Type right) {
         // C# numeric promotion rules
         if (left == typeof(decimal) || right == typeof(decimal)) return typeof(decimal);
         if (left == typeof(double) || right == typeof(double)) return typeof(double);
@@ -361,8 +347,7 @@ public sealed class LinqExpressionGenerator {
         return null;
     }
 
-    private static Type? GetCommonType(Type left, Type right)
-    {
+    private static Type? GetCommonType(Type left, Type right) {
         // Same types are already compatible
         if (left == right) return left;
 
@@ -407,8 +392,7 @@ public sealed class LinqExpressionGenerator {
         return null;
     }
 
-    private Expression CompileCoalesce(Coalesce coalesce)
-    {
+    private Expression CompileCoalesce(Coalesce coalesce) {
         var leftExpr = CompileNode(coalesce.LeftHandValue);
         var rightExpr = CompileNode(coalesce.RightHandValue);
 
@@ -428,8 +412,7 @@ public sealed class LinqExpressionGenerator {
         return Expression.Coalesce(leftExpr, rightExpr);
     }
 
-    private Type GetClrType(Node node)
-    {
+    private Type GetClrType(Node node) {
         var typeDef = _analysisResult.GetResolvedType(node);
         if (typeDef == null)
             throw new InvalidOperationException($"Type for node '{node}' was not resolved by semantic analysis.");
@@ -440,8 +423,7 @@ public sealed class LinqExpressionGenerator {
             : typeDef.ReflectedType;
     }
 
-    private ParameterExpression CompileParameter(Parameter parameter)
-    {
+    private ParameterExpression CompileParameter(Parameter parameter) {
         if (_parameterCache.TryGetValue(parameter, out var existing)) {
             return existing;
         }
@@ -452,8 +434,7 @@ public sealed class LinqExpressionGenerator {
         return paramExpr;
     }
 
-    private ParameterExpression CompileVariable(Variable variable)
-    {
+    private ParameterExpression CompileVariable(Variable variable) {
         if (_variableCache.TryGetValue(variable, out var existing)) {
             return existing;
         }
@@ -464,8 +445,7 @@ public sealed class LinqExpressionGenerator {
         return paramExpr;
     }
 
-    private Expression CompileIndexAccess(IndexAccess indexAccess)
-    {
+    private Expression CompileIndexAccess(IndexAccess indexAccess) {
         var target = CompileNode(indexAccess.Value);
         var indices = indexAccess.Arguments.Select(arg => CompileNode(arg)).ToArray();
 
@@ -484,8 +464,7 @@ public sealed class LinqExpressionGenerator {
         }
     }
 
-    private Expression CompileTypeCast(TypeCast typeCast)
-    {
+    private Expression CompileTypeCast(TypeCast typeCast) {
         var operand = CompileNode(typeCast.Operand);
         var type = GetClrType(typeCast);
         return typeCast.IsChecked
@@ -493,8 +472,7 @@ public sealed class LinqExpressionGenerator {
             : Expression.Convert(operand, type);
     }
 
-    private Expression CompileIfStatement(IfStatement ifStmt)
-    {
+    private Expression CompileIfStatement(IfStatement ifStmt) {
         var condition = CompileNode(ifStmt.Condition);
         var thenBranch = CompileNode(ifStmt.ThenBranch);
 
@@ -515,8 +493,7 @@ public sealed class LinqExpressionGenerator {
         return Expression.IfThen(condition, thenBranch);
     }
 
-    private Expression CompileSwitchStatement(SwitchStatement switchStmt)
-    {
+    private Expression CompileSwitchStatement(SwitchStatement switchStmt) {
         var switchValue = CompileNode(switchStmt.Value);
         var switchType = switchValue.Type;
 
@@ -532,8 +509,7 @@ public sealed class LinqExpressionGenerator {
         return Expression.Switch(switchType, switchValue, defaultCase, null, cases);
     }
 
-    private Expression CompileWhileLoop(WhileLoop whileLoop)
-    {
+    private Expression CompileWhileLoop(WhileLoop whileLoop) {
         var breakLabel = Expression.Label("break");
         var continueLabel = Expression.Label("continue");
 
@@ -560,8 +536,7 @@ public sealed class LinqExpressionGenerator {
             Expression.Label(breakLabel));
     }
 
-    private Expression CompileDoWhileLoop(DoWhileLoop doWhileLoop)
-    {
+    private Expression CompileDoWhileLoop(DoWhileLoop doWhileLoop) {
         var breakLabel = Expression.Label("break");
         var continueLabel = Expression.Label("continue");
 
@@ -588,8 +563,7 @@ public sealed class LinqExpressionGenerator {
             Expression.Label(breakLabel));
     }
 
-    private Expression CompileForLoop(ForLoop forLoop)
-    {
+    private Expression CompileForLoop(ForLoop forLoop) {
         var breakLabel = Expression.Label("break");
         var continueLabel = Expression.Label("continue");
 
@@ -624,20 +598,17 @@ public sealed class LinqExpressionGenerator {
         return blockExpressions.Count == 1 ? blockExpressions[0] : Expression.Block(blockExpressions);
     }
 
-    private Expression CompileBreakStatement(BreakStatement breakStmt)
-    {
+    private Expression CompileBreakStatement(BreakStatement breakStmt) {
         var label = breakStmt.Label ?? "break";
         return Expression.Break(GetOrCreateLabel(label));
     }
 
-    private Expression CompileContinueStatement(ContinueStatement continueStmt)
-    {
+    private Expression CompileContinueStatement(ContinueStatement continueStmt) {
         var label = continueStmt.Label ?? "continue";
         return Expression.Continue(GetOrCreateLabel(label));
     }
 
-    private Expression CompileLabelDeclaration(LabelDeclaration labelDecl)
-    {
+    private Expression CompileLabelDeclaration(LabelDeclaration labelDecl) {
         var label = GetOrCreateLabel(labelDecl.Name);
         var statement = CompileNode(labelDecl.Statement);
         return Expression.Block(
@@ -645,8 +616,7 @@ public sealed class LinqExpressionGenerator {
             statement);
     }
 
-    private Expression CompileReturnStatement(ReturnStatement returnStmt)
-    {
+    private Expression CompileReturnStatement(ReturnStatement returnStmt) {
         if (returnStmt.Value != null) {
             var value = CompileNode(returnStmt.Value);
             var returnLabel = GetOrCreateLabel("return");
@@ -657,8 +627,7 @@ public sealed class LinqExpressionGenerator {
         return Expression.Return(voidReturnLabel);
     }
 
-    private Expression CompileTryCatchFinally(TryCatchFinally tryCatch)
-    {
+    private Expression CompileTryCatchFinally(TryCatchFinally tryCatch) {
         var tryBlock = CompileNode(tryCatch.TryBlock);
 
         var catchClauses = tryCatch.CatchClauses?.Select(catchClause => {
@@ -702,8 +671,7 @@ public sealed class LinqExpressionGenerator {
         return tryBlock;
     }
 
-    private Expression CompileUsingStatement(UsingStatement usingStmt)
-    {
+    private Expression CompileUsingStatement(UsingStatement usingStmt) {
         var resourceType = GetClrType(usingStmt.Resource);
         var resource = CompileNode(usingStmt.Resource);
         var body = CompileNode(usingStmt.Body);
@@ -726,8 +694,7 @@ public sealed class LinqExpressionGenerator {
     /// <returns>The collection of parameter expressions created.</returns>
     public IEnumerable<ParameterExpression> GetParameters() => _parameterCache.Values;
 
-    private LabelTarget GetOrCreateLabel(string name)
-    {
+    private LabelTarget GetOrCreateLabel(string name) {
         if (!_labelMap.TryGetValue(name, out var label)) {
             label = Expression.Label(name);
             _labelMap[name] = label;

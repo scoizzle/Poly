@@ -8,8 +8,7 @@ namespace Poly.Validation;
 public sealed record RuleBuildingContext {
     private const string EntryPointName = "@value";
 
-    public RuleBuildingContext(ITypeDefinition entryPointTypeDefinition)
-    {
+    public RuleBuildingContext(ITypeDefinition entryPointTypeDefinition) {
         ArgumentNullException.ThrowIfNull(entryPointTypeDefinition);
 
         // Use the entry point type as a type hint to aid semantic analysis.

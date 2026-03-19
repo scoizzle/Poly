@@ -11,8 +11,7 @@ namespace Poly.Tests.Interpretation;
 
 public class ConditionalTests {
     [Test]
-    public async Task Conditional_WithTrueCondition_ReturnsIfTrueValue()
-    {
+    public async Task Conditional_WithTrueCondition_ReturnsIfTrueValue() {
         // Arrange
         var node = new Conditional(True, Wrap(42), Wrap(0));
 
@@ -26,8 +25,7 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithFalseCondition_ReturnsIfFalseValue()
-    {
+    public async Task Conditional_WithFalseCondition_ReturnsIfFalseValue() {
         // Arrange
         var node = new Conditional(False, Wrap(42), Wrap(99));
 
@@ -41,8 +39,7 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithParameterCondition_EvaluatesCorrectly()
-    {
+    public async Task Conditional_WithParameterCondition_EvaluatesCorrectly() {
         // Arrange
         var param = new Parameter("x", TypeReference.To<bool>());
         var node = new Conditional(param, Wrap(10), Wrap(20));
@@ -56,8 +53,7 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithNestedConditionals_WorksCorrectly()
-    {
+    public async Task Conditional_WithNestedConditionals_WorksCorrectly() {
         // Arrange
         var inner = new Conditional(True, Wrap(5), Wrap(10));
         var node = new Conditional(False, Wrap(1), inner);
@@ -72,8 +68,7 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_GetTypeDefinition_ReturnsIfTrueType()
-    {
+    public async Task Conditional_GetTypeDefinition_ReturnsIfTrueType() {
         // Arrange
         var node = new Conditional(True, Wrap(42), Wrap(0));
 
@@ -85,8 +80,7 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_ToString_ReturnsExpectedFormat()
-    {
+    public async Task Conditional_ToString_ReturnsExpectedFormat() {
         // Arrange
         var node = new Conditional(True, Wrap(42), Wrap(0));
 
@@ -98,8 +92,7 @@ public class ConditionalTests {
     }
 
     [Test]
-    public async Task Conditional_WithNullArguments_AllowsNulls()
-    {
+    public async Task Conditional_WithNullArguments_AllowsNulls() {
         // Act
         var node = new Conditional(null!, null!, null!);
 

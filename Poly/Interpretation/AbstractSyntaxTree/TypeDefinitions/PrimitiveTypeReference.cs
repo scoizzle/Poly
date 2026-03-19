@@ -16,8 +16,7 @@ public sealed record PrimitiveTypeReference(
     /// </summary>
     public TypeCategory Category => PrimitiveId.GetCategory();
 
-    public override string ToString()
-    {
+    public override string ToString() {
         var name = PrimitiveId.ToString();
         return IsNullable ? $"{name}?" : name;
     }

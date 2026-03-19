@@ -11,8 +11,7 @@ namespace Poly.Tests.Interpretation;
 
 public class BlockScopeTests {
     [Test]
-    public async Task BlockScope_CreatesNewScope_VariablesNotVisibleOutside()
-    {
+    public async Task BlockScope_CreatesNewScope_VariablesNotVisibleOutside() {
         // Arrange - nested blocks, inner variable should not affect outer
         var innerVar = new Variable("x");
         var innerAssign = new Assignment(innerVar, Wrap(50));
@@ -32,8 +31,7 @@ public class BlockScopeTests {
     }
 
     [Test]
-    public async Task BlockScope_NestedScopes_InnerShadowsOuter()
-    {
+    public async Task BlockScope_NestedScopes_InnerShadowsOuter() {
         // Arrange
         var outerVar = new Variable("x");
         var outerAssign = new Assignment(outerVar, Wrap(100));
@@ -54,8 +52,7 @@ public class BlockScopeTests {
     }
 
     [Test]
-    public async Task BlockScope_ExecutesExpressions_InSequence()
-    {
+    public async Task BlockScope_ExecutesExpressions_InSequence() {
         // Arrange
         var var1 = new Variable("a");
         var assign1 = new Assignment(var1, Wrap(10));
@@ -75,8 +72,7 @@ public class BlockScopeTests {
     }
 
     [Test]
-    public async Task BlockScope_CanAccessOuterScope_Variables()
-    {
+    public async Task BlockScope_CanAccessOuterScope_Variables() {
         // Arrange - outer variable used in inner block
         var outerVar = new Variable("x");
         var outerAssign = new Assignment(outerVar, Wrap(100));
@@ -94,8 +90,7 @@ public class BlockScopeTests {
     }
 
     [Test]
-    public async Task BlockScope_MultipleBlocks_IndependentScopes()
-    {
+    public async Task BlockScope_MultipleBlocks_IndependentScopes() {
         // Arrange
         var block1Var = new Variable("x");
         var block1Assign = new Assignment(block1Var, Wrap(10));

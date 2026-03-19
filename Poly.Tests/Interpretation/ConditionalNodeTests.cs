@@ -11,8 +11,7 @@ namespace Poly.Tests.Interpretation;
 public class ConditionalNodeTests {
     // Conditional (Ternary) Tests
     [Test]
-    public async Task Conditional_TrueCondition_ReturnsIfTrueValue()
-    {
+    public async Task Conditional_TrueCondition_ReturnsIfTrueValue() {
         // Arrange
         var node = new Conditional(
             new Constant(true),
@@ -29,8 +28,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task Conditional_FalseCondition_ReturnsIfFalseValue()
-    {
+    public async Task Conditional_FalseCondition_ReturnsIfFalseValue() {
         // Arrange
         var node = new Conditional(
             new Constant(false),
@@ -47,8 +45,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task Conditional_WithParameter_EvaluatesBasedOnParameter()
-    {
+    public async Task Conditional_WithParameter_EvaluatesBasedOnParameter() {
         // Arrange
         var param = new Parameter("condition", TypeReference.To<bool>());
         var node = new Conditional(
@@ -63,8 +60,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task Conditional_WithComparison_EvaluatesCorrectly()
-    {
+    public async Task Conditional_WithComparison_EvaluatesCorrectly() {
         // Arrange - if (x > 5) then 10 else 0
         var param = new Parameter("x", TypeReference.To<int>());
         var comparison = new GreaterThan(param, new Constant(5));
@@ -80,8 +76,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task Conditional_NestedConditionals_EvaluatesCorrectly()
-    {
+    public async Task Conditional_NestedConditionals_EvaluatesCorrectly() {
         // Arrange - if (true) then (if (true) then 1 else 2) else 3
         var inner = new Conditional(
             new Constant(true),
@@ -103,8 +98,7 @@ public class ConditionalNodeTests {
 
     // Coalesce Tests
     [Test]
-    public async Task Coalesce_NullValue_ReturnsDefaultValue()
-    {
+    public async Task Coalesce_NullValue_ReturnsDefaultValue() {
         // Arrange
         var node = new Coalesce(new Constant(null), new Constant(42));
 
@@ -118,8 +112,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task Coalesce_NonNullValue_ReturnsOriginalValue()
-    {
+    public async Task Coalesce_NonNullValue_ReturnsOriginalValue() {
         // Arrange
         var node = new Coalesce(new Constant(10), new Constant(42));
 
@@ -133,8 +126,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task Coalesce_WithNullableParameter_ReturnsCorrectValue()
-    {
+    public async Task Coalesce_WithNullableParameter_ReturnsCorrectValue() {
         // Arrange - x ?? 100
         var param = new Parameter("x", TypeReference.To<int?>());
         var node = new Coalesce(param, new Constant(100));
@@ -149,8 +141,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task Coalesce_ChainedCoalesce_ReturnsFirstNonNull()
-    {
+    public async Task Coalesce_ChainedCoalesce_ReturnsFirstNonNull() {
         // Arrange - null ?? null ?? 42
         var inner = new Coalesce(new Constant(null), new Constant(null));
         var outer = new Coalesce(inner, new Constant(42));
@@ -166,8 +157,7 @@ public class ConditionalNodeTests {
 
     // UnaryMinus Tests
     [Test]
-    public async Task UnaryMinus_PositiveInteger_ReturnsNegative()
-    {
+    public async Task UnaryMinus_PositiveInteger_ReturnsNegative() {
         // Arrange
         var node = new UnaryMinus(new Constant(42));
 
@@ -181,8 +171,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task UnaryMinus_NegativeInteger_ReturnsPositive()
-    {
+    public async Task UnaryMinus_NegativeInteger_ReturnsPositive() {
         // Arrange
         var node = new UnaryMinus(new Constant(-10));
 
@@ -196,8 +185,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithParameter_NegatesValue()
-    {
+    public async Task UnaryMinus_WithParameter_NegatesValue() {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new UnaryMinus(param);
@@ -211,8 +199,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task UnaryMinus_DoubleValue_NegatesCorrectly()
-    {
+    public async Task UnaryMinus_DoubleValue_NegatesCorrectly() {
         // Arrange
         var node = new UnaryMinus(new Constant(3.14));
 
@@ -226,8 +213,7 @@ public class ConditionalNodeTests {
     }
 
     [Test]
-    public async Task UnaryMinus_NestedInArithmetic_EvaluatesCorrectly()
-    {
+    public async Task UnaryMinus_NestedInArithmetic_EvaluatesCorrectly() {
         // Arrange - 10 + (-5) = 5
         var negated = new UnaryMinus(new Constant(5));
         var node = new Add(new Constant(10), negated);

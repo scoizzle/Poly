@@ -9,14 +9,12 @@ public sealed class MutualExclusionRule : Rule {
     public IEnumerable<string> PropertyNames { get; set; }
     public int MaxAllowed { get; set; }
 
-    public MutualExclusionRule(IEnumerable<string> propertyNames, int maxAllowed = 1)
-    {
+    public MutualExclusionRule(IEnumerable<string> propertyNames, int maxAllowed = 1) {
         PropertyNames = propertyNames;
         MaxAllowed = maxAllowed;
     }
 
-    public override Node BuildInterpretationTree(RuleBuildingContext context)
-    {
+    public override Node BuildInterpretationTree(RuleBuildingContext context) {
         var properties = PropertyNames.ToList();
 
         if (properties.Count <= MaxAllowed) {
@@ -49,8 +47,7 @@ public sealed class MutualExclusionRule : Rule {
         throw new NotImplementedException("MutualExclusionRule with MaxAllowed > 1 not yet implemented");
     }
 
-    public override string ToString()
-    {
+    public override string ToString() {
         return $"At most {MaxAllowed} of [{string.Join(", ", PropertyNames)}] can have values";
     }
 }

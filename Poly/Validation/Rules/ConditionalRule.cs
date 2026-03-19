@@ -7,15 +7,13 @@ public sealed class ConditionalRule : Rule {
     public Rule ThenRule { get; set; }
     public Rule? ElseRule { get; set; }
 
-    public ConditionalRule(Rule condition, Rule thenRule, Rule? elseRule = null)
-    {
+    public ConditionalRule(Rule condition, Rule thenRule, Rule? elseRule = null) {
         Condition = condition;
         ThenRule = thenRule;
         ElseRule = elseRule;
     }
 
-    public override Node BuildInterpretationTree(RuleBuildingContext context)
-    {
+    public override Node BuildInterpretationTree(RuleBuildingContext context) {
         var conditionTree = Condition.BuildInterpretationTree(context);
         var thenTree = ThenRule.BuildInterpretationTree(context);
 
@@ -36,8 +34,7 @@ public sealed class ConditionalRule : Rule {
         return implication;
     }
 
-    public override string ToString()
-    {
+    public override string ToString() {
         if (ElseRule != null) {
             return $"if ({Condition}) then ({ThenRule}) else ({ElseRule})";
         }

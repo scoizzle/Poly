@@ -11,8 +11,7 @@ public sealed class NodeMetadataStore {
     /// <summary>
     /// Initializes a new metadata store with data copied from another store.
     /// </summary>
-    public NodeMetadataStore(NodeMetadataStore source)
-    {
+    public NodeMetadataStore(NodeMetadataStore source) {
         ArgumentNullException.ThrowIfNull(source);
         foreach (var entry in source._metadata) {
             _metadata.Add(entry.Key, entry.Value);
@@ -26,8 +25,7 @@ public sealed class NodeMetadataStore {
     /// <typeparam name="TMetadata">The metadata type to store.</typeparam>
     /// <param name="data">The metadata instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when data is null.</exception>
-    public void Set<TMetadata>(Node node, TMetadata data) where TMetadata : class, IAnalysisMetadata
-    {
+    public void Set<TMetadata>(Node node, TMetadata data) where TMetadata : class, IAnalysisMetadata {
         ArgumentNullException.ThrowIfNull(data);
         _metadata.Add((node.Id, typeof(TMetadata)), data);
     }
@@ -37,8 +35,7 @@ public sealed class NodeMetadataStore {
     /// </summary>
     /// <typeparam name="TMetadata">The metadata type to retrieve.</typeparam>
     /// <returns>The metadata instance if it exists; otherwise, null.</returns>
-    public TMetadata? Get<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata
-    {
+    public TMetadata? Get<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata {
         return _metadata.TryGetValue((node.Id, typeof(TMetadata)), out var data) ? (TMetadata)data : null;
     }
 
@@ -47,8 +44,7 @@ public sealed class NodeMetadataStore {
     /// </summary>
     /// <param name="node">The node to query.</param>
     /// <returns>All metadata instances for the node.</returns>
-    public IEnumerable<IAnalysisMetadata> GetAll(Node node)
-    {
+    public IEnumerable<IAnalysisMetadata> GetAll(Node node) {
         return _metadata
             .Where(kvp => kvp.Key.Item1 == node.Id)
             .Select(kvp => kvp.Value);
@@ -60,8 +56,7 @@ public sealed class NodeMetadataStore {
     /// </summary>
     /// <typeparam name="TMetadata">The metadata type to retrieve.</typeparam>
     /// <returns>The metadata instance if it exists; otherwise, null.</returns>
-    public TMetadata GetOrAdd<TMetadata>(Node node, Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata
-    {
+    public TMetadata GetOrAdd<TMetadata>(Node node, Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata {
         if (!_metadata.TryGetValue((node.Id, typeof(TMetadata)), out var data)) {
             data = factory();
             _metadata.Add((node.Id, typeof(TMetadata)), data);
@@ -74,8 +69,7 @@ public sealed class NodeMetadataStore {
     /// Removes metadata of a given type.
     /// </summary>
     /// <typeparam name="TMetadata">The metadata type to remove.</typeparam>
-    public void Remove<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata
-    {
+    public void Remove<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata {
         _metadata.Remove((node.Id, typeof(TMetadata)));
     }
 }

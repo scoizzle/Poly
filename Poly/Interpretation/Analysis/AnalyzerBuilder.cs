@@ -7,35 +7,29 @@ public sealed class AnalyzerBuilder {
     private readonly List<INodeAnalyzer> _analyzers = new();
 
     public AnalyzerBuilder()
-        : this([ClrTypeDefinitionRegistry.Shared])
-    {
+        : this([ClrTypeDefinitionRegistry.Shared]) {
     }
 
     public AnalyzerBuilder(ITypeDefinitionProvider typeDefinitionProvider)
-        : this([typeDefinitionProvider])
-    {
+        : this([typeDefinitionProvider]) {
     }
 
-    public AnalyzerBuilder(IEnumerable<ITypeDefinitionProvider> typeDefinitionProviders)
-    {
+    public AnalyzerBuilder(IEnumerable<ITypeDefinitionProvider> typeDefinitionProviders) {
         ArgumentNullException.ThrowIfNull(typeDefinitionProviders);
         _typeDefinitions = [.. typeDefinitionProviders];
     }
 
-    public void AddAnalyzer(INodeAnalyzer analyzer)
-    {
+    public void AddAnalyzer(INodeAnalyzer analyzer) {
         ArgumentNullException.ThrowIfNull(analyzer);
         _analyzers.Add(analyzer);
     }
 
-    public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider)
-    {
+    public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider) {
         ArgumentNullException.ThrowIfNull(provider);
         _typeDefinitions.Add(provider);
     }
 
-    public Analyzer Build()
-    {
+    public Analyzer Build() {
         TypeDefinitionProviderCollection typeDefinitionProviders = [.. _typeDefinitions.Providers];
         return new Analyzer(typeDefinitionProviders, _analyzers.ToArray());
     }

@@ -12,8 +12,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     private readonly Stack<Block> _scopeStack = new();
     private readonly Dictionary<string, Stack<Variable>> _variablesByName = new();
 
-    public void Analyze(AnalysisContext context, Node node)
-    {
+    public void Analyze(AnalysisContext context, Node node) {
         switch (node) {
             case Block block:
                 AnalyzeBlock(context, block);
@@ -37,8 +36,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         }
     }
 
-    private void AnalyzeBlock(AnalysisContext context, Block block)
-    {
+    private void AnalyzeBlock(AnalysisContext context, Block block) {
         _scopeStack.Push(block);
 
         // Register block-scoped variables
@@ -57,8 +55,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         _scopeStack.Pop();
     }
 
-    private void RegisterVariable(AnalysisContext context, Variable variable, Block scope)
-    {
+    private void RegisterVariable(AnalysisContext context, Variable variable, Block scope) {
         if (!_variablesByName.TryGetValue(variable.Name, out var stack)) {
             stack = new Stack<Variable>();
             _variablesByName[variable.Name] = stack;
@@ -80,15 +77,13 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         scopeVars.Add(variable);
     }
 
-    private void UnregisterVariable(Variable variable)
-    {
+    private void UnregisterVariable(Variable variable) {
         if (_variablesByName.TryGetValue(variable.Name, out var stack)) {
             stack.Pop();
         }
     }
 
-    private void ValidateVariableReference(AnalysisContext context, Variable variable)
-    {
+    private void ValidateVariableReference(AnalysisContext context, Variable variable) {
         if (_variablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0) {
             // Valid reference - link to declaration
             var declaration = stack.Peek();
@@ -101,8 +96,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         }
     }
 
-    private VariableScopeMetadata GetOrCreateMetadata(AnalysisContext context, Node node)
-    {
+    private VariableScopeMetadata GetOrCreateMetadata(AnalysisContext context, Node node) {
         return context.Metadata.GetOrAdd(node, () => new VariableScopeMetadata(
             new Dictionary<Block, HashSet<Variable>>(),
             new Dictionary<Variable, Variable?>(),
@@ -110,22 +104,19 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         ));
     }
 
-    private void AddError(AnalysisContext context, Node node, string message)
-    {
+    private void AddError(AnalysisContext context, Node node, string message) {
         var metadata = GetOrCreateMetadata(context, node);
         metadata.Errors.Add(new VariableScopeError(node, message));
     }
 
-    private void AddWarning(AnalysisContext context, Node node, string message)
-    {
+    private void AddWarning(AnalysisContext context, Node node, string message) {
         // Could add a warnings list to metadata
     }
 }
 
 public static class VariableScopeMetadataExtensions {
     extension(AnalyzerBuilder builder) {
-        public AnalyzerBuilder UseVariableScopeValidator()
-        {
+        public AnalyzerBuilder UseVariableScopeValidator() {
             builder.AddAnalyzer(new ScopeValidator());
             return builder;
         }

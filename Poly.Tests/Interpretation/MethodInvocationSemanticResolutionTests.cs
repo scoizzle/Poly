@@ -7,8 +7,7 @@ namespace Poly.Tests.Interpretation;
 
 public class MethodInvocationSemanticResolutionTests {
     [Test]
-    public async Task AnalyzeNode_MethodInvocation_ResolvesCharOverloadFromArgumentType()
-    {
+    public async Task AnalyzeNode_MethodInvocation_ResolvesCharOverloadFromArgumentType() {
         var methodInvocation = new MethodInvocation(Wrap("hello"), "IndexOf", Wrap('e'));
 
         var analysis = methodInvocation.AnalyzeNode();
@@ -23,8 +22,7 @@ public class MethodInvocationSemanticResolutionTests {
     }
 
     [Test]
-    public async Task AnalyzeNode_MethodInvocation_PrefersExactOverAssignableOverload()
-    {
+    public async Task AnalyzeNode_MethodInvocation_PrefersExactOverAssignableOverload() {
         var methodInvocation = new MethodInvocation(Wrap("hello"), "Equals", Wrap("world"));
 
         var analysis = methodInvocation.AnalyzeNode();
@@ -39,8 +37,7 @@ public class MethodInvocationSemanticResolutionTests {
     }
 
     [Test]
-    public async Task AnalyzeNode_MethodInvocation_DoesNotResolveWhenNoOverloadMatches()
-    {
+    public async Task AnalyzeNode_MethodInvocation_DoesNotResolveWhenNoOverloadMatches() {
         var methodInvocation = new MethodInvocation(Wrap("hello"), "Substring", Wrap(1.5));
 
         var analysis = methodInvocation.AnalyzeNode();

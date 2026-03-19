@@ -6,8 +6,7 @@ namespace Poly.Tests.Introspection;
 
 public class ClrMethodTests {
     [Test]
-    public async Task ToStringMethod_HasCorrectProperties()
-    {
+    public async Task ToStringMethod_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var toStringMethod = intType.Methods.First(m => m.Name == "ToString");
@@ -18,8 +17,7 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task ToStringMethod_HasParameters()
-    {
+    public async Task ToStringMethod_HasParameters() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var toStringMethod = intType.Methods.First(m => m.Name == "ToString");
@@ -32,8 +30,7 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task ParseMethod_HasCorrectMemberType()
-    {
+    public async Task ParseMethod_HasCorrectMemberType() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var parseMethod = intType.Methods.First(m => m.Name == "Parse");
@@ -43,8 +40,7 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Method_WithNoParameters_HasEmptyParametersList()
-    {
+    public async Task Method_WithNoParameters_HasEmptyParametersList() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var toLowerMethod = stringType.Methods.First(m => m.Name == "ToLower" && !m.Parameters.Any());
@@ -53,8 +49,7 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Method_WithGenericMemberType_HasCorrectMemberType()
-    {
+    public async Task Method_WithGenericMemberType_HasCorrectMemberType() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
         var getEnumeratorMethod = listType.Methods.First(m => m.Name == "GetEnumerator");
@@ -64,8 +59,7 @@ public class ClrMethodTests {
     }
 
     [Test]
-    public async Task Method_WithMultipleOverloads_CanBeDistinguished()
-    {
+    public async Task Method_WithMultipleOverloads_CanBeDistinguished() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var stringType = registry.GetTypeDefinition<string>();
         var indexOfMethods = stringType.Methods.Where(m => m.Name == "IndexOf").ToList();

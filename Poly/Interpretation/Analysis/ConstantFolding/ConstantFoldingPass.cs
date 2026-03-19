@@ -16,8 +16,7 @@ public sealed record ConstantValueMetadata(object? Value) : IAnalysisMetadata;
 /// This pass identifies nodes that can be computed at compile time and stores their values.
 /// </summary>
 public sealed class ConstantFoldingPass : INodeAnalyzer {
-    public void Analyze(AnalysisContext context, Node node)
-    {
+    public void Analyze(AnalysisContext context, Node node) {
         // Post-order traversal: analyze children first, then fold parent
         this.AnalyzeChildren(context, node);
 
@@ -28,8 +27,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
     }
 
-    private FoldResult TryFold(AnalysisContext context, Node node)
-    {
+    private FoldResult TryFold(AnalysisContext context, Node node) {
         return node switch {
             Constant c => FoldResult.Success(c.Value),
 
@@ -67,8 +65,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         };
     }
 
-    private FoldResult FoldBinaryArithmetic(AnalysisContext context, Node left, Node right, Func<object, object, object?> operation)
-    {
+    private FoldResult FoldBinaryArithmetic(AnalysisContext context, Node left, Node right, Func<object, object, object?> operation) {
         var leftValue = GetConstantValue(context, left);
         var rightValue = GetConstantValue(context, right);
 
@@ -84,8 +81,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
     }
 
-    private FoldResult FoldUnaryArithmetic(AnalysisContext context, Node operand, Func<object, object?> operation)
-    {
+    private FoldResult FoldUnaryArithmetic(AnalysisContext context, Node operand, Func<object, object?> operation) {
         var value = GetConstantValue(context, operand);
         if (!value.HasValue)
             return FoldResult.NotFoldable;
@@ -99,8 +95,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
     }
 
-    private FoldResult FoldBinaryBoolean(AnalysisContext context, Node left, Node right, Func<bool, bool, bool> operation)
-    {
+    private FoldResult FoldBinaryBoolean(AnalysisContext context, Node left, Node right, Func<bool, bool, bool> operation) {
         var leftValue = GetConstantValue(context, left);
         var rightValue = GetConstantValue(context, right);
 
@@ -114,8 +109,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldUnaryBoolean(AnalysisContext context, Node operand, Func<bool, bool> operation)
-    {
+    private FoldResult FoldUnaryBoolean(AnalysisContext context, Node operand, Func<bool, bool> operation) {
         var value = GetConstantValue(context, operand);
         if (!value.HasValue)
             return FoldResult.NotFoldable;
@@ -127,8 +121,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldComparison(AnalysisContext context, Node left, Node right, Func<object, object, bool> operation)
-    {
+    private FoldResult FoldComparison(AnalysisContext context, Node left, Node right, Func<object, object, bool> operation) {
         var leftValue = GetConstantValue(context, left);
         var rightValue = GetConstantValue(context, right);
 
@@ -144,8 +137,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
     }
 
-    private FoldResult FoldEquality(AnalysisContext context, Node left, Node right, Func<object?, object?, bool> operation)
-    {
+    private FoldResult FoldEquality(AnalysisContext context, Node left, Node right, Func<object?, object?, bool> operation) {
         var leftValue = GetConstantValue(context, left);
         var rightValue = GetConstantValue(context, right);
 
@@ -155,8 +147,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return FoldResult.Success(operation(leftValue.Value, rightValue.Value));
     }
 
-    private FoldResult FoldConditional(AnalysisContext context, Conditional cond)
-    {
+    private FoldResult FoldConditional(AnalysisContext context, Conditional cond) {
         var condValue = GetConstantValue(context, cond.Condition);
         if (!condValue.HasValue || condValue.Value is not bool boolCond)
             return FoldResult.NotFoldable;
@@ -167,8 +158,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return branchValue.HasValue ? FoldResult.Success(branchValue.Value) : FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldIfStatement(AnalysisContext context, IfStatement ifStmt)
-    {
+    private FoldResult FoldIfStatement(AnalysisContext context, IfStatement ifStmt) {
         var condValue = GetConstantValue(context, ifStmt.Condition);
         if (!condValue.HasValue || condValue.Value is not bool boolCond)
             return FoldResult.NotFoldable;
@@ -187,8 +177,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldCoalesce(AnalysisContext context, Coalesce coalesce)
-    {
+    private FoldResult FoldCoalesce(AnalysisContext context, Coalesce coalesce) {
         var leftValue = GetConstantValue(context, coalesce.LeftHandValue);
         if (!leftValue.HasValue)
             return FoldResult.NotFoldable;
@@ -203,8 +192,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return rightValue.HasValue ? FoldResult.Success(rightValue.Value) : FoldResult.NotFoldable;
     }
 
-    private FoldResult GetConstantValue(AnalysisContext context, Node node)
-    {
+    private FoldResult GetConstantValue(AnalysisContext context, Node node) {
         // Check if we already computed a constant value for this node
         var metadata = context.GetMetadata<ConstantValueMetadata>(node);
         if (metadata != null) {
@@ -291,8 +279,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         _ => null
     };
 
-    private static int Compare(object a, object b)
-    {
+    private static int Compare(object a, object b) {
         if (a is IComparable ca && b is IComparable cb && a.GetType() == b.GetType()) {
             return ca.CompareTo(cb);
         }
@@ -305,8 +292,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         throw new InvalidOperationException($"Cannot compare {a.GetType()} and {b.GetType()}");
     }
 
-    private static bool TryConvertToDouble(object value, out double result)
-    {
+    private static bool TryConvertToDouble(object value, out double result) {
         result = value switch {
             int i => i,
             long l => l,
@@ -323,8 +309,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         public bool HasValue { get; }
         public object? Value => HasValue ? _value : throw new InvalidOperationException("No value");
 
-        private FoldResult(object? value, bool hasValue)
-        {
+        private FoldResult(object? value, bool hasValue) {
             _value = value;
             HasValue = hasValue;
         }
@@ -340,8 +325,7 @@ public static class ConstantFoldingExtensions {
         /// Adds constant folding optimization to the analyzer.
         /// This evaluates constant expressions at analysis time.
         /// </summary>
-        public AnalyzerBuilder UseConstantFolding()
-        {
+        public AnalyzerBuilder UseConstantFolding() {
             builder.AddAnalyzer(new ConstantFoldingPass());
             return builder;
         }
@@ -351,8 +335,7 @@ public static class ConstantFoldingExtensions {
         /// <summary>
         /// Gets the constant-folded value for a node, if available.
         /// </summary>
-        public object? GetConstantValue(Node node)
-        {
+        public object? GetConstantValue(Node node) {
             var metadata = context.GetMetadata<ConstantValueMetadata>(node);
             return metadata?.Value;
         }
@@ -360,8 +343,7 @@ public static class ConstantFoldingExtensions {
         /// <summary>
         /// Returns true if the node has been determined to be a constant.
         /// </summary>
-        public bool IsConstant(Node node)
-        {
+        public bool IsConstant(Node node) {
             return context.GetMetadata<ConstantValueMetadata>(node) != null || node is Constant;
         }
     }
@@ -370,8 +352,7 @@ public static class ConstantFoldingExtensions {
         /// <summary>
         /// Gets the constant-folded value for a node, if available.
         /// </summary>
-        public object? GetConstantValue(Node node)
-        {
+        public object? GetConstantValue(Node node) {
             var metadata = result.GetMetadata<ConstantValueMetadata>(node);
             return metadata?.Value;
         }
@@ -379,8 +360,7 @@ public static class ConstantFoldingExtensions {
         /// <summary>
         /// Returns true if the node has been determined to be a constant.
         /// </summary>
-        public bool IsConstant(Node node)
-        {
+        public bool IsConstant(Node node) {
             return result.GetMetadata<ConstantValueMetadata>(node) != null || node is Constant;
         }
     }

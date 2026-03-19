@@ -6,8 +6,7 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeMemberTests {
     [Test]
-    public async Task MaxValueMember_HasCorrectProperties()
-    {
+    public async Task MaxValueMember_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
         var maxValueMember = intType.Fields.WithName("MaxValue").SingleOrDefault();

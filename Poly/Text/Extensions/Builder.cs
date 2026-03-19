@@ -10,8 +10,7 @@ public static class StringBuilderExtensions {
                         .Append(str)
                         .Append('"');
 
-    public static StringBuilder AppendStringLiteral(this StringBuilder stringBuilder, in ReadOnlySequence<char> str)
-    {
+    public static StringBuilder AppendStringLiteral(this StringBuilder stringBuilder, in ReadOnlySequence<char> str) {
         return stringBuilder.Append('"')
                             .Append(str)
                             .Append('"');

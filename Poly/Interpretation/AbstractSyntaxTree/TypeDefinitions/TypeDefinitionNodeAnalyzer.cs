@@ -14,8 +14,7 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     private readonly Dictionary<string, AstTypeDefinition> _types = new();
     private FrozenDictionary<string, AstTypeDefinition>? _frozen;
 
-    public void Analyze(AnalysisContext context, Node node)
-    {
+    public void Analyze(AnalysisContext context, Node node) {
         if (node is TypeDefinitionNode typeDef) {
             var definition = new AstTypeDefinition(typeDef, this);
             _types[typeDef.FullName] = definition;
@@ -32,26 +31,22 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     /// Freezes the type definitions for thread-safe read access.
     /// Call this after all TypeDefinitionNodes have been analyzed.
     /// </summary>
-    public void Freeze()
-    {
+    public void Freeze() {
         _frozen = _types.ToFrozenDictionary();
     }
 
-    public ITypeDefinition? GetTypeDefinition(string typeName)
-    {
+    public ITypeDefinition? GetTypeDefinition(string typeName) {
         var dict = _frozen ?? (IReadOnlyDictionary<string, AstTypeDefinition>)_types;
         return dict.TryGetValue(typeName, out var def) ? def : null;
     }
 
-    public ITypeDefinition? GetTypeDefinition(Type type)
-    {
+    public ITypeDefinition? GetTypeDefinition(Type type) {
         // AST-based types don't map to CLR types directly
         // Fall back to CLR registry for runtime types
         return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
     }
 
-    public IEnumerable<ITypeDefinition> GetTypeDefinitions()
-    {
+    public IEnumerable<ITypeDefinition> GetTypeDefinitions() {
         var dict = _frozen ?? (IReadOnlyDictionary<string, AstTypeDefinition>)_types;
         return dict.Values;
     }
@@ -72,8 +67,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition {
     private readonly Lazy<IReadOnlyList<AstMethodDefinition>> _methods;
     private readonly Lazy<IReadOnlyList<AstFieldDefinition>> _fields;
 
-    public AstTypeDefinition(TypeDefinitionNode node, ITypeDefinitionProvider provider)
-    {
+    public AstTypeDefinition(TypeDefinitionNode node, ITypeDefinitionProvider provider) {
         _node = node;
         _provider = provider;
         _properties = new(() => BuildProperties());
@@ -104,22 +98,19 @@ internal sealed class AstTypeDefinition : ITypeDefinition {
     public PrimitiveTypeId? PrimitiveTypeId => _node.PrimitiveTypeId;
     public TypeCategory TypeCategory => _node.TypeCategory;
 
-    private IReadOnlyList<AstPropertyDefinition> BuildProperties()
-    {
+    private IReadOnlyList<AstPropertyDefinition> BuildProperties() {
         return _node.Properties?
             .Select(p => new AstPropertyDefinition(p, this, _provider))
             .ToList() ?? [];
     }
 
-    private IReadOnlyList<AstMethodDefinition> BuildMethods()
-    {
+    private IReadOnlyList<AstMethodDefinition> BuildMethods() {
         return _node.Methods?
             .Select(m => new AstMethodDefinition(m, this, _provider))
             .ToList() ?? [];
     }
 
-    private IReadOnlyList<AstFieldDefinition> BuildFields()
-    {
+    private IReadOnlyList<AstFieldDefinition> BuildFields() {
         return _node.Fields?
             .Select(f => new AstFieldDefinition(f, this, _provider))
             .ToList() ?? [];
@@ -136,8 +127,7 @@ internal sealed class AstPropertyDefinition : ITypeProperty {
     private readonly AstTypeDefinition _declaring;
     private readonly Lazy<ITypeDefinition> _memberType;
 
-    public AstPropertyDefinition(PropertyDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider)
-    {
+    public AstPropertyDefinition(PropertyDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider) {
         _node = node;
         _declaring = declaring;
         _memberType = new(() => declaring.ResolveType(node.PropertyType));
@@ -158,8 +148,7 @@ internal sealed class AstMethodDefinition : ITypeMethod {
     private readonly AstTypeDefinition _declaring;
     private readonly Lazy<ITypeDefinition> _returnType;
 
-    public AstMethodDefinition(MethodDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider)
-    {
+    public AstMethodDefinition(MethodDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider) {
         _node = node;
         _declaring = declaring;
         _returnType = new(() => declaring.ResolveType(node.ReturnType));
@@ -180,8 +169,7 @@ internal sealed class AstFieldDefinition : ITypeField {
     private readonly AstTypeDefinition _declaring;
     private readonly Lazy<ITypeDefinition> _fieldType;
 
-    public AstFieldDefinition(FieldDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider)
-    {
+    public AstFieldDefinition(FieldDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider) {
         _node = node;
         _declaring = declaring;
         _fieldType = new(() => declaring.ResolveType(node.FieldType));
@@ -198,8 +186,7 @@ internal sealed class AstFieldDefinition : ITypeField {
 /// Utility class to resolve AST type reference nodes to ITypeDefinition.
 /// </summary>
 internal static class TypeResolver {
-    public static ITypeDefinition Resolve(Node typeNode, ITypeDefinitionProvider provider)
-    {
+    public static ITypeDefinition Resolve(Node typeNode, ITypeDefinitionProvider provider) {
         var clr = ClrTypeDefinitionRegistry.Shared;
 
         return typeNode switch {
@@ -213,8 +200,7 @@ internal static class TypeResolver {
         };
     }
 
-    private static ITypeDefinition ResolvePrimitive(PrimitiveTypeId id, bool isNullable, ClrTypeDefinitionRegistry clr)
-    {
+    private static ITypeDefinition ResolvePrimitive(PrimitiveTypeId id, bool isNullable, ClrTypeDefinitionRegistry clr) {
         var baseType = id switch {
             PrimitiveTypeId.Boolean => clr.GetTypeDefinition<bool>(),
             PrimitiveTypeId.Int8 => clr.GetTypeDefinition<sbyte>(),
@@ -248,8 +234,7 @@ internal static class TypeResolver {
         return baseType;
     }
 
-    private static ITypeDefinition ResolveOptional(OptionalTypeReference opt, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr)
-    {
+    private static ITypeDefinition ResolveOptional(OptionalTypeReference opt, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var innerType = Resolve(opt.InnerType, provider);
         var innerClrType = innerType.ReflectedType;
 
@@ -260,8 +245,7 @@ internal static class TypeResolver {
         return clr.GetTypeDefinition(nullableType);
     }
 
-    private static ITypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr)
-    {
+    private static ITypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var elementType = Resolve(col.ElementType, provider);
         var elementClrType = elementType.ReflectedType;
 
@@ -275,8 +259,7 @@ internal static class TypeResolver {
         return clr.GetTypeDefinition(collectionClrType);
     }
 
-    private static ITypeDefinition ResolveMap(MapTypeReference map, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr)
-    {
+    private static ITypeDefinition ResolveMap(MapTypeReference map, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var keyType = Resolve(map.KeyType, provider);
         var valueType = Resolve(map.ValueType, provider);
 

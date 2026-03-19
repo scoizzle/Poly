@@ -9,8 +9,7 @@ public static class TypeMemberExtensions {
         /// <param name="members">The members to filter.</param>
         /// <param name="name">The name to filter by.</param>
         /// <returns>The members with the specified name.</returns>
-        public IEnumerable<T> WithName(string name)
-        {
+        public IEnumerable<T> WithName(string name) {
             ArgumentNullException.ThrowIfNull(members);
             ArgumentNullException.ThrowIfNull(name);
 
@@ -25,8 +24,7 @@ public static class TypeMemberExtensions {
         /// <param name="parameterTypes">The parameter types to match against.</param>
         /// <returns>The best-matching members, or an empty set if none found.</returns
         public IEnumerable<T> WithParameterTypes(
-            params IEnumerable<ITypeDefinition> parameterTypes)
-        {
+            params IEnumerable<ITypeDefinition> parameterTypes) {
             ArgumentNullException.ThrowIfNull(members);
             ArgumentNullException.ThrowIfNull(parameterTypes);
 
@@ -62,8 +60,7 @@ public static class TypeMemberExtensions {
         /// <param name="arguments">The argument types to match against.</param>
         /// <param name="score">The calculated score if compatible.</param>
         /// <returns>True if the member is compatible; otherwise, false.</returns>
-        private static int? CalculateParameterScore(T member, List<ITypeDefinition> arguments)
-        {
+        private static int? CalculateParameterScore(T member, List<ITypeDefinition> arguments) {
             var score = 0;
             var parameters = member.Parameters ?? [];
 

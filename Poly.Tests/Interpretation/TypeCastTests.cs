@@ -10,8 +10,7 @@ namespace Poly.Tests.Interpretation;
 
 public class TypeCastTests {
     [Test]
-    public async Task TypeCast_IntToDouble_ReturnsDouble()
-    {
+    public async Task TypeCast_IntToDouble_ReturnsDouble() {
         // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
@@ -25,8 +24,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_DoubleToInt_ReturnsInt()
-    {
+    public async Task TypeCast_DoubleToInt_ReturnsInt() {
         // Arrange
         var node = new TypeCast(Wrap(3.14), TypeReference.To<int>());
 
@@ -40,8 +38,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_LongToInt_ReturnsInt()
-    {
+    public async Task TypeCast_LongToInt_ReturnsInt() {
         // Arrange
         var node = new TypeCast(Wrap(9999L), TypeReference.To<int>());
 
@@ -55,8 +52,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_WithParameter_EvaluatesCorrectly()
-    {
+    public async Task TypeCast_WithParameter_EvaluatesCorrectly() {
         // Arrange
         var param = new Parameter("value", TypeReference.To<int>());
         var node = new TypeCast(param, TypeReference.To<double>());
@@ -70,8 +66,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_StringToObject_WorksCorrectly()
-    {
+    public async Task TypeCast_StringToObject_WorksCorrectly() {
         // Arrange
         var node = new TypeCast(Wrap("hello"), TypeReference.To<object>());
 
@@ -85,8 +80,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_ObjectToString_WorksCorrectly()
-    {
+    public async Task TypeCast_ObjectToString_WorksCorrectly() {
         // Arrange
         var obj = (object)"world";
         var node = new TypeCast(Wrap(obj), TypeReference.To<string>());
@@ -101,8 +95,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_NullableToNonNullable_WorksCorrectly()
-    {
+    public async Task TypeCast_NullableToNonNullable_WorksCorrectly() {
         // Arrange
         var node = new TypeCast(Wrap(42 as int?), TypeReference.To<int>());
 
@@ -116,8 +109,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_NonNullableToNullable_WorksCorrectly()
-    {
+    public async Task TypeCast_NonNullableToNullable_WorksCorrectly() {
         // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<int?>());
 
@@ -131,8 +123,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_GetTypeDefinition_ReturnsTargetType()
-    {
+    public async Task TypeCast_GetTypeDefinition_ReturnsTargetType() {
         // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
@@ -144,8 +135,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_ToString_ReturnsExpectedFormat()
-    {
+    public async Task TypeCast_ToString_ReturnsExpectedFormat() {
         // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
@@ -157,8 +147,7 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException()
-    {
+    public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException() {
         // Act & Assert
         await Assert.That(() => new TypeCast(null!, TypeReference.To<double>())).Throws<ArgumentNullException>();
     }

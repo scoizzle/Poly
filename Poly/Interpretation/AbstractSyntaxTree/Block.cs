@@ -26,8 +26,7 @@ public sealed record Block : Operator {
     /// <param name="expressions">The expressions to execute in sequence.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="expressions"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="expressions"/> is empty.</exception>
-    public Block(params Node[] expressions) : this(expressions, Array.Empty<Node>())
-    {
+    public Block(params Node[] expressions) : this(expressions, Array.Empty<Node>()) {
     }
 
     /// <summary>
@@ -37,8 +36,7 @@ public sealed record Block : Operator {
     /// <param name="variables">The variables declared within this block's scope.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="expressions"/> or <paramref name="variables"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="expressions"/> is empty or <paramref name="variables"/> contains non-variable nodes.</exception>
-    public Block(IEnumerable<Node> expressions, IEnumerable<Node> variables)
-    {
+    public Block(IEnumerable<Node> expressions, IEnumerable<Node> variables) {
         ArgumentNullException.ThrowIfNull(expressions);
         ArgumentNullException.ThrowIfNull(variables);
 
@@ -60,8 +58,7 @@ public sealed record Block : Operator {
     public override IEnumerable<Node?> Children => [.. Variables, .. Nodes];
 
     /// <inheritdoc />
-    public override string ToString()
-    {
+    public override string ToString() {
         return $"{{ {string.Join("; ", Nodes)} }}";
     }
 

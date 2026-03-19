@@ -13,8 +13,7 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
     /// </summary>
     /// <param name="action">The action to add.</param>
     /// <returns>The current Analyzer instance.</returns>
-    public Analyzer With(Action<AnalysisContext> action)
-    {
+    public Analyzer With(Action<AnalysisContext> action) {
         ArgumentNullException.ThrowIfNull(action);
         _actions.Add(action);
         return this;
@@ -25,8 +24,7 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
     /// </summary>
     /// <param name="root">The root AST node to analyze.</param>
     /// <returns>The result of the analysis.</returns>
-    public AnalysisResult Analyze(Node root)
-    {
+    public AnalysisResult Analyze(Node root) {
         ArgumentNullException.ThrowIfNull(root);
 
         var context = new AnalysisContext(typeDefinitions);

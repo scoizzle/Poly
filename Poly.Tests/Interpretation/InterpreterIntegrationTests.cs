@@ -11,8 +11,7 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class InterpreterIntegrationTests {
     [Test]
-    public async Task ComplexExpression_MultipleNestedOperations_EvaluatesCorrectly()
-    {
+    public async Task ComplexExpression_MultipleNestedOperations_EvaluatesCorrectly() {
         // Arrange - ((10 + 5) * 2) - (8 / 2) + 1 = 30 - 4 + 1 = 27
         var add = new Add(new Constant(10), new Constant(5));           // 15
         var multiply = new Multiply(add, new Constant(2));              // 30
@@ -30,8 +29,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task ParameterizedExpression_SingleParameter_EvaluatesForMultipleInputs()
-    {
+    public async Task ParameterizedExpression_SingleParameter_EvaluatesForMultipleInputs() {
         // Arrange - (x * 2) + 10
         var param = new Parameter("x", TypeReference.To<int>());
         var multiply = new Multiply(param, new Constant(2));
@@ -45,8 +43,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task ParameterizedExpression_MultipleParameters_EvaluatesCorrectly()
-    {
+    public async Task ParameterizedExpression_MultipleParameters_EvaluatesCorrectly() {
         // Arrange - (x + y) * z
         var x = new Parameter("x", TypeReference.To<int>());
         var y = new Parameter("y", TypeReference.To<int>());
@@ -62,8 +59,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task ConditionalWithArithmetic_EvaluatesCorrectBranch()
-    {
+    public async Task ConditionalWithArithmetic_EvaluatesCorrectBranch() {
         // Arrange - if (x > 10) then (x * 2) else (x + 5)
         var param = new Parameter("x", TypeReference.To<int>());
         var condition = new GreaterThan(param, new Constant(10));
@@ -79,8 +75,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task TypePromotion_IntAndDouble_PromotesCorrectly()
-    {
+    public async Task TypePromotion_IntAndDouble_PromotesCorrectly() {
         // Arrange - (int + double) * int should promote to double
         var node = new Multiply(
             new Add(new Constant(5), new Constant(2.5)),
@@ -96,8 +91,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task NullCoalesceInExpression_HandlesNullCorrectly()
-    {
+    public async Task NullCoalesceInExpression_HandlesNullCorrectly() {
         // Arrange - (x ?? 10) + 5
         var param = new Parameter("x", TypeReference.To<int?>());
         var coalesce = new Coalesce(param, new Constant(10));
@@ -113,8 +107,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task UnaryMinusInComplexExpression_NegatesCorrectly()
-    {
+    public async Task UnaryMinusInComplexExpression_NegatesCorrectly() {
         // Arrange - (10 - (-5)) * 2 = 30
         var negated = new UnaryMinus(new Constant(5));
         var subtract = new Subtract(new Constant(10), negated);
@@ -130,8 +123,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task NestedConditionals_EvaluatesCorrectPath()
-    {
+    public async Task NestedConditionals_EvaluatesCorrectPath() {
         // Arrange - if (x > 10) then (if (x > 20) then 100 else 50) else 0
         var param = new Parameter("x", TypeReference.To<int>());
         var innerCondition = new GreaterThan(param, new Constant(20));
@@ -149,8 +141,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task BlockExpression_ReturnsLastValue()
-    {
+    public async Task BlockExpression_ReturnsLastValue() {
         // Arrange - { 10; 20; 30 } should return 30
         var node = new Block(
             new Constant(10),
@@ -167,8 +158,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task BlockWithArithmetic_EvaluatesAllAndReturnsLast()
-    {
+    public async Task BlockWithArithmetic_EvaluatesAllAndReturnsLast() {
         // Arrange - { 5 + 3; 10 * 2; 100 / 4 } should return 25
         var node = new Block(
             new Add(new Constant(5), new Constant(3)),
@@ -185,8 +175,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task MathematicalFormula_QuadraticFormulaPart_EvaluatesCorrectly()
-    {
+    public async Task MathematicalFormula_QuadraticFormulaPart_EvaluatesCorrectly() {
         // Arrange - (-b + sqrt(b^2 - 4ac)) / (2a) simplified part: b^2 - 4ac
         // Let b = 5, a = 1, c = 6
         // Result should be: 5^2 - 4*1*6 = 25 - 24 = 1
@@ -209,8 +198,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task StringConcatenation_AddingStrings_ConcatenatesCorrectly()
-    {
+    public async Task StringConcatenation_AddingStrings_ConcatenatesCorrectly() {
         // Arrange
         var node = new Add(new Constant("Hello "), new Constant("World"));
 
@@ -224,8 +212,7 @@ public class InterpreterIntegrationTests {
     }
 
     [Test]
-    public async Task StringParameterExpression_ConcatenatesWithParameter()
-    {
+    public async Task StringParameterExpression_ConcatenatesWithParameter() {
         // Arrange
         var param = new Parameter("name", TypeReference.To<string>());
         var node = new Add(new Constant("Hello, "), param);

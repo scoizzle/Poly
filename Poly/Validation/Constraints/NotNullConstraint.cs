@@ -15,8 +15,7 @@ public sealed class NotNullConstraint : Constraint {
     /// <inheritdoc />
     public override ConstraintScope Scope => ConstraintScope.Structural;
 
-    public override Node BuildInterpretationTree(RuleBuildingContext context)
-    {
+    public override Node BuildInterpretationTree(RuleBuildingContext context) {
         var notNullCheck = new NotEqual(context.Value, Null);
         return notNullCheck;
     }

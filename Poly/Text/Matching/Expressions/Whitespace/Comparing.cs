@@ -9,8 +9,7 @@ namespace Poly.Text.Matching.Expressions {
         private static TryCompareDelegate gotoView() =>
             (StringView view) => view.GotoAndConsume(char.IsWhiteSpace);
 
-        private static TryCompareDelegate gotoView(bool optional)
-        {
+        private static TryCompareDelegate gotoView(bool optional) {
             if (!optional)
                 return gotoView();
 
@@ -20,8 +19,7 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate gotoView(Expression? next)
-        {
+        private static TryCompareDelegate gotoView(Expression? next) {
             if (next is default(Expression))
                 return gotoView();
 
@@ -42,8 +40,7 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate gotoView(bool optional, Expression? next)
-        {
+        private static TryCompareDelegate gotoView(bool optional, Expression? next) {
             if (!optional)
                 return gotoView(next);
 
@@ -68,8 +65,7 @@ namespace Poly.Text.Matching.Expressions {
         private static TryCompareDelegate compare() =>
             (StringView view) => view.Consume(char.IsWhiteSpace);
 
-        private static TryCompareDelegate compare(bool optional)
-        {
+        private static TryCompareDelegate compare(bool optional) {
             if (!optional)
                 return compare();
 
@@ -79,8 +75,7 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate compare(Expression? next)
-        {
+        private static TryCompareDelegate compare(Expression? next) {
             if (next is default(Expression))
                 return compare();
 
@@ -101,8 +96,7 @@ namespace Poly.Text.Matching.Expressions {
             };
         }
 
-        private static TryCompareDelegate compare(bool optional, Expression? next)
-        {
+        private static TryCompareDelegate compare(bool optional, Expression? next) {
             if (!optional)
                 return compare(next);
 

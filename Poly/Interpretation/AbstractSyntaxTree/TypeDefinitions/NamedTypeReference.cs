@@ -20,8 +20,7 @@ public sealed record NamedTypeReference(
 
     public override IEnumerable<Node?> Children => TypeArguments ?? [];
 
-    public override string ToString()
-    {
+    public override string ToString() {
         if (TypeArguments == null || TypeArguments.Count == 0)
             return FullName;
         return $"{FullName}<{string.Join(", ", TypeArguments)}>";

@@ -19,8 +19,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// while maintaining consistent parameter bindings.
     /// </summary>
     [Test]
-    public async Task SharedContext_ReuseAcrossMultipleFragments_MaintainsConsistentParameterBindings()
-    {
+    public async Task SharedContext_ReuseAcrossMultipleFragments_MaintainsConsistentParameterBindings() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
 
@@ -43,8 +42,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test that multiple parameters can coexist in the same context.
     /// </summary>
     [Test]
-    public async Task SharedContext_MultipleParameters_AllAccessible()
-    {
+    public async Task SharedContext_MultipleParameters_AllAccessible() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
         var y = new Parameter("y", TypeReference.To<int>());
@@ -63,8 +61,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Demonstrates custom middleware that optimizes constant expressions before code generation.
     /// </summary>
     [Test]
-    public async Task ConstantFoldingMiddleware_SimpleBinary_FoldsToConstantExpression()
-    {
+    public async Task ConstantFoldingMiddleware_SimpleBinary_FoldsToConstantExpression() {
         // Arrange
         var ast = new Add(Wrap(10), Wrap(20));
 
@@ -82,8 +79,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Verifies that (10 + 20) + (5 + 3) is properly computed as 38.
     /// </summary>
     [Test]
-    public async Task ConstantFoldingMiddleware_NestedOperations_ComputesCorrectly()
-    {
+    public async Task ConstantFoldingMiddleware_NestedOperations_ComputesCorrectly() {
         // Arrange
         var left = new Add(Wrap(10), Wrap(20));   // 30
         var right = new Add(Wrap(5), Wrap(3));    // 8
@@ -103,8 +99,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Verifies that complex expressions get proper type information during interpretation.
     /// </summary>
     [Test]
-    public async Task SemanticAnalysis_ComplexExpression_ResolvesTypesCorrectly()
-    {
+    public async Task SemanticAnalysis_ComplexExpression_ResolvesTypesCorrectly() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
 
@@ -122,8 +117,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Verifies that incompatible type operations throw during code generation.
     /// </summary>
     [Test]
-    public async Task IncompatibleTypes_IntPlusString_ThrowsDuringCodeGeneration()
-    {
+    public async Task IncompatibleTypes_IntPlusString_ThrowsDuringCodeGeneration() {
         // Arrange
         var ast = new Add(Wrap(5), Wrap("hello"));
 
@@ -136,8 +130,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Verifies that the code generator (LinqExpressionGenerator) correctly promotes int + double to double.
     /// </summary>
     [Test]
-    public async Task NumericTypePromotion_IntPlusDouble_ProducesCorrectResult()
-    {
+    public async Task NumericTypePromotion_IntPlusDouble_ProducesCorrectResult() {
         // Arrange
         var ast = new Add(Wrap(10), Wrap(5.5));
 
@@ -155,8 +148,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Verifies that the code generator promotes int * double to double.
     /// </summary>
     [Test]
-    public async Task NumericTypePromotion_IntTimesDouble_ProducesCorrectResult()
-    {
+    public async Task NumericTypePromotion_IntTimesDouble_ProducesCorrectResult() {
         // Arrange
         var ast = new Multiply(Wrap(10), Wrap(2.5));
 
@@ -173,8 +165,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test parameter usage in complex nested expression.
     /// </summary>
     [Test]
-    public async Task ComplexNested_WithParametersAndConstants_ExecutesCorrectly()
-    {
+    public async Task ComplexNested_WithParametersAndConstants_ExecutesCorrectly() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
 
@@ -194,8 +185,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test null coalescing operator with parameters.
     /// </summary>
     [Test]
-    public async Task NullCoalescing_WithParameter_ReturnsCorrectValue()
-    {
+    public async Task NullCoalescing_WithParameter_ReturnsCorrectValue() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int?>());
 
@@ -213,8 +203,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test conditional (ternary) operator.
     /// </summary>
     [Test]
-    public async Task Conditional_WithTrueCondition_ReturnsIfTrueValue()
-    {
+    public async Task Conditional_WithTrueCondition_ReturnsIfTrueValue() {
         // Act - Build: true ? 42 : 0
         var ast = new Conditional(
             Wrap(true),
@@ -233,8 +222,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test conditional (ternary) operator with false condition.
     /// </summary>
     [Test]
-    public async Task Conditional_WithFalseCondition_ReturnsIfFalseValue()
-    {
+    public async Task Conditional_WithFalseCondition_ReturnsIfFalseValue() {
         // Act - Build: false ? 42 : 0
         var ast = new Conditional(
             Wrap(false),
@@ -253,8 +241,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test unary minus operator.
     /// </summary>
     [Test]
-    public async Task UnaryMinus_WithPositiveValue_ReturnsNegated()
-    {
+    public async Task UnaryMinus_WithPositiveValue_ReturnsNegated() {
         // Act - Build: -42
         var ast = new UnaryMinus(Wrap(42));
         var expr = ast.BuildExpression();
@@ -270,8 +257,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test type cast operator.
     /// </summary>
     [Test]
-    public async Task TypeCast_IntToDouble_CastsCorrectly()
-    {
+    public async Task TypeCast_IntToDouble_CastsCorrectly() {
         // Act - Build: (double)42
         var ast = new TypeCast(Wrap(42), TypeReference.To<double>());
         var expr = ast.BuildExpression();
@@ -287,8 +273,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test that parameter expressions are consistent across multiple calls.
     /// </summary>
     [Test]
-    public async Task ContextPreservation_MultipleParameterAccess_UsesSameParameterExpression()
-    {
+    public async Task ContextPreservation_MultipleParameterAccess_UsesSameParameterExpression() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
         var node = new Add(x, x);
@@ -306,8 +291,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test block expression with multiple statements.
     /// </summary>
     [Test]
-    public async Task Block_MultipleStatements_ExecutesAllAndReturnsLast()
-    {
+    public async Task Block_MultipleStatements_ExecutesAllAndReturnsLast() {
         // Act - Build: { 10; 20; 30 } -> evaluates to 30
         var ast = new Block(
             Wrap(10),
@@ -326,8 +310,7 @@ public class MiddlewareInterpreterIntegrationTests {
     /// Test modulo operator.
     /// </summary>
     [Test]
-    public async Task Modulo_TenModThree_ReturnsOne()
-    {
+    public async Task Modulo_TenModThree_ReturnsOne() {
         // Act - Build: 10 % 3
         var ast = new Modulo(Wrap(10), Wrap(3));
         var expr = ast.BuildExpression();

@@ -11,8 +11,7 @@ namespace Poly.Tests.Validation;
 
 public class RuleSetBuilderTests {
     [Test]
-    public async Task Builder_EmptyRules_CreatesValidRuleSet()
-    {
+    public async Task Builder_EmptyRules_CreatesValidRuleSet() {
         var builder = new RuleSetBuilder<Person>();
         var ruleSet = builder.Build();
 
@@ -21,8 +20,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithMemberConstraint_PassesValidation()
-    {
+    public async Task Builder_WithMemberConstraint_PassesValidation() {
         var builder = new RuleSetBuilder<Person>()
             .Member(p => p.Name, c => c.NotNull());
 
@@ -35,8 +33,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithMemberConstraint_FailsValidation()
-    {
+    public async Task Builder_WithMemberConstraint_FailsValidation() {
         var builder = new RuleSetBuilder<Person>()
             .Member(p => p.Name, c => c.NotNull());
 
@@ -49,8 +46,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithMultipleMembers_AppliesAllConstraints()
-    {
+    public async Task Builder_WithMultipleMembers_AppliesAllConstraints() {
         var builder = new RuleSetBuilder<Person>()
             .Member(p => p.Name, c => c.NotNull())
             .Member(p => p.Age, c => c.Minimum(0).Maximum(150));
@@ -64,8 +60,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithMultipleMembers_OneFailsValidation()
-    {
+    public async Task Builder_WithMultipleMembers_OneFailsValidation() {
         var builder = new RuleSetBuilder<Person>()
             .Member(p => p.Name, c => c.NotNull())
             .Member(p => p.Age, c => c.Minimum(0).Maximum(150));
@@ -79,8 +74,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_Member_WithNullSelector_Throws()
-    {
+    public async Task Builder_Member_WithNullSelector_Throws() {
         var builder = new RuleSetBuilder<Person>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () => {
@@ -89,8 +83,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_Member_WithNullConstraintsBuilder_Throws()
-    {
+    public async Task Builder_Member_WithNullConstraintsBuilder_Throws() {
         var builder = new RuleSetBuilder<Person>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () => {
@@ -99,8 +92,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_AddRule_WithNullRule_Throws()
-    {
+    public async Task Builder_AddRule_WithNullRule_Throws() {
         var builder = new RuleSetBuilder<Person>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(async () => {
@@ -109,8 +101,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_AllowsChaining()
-    {
+    public async Task Builder_AllowsChaining() {
         var ruleSet = new RuleSetBuilder<Person>()
             .Member(p => p.Name, c => c.NotNull())
             .Member(p => p.Age, c => c.Minimum(0))
@@ -124,8 +115,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithStringLength_PassesValidation()
-    {
+    public async Task Builder_WithStringLength_PassesValidation() {
         var builder = new RuleSetBuilder<NumberProperty>()
             .Member(p => p.Value, c => c.Minimum(1).Maximum(100));
 
@@ -138,8 +128,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithStringLengthTooShort_FailsValidation()
-    {
+    public async Task Builder_WithStringLengthTooShort_FailsValidation() {
         var builder = new RuleSetBuilder<NumberProperty>()
             .Member(p => p.Value, c => c.Minimum(5));
 
@@ -152,8 +141,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithMultipleConstraintsOnProperty_AllMustPass()
-    {
+    public async Task Builder_WithMultipleConstraintsOnProperty_AllMustPass() {
         var builder = new RuleSetBuilder<NumberProperty>()
             .Member(p => p.Value, c => c
                 .Minimum(1)
@@ -168,8 +156,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithComplexValidation_PassesValidation()
-    {
+    public async Task Builder_WithComplexValidation_PassesValidation() {
         var builder = new RuleSetBuilder<Person>()
             .Member(p => p.Name, c => c.NotNull())
             .Member(p => p.Age, c => c
@@ -186,8 +173,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithComplexValidation_OnePropertyFails()
-    {
+    public async Task Builder_WithComplexValidation_OnePropertyFails() {
         var builder = new RuleSetBuilder<NumberProperty>()
             .Member(p => p.Value, c => c
                 .Minimum(5)
@@ -202,8 +188,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_BuildsExpressionTree()
-    {
+    public async Task Builder_BuildsExpressionTree() {
         var builder = new RuleSetBuilder<Person>()
             .Member(p => p.Name, c => c.NotNull());
 
@@ -214,8 +199,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_CompiledPredicate_ExecutesEfficiently()
-    {
+    public async Task Builder_CompiledPredicate_ExecutesEfficiently() {
         var builder = new RuleSetBuilder<Person>()
             .Member(p => p.Age, c => c.Minimum(18).Maximum(65));
 
@@ -230,8 +214,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithExplicitTypeDefinitionProvider_UsesProvider()
-    {
+    public async Task Builder_WithExplicitTypeDefinitionProvider_UsesProvider() {
         var provider = new TrackingTypeDefinitionProvider(ClrTypeDefinitionRegistry.Shared);
 
         var ruleSet = new RuleSetBuilder<Person>()
@@ -246,8 +229,7 @@ public class RuleSetBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithExplicitEmptyProviderSet_DoesNotFallbackToShared()
-    {
+    public async Task Builder_WithExplicitEmptyProviderSet_DoesNotFallbackToShared() {
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
             _ = new RuleSet<Person>([
                 new PropertyConstraintRule("Name", new NotNullConstraint())
@@ -272,8 +254,7 @@ public class RuleSetBuilderTests {
 
         public ITypeDefinition? GetTypeDefinition(string name) => innerProvider.GetTypeDefinition(name);
 
-        public ITypeDefinition? GetTypeDefinition(Type type)
-        {
+        public ITypeDefinition? GetTypeDefinition(Type type) {
             _requestedTypes.Add(type);
             return innerProvider.GetTypeDefinition(type);
         }

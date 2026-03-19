@@ -5,8 +5,7 @@ namespace Poly.Tests.Introspection;
 
 public class TypeCompatibilityTests {
     [Test]
-    public async Task BaseType_WithSingleInheritance_ReturnsImmediateParent()
-    {
+    public async Task BaseType_WithSingleInheritance_ReturnsImmediateParent() {
         var registry = new ClrTypeDefinitionRegistry();
         var derivedType = registry.GetTypeDefinition(typeof(ArgumentException));
         var baseType = derivedType.BaseType;
@@ -17,8 +16,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task BaseType_WithObjectType_ReturnsNull()
-    {
+    public async Task BaseType_WithObjectType_ReturnsNull() {
         var registry = new ClrTypeDefinitionRegistry();
         var objectType = registry.GetTypeDefinition<object>();
         var baseType = objectType.BaseType;
@@ -27,8 +25,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task BaseType_FollowChain_ReachesMultipleLevels()
-    {
+    public async Task BaseType_FollowChain_ReachesMultipleLevels() {
         var registry = new ClrTypeDefinitionRegistry();
         var derivedType = registry.GetTypeDefinition(typeof(ArgumentNullException));
         var current = derivedType.BaseType;
@@ -43,8 +40,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_SameType_ReturnsTrue()
-    {
+    public async Task IsAssignableFrom_SameType_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -54,8 +50,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_DerivedType_ReturnsTrue()
-    {
+    public async Task IsAssignableFrom_DerivedType_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var exceptionType = registry.GetTypeDefinition<Exception>();
         var argumentExceptionType = registry.GetTypeDefinition<ArgumentException>();
@@ -66,8 +61,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_UnrelatedType_ReturnsFalse()
-    {
+    public async Task IsAssignableFrom_UnrelatedType_ReturnsFalse() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
         var intType = registry.GetTypeDefinition<int>();
@@ -78,8 +72,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_InterfaceImplementation_ReturnsTrue()
-    {
+    public async Task IsAssignableFrom_InterfaceImplementation_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var enumerableType = registry.GetTypeDefinition<IEnumerable<int>>();
         var listType = registry.GetTypeDefinition<List<int>>();
@@ -90,8 +83,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableTo_InverseOf_IsAssignableFrom()
-    {
+    public async Task IsAssignableTo_InverseOf_IsAssignableFrom() {
         var registry = new ClrTypeDefinitionRegistry();
         var exceptionType = registry.GetTypeDefinition<Exception>();
         var argumentExceptionType = registry.GetTypeDefinition<ArgumentException>();
@@ -103,8 +95,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task Interfaces_WithImplementedInterface_ContainsInterface()
-    {
+    public async Task Interfaces_WithImplementedInterface_ContainsInterface() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
         var interfaces = stringType.Interfaces.ToList();
@@ -115,8 +106,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task Interfaces_WithMultipleImplementedInterfaces_ContainsAll()
-    {
+    public async Task Interfaces_WithMultipleImplementedInterfaces_ContainsAll() {
         var registry = new ClrTypeDefinitionRegistry();
         var listType = registry.GetTypeDefinition(typeof(List<int>));
         var interfaceNames = listType.Interfaces.Select(i => i.Name).ToList();
@@ -126,8 +116,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task Interfaces_WithObjectType_ReturnsEmpty()
-    {
+    public async Task Interfaces_WithObjectType_ReturnsEmpty() {
         var registry = new ClrTypeDefinitionRegistry();
         var objectType = registry.GetTypeDefinition<object>();
         var interfaces = objectType.Interfaces.ToList();
@@ -136,8 +125,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_DerivedFromBase_ReturnsTrue()
-    {
+    public async Task IsAssignableFrom_DerivedFromBase_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
@@ -146,8 +134,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_BaseFromDerived_ReturnsFalse()
-    {
+    public async Task IsAssignableFrom_BaseFromDerived_ReturnsFalse() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
@@ -156,8 +143,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_InterfaceImplementation_ReturnsTrue_V2()
-    {
+    public async Task IsAssignableFrom_InterfaceImplementation_ReturnsTrue_V2() {
         var registry = new ClrTypeDefinitionRegistry();
         var comparableType = (ITypeDefinition)registry.GetTypeDefinition(typeof(IComparable));
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
@@ -166,8 +152,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_UnrelatedTypes_ReturnsFalse()
-    {
+    public async Task IsAssignableFrom_UnrelatedTypes_ReturnsFalse() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
         var intType = (ITypeDefinition)registry.GetTypeDefinition<int>();
@@ -176,8 +161,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_DistantInheritanceChain_ReturnsTrue()
-    {
+    public async Task IsAssignableFrom_DistantInheritanceChain_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var exceptionType = (ITypeDefinition)registry.GetTypeDefinition<Exception>();
         var argNullExType = (ITypeDefinition)registry.GetTypeDefinition<ArgumentNullException>();
@@ -186,8 +170,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableTo_DerivedToBase_ReturnsTrue()
-    {
+    public async Task IsAssignableTo_DerivedToBase_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
@@ -196,8 +179,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableTo_BaseToDerived_ReturnsFalse()
-    {
+    public async Task IsAssignableTo_BaseToDerived_ReturnsFalse() {
         var registry = new ClrTypeDefinitionRegistry();
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
@@ -206,8 +188,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableTo_ImplementationToInterface_ReturnsTrue()
-    {
+    public async Task IsAssignableTo_ImplementationToInterface_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
         var comparableType = (ITypeDefinition)registry.GetTypeDefinition(typeof(IComparable));
@@ -216,8 +197,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task Assignability_WithValueTypeBoxing_ReturnsTrue()
-    {
+    public async Task Assignability_WithValueTypeBoxing_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var objectType = (ITypeDefinition)registry.GetTypeDefinition<object>();
         var intType = (ITypeDefinition)registry.GetTypeDefinition<int>();
@@ -226,8 +206,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task InheritanceChain_ExceptionHierarchy_IsComplete()
-    {
+    public async Task InheritanceChain_ExceptionHierarchy_IsComplete() {
         var registry = new ClrTypeDefinitionRegistry();
         var exceptionType = (ITypeDefinition)registry.GetTypeDefinition<Exception>();
         var ioExceptionType = (ITypeDefinition)registry.GetTypeDefinition(typeof(IOException));
@@ -239,8 +218,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task BaseType_CachedAfterFirstAccess()
-    {
+    public async Task BaseType_CachedAfterFirstAccess() {
         var registry = new ClrTypeDefinitionRegistry();
         var derivedType = registry.GetTypeDefinition(typeof(ArgumentException));
 
@@ -251,8 +229,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task BaseType_OnClosedGenericType_ReturnsConstructedBaseType()
-    {
+    public async Task BaseType_OnClosedGenericType_ReturnsConstructedBaseType() {
         var registry = new ClrTypeDefinitionRegistry();
         var closedGenericType = registry.GetTypeDefinition(typeof(GenericLeaf<string>));
 
@@ -265,8 +242,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_ClosedGenericBaseFromClosedGenericDerived_ReturnsTrue()
-    {
+    public async Task IsAssignableFrom_ClosedGenericBaseFromClosedGenericDerived_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var baseType = (ITypeDefinition)registry.GetTypeDefinition(typeof(GenericBase<string>));
         var derivedType = (ITypeDefinition)registry.GetTypeDefinition(typeof(GenericLeaf<string>));
@@ -275,8 +251,7 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task Interfaces_CachedAfterFirstAccess()
-    {
+    public async Task Interfaces_CachedAfterFirstAccess() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 

@@ -10,8 +10,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
 public sealed record Coalesce : Operator {
-    public Coalesce(Node leftHandValue, Node rightHandValue)
-    {
+    public Coalesce(Node leftHandValue, Node rightHandValue) {
         LeftHandValue = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
         RightHandValue = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));
     }

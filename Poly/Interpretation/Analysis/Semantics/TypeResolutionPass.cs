@@ -6,8 +6,7 @@ using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
 
 internal sealed class TypeResolver : INodeAnalyzer {
-    public void Analyze(AnalysisContext context, Node node)
-    {
+    public void Analyze(AnalysisContext context, Node node) {
         var resolvedType = ResolveNodeType(context, node);
 
         if (resolvedType != null) {
@@ -17,8 +16,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
         this.AnalyzeChildren(context, node);
     }
 
-    private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node)
-    {
+    private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node) {
         return node switch {
             Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
             Parameter p => ResolveParameterType(context, p),
@@ -58,8 +56,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
     private static ITypeDefinition? ResolveArithmeticType(
         AnalysisContext context,
         Node left,
-        Node right)
-    {
+        Node right) {
         var leftType = ResolveNodeType(context, left);
         var rightType = ResolveNodeType(context, right);
 
@@ -71,8 +68,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveMemberAccessType(
         AnalysisContext context,
-        MemberAccess memberAccess)
-    {
+        MemberAccess memberAccess) {
         var instanceType = ResolveNodeType(context, memberAccess.Value);
         if (instanceType == null)
             return null;
@@ -83,8 +79,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveMethodInvocationType(
         AnalysisContext context,
-        MethodInvocation methodInv)
-    {
+        MethodInvocation methodInv) {
         var targetType = ResolveNodeType(context, methodInv.Target);
         if (targetType != null) {
             context.SetResolvedType(methodInv.Target, targetType);
@@ -103,8 +98,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveIndexAccessType(
         AnalysisContext context,
-        IndexAccess indexAccess)
-    {
+        IndexAccess indexAccess) {
         var instanceType = ResolveNodeType(context, indexAccess.Value);
         if (instanceType == null)
             return null;
@@ -127,8 +121,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveAssignmentType(
         AnalysisContext context,
-        Assignment assignment)
-    {
+        Assignment assignment) {
         var valueType = ResolveNodeType(context, assignment.Value);
 
         if (assignment.Destination is Variable variable && valueType != null) {
@@ -140,8 +133,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveBlockType(
         AnalysisContext context,
-        Block block)
-    {
+        Block block) {
         foreach (var variable in block.Variables.OfType<Variable>()) {
             var firstAssignment = block.Nodes.OfType<Assignment>().FirstOrDefault(a => ReferenceEquals(a.Destination, variable));
 
@@ -164,8 +156,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
             : null;
     }
 
-    private static ITypeDefinition? ResolveParameterType(AnalysisContext context, Parameter parameter)
-    {
+    private static ITypeDefinition? ResolveParameterType(AnalysisContext context, Parameter parameter) {
         if (parameter.TypeReference is not null) {
             return ResolveNodeType(context, parameter.TypeReference);
         }
@@ -180,24 +171,21 @@ public static class TypeResolutionMetadataExtensions {
     };
 
     extension(AnalyzerBuilder builder) {
-        public AnalyzerBuilder UseTypeResolver()
-        {
+        public AnalyzerBuilder UseTypeResolver() {
             builder.AddAnalyzer(new TypeResolver());
             return builder;
         }
     }
 
     extension(AnalysisContext context) {
-        public void SetResolvedType(Node node, ITypeDefinition type)
-        {
+        public void SetResolvedType(Node node, ITypeDefinition type) {
             var metadata = context.GetOrAddMetadata(node, static () => new TypeResolutionMetadata());
             metadata.ResolvedTypeDefinition = type;
         }
     }
 
     extension(INodeMetadataProvider typedMetadataProvider) {
-        public ITypeDefinition? GetResolvedType(Node node)
-        {
+        public ITypeDefinition? GetResolvedType(Node node) {
             return typedMetadataProvider.GetMetadata<TypeResolutionMetadata>(node)?.ResolvedTypeDefinition;
         }
     }

@@ -20,8 +20,7 @@ public sealed class RuleSetBuilder<T> {
     /// <returns>This builder for method chaining.</returns>
     public RuleSetBuilder<T> Member<TProperty>(
         Exprs.Expression<Func<T, TProperty>> propertySelector,
-        Action<ConstraintSetBuilder<TProperty>> constraintsBuilder)
-    {
+        Action<ConstraintSetBuilder<TProperty>> constraintsBuilder) {
 
         ArgumentNullException.ThrowIfNull(propertySelector);
         ArgumentNullException.ThrowIfNull(constraintsBuilder);
@@ -42,8 +41,7 @@ public sealed class RuleSetBuilder<T> {
     /// </summary>
     /// <param name="rule">The rule to add.</param>
     /// <returns>This builder for method chaining.</returns>
-    public RuleSetBuilder<T> AddRule(Rule rule)
-    {
+    public RuleSetBuilder<T> AddRule(Rule rule) {
         ArgumentNullException.ThrowIfNull(rule);
         _rules.Add(rule);
         return this;
@@ -54,8 +52,7 @@ public sealed class RuleSetBuilder<T> {
     /// </summary>
     /// <param name="provider">The provider to add.</param>
     /// <returns>This builder for method chaining.</returns>
-    public RuleSetBuilder<T> AddTypeDefinitionProvider(ITypeDefinitionProvider provider)
-    {
+    public RuleSetBuilder<T> AddTypeDefinitionProvider(ITypeDefinitionProvider provider) {
         ArgumentNullException.ThrowIfNull(provider);
         _typeDefinitionProviders.Add(provider);
         return this;
@@ -72,8 +69,7 @@ public sealed class RuleSetBuilder<T> {
     /// <summary>
     /// Extracts the property name from a member access expression.
     /// </summary>
-    private static string GetMemberName<TMember>(Exprs.Expression<Func<T, TMember>> memberNode)
-    {
+    private static string GetMemberName<TMember>(Exprs.Expression<Func<T, TMember>> memberNode) {
         return memberNode.Body switch {
             Exprs.MemberExpression me => me.Member.Name,
             Exprs.UnaryExpression { Operand: Exprs.MemberExpression me } => me.Member.Name,

@@ -15,8 +15,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     private readonly List<(GotoStatement Goto, string Label)> _pendingGotos = [];
     private readonly Stack<(BasicBlock Continue, BasicBlock Break)> _loopContexts = new();
 
-    public void Analyze(AnalysisContext context, Node node)
-    {
+    public void Analyze(AnalysisContext context, Node node) {
         _cfg = new ControlFlowGraph();
         _currentBlock = _cfg.CreateBlock();
         _labeledBlocks.Clear();
@@ -51,8 +50,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         context.SetMetadata(node, new ControlFlowMetadata(_cfg));
     }
 
-    private void BuildCfg(AnalysisContext context, Node node)
-    {
+    private void BuildCfg(AnalysisContext context, Node node) {
         if (_currentBlock == null || _cfg == null) return;
 
         switch (node) {
@@ -141,15 +139,13 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         }
     }
 
-    private void AddStatement(Node node)
-    {
+    private void AddStatement(Node node) {
         if (_currentBlock == null || _cfg == null) return;
         _currentBlock.AddStatement(node);
         _cfg.MapNodeToBlock(node, _currentBlock);
     }
 
-    private void BuildBlockCfg(AnalysisContext context, Block block)
-    {
+    private void BuildBlockCfg(AnalysisContext context, Block block) {
         foreach (var stmt in block.Nodes) {
             if (_currentBlock == null) {
                 // Code after terminator - create new unreachable block
@@ -159,8 +155,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         }
     }
 
-    private void BuildIfCfg(AnalysisContext context, IfStatement ifStmt)
-    {
+    private void BuildIfCfg(AnalysisContext context, IfStatement ifStmt) {
         if (_currentBlock == null || _cfg == null) return;
 
         // Add condition to current block
@@ -211,8 +206,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         }
     }
 
-    private void BuildWhileLoopCfg(AnalysisContext context, WhileLoop whileLoop)
-    {
+    private void BuildWhileLoopCfg(AnalysisContext context, WhileLoop whileLoop) {
         if (_currentBlock == null || _cfg == null) return;
 
         var preLoop = _currentBlock;
@@ -242,8 +236,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         _currentBlock = exitBlock;
     }
 
-    private void BuildDoWhileLoopCfg(AnalysisContext context, DoWhileLoop doWhileLoop)
-    {
+    private void BuildDoWhileLoopCfg(AnalysisContext context, DoWhileLoop doWhileLoop) {
         if (_currentBlock == null || _cfg == null) return;
 
         var preLoop = _currentBlock;
@@ -271,8 +264,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         _currentBlock = exitBlock;
     }
 
-    private void BuildForLoopCfg(AnalysisContext context, ForLoop forLoop)
-    {
+    private void BuildForLoopCfg(AnalysisContext context, ForLoop forLoop) {
         if (_currentBlock == null || _cfg == null) return;
 
         // Initializer
@@ -315,8 +307,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         _currentBlock = exitBlock;
     }
 
-    private void BuildTryCatchCfg(AnalysisContext context, TryCatchFinally tryCatch)
-    {
+    private void BuildTryCatchCfg(AnalysisContext context, TryCatchFinally tryCatch) {
         if (_currentBlock == null || _cfg == null) return;
 
         var preTry = _currentBlock;
@@ -371,8 +362,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         _currentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
     }
 
-    private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt)
-    {
+    private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt) {
         if (_currentBlock == null || _cfg == null) return;
 
         // Switch value
@@ -423,8 +413,7 @@ public static class ControlFlowAnalysisExtensions {
         /// Adds control flow analysis to the analyzer.
         /// This builds a Control Flow Graph (CFG) and performs reachability analysis.
         /// </summary>
-        public AnalyzerBuilder UseControlFlowAnalysis()
-        {
+        public AnalyzerBuilder UseControlFlowAnalysis() {
             builder.AddAnalyzer(new ControlFlowAnalysisPass());
             return builder;
         }
@@ -434,8 +423,7 @@ public static class ControlFlowAnalysisExtensions {
         /// <summary>
         /// Gets the control flow graph for the root node.
         /// </summary>
-        public ControlFlowGraph? GetControlFlowGraph(Node rootNode)
-        {
+        public ControlFlowGraph? GetControlFlowGraph(Node rootNode) {
             var metadata = context.GetMetadata<ControlFlowMetadata>(rootNode);
             return metadata?.Graph;
         }
@@ -445,8 +433,7 @@ public static class ControlFlowAnalysisExtensions {
         /// <summary>
         /// Gets the control flow graph from the analysis result.
         /// </summary>
-        public ControlFlowGraph? GetControlFlowGraph(Node rootNode)
-        {
+        public ControlFlowGraph? GetControlFlowGraph(Node rootNode) {
             var metadata = result.GetMetadata<ControlFlowMetadata>(rootNode);
             return metadata?.Graph;
         }

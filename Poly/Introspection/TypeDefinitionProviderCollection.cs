@@ -10,8 +10,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Adds a provider to the top of the stack.
     /// </summary>
-    public void Add(ITypeDefinitionProvider provider)
-    {
+    public void Add(ITypeDefinitionProvider provider) {
         ArgumentNullException.ThrowIfNull(provider);
         _providers.Insert(0, provider);
     }
@@ -20,8 +19,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// Removes the first matching provider instance from the stack.
     /// </summary>
     /// <returns>True if the provider was found and removed.</returns>
-    public bool Remove(ITypeDefinitionProvider provider)
-    {
+    public bool Remove(ITypeDefinitionProvider provider) {
         ArgumentNullException.ThrowIfNull(provider);
         return _providers.Remove(provider);
     }
@@ -29,8 +27,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Removes all providers.
     /// </summary>
-    public void Clear()
-    {
+    public void Clear() {
         _providers.Clear();
     }
 
@@ -57,8 +54,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Resolves by name, querying providers from top to bottom. Returns null when not found.
     /// </summary>
-    public ITypeDefinition? GetTypeDefinition(string name)
-    {
+    public ITypeDefinition? GetTypeDefinition(string name) {
         foreach (var provider in _providers) {
             var typeDef = provider.GetTypeDefinition(name);
             if (typeDef is not null) {
@@ -71,8 +67,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <summary>
     /// Resolves by runtime type, querying providers from top to bottom. Returns null when not found.
     /// </summary>
-    public ITypeDefinition? GetTypeDefinition(Type type)
-    {
+    public ITypeDefinition? GetTypeDefinition(Type type) {
         foreach (var provider in _providers) {
             var typeDef = provider.GetTypeDefinition(type);
             if (typeDef is not null) {
@@ -94,8 +89,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// </summary>
     /// <param name="item">The provider to locate in the collection.</param>
     /// <returns>True if the provider is found; otherwise, false.</returns>
-    public bool Contains(ITypeDefinitionProvider item)
-    {
+    public bool Contains(ITypeDefinitionProvider item) {
         return _providers.Contains(item);
     }
 
@@ -104,24 +98,21 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// </summary>
     /// <param name="array">The destination array.</param>
     /// <param name="arrayIndex">The zero-based index in the array at which copying begins.</param>
-    public void CopyTo(ITypeDefinitionProvider[] array, int arrayIndex)
-    {
+    public void CopyTo(ITypeDefinitionProvider[] array, int arrayIndex) {
         _providers.CopyTo(array, arrayIndex);
     }
 
     /// <summary>
     /// Returns an enumerator that iterates through the collection.
     /// </summary>
-    public IEnumerator<ITypeDefinitionProvider> GetEnumerator()
-    {
+    public IEnumerator<ITypeDefinitionProvider> GetEnumerator() {
         return _providers.GetEnumerator();
     }
 
     /// <summary>
     /// Returns an enumerator that iterates through the collection.
     /// </summary>
-    IEnumerator IEnumerable.GetEnumerator()
-    {
+    IEnumerator IEnumerable.GetEnumerator() {
         return GetEnumerator();
     }
 }

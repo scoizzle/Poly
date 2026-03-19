@@ -12,8 +12,7 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
     public override IEnumerable<Node?> Children => [Initializer, Condition, Increment, Body];
 
     /// <inheritdoc />
-    public override string ToString()
-    {
+    public override string ToString() {
         var init = Initializer?.ToString() ?? "";
         var cond = Condition?.ToString() ?? "";
         var incr = Increment?.ToString() ?? "";

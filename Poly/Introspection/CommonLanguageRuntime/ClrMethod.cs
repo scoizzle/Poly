@@ -15,8 +15,7 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     private readonly IEnumerable<ClrParameter> _parameters;
     private readonly string _name;
 
-    public ClrMethod(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter> parameters, MethodInfo methodInfo)
-    {
+    public ClrMethod(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter> parameters, MethodInfo methodInfo) {
         ArgumentNullException.ThrowIfNull(memberType);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(methodInfo);

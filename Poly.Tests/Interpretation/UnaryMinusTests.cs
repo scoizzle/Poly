@@ -11,8 +11,7 @@ namespace Poly.Tests.Interpretation;
 
 public class UnaryMinusTests {
     [Test]
-    public async Task UnaryMinus_WithPositiveInteger_ReturnsNegative()
-    {
+    public async Task UnaryMinus_WithPositiveInteger_ReturnsNegative() {
         // Arrange
         var node = new UnaryMinus(Wrap(42));
 
@@ -26,8 +25,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithNegativeInteger_ReturnsPositive()
-    {
+    public async Task UnaryMinus_WithNegativeInteger_ReturnsPositive() {
         // Arrange
         var node = new UnaryMinus(Wrap(-99));
 
@@ -41,8 +39,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithZero_ReturnsZero()
-    {
+    public async Task UnaryMinus_WithZero_ReturnsZero() {
         // Arrange
         var node = new UnaryMinus(Wrap(0));
 
@@ -56,8 +53,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithDouble_NegatesCorrectly()
-    {
+    public async Task UnaryMinus_WithDouble_NegatesCorrectly() {
         // Arrange
         var node = new UnaryMinus(Wrap(3.14));
 
@@ -71,8 +67,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithParameter_EvaluatesCorrectly()
-    {
+    public async Task UnaryMinus_WithParameter_EvaluatesCorrectly() {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new UnaryMinus(param);
@@ -87,8 +82,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_DoubleNegation_ReturnsOriginalValue()
-    {
+    public async Task UnaryMinus_DoubleNegation_ReturnsOriginalValue() {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new UnaryMinus(new UnaryMinus(param));
@@ -102,8 +96,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithArithmeticExpression_EvaluatesCorrectly()
-    {
+    public async Task UnaryMinus_WithArithmeticExpression_EvaluatesCorrectly() {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new UnaryMinus(new Add(param, Wrap(5)));
@@ -117,8 +110,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_ToString_ReturnsExpectedFormat()
-    {
+    public async Task UnaryMinus_ToString_ReturnsExpectedFormat() {
         // Arrange
         var node = new UnaryMinus(Wrap(42));
 
@@ -130,8 +122,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_WithNullArgument_AllowsNull()
-    {
+    public async Task UnaryMinus_WithNullArgument_AllowsNull() {
         // Act
         var node = new UnaryMinus(null!);
 

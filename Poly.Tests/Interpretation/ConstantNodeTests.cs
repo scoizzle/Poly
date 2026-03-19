@@ -9,8 +9,7 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class ConstantNodeTests {
     [Test]
-    public async Task Constant_IntegerValue_CompilesAndExecutes()
-    {
+    public async Task Constant_IntegerValue_CompilesAndExecutes() {
         // Arrange
         var node = new Constant(42);
 
@@ -24,8 +23,7 @@ public class ConstantNodeTests {
     }
 
     [Test]
-    public async Task Constant_StringValue_CompilesAndExecutes()
-    {
+    public async Task Constant_StringValue_CompilesAndExecutes() {
         // Arrange
         var node = new Constant("hello");
 
@@ -39,8 +37,7 @@ public class ConstantNodeTests {
     }
 
     [Test]
-    public async Task Constant_DoubleValue_CompilesAndExecutes()
-    {
+    public async Task Constant_DoubleValue_CompilesAndExecutes() {
         // Arrange
         var node = new Constant(3.14);
 
@@ -54,8 +51,7 @@ public class ConstantNodeTests {
     }
 
     [Test]
-    public async Task Constant_BooleanTrue_CompilesAndExecutes()
-    {
+    public async Task Constant_BooleanTrue_CompilesAndExecutes() {
         // Arrange
         var node = new Constant(true);
 
@@ -69,8 +65,7 @@ public class ConstantNodeTests {
     }
 
     [Test]
-    public async Task Constant_BooleanFalse_CompilesAndExecutes()
-    {
+    public async Task Constant_BooleanFalse_CompilesAndExecutes() {
         // Arrange
         var node = new Constant(false);
 
@@ -84,8 +79,7 @@ public class ConstantNodeTests {
     }
 
     [Test]
-    public async Task Constant_NullValue_CompilesAndExecutes()
-    {
+    public async Task Constant_NullValue_CompilesAndExecutes() {
         // Arrange
         var node = new Constant(null);
 
@@ -99,8 +93,7 @@ public class ConstantNodeTests {
     }
 
     [Test]
-    public async Task Constant_DecimalValue_CompilesAndExecutes()
-    {
+    public async Task Constant_DecimalValue_CompilesAndExecutes() {
         // Arrange
         var node = new Constant(99.99m);
 
@@ -114,8 +107,7 @@ public class ConstantNodeTests {
     }
 
     [Test]
-    public async Task Constant_DateTime_CompilesAndExecutes()
-    {
+    public async Task Constant_DateTime_CompilesAndExecutes() {
         // Arrange
         var expected = new DateTime(2024, 1, 15, 10, 30, 0);
         var node = new Constant(expected);
@@ -130,8 +122,7 @@ public class ConstantNodeTests {
     }
 
     [Test]
-    public async Task Constant_ComplexObject_CompilesAndExecutes()
-    {
+    public async Task Constant_ComplexObject_CompilesAndExecutes() {
         // Arrange
         var expected = new List<int> { 1, 2, 3 };
         var node = new Constant(expected);

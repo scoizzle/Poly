@@ -50,39 +50,33 @@ public sealed class BasicBlock {
     /// </summary>
     public Node? Terminator { get; private set; }
 
-    public BasicBlock(int id)
-    {
+    public BasicBlock(int id) {
         Id = id;
         IsReachable = id == 0; // Entry block is always reachable initially
     }
 
-    internal void AddStatement(Node statement)
-    {
+    internal void AddStatement(Node statement) {
         _statements.Add(statement);
     }
 
-    internal void SetTerminator(Node terminator)
-    {
+    internal void SetTerminator(Node terminator) {
         Terminator = terminator;
     }
 
-    internal void AddPredecessor(BasicBlock block)
-    {
+    internal void AddPredecessor(BasicBlock block) {
         if (!_predecessors.Contains(block)) {
             _predecessors.Add(block);
         }
     }
 
-    internal void AddSuccessor(BasicBlock block)
-    {
+    internal void AddSuccessor(BasicBlock block) {
         if (!_successors.Contains(block)) {
             _successors.Add(block);
             block.AddPredecessor(this);
         }
     }
 
-    public override string ToString()
-    {
+    public override string ToString() {
         var kind = IsEntry ? "Entry" : (IsExit ? "Exit" : "Block");
         return $"{kind}[{Id}] ({Statements.Count} statements, {Successors.Count} successors)";
     }

@@ -23,8 +23,7 @@ public sealed record FieldDefinitionNode(
         }
     }
 
-    public override string ToString()
-    {
+    public override string ToString() {
         var suffix = DefaultValue != null ? $" = {DefaultValue}" : "";
         var staticPrefix = IsStatic ? "static " : "";
         var readonlyPrefix = IsReadOnly ? "readonly " : "";

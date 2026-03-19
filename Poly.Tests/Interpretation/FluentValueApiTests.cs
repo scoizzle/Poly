@@ -11,8 +11,7 @@ namespace Poly.Tests.Interpretation;
 
 public class FluentValueApiTests {
     [Test]
-    public async Task FluentApi_ArithmeticChaining_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_ArithmeticChaining_EvaluatesCorrectly() {
         // Arrange - fluent chaining: (10 + 5) * 2
         var node = Wrap(10).Add(Wrap(5)).Multiply(Wrap(2));
 
@@ -26,8 +25,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_ComparisonChaining_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_ComparisonChaining_EvaluatesCorrectly() {
         // Arrange - fluent chaining: 10 > 5
         var node = Wrap(10).GreaterThan(Wrap(5));
 
@@ -41,8 +39,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_BooleanChaining_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_BooleanChaining_EvaluatesCorrectly() {
         // Arrange - fluent chaining: true && false
         var node = True.And(False);
 
@@ -56,8 +53,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_ConditionalExpression_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_ConditionalExpression_EvaluatesCorrectly() {
         // Arrange - fluent chaining: true ? 42 : 0
         var node = True.Conditional(Wrap(42), Wrap(0));
 
@@ -71,8 +67,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_CoalesceExpression_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_CoalesceExpression_EvaluatesCorrectly() {
         // Arrange - fluent chaining: null ?? 42
         var node = Wrap(null as int?).Coalesce(Wrap(42));
 
@@ -86,8 +81,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_NegateOperation_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_NegateOperation_EvaluatesCorrectly() {
         // Arrange - fluent chaining: -42
         var node = Wrap(42).Negate();
 
@@ -101,8 +95,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_NotOperation_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_NotOperation_EvaluatesCorrectly() {
         // Arrange - fluent chaining: !true
         var node = True.Not();
 
@@ -116,8 +109,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_TypeCastOperation_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_TypeCastOperation_EvaluatesCorrectly() {
         // Arrange - fluent chaining: (int)42.0 cast to double
         var node = Wrap(42).CastTo("System.Double");
 
@@ -131,8 +123,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_ComplexExpression_EvaluatesCorrectly()
-    {
+    public async Task FluentApi_ComplexExpression_EvaluatesCorrectly() {
         // Arrange - fluent chaining: ((10 + 5) * 2) > 20
         var node = Wrap(10)
             .Add(Wrap(5))
@@ -149,8 +140,7 @@ public class FluentValueApiTests {
     }
 
     [Test]
-    public async Task FluentApi_MemberAccess_WorksCorrectly()
-    {
+    public async Task FluentApi_MemberAccess_WorksCorrectly() {
         // Arrange
         var str = "hello";
         var node = Wrap(str).GetMember("Length");

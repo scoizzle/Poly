@@ -10,8 +10,7 @@ public static class TypeDefinitionExtensions {
         /// <returns>The best-matching methods, or an empty set if none found.</returns>
         public IEnumerable<ITypeMethod> FindMatchingMethodOverloads(
             string name,
-            IEnumerable<ITypeDefinition> argumentTypes)
-        {
+            IEnumerable<ITypeDefinition> argumentTypes) {
             ArgumentNullException.ThrowIfNull(typeDefinition);
             ArgumentNullException.ThrowIfNull(name);
             ArgumentNullException.ThrowIfNull(argumentTypes);
@@ -26,8 +25,7 @@ public static class TypeDefinitionExtensions {
         /// Default implementation walks the base type chain and interface list. Implementations
         /// can override with more precise or faster logic.
         /// </remarks>
-        public bool IsAssignableFrom(ITypeDefinition other)
-        {
+        public bool IsAssignableFrom(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             if (typeDefinition == other) return true;
 
@@ -45,8 +43,7 @@ public static class TypeDefinitionExtensions {
         /// <summary>
         /// Determines if this type can be assigned to <paramref name="other"/>.
         /// </summary>
-        public bool IsAssignableTo(ITypeDefinition other)
-        {
+        public bool IsAssignableTo(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             return other.IsAssignableFrom(typeDefinition);
         }

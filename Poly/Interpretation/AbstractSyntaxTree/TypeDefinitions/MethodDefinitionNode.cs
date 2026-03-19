@@ -29,8 +29,7 @@ public sealed record MethodDefinitionNode(
         }
     }
 
-    public override string ToString()
-    {
+    public override string ToString() {
         var staticPrefix = IsStatic ? "static " : "";
         var paramList = Parameters != null ? string.Join(", ", Parameters) : "";
         return $"{staticPrefix}{ReturnType} {Name}({paramList})";

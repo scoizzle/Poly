@@ -16,8 +16,7 @@ public sealed class EqualityConstraint(object value) : Constraint {
     /// <inheritdoc />
     public override ConstraintScope Scope => ConstraintScope.Structural;
 
-    public override Node BuildInterpretationTree(RuleBuildingContext context)
-    {
+    public override Node BuildInterpretationTree(RuleBuildingContext context) {
         var member = context.Value;
         var valueLiteral = Wrap(Value);
         var equalityCheck = new Equal(member, valueLiteral);

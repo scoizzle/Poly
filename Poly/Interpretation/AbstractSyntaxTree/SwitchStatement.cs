@@ -11,8 +11,7 @@ public sealed record SwitchStatement(Node Value, IReadOnlyList<SwitchCase> Cases
     public override IEnumerable<Node?> Children => [Value, .. Cases.SelectMany(c => c.Children), DefaultCase];
 
     /// <inheritdoc />
-    public override string ToString()
-    {
+    public override string ToString() {
         var cases = string.Join(" ", Cases.Select(c => c.ToString()));
         var defaultStr = DefaultCase is not null ? $" default: {DefaultCase}" : "";
         return $"switch ({Value}) {{ {cases}{defaultStr} }}";

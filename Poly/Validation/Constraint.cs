@@ -25,8 +25,7 @@ public abstract class Constraint : Rule {
     /// <summary>
     /// Returns true if this constraint can be applied to a type with the given categories.
     /// </summary>
-    public bool IsApplicableTo(TypeCategory typeCategories)
-    {
+    public bool IsApplicableTo(TypeCategory typeCategories) {
         // If no specific categories are required, the constraint is universally applicable
         if (ApplicableCategories == TypeCategory.None)
             return true;

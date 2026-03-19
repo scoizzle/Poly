@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 
-using Poly.DomainModeling.TypeExpressions;
 using Poly.Introspection;
 
 namespace Poly.Validation;
@@ -10,7 +9,6 @@ namespace Poly.Validation;
 [JsonDerivedType(typeof(NotNullConstraint), "NotNull")]
 [JsonDerivedType(typeof(LengthConstraint), "Length")]
 [JsonDerivedType(typeof(Constraints.EqualityConstraint), "Equality")]
-[JsonDerivedType(typeof(DomainModeling.Builders.ValueSourceComparisonConstraint), "ValueSourceComparison")]
 public abstract class Constraint : Rule {
     /// <summary>
     /// Gets the type categories this constraint can be applied to.
@@ -35,14 +33,5 @@ public abstract class Constraint : Rule {
 
         // Check if any of the applicable categories are present in the type
         return (ApplicableCategories & typeCategories) != TypeCategory.None;
-    }
-
-    /// <summary>
-    /// Returns true if this constraint can be applied to the given type expression.
-    /// </summary>
-    public bool IsApplicableTo(TypeExpression typeExpression)
-    {
-        ArgumentNullException.ThrowIfNull(typeExpression);
-        return IsApplicableTo(typeExpression.Category);
     }
 }

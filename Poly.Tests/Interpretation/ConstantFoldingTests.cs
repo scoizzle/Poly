@@ -158,7 +158,7 @@ public class ConstantFoldingTests {
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
-        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(false);
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsFalse();
     }
 
     [Test]
@@ -176,7 +176,7 @@ public class ConstantFoldingTests {
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
-        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(true);
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsTrue();
     }
 
     [Test]
@@ -194,7 +194,7 @@ public class ConstantFoldingTests {
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
-        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(false);
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsFalse();
     }
 
     [Test]
@@ -212,7 +212,7 @@ public class ConstantFoldingTests {
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
-        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(true);
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsTrue();
     }
 
     [Test]
@@ -230,7 +230,7 @@ public class ConstantFoldingTests {
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
-        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(true);
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsTrue();
     }
 
     [Test]
@@ -248,7 +248,7 @@ public class ConstantFoldingTests {
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
-        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(true);
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsTrue();
     }
 
     [Test]
@@ -266,7 +266,7 @@ public class ConstantFoldingTests {
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
-        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(true);
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsTrue();
     }
 
     [Test]

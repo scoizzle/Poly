@@ -46,7 +46,7 @@ public class BlockTests {
         // Arrange - block with a variable that's assigned and used
         var varNode = new Variable("x");
         var assignNode = new Assignment(varNode, Wrap(50));
-        var node = new Block([assignNode, varNode], new[] { varNode });
+        var node = new Block([assignNode, varNode], [varNode]);
 
         // Act
         var expr = node.BuildExpression();

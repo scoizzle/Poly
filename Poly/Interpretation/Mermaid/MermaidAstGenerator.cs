@@ -423,40 +423,40 @@ public sealed class MermaidAstGenerator {
     {
         return node switch {
             // Binary operations
-            Add add => new[] { (add.LeftHandValue, "left"), (add.RightHandValue, "right") },
-            Subtract sub => new[] { (sub.LeftHandValue, "left"), (sub.RightHandValue, "right") },
-            Multiply mul => new[] { (mul.LeftHandValue, "left"), (mul.RightHandValue, "right") },
-            Divide div => new[] { (div.LeftHandValue, "left"), (div.RightHandValue, "right") },
-            Modulo mod => new[] { (mod.LeftHandValue, "left"), (mod.RightHandValue, "right") },
+            Add add => [(add.LeftHandValue, "left"), (add.RightHandValue, "right")],
+            Subtract sub => [(sub.LeftHandValue, "left"), (sub.RightHandValue, "right")],
+            Multiply mul => [(mul.LeftHandValue, "left"), (mul.RightHandValue, "right")],
+            Divide div => [(div.LeftHandValue, "left"), (div.RightHandValue, "right")],
+            Modulo mod => [(mod.LeftHandValue, "left"), (mod.RightHandValue, "right")],
 
-            Equal eq => new[] { (eq.LeftHandValue, "left"), (eq.RightHandValue, "right") },
-            NotEqual neq => new[] { (neq.LeftHandValue, "left"), (neq.RightHandValue, "right") },
-            LessThan lt => new[] { (lt.LeftHandValue, "left"), (lt.RightHandValue, "right") },
-            LessThanOrEqual lte => new[] { (lte.LeftHandValue, "left"), (lte.RightHandValue, "right") },
-            GreaterThan gt => new[] { (gt.LeftHandValue, "left"), (gt.RightHandValue, "right") },
-            GreaterThanOrEqual gte => new[] { (gte.LeftHandValue, "left"), (gte.RightHandValue, "right") },
+            Equal eq => [(eq.LeftHandValue, "left"), (eq.RightHandValue, "right")],
+            NotEqual neq => [(neq.LeftHandValue, "left"), (neq.RightHandValue, "right")],
+            LessThan lt => [(lt.LeftHandValue, "left"), (lt.RightHandValue, "right")],
+            LessThanOrEqual lte => [(lte.LeftHandValue, "left"), (lte.RightHandValue, "right")],
+            GreaterThan gt => [(gt.LeftHandValue, "left"), (gt.RightHandValue, "right")],
+            GreaterThanOrEqual gte => [(gte.LeftHandValue, "left"), (gte.RightHandValue, "right")],
 
-            And and => new[] { (and.LeftHandValue, "left"), (and.RightHandValue, "right") },
-            Or or => new[] { (or.LeftHandValue, "left"), (or.RightHandValue, "right") },
+            And and => [(and.LeftHandValue, "left"), (and.RightHandValue, "right")],
+            Or or => [(or.LeftHandValue, "left"), (or.RightHandValue, "right")],
 
-            Coalesce coalesce => new[] { (coalesce.LeftHandValue, "value"), (coalesce.RightHandValue, "default") },
+            Coalesce coalesce => [(coalesce.LeftHandValue, "value"), (coalesce.RightHandValue, "default")],
 
             // Unary operations
-            UnaryMinus minus => new[] { (minus.Operand, "") },
-            Not not => new[] { (not.Value, "") },
+            UnaryMinus minus => [(minus.Operand, "")],
+            Not not => [(not.Value, "")],
 
             // Conditional
-            Conditional cond => new[] {
+            Conditional cond => [
                 (cond.Condition, "condition"),
                 (cond.IfTrue, "true"),
                 (cond.IfFalse, "false")
-            },
+            ],
 
             // Type operations
-            TypeCast cast => new[] { (cast.Operand, "") },
+            TypeCast cast => [(cast.Operand, "")],
 
             // Member access
-            MemberAccess member => new[] { (member.Value, "") },
+            MemberAccess member => [(member.Value, "")],
             IndexAccess index => new[] { (index.Value, "target") }
                 .Concat(index.Arguments.Select((arg, i) => (arg, $"index{i}"))),
 
@@ -470,15 +470,15 @@ public sealed class MermaidAstGenerator {
             Block block => block.Nodes.Select((n, i) => (n, $"{i}")),
 
             // Assignment
-            Assignment assign => new[] { (assign.Destination, "target"), (assign.Value, "value") },
+            Assignment assign => [(assign.Destination, "target"), (assign.Value, "value")],
 
             // Control flow
             IfStatement ifStmt => ifStmt.ElseBranch != null
                 ? new[] { (ifStmt.Condition, "condition"), (ifStmt.ThenBranch, "then"), (ifStmt.ElseBranch, "else") }
-                : new[] { (ifStmt.Condition, "condition"), (ifStmt.ThenBranch, "then") },
+                : [(ifStmt.Condition, "condition"), (ifStmt.ThenBranch, "then")],
 
-            WhileLoop whileLoop => new[] { (whileLoop.Condition, "condition"), (whileLoop.Body, "body") },
-            DoWhileLoop doWhile => new[] { (doWhile.Body, "body"), (doWhile.Condition, "condition") },
+            WhileLoop whileLoop => [(whileLoop.Condition, "condition"), (whileLoop.Body, "body")],
+            DoWhileLoop doWhile => [(doWhile.Body, "body"), (doWhile.Condition, "condition")],
 
             ForLoop forLoop => new[] {
                 (forLoop.Initializer!, "init"),
@@ -487,8 +487,8 @@ public sealed class MermaidAstGenerator {
                 (forLoop.Body, "body")
             }.Where(x => x.Item1 != null!),
 
-            ReturnStatement ret => ret.Value != null ? new[] { (ret.Value, "") } : Array.Empty<(Node, string)>(),
-            ThrowStatement throw_ => new[] { (throw_.Exception, "") },
+            ReturnStatement ret => ret.Value != null ? [(ret.Value, "")] : Array.Empty<(Node, string)>(),
+            ThrowStatement throw_ => [(throw_.Exception, "")],
 
             // Default: no children
             _ => Array.Empty<(Node, string)>()

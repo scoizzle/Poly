@@ -261,7 +261,7 @@ public class TypeCompatibilityTests {
         await Assert.That(baseType).IsNotNull();
         await Assert.That(((ITypeDefinition)baseType!).ReflectedType).IsEqualTo(typeof(GenericBase<string>));
         await Assert.That(baseType.GenericParameters.Select(parameter => parameter.ParameterTypeDefinition.Type).ToArray())
-            .IsEquivalentTo(new[] { typeof(string) });
+            .IsEquivalentTo([typeof(string)]);
     }
 
     [Test]

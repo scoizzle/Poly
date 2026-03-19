@@ -330,7 +330,7 @@ public sealed class LinqExpressionGenerator {
 
         // Handle string concatenation explicitly
         if (leftExpr.Type == typeof(string) && rightExpr.Type == typeof(string)) {
-            var concat = typeof(string).GetMethod(nameof(string.Concat), new[] { typeof(string), typeof(string) })
+            var concat = typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])
                 ?? throw new InvalidOperationException("string.Concat overload not found.");
             return Expression.Call(concat, leftExpr, rightExpr);
         }

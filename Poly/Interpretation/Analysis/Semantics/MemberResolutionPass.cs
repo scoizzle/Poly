@@ -1,5 +1,30 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
+internal static class MethodInvocationSemanticResolver {
+    public static ITypeMethod? ResolveMethod(AnalysisContext context, MethodInvocation methodInv)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(methodInv);
+
+        var targetType = context.GetResolvedType(methodInv.Target);
+        if (targetType == null)
+            return null;
+
+        var argumentTypes = new ITypeDefinition[methodInv.Arguments.Length];
+        for (var i = 0; i < methodInv.Arguments.Length; i++) {
+            var argumentType = context.GetResolvedType(methodInv.Arguments[i]);
+            if (argumentType == null)
+                return null;
+
+            argumentTypes[i] = argumentType;
+        }
+
+        return targetType
+            .FindMatchingMethodOverloads(methodInv.MethodName, argumentTypes)
+            .FirstOrDefault();
+    }
+}
+
 
 internal sealed class MemberResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node)
@@ -36,12 +61,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
 
     private static ITypeMember? ResolveMethodInvocationMember(AnalysisContext context, MethodInvocation methodInv)
     {
-        var targetType = context.GetResolvedType(methodInv.Target);
-        if (targetType == null)
-            return null;
-
-        var method = targetType.Methods.WithName(methodInv.MethodName).FirstOrDefault();
-        return method;
+        return MethodInvocationSemanticResolver.ResolveMethod(context, methodInv);
     }
 
     private static ITypeMember? ResolveIndexAccessMember(AnalysisContext context, IndexAccess indexAccess)

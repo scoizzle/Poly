@@ -251,6 +251,30 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
+    public async Task BaseType_OnClosedGenericType_ReturnsConstructedBaseType()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var closedGenericType = registry.GetTypeDefinition(typeof(GenericLeaf<string>));
+
+        var baseType = closedGenericType.BaseType;
+
+        await Assert.That(baseType).IsNotNull();
+        await Assert.That(((ITypeDefinition)baseType!).ReflectedType).IsEqualTo(typeof(GenericBase<string>));
+        await Assert.That(baseType.GenericParameters.Select(parameter => parameter.ParameterTypeDefinition.Type).ToArray())
+            .IsEquivalentTo(new[] { typeof(string) });
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_ClosedGenericBaseFromClosedGenericDerived_ReturnsTrue()
+    {
+        var registry = new ClrTypeDefinitionRegistry();
+        var baseType = (ITypeDefinition)registry.GetTypeDefinition(typeof(GenericBase<string>));
+        var derivedType = (ITypeDefinition)registry.GetTypeDefinition(typeof(GenericLeaf<string>));
+
+        await Assert.That(baseType.IsAssignableFrom(derivedType)).IsTrue();
+    }
+
+    [Test]
     public async Task Interfaces_CachedAfterFirstAccess()
     {
         var registry = new ClrTypeDefinitionRegistry();
@@ -261,4 +285,8 @@ public class TypeCompatibilityTests {
 
         await Assert.That(ReferenceEquals(interfaces1, interfaces2)).IsTrue();
     }
+
+    private abstract class GenericBase<T>;
+
+    private sealed class GenericLeaf<T> : GenericBase<T>;
 }

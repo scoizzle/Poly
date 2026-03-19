@@ -1,3 +1,4 @@
+using Poly.Introspection;
 using Poly.Validation.Rules;
 
 namespace Poly.Validation.Builders;
@@ -8,6 +9,7 @@ namespace Poly.Validation.Builders;
 /// <typeparam name="T">The type to build validation rules for.</typeparam>
 public sealed class RuleSetBuilder<T> {
     private readonly List<Rule> _rules = new();
+    private readonly TypeDefinitionProviderCollection _typeDefinitionProviders = [];
 
     /// <summary>
     /// Adds validation rules for a specific property.
@@ -48,10 +50,24 @@ public sealed class RuleSetBuilder<T> {
     }
 
     /// <summary>
+    /// Adds a type definition provider used when compiling the rule set.
+    /// </summary>
+    /// <param name="provider">The provider to add.</param>
+    /// <returns>This builder for method chaining.</returns>
+    public RuleSetBuilder<T> AddTypeDefinitionProvider(ITypeDefinitionProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _typeDefinitionProviders.Add(provider);
+        return this;
+    }
+
+    /// <summary>
     /// Builds the final RuleSet with all configured rules.
     /// </summary>
     /// <returns>A compiled RuleSet.</returns>
-    public RuleSet<T> Build() => new RuleSet<T>(_rules);
+    public RuleSet<T> Build() => _typeDefinitionProviders.Count == 0
+        ? new RuleSet<T>(_rules)
+        : new RuleSet<T>(_rules, _typeDefinitionProviders.Providers);
 
     /// <summary>
     /// Extracts the property name from a member access expression.

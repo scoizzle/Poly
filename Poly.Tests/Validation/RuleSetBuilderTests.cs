@@ -1,4 +1,9 @@
+using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Validation;
 using Poly.Validation.Builders;
+using Poly.Validation.Constraints;
+using Poly.Validation.Rules;
 
 using Exprs = System.Linq.Expressions;
 
@@ -224,6 +229,32 @@ public class RuleSetBuilderTests {
         }
     }
 
+    [Test]
+    public async Task Builder_WithExplicitTypeDefinitionProvider_UsesProvider()
+    {
+        var provider = new TrackingTypeDefinitionProvider(ClrTypeDefinitionRegistry.Shared);
+
+        var ruleSet = new RuleSetBuilder<Person>()
+            .AddTypeDefinitionProvider(provider)
+            .Member(p => p.Name, c => c.NotNull())
+            .Build();
+
+        var result = ruleSet.Test(new Person { Name = "John", Age = 25 });
+
+        await Assert.That(result).IsTrue();
+        await Assert.That(provider.RequestedTypes).Contains(typeof(Person));
+    }
+
+    [Test]
+    public async Task Builder_WithExplicitEmptyProviderSet_DoesNotFallbackToShared()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+            _ = new RuleSet<Person>([
+                new PropertyConstraintRule("Name", new NotNullConstraint())
+            ], Array.Empty<ITypeDefinitionProvider>());
+        });
+    }
+
     private class Person {
         public string? Name { get; set; }
         public int Age { get; set; }
@@ -232,5 +263,19 @@ public class RuleSetBuilderTests {
 
     private class NumberProperty {
         public int Value { get; set; }
+    }
+
+    private sealed class TrackingTypeDefinitionProvider(ITypeDefinitionProvider innerProvider) : ITypeDefinitionProvider {
+        private readonly List<Type> _requestedTypes = new();
+
+        public IReadOnlyList<Type> RequestedTypes => _requestedTypes;
+
+        public ITypeDefinition? GetTypeDefinition(string name) => innerProvider.GetTypeDefinition(name);
+
+        public ITypeDefinition? GetTypeDefinition(Type type)
+        {
+            _requestedTypes.Add(type);
+            return innerProvider.GetTypeDefinition(type);
+        }
     }
 }

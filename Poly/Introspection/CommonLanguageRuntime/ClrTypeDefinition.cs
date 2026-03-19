@@ -201,11 +201,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
-        if (type.IsGenericType && !type.IsGenericTypeDefinition) {
-            var genericDef = type.GetGenericTypeDefinition();
-            return provider.GetTypeDefinition(genericDef)!;
-        }
-        else if (type.BaseType != null) {
+        if (type.BaseType != null) {
             return provider.GetTypeDefinition(type.BaseType)!;
         }
         return default;

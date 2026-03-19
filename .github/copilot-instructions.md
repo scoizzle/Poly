@@ -20,6 +20,7 @@ Keep only requirements that measurably improve customer time-to-value, correctne
 ## Build & Test
 - Build: `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`
 - Test: `dotnet run --project Poly.Tests/Poly.Tests.csproj`
+- Work is not complete while the build is failing; keep iterating until build failures are resolved or explicitly blocked by the user.
 - Add tests alongside feature changes; mirror the builder-first style.
 
 ## Placement Rules

@@ -85,11 +85,19 @@ internal sealed class TypeResolver : INodeAnalyzer {
         AnalysisContext context,
         MethodInvocation methodInv)
     {
-        var instanceType = ResolveNodeType(context, methodInv.Target);
-        if (instanceType == null)
-            return null;
+        var targetType = ResolveNodeType(context, methodInv.Target);
+        if (targetType != null) {
+            context.SetResolvedType(methodInv.Target, targetType);
+        }
 
-        var method = instanceType.Methods.WithName(methodInv.MethodName).FirstOrDefault();
+        foreach (var argument in methodInv.Arguments) {
+            var argumentType = ResolveNodeType(context, argument);
+            if (argumentType != null) {
+                context.SetResolvedType(argument, argumentType);
+            }
+        }
+
+        var method = MethodInvocationSemanticResolver.ResolveMethod(context, methodInv);
         return method?.MemberTypeDefinition;
     }
 

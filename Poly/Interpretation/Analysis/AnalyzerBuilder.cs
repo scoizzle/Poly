@@ -3,8 +3,24 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Interpretation.Analysis;
 
 public sealed class AnalyzerBuilder {
-    private readonly TypeDefinitionProviderCollection _typeDefinitions = [ClrTypeDefinitionRegistry.Shared];
+    private readonly TypeDefinitionProviderCollection _typeDefinitions;
     private readonly List<INodeAnalyzer> _analyzers = new();
+
+    public AnalyzerBuilder()
+        : this([ClrTypeDefinitionRegistry.Shared])
+    {
+    }
+
+    public AnalyzerBuilder(ITypeDefinitionProvider typeDefinitionProvider)
+        : this([typeDefinitionProvider])
+    {
+    }
+
+    public AnalyzerBuilder(IEnumerable<ITypeDefinitionProvider> typeDefinitionProviders)
+    {
+        ArgumentNullException.ThrowIfNull(typeDefinitionProviders);
+        _typeDefinitions = [.. typeDefinitionProviders];
+    }
 
     public void AddAnalyzer(INodeAnalyzer analyzer)
     {

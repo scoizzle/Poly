@@ -2,6 +2,7 @@ using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Validation.Rules;
 
@@ -17,17 +18,40 @@ public sealed class RuleSet<T> {
     /// </summary>
     /// <param name="rules">The collection of rules to combine.</param>
     public RuleSet(IEnumerable<Rule> rules)
+        : this(rules, [ClrTypeDefinitionRegistry.Shared])
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the RuleSet class.
+    /// </summary>
+    /// <param name="rules">The collection of rules to combine.</param>
+    /// <param name="typeDefinitionProvider">The type definition provider to use for rule analysis.</param>
+    public RuleSet(IEnumerable<Rule> rules, ITypeDefinitionProvider typeDefinitionProvider)
+        : this(rules, [typeDefinitionProvider])
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the RuleSet class.
+    /// </summary>
+    /// <param name="rules">The collection of rules to combine.</param>
+    /// <param name="typeDefinitionProviders">The type definition providers to use for rule analysis.</param>
+    public RuleSet(IEnumerable<Rule> rules, IEnumerable<ITypeDefinitionProvider> typeDefinitionProviders)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(typeDefinitionProviders);
+
         // Combine all rules into a single AndRule
         CombinedRules = new AndRule(rules);
-        var registry = ClrTypeDefinitionRegistry.Shared;
-        var typeDefinition = registry.GetTypeDefinition<T>()
+        var providers = new TypeDefinitionProviderCollection(typeDefinitionProviders);
+        var typeDefinition = providers.GetTypeDefinition<T>()
             ?? throw new InvalidOperationException($"Type definition for {typeof(T).Name} not found.");
 
         var buildingContext = new RuleBuildingContext(typeDefinition);
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
 
-        var analyzer = new AnalyzerBuilder()
+        var analyzer = new AnalyzerBuilder(providers.Providers)
             .UseTypeResolver()
             .UseMemberResolver()
             .UseVariableScopeValidator()

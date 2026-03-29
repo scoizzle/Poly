@@ -531,9 +531,7 @@ public sealed class LinqExpressionGenerator {
             body,
             Expression.Label(continueLabel));
 
-        return Expression.Block(
-            Expression.Loop(loopBody, breakLabel),
-            Expression.Label(breakLabel));
+        return Expression.Loop(loopBody, breakLabel);
     }
 
     private Expression CompileDoWhileLoop(DoWhileLoop doWhileLoop) {
@@ -558,9 +556,7 @@ public sealed class LinqExpressionGenerator {
                 Expression.Not(condition),
                 Expression.Break(breakLabel)));
 
-        return Expression.Block(
-            Expression.Loop(loopBody, breakLabel),
-            Expression.Label(breakLabel));
+        return Expression.Loop(loopBody, breakLabel);
     }
 
     private Expression CompileForLoop(ForLoop forLoop) {
@@ -593,7 +589,6 @@ public sealed class LinqExpressionGenerator {
             blockExpressions.Add(initializer);
 
         blockExpressions.Add(Expression.Loop(loopBody, breakLabel));
-        blockExpressions.Add(Expression.Label(breakLabel));
 
         return blockExpressions.Count == 1 ? blockExpressions[0] : Expression.Block(blockExpressions);
     }

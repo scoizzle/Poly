@@ -450,7 +450,8 @@ public sealed class LinqExpressionGenerator {
         var indices = indexAccess.Arguments.Select(arg => CompileNode(arg)).ToArray();
 
         if (target.Type.IsArray) {
-            return Expression.ArrayIndex(target, indices);
+            // Use ArrayAccess so the expression is writable and can be used on the left side of Assignment.
+            return Expression.ArrayAccess(target, indices);
         }
         else {
             var indexerProperty = target.Type.GetProperties()

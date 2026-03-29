@@ -14,7 +14,8 @@ namespace Poly.Tests.Integration;
 /// Demonstrates the full flow: C99 source text → tokens → Poly AST → LINQ expression → execution.
 ///
 /// Supported subset: int/float/double types, arithmetic, comparison, logical operators,
-/// ternary (?:), if/else, while, for, variable declarations, assignments.
+/// ternary (?:), if/else, while, for, variable declarations, struct definitions,
+/// member access, and assignments.
 /// </summary>
 public class C99ParserInterpreterTests {
 
@@ -25,12 +26,14 @@ public class C99ParserInterpreterTests {
     private enum C99TokenKind {
         IntLiteral, FloatLiteral, DoubleLiteral,
         Identifier,
-        KwInt, KwFloat, KwDouble, KwReturn, KwIf, KwElse, KwWhile, KwFor,
+        KwInt, KwFloat, KwDouble, KwStruct, KwNamespace, KwReturn, KwIf, KwElse, KwWhile, KwFor,
         Plus, Minus, Star, Slash, Percent,
         Lt, LtEq, Gt, GtEq, EqEq, BangEq,
         AmpAmp, PipePipe, Bang,
         Eq,
         Question, Colon,
+        Dot,
+        LBracket, RBracket,
         LParen, RParen, LBrace, RBrace, Semicolon, Comma,
         Eof
     }
@@ -87,6 +90,8 @@ public class C99ParserInterpreterTests {
             ["int"] = C99TokenKind.KwInt,
             ["float"] = C99TokenKind.KwFloat,
             ["double"] = C99TokenKind.KwDouble,
+            ["struct"] = C99TokenKind.KwStruct,
+            ["namespace"] = C99TokenKind.KwNamespace,
             ["return"] = C99TokenKind.KwReturn,
             ["if"] = C99TokenKind.KwIf,
             ["else"] = C99TokenKind.KwElse,
@@ -123,12 +128,15 @@ public class C99ParserInterpreterTests {
                 '|' when TryPeek('|') => new C99Token(C99TokenKind.PipePipe, "||", start),
                 '(' => new C99Token(C99TokenKind.LParen, "(", start),
                 ')' => new C99Token(C99TokenKind.RParen, ")", start),
+                '[' => new C99Token(C99TokenKind.LBracket, "[", start),
+                ']' => new C99Token(C99TokenKind.RBracket, "]", start),
                 '{' => new C99Token(C99TokenKind.LBrace, "{", start),
                 '}' => new C99Token(C99TokenKind.RBrace, "}", start),
                 ';' => new C99Token(C99TokenKind.Semicolon, ";", start),
                 ',' => new C99Token(C99TokenKind.Comma, ",", start),
                 '?' => new C99Token(C99TokenKind.Question, "?", start),
                 ':' => new C99Token(C99TokenKind.Colon, ":", start),
+                '.' => new C99Token(C99TokenKind.Dot, ".", start),
                 _ => throw new InvalidOperationException($"Unexpected character '{c}' at position {start}")
             };
         }
@@ -151,6 +159,21 @@ public class C99ParserInterpreterTests {
         Node Body
     );
 
+    private struct C99Point {
+        public int x;
+        public int y;
+
+        public C99Point(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    private struct C99Segment {
+        public C99Point start;
+        public C99Point end;
+    }
+
     private sealed class C99Parser {
         private readonly List<C99Token> _tokens;
         private int _cur;
@@ -159,10 +182,24 @@ public class C99ParserInterpreterTests {
         private readonly Dictionary<string, (Parameter Param, Type ClrType)> _symbols = new();
         // Accumulated local variable declarations (excludes function parameters)
         private readonly List<(Parameter Param, Type ClrType)> _locals = new();
+        // Struct aliases available to this test parser; values are host CLR types.
+        private static readonly Dictionary<string, Type> KnownStructTypes = new() {
+            ["C99Point"] = typeof(C99Point),
+            ["C99Segment"] = typeof(C99Segment),
+        };
+        private readonly Dictionary<string, Type> _structTypes = new(KnownStructTypes);
 
         public C99Parser(List<C99Token> tokens) => _tokens = tokens;
 
         public C99ParsedFunction ParseFunction() {
+            if (Check(C99TokenKind.KwNamespace)) {
+                throw new InvalidOperationException("C99 does not support namespaces.");
+            }
+
+            while (Check(C99TokenKind.KwStruct) && IsStructDefinition()) {
+                ParseStructDefinition();
+            }
+
             var returnType = ParseTypeSpec();
             var name = Expect(C99TokenKind.Identifier).Text;
 
@@ -170,9 +207,9 @@ public class C99ParserInterpreterTests {
             var parameters = new List<(Parameter, Type)>();
             if (!Check(C99TokenKind.RParen)) {
                 do {
-                    var pType = ParseTypeSpec();
-                    var pName = Expect(C99TokenKind.Identifier).Text;
-                    var param = new Parameter(pName, TypeRef(pType));
+                    var baseType = ParseTypeSpec();
+                    var (pName, pType) = ParseDeclarator(baseType);
+                    var param = CreateParameter(pName, pType);
                     _symbols[pName] = (param, pType);
                     parameters.Add((param, pType));
                 } while (TryConsume(C99TokenKind.Comma));
@@ -181,6 +218,51 @@ public class C99ParserInterpreterTests {
 
             var body = ParseBlock();
             return new C99ParsedFunction(name, returnType, [.. parameters], [.. _locals], body);
+        }
+
+        private bool IsStructDefinition() {
+            if (!Check(C99TokenKind.KwStruct)) return false;
+            if (_cur + 2 >= _tokens.Count) return false;
+            return _tokens[_cur + 1].Kind == C99TokenKind.Identifier
+                && _tokens[_cur + 2].Kind == C99TokenKind.LBrace;
+        }
+
+        private void ParseStructDefinition() {
+            Expect(C99TokenKind.KwStruct);
+            var name = Expect(C99TokenKind.Identifier).Text;
+            Expect(C99TokenKind.LBrace);
+
+            var declaredFields = new List<(string Name, Type Type)>();
+            while (!Check(C99TokenKind.RBrace) && !Check(C99TokenKind.Eof)) {
+                var fieldType = ParseTypeSpec();
+                var fieldName = Expect(C99TokenKind.Identifier).Text;
+                Expect(C99TokenKind.Semicolon);
+                declaredFields.Add((fieldName, fieldType));
+            }
+
+            Expect(C99TokenKind.RBrace);
+            Expect(C99TokenKind.Semicolon);
+
+            if (!KnownStructTypes.TryGetValue(name, out var hostType)) {
+                throw new InvalidOperationException($"Struct '{name}' is not mapped to a host CLR type in this test harness.");
+            }
+
+            ValidateStructFields(name, hostType, declaredFields);
+            _structTypes[name] = hostType;
+        }
+
+        private static void ValidateStructFields(string structName, Type hostType, List<(string Name, Type Type)> fields) {
+            foreach (var (name, type) in fields) {
+                var hostField = hostType.GetField(name);
+                if (hostField == null) {
+                    throw new InvalidOperationException($"Struct '{structName}' field '{name}' is not present on host type '{hostType.Name}'.");
+                }
+
+                if (hostField.FieldType != type) {
+                    throw new InvalidOperationException(
+                        $"Struct '{structName}' field '{name}' type mismatch. C99 declares '{type.Name}', host has '{hostField.FieldType.Name}'.");
+                }
+            }
         }
 
         private Block ParseBlock() {
@@ -206,17 +288,172 @@ public class C99ParserInterpreterTests {
         }
 
         private ((Parameter Param, Type ClrType) Decl, Node? Init) ParseDeclaration() {
-            var type = ParseTypeSpec();
-            var name = Expect(C99TokenKind.Identifier).Text;
-            var param = new Parameter(name, TypeRef(type));
+            var baseType = ParseTypeSpec();
+            var (name, type) = ParseDeclarator(baseType);
+            var param = CreateParameter(name, type);
             _symbols[name] = (param, type);
 
             Node? init = null;
             if (TryConsume(C99TokenKind.Eq)) {
-                init = new Assignment(param, ParseExpr());
+                init = ParseDeclarationInitializer(param, type);
             }
             Expect(C99TokenKind.Semicolon);
             return ((param, type), init);
+        }
+
+        private Node ParseDeclarationInitializer(Parameter destination, Type destinationType) {
+            if (Check(C99TokenKind.LBrace)) {
+                return ParseDesignatedInitializer(destination, destinationType);
+            }
+
+            return new Assignment(destination, ParseExpr());
+        }
+
+        private Node ParseDesignatedInitializer(Parameter destination, Type destinationType) {
+            return destinationType.IsArray
+                ? ParseDesignatedArrayInitializer(destination, destinationType)
+                : ParseDesignatedStructInitializer(destination, destinationType);
+        }
+
+        private Node ParseDesignatedStructInitializer(Parameter destination, Type destinationType) {
+            if (destinationType == typeof(int) || destinationType == typeof(float) || destinationType == typeof(double)) {
+                throw new InvalidOperationException("Designated initializers are only supported for struct types.");
+            }
+
+            Expect(C99TokenKind.LBrace);
+            var assignments = new List<Node>();
+
+            while (!Check(C99TokenKind.RBrace) && !Check(C99TokenKind.Eof)) {
+                if (!Check(C99TokenKind.Dot) && !Check(C99TokenKind.LBracket)) {
+                    throw new InvalidOperationException("Expected designated field path starting with '.' or '['.");
+                }
+
+                var destinationPath = ParseDesignatorPath(destination, destinationType);
+                Expect(C99TokenKind.Eq);
+                var value = ParseExpr();
+                assignments.Add(new Assignment(destinationPath, value));
+
+                if (!TryConsume(C99TokenKind.Comma)) {
+                    break;
+                }
+            }
+
+            Expect(C99TokenKind.RBrace);
+
+            if (assignments.Count == 0) {
+                throw new InvalidOperationException("Designated initializer must include at least one field assignment.");
+            }
+
+            return assignments.Count == 1
+                ? assignments[0]
+                : new Block(assignments.ToArray());
+        }
+
+        private Node ParseDesignatedArrayInitializer(Parameter destination, Type destinationType) {
+            var elementType = destinationType.GetElementType()
+                ?? throw new InvalidOperationException($"Array type '{destinationType}' has no element type.");
+
+            Expect(C99TokenKind.LBrace);
+            var pending = new List<(int Index, Node Value)>();
+
+            while (!Check(C99TokenKind.RBrace) && !Check(C99TokenKind.Eof)) {
+                Expect(C99TokenKind.LBracket);
+                var index = ParseDesignatorIndex();
+                Expect(C99TokenKind.RBracket);
+                Expect(C99TokenKind.Eq);
+                var value = ParseExpr();
+                pending.Add((index, value));
+
+                if (!TryConsume(C99TokenKind.Comma)) {
+                    break;
+                }
+            }
+
+            Expect(C99TokenKind.RBrace);
+
+            if (pending.Count == 0) {
+                throw new InvalidOperationException("Designated array initializer must include at least one [index] assignment.");
+            }
+
+            int length = pending.Max(p => p.Index) + 1;
+            var initNodes = new List<Node> {
+                new Assignment(destination, new Constant(Array.CreateInstance(elementType, length)))
+            };
+
+            foreach (var (index, value) in pending) {
+                var target = new IndexAccess(destination, [new Constant(index)]);
+                initNodes.Add(new Assignment(target, value));
+            }
+
+            return new Block(initNodes.ToArray());
+        }
+
+        private Node ParseDesignatorPath(Node root, Type rootType) {
+            Node currentNode = root;
+            var currentType = rootType;
+
+            while (Check(C99TokenKind.Dot) || Check(C99TokenKind.LBracket)) {
+                if (TryConsume(C99TokenKind.Dot)) {
+                    var member = Expect(C99TokenKind.Identifier).Text;
+                    var nextType = ResolveMemberType(currentType, member);
+                    currentNode = new MemberAccess(currentNode, member);
+                    currentType = nextType;
+                    continue;
+                }
+
+                Expect(C99TokenKind.LBracket);
+                var index = ParseDesignatorIndex();
+                Expect(C99TokenKind.RBracket);
+
+                if (!currentType.IsArray) {
+                    throw new InvalidOperationException($"Type '{currentType.Name}' is not indexable in designated path.");
+                }
+
+                currentNode = new IndexAccess(currentNode, [new Constant(index)]);
+                currentType = currentType.GetElementType()
+                    ?? throw new InvalidOperationException($"Array type '{currentType}' has no element type.");
+            }
+
+            return currentNode;
+        }
+
+        private int ParseDesignatorIndex() {
+            var token = Expect(C99TokenKind.IntLiteral);
+            if (!int.TryParse(token.Text, out var index) || index < 0) {
+                throw new InvalidOperationException($"Designator index must be a non-negative integer literal, got '{token.Text}'.");
+            }
+
+            return index;
+        }
+
+        private static Type ResolveMemberType(Type ownerType, string member) {
+            var field = ownerType.GetField(member);
+            if (field != null) {
+                return field.FieldType;
+            }
+
+            var property = ownerType.GetProperty(member);
+            if (property != null) {
+                return property.PropertyType;
+            }
+
+            throw new InvalidOperationException($"Struct '{ownerType.Name}' does not contain field '{member}'.");
+        }
+
+        private static void EnsureStructFieldExists(Type structType, string fieldName) {
+            if (structType.GetField(fieldName) == null) {
+                throw new InvalidOperationException($"Struct '{structType.Name}' does not contain field '{fieldName}'.");
+            }
+        }
+
+        private (string Name, Type Type) ParseDeclarator(Type baseType) {
+            var name = Expect(C99TokenKind.Identifier).Text;
+            if (TryConsume(C99TokenKind.LBracket)) {
+                Expect(C99TokenKind.RBracket);
+                return (name, baseType.MakeArrayType());
+            }
+
+            return (name, baseType);
         }
 
         private Node ParseStatement() {
@@ -281,18 +518,34 @@ public class C99ParserInterpreterTests {
             return new ForLoop(init, cond, incr, ParseStatement());
         }
 
-        // Handles `ident = expr` (assignment) or falls through to a plain expression.
+        // Handles `ident = expr` and `ident.member = expr` assignments, or falls through to a plain expression.
         private Node ParseAssignmentOrExpr() {
-            if (_cur + 1 < _tokens.Count
-                && Check(C99TokenKind.Identifier)
-                && _tokens[_cur + 1].Kind == C99TokenKind.Eq) {
-                var name = Advance().Text;
-                Advance(); // consume '='
-                if (!_symbols.TryGetValue(name, out var sym))
-                    throw new InvalidOperationException($"Undefined identifier '{name}'");
-                return new Assignment(sym.Param, ParseExpr());
+            if (Check(C99TokenKind.Identifier)) {
+                int checkpoint = _cur;
+                var destination = ParseAssignmentDestination();
+                if (TryConsume(C99TokenKind.Eq)) {
+                    return new Assignment(destination, ParseExpr());
+                }
+
+                _cur = checkpoint;
             }
+
             return ParseExpr();
+        }
+
+        private Node ParseAssignmentDestination() {
+            var nameToken = Expect(C99TokenKind.Identifier);
+            if (!_symbols.TryGetValue(nameToken.Text, out var sym)) {
+                throw new InvalidOperationException($"Undefined identifier '{nameToken.Text}'");
+            }
+
+            Node destination = sym.Param;
+            while (TryConsume(C99TokenKind.Dot)) {
+                var member = Expect(C99TokenKind.Identifier).Text;
+                destination = new MemberAccess(destination, member);
+            }
+
+            return destination;
         }
 
         private Node ParseExpr() => ParseTernary();
@@ -370,6 +623,25 @@ public class C99ParserInterpreterTests {
         }
 
         private Node ParsePrimary() {
+            var expr = ParsePrimaryAtom();
+
+            while (Check(C99TokenKind.Dot) || Check(C99TokenKind.LBracket)) {
+                if (TryConsume(C99TokenKind.Dot)) {
+                    var member = Expect(C99TokenKind.Identifier).Text;
+                    expr = new MemberAccess(expr, member);
+                }
+                else {
+                    Expect(C99TokenKind.LBracket);
+                    var indexExpr = ParseExpr();
+                    Expect(C99TokenKind.RBracket);
+                    expr = new IndexAccess(expr, [indexExpr]);
+                }
+            }
+
+            return expr;
+        }
+
+        private Node ParsePrimaryAtom() {
             var tok = Peek();
             switch (tok.Kind) {
                 case C99TokenKind.IntLiteral:
@@ -401,9 +673,15 @@ public class C99ParserInterpreterTests {
         }
 
         private bool IsTypeSpec() =>
-            Peek().Kind is C99TokenKind.KwInt or C99TokenKind.KwFloat or C99TokenKind.KwDouble;
+            Peek().Kind is C99TokenKind.KwInt or C99TokenKind.KwFloat or C99TokenKind.KwDouble or C99TokenKind.KwStruct;
 
         private Type ParseTypeSpec() {
+            if (TryConsume(C99TokenKind.KwStruct)) {
+                var name = Expect(C99TokenKind.Identifier).Text;
+                if (_structTypes.TryGetValue(name, out var structType)) return structType;
+                throw new InvalidOperationException($"Unknown struct type '{name}'.");
+            }
+
             var tok = Advance();
             return tok.Kind switch {
                 C99TokenKind.KwInt => typeof(int),
@@ -418,6 +696,15 @@ public class C99ParserInterpreterTests {
             if (type == typeof(float)) return TypeReference.To<float>();
             if (type == typeof(double)) return TypeReference.To<double>();
             throw new ArgumentException($"Unsupported C99 type mapping for {type}");
+        }
+
+        private static Parameter CreateParameter(string name, Type type) {
+            if (type == typeof(int) || type == typeof(float) || type == typeof(double)) {
+                return new Parameter(name, TypeRef(type));
+            }
+
+            // Struct types are resolved from pre-registered metadata in CompileC99.
+            return new Parameter(name);
         }
 
         private C99Token Peek() => _tokens[_cur];
@@ -460,7 +747,13 @@ public class C99ParserInterpreterTests {
             .Analyze(fn.Body);
 
         var generator = new LinqExpressionGenerator(analysisResult);
-        return generator.CompileAsDelegate<TDelegate>(fn.Body, fn.Parameters.Select(p => p.Param).ToArray());
+        var parameters = fn.Parameters.Select(p => p.Param).ToArray();
+        if (parameters.Length == 0) {
+            var body = generator.Compile(fn.Body);
+            return System.Linq.Expressions.Expression.Lambda<TDelegate>(body).Compile();
+        }
+
+        return generator.CompileAsDelegate<TDelegate>(fn.Body, parameters);
     }
 
     // =========================================================================
@@ -596,5 +889,171 @@ public class C99ParserInterpreterTests {
         await Assert.That(clamp(5, 0, 10)).IsEqualTo(5);
         await Assert.That(clamp(-5, 0, 10)).IsEqualTo(0);
         await Assert.That(clamp(15, 0, 10)).IsEqualTo(10);
+    }
+
+    [Test]
+    public async Task StructDefinition_AndMemberAccess_UsesMappedHostStruct() {
+        var sum = CompileC99<Func<C99Point, int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            int sum(struct C99Point p) {
+                return p.x + p.y;
+            }
+            """);
+
+        await Assert.That(sum(new C99Point(3, 4))).IsEqualTo(7);
+        await Assert.That(sum(new C99Point(10, -2))).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task StructLocal_FieldAssignments_AndReadback_WorkCorrectly() {
+        var eval = CompileC99<Func<int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            int eval() {
+                struct C99Point p;
+                p.x = 8;
+                p.y = 13;
+                return p.x + p.y;
+            }
+            """);
+
+        await Assert.That(eval()).IsEqualTo(21);
+    }
+
+    [Test]
+    public async Task StructCopyInitialization_ThenMemberMutation_WorksCorrectly() {
+        var project = CompileC99<Func<C99Point, int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            int project(struct C99Point seed) {
+                struct C99Point p = seed;
+                p.x = p.x + 2;
+                p.y = p.y + 3;
+                return p.x * 100 + p.y;
+            }
+            """);
+
+        await Assert.That(project(new C99Point(1, 2))).IsEqualTo(305);
+        await Assert.That(project(new C99Point(10, 20))).IsEqualTo(1223);
+    }
+
+    [Test]
+    public async Task StructDesignatedInitializer_AssignsNamedFields() {
+        var eval = CompileC99<Func<int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            int eval() {
+                struct C99Point p = { .x = 7, .y = 9 };
+                return p.x * 10 + p.y;
+            }
+            """);
+
+        await Assert.That(eval()).IsEqualTo(79);
+    }
+
+    [Test]
+    public async Task StructDesignatedInitializer_AllowsOutOfOrderAndDefaultsUnspecifiedFields() {
+        var eval = CompileC99<Func<int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            int eval() {
+                struct C99Point p = { .y = 11 };
+                return p.x + p.y;
+            }
+            """);
+
+        await Assert.That(eval()).IsEqualTo(11);
+    }
+
+    [Test]
+    public async Task StructDesignatedInitializer_UnknownField_ThrowsException() {
+        await Assert.That(() => CompileC99<Func<int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            int eval() {
+                struct C99Point p = { .z = 1 };
+                return p.x;
+            }
+            """))
+            .Throws<InvalidOperationException>()
+                .WithMessage("Struct 'C99Point' does not contain field 'z'.");
+    }
+
+    [Test]
+    public async Task StructNestedDesignatedInitializer_AssignsNestedFields() {
+        var eval = CompileC99<Func<int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            struct C99Segment {
+                struct C99Point start;
+                struct C99Point end;
+            };
+
+            int eval() {
+                struct C99Segment s = { .start.x = 2, .start.y = 3, .end.x = 7, .end.y = 11 };
+                return s.start.x + s.start.y + s.end.x + s.end.y;
+            }
+            """);
+
+        await Assert.That(eval()).IsEqualTo(23);
+    }
+
+    [Test]
+    public async Task ArrayDesignatedInitializer_AssignsIndexedValues() {
+        var eval = CompileC99<Func<int>>("""
+            int eval() {
+                int values[] = { [0] = 3, [2] = 5, [4] = 8 };
+                return values[0] + values[1] + values[2] + values[3] + values[4];
+            }
+            """);
+
+        await Assert.That(eval()).IsEqualTo(16);
+    }
+
+    [Test]
+    public async Task ArrayDesignatedInitializer_NonArrayType_ThrowsException() {
+        await Assert.That(() => CompileC99<Func<int>>("""
+            int eval() {
+                int x = { [0] = 1 };
+                return x;
+            }
+            """))
+            .Throws<InvalidOperationException>()
+            .WithMessage("Designated initializers are only supported for struct types.");
+    }
+
+    [Test]
+    public async Task NamespaceKeyword_IsRejected_WithClearMessage() {
+        await Assert.That(() => CompileC99<Func<int, int, int>>("""
+            namespace math {
+                int add(int a, int b) {
+                    return a + b;
+                }
+            }
+            """))
+            .Throws<InvalidOperationException>()
+            .WithMessage("C99 does not support namespaces.");
     }
 }

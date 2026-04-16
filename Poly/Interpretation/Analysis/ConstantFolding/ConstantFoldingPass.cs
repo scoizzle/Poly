@@ -3,6 +3,7 @@ using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
+using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Interpretation.Analysis.ConstantFolding;
 
@@ -24,50 +25,81 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         var foldedValue = TryFold(context, node);
         if (foldedValue.HasValue) {
             context.SetMetadata(node, new ConstantValueMetadata(foldedValue.Value));
+            context.SetNodeReplacement(node, new Constant(foldedValue.Value));
+            return;
+        }
+
+        var replacement = TrySimplify(context, node);
+        if (replacement != null) {
+            context.SetNodeReplacement(node, replacement);
         }
     }
 
-    private FoldResult TryFold(AnalysisContext context, Node node) {
+    private FoldResult TryFold(AnalysisContext context, Node node, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
         return node switch {
             Constant c => FoldResult.Success(c.Value),
+            Parameter parameter => FoldParameter(parameter, parameterValues),
 
             // Arithmetic operations
-            Add add => FoldBinaryArithmetic(context, add.LeftHandValue, add.RightHandValue, (a, b) => Add(a, b)),
-            Subtract sub => FoldBinaryArithmetic(context, sub.LeftHandValue, sub.RightHandValue, (a, b) => Subtract(a, b)),
-            Multiply mul => FoldBinaryArithmetic(context, mul.LeftHandValue, mul.RightHandValue, (a, b) => Multiply(a, b)),
-            Divide div => FoldBinaryArithmetic(context, div.LeftHandValue, div.RightHandValue, (a, b) => Divide(a, b)),
-            Modulo mod => FoldBinaryArithmetic(context, mod.LeftHandValue, mod.RightHandValue, (a, b) => Modulo(a, b)),
-            UnaryMinus neg => FoldUnaryArithmetic(context, neg.Operand, Negate),
+            Add add => FoldBinaryArithmetic(context, add.LeftHandValue, add.RightHandValue, Add, parameterValues),
+            Subtract sub => FoldBinaryArithmetic(context, sub.LeftHandValue, sub.RightHandValue, Subtract, parameterValues),
+            Multiply mul => FoldBinaryArithmetic(context, mul.LeftHandValue, mul.RightHandValue, Multiply, parameterValues),
+            Divide div => FoldBinaryArithmetic(context, div.LeftHandValue, div.RightHandValue, Divide, parameterValues),
+            Modulo mod => FoldBinaryArithmetic(context, mod.LeftHandValue, mod.RightHandValue, Modulo, parameterValues),
+            UnaryMinus neg => FoldUnaryArithmetic(context, neg.Operand, Negate, parameterValues),
 
             // Boolean operations
-            And and => FoldBinaryBoolean(context, and.LeftHandValue, and.RightHandValue, (a, b) => a && b),
-            Or or => FoldBinaryBoolean(context, or.LeftHandValue, or.RightHandValue, (a, b) => a || b),
-            Not not => FoldUnaryBoolean(context, not.Value, a => !a),
+            And and => FoldAnd(context, and, parameterValues),
+            Or or => FoldOr(context, or, parameterValues),
+            Not not => FoldUnaryBoolean(context, not.Value, a => !a, parameterValues),
 
             // Comparison operations
-            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => Compare(a, b) > 0),
-            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => Compare(a, b) >= 0),
-            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => Compare(a, b) < 0),
-            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => Compare(a, b) <= 0),
+            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => Compare(a, b) > 0, parameterValues),
+            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => Compare(a, b) >= 0, parameterValues),
+            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => Compare(a, b) < 0, parameterValues),
+            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => Compare(a, b) <= 0, parameterValues),
 
             // Equality operations
-            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, object.Equals),
-            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !object.Equals(a, b)),
+            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, object.Equals, parameterValues),
+            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !object.Equals(a, b), parameterValues),
 
             // Conditional with constant condition
-            Conditional cond => FoldConditional(context, cond),
-            IfStatement ifStmt => FoldIfStatement(context, ifStmt),
+            Conditional cond => FoldConditional(context, cond, parameterValues),
+            IfStatement ifStmt => FoldIfStatement(context, ifStmt, parameterValues),
 
             // Coalesce with non-null left
-            Coalesce coalesce => FoldCoalesce(context, coalesce),
+            Coalesce coalesce => FoldCoalesce(context, coalesce, parameterValues),
+
+            // Lambda invocation with constant arguments
+            Invoke invoke => FoldInvocation(context, invoke, parameterValues),
 
             _ => FoldResult.NotFoldable
         };
     }
 
-    private FoldResult FoldBinaryArithmetic(AnalysisContext context, Node left, Node right, Func<object, object, object?> operation) {
-        var leftValue = GetConstantValue(context, left);
-        var rightValue = GetConstantValue(context, right);
+    private FoldResult FoldParameter(Parameter parameter, IReadOnlyDictionary<NodeId, object?>? parameterValues) {
+        if (parameterValues != null && parameterValues.TryGetValue(parameter.Id, out var value)) {
+            return FoldResult.Success(value);
+        }
+
+        return FoldResult.NotFoldable;
+    }
+
+    private Node? TrySimplify(AnalysisContext context, Node node) {
+        return node switch {
+            Add add => SimplifyAddition(context, add),
+            Subtract sub => SimplifySubtraction(context, sub),
+            Multiply mul => SimplifyMultiplication(context, mul),
+            Divide div => SimplifyDivision(context, div),
+            And and => SimplifyAnd(context, and),
+            Or or => SimplifyOr(context, or),
+            _ => null
+        };
+    }
+
+    private FoldResult FoldBinaryArithmetic(AnalysisContext context, Node left, Node right, Func<object, object, object?> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var leftValue = GetConstantValue(context, left, parameterValues);
+        var rightValue = GetConstantValue(context, right, parameterValues);
 
         if (!leftValue.HasValue || !rightValue.HasValue)
             return FoldResult.NotFoldable;
@@ -81,8 +113,8 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
     }
 
-    private FoldResult FoldUnaryArithmetic(AnalysisContext context, Node operand, Func<object, object?> operation) {
-        var value = GetConstantValue(context, operand);
+    private FoldResult FoldUnaryArithmetic(AnalysisContext context, Node operand, Func<object, object?> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var value = GetConstantValue(context, operand, parameterValues);
         if (!value.HasValue)
             return FoldResult.NotFoldable;
 
@@ -95,9 +127,9 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
     }
 
-    private FoldResult FoldBinaryBoolean(AnalysisContext context, Node left, Node right, Func<bool, bool, bool> operation) {
-        var leftValue = GetConstantValue(context, left);
-        var rightValue = GetConstantValue(context, right);
+    private FoldResult FoldBinaryBoolean(AnalysisContext context, Node left, Node right, Func<bool, bool, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var leftValue = GetConstantValue(context, left, parameterValues);
+        var rightValue = GetConstantValue(context, right, parameterValues);
 
         if (!leftValue.HasValue || !rightValue.HasValue)
             return FoldResult.NotFoldable;
@@ -109,8 +141,26 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldUnaryBoolean(AnalysisContext context, Node operand, Func<bool, bool> operation) {
-        var value = GetConstantValue(context, operand);
+    private FoldResult FoldAnd(AnalysisContext context, And and, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var leftValue = GetConstantValue(context, and.LeftHandValue, parameterValues);
+        if (leftValue.HasValue && leftValue.Value is bool leftBool && !leftBool) {
+            return FoldResult.Success(false);
+        }
+
+        return FoldBinaryBoolean(context, and.LeftHandValue, and.RightHandValue, (a, b) => a && b, parameterValues);
+    }
+
+    private FoldResult FoldOr(AnalysisContext context, Or or, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var leftValue = GetConstantValue(context, or.LeftHandValue, parameterValues);
+        if (leftValue.HasValue && leftValue.Value is bool leftBool && leftBool) {
+            return FoldResult.Success(true);
+        }
+
+        return FoldBinaryBoolean(context, or.LeftHandValue, or.RightHandValue, (a, b) => a || b, parameterValues);
+    }
+
+    private FoldResult FoldUnaryBoolean(AnalysisContext context, Node operand, Func<bool, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var value = GetConstantValue(context, operand, parameterValues);
         if (!value.HasValue)
             return FoldResult.NotFoldable;
 
@@ -121,9 +171,59 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldComparison(AnalysisContext context, Node left, Node right, Func<object, object, bool> operation) {
-        var leftValue = GetConstantValue(context, left);
-        var rightValue = GetConstantValue(context, right);
+    private Node? SimplifyAddition(AnalysisContext context, Add add) {
+        if (IsZero(context, add.LeftHandValue)) {
+            return add.RightHandValue;
+        }
+
+        if (IsZero(context, add.RightHandValue)) {
+            return add.LeftHandValue;
+        }
+
+        return null;
+    }
+
+    private Node? SimplifySubtraction(AnalysisContext context, Subtract subtract) {
+        return IsZero(context, subtract.RightHandValue) ? subtract.LeftHandValue : null;
+    }
+
+    private Node? SimplifyMultiplication(AnalysisContext context, Multiply multiply) {
+        if (IsOne(context, multiply.LeftHandValue)) {
+            return multiply.RightHandValue;
+        }
+
+        if (IsOne(context, multiply.RightHandValue)) {
+            return multiply.LeftHandValue;
+        }
+
+        return null;
+    }
+
+    private Node? SimplifyDivision(AnalysisContext context, Divide divide) {
+        return IsOne(context, divide.RightHandValue) ? divide.LeftHandValue : null;
+    }
+
+    private Node? SimplifyAnd(AnalysisContext context, And and) {
+        var leftValue = GetConstantValue(context, and.LeftHandValue);
+        if (!leftValue.HasValue || leftValue.Value is not bool leftBool) {
+            return null;
+        }
+
+        return leftBool ? and.RightHandValue : and.LeftHandValue;
+    }
+
+    private Node? SimplifyOr(AnalysisContext context, Or or) {
+        var leftValue = GetConstantValue(context, or.LeftHandValue);
+        if (!leftValue.HasValue || leftValue.Value is not bool leftBool) {
+            return null;
+        }
+
+        return leftBool ? or.LeftHandValue : or.RightHandValue;
+    }
+
+    private FoldResult FoldComparison(AnalysisContext context, Node left, Node right, Func<object, object, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var leftValue = GetConstantValue(context, left, parameterValues);
+        var rightValue = GetConstantValue(context, right, parameterValues);
 
         if (!leftValue.HasValue || !rightValue.HasValue)
             return FoldResult.NotFoldable;
@@ -137,9 +237,9 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
     }
 
-    private FoldResult FoldEquality(AnalysisContext context, Node left, Node right, Func<object?, object?, bool> operation) {
-        var leftValue = GetConstantValue(context, left);
-        var rightValue = GetConstantValue(context, right);
+    private FoldResult FoldEquality(AnalysisContext context, Node left, Node right, Func<object?, object?, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var leftValue = GetConstantValue(context, left, parameterValues);
+        var rightValue = GetConstantValue(context, right, parameterValues);
 
         if (!leftValue.HasValue || !rightValue.HasValue)
             return FoldResult.NotFoldable;
@@ -147,38 +247,38 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return FoldResult.Success(operation(leftValue.Value, rightValue.Value));
     }
 
-    private FoldResult FoldConditional(AnalysisContext context, Conditional cond) {
-        var condValue = GetConstantValue(context, cond.Condition);
+    private FoldResult FoldConditional(AnalysisContext context, Conditional cond, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var condValue = GetConstantValue(context, cond.Condition, parameterValues);
         if (!condValue.HasValue || condValue.Value is not bool boolCond)
             return FoldResult.NotFoldable;
 
         // If condition is constant, result is the appropriate branch
         var selectedBranch = boolCond ? cond.IfTrue : cond.IfFalse;
-        var branchValue = GetConstantValue(context, selectedBranch);
+        var branchValue = GetConstantValue(context, selectedBranch, parameterValues);
         return branchValue.HasValue ? FoldResult.Success(branchValue.Value) : FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldIfStatement(AnalysisContext context, IfStatement ifStmt) {
-        var condValue = GetConstantValue(context, ifStmt.Condition);
+    private FoldResult FoldIfStatement(AnalysisContext context, IfStatement ifStmt, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var condValue = GetConstantValue(context, ifStmt.Condition, parameterValues);
         if (!condValue.HasValue || condValue.Value is not bool boolCond)
             return FoldResult.NotFoldable;
 
         // If condition is constant true, result is then branch
         // If condition is constant false, result is else branch (if present)
         if (boolCond) {
-            var thenValue = GetConstantValue(context, ifStmt.ThenBranch);
+            var thenValue = GetConstantValue(context, ifStmt.ThenBranch, parameterValues);
             return thenValue.HasValue ? FoldResult.Success(thenValue.Value) : FoldResult.NotFoldable;
         }
         else if (ifStmt.ElseBranch != null) {
-            var elseValue = GetConstantValue(context, ifStmt.ElseBranch);
+            var elseValue = GetConstantValue(context, ifStmt.ElseBranch, parameterValues);
             return elseValue.HasValue ? FoldResult.Success(elseValue.Value) : FoldResult.NotFoldable;
         }
 
         return FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldCoalesce(AnalysisContext context, Coalesce coalesce) {
-        var leftValue = GetConstantValue(context, coalesce.LeftHandValue);
+    private FoldResult FoldCoalesce(AnalysisContext context, Coalesce coalesce, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var leftValue = GetConstantValue(context, coalesce.LeftHandValue, parameterValues);
         if (!leftValue.HasValue)
             return FoldResult.NotFoldable;
 
@@ -188,11 +288,36 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
 
         // If left is null, result is right
-        var rightValue = GetConstantValue(context, coalesce.RightHandValue);
+        var rightValue = GetConstantValue(context, coalesce.RightHandValue, parameterValues);
         return rightValue.HasValue ? FoldResult.Success(rightValue.Value) : FoldResult.NotFoldable;
     }
 
-    private FoldResult GetConstantValue(AnalysisContext context, Node node) {
+    private FoldResult FoldInvocation(AnalysisContext context, Invoke invoke, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        if (invoke.Delegate is not Lambda lambda || lambda.Parameters.Count != invoke.Arguments.Length) {
+            return FoldResult.NotFoldable;
+        }
+
+        Dictionary<NodeId, object?> boundParameters = parameterValues != null
+            ? new Dictionary<NodeId, object?>(parameterValues)
+            : [];
+
+        for (var i = 0; i < lambda.Parameters.Count; i++) {
+            var argumentValue = GetConstantValue(context, invoke.Arguments[i], parameterValues);
+            if (!argumentValue.HasValue) {
+                return FoldResult.NotFoldable;
+            }
+
+            boundParameters[lambda.Parameters[i].Id] = argumentValue.Value;
+        }
+
+        return GetConstantValue(context, lambda.Body, boundParameters);
+    }
+
+    private FoldResult GetConstantValue(AnalysisContext context, Node node, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        if (node is Parameter parameter) {
+            return FoldParameter(parameter, parameterValues);
+        }
+
         // Check if we already computed a constant value for this node
         var metadata = context.GetMetadata<ConstantValueMetadata>(node);
         if (metadata != null) {
@@ -204,7 +329,43 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             return FoldResult.Success(c.Value);
         }
 
-        return FoldResult.NotFoldable;
+        return TryFold(context, node, parameterValues);
+    }
+
+    private bool IsZero(AnalysisContext context, Node node) {
+        var value = GetConstantValue(context, node);
+        return value.HasValue && value.Value switch {
+            sbyte x => x == 0,
+            byte x => x == 0,
+            short x => x == 0,
+            ushort x => x == 0,
+            int x => x == 0,
+            uint x => x == 0,
+            long x => x == 0,
+            ulong x => x == 0,
+            float x => x == 0,
+            double x => x == 0,
+            decimal x => x == 0,
+            _ => false
+        };
+    }
+
+    private bool IsOne(AnalysisContext context, Node node) {
+        var value = GetConstantValue(context, node);
+        return value.HasValue && value.Value switch {
+            sbyte x => x == 1,
+            byte x => x == 1,
+            short x => x == 1,
+            ushort x => x == 1,
+            int x => x == 1,
+            uint x => x == 1,
+            long x => x == 1,
+            ulong x => x == 1,
+            float x => x == 1,
+            double x => x == 1,
+            decimal x => x == 1,
+            _ => false
+        };
     }
 
     // Arithmetic operations with type coercion
@@ -331,7 +492,7 @@ public static class ConstantFoldingExtensions {
         }
     }
 
-    extension(AnalysisContext context) {
+    extension(INodeMetadataProvider context) {
         /// <summary>
         /// Gets the constant-folded value for a node, if available.
         /// </summary>
@@ -345,23 +506,6 @@ public static class ConstantFoldingExtensions {
         /// </summary>
         public bool IsConstant(Node node) {
             return context.GetMetadata<ConstantValueMetadata>(node) != null || node is Constant;
-        }
-    }
-
-    extension(AnalysisResult result) {
-        /// <summary>
-        /// Gets the constant-folded value for a node, if available.
-        /// </summary>
-        public object? GetConstantValue(Node node) {
-            var metadata = result.GetMetadata<ConstantValueMetadata>(node);
-            return metadata?.Value;
-        }
-
-        /// <summary>
-        /// Returns true if the node has been determined to be a constant.
-        /// </summary>
-        public bool IsConstant(Node node) {
-            return result.GetMetadata<ConstantValueMetadata>(node) != null || node is Constant;
         }
     }
 }

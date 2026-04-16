@@ -56,11 +56,10 @@ public sealed class RuleSet<T> {
 
         var analysisResult = analyzer.Analyze(RuleSetInterpretation);
         var generator = new LinqExpressionGenerator(analysisResult);
+        var compilation = generator.Compile(RuleSetInterpretation);
 
-        NodeTree = generator.Compile(RuleSetInterpretation);
-
-        // Collect parameters generated during compilation
-        var parameterExpressions = generator.GetParameters().ToList();
+        NodeTree = compilation.Expression;
+        var parameterExpressions = compilation.Parameters.ToList();
 
         // Ensure we have the main parameter for the type being validated
         // If it wasn't generated (e.g., due to empty rules), create it manually

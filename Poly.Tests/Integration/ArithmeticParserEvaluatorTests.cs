@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using System.Text.RegularExpressions;
 
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;

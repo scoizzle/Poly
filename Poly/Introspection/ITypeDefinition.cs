@@ -66,6 +66,11 @@ public interface ITypeDefinition {
     IEnumerable<ITypeMethod> Methods { get; }
 
     /// <summary>
+    /// Gets all constructors defined on the type.
+    /// </summary>
+    IEnumerable<ITypeConstructor> Constructors { get; }
+
+    /// <summary>
     /// Gets the underlying reflected runtime type, when available.
     /// </summary>
     Type ReflectedType { get; }
@@ -74,7 +79,7 @@ public interface ITypeDefinition {
     /// Gets the primitive type identifier if this type is a primitive type, null otherwise.
     /// Primitive types are the atomic building blocks from which all other types are composed.
     /// </summary>
-    PrimitiveTypeId? PrimitiveTypeId { get; }
+    PrimitiveType? PrimitiveType { get; }
 
     /// <summary>
     /// Gets the type categories that apply to this type.

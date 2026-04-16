@@ -12,7 +12,6 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Mermaid;
 using Poly.Validation;
-using Poly.Validation.Builders;
 
 // Playground.Main();
 
@@ -219,10 +218,10 @@ Console.WriteLine($"Total time for 10 analyses: {stopwatch.Elapsed}");
 // Console.WriteLine(JsonSerializer.Serialize(dataModel, options));
 
 
-RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-    .Member(p => p.Name, r => r.NotNull()!.MinLength(1).MaxLength(100))
-    .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
-    .Build();
+// RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
+//     .Member(p => p.Name, r => r.NotNull()!.MinLength(1).MaxLength(100))
+//     .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
+//     .Build();
 
 // Person person = new(Name: "Alice", Age: 30);
 // Console.WriteLine($"Rule evaluation for {person}: {ruleSet.Test(person)}");
@@ -264,39 +263,39 @@ RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
 // var compiled = Expression.Lambda<Func<int>>(expr).Compile();
 // Console.WriteLine(compiled());
 
-public record Person(string? Name, int Age);
+// public record Person(string? Name, int Age);
 
-[BenchmarkDotNet.Attributes.MemoryDiagnoser]
-public class BenchmarkPersonPredicate {
-    private Predicate<Person?>? _rulePredicate;
-    private Person? _person;
+// [BenchmarkDotNet.Attributes.MemoryDiagnoser]
+// public class BenchmarkPersonPredicate {
+//     private Predicate<Person?>? _rulePredicate;
+//     private Person? _person;
 
-    [BenchmarkDotNet.Attributes.GlobalSetup]
-    public void Setup() {
-        _person = new Person("Alice", 30);
+//     [BenchmarkDotNet.Attributes.GlobalSetup]
+//     public void Setup() {
+//         _person = new Person("Alice", 30);
 
-        RuleSet<Person?> ruleSet = new RuleSetBuilder<Person?>()
-            .Member(p => p!.Name, r => r.NotNull()!.MinLength(1).MaxLength(100))
-            .Member(p => p!.Age, r => r.Minimum(0).Maximum(150))
-            .Build();
+//         RuleSet<Person?> ruleSet = new RuleSetBuilder<Person?>()
+//             .Member(p => p!.Name, r => r.NotNull()!.MinLength(1).MaxLength(100))
+//             .Member(p => p!.Age, r => r.Minimum(0).Maximum(150))
+//             .Build();
 
-        _rulePredicate = ruleSet.Test;
-    }
+//         _rulePredicate = ruleSet.Test;
+//     }
 
-    [BenchmarkDotNet.Attributes.Benchmark]
-    public bool Handrolled() {
-        if (_person == null) return false;
-        if (_person.Name == null) return false;
-        if (_person.Name.Length < 1) return false;
-        if (_person.Name.Length > 100) return false;
-        if (_person.Age < 0) return false;
-        if (_person.Age > 150) return false;
-        return true;
-    }
+//     [BenchmarkDotNet.Attributes.Benchmark]
+//     public bool Handrolled() {
+//         if (_person == null) return false;
+//         if (_person.Name == null) return false;
+//         if (_person.Name.Length < 1) return false;
+//         if (_person.Name.Length > 100) return false;
+//         if (_person.Age < 0) return false;
+//         if (_person.Age > 150) return false;
+//         return true;
+//     }
 
-    [BenchmarkDotNet.Attributes.Benchmark(Baseline = true)]
-    public bool RuleBased() {
-        ArgumentNullException.ThrowIfNull(_rulePredicate);
-        return _rulePredicate(_person);
-    }
-}
+//     [BenchmarkDotNet.Attributes.Benchmark(Baseline = true)]
+//     public bool RuleBased() {
+//         ArgumentNullException.ThrowIfNull(_rulePredicate);
+//         return _rulePredicate(_person);
+//     }
+// }

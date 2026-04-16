@@ -74,7 +74,11 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
                 BuildForLoopCfg(context, forLoop);
                 break;
 
-            case ReturnStatement returnStmt:
+            case ForEachLoop forEachLoop:
+                BuildForEachLoopCfg(context, forEachLoop);
+                break;
+
+            case Return returnStmt:
                 AddStatement(returnStmt);
                 _currentBlock.SetTerminator(returnStmt);
                 // Return terminates the current block with no successors
@@ -307,6 +311,34 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         _currentBlock = exitBlock;
     }
 
+    private void BuildForEachLoopCfg(AnalysisContext context, ForEachLoop forEachLoop) {
+        if (_currentBlock == null || _cfg == null) return;
+
+        var preLoop = _currentBlock;
+        var conditionBlock = _cfg.CreateBlock();
+        var bodyBlock = _cfg.CreateBlock();
+        var exitBlock = _cfg.CreateBlock();
+
+        preLoop.AddSuccessor(conditionBlock);
+
+        // Collection expression is evaluated before each iteration check.
+        _currentBlock = conditionBlock;
+        AddStatement(forEachLoop.Collection);
+        conditionBlock.AddSuccessor(bodyBlock);
+        conditionBlock.AddSuccessor(exitBlock);
+
+        _loopContexts.Push((Continue: conditionBlock, Break: exitBlock));
+        _currentBlock = bodyBlock;
+        BuildCfg(context, forEachLoop.Body);
+
+        if (_currentBlock != null) {
+            _currentBlock.AddSuccessor(conditionBlock);
+        }
+
+        _loopContexts.Pop();
+        _currentBlock = exitBlock;
+    }
+
     private void BuildTryCatchCfg(AnalysisContext context, TryCatchFinally tryCatch) {
         if (_currentBlock == null || _cfg == null) return;
 
@@ -419,22 +451,12 @@ public static class ControlFlowAnalysisExtensions {
         }
     }
 
-    extension(AnalysisContext context) {
+    extension(INodeMetadataProvider context) {
         /// <summary>
         /// Gets the control flow graph for the root node.
         /// </summary>
         public ControlFlowGraph? GetControlFlowGraph(Node rootNode) {
             var metadata = context.GetMetadata<ControlFlowMetadata>(rootNode);
-            return metadata?.Graph;
-        }
-    }
-
-    extension(AnalysisResult result) {
-        /// <summary>
-        /// Gets the control flow graph from the analysis result.
-        /// </summary>
-        public ControlFlowGraph? GetControlFlowGraph(Node rootNode) {
-            var metadata = result.GetMetadata<ControlFlowMetadata>(rootNode);
             return metadata?.Graph;
         }
     }

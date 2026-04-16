@@ -16,10 +16,10 @@ public enum TypeCategory {
     Numeric = 1 << 1,
 
     /// <summary>An integer type (signed or unsigned).</summary>
-    Integer = 1 << 2,
+    Integer = Numeric | 1 << 2,
 
     /// <summary>A floating point type (float, double).</summary>
-    FloatingPoint = 1 << 3,
+    FloatingPoint = Numeric | 1 << 3,
 
     /// <summary>High precision decimal type.</summary>
     HighPrecision = 1 << 4,
@@ -67,10 +67,10 @@ public enum TypeCategory {
     Identifier = 1 << 18,
 
     /// <summary>A signed numeric type.</summary>
-    Signed = 1 << 19,
+    Signed = Numeric | 1 << 19,
 
     /// <summary>An unsigned numeric type.</summary>
-    Unsigned = 1 << 20,
+    Unsigned = Numeric | 1 << 20,
 }
 
 public static class TypeCategoryExtensions {

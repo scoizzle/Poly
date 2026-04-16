@@ -66,6 +66,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition {
     private readonly Lazy<IReadOnlyList<AstPropertyDefinition>> _properties;
     private readonly Lazy<IReadOnlyList<AstMethodDefinition>> _methods;
     private readonly Lazy<IReadOnlyList<AstFieldDefinition>> _fields;
+    private static readonly IReadOnlyList<ITypeConstructor> EmptyConstructors = [];
 
     public AstTypeDefinition(TypeDefinitionNode node, ITypeDefinitionProvider provider) {
         _node = node;
@@ -87,6 +88,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition {
     public IEnumerable<ITypeField> Fields => _fields.Value;
     public IEnumerable<ITypeProperty> Properties => _properties.Value;
     public IEnumerable<ITypeMethod> Methods => _methods.Value;
+    public IEnumerable<ITypeConstructor> Constructors => EmptyConstructors;
 
     // AST-based types are dictionary-backed at runtime
     public Type ReflectedType => typeof(IDictionary<string, object>);
@@ -95,7 +97,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition {
     public IEnumerable<ITypeDefinition> Interfaces => []; // TODO: Resolve from _node.Interfaces
     public IEnumerable<IParameter> GenericParameters => []; // TODO: Map from _node.GenericParameters
 
-    public PrimitiveTypeId? PrimitiveTypeId => _node.PrimitiveTypeId;
+    public PrimitiveType? PrimitiveType => _node.PrimitiveTypeId;
     public TypeCategory TypeCategory => _node.TypeCategory;
 
     private IReadOnlyList<AstPropertyDefinition> BuildProperties() {
@@ -200,29 +202,29 @@ internal static class TypeResolver {
         };
     }
 
-    private static ITypeDefinition ResolvePrimitive(PrimitiveTypeId id, bool isNullable, ClrTypeDefinitionRegistry clr) {
+    private static ITypeDefinition ResolvePrimitive(PrimitiveType id, bool isNullable, ClrTypeDefinitionRegistry clr) {
         var baseType = id switch {
-            PrimitiveTypeId.Boolean => clr.GetTypeDefinition<bool>(),
-            PrimitiveTypeId.Int8 => clr.GetTypeDefinition<sbyte>(),
-            PrimitiveTypeId.Int16 => clr.GetTypeDefinition<short>(),
-            PrimitiveTypeId.Int32 => clr.GetTypeDefinition<int>(),
-            PrimitiveTypeId.Int64 => clr.GetTypeDefinition<long>(),
-            PrimitiveTypeId.UInt8 => clr.GetTypeDefinition<byte>(),
-            PrimitiveTypeId.UInt16 => clr.GetTypeDefinition<ushort>(),
-            PrimitiveTypeId.UInt32 => clr.GetTypeDefinition<uint>(),
-            PrimitiveTypeId.UInt64 => clr.GetTypeDefinition<ulong>(),
-            PrimitiveTypeId.Float32 => clr.GetTypeDefinition<float>(),
-            PrimitiveTypeId.Float64 => clr.GetTypeDefinition<double>(),
-            PrimitiveTypeId.Decimal => clr.GetTypeDefinition<decimal>(),
-            PrimitiveTypeId.String => clr.GetTypeDefinition<string>(),
-            PrimitiveTypeId.Char => clr.GetTypeDefinition<char>(),
-            PrimitiveTypeId.DateTime => clr.GetTypeDefinition<DateTime>(),
-            PrimitiveTypeId.DateOnly => clr.GetTypeDefinition<DateOnly>(),
-            PrimitiveTypeId.TimeOnly => clr.GetTypeDefinition<TimeOnly>(),
-            PrimitiveTypeId.TimeSpan => clr.GetTypeDefinition<TimeSpan>(),
-            PrimitiveTypeId.Guid => clr.GetTypeDefinition<Guid>(),
-            PrimitiveTypeId.ByteArray => clr.GetTypeDefinition<byte[]>(),
-            PrimitiveTypeId.Json => clr.GetTypeDefinition<object>(),
+            PrimitiveType.Boolean => clr.GetTypeDefinition<bool>(),
+            PrimitiveType.Int8 => clr.GetTypeDefinition<sbyte>(),
+            PrimitiveType.Int16 => clr.GetTypeDefinition<short>(),
+            PrimitiveType.Int32 => clr.GetTypeDefinition<int>(),
+            PrimitiveType.Int64 => clr.GetTypeDefinition<long>(),
+            PrimitiveType.UInt8 => clr.GetTypeDefinition<byte>(),
+            PrimitiveType.UInt16 => clr.GetTypeDefinition<ushort>(),
+            PrimitiveType.UInt32 => clr.GetTypeDefinition<uint>(),
+            PrimitiveType.UInt64 => clr.GetTypeDefinition<ulong>(),
+            PrimitiveType.Float32 => clr.GetTypeDefinition<float>(),
+            PrimitiveType.Float64 => clr.GetTypeDefinition<double>(),
+            PrimitiveType.Decimal => clr.GetTypeDefinition<decimal>(),
+            PrimitiveType.String => clr.GetTypeDefinition<string>(),
+            PrimitiveType.Char => clr.GetTypeDefinition<char>(),
+            PrimitiveType.DateTime => clr.GetTypeDefinition<DateTime>(),
+            PrimitiveType.DateOnly => clr.GetTypeDefinition<DateOnly>(),
+            PrimitiveType.TimeOnly => clr.GetTypeDefinition<TimeOnly>(),
+            PrimitiveType.TimeSpan => clr.GetTypeDefinition<TimeSpan>(),
+            PrimitiveType.Guid => clr.GetTypeDefinition<Guid>(),
+            PrimitiveType.ByteArray => clr.GetTypeDefinition<byte[]>(),
+            PrimitiveType.Structure => clr.GetTypeDefinition<object>(),
             _ => clr.GetTypeDefinition<object>()
         };
 

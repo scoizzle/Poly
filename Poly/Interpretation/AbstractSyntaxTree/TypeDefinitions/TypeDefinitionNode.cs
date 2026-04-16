@@ -24,7 +24,7 @@ public sealed record TypeDefinitionNode(
     Node? BaseType = null,
     IReadOnlyList<Node>? Interfaces = null,
     IReadOnlyList<Parameter>? GenericParameters = null,
-    PrimitiveTypeId? PrimitiveTypeId = null,
+    PrimitiveType? PrimitiveTypeId = null,
     TypeCategory TypeCategory = TypeCategory.None
 ) : Node {
 

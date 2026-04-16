@@ -33,7 +33,7 @@ public static class NodeTestHelpers {
         var analyzer = CreateTestAnalyzer();
         var analysisResult = analyzer.Analyze(node);
         var generator = new LinqExpressionGenerator(analysisResult);
-        return generator.Compile(node);
+        return generator.Compile(node).Expression;
     }
 
     /// <summary>
@@ -60,10 +60,9 @@ public static class NodeTestHelpers {
             .Analyze(node);
 
         var generator = new LinqExpressionGenerator(analysisResult);
-        var expression = generator.Compile(node);
-
-        // Get parameters that were generated during compilation
-        var generatedParams = generator.GetParameters().ToArray();
+        var compilation = generator.Compile(node);
+        var expression = compilation.Expression;
+        var generatedParams = compilation.Parameters.ToArray();
 
         // Build a mapping of parameter names to generated expressions
         var paramMap = new Dictionary<string, Exprs.ParameterExpression>();

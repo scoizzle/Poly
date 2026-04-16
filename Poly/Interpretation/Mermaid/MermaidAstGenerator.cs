@@ -323,9 +323,10 @@ public sealed class MermaidAstGenerator {
             case IndexAccess:
                 builder.Append("Index Access");
                 break;
-            case MethodInvocation method:
+            case Invoke method:
                 builder.Append("Method Call ");
-                builder.Append(method.MethodName);
+                if (method.Delegate is MemberAccess ma)
+                    builder.Append(ma.MemberName);
                 builder.Append("()");
                 break;
 
@@ -361,7 +362,7 @@ public sealed class MermaidAstGenerator {
             case ContinueStatement:
                 builder.Append("Continue");
                 break;
-            case ReturnStatement:
+            case Return:
                 builder.Append("Return");
                 break;
             case GotoStatement goto_:
@@ -449,10 +450,8 @@ public sealed class MermaidAstGenerator {
                 .Concat(index.Arguments.Select((arg, i) => (arg, $"index{i}"))),
 
             // Method invocation
-            MethodInvocation method => method.Target != null
-                ? new[] { (method.Target, "target") }.Concat(
-                    method.Arguments.Select((arg, i) => (arg, $"arg{i}")))
-                : method.Arguments.Select((arg, i) => (arg, $"arg{i}")),
+            Invoke method => new[] { (method.Delegate, "method") }
+                .Concat(method.Arguments.Select((arg, i) => ((Node)arg, $"arg{i}"))),
 
             // Block
             Block block => block.Nodes.Select((n, i) => (n, $"{i}")),
@@ -475,7 +474,7 @@ public sealed class MermaidAstGenerator {
                 (forLoop.Body, "body")
             }.Where(x => x.Item1 != null!),
 
-            ReturnStatement ret => ret.Value != null ? [(ret.Value, "")] : Array.Empty<(Node, string)>(),
+            Return ret => ret.Value != null ? [(ret.Value, "")] : Array.Empty<(Node, string)>(),
             ThrowStatement throw_ => [(throw_.Exception, "")],
 
             // Default: no children

@@ -110,19 +110,19 @@ public class TypeDefinitionProviderCollectionTests {
         ITypeDefinition listType = registry.GetTypeDefinition(typeof(List<int>));
 
         // int should be primitive
-        await Assert.That(intType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.Int32);
+        await Assert.That(intType.PrimitiveType).IsEqualTo(PrimitiveType.Int32);
         await Assert.That(intType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed);
 
         // string should be primitive
-        await Assert.That(stringType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.String);
+        await Assert.That(stringType.PrimitiveType).IsEqualTo(PrimitiveType.String);
         await Assert.That(stringType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Text);
 
         // DateTime should be primitive
-        await Assert.That(dateTimeType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.DateTime);
+        await Assert.That(dateTimeType.PrimitiveType).IsEqualTo(PrimitiveType.DateTime);
         await Assert.That(dateTimeType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Temporal);
 
         // List<int> should not be primitive
-        await Assert.That(listType.PrimitiveTypeId).IsNull();
+        await Assert.That(listType.PrimitiveType).IsNull();
         await Assert.That(listType.TypeCategory).IsEqualTo(TypeCategory.Collection);
     }
 
@@ -135,7 +135,7 @@ public class TypeDefinitionProviderCollectionTests {
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
-        public PrimitiveTypeId? PrimitiveTypeId => null;
+        public PrimitiveType? PrimitiveType => null;
         public TypeCategory TypeCategory => TypeCategory.None;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
@@ -149,6 +149,7 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeField> Fields => [];
         public IEnumerable<ITypeProperty> Properties => [];
         public IEnumerable<ITypeMethod> Methods => [];
+        public IEnumerable<ITypeConstructor> Constructors => [];
     }
 
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {

@@ -1,10 +1,9 @@
 using Poly.Interpretation.AbstractSyntaxTree.Boolean;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
-using Poly.Introspection;
 
 using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
-namespace Poly.Validation;
+namespace Poly.Data.Modeling.Validation.Constraints;
 
 public sealed class LengthConstraint(int? minLength, int? maxLength) : Constraint {
     public int? MinLength { get; set; } = minLength;
@@ -13,13 +12,10 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
     /// <summary>
     /// Length constraints apply to Text and Collection types.
     /// </summary>
-    public override TypeCategory ApplicableCategories => TypeCategory.Text | TypeCategory.Collection | TypeCategory.Binary;
+    public TypeCategory ApplicableCategories => TypeCategory.Text | TypeCategory.Collection | TypeCategory.Binary;
 
-    /// <inheritdoc />
-    public override ConstraintScope Scope => ConstraintScope.Structural;
-
-    public override Node BuildInterpretationTree(RuleBuildingContext context) {
-        var length = context.Value.GetMember("Length");
+    public Node ToInterpretationNode(Node value) {
+        var length = value.GetMember("Length");
 
         var minCheck = MinLength.HasValue
             ? new GreaterThanOrEqual(length, Wrap(MinLength.Value))
@@ -37,20 +33,5 @@ public sealed class LengthConstraint(int? minLength, int? maxLength) : Constrain
         };
 
         return lengthCheck;
-    }
-
-    public override string ToString() {
-        if (MinLength.HasValue && MaxLength.HasValue) {
-            return $"value.Length >= {MinLength.Value} && value.Length <= {MaxLength.Value}";
-        }
-        else if (MinLength.HasValue) {
-            return $"value.Length >= {MinLength.Value}";
-        }
-        else if (MaxLength.HasValue) {
-            return $"value.Length <= {MaxLength.Value}";
-        }
-        else {
-            return "true";
-        }
     }
 }

@@ -20,12 +20,138 @@ namespace Poly.Interpretation.LinqExpressions;
 /// </remarks>
 public sealed class LinqExpressionGenerator {
     private readonly AnalysisResult _analysisResult;
-    private readonly Dictionary<Variable, ParameterExpression> _variableCache = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<Parameter, ParameterExpression> _parameterCache = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<string, LabelTarget> _labelMap = new();
     private readonly List<INodeCompiler> _customCompilers = new();
-    private LabelTarget? _currentBreakLabel;
-    private LabelTarget? _currentContinueLabel;
+
+    public sealed record CompilationResult(Expression Expression, IReadOnlyList<ParameterExpression> Parameters);
+
+    private sealed class CompilationState {
+        private readonly List<ParameterExpression> _exportedParameters = [];
+        private readonly HashSet<ParameterExpression> _exportedParameterSet = [];
+
+        public IReadOnlyList<ParameterExpression> ExportedParameters => _exportedParameters;
+
+        public void ExportParameter(ParameterExpression parameter) {
+            if (_exportedParameterSet.Add(parameter)) {
+                _exportedParameters.Add(parameter);
+            }
+        }
+    }
+
+    private sealed class CompilationContext {
+        private readonly Dictionary<Variable, ParameterExpression> _localVariables = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<Parameter, ParameterExpression> _localParameters = new(ReferenceEqualityComparer.Instance);
+
+        private CompilationContext(
+            CompilationContext? parent,
+            CompilationState state,
+            Dictionary<string, LabelTarget> functionLabels,
+            LabelTarget? currentBreakLabel,
+            LabelTarget? currentContinueLabel,
+            bool hasReturnScope) {
+            Parent = parent;
+            State = state;
+            FunctionLabels = functionLabels;
+            CurrentBreakLabel = currentBreakLabel;
+            CurrentContinueLabel = currentContinueLabel;
+            HasReturnScope = hasReturnScope;
+        }
+
+        public CompilationContext? Parent { get; }
+
+        public CompilationState State { get; }
+
+        public Dictionary<string, LabelTarget> FunctionLabels { get; }
+
+        public LabelTarget? CurrentBreakLabel { get; }
+
+        public LabelTarget? CurrentContinueLabel { get; }
+
+        public bool HasReturnScope { get; }
+
+        public static CompilationContext CreateRoot() => new(
+            parent: null,
+            state: new CompilationState(),
+            functionLabels: [],
+            currentBreakLabel: null,
+            currentContinueLabel: null,
+            hasReturnScope: false);
+
+        public CompilationContext CreateChild() => new(
+            parent: this,
+            state: State,
+            functionLabels: FunctionLabels,
+            currentBreakLabel: CurrentBreakLabel,
+            currentContinueLabel: CurrentContinueLabel,
+            hasReturnScope: HasReturnScope);
+
+        public CompilationContext CreateBlockScope() => new(
+            parent: this,
+            state: State,
+            functionLabels: FunctionLabels,
+            currentBreakLabel: CurrentBreakLabel,
+            currentContinueLabel: CurrentContinueLabel,
+            hasReturnScope: true);
+
+        public CompilationContext CreateLoopScope(LabelTarget breakLabel, LabelTarget continueLabel) => new(
+            parent: this,
+            state: State,
+            functionLabels: FunctionLabels,
+            currentBreakLabel: breakLabel,
+            currentContinueLabel: continueLabel,
+            hasReturnScope: HasReturnScope);
+
+        public CompilationContext CreateLambdaScope() => new(
+            parent: this,
+            state: State,
+            functionLabels: [],
+            currentBreakLabel: null,
+            currentContinueLabel: null,
+            hasReturnScope: false);
+
+        public bool TryGetVariable(Variable variable, out ParameterExpression expression) {
+            if (_localVariables.TryGetValue(variable, out var localExpression)) {
+                expression = localExpression;
+                return true;
+            }
+
+            if (Parent != null) {
+                return Parent.TryGetVariable(variable, out expression);
+            }
+
+            expression = null!;
+            return false;
+        }
+
+        public bool TryGetParameter(Parameter parameter, out ParameterExpression expression) {
+            if (_localParameters.TryGetValue(parameter, out var localExpression)) {
+                expression = localExpression;
+                return true;
+            }
+
+            if (Parent != null) {
+                return Parent.TryGetParameter(parameter, out expression);
+            }
+
+            expression = null!;
+            return false;
+        }
+
+        public ParameterExpression DeclareVariable(Variable variable, ParameterExpression expression) {
+            _localVariables[variable] = expression;
+            return expression;
+        }
+
+        public ParameterExpression DeclareParameter(Parameter parameter, ParameterExpression expression, bool export) {
+            _localParameters[parameter] = expression;
+            if (export) {
+                State.ExportParameter(expression);
+            }
+
+            return expression;
+        }
+
+        public CompilationContext GetRoot() => Parent is null ? this : Parent.GetRoot();
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LinqExpressionGenerator"/> class.
@@ -51,12 +177,14 @@ public sealed class LinqExpressionGenerator {
     /// Compiles an AST node to a LINQ Expression.
     /// </summary>
     /// <param name="node">The AST node to compile.</param>
-    /// <returns>The compiled LINQ Expression.</returns>
+    /// <returns>The compiled expression and any generated parameters needed by consumers.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="node"/> is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the expression cannot be compiled.</exception>
-    public Expression Compile(Node node) {
+    public CompilationResult Compile(Node node) {
         ArgumentNullException.ThrowIfNull(node);
-        return CompileNode(node);
+        return ExecuteCompilation(context => new CompilationResult(
+            CompileNode(node, context),
+            context.State.ExportedParameters.ToArray()));
     }
 
     /// <summary>
@@ -69,14 +197,7 @@ public sealed class LinqExpressionGenerator {
     public LambdaExpression CompileAsLambda(Node node, Parameter parameter) {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameter);
-
-        var bodyExpr = CompileNode(node);
-
-        if (!_parameterCache.TryGetValue(parameter, out var paramExpr)) {
-            throw new InvalidOperationException($"Parameter '{parameter.Name}' must be part of the context used for compilation.");
-        }
-
-        return Expression.Lambda(bodyExpr, paramExpr);
+        return ExecuteCompilation(context => CompileAsLambdaCore(node, parameter, context));
     }
 
     /// <summary>
@@ -94,12 +215,7 @@ public sealed class LinqExpressionGenerator {
             throw new ArgumentException("At least one parameter must be provided.", nameof(parameters));
         }
 
-        var bodyExpr = CompileNode(node);
-        var paramExpressions = parameters.Select(param => {
-            return _parameterCache[param];
-        }).ToArray();
-
-        return Expression.Lambda(bodyExpr, paramExpressions);
+        return ExecuteCompilation(context => CompileAsLambdaCore(node, parameters, context));
     }
 
     /// <summary>
@@ -112,9 +228,7 @@ public sealed class LinqExpressionGenerator {
     public Delegate CompileAsDelegate(Node node, Parameter parameter) {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameter);
-
-        var lambda = CompileAsLambda(node, parameter);
-        return lambda.Compile();
+        return ExecuteCompilation(context => CompileAsLambdaCore(node, parameter, context).Compile());
     }
 
     /// <summary>
@@ -128,8 +242,7 @@ public sealed class LinqExpressionGenerator {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameters);
 
-        var lambda = CompileAsLambda(node, parameters);
-        return lambda.Compile();
+        return ExecuteCompilation(context => CompileAsLambdaCore(node, parameters, context).Compile());
     }
 
     /// <summary>
@@ -145,27 +258,62 @@ public sealed class LinqExpressionGenerator {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(parameters);
 
-        var lambda = CompileAsLambda(node, parameters);
-        return (TDelegate)(object)lambda.Compile();
+        return ExecuteCompilation(context => (TDelegate)(object)CompileAsLambdaCore(node, parameters, context).Compile());
     }
 
-    private Expression CompileNode(Node node) {
-        // Check if this node has a replacement from analysis passes (e.g., DataModel transforms)
-        // This allows analyzers to transform nodes without modifying the original AST
-        var allMetadata = _analysisResult.GetAllMetadata(node);
-        foreach (var metadata in allMetadata) {
-            var replacementProperty = metadata.GetType().GetProperty("Replacement");
-            if (replacementProperty?.PropertyType.IsAssignableTo(typeof(Node)) == true) {
-                if (replacementProperty.GetValue(metadata) is Node replacement) {
-                    node = replacement;
-                    break;
-                }
+    private static TResult ExecuteCompilation<TResult>(Func<CompilationContext, TResult> compile) {
+        ArgumentNullException.ThrowIfNull(compile);
+        return compile(CompilationContext.CreateRoot());
+    }
+
+    /// <summary>
+    /// Compiles a node into a single-parameter lambda by first emitting the body expression,
+    /// then resolving the already-declared lexical parameter that should become the lambda's
+    /// formal argument.
+    /// </summary>
+    private LambdaExpression CompileAsLambdaCore(Node node, Parameter parameter, CompilationContext context) {
+        var bodyExpr = CompileNode(node, context);
+
+        if (!context.TryGetParameter(parameter, out var paramExpr)) {
+            throw new InvalidOperationException($"Parameter '{parameter.Name}' must be part of the context used for compilation.");
+        }
+
+        return Expression.Lambda(bodyExpr, paramExpr);
+    }
+
+    /// <summary>
+    /// Compiles a node into a multi-parameter lambda by emitting the body once and then binding
+    /// the requested lexical parameters, in order, as the lambda's formal parameter list.
+    /// </summary>
+    private LambdaExpression CompileAsLambdaCore(Node node, Parameter[] parameters, CompilationContext context) {
+        var bodyExpr = CompileNode(node, context);
+        var paramExpressions = parameters.Select(param => {
+            if (!context.TryGetParameter(param, out var expression)) {
+                throw new InvalidOperationException($"Parameter '{param.Name}' must be part of the context used for compilation.");
             }
+
+            return expression;
+        }).ToArray();
+        return Expression.Lambda(bodyExpr, paramExpressions);
+    }
+
+    /// <summary>
+    /// Compiles a single AST node into its LINQ expression equivalent.
+    /// High-level nodes may first be lowered by analysis metadata, custom compilers get first
+    /// chance to handle the node, and otherwise the method dispatches to the node-specific
+    /// compiler that emits the corresponding expression-tree shape.
+    /// </summary>
+    private Expression CompileNode(Node node, CompilationContext context) {
+        // Check if this node has a replacement from analysis passes (e.g., DataModel transforms)
+        // This allows analyzers to lower high-level nodes to core nodes without mutating the AST
+        var replacement = _analysisResult.GetNodeReplacement(node);
+        if (replacement != null) {
+            node = replacement;
         }
 
         // Try custom compilers (allows external systems to handle their node types)
         foreach (var compiler in _customCompilers) {
-            if (compiler.TryCompile(node, CompileNode, out var customExpr)) {
+            if (compiler.TryCompile(node, child => CompileNode(child, context), out var customExpr)) {
                 return customExpr!;
             }
         }
@@ -173,102 +321,131 @@ public sealed class LinqExpressionGenerator {
         return node switch {
             // Leaf nodes
             Constant constant => Expression.Constant(constant.Value),
-            Variable variable => CompileVariable(variable),
-            Parameter parameter => CompileParameter(parameter),
+            Variable variable => CompileVariable(variable, context),
+            Parameter parameter => CompileParameter(parameter, context),
 
             // Binary arithmetic operations
-            Add add => CompileBinaryArithmetic(add.LeftHandValue, add.RightHandValue, Expression.Add),
-            Subtract sub => CompileBinaryArithmetic(sub.LeftHandValue, sub.RightHandValue, Expression.Subtract),
-            Multiply mul => CompileBinaryArithmetic(mul.LeftHandValue, mul.RightHandValue, Expression.Multiply),
-            Divide div => CompileBinaryArithmetic(div.LeftHandValue, div.RightHandValue, Expression.Divide),
-            Modulo mod => CompileBinaryArithmetic(mod.LeftHandValue, mod.RightHandValue, Expression.Modulo),
+            Add add => CompileBinaryArithmetic(add.LeftHandValue, add.RightHandValue, Expression.Add, context),
+            Subtract sub => CompileBinaryArithmetic(sub.LeftHandValue, sub.RightHandValue, Expression.Subtract, context),
+            Multiply mul => CompileBinaryArithmetic(mul.LeftHandValue, mul.RightHandValue, Expression.Multiply, context),
+            Divide div => CompileBinaryArithmetic(div.LeftHandValue, div.RightHandValue, Expression.Divide, context),
+            Modulo mod => CompileBinaryArithmetic(mod.LeftHandValue, mod.RightHandValue, Expression.Modulo, context),
 
             // Unary operations
-            UnaryMinus minus => Expression.Negate(CompileNode(minus.Operand)),
-            Not not => Expression.Not(CompileNode(not.Value)),
+            UnaryMinus minus => Expression.Negate(CompileNode(minus.Operand, context)),
+            Not not => Expression.Not(CompileNode(not.Value, context)),
 
             // Comparison operations
-            Equal eq => CompileBinaryComparison(eq.LeftHandValue, eq.RightHandValue, Expression.Equal),
-            NotEqual neq => CompileBinaryComparison(neq.LeftHandValue, neq.RightHandValue, Expression.NotEqual),
-            LessThan lt => CompileBinaryComparison(lt.LeftHandValue, lt.RightHandValue, Expression.LessThan),
-            LessThanOrEqual lte => CompileBinaryComparison(lte.LeftHandValue, lte.RightHandValue, Expression.LessThanOrEqual),
-            GreaterThan gt => CompileBinaryComparison(gt.LeftHandValue, gt.RightHandValue, Expression.GreaterThan),
-            GreaterThanOrEqual gte => CompileBinaryComparison(gte.LeftHandValue, gte.RightHandValue, Expression.GreaterThanOrEqual),
+            Equal eq => CompileBinaryComparison(eq.LeftHandValue, eq.RightHandValue, Expression.Equal, context),
+            NotEqual neq => CompileBinaryComparison(neq.LeftHandValue, neq.RightHandValue, Expression.NotEqual, context),
+            LessThan lt => CompileBinaryComparison(lt.LeftHandValue, lt.RightHandValue, Expression.LessThan, context),
+            LessThanOrEqual lte => CompileBinaryComparison(lte.LeftHandValue, lte.RightHandValue, Expression.LessThanOrEqual, context),
+            GreaterThan gt => CompileBinaryComparison(gt.LeftHandValue, gt.RightHandValue, Expression.GreaterThan, context),
+            GreaterThanOrEqual gte => CompileBinaryComparison(gte.LeftHandValue, gte.RightHandValue, Expression.GreaterThanOrEqual, context),
 
             // Boolean operations
-            And and => Expression.AndAlso(CompileNode(and.LeftHandValue), CompileNode(and.RightHandValue)),
-            Or or => Expression.OrElse(CompileNode(or.LeftHandValue), CompileNode(or.RightHandValue)),
+            And and => Expression.AndAlso(CompileNode(and.LeftHandValue, context), CompileNode(and.RightHandValue, context)),
+            Or or => Expression.OrElse(CompileNode(or.LeftHandValue, context), CompileNode(or.RightHandValue, context)),
 
             // Conditional
-            Conditional cond => CompileConditional(cond),
+            Conditional cond => CompileConditional(cond, context),
 
             // Member and index access
-            MemberAccess member => Expression.PropertyOrField(CompileNode(member.Value), member.MemberName),
-            IndexAccess index => CompileIndexAccess(index),
+            MemberAccess member => Expression.PropertyOrField(CompileNode(member.Value, context), member.MemberName),
+            IndexAccess index => CompileIndexAccess(index, context),
 
             // Method invocation
-            MethodInvocation method => Expression.Call(
-                method.Target != null ? CompileNode(method.Target) : null!,
-                method.MethodName,
-                Type.EmptyTypes,
-                method.Arguments.Select(arg => CompileNode(arg)).ToArray()),
+            Invoke method => CompileInvocation(method, context),
 
             // Type reference
             TypeReference => Expression.Constant(null),
 
             // Type cast
-            TypeCast cast => CompileTypeCast(cast),
+            TypeCast cast => CompileTypeCast(cast, context),
 
             // Coalesce
-            Coalesce coalesce => CompileCoalesce(coalesce),
+            Coalesce coalesce => CompileCoalesce(coalesce, context),
 
             // Block
-            Block block => Expression.Block(
-                block.Variables.Select(v => v switch {
-                    Variable variable => CompileVariable(variable),
-                    Parameter parameter => CompileParameter(parameter),
-                    _ => throw new InvalidOperationException("Block variables must be Variable or Parameter nodes.")
-                }).ToArray(),
-                block.Nodes.Select(n => CompileNode(n)).ToArray()),
+            Block block => CompileBlock(block, context),
 
             // Assignment
-            Assignment assign => CompileAssignment(assign),
+            Assignment assign => CompileAssignment(assign, context),
 
             // Control flow - conditionals
-            IfStatement ifStmt => CompileIfStatement(ifStmt),
-            SwitchStatement switchStmt => CompileSwitchStatement(switchStmt),
+            IfStatement ifStmt => CompileIfStatement(ifStmt, context),
+            SwitchStatement switchStmt => CompileSwitchStatement(switchStmt, context),
 
             // Control flow - loops
-            WhileLoop whileLoop => CompileWhileLoop(whileLoop),
-            DoWhileLoop doWhileLoop => CompileDoWhileLoop(doWhileLoop),
-            ForLoop forLoop => CompileForLoop(forLoop),
+            WhileLoop whileLoop => CompileWhileLoop(whileLoop, context),
+            DoWhileLoop doWhileLoop => CompileDoWhileLoop(doWhileLoop, context),
+            ForLoop forLoop => CompileForLoop(forLoop, context),
+            ForEachLoop forEachLoop => CompileForEachLoop(forEachLoop, context),
 
             // Control flow - jumps
-            BreakStatement breakStmt => CompileBreakStatement(breakStmt),
-            ContinueStatement continueStmt => CompileContinueStatement(continueStmt),
-            GotoStatement gotoStmt => Expression.Goto(GetOrCreateLabel(gotoStmt.Target)),
-            LabelDeclaration labelDecl => CompileLabelDeclaration(labelDecl),
-            ReturnStatement returnStmt => CompileReturnStatement(returnStmt),
+            BreakStatement breakStmt => CompileBreakStatement(breakStmt, context),
+            ContinueStatement continueStmt => CompileContinueStatement(continueStmt, context),
+            GotoStatement gotoStmt => Expression.Goto(GetOrCreateLabel(gotoStmt.Target, context)),
+            LabelDeclaration labelDecl => CompileLabelDeclaration(labelDecl, context),
+            Return returnStmt => CompileReturnStatement(returnStmt, context),
 
             // Exception handling
-            ThrowStatement throwStmt => Expression.Throw(CompileNode(throwStmt.Exception)),
-            TryCatchFinally tryCatch => CompileTryCatchFinally(tryCatch),
+            ThrowStatement throwStmt => Expression.Throw(CompileNode(throwStmt.Exception, context)),
+            TryCatchFinally tryCatch => CompileTryCatchFinally(tryCatch, context),
 
             // Resource management
-            UsingStatement usingStmt => CompileUsingStatement(usingStmt),
+            UsingStatement usingStmt => CompileUsingStatement(usingStmt, context),
+
+            // First-class functions
+            Lambda lambda => CompileLambda(lambda, context),
 
             _ => throw new InvalidOperationException($"Unsupported node type: {node.GetType().Name}")
         };
     }
 
-    private Expression CompileAssignment(Assignment assignment) {
+    /// <summary>
+    /// Compiles a block into an <see cref="Expression.Block(System.Collections.Generic.IEnumerable{ParameterExpression}, System.Collections.Generic.IEnumerable{Expression})"/>.
+    /// Block-scoped locals are declared up front in a child lexical scope, child nodes are
+    /// emitted in sequence, and the outermost return-owning block closes the shared return label
+    /// so nested <c>return</c> nodes terminate within the correct expression-tree scope.
+    /// </summary>
+    private BlockExpression CompileBlock(Block block, CompilationContext context) {
+        var blockContext = context.CreateBlockScope();
+
+        var variables = block.Variables
+            .Select(v => v switch {
+                Variable variable => blockContext.DeclareVariable(variable, CreateVariableExpression(variable)),
+                Parameter parameter => blockContext.DeclareParameter(parameter, CreateParameterExpression(parameter), export: false),
+                _ => throw new InvalidOperationException("Block variables must be Variable or Parameter nodes.")
+            })
+            .ToArray();
+
+        var compiledNodes = block.Nodes.Select(n => CompileNode(n, blockContext)).ToList<Expression>();
+
+        // The outermost block that introduced a "return" label closes it here so that
+        // Return nodes nested anywhere inside (including in ForEachLoop bodies) have a
+        // valid label target within the same expression-tree scope.
+        if (!context.HasReturnScope && blockContext.FunctionLabels.TryGetValue("return", out var returnLabel)) {
+            blockContext.FunctionLabels.Remove("return");
+            compiledNodes.Add(Expression.Label(returnLabel, Expression.Default(returnLabel.Type)));
+        }
+
+        return Expression.Block(variables, compiledNodes);
+    }
+
+    /// <summary>
+    /// Compiles an assignment into <see cref="Expression.Assign(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/>.
+    /// The destination is resolved as a writable variable, parameter, or member/index expression,
+    /// and the value is converted when necessary so the emitted assignment matches the storage type.
+    /// </summary>
+    private Expression CompileAssignment(Assignment assignment, CompilationContext context) {
         Expression destination = assignment.Destination switch {
-            Variable variable => CompileVariable(variable),
-            Parameter parameter => CompileParameter(parameter),
-            _ => CompileNode(assignment.Destination)
+            Variable variable => CompileVariable(variable, context),
+            Parameter parameter => CompileParameter(parameter, context),
+            _ => CompileNode(assignment.Destination, context)
         };
 
-        var valueExpr = CompileNode(assignment.Value);
+        var valueExpr = CompileNode(assignment.Value, context);
 
         if (destination is ParameterExpression param && valueExpr.Type != param.Type) {
             valueExpr = Expression.Convert(valueExpr, param.Type);
@@ -277,12 +454,18 @@ public sealed class LinqExpressionGenerator {
         return Expression.Assign(destination, valueExpr);
     }
 
+    /// <summary>
+    /// Compiles a comparison such as <c>a == b</c> or <c>a &lt; b</c> by first emitting both sides,
+    /// applying numeric promotion when required, and then invoking the supplied comparison factory
+    /// to produce the final binary expression.
+    /// </summary>
     private Expression CompileBinaryComparison(
         Node leftNode,
         Node rightNode,
-        Func<Expression, Expression, BinaryExpression> factory) {
-        var leftExpr = CompileNode(leftNode);
-        var rightExpr = CompileNode(rightNode);
+        Func<Expression, Expression, BinaryExpression> factory,
+        CompilationContext context) {
+        var leftExpr = CompileNode(leftNode, context);
+        var rightExpr = CompileNode(rightNode, context);
 
         var promotedType = GetPromotedNumericType(leftExpr.Type, rightExpr.Type);
         if (promotedType != null) {
@@ -293,10 +476,15 @@ public sealed class LinqExpressionGenerator {
         return factory(leftExpr, rightExpr);
     }
 
-    private Expression CompileConditional(Conditional cond) {
-        var condition = CompileNode(cond.Condition);
-        var ifTrue = CompileNode(cond.IfTrue);
-        var ifFalse = CompileNode(cond.IfFalse);
+    /// <summary>
+    /// Compiles a ternary conditional of the form <c>condition ? ifTrue : ifFalse</c>.
+    /// Each branch is emitted independently and, when possible, converted to a common type so the
+    /// resulting <see cref="Expression.Condition(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/> is type-correct.
+    /// </summary>
+    private Expression CompileConditional(Conditional cond, CompilationContext context) {
+        var condition = CompileNode(cond.Condition, context);
+        var ifTrue = CompileNode(cond.IfTrue, context);
+        var ifFalse = CompileNode(cond.IfFalse, context);
 
         // Ensure both branches have compatible types
         var commonType = GetCommonType(ifTrue.Type, ifFalse.Type);
@@ -308,12 +496,18 @@ public sealed class LinqExpressionGenerator {
         return Expression.Condition(condition, ifTrue, ifFalse);
     }
 
+    /// <summary>
+    /// Compiles arithmetic such as <c>a + b</c>, <c>a - b</c>, or <c>a * b</c> by emitting both operands,
+    /// handling special cases like string concatenation, applying numeric promotion, and then using
+    /// the provided factory to build the final binary arithmetic expression.
+    /// </summary>
     private Expression CompileBinaryArithmetic(
         Node leftNode,
         Node rightNode,
-        Func<Expression, Expression, BinaryExpression> factory) {
-        var leftExpr = CompileNode(leftNode);
-        var rightExpr = CompileNode(rightNode);
+        Func<Expression, Expression, BinaryExpression> factory,
+        CompilationContext context) {
+        var leftExpr = CompileNode(leftNode, context);
+        var rightExpr = CompileNode(rightNode, context);
 
         // Handle string concatenation explicitly
         if (leftExpr.Type == typeof(string) && rightExpr.Type == typeof(string)) {
@@ -392,9 +586,14 @@ public sealed class LinqExpressionGenerator {
         return null;
     }
 
-    private Expression CompileCoalesce(Coalesce coalesce) {
-        var leftExpr = CompileNode(coalesce.LeftHandValue);
-        var rightExpr = CompileNode(coalesce.RightHandValue);
+    /// <summary>
+    /// Compiles a null-coalescing expression of the form <c>left ?? right</c>.
+    /// The emitted expression normalizes the left and right operands to compatible nullable or
+    /// reference types before producing the final <see cref="Expression.Coalesce(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/>.
+    /// </summary>
+    private Expression CompileCoalesce(Coalesce coalesce, CompilationContext context) {
+        var leftExpr = CompileNode(coalesce.LeftHandValue, context);
+        var rightExpr = CompileNode(coalesce.RightHandValue, context);
 
         var rightType = (_analysisResult.GetResolvedType(coalesce.RightHandValue) as ClrTypeDefinition)?.Type ?? rightExpr.Type;
 
@@ -423,31 +622,53 @@ public sealed class LinqExpressionGenerator {
             : typeDef.ReflectedType;
     }
 
-    private ParameterExpression CompileParameter(Parameter parameter) {
-        if (_parameterCache.TryGetValue(parameter, out var existing)) {
-            return existing;
-        }
-
+    private ParameterExpression CreateParameterExpression(Parameter parameter) {
         var type = GetClrType(parameter);
-        var paramExpr = Expression.Parameter(type, parameter.Name);
-        _parameterCache[parameter] = paramExpr;
-        return paramExpr;
+        return Expression.Parameter(type, parameter.Name);
     }
 
-    private ParameterExpression CompileVariable(Variable variable) {
-        if (_variableCache.TryGetValue(variable, out var existing)) {
+    /// <summary>
+    /// Compiles a parameter reference by resolving it lexically when already in scope, or by
+    /// declaring it at the root compilation scope when it is a free parameter that must be exposed
+    /// to callers as part of the compilation result.
+    /// </summary>
+    private ParameterExpression CompileParameter(Parameter parameter, CompilationContext context) {
+        if (context.TryGetParameter(parameter, out var existing)) {
             return existing;
         }
 
-        var clrType = (_analysisResult.GetResolvedType(variable) as ClrTypeDefinition)?.Type ?? typeof(object);
-        var paramExpr = Expression.Variable(clrType, variable.Name);
-        _variableCache[variable] = paramExpr;
-        return paramExpr;
+        // Free parameters belong to the root compilation scope so they can be surfaced
+        // to callers while still remaining visible to nested lexical scopes.
+        return context.GetRoot().DeclareParameter(parameter, CreateParameterExpression(parameter), export: true);
     }
 
-    private Expression CompileIndexAccess(IndexAccess indexAccess) {
-        var target = CompileNode(indexAccess.Value);
-        var indices = indexAccess.Arguments.Select(arg => CompileNode(arg)).ToArray();
+    private ParameterExpression CreateVariableExpression(Variable variable) {
+        var clrType = (_analysisResult.GetResolvedType(variable) as ClrTypeDefinition)?.Type ?? typeof(object);
+        return Expression.Variable(clrType, variable.Name);
+    }
+
+    /// <summary>
+    /// Compiles a variable reference by resolving it from the nearest lexical scope, or by
+    /// declaring a new local variable expression in the current scope when the variable represents
+    /// a writable local introduced by the surrounding construct.
+    /// </summary>
+    private ParameterExpression CompileVariable(Variable variable, CompilationContext context) {
+        if (context.TryGetVariable(variable, out var existing)) {
+            return existing;
+        }
+
+        return context.DeclareVariable(variable, CreateVariableExpression(variable));
+    }
+
+    /// <summary>
+    /// Compiles an index access such as <c>target[index]</c>.
+    /// Arrays become writable array-access expressions, indexer properties become
+    /// <see cref="Expression.MakeIndex(System.Linq.Expressions.Expression, System.Reflection.PropertyInfo, System.Collections.Generic.IEnumerable{System.Linq.Expressions.Expression})"/>,
+    /// and other fallback shapes are emitted as array indexing when possible.
+    /// </summary>
+    private Expression CompileIndexAccess(IndexAccess indexAccess, CompilationContext context) {
+        var target = CompileNode(indexAccess.Value, context);
+        var indices = indexAccess.Arguments.Select(arg => CompileNode(arg, context)).ToArray();
 
         if (target.Type.IsArray) {
             // Use ArrayAccess so the expression is writable and can be used on the left side of Assignment.
@@ -465,20 +686,30 @@ public sealed class LinqExpressionGenerator {
         }
     }
 
-    private Expression CompileTypeCast(TypeCast typeCast) {
-        var operand = CompileNode(typeCast.Operand);
+    /// <summary>
+    /// Compiles a cast such as <c>(T)value</c> or a checked cast by emitting the operand and then
+    /// wrapping it in either <see cref="Expression.Convert(System.Linq.Expressions.Expression, System.Type)"/> or
+    /// <see cref="Expression.ConvertChecked(System.Linq.Expressions.Expression, System.Type)"/>.
+    /// </summary>
+    private Expression CompileTypeCast(TypeCast typeCast, CompilationContext context) {
+        var operand = CompileNode(typeCast.Operand, context);
         var type = GetClrType(typeCast);
         return typeCast.IsChecked
             ? Expression.ConvertChecked(operand, type)
             : Expression.Convert(operand, type);
     }
 
-    private Expression CompileIfStatement(IfStatement ifStmt) {
-        var condition = CompileNode(ifStmt.Condition);
-        var thenBranch = CompileNode(ifStmt.ThenBranch);
+    /// <summary>
+    /// Compiles an <c>if</c> statement into <see cref="Expression.IfThen(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/> or
+    /// <see cref="Expression.IfThenElse(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/>.
+    /// The condition and branches are emitted in place, with branch typing normalized when possible.
+    /// </summary>
+    private Expression CompileIfStatement(IfStatement ifStmt, CompilationContext context) {
+        var condition = CompileNode(ifStmt.Condition, context);
+        var thenBranch = CompileNode(ifStmt.ThenBranch, context);
 
         if (ifStmt.ElseBranch != null) {
-            var elseBranch = CompileNode(ifStmt.ElseBranch);
+            var elseBranch = CompileNode(ifStmt.ElseBranch, context);
             // For IfThenElse, both branches should have compatible types
             if (thenBranch.Type == elseBranch.Type) {
                 return Expression.IfThenElse(condition, thenBranch, elseBranch);
@@ -494,36 +725,41 @@ public sealed class LinqExpressionGenerator {
         return Expression.IfThen(condition, thenBranch);
     }
 
-    private Expression CompileSwitchStatement(SwitchStatement switchStmt) {
-        var switchValue = CompileNode(switchStmt.Value);
+    /// <summary>
+    /// Compiles a switch statement by emitting the switch value, compiling each case pattern/body
+    /// pair into a <see cref="SwitchCase"/>, and then producing a single
+    /// <see cref="Expression.Switch(System.Type, System.Linq.Expressions.Expression, System.Linq.Expressions.Expression, System.Reflection.MethodInfo, System.Collections.Generic.IEnumerable{System.Linq.Expressions.SwitchCase})"/>.
+    /// </summary>
+    private Expression CompileSwitchStatement(SwitchStatement switchStmt, CompilationContext context) {
+        var switchValue = CompileNode(switchStmt.Value, context);
         var switchType = switchValue.Type;
 
         var cases = switchStmt.Cases.Select(caseNode => {
-            var pattern = CompileNode(caseNode.Pattern);
-            var body = CompileNode(caseNode.Body);
+            var pattern = CompileNode(caseNode.Pattern, context);
+            var body = CompileNode(caseNode.Body, context);
             // SwitchCase expects Expression array for test values
             return Expression.SwitchCase(body, pattern);
         }).ToArray();
 
-        var defaultCase = switchStmt.DefaultCase != null ? CompileNode(switchStmt.DefaultCase) : null;
+        var defaultCase = switchStmt.DefaultCase != null ? CompileNode(switchStmt.DefaultCase, context) : null;
 
         return Expression.Switch(switchType, switchValue, defaultCase, null, cases);
     }
 
-    private Expression CompileWhileLoop(WhileLoop whileLoop) {
+    /// <summary>
+    /// Compiles a <c>while (condition) { body }</c> loop into an infinite LINQ loop with explicit
+    /// break and continue labels.
+    /// The condition is checked at the top of each iteration and breaks the loop when false, while
+    /// the body executes inside a child loop scope so unlabeled <c>break</c> and <c>continue</c>
+    /// bind to this loop instance.
+    /// </summary>
+    private Expression CompileWhileLoop(WhileLoop whileLoop, CompilationContext context) {
         var breakLabel = Expression.Label("break");
         var continueLabel = Expression.Label("continue");
+        var loopContext = context.CreateLoopScope(breakLabel, continueLabel);
 
-        var savedBreak = _currentBreakLabel;
-        var savedContinue = _currentContinueLabel;
-        _currentBreakLabel = breakLabel;
-        _currentContinueLabel = continueLabel;
-
-        var condition = CompileNode(whileLoop.Condition);
-        var body = CompileNode(whileLoop.Body);
-
-        _currentBreakLabel = savedBreak;
-        _currentContinueLabel = savedContinue;
+        var condition = CompileNode(whileLoop.Condition, context);
+        var body = CompileNode(whileLoop.Body, loopContext);
 
         var loopBody = Expression.Block(
             Expression.IfThen(
@@ -535,20 +771,19 @@ public sealed class LinqExpressionGenerator {
         return Expression.Loop(loopBody, breakLabel);
     }
 
-    private Expression CompileDoWhileLoop(DoWhileLoop doWhileLoop) {
+    /// <summary>
+    /// Compiles a <c>do { body } while (condition)</c> loop into an infinite LINQ loop whose body
+    /// runs before the condition check.
+    /// A child loop scope provides the active break and continue labels so control-flow statements
+    /// target this loop and not an outer one.
+    /// </summary>
+    private Expression CompileDoWhileLoop(DoWhileLoop doWhileLoop, CompilationContext context) {
         var breakLabel = Expression.Label("break");
         var continueLabel = Expression.Label("continue");
+        var loopContext = context.CreateLoopScope(breakLabel, continueLabel);
 
-        var savedBreak = _currentBreakLabel;
-        var savedContinue = _currentContinueLabel;
-        _currentBreakLabel = breakLabel;
-        _currentContinueLabel = continueLabel;
-
-        var body = CompileNode(doWhileLoop.Body);
-        var condition = CompileNode(doWhileLoop.Condition);
-
-        _currentBreakLabel = savedBreak;
-        _currentContinueLabel = savedContinue;
+        var body = CompileNode(doWhileLoop.Body, loopContext);
+        var condition = CompileNode(doWhileLoop.Condition, context);
 
         var loopBody = Expression.Block(
             body,
@@ -560,22 +795,20 @@ public sealed class LinqExpressionGenerator {
         return Expression.Loop(loopBody, breakLabel);
     }
 
-    private Expression CompileForLoop(ForLoop forLoop) {
+    /// <summary>
+    /// Compiles a <c>for (initializer; condition; increment) { body }</c> loop into a block that
+    /// runs the initializer once and then executes an explicit LINQ loop containing the condition
+    /// check, body, continue label, and increment step in that order.
+    /// </summary>
+    private Expression CompileForLoop(ForLoop forLoop, CompilationContext context) {
         var breakLabel = Expression.Label("break");
         var continueLabel = Expression.Label("continue");
+        var loopContext = context.CreateLoopScope(breakLabel, continueLabel);
 
-        var savedBreak = _currentBreakLabel;
-        var savedContinue = _currentContinueLabel;
-        _currentBreakLabel = breakLabel;
-        _currentContinueLabel = continueLabel;
-
-        var initializer = forLoop.Initializer != null ? CompileNode(forLoop.Initializer) : null;
-        var condition = forLoop.Condition != null ? CompileNode(forLoop.Condition) : null;
-        var increment = forLoop.Increment != null ? CompileNode(forLoop.Increment) : null;
-        var body = CompileNode(forLoop.Body);
-
-        _currentBreakLabel = savedBreak;
-        _currentContinueLabel = savedContinue;
+        var initializer = forLoop.Initializer != null ? CompileNode(forLoop.Initializer, context) : null;
+        var condition = forLoop.Condition != null ? CompileNode(forLoop.Condition, context) : null;
+        var increment = forLoop.Increment != null ? CompileNode(forLoop.Increment, context) : null;
+        var body = CompileNode(forLoop.Body, loopContext);
 
         var loopBody = Expression.Block(
             condition != null
@@ -594,37 +827,168 @@ public sealed class LinqExpressionGenerator {
         return blockExpressions.Count == 1 ? blockExpressions[0] : Expression.Block(blockExpressions);
     }
 
-    private Expression CompileBreakStatement(BreakStatement breakStmt) {
+    /// <summary>
+    /// Compiles a <c>foreach (var v in collection) { body }</c> loop into a block that acquires an
+    /// <see cref="IEnumerator"/>, advances it inside an explicit LINQ loop, assigns
+    /// <see cref="IEnumerator.Current"/> into the lexical loop variable each iteration, executes the
+    /// body, and disposes the enumerator in a <c>finally</c> block when iteration completes.
+    /// </summary>
+    private Expression CompileForEachLoop(ForEachLoop foreachLoop, CompilationContext context) {
+        var breakLabel = Expression.Label("break");
+        var continueLabel = Expression.Label("continue");
+        var loopContext = context.CreateLoopScope(breakLabel, continueLabel);
+
+        var collection = CompileNode(foreachLoop.Collection, context);
+        var enumeratorVar = Expression.Variable(typeof(IEnumerator), "enumerator");
+        var getEnumeratorCall = Expression.Call(
+            Expression.Convert(collection, typeof(IEnumerable)),
+            typeof(IEnumerable).GetMethod(nameof(IEnumerable.GetEnumerator))!);
+        var assignEnumerator = Expression.Assign(enumeratorVar, getEnumeratorCall);
+        var moveNextCall = Expression.Call(enumeratorVar, typeof(IEnumerator).GetMethod(nameof(IEnumerator.MoveNext))!);
+        var currentProperty = Expression.Property(enumeratorVar, nameof(IEnumerator.Current));
+
+        // Pre-register the loop variable PE before compiling the body so that the
+        // assignment (here) and any references inside the body share the same PE.
+        var loopVarPE = loopContext.DeclareVariable(foreachLoop.LoopVariable, CreateVariableExpression(foreachLoop.LoopVariable));
+
+        var compiledBody = CompileNode(foreachLoop.Body, loopContext);
+        Expression currentValue = currentProperty;
+        if (currentProperty.Type != loopVarPE.Type) {
+            currentValue = Expression.Convert(currentProperty, loopVarPE.Type);
+        }
+
+        var loopBody = Expression.Block(
+            Expression.IfThen(
+                Expression.Not(moveNextCall),
+                Expression.Break(breakLabel)),
+            Expression.Assign(loopVarPE, currentValue),
+            compiledBody,
+            Expression.Label(continueLabel)
+        );
+
+        var tryFinally = Expression.TryFinally(
+            Expression.Loop(loopBody, breakLabel),
+            Expression.IfThen(
+                Expression.TypeIs(enumeratorVar, typeof(IDisposable)),
+                Expression.Call(Expression.Convert(enumeratorVar, typeof(IDisposable)), typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose))!)));
+
+        return Expression.Block(
+            [enumeratorVar, loopVarPE],
+            assignEnumerator,
+            tryFinally
+        );
+    }
+
+    /// <summary>
+    /// Compiles a <c>break</c> statement by targeting the active loop break label for unlabeled
+    /// breaks, or a function-scoped named label for labeled breaks.
+    /// </summary>
+    private Expression CompileBreakStatement(BreakStatement breakStmt, CompilationContext context) {
+        if (breakStmt.Label == null && context.CurrentBreakLabel != null) {
+            return Expression.Break(context.CurrentBreakLabel);
+        }
+
         var label = breakStmt.Label ?? "break";
-        return Expression.Break(GetOrCreateLabel(label));
+        return Expression.Break(GetOrCreateLabel(label, context));
     }
 
-    private Expression CompileContinueStatement(ContinueStatement continueStmt) {
+    /// <summary>
+    /// Compiles a <c>continue</c> statement by targeting the active loop continue label for
+    /// unlabeled continues, or a function-scoped named label for labeled continues.
+    /// </summary>
+    private Expression CompileContinueStatement(ContinueStatement continueStmt, CompilationContext context) {
+        if (continueStmt.Label == null && context.CurrentContinueLabel != null) {
+            return Expression.Continue(context.CurrentContinueLabel);
+        }
+
         var label = continueStmt.Label ?? "continue";
-        return Expression.Continue(GetOrCreateLabel(label));
+        return Expression.Continue(GetOrCreateLabel(label, context));
     }
 
-    private Expression CompileLabelDeclaration(LabelDeclaration labelDecl) {
-        var label = GetOrCreateLabel(labelDecl.Name);
-        var statement = CompileNode(labelDecl.Statement);
+    /// <summary>
+    /// Compiles a label declaration into a block containing the label target followed by the
+    /// labeled statement, so <c>goto</c> expressions within the same function scope can jump to it.
+    /// </summary>
+    private Expression CompileLabelDeclaration(LabelDeclaration labelDecl, CompilationContext context) {
+        var label = GetOrCreateLabel(labelDecl.Name, context);
+        var statement = CompileNode(labelDecl.Statement, context);
         return Expression.Block(
             Expression.Label(label),
             statement);
     }
 
-    private Expression CompileReturnStatement(ReturnStatement returnStmt) {
+    /// <summary>
+    /// Compiles a <c>return</c> statement into <see cref="Expression.Return(System.Linq.Expressions.LabelTarget)"/> or
+    /// <see cref="Expression.Return(System.Linq.Expressions.LabelTarget, System.Linq.Expressions.Expression)"/>.
+    /// The enclosing function scope owns the shared return label, which is lazily created and typed
+    /// from the first returned value so all returns in that scope target the same exit point.
+    /// </summary>
+    private Expression CompileReturnStatement(Return returnStmt, CompilationContext context) {
         if (returnStmt.Value != null) {
-            var value = CompileNode(returnStmt.Value);
-            var returnLabel = GetOrCreateLabel("return");
+            var value = CompileNode(returnStmt.Value, context);
+            // Use a typed label so that Expression.Return and Expression.Label agree on type.
+            if (!context.FunctionLabels.TryGetValue("return", out var returnLabel)) {
+                returnLabel = Expression.Label(value.Type, "return");
+                context.FunctionLabels["return"] = returnLabel;
+            }
             return Expression.Return(returnLabel, value);
         }
 
-        var voidReturnLabel = GetOrCreateLabel("return");
+        var voidReturnLabel = GetOrCreateLabel("return", context);
         return Expression.Return(voidReturnLabel);
     }
 
-    private Expression CompileTryCatchFinally(TryCatchFinally tryCatch) {
-        var tryBlock = CompileNode(tryCatch.TryBlock);
+    /// <summary>
+    /// Compiles a lambda expression by creating a new lexical function scope, declaring the lambda
+    /// parameters locally, compiling the body within that scope, and then closing any function-local
+    /// return label before emitting the final <see cref="Expression.Lambda(System.Linq.Expressions.Expression, System.Collections.Generic.IEnumerable{System.Linq.Expressions.ParameterExpression})"/>.
+    /// </summary>
+    private Expression CompileLambda(Lambda lambda, CompilationContext context) {
+        var lambdaContext = context.CreateLambdaScope();
+        var paramExprs = lambda.Parameters
+            .Select(parameter => lambdaContext.DeclareParameter(parameter, CreateParameterExpression(parameter), export: false))
+            .ToArray();
+        var bodyExpr = CompileNode(lambda.Body, lambdaContext);
+
+        // If the body introduced a return label (e.g., via a top-level Return statement
+        // that wasn't consumed by an inner Block), close it here.
+        if (lambdaContext.FunctionLabels.TryGetValue("return", out var bodyReturnLabel)) {
+            lambdaContext.FunctionLabels.Remove("return");
+            bodyExpr = Expression.Block(
+                bodyExpr,
+                Expression.Label(bodyReturnLabel, Expression.Default(bodyReturnLabel.Type)));
+        }
+
+        return Expression.Lambda(bodyExpr, paramExprs);
+    }
+
+    /// <summary>
+    /// Compiles an invocation either as a direct method call when the delegate expression is a
+    /// <see cref="MemberAccess"/>, or as a general <see cref="Expression.Invoke(System.Linq.Expressions.Expression, System.Collections.Generic.IEnumerable{System.Linq.Expressions.Expression})"/>
+    /// when invoking a first-class lambda or delegate value.
+    /// </summary>
+    private Expression CompileInvocation(Invoke invoke, CompilationContext context) {
+        var argExprs = invoke.Arguments.Select(argument => CompileNode(argument, context)).ToArray();
+        if (invoke.Delegate is MemberAccess memberAccess) {
+            return Expression.Call(
+                CompileNode(memberAccess.Value, context),
+                memberAccess.MemberName,
+                Type.EmptyTypes,
+                argExprs);
+        }
+
+        var methodExpr = CompileNode(invoke.Delegate, context);
+        return Expression.Invoke(methodExpr, argExprs);
+    }
+
+    /// <summary>
+    /// Compiles a <c>try</c>/<c>catch</c>/<c>finally</c> construct by emitting the try block,
+    /// compiling each catch body inside its own child lexical scope with the exception variable
+    /// bound locally, and then selecting the appropriate LINQ try expression shape based on whether
+    /// catch clauses, a finally block, or both are present.
+    /// </summary>
+    private Expression CompileTryCatchFinally(TryCatchFinally tryCatch, CompilationContext context) {
+        var tryBlock = CompileNode(tryCatch.TryBlock, context);
 
         var catchClauses = tryCatch.CatchClauses?.Select(catchClause => {
             var exceptionType = catchClause.ExceptionType != null
@@ -635,24 +999,18 @@ public sealed class LinqExpressionGenerator {
 
             // Create a synthetic Parameter node to bind the exception variable to the cache
             // This allows references to the exception variable in the catch body
+            var catchContext = context.CreateChild();
             if (catchClause.VariableName != null) {
                 var exceptionVarNode = new Parameter(catchClause.VariableName, catchClause.ExceptionType);
-                _parameterCache[exceptionVarNode] = exceptionParam;
+                catchContext.DeclareParameter(exceptionVarNode, exceptionParam, export: false);
             }
 
-            var catchBody = CompileNode(catchClause.Body);
-
-            // Remove from cache after compilation to avoid pollution
-            if (catchClause.VariableName != null) {
-                var keyToRemove = _parameterCache.Keys.FirstOrDefault(k => k is Parameter p && p.Name == catchClause.VariableName);
-                if (keyToRemove != null)
-                    _parameterCache.Remove(keyToRemove);
-            }
+            var catchBody = CompileNode(catchClause.Body, catchContext);
 
             return Expression.Catch(exceptionParam, catchBody);
         }).ToArray() ?? Array.Empty<CatchBlock>();
 
-        var finallyBlock = tryCatch.FinallyBlock != null ? CompileNode(tryCatch.FinallyBlock) : null;
+        var finallyBlock = tryCatch.FinallyBlock != null ? CompileNode(tryCatch.FinallyBlock, context) : null;
 
         if (catchClauses.Length > 0 && finallyBlock != null) {
             return Expression.TryCatchFinally(tryBlock, finallyBlock, catchClauses);
@@ -667,10 +1025,15 @@ public sealed class LinqExpressionGenerator {
         return tryBlock;
     }
 
-    private Expression CompileUsingStatement(UsingStatement usingStmt) {
-        var resourceType = GetClrType(usingStmt.Resource);
-        var resource = CompileNode(usingStmt.Resource);
-        var body = CompileNode(usingStmt.Body);
+    /// <summary>
+    /// Compiles a <c>using</c> statement into a <c>try/finally</c> pattern where the resource is
+    /// evaluated once, the body executes normally, and <c>Dispose()</c> is called in the finally
+    /// block when the compiled resource type exposes a disposable cleanup method.
+    /// </summary>
+    private Expression CompileUsingStatement(UsingStatement usingStmt, CompilationContext context) {
+        var resource = CompileNode(usingStmt.Resource, context);
+        var resourceType = resource.Type;
+        var body = CompileNode(usingStmt.Body, context);
 
         // using statement is: try { body } finally { resource.Dispose() }
         var disposeMethod = resourceType.GetMethod(nameof(IDisposable.Dispose));
@@ -684,16 +1047,10 @@ public sealed class LinqExpressionGenerator {
         return body;
     }
 
-    /// <summary>
-    /// Gets the parameter expressions that were created during compilation.
-    /// </summary>
-    /// <returns>The collection of parameter expressions created.</returns>
-    public IEnumerable<ParameterExpression> GetParameters() => _parameterCache.Values;
-
-    private LabelTarget GetOrCreateLabel(string name) {
-        if (!_labelMap.TryGetValue(name, out var label)) {
+    private LabelTarget GetOrCreateLabel(string name, CompilationContext context) {
+        if (!context.FunctionLabels.TryGetValue(name, out var label)) {
             label = Expression.Label(name);
-            _labelMap[name] = label;
+            context.FunctionLabels[name] = label;
         }
 
         return label;

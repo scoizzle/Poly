@@ -7,7 +7,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
 /// <param name="PrimitiveId">The primitive type identifier.</param>
 /// <param name="IsNullable">Whether this is a nullable version of the primitive type.</param>
 public sealed record PrimitiveTypeReference(
-    PrimitiveTypeId PrimitiveId,
+    PrimitiveType PrimitiveId,
     bool IsNullable = false
 ) : Node {
 

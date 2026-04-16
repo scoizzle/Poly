@@ -33,8 +33,8 @@ public static class NodeExtensions {
     /// <param name="instance">The instance expression.</param>
     /// <param name="methodName">The name of the method to invoke.</param>
     /// <param name="arguments">The method arguments.</param>
-    /// <returns>An <see cref="MethodInvocation"/> representing the method invocation.</returns>
-    public static MethodInvocation Invoke(this Node instance, string methodName, params Node[] arguments) => new MethodInvocation(instance, methodName, arguments);
+    /// <returns>An <see cref="AbstractSyntaxTree.Invoke"/> representing the method invocation.</returns>
+    public static Invoke Invoke(this Node instance, string methodName, params Node[] arguments) => new Invoke(new MemberAccess(instance, methodName), arguments);
 
     #endregion
 
@@ -215,6 +215,18 @@ public static class NodeExtensions {
     /// <param name="value">The value to assign.</param>
     /// <returns>An <see cref="Assignment"/> operator.</returns>
     public static Assignment Assign(this Node destination, Node value) => new Assignment(destination, value);
+
+    #endregion
+
+    #region Lambda and Invocation
+
+    /// <summary>
+    /// Invokes this expression as a delegate or lambda with the given arguments.
+    /// </summary>
+    /// <param name="delegate">The delegate or lambda expression to invoke.</param>
+    /// <param name="arguments">The arguments to pass.</param>
+    /// <returns>An <see cref="Invoke"/> operator.</returns>
+    public static Invoke InvokeWith(this Node @delegate, params Node[] arguments) => new Invoke(@delegate, arguments);
 
     #endregion
 

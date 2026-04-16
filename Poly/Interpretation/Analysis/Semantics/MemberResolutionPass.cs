@@ -1,11 +1,14 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal static class MethodInvocationSemanticResolver {
-    public static ITypeMethod? ResolveMethod(AnalysisContext context, MethodInvocation methodInv) {
+    public static ITypeMethod? ResolveMethod(AnalysisContext context, Invoke methodInv) {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(methodInv);
 
-        var targetType = context.GetResolvedType(methodInv.Target);
+        if (methodInv.Delegate is not MemberAccess memberAccess)
+            return null;
+
+        var targetType = context.GetResolvedType(memberAccess.Value);
         if (targetType == null)
             return null;
 
@@ -19,7 +22,7 @@ internal static class MethodInvocationSemanticResolver {
         }
 
         return targetType
-            .FindMatchingMethodOverloads(methodInv.MethodName, argumentTypes)
+            .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes)
             .FirstOrDefault();
     }
 }
@@ -32,7 +35,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
             MemberAccess memberAccess => ResolveMemberAccessMember(context, memberAccess),
 
             // Method invocation - resolve the method being called
-            MethodInvocation methodInv => ResolveMethodInvocationMember(context, methodInv),
+            Invoke methodInv => ResolveMethodInvocationMember(context, methodInv),
 
             // Index access - resolve the indexer property
             IndexAccess indexAccess => ResolveIndexAccessMember(context, indexAccess),
@@ -56,7 +59,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
         return member;
     }
 
-    private static ITypeMember? ResolveMethodInvocationMember(AnalysisContext context, MethodInvocation methodInv) {
+    private static ITypeMember? ResolveMethodInvocationMember(AnalysisContext context, Invoke methodInv) {
         return MethodInvocationSemanticResolver.ResolveMethod(context, methodInv);
     }
 

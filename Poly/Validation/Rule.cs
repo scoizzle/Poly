@@ -3,8 +3,6 @@ using System.Text.Json.Serialization;
 namespace Poly.Validation;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
-[JsonDerivedType(typeof(RangeConstraint), "Range")]
-[JsonDerivedType(typeof(NotNullConstraint), "NotNull")]
 [JsonDerivedType(typeof(Rules.AndRule), "And")]
 [JsonDerivedType(typeof(Rules.OrRule), "Or")]
 [JsonDerivedType(typeof(Rules.NotRule), "Not")]

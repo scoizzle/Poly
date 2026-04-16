@@ -341,6 +341,36 @@ public class ConstantFoldingTests {
     }
 
     [Test]
+    public async Task And_WithConstantFalseLeft_FoldsToFalse() {
+        var parameter = new Parameter("flag", TypeReference.To<bool>());
+        var ast = new And(Wrap(false), parameter);
+
+        var analyzer = new AnalyzerBuilder()
+            .UseConstantFolding()
+            .Build();
+
+        var result = analyzer.Analyze(ast);
+
+        await Assert.That(result.IsConstant(ast)).IsTrue();
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsFalse();
+    }
+
+    [Test]
+    public async Task Or_WithConstantTrueLeft_FoldsToTrue() {
+        var parameter = new Parameter("flag", TypeReference.To<bool>());
+        var ast = new Or(Wrap(true), parameter);
+
+        var analyzer = new AnalyzerBuilder()
+            .UseConstantFolding()
+            .Build();
+
+        var result = analyzer.Analyze(ast);
+
+        await Assert.That(result.IsConstant(ast)).IsTrue();
+        await Assert.That((bool?)result.GetConstantValue(ast)).IsTrue();
+    }
+
+    [Test]
     public async Task StringConcatenation_FoldsCorrectly() {
         // Arrange: "Hello" + " World"
         var ast = new Add(Wrap("Hello"), Wrap(" World"));
@@ -372,6 +402,39 @@ public class ConstantFoldingTests {
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
         await Assert.That(result.GetConstantValue(ast)).IsEqualTo("value");
+    }
+
+    [Test]
+    public async Task InvokeLambda_WithConstantArguments_FoldsToInvokedResult() {
+        var parameter = new Parameter("x", TypeReference.To<int>());
+        var lambda = new Lambda([parameter], new Add(parameter, Wrap(10)));
+        var ast = new Invoke(lambda, Wrap(5));
+
+        var analyzer = new AnalyzerBuilder()
+            .UseConstantFolding()
+            .Build();
+
+        var result = analyzer.Analyze(ast);
+
+        await Assert.That(result.IsConstant(ast)).IsTrue();
+        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(15);
+    }
+
+    [Test]
+    public async Task InvokeLambda_WithCapturedConstantArguments_FoldsNestedExpression() {
+        var outer = new Parameter("outer", TypeReference.To<int>());
+        var inner = new Parameter("inner", TypeReference.To<int>());
+        var lambda = new Lambda([inner], new Add(inner, new Multiply(outer, Wrap(2))));
+        var ast = new Invoke(new Lambda([outer], new Invoke(lambda, Wrap(5))), Wrap(3));
+
+        var analyzer = new AnalyzerBuilder()
+            .UseConstantFolding()
+            .Build();
+
+        var result = analyzer.Analyze(ast);
+
+        await Assert.That(result.IsConstant(ast)).IsTrue();
+        await Assert.That(result.GetConstantValue(ast)).IsEqualTo(11);
     }
 
     [Test]

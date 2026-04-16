@@ -18,6 +18,10 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeBlock(context, block);
                 break;
 
+            case ForEachLoop forEachLoop:
+                AnalyzeForEachLoop(context, forEachLoop);
+                break;
+
             case Variable variable when variable.Value == null:
                 // Variable reference (usage)
                 ValidateVariableReference(context, variable);
@@ -34,6 +38,14 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 this.AnalyzeChildren(context, node);
                 break;
         }
+    }
+
+    private void AnalyzeForEachLoop(AnalysisContext context, ForEachLoop forEachLoop) {
+        Analyze(context, forEachLoop.Collection);
+
+        RegisterScopedVariable(context, forEachLoop.LoopVariable);
+        Analyze(context, forEachLoop.Body);
+        UnregisterVariable(forEachLoop.LoopVariable);
     }
 
     private void AnalyzeBlock(AnalysisContext context, Block block) {
@@ -56,6 +68,19 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     }
 
     private void RegisterVariable(AnalysisContext context, Variable variable, Block scope) {
+        RegisterScopedVariable(context, variable);
+
+        // Track which block owns this variable
+        var metadata = GetOrCreateMetadata(context, variable);
+        if (!metadata.BlockScopes.TryGetValue(scope, out var scopeVars)) {
+            scopeVars = new HashSet<Variable>();
+            metadata.BlockScopes[scope] = scopeVars;
+        }
+
+        scopeVars.Add(variable);
+    }
+
+    private void RegisterScopedVariable(AnalysisContext context, Variable variable) {
         if (!_variablesByName.TryGetValue(variable.Name, out var stack)) {
             stack = new Stack<Variable>();
             _variablesByName[variable.Name] = stack;
@@ -67,14 +92,6 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         }
 
         stack.Push(variable);
-
-        // Track which block owns this variable
-        var metadata = GetOrCreateMetadata(context, variable);
-        if (!metadata.BlockScopes.TryGetValue(scope, out var scopeVars)) {
-            scopeVars = new HashSet<Variable>();
-            metadata.BlockScopes[scope] = scopeVars;
-        }
-        scopeVars.Add(variable);
     }
 
     private void UnregisterVariable(Variable variable) {

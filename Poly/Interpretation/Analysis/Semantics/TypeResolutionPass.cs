@@ -1,3 +1,6 @@
+using System.Collections;
+using System.Collections.Generic;
+
 namespace Poly.Interpretation.Analysis.Semantics;
 
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
@@ -40,7 +43,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
             GreaterThan => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             GreaterThanOrEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             MemberAccess memberAccess => ResolveMemberAccessType(context, memberAccess),
-            MethodInvocation methodInv => ResolveMethodInvocationType(context, methodInv),
+            Invoke methodInv => ResolveMethodInvocationType(context, methodInv),
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
@@ -49,8 +52,23 @@ internal sealed class TypeResolver : INodeAnalyzer {
             Coalesce coal => ResolveNodeType(context, coal.RightHandValue),
             Block block => ResolveBlockType(context, block),
             Assignment assign => ResolveAssignmentType(context, assign),
+            ForEachLoop foreachLoop => ResolveForEachLoopType(context, foreachLoop),
+            Lambda lambda => ResolveBlockType(context, lambda.Body is Block b ? b : new Block(lambda.Body)),
             _ => null
         };
+    }
+
+    private static ITypeDefinition? ResolveForEachLoopType(
+        AnalysisContext context,
+        ForEachLoop foreachLoop) {
+        var collectionType = ResolveNodeType(context, foreachLoop.Collection);
+        var elementType = ResolveEnumerableElementType(context, collectionType);
+
+        if (elementType != null) {
+            context.SetResolvedType(foreachLoop.LoopVariable, elementType);
+        }
+
+        return context.TypeDefinitions.GetTypeDefinition(typeof(void));
     }
 
     private static ITypeDefinition? ResolveArithmeticType(
@@ -79,20 +97,28 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveMethodInvocationType(
         AnalysisContext context,
-        MethodInvocation methodInv) {
-        var targetType = ResolveNodeType(context, methodInv.Target);
-        if (targetType != null) {
-            context.SetResolvedType(methodInv.Target, targetType);
+        Invoke invoke) {
+        // Resolve the target type through the method reference so the semantic
+        // resolver can look it up by name when FindMatchingMethodOverloads is called.
+        if (invoke.Delegate is MemberAccess memberAccess) {
+            var targetType = ResolveNodeType(context, memberAccess.Value);
+            if (targetType != null) {
+                context.SetResolvedType(memberAccess.Value, targetType);
+            }
+        }
+        else
+        if (invoke.Delegate is Lambda lambda) {
+            return ResolveNodeType(context, lambda.Body);
         }
 
-        foreach (var argument in methodInv.Arguments) {
+        foreach (var argument in invoke.Arguments) {
             var argumentType = ResolveNodeType(context, argument);
             if (argumentType != null) {
                 context.SetResolvedType(argument, argumentType);
             }
         }
 
-        var method = MethodInvocationSemanticResolver.ResolveMethod(context, methodInv);
+        var method = MethodInvocationSemanticResolver.ResolveMethod(context, invoke);
         return method?.MemberTypeDefinition;
     }
 
@@ -162,6 +188,43 @@ internal sealed class TypeResolver : INodeAnalyzer {
         }
 
         return null;
+    }
+
+    private static ITypeDefinition? ResolveEnumerableElementType(
+        AnalysisContext context,
+        ITypeDefinition? collectionType) {
+        if (collectionType == null) {
+            return null;
+        }
+
+        var reflectedType = collectionType.ReflectedType;
+
+        if (reflectedType.IsArray) {
+            var elementType = reflectedType.GetElementType();
+            return elementType != null
+                ? context.TypeDefinitions.GetTypeDefinition(elementType)
+                : null;
+        }
+
+        var enumerableType = GetGenericEnumerableType(reflectedType);
+        if (enumerableType != null) {
+            var elementType = enumerableType.GetGenericArguments()[0];
+            return context.TypeDefinitions.GetTypeDefinition(elementType);
+        }
+
+        return typeof(IEnumerable).IsAssignableFrom(reflectedType)
+            ? context.TypeDefinitions.GetTypeDefinition(typeof(object))
+            : null;
+    }
+
+    private static Type? GetGenericEnumerableType(Type type) {
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)) {
+            return type;
+        }
+
+        return type
+            .GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
     }
 }
 

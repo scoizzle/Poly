@@ -20,6 +20,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         Fields = BuildFieldCollection(type, this, provider);
         Properties = BuildPropertyCollection(type, this, provider);
         Methods = BuildMethodCollection(type, this, provider);
+        Constructors = BuildConstructorCollection(type, this, provider);
         Members = BuildMemberCollection(Fields, Properties, Methods);
     }
 
@@ -33,6 +34,7 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
     public FrozenSet<ClrTypeField> Fields { get; }
     public FrozenSet<ClrTypeProperty> Properties { get; }
     public FrozenSet<ClrMethod> Methods { get; }
+    public FrozenSet<ClrConstructor> Constructors { get; }
     public FrozenSet<ClrTypeMember> Members { get; }
 
     ITypeDefinition? ITypeDefinition.BaseType => BaseType;
@@ -40,9 +42,10 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
     IEnumerable<ITypeField> ITypeDefinition.Fields => Fields;
     IEnumerable<ITypeProperty> ITypeDefinition.Properties => Properties;
     IEnumerable<ITypeMethod> ITypeDefinition.Methods => Methods;
+    IEnumerable<ITypeConstructor> ITypeDefinition.Constructors => Constructors;
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members;
     Type ITypeDefinition.ReflectedType => Type;
-    IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters; PrimitiveTypeId? ITypeDefinition.PrimitiveTypeId => GetPrimitiveTypeId(Type);
+    IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters; PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(Type);
     TypeCategory ITypeDefinition.TypeCategory => GetTypeCategory(Type);
     public override string ToString() => FullName;
 
@@ -121,6 +124,30 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
             Lazy<ClrTypeDefinition> returnType = provider.GetDeferredTypeDefinitionResolver(mi.ReturnType);
             IEnumerable<ClrParameter> parameters = mi.GetParameters().Select(pi => ConstructParameter(provider, pi)).ToArray();
             return new ClrMethod(returnType, declaringType, parameters, mi);
+        }
+    }
+
+    private static FrozenSet<ClrConstructor> BuildConstructorCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(declaringType);
+        ArgumentNullException.ThrowIfNull(provider);
+
+        var constructors = type
+            .GetConstructors(MemberSearchCriteria)
+            .Select(ConstructConstructor)
+            .ToFrozenSet();
+
+        return constructors;
+
+        ClrConstructor ConstructConstructor(ConstructorInfo constructorInfo) {
+            ArgumentNullException.ThrowIfNull(constructorInfo);
+
+            IEnumerable<ClrParameter> parameters = constructorInfo
+                .GetParameters()
+                .Select(pi => ConstructParameter(provider, pi))
+                .ToArray();
+
+            return new ClrConstructor(declaringType, parameters, constructorInfo);
         }
     }
 
@@ -205,30 +232,30 @@ internal sealed class ClrTypeDefinition : ITypeDefinition {
         return interfaces.Select(provider.GetTypeDefinition).ToFrozenSet();
     }
 
-    private static PrimitiveTypeId? GetPrimitiveTypeId(Type type) {
+    private static PrimitiveType? GetPrimitiveTypeId(Type type) {
         ArgumentNullException.ThrowIfNull(type);
 
         return type switch {
-            Type t when t == typeof(bool) => PrimitiveTypeId.Boolean,
-            Type t when t == typeof(sbyte) => PrimitiveTypeId.Int8,
-            Type t when t == typeof(short) => PrimitiveTypeId.Int16,
-            Type t when t == typeof(int) => PrimitiveTypeId.Int32,
-            Type t when t == typeof(long) => PrimitiveTypeId.Int64,
-            Type t when t == typeof(byte) => PrimitiveTypeId.UInt8,
-            Type t when t == typeof(ushort) => PrimitiveTypeId.UInt16,
-            Type t when t == typeof(uint) => PrimitiveTypeId.UInt32,
-            Type t when t == typeof(ulong) => PrimitiveTypeId.UInt64,
-            Type t when t == typeof(float) => PrimitiveTypeId.Float32,
-            Type t when t == typeof(double) => PrimitiveTypeId.Float64,
-            Type t when t == typeof(decimal) => PrimitiveTypeId.Decimal,
-            Type t when t == typeof(string) => PrimitiveTypeId.String,
-            Type t when t == typeof(char) => PrimitiveTypeId.Char,
-            Type t when t == typeof(DateTime) => PrimitiveTypeId.DateTime,
-            Type t when t == typeof(DateOnly) => PrimitiveTypeId.DateOnly,
-            Type t when t == typeof(TimeOnly) => PrimitiveTypeId.TimeOnly,
-            Type t when t == typeof(TimeSpan) => PrimitiveTypeId.TimeSpan,
-            Type t when t == typeof(Guid) => PrimitiveTypeId.Guid,
-            Type t when t == typeof(byte[]) => PrimitiveTypeId.ByteArray,
+            Type t when t == typeof(bool) => PrimitiveType.Boolean,
+            Type t when t == typeof(sbyte) => PrimitiveType.Int8,
+            Type t when t == typeof(short) => PrimitiveType.Int16,
+            Type t when t == typeof(int) => PrimitiveType.Int32,
+            Type t when t == typeof(long) => PrimitiveType.Int64,
+            Type t when t == typeof(byte) => PrimitiveType.UInt8,
+            Type t when t == typeof(ushort) => PrimitiveType.UInt16,
+            Type t when t == typeof(uint) => PrimitiveType.UInt32,
+            Type t when t == typeof(ulong) => PrimitiveType.UInt64,
+            Type t when t == typeof(float) => PrimitiveType.Float32,
+            Type t when t == typeof(double) => PrimitiveType.Float64,
+            Type t when t == typeof(decimal) => PrimitiveType.Decimal,
+            Type t when t == typeof(string) => PrimitiveType.String,
+            Type t when t == typeof(char) => PrimitiveType.Char,
+            Type t when t == typeof(DateTime) => PrimitiveType.DateTime,
+            Type t when t == typeof(DateOnly) => PrimitiveType.DateOnly,
+            Type t when t == typeof(TimeOnly) => PrimitiveType.TimeOnly,
+            Type t when t == typeof(TimeSpan) => PrimitiveType.TimeSpan,
+            Type t when t == typeof(Guid) => PrimitiveType.Guid,
+            Type t when t == typeof(byte[]) => PrimitiveType.ByteArray,
             _ => null
         };
     }

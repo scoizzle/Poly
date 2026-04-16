@@ -749,7 +749,7 @@ public class C99ParserInterpreterTests {
         var generator = new LinqExpressionGenerator(analysisResult);
         var parameters = fn.Parameters.Select(p => p.Param).ToArray();
         if (parameters.Length == 0) {
-            var body = generator.Compile(fn.Body);
+            var body = generator.Compile(fn.Body).Expression;
             return System.Linq.Expressions.Expression.Lambda<TDelegate>(body).Compile();
         }
 

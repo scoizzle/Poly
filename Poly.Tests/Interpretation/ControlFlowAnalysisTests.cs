@@ -59,7 +59,7 @@ public class ControlFlowAnalysisTests {
         // Arrange: block with return followed by code
         var ast = new Block(
             Wrap(1),
-            new ReturnStatement(Wrap(42)),
+            new Return(Wrap(42)),
             Wrap(3) // This should be dead code
         );
 
@@ -179,6 +179,28 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
+    public async Task ForEachLoop_HasProperStructure() {
+        // Arrange: foreach loop over a collection variable
+        var collection = new Variable("items");
+        var body = Wrap(1);
+
+        var ast = new ForEachLoop(new Variable("item"), collection, body);
+
+        var analyzer = new AnalyzerBuilder()
+            .UseControlFlowAnalysis()
+            .Build();
+
+        // Act
+        var result = analyzer.Analyze(ast);
+
+        // Assert
+        var cfg = result.GetControlFlowGraph(ast);
+        await Assert.That(cfg).IsNotNull();
+        // Should have at least: entry, condition, body, exit blocks
+        await Assert.That(cfg!.Blocks.Count).IsGreaterThanOrEqualTo(4);
+    }
+
+    [Test]
     public async Task NestedIf_AllPathsReachable() {
         // Arrange: nested if statements
         var innerIf = new IfStatement(
@@ -238,7 +260,7 @@ public class ControlFlowAnalysisTests {
             new IfStatement(
                 Wrap(true),
                 new Block(
-                    new ReturnStatement(Wrap(1)),
+                    new Return(Wrap(1)),
                     Wrap(99) // Dead code
                 ),
                 Wrap(2)
@@ -285,6 +307,57 @@ public class ControlFlowAnalysisTests {
         await Assert.That(cfg).IsNotNull();
 
         // Should detect dead code after continue
+        var deadCodeWarnings = result.Diagnostics.Where(d => d.Code == "CF0002").ToList();
+        await Assert.That(deadCodeWarnings.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task ContinueStatement_InForEachLoop_DetectsDeadCodeAfterContinue() {
+        // Arrange: foreach loop with continue
+        var body = new Block(
+            new ContinueStatement(),
+            Wrap(2) // Dead code after continue
+        );
+
+        var ast = new ForEachLoop(new Variable("item"), new Variable("items"), body);
+
+        var analyzer = new AnalyzerBuilder()
+            .UseControlFlowAnalysis()
+            .Build();
+
+        // Act
+        var result = analyzer.Analyze(ast);
+
+        // Assert
+        var cfg = result.GetControlFlowGraph(ast);
+        await Assert.That(cfg).IsNotNull();
+
+        // Should detect dead code after continue
+        var deadCodeWarnings = result.Diagnostics.Where(d => d.Code == "CF0002").ToList();
+        await Assert.That(deadCodeWarnings.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task BreakStatement_InForEachLoop_DetectsDeadCodeAfterBreak() {
+        // Arrange: foreach loop with break
+        var body = new Block(
+            new BreakStatement(),
+            Wrap(2) // Dead code after break
+        );
+
+        var ast = new ForEachLoop(new Variable("item"), new Variable("items"), body);
+
+        var analyzer = new AnalyzerBuilder()
+            .UseControlFlowAnalysis()
+            .Build();
+
+        // Act
+        var result = analyzer.Analyze(ast);
+
+        // Assert
+        var cfg = result.GetControlFlowGraph(ast);
+        await Assert.That(cfg).IsNotNull();
+
         var deadCodeWarnings = result.Diagnostics.Where(d => d.Code == "CF0002").ToList();
         await Assert.That(deadCodeWarnings.Count).IsGreaterThan(0);
     }

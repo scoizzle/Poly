@@ -19,6 +19,19 @@ public static class TypeDefinitionExtensions {
         }
 
         /// <summary>
+        /// Gets the best-matching constructors for the given argument types.
+        /// </summary>
+        /// <param name="argumentTypes">The types of the arguments to match against.</param>
+        /// <returns>The best-matching constructors, or an empty set if none found.</returns>
+        public IEnumerable<ITypeConstructor> FindMatchingConstructors(
+            IEnumerable<ITypeDefinition> argumentTypes) {
+            ArgumentNullException.ThrowIfNull(typeDefinition);
+            ArgumentNullException.ThrowIfNull(argumentTypes);
+
+            return typeDefinition.Constructors.WithParameterTypes(argumentTypes);
+        }
+
+        /// <summary>
         /// Determines if values of <paramref name="other"/> can be assigned to this type.
         /// </summary>
         /// <remarks>

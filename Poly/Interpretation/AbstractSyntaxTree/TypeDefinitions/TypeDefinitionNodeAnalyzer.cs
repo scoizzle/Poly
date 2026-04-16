@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 
 using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
@@ -60,17 +61,24 @@ public sealed record TypeDefinitionMetadata(ITypeDefinition TypeDefinition) : IA
 /// <summary>
 /// ITypeDefinition implementation backed by a TypeDefinitionNode AST.
 /// </summary>
-internal sealed class AstTypeDefinition : ITypeDefinition {
+internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private readonly TypeDefinitionNode _node;
     private readonly ITypeDefinitionProvider _provider;
+    private readonly Lazy<ITypeDefinition?> _baseType;
+    private readonly Lazy<IReadOnlyList<ITypeDefinition>> _interfaces;
+    private readonly Lazy<IReadOnlyList<IParameter>> _genericParameters;
+    private readonly Lazy<IReadOnlyList<AstConstructorDefinition>> _constructors;
     private readonly Lazy<IReadOnlyList<AstPropertyDefinition>> _properties;
     private readonly Lazy<IReadOnlyList<AstMethodDefinition>> _methods;
     private readonly Lazy<IReadOnlyList<AstFieldDefinition>> _fields;
-    private static readonly IReadOnlyList<ITypeConstructor> EmptyConstructors = [];
 
     public AstTypeDefinition(TypeDefinitionNode node, ITypeDefinitionProvider provider) {
         _node = node;
         _provider = provider;
+        _baseType = new(() => _node.BaseType is null ? null : ResolveType(_node.BaseType));
+        _interfaces = new(() => _node.Interfaces?.Select(ResolveType).ToArray() ?? []);
+        _genericParameters = new(() => MapParameters(_node.GenericParameters));
+        _constructors = new(() => BuildConstructors());
         _properties = new(() => BuildProperties());
         _methods = new(() => BuildMethods());
         _fields = new(() => BuildFields());
@@ -80,22 +88,19 @@ internal sealed class AstTypeDefinition : ITypeDefinition {
     public string? Namespace => _node.Namespace;
     public string FullName => _node.FullName;
 
-    public IEnumerable<ITypeMember> Members =>
-        Properties.Cast<ITypeMember>()
-            .Concat(Methods)
-            .Concat(Fields);
+    public IEnumerable<ITypeMember> Members => [.. Constructors, .. Properties, .. Methods, .. Fields];
 
     public IEnumerable<ITypeField> Fields => _fields.Value;
     public IEnumerable<ITypeProperty> Properties => _properties.Value;
     public IEnumerable<ITypeMethod> Methods => _methods.Value;
-    public IEnumerable<ITypeConstructor> Constructors => EmptyConstructors;
+    public IEnumerable<ITypeConstructor> Constructors => _constructors.Value;
 
     // AST-based types are dictionary-backed at runtime
-    public Type ReflectedType => typeof(IDictionary<string, object>);
+    public Type RuntimeType => typeof(IDictionary<string, object>);
 
-    public ITypeDefinition? BaseType => null; // TODO: Resolve from _node.BaseType
-    public IEnumerable<ITypeDefinition> Interfaces => []; // TODO: Resolve from _node.Interfaces
-    public IEnumerable<IParameter> GenericParameters => []; // TODO: Map from _node.GenericParameters
+    public ITypeDefinition? BaseType => _baseType.Value;
+    public IEnumerable<ITypeDefinition> Interfaces => _interfaces.Value;
+    public IEnumerable<IParameter> GenericParameters => _genericParameters.Value;
 
     public PrimitiveType? PrimitiveType => _node.PrimitiveTypeId;
     public TypeCategory TypeCategory => _node.TypeCategory;
@@ -103,6 +108,12 @@ internal sealed class AstTypeDefinition : ITypeDefinition {
     private IReadOnlyList<AstPropertyDefinition> BuildProperties() {
         return _node.Properties?
             .Select(p => new AstPropertyDefinition(p, this, _provider))
+            .ToList() ?? [];
+    }
+
+    private IReadOnlyList<AstConstructorDefinition> BuildConstructors() {
+        return _node.Constructors?
+            .Select(constructor => new AstConstructorDefinition(constructor, this))
             .ToList() ?? [];
     }
 
@@ -119,6 +130,55 @@ internal sealed class AstTypeDefinition : ITypeDefinition {
     }
 
     internal ITypeDefinition ResolveType(Node typeNode) => TypeResolver.Resolve(typeNode, _provider);
+
+    internal IReadOnlyList<IParameter> MapParameters(IReadOnlyList<Parameter>? parameters) {
+        return parameters?
+            .Select((parameter, index) => new AstParameterDefinition(parameter, index, this))
+            .Cast<IParameter>()
+            .ToArray() ?? [];
+    }
+}
+
+internal sealed class AstConstructorDefinition : ITypeConstructor {
+    private readonly ConstructorDefinitionNode _node;
+    private readonly AstTypeDefinition _declaringType;
+    private readonly Lazy<IReadOnlyList<IParameter>> _parameters;
+
+    public AstConstructorDefinition(ConstructorDefinitionNode node, AstTypeDefinition declaringType) {
+        _node = node;
+        _declaringType = declaringType;
+        _parameters = new(() => _declaringType.MapParameters(_node.Parameters));
+    }
+
+    public string Name => _declaringType.Name;
+    public ITypeDefinition MemberTypeDefinition => _declaringType;
+    public ITypeDefinition DeclaringTypeDefinition => _declaringType;
+    public IEnumerable<IParameter> Parameters => _parameters.Value;
+    IEnumerable<IParameter>? ITypeMember.Parameters => Parameters;
+    public bool IsStatic => false;
+}
+
+internal sealed class AstParameterDefinition : IParameter {
+    private readonly Parameter _node;
+    private readonly AstTypeDefinition _declaringType;
+    private readonly Lazy<ITypeDefinition> _parameterType;
+    private readonly Lazy<object?> _defaultValue;
+
+    public AstParameterDefinition(Parameter node, int position, AstTypeDefinition declaringType) {
+        _node = node;
+        _declaringType = declaringType;
+        Position = position;
+        _parameterType = new(() => _node.TypeReference is null
+            ? ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<object>()
+            : _declaringType.ResolveType(_node.TypeReference));
+        _defaultValue = new(() => _node.DefaultValue is Constant constant ? constant.Value : null);
+    }
+
+    public int Position { get; }
+    public string Name => _node.Name;
+    public ITypeDefinition ParameterTypeDefinition => _parameterType.Value;
+    public bool IsOptional => _node.DefaultValue is not null;
+    public object? DefaultValue => _defaultValue.Value;
 }
 
 /// <summary>
@@ -132,13 +192,13 @@ internal sealed class AstPropertyDefinition : ITypeProperty {
     public AstPropertyDefinition(PropertyDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider) {
         _node = node;
         _declaring = declaring;
-        _memberType = new(() => declaring.ResolveType(node.PropertyType));
+        _memberType = new(() => declaring.ResolveType(node.MemberType));
     }
 
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _memberType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
-    public IEnumerable<IParameter>? Parameters => null; // TODO: Map IndexParameters
+    public IEnumerable<IParameter>? Parameters => _node.IndexParameters is null ? null : _declaring.MapParameters(_node.IndexParameters);
     public bool IsStatic => _node.IsStatic;
 }
 
@@ -159,7 +219,7 @@ internal sealed class AstMethodDefinition : ITypeMethod {
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _returnType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
-    public IEnumerable<IParameter> Parameters => []; // TODO: Map _node.Parameters
+    public IEnumerable<IParameter> Parameters => _declaring.MapParameters(_node.Parameters);
     public bool IsStatic => _node.IsStatic;
 }
 
@@ -228,8 +288,8 @@ internal static class TypeResolver {
             _ => clr.GetTypeDefinition<object>()
         };
 
-        if (isNullable && baseType.Type.IsValueType) {
-            var nullableType = typeof(Nullable<>).MakeGenericType(baseType.Type);
+        if (isNullable && baseType.RuntimeType.IsValueType) {
+            var nullableType = typeof(Nullable<>).MakeGenericType(baseType.RuntimeType);
             return clr.GetTypeDefinition(nullableType);
         }
 
@@ -238,7 +298,7 @@ internal static class TypeResolver {
 
     private static ITypeDefinition ResolveOptional(OptionalTypeReference opt, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var innerType = Resolve(opt.InnerType, provider);
-        var innerClrType = innerType.ReflectedType;
+        var innerClrType = innerType.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{innerType.FullName}' does not have a runtime type.");
 
         if (!innerClrType.IsValueType || Nullable.GetUnderlyingType(innerClrType) != null)
             return innerType;
@@ -249,7 +309,7 @@ internal static class TypeResolver {
 
     private static ITypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var elementType = Resolve(col.ElementType, provider);
-        var elementClrType = elementType.ReflectedType;
+        var elementClrType = elementType.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{elementType.FullName}' does not have a runtime type.");
 
         var collectionClrType = col.Kind switch {
             CollectionKind.Array => elementClrType.MakeArrayType(),
@@ -265,7 +325,10 @@ internal static class TypeResolver {
         var keyType = Resolve(map.KeyType, provider);
         var valueType = Resolve(map.ValueType, provider);
 
-        var dictType = typeof(Dictionary<,>).MakeGenericType(keyType.ReflectedType, valueType.ReflectedType);
+        var dictType = typeof(Dictionary<,>).MakeGenericType(
+            keyType.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{keyType.FullName}' does not have a runtime type."),
+            valueType.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{valueType.FullName}' does not have a runtime type.")
+        );
         return clr.GetTypeDefinition(dictType);
     }
 }

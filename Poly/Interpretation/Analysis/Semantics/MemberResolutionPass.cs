@@ -27,6 +27,30 @@ internal static class MethodInvocationSemanticResolver {
     }
 }
 
+internal static class ConstructorInvocationSemanticResolver {
+    public static ITypeConstructor? ResolveConstructor(AnalysisContext context, New @new) {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(@new);
+
+        var targetType = context.GetResolvedType(@new.Type);
+        if (targetType == null)
+            return null;
+
+        var argumentTypes = new ITypeDefinition[@new.Arguments.Length];
+        for (var i = 0; i < @new.Arguments.Length; i++) {
+            var argumentType = context.GetResolvedType(@new.Arguments[i]);
+            if (argumentType == null)
+                return null;
+
+            argumentTypes[i] = argumentType;
+        }
+
+        return targetType
+            .FindMatchingConstructors(argumentTypes)
+            .FirstOrDefault();
+    }
+}
+
 
 internal sealed class MemberResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
@@ -36,6 +60,9 @@ internal sealed class MemberResolver : INodeAnalyzer {
 
             // Method invocation - resolve the method being called
             Invoke methodInv => ResolveMethodInvocationMember(context, methodInv),
+
+            // Constructor invocation - resolve the constructor being called
+            New @new => ResolveConstructorInvocationMember(context, @new),
 
             // Index access - resolve the indexer property
             IndexAccess indexAccess => ResolveIndexAccessMember(context, indexAccess),
@@ -63,13 +90,28 @@ internal sealed class MemberResolver : INodeAnalyzer {
         return MethodInvocationSemanticResolver.ResolveMethod(context, methodInv);
     }
 
+    private static ITypeMember? ResolveConstructorInvocationMember(AnalysisContext context, New @new) {
+        return ConstructorInvocationSemanticResolver.ResolveConstructor(context, @new);
+    }
+
     private static ITypeMember? ResolveIndexAccessMember(AnalysisContext context, IndexAccess indexAccess) {
         var instanceType = context.GetResolvedType(indexAccess.Value);
         if (instanceType == null)
             return null;
 
+        var argumentTypes = indexAccess.Arguments
+            .Select(context.GetResolvedType)
+            .ToArray();
+
+        if (argumentTypes.All(static type => type is not null)) {
+            var matchedIndexer = instanceType.FindMatchingIndexers(argumentTypes!).FirstOrDefault();
+            if (matchedIndexer != null) {
+                return matchedIndexer;
+            }
+        }
+
         var indexer = instanceType.Properties
-            .FirstOrDefault(p => p.Parameters != null && p.Parameters.Any());
+            .FirstOrDefault(static property => property.Parameters is { } parameters && parameters.Any());
 
         return indexer;
     }

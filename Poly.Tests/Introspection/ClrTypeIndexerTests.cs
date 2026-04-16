@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 
 using Poly.Interpretation;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
 
@@ -10,14 +11,31 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeIndexerTests {
     [Test]
-    public async Task ArrayType_HasProperties() {
+    public async Task ArrayType_ExposesSyntheticIndexerProperty() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var arrayType = registry.GetTypeDefinition<int[]>();
 
-        // Arrays don't expose indexers as properties in CLR, they use special IL instructions
-        // So we just verify we can get the type definition
-        await Assert.That(arrayType).IsNotNull();
-        await Assert.That(arrayType.Name).IsEqualTo("Int32[]");
+        var indexers = arrayType.Properties.Where(p => p.Parameters != null).ToList();
+
+        await Assert.That(indexers.Count).IsEqualTo(1);
+        await Assert.That(indexers[0].Name).IsEqualTo("Item");
+        await Assert.That(indexers[0].Parameters!.Count()).IsEqualTo(1);
+        await Assert.That(indexers[0].Parameters!.Single().ParameterTypeDefinition.GetRuntimeType()).IsEqualTo(typeof(int));
+        await Assert.That(indexers[0].MemberTypeDefinition.GetRuntimeType()).IsEqualTo(typeof(int));
+        await Assert.That(indexers[0] is ClrTypeSyntheticProperty).IsTrue();
+    }
+
+    [Test]
+    public async Task MultiDimensionalArray_ExposesIndexerWithParameterPerDimension() {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var arrayType = registry.GetTypeDefinition<int[,]>();
+
+        var indexer = arrayType.Properties.Single(p => p.Parameters != null);
+
+        await Assert.That(indexer.Name).IsEqualTo("Item");
+        await Assert.That(indexer.Parameters!.Count()).IsEqualTo(2);
+        await Assert.That(indexer.Parameters!.All(parameter => parameter.ParameterTypeDefinition.GetRuntimeType() == typeof(int))).IsTrue();
+        await Assert.That(indexer.MemberTypeDefinition.GetRuntimeType()).IsEqualTo(typeof(int));
     }
 
     [Test]
@@ -31,6 +49,7 @@ public class ClrTypeIndexerTests {
         var indexer = indexers.First();
         // The full name includes the interface name when it's an explicit interface implementation
         await Assert.That(indexer.Name).Contains("Item");
+        await Assert.That(indexer is ClrTypeProperty).IsTrue();
     }
 
     [Test]

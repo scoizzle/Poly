@@ -72,13 +72,24 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
             return existing;
         }
 
-        var clrType = Type.GetType(name);
+        var clrType = Type.GetType(name) ?? ResolveLoadedAssemblyType(name);
         if (clrType is null) {
             return null;
         }
 
         var created = new ClrTypeDefinition(clrType, this);
         return _types.GetOrAdd(name, created);
+    }
+
+    private static Type? ResolveLoadedAssemblyType(string name) {
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies()) {
+            var resolved = assembly.GetType(name, throwOnError: false, ignoreCase: false);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+
+        return null;
     }
 
     ITypeDefinition? ITypeDefinitionProvider.GetTypeDefinition(Type type) => GetTypeDefinition(type);

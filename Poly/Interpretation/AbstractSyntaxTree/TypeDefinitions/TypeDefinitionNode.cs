@@ -7,6 +7,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
 /// </summary>
 /// <param name="Name">The simple name of the type.</param>
 /// <param name="Namespace">Optional namespace qualification.</param>
+/// <param name="Constructors">Constructor definitions for the type.</param>
 /// <param name="Properties">Property definitions for the type.</param>
 /// <param name="Methods">Method definitions for the type.</param>
 /// <param name="Fields">Field definitions for the type.</param>
@@ -18,6 +19,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
 public sealed record TypeDefinitionNode(
     string Name,
     string? Namespace = null,
+    IReadOnlyList<ConstructorDefinitionNode>? Constructors = null,
     IReadOnlyList<PropertyDefinitionNode>? Properties = null,
     IReadOnlyList<MethodDefinitionNode>? Methods = null,
     IReadOnlyList<FieldDefinitionNode>? Fields = null,
@@ -34,15 +36,14 @@ public sealed record TypeDefinitionNode(
     public string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
 
     /// <summary>
-    /// Gets all member definitions (properties, methods, fields).
+    /// Gets all member definition nodes.
     /// </summary>
-    public IEnumerable<MemberDefinitionNode> Members =>
-        (Properties?.Cast<MemberDefinitionNode>() ?? [])
-        .Concat(Methods?.Cast<MemberDefinitionNode>() ?? [])
-        .Concat(Fields?.Cast<MemberDefinitionNode>() ?? []);
+    public IEnumerable<Node> Members => [.. Constructors ?? [], .. Properties ?? [], .. Methods ?? [], .. Fields ?? []];
 
     public override IEnumerable<Node?> Children {
         get {
+            if (Constructors != null)
+                foreach (var constructor in Constructors) yield return constructor;
             if (Properties != null)
                 foreach (var p in Properties) yield return p;
             if (Methods != null)

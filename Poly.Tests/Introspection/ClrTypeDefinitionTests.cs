@@ -12,7 +12,7 @@ public class ClrTypeDefinitionTests {
         await Assert.That(intType.Name).IsEqualTo("Int32");
         await Assert.That(intType.Namespace).IsEqualTo("System");
         await Assert.That(intType.FullName).IsEqualTo("System.Int32");
-        await Assert.That(((ITypeDefinition)intType).ReflectedType).IsEqualTo(typeof(int));
+        await Assert.That(((ITypeDefinition)intType).GetRuntimeType()).IsEqualTo(typeof(int));
     }
 
     [Test]

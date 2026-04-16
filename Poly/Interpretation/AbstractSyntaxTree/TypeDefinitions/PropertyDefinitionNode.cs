@@ -3,37 +3,57 @@ namespace Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
 /// <summary>
 /// AST node representing a property definition on a type.
 /// </summary>
-/// <param name="Name">The property name.</param>
-/// <param name="PropertyType">The type of the property.</param>
-/// <param name="DefaultValue">Optional default value expression.</param>
-/// <param name="IsStatic">Whether this is a static property.</param>
-/// <param name="IsReadOnly">Whether this property is read-only (has no setter).</param>
-/// <param name="IndexParameters">Parameters for indexed properties (indexers).</param>
-/// <param name="Constraints">Validation constraints on the property.</param>
-public sealed record PropertyDefinitionNode(
-    string Name,
-    Node PropertyType,
-    Node? DefaultValue = null,
-    bool IsStatic = false,
-    bool IsReadOnly = false,
-    IReadOnlyList<Parameter>? IndexParameters = null,
-    IReadOnlyList<Node>? Constraints = null
-) : MemberDefinitionNode(Name, PropertyType, IsStatic) {
+public sealed record PropertyDefinitionNode : MemberDefinitionNode {
+    public PropertyDefinitionNode(
+        string Name,
+        Node PropertyType,
+        Node? DefaultValue = null,
+        PropertyGetterDefinitionNode? Getter = null,
+        PropertySetterDefinitionNode? Setter = null,
+        PropertyInitializerDefinitionNode? Initializer = null,
+        bool IsStatic = false,
+        IReadOnlyList<Parameter>? IndexParameters = null,
+        IReadOnlyList<Node>? Constraints = null
+    ) : base(Name, PropertyType, IsStatic) {
+        this.Getter = Getter;
+        this.Setter = Setter;
+        this.Initializer = Initializer ?? (DefaultValue is null ? null : new PropertyInitializerDefinitionNode(DefaultValue));
+        this.IndexParameters = IndexParameters;
+        this.Constraints = Constraints;
+    }
+
+    public PropertyGetterDefinitionNode? Getter { get; }
+
+    public PropertySetterDefinitionNode? Setter { get; }
+
+    public PropertyInitializerDefinitionNode? Initializer { get; }
+
+    public IReadOnlyList<Parameter>? IndexParameters { get; }
+
+    public IReadOnlyList<Node>? Constraints { get; }
+
+    public bool IsReadOnly => Setter is null;
+
+    public Node? DefaultValue => Initializer?.Value;
 
     public override IEnumerable<Node?> Children {
         get {
-            yield return PropertyType;
-            yield return DefaultValue;
+            yield return MemberType;
+            yield return Getter;
+            yield return Setter;
+            yield return Initializer;
             if (IndexParameters != null)
-                foreach (var p in IndexParameters) yield return p;
+                foreach (var parameter in IndexParameters) yield return parameter;
             if (Constraints != null)
-                foreach (var c in Constraints) yield return c;
+                foreach (var constraint in Constraints) yield return constraint;
         }
     }
 
     public override string ToString() {
-        var suffix = DefaultValue != null ? $" = {DefaultValue}" : "";
         var staticPrefix = IsStatic ? "static " : "";
-        return $"{staticPrefix}{PropertyType} {Name}{suffix}";
+        var getterText = Getter is null ? string.Empty : $" {Getter}";
+        var setterText = Setter is null ? string.Empty : $" {Setter}";
+        var initializerText = DefaultValue is null ? string.Empty : $" = {DefaultValue}";
+        return $"{staticPrefix}{MemberType} {Name}{getterText}{setterText}{initializerText}".TrimEnd();
     }
 }

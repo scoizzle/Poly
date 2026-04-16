@@ -357,6 +357,9 @@ public sealed class LinqExpressionGenerator {
             // Method invocation
             Invoke method => CompileInvocation(method, context),
 
+            // Constructor invocation
+            New @new => CompileConstructor(@new, context),
+
             // Type reference
             TypeReference => Expression.Constant(null),
 
@@ -595,7 +598,7 @@ public sealed class LinqExpressionGenerator {
         var leftExpr = CompileNode(coalesce.LeftHandValue, context);
         var rightExpr = CompileNode(coalesce.RightHandValue, context);
 
-        var rightType = (_analysisResult.GetResolvedType(coalesce.RightHandValue) as ClrTypeDefinition)?.Type ?? rightExpr.Type;
+        var rightType = (_analysisResult.GetResolvedType(coalesce.RightHandValue) as ClrTypeDefinition)?.RuntimeType ?? rightExpr.Type;
 
         // For value types, ensure the left side is nullable to allow coalesce
         if (rightType.IsValueType && Nullable.GetUnderlyingType(rightType) is null) {
@@ -616,10 +619,7 @@ public sealed class LinqExpressionGenerator {
         if (typeDef == null)
             throw new InvalidOperationException($"Type for node '{node}' was not resolved by semantic analysis.");
 
-        // Prefer ClrTypeDefinition, but fall back to ReflectedType for non-CLR types like DataModels
-        return typeDef is ClrTypeDefinition clrTypeDef
-            ? clrTypeDef.Type
-            : typeDef.ReflectedType;
+        return typeDef.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{typeDef.FullName}' does not have a common language runtime type.");
     }
 
     private ParameterExpression CreateParameterExpression(Parameter parameter) {
@@ -643,7 +643,7 @@ public sealed class LinqExpressionGenerator {
     }
 
     private ParameterExpression CreateVariableExpression(Variable variable) {
-        var clrType = (_analysisResult.GetResolvedType(variable) as ClrTypeDefinition)?.Type ?? typeof(object);
+        var clrType = (_analysisResult.GetResolvedType(variable) as ClrTypeDefinition)?.RuntimeType ?? typeof(object);
         return Expression.Variable(clrType, variable.Name);
     }
 
@@ -979,6 +979,54 @@ public sealed class LinqExpressionGenerator {
 
         var methodExpr = CompileNode(invoke.Delegate, context);
         return Expression.Invoke(methodExpr, argExprs);
+    }
+
+    /// <summary>
+    /// Compiles a constructor invocation by selecting the resolved constructor and emitting an
+    /// <see cref="Expression.New(System.Reflection.ConstructorInfo, System.Collections.Generic.IEnumerable{System.Linq.Expressions.Expression})"/>.
+    /// Optional parameters are padded with their default values when omitted by the AST.
+    /// </summary>
+    private Expression CompileConstructor(New @new, CompilationContext context) {
+        var targetType = GetClrType(@new.Type);
+        var resolvedConstructor = _analysisResult.GetResolvedMember(@new) as ITypeConstructor;
+
+        if (resolvedConstructor is ClrConstructor clrConstructor) {
+            var arguments = BuildConstructorArguments(clrConstructor, @new.Arguments, context);
+            return Expression.New(clrConstructor.ConstructorInfo, arguments);
+        }
+
+        throw new InvalidOperationException($"Constructor '{@new.Type}' could not be resolved to a CLR constructor.");
+    }
+
+    private Expression[] BuildConstructorArguments(ITypeConstructor constructor, Node[] providedArguments, CompilationContext context) {
+        var parameters = constructor.Parameters.ToArray();
+        var result = new Expression[parameters.Length];
+
+        for (var index = 0; index < parameters.Length; index++) {
+            if (index < providedArguments.Length) {
+                var argument = CompileNode(providedArguments[index], context);
+                var parameterType = GetClrType(parameters[index].ParameterTypeDefinition);
+                result[index] = argument.Type == parameterType
+                    ? argument
+                    : Expression.Convert(argument, parameterType);
+                continue;
+            }
+
+            if (!parameters[index].IsOptional) {
+                throw new InvalidOperationException($"Constructor '{constructor}' requires argument '{parameters[index].Name}'.");
+            }
+
+            var optionalType = GetClrType(parameters[index].ParameterTypeDefinition);
+            result[index] = Expression.Constant(parameters[index].DefaultValue, optionalType);
+        }
+
+        return result;
+    }
+
+    private static Type GetClrType(ITypeDefinition typeDefinition) {
+        ArgumentNullException.ThrowIfNull(typeDefinition);
+
+        return typeDefinition.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{typeDefinition.FullName}' does not have a common language runtime type.");
     }
 
     /// <summary>

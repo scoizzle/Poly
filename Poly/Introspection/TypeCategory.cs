@@ -101,5 +101,10 @@ public static class TypeCategoryExtensions {
         /// Returns true if this type category includes the Reference flag.
         /// </summary>
         public bool IsReference => category.Is(TypeCategory.Reference);
+
+        /// <summary>
+        /// Returns true if this type category represents an array.
+        /// </summary>
+        public bool IsArray => category.Is(TypeCategory.Collection) && !category.Is(TypeCategory.Keyed);
     }
 }

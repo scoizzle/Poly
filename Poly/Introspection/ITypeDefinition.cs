@@ -71,11 +71,6 @@ public interface ITypeDefinition {
     IEnumerable<ITypeConstructor> Constructors { get; }
 
     /// <summary>
-    /// Gets the underlying reflected runtime type, when available.
-    /// </summary>
-    Type ReflectedType { get; }
-
-    /// <summary>
     /// Gets the primitive type identifier if this type is a primitive type, null otherwise.
     /// Primitive types are the atomic building blocks from which all other types are composed.
     /// </summary>

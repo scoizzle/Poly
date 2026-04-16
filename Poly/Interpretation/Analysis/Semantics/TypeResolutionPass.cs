@@ -1,6 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
-
 namespace Poly.Interpretation.Analysis.Semantics;
 
 using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
@@ -22,6 +19,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
     private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node) {
         return node switch {
             Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
+            ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
             Variable v => context.GetResolvedType(v)
                 ?? (v.Value is null
@@ -44,6 +42,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
             GreaterThanOrEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             MemberAccess memberAccess => ResolveMemberAccessType(context, memberAccess),
             Invoke methodInv => ResolveMethodInvocationType(context, methodInv),
+            New @new => ResolveConstructorInvocationType(context, @new),
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
@@ -62,7 +61,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
         AnalysisContext context,
         ForEachLoop foreachLoop) {
         var collectionType = ResolveNodeType(context, foreachLoop.Collection);
-        var elementType = ResolveEnumerableElementType(context, collectionType);
+        var elementType = collectionType?.GetElementType();
 
         if (elementType != null) {
             context.SetResolvedType(foreachLoop.LoopVariable, elementType);
@@ -70,6 +69,9 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
         return context.TypeDefinitions.GetTypeDefinition(typeof(void));
     }
+
+    private static ITypeDefinition? ResolveThisReferenceType(AnalysisContext context, ThisReference thisReference) =>
+        context.GetResolvedType(thisReference);
 
     private static ITypeDefinition? ResolveArithmeticType(
         AnalysisContext context,
@@ -122,6 +124,25 @@ internal sealed class TypeResolver : INodeAnalyzer {
         return method?.MemberTypeDefinition;
     }
 
+    private static ITypeDefinition? ResolveConstructorInvocationType(
+        AnalysisContext context,
+        New @new) {
+        var targetType = ResolveNodeType(context, @new.Type);
+        if (targetType != null) {
+            context.SetResolvedType(@new.Type, targetType);
+        }
+
+        foreach (var argument in @new.Arguments) {
+            var argumentType = ResolveNodeType(context, argument);
+            if (argumentType != null) {
+                context.SetResolvedType(argument, argumentType);
+            }
+        }
+
+        var constructor = ConstructorInvocationSemanticResolver.ResolveConstructor(context, @new);
+        return constructor?.MemberTypeDefinition ?? targetType;
+    }
+
     private static ITypeDefinition? ResolveIndexAccessType(
         AnalysisContext context,
         IndexAccess indexAccess) {
@@ -129,20 +150,15 @@ internal sealed class TypeResolver : INodeAnalyzer {
         if (instanceType == null)
             return null;
 
-        var indexer = instanceType.Properties
-            .FirstOrDefault(p => p.Parameters != null && p.Parameters.Any());
+        var argumentTypes = indexAccess.Arguments
+            .Select(argument => ResolveNodeType(context, argument))
+            .ToArray();
 
-        if (indexer != null)
-            return indexer.MemberTypeDefinition;
-
-        if (instanceType.ReflectedType.IsArray) {
-            var elementType = instanceType.ReflectedType.GetElementType();
-            if (elementType != null) {
-                return context.TypeDefinitions.GetTypeDefinition(elementType);
-            }
+        if (argumentTypes.All(static type => type is not null)) {
+            return instanceType.GetElementType(argumentTypes!);
         }
 
-        return null;
+        return instanceType.GetElementType();
     }
 
     private static ITypeDefinition? ResolveAssignmentType(
@@ -188,43 +204,6 @@ internal sealed class TypeResolver : INodeAnalyzer {
         }
 
         return null;
-    }
-
-    private static ITypeDefinition? ResolveEnumerableElementType(
-        AnalysisContext context,
-        ITypeDefinition? collectionType) {
-        if (collectionType == null) {
-            return null;
-        }
-
-        var reflectedType = collectionType.ReflectedType;
-
-        if (reflectedType.IsArray) {
-            var elementType = reflectedType.GetElementType();
-            return elementType != null
-                ? context.TypeDefinitions.GetTypeDefinition(elementType)
-                : null;
-        }
-
-        var enumerableType = GetGenericEnumerableType(reflectedType);
-        if (enumerableType != null) {
-            var elementType = enumerableType.GetGenericArguments()[0];
-            return context.TypeDefinitions.GetTypeDefinition(elementType);
-        }
-
-        return typeof(IEnumerable).IsAssignableFrom(reflectedType)
-            ? context.TypeDefinitions.GetTypeDefinition(typeof(object))
-            : null;
-    }
-
-    private static Type? GetGenericEnumerableType(Type type) {
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)) {
-            return type;
-        }
-
-        return type
-            .GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
     }
 }
 

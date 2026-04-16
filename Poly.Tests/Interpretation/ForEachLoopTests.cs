@@ -3,6 +3,7 @@ using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Interpretation.AbstractSyntaxTree.Comparison;
 using Poly.Interpretation.AbstractSyntaxTree.Equality;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -19,7 +20,7 @@ public class ForEachLoopTests {
         var resolvedType = analysis.GetResolvedType(loopVariable);
 
         await Assert.That(resolvedType).IsNotNull();
-        await Assert.That(resolvedType!.ReflectedType).IsEqualTo(typeof(int));
+        await Assert.That(resolvedType!.GetRuntimeType()).IsEqualTo(typeof(int));
     }
 
     [Test]

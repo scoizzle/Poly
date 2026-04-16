@@ -131,7 +131,6 @@ public class TypeDefinitionProviderCollectionTests {
         public string Name { get; } = name;
         public string? Namespace => null;
         public IEnumerable<ITypeMember> Members => [];
-        public Type ReflectedType => typeof(object);
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];

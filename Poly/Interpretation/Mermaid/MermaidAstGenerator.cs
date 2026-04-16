@@ -251,6 +251,23 @@ public sealed class MermaidAstGenerator {
                 builder.Append("Variable ");
                 builder.Append(variable.Name);
                 break;
+            case ThisReference:
+                builder.Append("This");
+                break;
+            case PropertyGetterDefinitionNode:
+                builder.Append("Property Getter");
+                break;
+            case PropertySetterDefinitionNode setter:
+                builder.Append("Property Setter");
+                if (setter.ValueParameter != null) {
+                    builder.Append(" (");
+                    builder.Append(setter.ValueParameter.Name);
+                    builder.Append(')');
+                }
+                break;
+            case PropertyInitializerDefinitionNode:
+                builder.Append("Property Initializer");
+                break;
 
             // Binary arithmetic
             case Add:
@@ -329,6 +346,9 @@ public sealed class MermaidAstGenerator {
                     builder.Append(ma.MemberName);
                 builder.Append("()");
                 break;
+            case New:
+                builder.Append("New");
+                break;
 
             // Control flow
             case Block:
@@ -396,7 +416,7 @@ public sealed class MermaidAstGenerator {
     private NodeShape GetNodeShape(Node node) {
         return node switch {
             // Leaf nodes - rounded rectangles
-            Constant or Parameter or Variable => NodeShape.RoundedRectangle,
+            Constant or Parameter or Variable or ThisReference => NodeShape.RoundedRectangle,
 
             // Conditionals - rhombus
             Conditional or IfStatement or SwitchStatement => NodeShape.Rhombus,
@@ -452,6 +472,16 @@ public sealed class MermaidAstGenerator {
             // Method invocation
             Invoke method => new[] { (method.Delegate, "method") }
                 .Concat(method.Arguments.Select((arg, i) => ((Node)arg, $"arg{i}"))),
+
+            // Constructor invocation
+            New @new => new[] { (@new.Type, "type") }
+                .Concat(@new.Arguments.Select((arg, i) => ((Node)arg, $"arg{i}"))),
+
+            PropertyGetterDefinitionNode getter when getter.Body != null => [(getter.Body, "body")],
+            PropertySetterDefinitionNode setter => new[] { ((Node)setter.ValueParameter!, "value") }
+                .Where(static pair => pair.Item1 is not null)
+                .Concat(setter.Body is null ? Array.Empty<(Node, string)>() : [(setter.Body, "body")]),
+            PropertyInitializerDefinitionNode initializer => [(initializer.Value, "value")],
 
             // Block
             Block block => block.Nodes.Select((n, i) => (n, $"{i}")),

@@ -34,7 +34,7 @@ public class ClrConstructorTests {
         var constructor = type.Constructors.Single(ctor =>
             !ctor.IsStatic &&
             ctor.Parameters.Count() == 2 &&
-            ((ITypeDefinition)ctor.Parameters.First().ParameterTypeDefinition).ReflectedType == typeof(string));
+            ((ITypeDefinition)ctor.Parameters.First().ParameterTypeDefinition).GetRuntimeType() == typeof(string));
 
         var parameters = constructor.Parameters.ToArray();
 

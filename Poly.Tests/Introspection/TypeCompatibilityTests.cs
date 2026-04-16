@@ -236,8 +236,8 @@ public class TypeCompatibilityTests {
         var baseType = closedGenericType.BaseType;
 
         await Assert.That(baseType).IsNotNull();
-        await Assert.That(((ITypeDefinition)baseType!).ReflectedType).IsEqualTo(typeof(GenericBase<string>));
-        await Assert.That(baseType.GenericParameters.Select(parameter => parameter.ParameterTypeDefinition.Type).ToArray())
+        await Assert.That(((ITypeDefinition)baseType!).GetRuntimeType()).IsEqualTo(typeof(GenericBase<string>));
+        await Assert.That(baseType.GenericParameters.Select(parameter => parameter.ParameterTypeDefinition.RuntimeType).ToArray())
             .IsEquivalentTo([typeof(string)]);
     }
 

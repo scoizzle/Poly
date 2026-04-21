@@ -5,7 +5,7 @@ namespace Poly.Interpretation.AbstractSyntaxTree;
 /// </summary>
 /// <remarks>
 /// Defines a callable unit with a parameter list and a body expression. Compiles to a
-/// <see cref="System.Linq.Expressions.LambdaExpression"/> which can be invoked via
+/// <see cref="Exprs.LambdaExpression"/> which can be invoked via
 /// <see cref="Invoke"/> or compiled into a delegate.
 /// <para>
 /// Lambda nodes introduce a new return scope: <see cref="ReturnStatement.Return"/> nodes

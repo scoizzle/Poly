@@ -298,7 +298,7 @@ internal static class TypeResolver {
 
     private static ITypeDefinition ResolveOptional(OptionalTypeReference opt, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var innerType = Resolve(opt.InnerType, provider);
-        var innerClrType = innerType.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{innerType.FullName}' does not have a runtime type.");
+        var innerClrType = innerType.GetRuntimeTypeOrThrow();
 
         if (!innerClrType.IsValueType || Nullable.GetUnderlyingType(innerClrType) != null)
             return innerType;
@@ -309,7 +309,7 @@ internal static class TypeResolver {
 
     private static ITypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var elementType = Resolve(col.ElementType, provider);
-        var elementClrType = elementType.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{elementType.FullName}' does not have a runtime type.");
+        var elementClrType = elementType.GetRuntimeTypeOrThrow();
 
         var collectionClrType = col.Kind switch {
             CollectionKind.Array => elementClrType.MakeArrayType(),
@@ -326,8 +326,8 @@ internal static class TypeResolver {
         var valueType = Resolve(map.ValueType, provider);
 
         var dictType = typeof(Dictionary<,>).MakeGenericType(
-            keyType.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{keyType.FullName}' does not have a runtime type."),
-            valueType.GetRuntimeType() ?? throw new InvalidOperationException($"Type '{valueType.FullName}' does not have a runtime type.")
+            keyType.GetRuntimeTypeOrThrow(),
+            valueType.GetRuntimeTypeOrThrow()
         );
         return clr.GetTypeDefinition(dictType);
     }

@@ -27,6 +27,8 @@ public sealed class ConstraintSet : Constraint {
         ApplicableCategories = DetermineApplicableCategories(materializedConstraints);
     }
 
+    public ConstraintSet(params Constraint[] constraints) : this(ConstraintAggregationStrategy.All, constraints) { }
+
     public TypeCategory ApplicableCategories { get; }
 
     public ConstraintAggregationStrategy AggregationStrategy { get; }

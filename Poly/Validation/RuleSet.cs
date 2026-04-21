@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
@@ -66,12 +68,12 @@ public sealed class RuleSet<T> {
         var mainParam = (Parameter)buildingContext.Value;
         var mainParamExpr = parameterExpressions.FirstOrDefault(p => p.Name == mainParam.Name);
         if (mainParamExpr == null) {
-            mainParamExpr = Expr.Parameter(typeof(T), mainParam.Name);
+            mainParamExpr = Expression.Parameter(typeof(T), mainParam.Name);
             parameterExpressions.Clear();
             parameterExpressions.Add(mainParamExpr);
         }
 
-        Predicate = Expr.Lambda<Predicate<T>>(NodeTree, parameterExpressions).Compile();
+        Predicate = Expression.Lambda<Predicate<T>>(NodeTree, parameterExpressions).Compile();
     }
 
     /// <summary>
@@ -87,7 +89,7 @@ public sealed class RuleSet<T> {
     /// <summary>
     /// Gets the LINQ expression tree representation of the rule set.
     /// </summary>
-    public Expr NodeTree { get; }
+    public Expression NodeTree { get; }
 
     /// <summary>
     /// Gets the compiled predicate function.

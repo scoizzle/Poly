@@ -11,13 +11,13 @@ public class ConstraintTests {
 
     [Test]
     public async Task NotNullConstraint_WithNullValue_FailsValidation() {
-        var predicate = CompileConstraintPredicate<object?>(new NotNullConstraint());
+        var predicate = CompileConstraintPredicate<object?>(new RequiredConstraint());
         await Assert.That(predicate(null)).IsFalse();
     }
 
     [Test]
     public async Task NotNullConstraint_WithNonNullValue_PassesValidation() {
-        var predicate = CompileConstraintPredicate<object?>(new NotNullConstraint());
+        var predicate = CompileConstraintPredicate<object?>(new RequiredConstraint());
         await Assert.That(predicate(new object())).IsTrue();
     }
 
@@ -201,7 +201,7 @@ public class ConstraintTests {
     [Test]
     public async Task ConstraintSet_WithUniversalConstraintsOnly_HasUniversalApplicableCategories() {
         var constraint = new ConstraintSet(ConstraintAggregationStrategy.All, [
-            new NotNullConstraint(),
+            new RequiredConstraint(),
             new EqualityConstraint(42)
         ]);
 

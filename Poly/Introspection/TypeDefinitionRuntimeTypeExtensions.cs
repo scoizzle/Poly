@@ -19,5 +19,11 @@ internal static class TypeDefinitionRuntimeTypeExtensions {
         public Type? GetRuntimeType() {
             return typeDefinition is IClrTypeDefinition clr ? clr.RuntimeType : null;
         }
+
+        public Type GetRuntimeTypeOrThrow() {
+            return typeDefinition is IClrTypeDefinition clr
+                ? clr.RuntimeType
+                : throw new InvalidOperationException($"Type '{typeDefinition.FullName}' does not have a common language runtime type.");
+        }
     }
 }

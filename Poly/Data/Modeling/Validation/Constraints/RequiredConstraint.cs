@@ -4,9 +4,9 @@ using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Data.Modeling.Validation.Constraints;
 
-public sealed class NotNullConstraint : Constraint {
+public sealed class RequiredConstraint : Constraint {
     /// <summary>
-    /// NotNull constraint is universally applicable - it makes sense for any nullable type
+    /// Required constraint is universally applicable - it makes sense for any nullable type
     /// and is a no-op for non-nullable types.
     /// </summary>
     public TypeCategory ApplicableCategories => TypeCategory.None;

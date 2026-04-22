@@ -233,8 +233,8 @@ public class TypeCastTests {
         var operand = Wrap((object)"hello");
 
         // Act
-        var isNode = operand.Is(typeof(string).FullName!);
-        var asNode = operand.As(typeof(string).FullName!);
+        var isNode = operand.Is(TypeReference.To<string>());
+        var asNode = operand.As(TypeReference.To<string>());
 
         // Assert
         await Assert.That(isNode.TargetTypeReference).IsTypeOf<TypeReference>();

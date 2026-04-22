@@ -111,7 +111,7 @@ public class FluentValueApiTests {
     [Test]
     public async Task FluentApi_TypeCastOperation_EvaluatesCorrectly() {
         // Arrange - fluent chaining: (int)42.0 cast to double
-        var node = Wrap(42).CastTo("System.Double");
+        var node = Wrap(42).CastTo(TypeReference.To<double>());
 
         // Act
         var expr = node.BuildExpression();

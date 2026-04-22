@@ -64,4 +64,49 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(methodParameters[1].DefaultValue).IsEqualTo(3);
         await Assert.That(methodParameters[1].ParameterTypeDefinition.GetRuntimeType()).IsEqualTo(typeof(int));
     }
+
+    [Test]
+    public async Task Analyze_TypeDefinitionNode_WithUnionProperty_ResolvesToExpectedRuntimeType() {
+        var sameTypeUnion = new TypeDefinitionNode(
+            "SameTypeUnionHolder",
+            "Sample",
+            Properties: [
+                new PropertyDefinitionNode(
+                    "Value",
+                    new UnionTypeReference([
+                        new PrimitiveTypeReference(PrimitiveType.Int32),
+                        new PrimitiveTypeReference(PrimitiveType.Int32)
+                    ]))
+            ]);
+
+        var mixedTypeUnion = new TypeDefinitionNode(
+            "MixedTypeUnionHolder",
+            "Sample",
+            Properties: [
+                new PropertyDefinitionNode(
+                    "Value",
+                    new UnionTypeReference([
+                        new PrimitiveTypeReference(PrimitiveType.Int32),
+                        new PrimitiveTypeReference(PrimitiveType.String)
+                    ]))
+            ]);
+
+        var analyzerPass = new TypeDefinitionNodeAnalyzer();
+        var analyzer = new AnalyzerBuilder(analyzerPass);
+        analyzer.AddAnalyzer(analyzerPass);
+
+        var analysis = analyzer.Build().Analyze(new Block([sameTypeUnion, mixedTypeUnion]));
+
+        var sameTypeDefinition = analysis.GetMetadata<TypeDefinitionMetadata>(sameTypeUnion)?.TypeDefinition;
+        var mixedTypeDefinition = analysis.GetMetadata<TypeDefinitionMetadata>(mixedTypeUnion)?.TypeDefinition;
+
+        await Assert.That(sameTypeDefinition).IsNotNull();
+        await Assert.That(mixedTypeDefinition).IsNotNull();
+
+        var samePropertyType = sameTypeDefinition!.Properties.Single().MemberTypeDefinition.GetRuntimeType();
+        var mixedPropertyType = mixedTypeDefinition!.Properties.Single().MemberTypeDefinition.GetRuntimeType();
+
+        await Assert.That(samePropertyType).IsEqualTo(typeof(int));
+        await Assert.That(mixedPropertyType).IsEqualTo(typeof(object));
+    }
 }

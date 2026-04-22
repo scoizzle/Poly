@@ -257,6 +257,7 @@ internal static class TypeResolver {
             OptionalTypeReference opt => ResolveOptional(opt, provider, clr),
             CollectionTypeReference col => ResolveCollection(col, provider, clr),
             MapTypeReference map => ResolveMap(map, provider, clr),
+            UnionTypeReference union => ResolveUnion(union, provider, clr),
             TypeDefinitionReference tdr => tdr.TypeDefinition,
             _ => clr.GetTypeDefinition<object>()
         };
@@ -330,5 +331,18 @@ internal static class TypeResolver {
             valueType.GetRuntimeTypeOrThrow()
         );
         return clr.GetTypeDefinition(dictType);
+    }
+
+    private static ITypeDefinition ResolveUnion(UnionTypeReference union, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
+        if (union.Options.Count == 0) {
+            return clr.GetTypeDefinition<object>();
+        }
+
+        var optionTypes = union.Options.Select(option => Resolve(option, provider)).ToArray();
+        var firstRuntimeType = optionTypes[0].GetRuntimeTypeOrThrow();
+
+        // Preserve precision only when all options collapse to the same CLR runtime type.
+        var allSameRuntimeType = optionTypes.All(type => type.GetRuntimeTypeOrThrow() == firstRuntimeType);
+        return allSameRuntimeType ? optionTypes[0] : clr.GetTypeDefinition<object>();
     }
 }

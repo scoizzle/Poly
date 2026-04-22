@@ -365,6 +365,8 @@ public sealed class LinqExpressionGenerator {
 
             // Type cast
             TypeCast cast => CompileTypeCast(cast, context),
+            TypeIs typeIs => CompileTypeIs(typeIs, context),
+            TypeAs typeAs => CompileTypeAs(typeAs, context),
 
             // Coalesce
             Coalesce coalesce => CompileCoalesce(coalesce, context),
@@ -697,6 +699,31 @@ public sealed class LinqExpressionGenerator {
         return typeCast.IsChecked
             ? Expression.ConvertChecked(operand, type)
             : Expression.Convert(operand, type);
+    }
+
+    /// <summary>
+    /// Compiles a type test such as <c>value is T</c> into <see cref="Expression.TypeIs(System.Linq.Expressions.Expression, System.Type)"/>.
+    /// </summary>
+    private Expression CompileTypeIs(TypeIs typeIs, CompilationContext context) {
+        var operand = CompileNode(typeIs.Operand, context);
+        var type = GetClrType(typeIs.TargetTypeReference);
+        return Expression.TypeIs(operand, type);
+    }
+
+    /// <summary>
+    /// Compiles a safe cast such as <c>value as T</c> into <see cref="Expression.TypeAs(System.Linq.Expressions.Expression, System.Type)"/>
+    /// for reference/nullable targets and a nullable convert for non-nullable value type targets.
+    /// </summary>
+    private Expression CompileTypeAs(TypeAs typeAs, CompilationContext context) {
+        var operand = CompileNode(typeAs.Operand, context);
+        var type = GetClrType(typeAs.TargetTypeReference);
+
+        if (!type.IsValueType || Nullable.GetUnderlyingType(type) is not null) {
+            return Expression.TypeAs(operand, type);
+        }
+
+        var nullableType = typeof(Nullable<>).MakeGenericType(type);
+        return Expression.TypeAs(operand, nullableType);
     }
 
     /// <summary>

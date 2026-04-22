@@ -151,4 +151,93 @@ public class TypeCastTests {
         // Act & Assert
         await Assert.That(() => new TypeCast(null!, TypeReference.To<double>())).Throws<ArgumentNullException>();
     }
+
+    [Test]
+    public async Task TypeIs_ObjectAgainstString_ReturnsTrue() {
+        // Arrange
+        var value = Wrap((object)"hello");
+        var node = new TypeIs(value, TypeReference.To<string>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsTrue();
+    }
+
+    [Test]
+    public async Task TypeIs_ObjectAgainstInt_ReturnsFalse() {
+        // Arrange
+        var value = Wrap((object)"hello");
+        var node = new TypeIs(value, TypeReference.To<int>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsFalse();
+    }
+
+    [Test]
+    public async Task TypeAs_ObjectToString_ReturnsStringValue() {
+        // Arrange
+        var value = Wrap((object)"hello");
+        var node = new TypeAs(value, TypeReference.To<string>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<string?>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsEqualTo("hello");
+    }
+
+    [Test]
+    public async Task TypeAs_ObjectToString_WithIncompatibleValue_ReturnsNull() {
+        // Arrange
+        var value = Wrap((object)42);
+        var node = new TypeAs(value, TypeReference.To<string>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<string?>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    public async Task TypeAs_ObjectToNonNullableValueType_ReturnsNullableValue() {
+        // Arrange
+        var value = Wrap((object)42);
+        var node = new TypeAs(value, TypeReference.To<int>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int?>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task TypeOperations_Extensions_IsAndAs_CreateExpectedNodes() {
+        // Arrange
+        var operand = Wrap((object)"hello");
+
+        // Act
+        var isNode = operand.Is(typeof(string).FullName!);
+        var asNode = operand.As(typeof(string).FullName!);
+
+        // Assert
+        await Assert.That(isNode.TargetTypeReference).IsTypeOf<TypeReference>();
+        await Assert.That(asNode.TargetTypeReference).IsTypeOf<TypeReference>();
+    }
 }

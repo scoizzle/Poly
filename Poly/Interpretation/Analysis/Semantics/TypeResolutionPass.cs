@@ -47,6 +47,8 @@ internal sealed class TypeResolver : INodeAnalyzer {
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
+            TypeIs => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
+            TypeAs asType => ResolveAsType(context, asType.TargetTypeReference),
             Conditional cond => ResolveNodeType(context, cond.IfTrue),
             Coalesce coal => ResolveNodeType(context, coal.RightHandValue),
             Block block => ResolveBlockType(context, block),
@@ -55,6 +57,21 @@ internal sealed class TypeResolver : INodeAnalyzer {
             Lambda lambda => ResolveBlockType(context, lambda.Body is Block b ? b : new Block(lambda.Body)),
             _ => null
         };
+    }
+
+    private static ITypeDefinition? ResolveAsType(AnalysisContext context, Node targetTypeReference) {
+        var targetType = ResolveNodeType(context, targetTypeReference);
+        if (targetType is null) {
+            return null;
+        }
+
+        var runtimeType = targetType.GetRuntimeType();
+        if (runtimeType is null || !runtimeType.IsValueType || Nullable.GetUnderlyingType(runtimeType) is not null) {
+            return targetType;
+        }
+
+        var nullableType = typeof(Nullable<>).MakeGenericType(runtimeType);
+        return context.TypeDefinitions.GetTypeDefinition(nullableType) ?? targetType;
     }
 
     private static ITypeDefinition? ResolveForEachLoopType(

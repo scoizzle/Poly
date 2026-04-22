@@ -204,6 +204,22 @@ public static class NodeExtensions {
     /// <returns>A <see cref="TypeCast"/> operator.</returns>
     public static TypeCast CastTo(this Node operand, string targetTypeName, bool isChecked = false) => new TypeCast(operand, new TypeReference(targetTypeName), isChecked);
 
+    /// <summary>
+    /// Creates a type test operation.
+    /// </summary>
+    /// <param name="operand">The operand.</param>
+    /// <param name="targetTypeName">The name of the type to test against.</param>
+    /// <returns>A <see cref="TypeIs"/> operator.</returns>
+    public static TypeIs Is(this Node operand, string targetTypeName) => new TypeIs(operand, new TypeReference(targetTypeName));
+
+    /// <summary>
+    /// Creates a safe cast operation that returns null on failure.
+    /// </summary>
+    /// <param name="operand">The operand.</param>
+    /// <param name="targetTypeName">The name of the type to cast to.</param>
+    /// <returns>A <see cref="TypeAs"/> operator.</returns>
+    public static TypeAs As(this Node operand, string targetTypeName) => new TypeAs(operand, new TypeReference(targetTypeName));
+
     #endregion
 
     #region Assignment

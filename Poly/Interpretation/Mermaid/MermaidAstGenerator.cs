@@ -333,6 +333,14 @@ public sealed class MermaidAstGenerator {
                 builder.Append("Cast to ");
                 builder.Append(cast.TargetTypeReference);
                 break;
+            case TypeIs typeIs:
+                builder.Append("Type Is ");
+                builder.Append(typeIs.TargetTypeReference);
+                break;
+            case TypeAs typeAs:
+                builder.Append("Type As ");
+                builder.Append(typeAs.TargetTypeReference);
+                break;
             case MemberAccess member:
                 builder.Append("Member Access .");
                 builder.Append(member.MemberName);
@@ -463,6 +471,8 @@ public sealed class MermaidAstGenerator {
 
             // Type operations
             TypeCast cast => [(cast.Operand, "")],
+            TypeIs typeIs => [(typeIs.Operand, "")],
+            TypeAs typeAs => [(typeAs.Operand, "")],
 
             // Member access
             MemberAccess member => [(member.Value, "")],

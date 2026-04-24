@@ -16,10 +16,10 @@ public enum TypeCategory {
     Numeric = 1 << 1,
 
     /// <summary>An integer type (signed or unsigned).</summary>
-    Integer = Numeric | 1 << 2,
+    Integer = 1 << 2 | Numeric,
 
     /// <summary>A floating point type (float, double).</summary>
-    FloatingPoint = Numeric | 1 << 3,
+    FloatingPoint = 1 << 3 | Numeric,
 
     /// <summary>High precision decimal type.</summary>
     HighPrecision = 1 << 4,
@@ -28,10 +28,10 @@ public enum TypeCategory {
     Temporal = 1 << 5,
 
     /// <summary>An instant type (point in time).</summary>
-    Instant = Temporal | 1 << 6,
+    Instant = 1 << 6 | Temporal,
 
     /// <summary>A duration type (timespan, etc).</summary>
-    Duration = Temporal | 1 << 7,
+    Duration = 1 << 7 | Temporal,
 
     /// <summary>A text type (string, char).</summary>
     Text = 1 << 8,
@@ -60,17 +60,20 @@ public enum TypeCategory {
     /// <summary>An enumeration type.</summary>
     Enumeration = 1 << 16,
 
+    /// <summary>A flag enumeration type (bit field).</summary>
+    FlagEnumeration = 1 << 17 | Enumeration,
+
     /// <summary>A structured type (JSON, etc).</summary>
-    Structured = 1 << 17,
+    Structured = 1 << 18,
 
     /// <summary>An identifier type (Guid, etc).</summary>
-    Identifier = 1 << 18,
+    Identifier = 1 << 19,
 
     /// <summary>A signed numeric type.</summary>
-    Signed = Numeric | 1 << 19,
+    Signed = 1 << 20 | Numeric,
 
     /// <summary>An unsigned numeric type.</summary>
-    Unsigned = Numeric | 1 << 20,
+    Unsigned = 1 << 21 | Numeric,
 }
 
 public static class TypeCategoryExtensions {

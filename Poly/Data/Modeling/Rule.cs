@@ -3,19 +3,18 @@ using Poly.Data.Modeling.Validation;
 
 namespace Poly.Data.Modeling;
 
-public abstract class Rule {
+public abstract class Rule : IPolicyRule {
     public IDomainValue Value { get; init; } = null!;
-    public Constraint Constraints { get; init; }
+    public Constraint Constraints { get; init; } = null!;
 
-    public Node ToInterpretationNode(Node parent) {
-        ArgumentNullException.ThrowIfNull(parent);
-        ArgumentNullException.ThrowIfNull(Value);
+    public Node ToInterpretationNode(Node subject) {
+        ArgumentNullException.ThrowIfNull(subject);
         ArgumentNullException.ThrowIfNull(Value);
         ArgumentNullException.ThrowIfNull(Constraints);
 
-        return parent;
-        // var member = parent.GetMember();
-        // var constraintNode = Constraints.ToInterpretationNode(member);
-        // return constraintNode;
+        return Value switch {
+            Property property => Constraints.ToInterpretationNode(subject.GetMember(property.Name)),
+            _ => throw new NotSupportedException($"Rule value type '{Value.GetType().Name}' is not supported.")
+        };
     }
 }

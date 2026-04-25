@@ -3,7 +3,7 @@ namespace Poly.Data.Modeling.TypeSystem;
 /// <summary>
 /// Represents a value within a domain, which is an instance of a domain type.
 /// </summary>
-public interface IDomainValue {
+public interface IDomainValue : IDomainObject {
     /// <summary>
     /// Gets the type of the value.
     /// </summary>

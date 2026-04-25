@@ -3,10 +3,11 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
-public sealed class Action {
+public sealed class Action : IDomainObject {
     private readonly List<IDomainValue> _parameters = [];
     private readonly List<Effect> _effects = [];
 
+    public required Domain Domain { get; init; }
     public required Entity Entity { get; init; }
     public required string Name { get; set; }
 

@@ -36,10 +36,10 @@ namespace Poly.Data.Modeling;
 /// }
 /// </code>
 /// </remarks>
-public sealed class Entity : IDomainType {
+public class Entity : IDomainType {
     private readonly List<Property> _properties = [];
     private readonly List<Stage> _stages = [];
-    private readonly List<Rule> _rules = [];
+    private readonly List<Policy> _policies = [];
     private readonly List<Action> _actions = [];
     private readonly List<Event> _events = [];
     private readonly List<Relationship> _relationships = [];
@@ -49,18 +49,40 @@ public sealed class Entity : IDomainType {
 
     public IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
     public IReadOnlyCollection<Stage> Stages => _stages.AsReadOnly();
-    public IReadOnlyCollection<Rule> Rules => _rules.AsReadOnly();
+    public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
     public IReadOnlyCollection<Action> Actions => _actions.AsReadOnly();
     public IReadOnlyCollection<Event> Events => _events.AsReadOnly();
     public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
 
-    public void AddProperty(Property property) => _properties.Add(property);
-    public void AddStage(Stage stage) => _stages.Add(stage);
-    public void AddRule(Rule rule) => _rules.Add(rule);
-    public void AddAction(Action action) => _actions.Add(action);
-    public void AddEvent(Event @event) => _events.Add(@event);
+    public void AddProperty(Property property) {
+        property.ThrowIfNullOrMismatchedDomain(Domain);
+        _properties.Add(property);
+    }
+
+    public void AddStage(Stage stage) {
+        stage.ThrowIfNullOrMismatchedDomain(Domain);
+        _stages.Add(stage);
+    }
+    public void AddPolicy(Policy policy) {
+        policy.ThrowIfNullOrMismatchedDomain(Domain);
+        _policies.Add(policy);
+    }
+
+    public bool RemovePolicy(Policy policy) {
+        policy.ThrowIfNullOrMismatchedDomain(Domain);
+        return _policies.Remove(policy);
+    }
+    public void AddAction(Action action) {
+        action.ThrowIfNullOrMismatchedDomain(Domain);
+        _actions.Add(action);
+    }
+
+    public void AddEvent(Event @event) {
+        @event.ThrowIfNullOrMismatchedDomain(Domain);
+        _events.Add(@event);
+    }
     public void AddRelationship(Relationship relationship) {
-        ArgumentNullException.ThrowIfNull(relationship);
+        relationship.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (!ReferenceEquals(relationship.Source, this)) {
             throw new InvalidOperationException($"Relationship '{relationship.Name}' source must be '{Name}'.");

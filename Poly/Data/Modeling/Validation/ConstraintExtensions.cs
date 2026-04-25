@@ -13,5 +13,20 @@ public static class ConstraintExtensions {
             // Check if any of the applicable categories are present in the type
             return (constraint.ApplicableCategories & typeCategories) != TypeCategory.None;
         }
+
+        /// <summary>
+        /// Returns true when the constraint is the given type or contains it in a nested constraint set.
+        /// </summary>
+        public bool IsOrContains<TConstraint>() where TConstraint : Constraint {
+            if (constraint is TConstraint) {
+                return true;
+            }
+
+            if (constraint is ConstraintSet set) {
+                return set.Constraints.Any(c => c.IsOrContains<TConstraint>());
+            }
+
+            return false;
+        }
     }
 }

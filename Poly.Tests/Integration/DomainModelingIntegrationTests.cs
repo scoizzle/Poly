@@ -302,6 +302,23 @@ public class DomainModelingIntegrationTests {
         await Assert.That(supportCase.Policies.Select(p => p.Name)).Contains("RequireTitle");
     }
 
+    [Test]
+    public async Task SupportCase_TransitionRequirements_IncludeEntityRootPolicyRequirements() {
+        var domain = BuildSupportCaseDomain();
+        var supportCase = RequireEntity(domain, "SupportCase");
+        var current = supportCase.Stages.Single(s => s.Name == "New");
+        var target = supportCase.Stages.Single(s => s.Name == "InProgress");
+
+        var analysis = StageTransitionRequirementAnalyzer.Analyze(current, target, supportCase);
+        var currentRequiredNames = analysis.CurrentRequiredProperties.Select(p => p.Name).ToArray();
+        var targetRequiredNames = analysis.TargetRequiredProperties.Select(p => p.Name).ToArray();
+        var newlyRequiredNames = analysis.NewlyRequiredProperties.Select(p => p.Name).ToArray();
+
+        await Assert.That(currentRequiredNames).Contains("Title");
+        await Assert.That(targetRequiredNames).Contains("Title");
+        await Assert.That(newlyRequiredNames).DoesNotContain("Title");
+    }
+
     // ─── Relationships ────────────────────────────────────────────────────────
 
     [Test]
@@ -457,6 +474,35 @@ public class DomainModelingIntegrationTests {
     }
 
     [Test]
+    public async Task AgentSupportCasesRelationship_ActiveStage_EffectivePolicies_RequireAssignedAt() {
+        var domain = BuildSupportCaseDomain();
+        var relationship = domain.Relationships.Single(r => r.Name == "AgentSupportCases");
+        var active = relationship.Stages.Single(s => s.Name == "Active");
+        var requiredNames = StageTransitionRequirementAnalyzer
+            .Analyze(active, active, relationship)
+            .CurrentRequiredProperties
+            .Select(p => p.Name)
+            .ToArray();
+
+        await Assert.That(requiredNames).Contains("AssignedAt");
+        await Assert.That(requiredNames).DoesNotContain("UnassignedAt");
+    }
+
+    [Test]
+    public async Task AgentSupportCasesRelationship_Transition_ActiveToInactive_NewlyRequiresUnassignedAt() {
+        var domain = BuildSupportCaseDomain();
+        var relationship = domain.Relationships.Single(r => r.Name == "AgentSupportCases");
+        var active = relationship.Stages.Single(s => s.Name == "Active");
+        var inactive = relationship.Stages.Single(s => s.Name == "Inactive");
+
+        var analysis = StageTransitionRequirementAnalyzer.Analyze(active, inactive, relationship);
+        var newlyRequiredNames = analysis.NewlyRequiredProperties.Select(p => p.Name).ToArray();
+
+        await Assert.That(newlyRequiredNames).Contains("UnassignedAt");
+        await Assert.That(newlyRequiredNames).DoesNotContain("AssignedAt");
+    }
+
+    [Test]
     public async Task AgentSupportCasesRelationship_TimestampPropertyTypes_ReferenceInstantPrimitive() {
         var domain = BuildSupportCaseDomain();
         var instant = RequirePrimitive(domain, "instant");
@@ -547,6 +593,11 @@ public class DomainModelingIntegrationTests {
             Name = "RequireTitle",
             AggregationStrategy = PolicyAggregationStrategy.All
         };
+        var supportCaseTitle = supportCase.Properties.Single(p => p.Name == "Title");
+        requireTitle.AddRule(new PropertyRule {
+            Value = supportCaseTitle,
+            Constraints = new RequiredConstraint()
+        });
         supportCase.AddPolicy(requireTitle);
 
         var ownership = new Relationship {
@@ -598,10 +649,33 @@ public class DomainModelingIntegrationTests {
         };
         var activeAssignmentStage = new Stage { Domain = domain, Name = "Active" };
         var inactiveAssignmentStage = new Stage { Domain = domain, Name = "Inactive" };
+        var requireAssignedAtWhenActive = new Policy {
+            Domain = domain,
+            Name = "RequireAssignedAtWhenActive"
+        };
+        var requireUnassignedAtWhenInactive = new Policy {
+            Domain = domain,
+            Name = "RequireUnassignedAtWhenInactive"
+        };
         agentCases.AddStage(activeAssignmentStage);
         agentCases.AddStage(inactiveAssignmentStage);
-        agentCases.AddProperty(new Property { Domain = domain, Name = "AssignedAt", Type = instantType, Constraints = [new RequiredConstraint()] });
-        agentCases.AddProperty(new Property { Domain = domain, Name = "UnassignedAt", Type = instantType });
+        var assignedAt = new Property { Domain = domain, Name = "AssignedAt", Type = instantType, Constraints = [new RequiredConstraint()] };
+        var unassignedAt = new Property { Domain = domain, Name = "UnassignedAt", Type = instantType };
+        agentCases.AddProperty(assignedAt);
+        agentCases.AddProperty(unassignedAt);
+
+        requireAssignedAtWhenActive.AddRule(new PropertyRule {
+            Value = assignedAt,
+            Constraints = new RequiredConstraint()
+        });
+
+        requireUnassignedAtWhenInactive.AddRule(new PropertyRule {
+            Value = unassignedAt,
+            Constraints = new RequiredConstraint()
+        });
+
+        activeAssignmentStage.AddPolicy(requireAssignedAtWhenActive);
+        inactiveAssignmentStage.AddPolicy(requireUnassignedAtWhenInactive);
         domain.AddRelationship(agentCases);
         agent.AddRelationship(agentCases);
 

@@ -11,7 +11,7 @@ public interface IDomainObject {
 }
 
 public static class IDomainObjectExtensions {
-    public static void ThrowIfNullOrMismatchedDomain(this IDomainObject domainObject, Domain other, [CallerArgumentExpression("domainObject")] string paramName = "") {
+    public static void ThrowIfNullOrMismatchedDomain([NotNull] this IDomainObject? domainObject, Domain other, [CallerArgumentExpression("domainObject")] string paramName = "") {
         if (domainObject is null) {
             throw new ArgumentNullException(paramName);
         }

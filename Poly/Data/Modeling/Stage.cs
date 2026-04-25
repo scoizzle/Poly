@@ -33,6 +33,18 @@ public sealed class Stage : IDomainObject {
         return _actions.Remove(action);
     }
 
+    public IEnumerable<Policy> GetEffectivePolicies() {
+        var policies = Policies.ToDictionary(policy => policy.Name, StringComparer.Ordinal);
+
+        for (var current = Parent; current != null; current = current.Parent) {
+            foreach (var policy in current.Policies) {
+                _ = policies.TryAdd(policy.Name, policy);
+            }
+        }
+
+        return policies.Values;
+    }
+
     public IEnumerable<Action> GetEffectiveActions() {
         var actions = Actions.ToDictionary(e => e.Name);
 

@@ -74,6 +74,7 @@ public class CreateEntityInstanceTests {
         });
 
         draft.AddPolicy(policy);
+        note.AddStage(draft);
 
         var create = new CreateEntityInstance {
             EntityType = note,
@@ -123,11 +124,49 @@ public class CreateEntityInstanceTests {
         });
 
         parent.AddPolicy(parentPolicy);
+        note.AddStage(parent);
+        note.AddStage(child);
 
         var create = new CreateEntityInstance {
             EntityType = note,
             OwnershipRelationship = CreateOwnership(domain, note),
             InitialStage = child
+        };
+
+        var requiredNames = create.GetRequiredProperties().Select(p => p.Name).ToArray();
+
+        await Assert.That(requiredNames.Length).IsEqualTo(1);
+        await Assert.That(requiredNames).Contains("Title");
+    }
+
+    [Test]
+    public async Task CreateEntityInstance_WhenEffectInitialStageIsNull_IncludesEntityPolicyRequirements() {
+        var domain = DomainTestFactory.CreateDomain();
+        var note = CreateEntity(domain, "Note");
+        var stringType = CreatePrimitive(domain, "string");
+        var title = new Property {
+            Domain = domain,
+            Name = "Title",
+            Type = stringType
+        };
+
+        var rootPolicy = new Policy {
+            Domain = domain,
+            Name = "RequireTitle"
+        };
+
+        rootPolicy.AddRule(new PropertyRule {
+            Value = title,
+            Constraints = new RequiredConstraint()
+        });
+
+        note.AddProperty(title);
+        note.AddPolicy(rootPolicy);
+
+        var create = new CreateEntityInstance {
+            EntityType = note,
+            OwnershipRelationship = CreateOwnership(domain, note),
+            InitialStage = null
         };
 
         var requiredNames = create.GetRequiredProperties().Select(p => p.Name).ToArray();

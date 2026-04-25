@@ -81,6 +81,7 @@ public class Entity : IDomainType {
         @event.ThrowIfNullOrMismatchedDomain(Domain);
         _events.Add(@event);
     }
+
     public void AddRelationship(Relationship relationship) {
         relationship.ThrowIfNullOrMismatchedDomain(Domain);
 

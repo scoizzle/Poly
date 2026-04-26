@@ -8,4 +8,6 @@ namespace Poly.Data.Modeling.Effects;
 /// </summary>
 public abstract class Effect {
     public virtual IReadOnlyCollection<IDomainValue> RequiredParameters => [];
+
+    public abstract void Validate(Entity entity);
 }

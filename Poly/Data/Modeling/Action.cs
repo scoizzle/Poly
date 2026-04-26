@@ -27,30 +27,7 @@ public sealed class Action : IDomainObject {
     public void AddEffect(Effect effect) {
         ArgumentNullException.ThrowIfNull(effect);
 
-        switch (effect) {
-            case CreateEntityInstance create:
-                create.EntityType.ThrowIfMismatchedDomain(Domain);
-
-                if (create.InitialStage is not null) {
-                    create.InitialStage.ThrowIfMismatchedDomain(Domain);
-
-                    if (!create.EntityType.Stages.Contains(create.InitialStage)) {
-                        throw new InvalidOperationException(
-                            $"Initial stage '{create.InitialStage.Name}' must belong to entity '{create.EntityType.Name}'.");
-                    }
-                }
-
-                break;
-            case PublishEvent publishEvent:
-                publishEvent.Event.ThrowIfMismatchedDomain(Domain);
-                break;
-            case StageTransition stageTransition:
-                stageTransition.TargetStage.ThrowIfMismatchedDomain(Domain);
-                break;
-            case InvokeAction invokeAction:
-                invokeAction.TargetAction.ThrowIfMismatchedDomain(Domain);
-                break;
-        }
+        effect.Validate(Entity);
 
         _effects.Add(effect);
     }

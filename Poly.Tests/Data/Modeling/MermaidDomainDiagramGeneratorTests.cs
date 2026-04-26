@@ -240,6 +240,24 @@ public class MermaidDomainDiagramGeneratorTests {
     }
 
     [Test]
+    public async Task Generate_InheritedEntity_EmitsInheritanceArrow() {
+        var domain = DomainTestFactory.CreateDomain();
+        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        domain.AddType(stringType);
+
+        var user = new Entity(domain, "User");
+        user.AddProperty(new Property(domain, "Name", stringType));
+        domain.AddType(user);
+
+        var agent = new Entity(domain, "Agent", user);
+        domain.AddType(agent);
+
+        var result = new MermaidDomainDiagramGenerator().Generate(domain);
+
+        await Assert.That(result).Contains("User <|-- Agent");
+    }
+
+    [Test]
     public async Task Generate_Actions_AppearAsMethodsOnEntity() {
         var domain = DomainTestFactory.CreateDomain();
         var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };

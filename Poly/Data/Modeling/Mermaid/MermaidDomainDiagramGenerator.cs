@@ -67,6 +67,9 @@ public sealed class MermaidDomainDiagramGenerator {
 
         _sb.AppendLine("    }");
 
+        if (entity.ParentEntity is not null)
+            _sb.AppendLine($"    {entity.ParentEntity.Name} <|-- {entity.Name}");
+
         EmitPoliciesNote(entity.Name, entity.Policies);
         EmitStagesEnum(entity.Name, entity.Stages);
     }

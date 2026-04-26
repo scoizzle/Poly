@@ -44,8 +44,21 @@ public class Entity : IDomainType {
     private readonly List<Event> _events = [];
     private readonly List<Relationship> _relationships = [];
 
-    public required Domain Domain { get; init; }
-    public required string Name { get; set; }
+    public Entity(Domain domain, string name, Entity? parentEntity = null) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(name);
+
+        parentEntity?.ThrowIfMismatchedDomain(domain);
+        ValidateParentEntityCycle(parentEntity);
+
+        Domain = domain;
+        Name = name;
+        ParentEntity = parentEntity;
+    }
+
+    public Domain Domain { get; }
+    public string Name { get; set; }
+    public Entity? ParentEntity { get; }
 
     public IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
     public IReadOnlyCollection<Stage> Stages => _stages.AsReadOnly();
@@ -56,15 +69,31 @@ public class Entity : IDomainType {
 
     public void AddProperty(Property property) {
         property.ThrowIfNullOrMismatchedDomain(Domain);
+
+        if (_properties.Any(existing => string.Equals(existing.Name, property.Name, StringComparison.Ordinal))) {
+            throw new InvalidOperationException($"Property '{property.Name}' already exists on entity '{Name}'.");
+        }
+
         _properties.Add(property);
     }
 
     public void AddStage(Stage stage) {
         stage.ThrowIfNullOrMismatchedDomain(Domain);
+
+        if (_stages.Any(existing => string.Equals(existing.Name, stage.Name, StringComparison.Ordinal))) {
+            throw new InvalidOperationException($"Stage '{stage.Name}' already exists on entity '{Name}'.");
+        }
+
+        ValidateStageInheritance(stage);
         _stages.Add(stage);
     }
     public void AddPolicy(Policy policy) {
         policy.ThrowIfNullOrMismatchedDomain(Domain);
+
+        if (_policies.Any(existing => string.Equals(existing.Name, policy.Name, StringComparison.Ordinal))) {
+            throw new InvalidOperationException($"Policy '{policy.Name}' already exists on entity '{Name}'.");
+        }
+
         _policies.Add(policy);
     }
 
@@ -74,21 +103,69 @@ public class Entity : IDomainType {
     }
     public void AddAction(Action action) {
         action.ThrowIfNullOrMismatchedDomain(Domain);
+
+        if (_actions.Any(existing => string.Equals(existing.Name, action.Name, StringComparison.Ordinal))) {
+            throw new InvalidOperationException($"Action '{action.Name}' already exists on entity '{Name}'.");
+        }
+
         _actions.Add(action);
     }
 
     public void AddEvent(Event @event) {
         @event.ThrowIfNullOrMismatchedDomain(Domain);
+
+        if (_events.Any(existing => string.Equals(existing.Name, @event.Name, StringComparison.Ordinal))) {
+            throw new InvalidOperationException($"Event '{@event.Name}' already exists on entity '{Name}'.");
+        }
+
         _events.Add(@event);
     }
 
     public void AddRelationship(Relationship relationship) {
         relationship.ThrowIfNullOrMismatchedDomain(Domain);
 
+        if (!Domain.Relationships.Contains(relationship)) {
+            throw new InvalidOperationException($"Relationship '{relationship.Name}' must be registered in domain '{Domain.Name}' before attaching to entity '{Name}'.");
+        }
+
         if (!ReferenceEquals(relationship.Source, this)) {
             throw new InvalidOperationException($"Relationship '{relationship.Name}' source must be '{Name}'.");
         }
 
+        if (_relationships.Any(existing => string.Equals(existing.Name, relationship.Name, StringComparison.Ordinal))) {
+            throw new InvalidOperationException($"Relationship '{relationship.Name}' already exists on entity '{Name}'.");
+        }
+
         _relationships.Add(relationship);
+    }
+
+    private void ValidateStageInheritance(Stage stage) {
+        if (ParentEntity is null || ParentEntity.Stages.Count == 0) {
+            return;
+        }
+
+        if (stage.Parent is null) {
+            throw new InvalidOperationException(
+                $"Stage '{stage.Name}' on child entity '{Name}' must have a parent stage when parent entity '{ParentEntity.Name}' defines stages.");
+        }
+
+        if (!ParentEntity.Stages.Contains(stage.Parent)) {
+            throw new InvalidOperationException(
+                $"Stage '{stage.Name}' on child entity '{Name}' must directly inherit from a stage defined on parent entity '{ParentEntity.Name}'.");
+        }
+    }
+
+    private void ValidateParentEntityCycle(Entity? parentEntity) {
+        if (parentEntity is null) {
+            return;
+        }
+
+        var lineage = new HashSet<Entity> { this };
+
+        for (var current = parentEntity; current is not null; current = current.ParentEntity) {
+            if (!lineage.Add(current)) {
+                throw new InvalidOperationException($"Entity '{Name}' cannot participate in an inheritance cycle.");
+            }
+        }
     }
 }

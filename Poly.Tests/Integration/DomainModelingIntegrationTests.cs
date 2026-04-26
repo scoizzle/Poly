@@ -1,5 +1,6 @@
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
+using Poly.Data.Modeling.Mermaid;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Introspection;
@@ -35,6 +36,7 @@ public class DomainModelingIntegrationTests {
     public async Task Domain_ContainsExpectedEntityTypes() {
         var domain = BuildSupportCaseDomain();
         var names = domain.Types.OfType<Entity>().Select(e => e.Name).ToArray();
+        await Assert.That(names).Contains("User");
         await Assert.That(names).Contains("Customer");
         await Assert.That(names).Contains("Agent");
         await Assert.That(names).Contains("Note");
@@ -44,20 +46,28 @@ public class DomainModelingIntegrationTests {
     [Test]
     public async Task Domain_TypeCount_MatchesExpected() {
         var domain = BuildSupportCaseDomain();
-        // 4 primitives + Customer + Agent + Note + SupportCase
-        await Assert.That(domain.Types.Count).IsEqualTo(8);
+        // 4 primitives + User + Customer + Agent + Note + SupportCase
+        await Assert.That(domain.Types.Count).IsEqualTo(9);
     }
 
     // ─── Entity properties ─────────────────────────────────────────────────────
 
     [Test]
-    public async Task Agent_HasExpectedProperties() {
+    public async Task User_HasExpectedProperties() {
         var domain = BuildSupportCaseDomain();
-        var agent = RequireEntity(domain, "Agent");
-        var names = agent.Properties.Select(p => p.Name).ToArray();
+        var user = RequireEntity(domain, "User");
+        var names = user.Properties.Select(p => p.Name).ToArray();
         await Assert.That(names).Contains("Name");
         await Assert.That(names).Contains("Email");
-        await Assert.That(agent.Properties.Count).IsEqualTo(2);
+        await Assert.That(user.Properties.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Agent_InheritsFromUser() {
+        var domain = BuildSupportCaseDomain();
+        var user = RequireEntity(domain, "User");
+        var agent = RequireEntity(domain, "Agent");
+        await Assert.That(ReferenceEquals(agent.ParentEntity, user)).IsTrue();
     }
 
     [Test]
@@ -71,22 +81,20 @@ public class DomainModelingIntegrationTests {
     }
 
     [Test]
-    public async Task Note_AuthorProperty_ReferencesAgentEntity() {
+    public async Task Note_AuthorProperty_ReferencesUserEntity() {
         var domain = BuildSupportCaseDomain();
-        var agent = RequireEntity(domain, "Agent");
+        var user = RequireEntity(domain, "User");
         var note = RequireEntity(domain, "Note");
         var authorProp = note.Properties.Single(p => p.Name == "Author");
-        await Assert.That(ReferenceEquals(authorProp.Type, agent)).IsTrue();
+        await Assert.That(ReferenceEquals(authorProp.Type, user)).IsTrue();
     }
 
     [Test]
-    public async Task Customer_HasExpectedProperties() {
+    public async Task Customer_InheritsFromUser() {
         var domain = BuildSupportCaseDomain();
+        var user = RequireEntity(domain, "User");
         var customer = RequireEntity(domain, "Customer");
-        var names = customer.Properties.Select(p => p.Name).ToArray();
-        await Assert.That(names).Contains("Name");
-        await Assert.That(names).Contains("Email");
-        await Assert.That(customer.Properties.Count).IsEqualTo(2);
+        await Assert.That(ReferenceEquals(customer.ParentEntity, user)).IsTrue();
     }
 
     [Test]
@@ -209,14 +217,15 @@ public class DomainModelingIntegrationTests {
     }
 
     [Test]
-    public async Task AddNoteAction_CreateEntityInstance_UsesSupportCaseNotesOwnershipRelationship() {
+    public async Task AddNoteAction_CreateEntityInstance_UsesNoteParentEntityInheritance() {
         var domain = BuildSupportCaseDomain();
         var supportCase = RequireEntity(domain, "SupportCase");
+        var note = RequireEntity(domain, "Note");
         var inProgress = supportCase.Stages.Single(s => s.Name == "InProgress");
         var addNoteAction = inProgress.Actions.Single(a => a.Name == "AddNote");
         var create = addNoteAction.Effects.OfType<CreateEntityInstance>().Single();
-        await Assert.That(create.OwnershipRelationship.Name).IsEqualTo("SupportCaseNotes");
-        await Assert.That(create.OwnershipRelationship.SourceOwnsTarget).IsTrue();
+        await Assert.That(ReferenceEquals(note.ParentEntity, supportCase)).IsTrue();
+        await Assert.That(ReferenceEquals(create.EntityType.ParentEntity, supportCase)).IsTrue();
     }
 
     [Test]
@@ -300,6 +309,30 @@ public class DomainModelingIntegrationTests {
         var domain = BuildSupportCaseDomain();
         var supportCase = RequireEntity(domain, "SupportCase");
         await Assert.That(supportCase.Policies.Select(p => p.Name)).Contains("RequireTitle");
+    }
+
+    [Test]
+    public async Task CustomerNotesRelationship_HasOnlyAgentsCanCreateAndViewUserNotesPolicies() {
+        var domain = BuildSupportCaseDomain();
+        var relationship = domain.Relationships.Single(r => r.Name == "CustomerNotes");
+
+        await Assert.That(relationship.Policies.Select(p => p.Name)).Contains("OnlyAgentsCanCreateUserNotes");
+        await Assert.That(relationship.Policies.Select(p => p.Name)).Contains("OnlyAgentsCanViewUserNotes");
+    }
+
+    [Test]
+    public async Task CustomerNotesRelationship_AgentOnlyUserNotesPolicies_TargetAuthorProperty() {
+        var domain = BuildSupportCaseDomain();
+        var relationship = domain.Relationships.Single(r => r.Name == "CustomerNotes");
+        var createPolicy = relationship.Policies.Single(p => p.Name == "OnlyAgentsCanCreateUserNotes");
+        var viewPolicy = relationship.Policies.Single(p => p.Name == "OnlyAgentsCanViewUserNotes");
+        var createRule = createPolicy.Rules.OfType<PropertyRule>().Single();
+        var viewRule = viewPolicy.Rules.OfType<PropertyRule>().Single();
+
+        await Assert.That(createRule.Value).IsTypeOf<Property>();
+        await Assert.That(((Property)createRule.Value).Name).IsEqualTo("Author");
+        await Assert.That(viewRule.Value).IsTypeOf<Property>();
+        await Assert.That(((Property)viewRule.Value).Name).IsEqualTo("Author");
     }
 
     [Test]
@@ -520,6 +553,35 @@ public class DomainModelingIntegrationTests {
         await Assert.That(agent.Relationships.Select(r => r.Name)).Contains("AgentSupportCases");
     }
 
+    // ─── Mermaid diagram ──────────────────────────────────────────────────────
+
+    [Test]
+    public async Task SupportCaseDomain_GeneratesMermaidClassDiagram() {
+        var domain = BuildSupportCaseDomain();
+        var diagram = new MermaidDomainDiagramGenerator().Generate(domain);
+        File.WriteAllText("/tmp/support-case-domain.mmd", diagram);
+        await Assert.That(diagram).StartsWith("classDiagram");
+    }
+
+    [Test]
+    public async Task SupportCaseDomain_GeneratesMermaidStateDiagram() {
+        var domain = BuildSupportCaseDomain();
+        var diagram = new MermaidDomainStateDiagramGenerator().Generate(domain);
+        File.WriteAllText("/tmp/support-case-state.mmd", diagram);
+        await Assert.That(diagram).StartsWith("stateDiagram-v2");
+    }
+
+    [Test]
+    public async Task SupportCaseDomain_GeneratesMermaidSequenceDiagram_ForAssignAction() {
+        var domain = BuildSupportCaseDomain();
+        var supportCase = RequireEntity(domain, "SupportCase");
+        var newStage = supportCase.Stages.Single(s => s.Name == "New");
+        var assign = newStage.Actions.Single(a => a.Name == "Assign");
+        var diagram = new MermaidActionSequenceDiagramGenerator().Generate(assign);
+        File.WriteAllText("/tmp/support-case-assign-sequence.mmd", diagram);
+        await Assert.That(diagram).StartsWith("sequenceDiagram");
+    }
+
     // ─── Domain factory ────────────────────────────────────────────────────────
 
     private static Domain BuildSupportCaseDomain() {
@@ -534,27 +596,21 @@ public class DomainModelingIntegrationTests {
         domain.AddType(boolType);
         domain.AddType(instantType);
 
-        var customer = new Entity { Domain = domain, Name = "Customer" };
-        customer.AddProperty(new Property { Domain = domain, Name = "Name", Type = stringType });
-        customer.AddProperty(new Property { Domain = domain, Name = "Email", Type = stringType });
+        var user = new Entity(domain, "User");
+        user.AddProperty(new Property(domain, "Name", stringType));
+        user.AddProperty(new Property(domain, "Email", stringType));
+        domain.AddType(user);
+
+        var customer = new Entity(domain, "Customer", user);
         domain.AddType(customer);
 
-        var agent = new Entity { Domain = domain, Name = "Agent" };
-        agent.AddProperty(new Property { Domain = domain, Name = "Name", Type = stringType });
-        agent.AddProperty(new Property { Domain = domain, Name = "Email", Type = stringType });
+        var agent = new Entity(domain, "Agent", user);
         domain.AddType(agent);
 
-        var note = new Entity { Domain = domain, Name = "Note" };
-        note.AddProperty(new Property { Domain = domain, Name = "Content", Type = stringType });
-        note.AddProperty(new Property { Domain = domain, Name = "Author", Type = agent });
-        var noteDraftStage = new Stage { Domain = domain, Name = "Draft" };
-        note.AddStage(noteDraftStage);
-        domain.AddType(note);
-
-        var supportCase = new Entity { Domain = domain, Name = "SupportCase" };
-        supportCase.AddProperty(new Property { Domain = domain, Name = "Title", Type = stringType });
-        supportCase.AddProperty(new Property { Domain = domain, Name = "Priority", Type = intType });
-        supportCase.AddProperty(new Property { Domain = domain, Name = "IsEscalated", Type = boolType });
+        var supportCase = new Entity(domain, "SupportCase");
+        supportCase.AddProperty(new Property(domain, "Title", stringType));
+        supportCase.AddProperty(new Property(domain, "Priority", intType));
+        supportCase.AddProperty(new Property(domain, "IsEscalated", boolType));
         domain.AddType(supportCase);
 
         var newStage = new Stage { Domain = domain, Name = "New" };
@@ -563,19 +619,19 @@ public class DomainModelingIntegrationTests {
         var resolvedStage = new Stage { Domain = domain, Name = "Resolved" };
 
         var caseAssignedEvent = new DomainEvent { Domain = domain, Name = "CaseAssigned" };
-        caseAssignedEvent.AddProperty(new Property { Domain = domain, Name = "AssignedTo", Type = agent });
+        caseAssignedEvent.AddProperty(new Property(domain, "AssignedTo", agent));
         var caseResolvedEvent = new DomainEvent { Domain = domain, Name = "CaseResolved" };
         supportCase.AddEvent(caseAssignedEvent);
         supportCase.AddEvent(caseResolvedEvent);
 
         var assignAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "Assign" };
-        assignAction.AddParameter(new Property { Domain = domain, Name = "Agent", Type = agent });
+        assignAction.AddParameter(new Property(domain, "Agent", agent));
         assignAction.AddEffect(new StageTransition { TargetStage = assignedStage });
         assignAction.AddEffect(new PublishEvent { Event = caseAssignedEvent });
         newStage.AddAction(assignAction);
 
         var addNoteAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "AddNote" };
-        addNoteAction.AddParameter(new Property { Domain = domain, Name = "NoteText", Type = stringType });
+        addNoteAction.AddParameter(new Property(domain, "NoteText", stringType));
         inProgressStage.AddAction(addNoteAction);
 
         var resolveAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "Resolve" };
@@ -587,6 +643,19 @@ public class DomainModelingIntegrationTests {
         supportCase.AddStage(inProgressStage);
         supportCase.AddStage(assignedStage);
         supportCase.AddStage(resolvedStage);
+
+        var note = new Entity(domain, "Note", supportCase);
+        note.AddProperty(new Property(domain, "Content", stringType));
+        note.AddProperty(new Property(domain, "Author", user));
+        var noteAuthor = note.Properties.Single(p => p.Name == "Author");
+        var noteDraftStage = new Stage {
+            Domain = domain,
+            Name = "Draft",
+            Parent = inProgressStage
+        };
+        note.AddStage(noteDraftStage);
+
+        domain.AddType(note);
 
         var requireTitle = new Policy {
             Domain = domain,
@@ -600,9 +669,7 @@ public class DomainModelingIntegrationTests {
         });
         supportCase.AddPolicy(requireTitle);
 
-        var ownership = new Relationship {
-            Domain = domain,
-            Name = "CustomerCases",
+        var ownership = new Relationship(domain, "CustomerCases") {
             Source = customer,
             Target = supportCase,
             Cardinality = RelationshipCardinality.OneToMany,
@@ -611,9 +678,7 @@ public class DomainModelingIntegrationTests {
         domain.AddRelationship(ownership);
         customer.AddRelationship(ownership);
 
-        var caseNotes = new Relationship {
-            Domain = domain,
-            Name = "SupportCaseNotes",
+        var caseNotes = new Relationship(domain, "SupportCaseNotes") {
             Source = supportCase,
             Target = note,
             Cardinality = RelationshipCardinality.OneToMany,
@@ -624,24 +689,43 @@ public class DomainModelingIntegrationTests {
 
         addNoteAction.AddEffect(new CreateEntityInstance {
             EntityType = note,
-            OwnershipRelationship = caseNotes,
             InitialStage = noteDraftStage
         });
 
-        var customerNotes = new Relationship {
-            Domain = domain,
-            Name = "CustomerNotes",
+        var customerNotes = new Relationship(domain, "CustomerNotes") {
             Source = customer,
             Target = note,
             Cardinality = RelationshipCardinality.OneToMany,
             SourceOwnsTarget = false
         };
+
+        var onlyAgentsCanCreateUserNotes = new Policy {
+            Domain = domain,
+            Name = "OnlyAgentsCanCreateUserNotes",
+            AggregationStrategy = PolicyAggregationStrategy.All
+        };
+        onlyAgentsCanCreateUserNotes.AddRule(new PropertyRule {
+            Value = noteAuthor,
+            Constraints = new RequiredConstraint()
+        });
+
+        var onlyAgentsCanViewUserNotes = new Policy {
+            Domain = domain,
+            Name = "OnlyAgentsCanViewUserNotes",
+            AggregationStrategy = PolicyAggregationStrategy.All
+        };
+        onlyAgentsCanViewUserNotes.AddRule(new PropertyRule {
+            Value = noteAuthor,
+            Constraints = new RequiredConstraint()
+        });
+
+        customerNotes.AddPolicy(onlyAgentsCanCreateUserNotes);
+        customerNotes.AddPolicy(onlyAgentsCanViewUserNotes);
+
         domain.AddRelationship(customerNotes);
         customer.AddRelationship(customerNotes);
 
-        var agentCases = new Relationship {
-            Domain = domain,
-            Name = "AgentSupportCases",
+        var agentCases = new Relationship(domain, "AgentSupportCases") {
             Source = agent,
             Target = supportCase,
             Cardinality = RelationshipCardinality.ManyToMany,
@@ -659,8 +743,9 @@ public class DomainModelingIntegrationTests {
         };
         agentCases.AddStage(activeAssignmentStage);
         agentCases.AddStage(inactiveAssignmentStage);
-        var assignedAt = new Property { Domain = domain, Name = "AssignedAt", Type = instantType, Constraints = [new RequiredConstraint()] };
-        var unassignedAt = new Property { Domain = domain, Name = "UnassignedAt", Type = instantType };
+        var assignedAt = new Property(domain, "AssignedAt", instantType);
+        assignedAt.AddConstraint(new RequiredConstraint());
+        var unassignedAt = new Property(domain, "UnassignedAt", instantType);
         agentCases.AddProperty(assignedAt);
         agentCases.AddProperty(unassignedAt);
 

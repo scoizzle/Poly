@@ -14,25 +14,16 @@ public class CreateEntityInstanceTests {
         var note = CreateEntity(domain, "Note");
         var stringType = CreatePrimitive(domain, "string");
 
-        var title = new Property {
-            Domain = domain,
-            Name = "Title",
-            Type = stringType,
-            Constraints = [new RequiredConstraint()]
-        };
+        var title = new Property(domain, "Title", stringType);
+        title.AddConstraint(new RequiredConstraint());
 
-        var body = new Property {
-            Domain = domain,
-            Name = "Body",
-            Type = stringType
-        };
+        var body = new Property(domain, "Body", stringType);
 
         note.AddProperty(title);
         note.AddProperty(body);
 
         var create = new CreateEntityInstance {
             EntityType = note,
-            OwnershipRelationship = CreateOwnership(domain, note),
             InitialStage = null
         };
 
@@ -48,11 +39,7 @@ public class CreateEntityInstanceTests {
         var note = CreateEntity(domain, "Note");
         var stringType = CreatePrimitive(domain, "string");
 
-        var title = new Property {
-            Domain = domain,
-            Name = "Title",
-            Type = stringType
-        };
+        var title = new Property(domain, "Title", stringType);
 
         note.AddProperty(title);
 
@@ -78,7 +65,6 @@ public class CreateEntityInstanceTests {
 
         var create = new CreateEntityInstance {
             EntityType = note,
-            OwnershipRelationship = CreateOwnership(domain, note),
             InitialStage = draft
         };
 
@@ -94,11 +80,7 @@ public class CreateEntityInstanceTests {
         var note = CreateEntity(domain, "Note");
         var stringType = CreatePrimitive(domain, "string");
 
-        var title = new Property {
-            Domain = domain,
-            Name = "Title",
-            Type = stringType
-        };
+        var title = new Property(domain, "Title", stringType);
 
         note.AddProperty(title);
 
@@ -129,7 +111,6 @@ public class CreateEntityInstanceTests {
 
         var create = new CreateEntityInstance {
             EntityType = note,
-            OwnershipRelationship = CreateOwnership(domain, note),
             InitialStage = child
         };
 
@@ -144,11 +125,7 @@ public class CreateEntityInstanceTests {
         var domain = DomainTestFactory.CreateDomain();
         var note = CreateEntity(domain, "Note");
         var stringType = CreatePrimitive(domain, "string");
-        var title = new Property {
-            Domain = domain,
-            Name = "Title",
-            Type = stringType
-        };
+        var title = new Property(domain, "Title", stringType);
 
         var rootPolicy = new Policy {
             Domain = domain,
@@ -165,7 +142,6 @@ public class CreateEntityInstanceTests {
 
         var create = new CreateEntityInstance {
             EntityType = note,
-            OwnershipRelationship = CreateOwnership(domain, note),
             InitialStage = null
         };
 
@@ -175,11 +151,100 @@ public class CreateEntityInstanceTests {
         await Assert.That(requiredNames).Contains("Title");
     }
 
-    private static Entity CreateEntity(Domain domain, string name) {
-        var entity = new Entity {
+    [Test]
+    public async Task CreateEntityInstance_WhenEffectInitialStageIsNull_IncludesPropertyPolicyRequirements() {
+        var domain = DomainTestFactory.CreateDomain();
+        var note = CreateEntity(domain, "Note");
+        var stringType = CreatePrimitive(domain, "string");
+
+        var title = new Property(domain, "Title", stringType);
+
+        var titlePolicy = new Policy {
             Domain = domain,
-            Name = name
+            Name = "RequireTitleFromProperty"
         };
+
+        titlePolicy.AddRule(new PropertyRule {
+            Value = title,
+            Constraints = new RequiredConstraint()
+        });
+
+        title.AddPolicy(titlePolicy);
+        note.AddProperty(title);
+
+        var create = new CreateEntityInstance {
+            EntityType = note,
+            InitialStage = null
+        };
+
+        var requiredNames = create.GetRequiredProperties().Select(p => p.Name).ToArray();
+
+        await Assert.That(requiredNames.Length).IsEqualTo(1);
+        await Assert.That(requiredNames).Contains("Title");
+    }
+
+    [Test]
+    public async Task CreateEntityInstance_WhenInitialStageHasParentEntityAncestorStage_DoesNotThrow() {
+        var domain = DomainTestFactory.CreateDomain();
+        var parent = CreateEntity(domain, "Account");
+        var child = CreateEntity(domain, "Ticket", parent);
+
+        var parentStage = new Stage {
+            Domain = domain,
+            Name = "Open"
+        };
+
+        var childStage = new Stage {
+            Domain = domain,
+            Name = "Draft",
+            Parent = parentStage
+        };
+
+        parent.AddStage(parentStage);
+        child.AddStage(childStage);
+
+        var create = new CreateEntityInstance {
+            EntityType = child,
+            InitialStage = childStage
+        };
+
+        var required = create.GetRequiredProperties();
+
+        await Assert.That(required).IsNotNull();
+    }
+
+    [Test]
+    public async Task CreateEntityInstance_WhenEntityHasNoParentEntity_DoesNotRequireParentEntityAncestorStage() {
+        var domain = DomainTestFactory.CreateDomain();
+        var parent = CreateEntity(domain, "Account");
+        var child = CreateEntity(domain, "Ticket");
+
+        var childParent = new Stage {
+            Domain = domain,
+            Name = "Review"
+        };
+
+        var childStage = new Stage {
+            Domain = domain,
+            Name = "Draft",
+            Parent = childParent
+        };
+
+        child.AddStage(childParent);
+        child.AddStage(childStage);
+
+        var create = new CreateEntityInstance {
+            EntityType = child,
+            InitialStage = childStage
+        };
+
+        var required = create.GetRequiredProperties();
+
+        await Assert.That(required).IsNotNull();
+    }
+
+    private static Entity CreateEntity(Domain domain, string name, Entity? parentEntity = null) {
+        var entity = new Entity(domain, name, parentEntity);
 
         domain.AddType(entity);
         return entity;
@@ -196,21 +261,4 @@ public class CreateEntityInstanceTests {
         return primitive;
     }
 
-    private static Relationship CreateOwnership(Domain domain, Entity target) {
-        var owner = CreateEntity(domain, $"{target.Name}Owner");
-
-        var relationship = new Relationship {
-            Domain = domain,
-            Name = $"{owner.Name}{target.Name}Ownership",
-            Source = owner,
-            Target = target,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = true
-        };
-
-        domain.AddRelationship(relationship);
-        owner.AddRelationship(relationship);
-
-        return relationship;
-    }
 }

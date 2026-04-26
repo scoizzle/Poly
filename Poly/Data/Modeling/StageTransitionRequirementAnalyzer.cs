@@ -58,6 +58,12 @@ public static class StageTransitionRequirementAnalyzer {
             _ = policies.TryAdd(policy.Name, policy);
         }
 
+        foreach (var property in entityType.Properties) {
+            foreach (var policy in property.Policies) {
+                _ = policies.TryAdd(policy.Name, policy);
+            }
+        }
+
         foreach (var policy in stage.GetEffectivePolicies()) {
             _ = policies.TryAdd(policy.Name, policy);
         }

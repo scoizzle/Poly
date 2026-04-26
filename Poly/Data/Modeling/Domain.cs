@@ -16,7 +16,7 @@ public sealed class Domain {
 
     public required string Name { get; set; }
     public IReadOnlyCollection<IDomainType> Types => _types.Values;
-    public IReadOnlyCollection<Relationship> Relationships => _relationships;
+    public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
 
     public void AddType(IDomainType type) {
         ArgumentNullException.ThrowIfNull(type);
@@ -36,6 +36,23 @@ public sealed class Domain {
 
         if (relationship.Source.Domain != this || relationship.Target.Domain != this)
             throw new InvalidOperationException("Relationship source and target entities must belong to the same domain.");
+
+        if (_relationships.Any(existing => string.Equals(existing.Name, relationship.Name, StringComparison.Ordinal)))
+            throw new InvalidOperationException($"A relationship with the name '{relationship.Name}' already exists in the domain.");
+
+        if (relationship.SourceOwnsTarget) {
+            if (relationship.Source is not Entity)
+                throw new InvalidOperationException("Ownership relationship source must be an entity.");
+
+            if (relationship.Target is not Entity)
+                throw new InvalidOperationException("Ownership relationship target must be an entity.");
+
+            if (relationship.Cardinality is RelationshipCardinality.ManyToOne or RelationshipCardinality.ManyToMany)
+                throw new InvalidOperationException("Ownership relationships must have one-to-one or one-to-many cardinality.");
+
+            if (_relationships.Any(existing => existing.SourceOwnsTarget && ReferenceEquals(existing.Target, relationship.Target)))
+                throw new InvalidOperationException($"Target '{relationship.Target.Name}' already has an ownership relationship.");
+        }
 
         _relationships.Add(relationship);
     }

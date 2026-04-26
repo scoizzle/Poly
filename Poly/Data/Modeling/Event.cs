@@ -26,7 +26,15 @@ public sealed class Event : IDomainType {
 
     public required Domain Domain { get; init; }
     public required string Name { get; set; } = string.Empty;
-    public IReadOnlyCollection<Property> Properties => _properties;
+    public IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
 
-    public void AddProperty(Property property) => _properties.Add(property);
+    public void AddProperty(Property property) {
+        property.ThrowIfNullOrMismatchedDomain(Domain);
+
+        if (_properties.Any(existing => string.Equals(existing.Name, property.Name, StringComparison.Ordinal))) {
+            throw new InvalidOperationException($"Property '{property.Name}' already exists on event '{Name}'.");
+        }
+
+        _properties.Add(property);
+    }
 }

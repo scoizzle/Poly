@@ -6,7 +6,6 @@ namespace Poly.Data.Modeling.Effects;
 
 public sealed class CreateEntityInstance : Effect {
     public required Entity EntityType { get; init; }
-    public required Relationship OwnershipRelationship { get; init; }
     public Stage? InitialStage { get; init; }
 
     public override IReadOnlyCollection<IDomainValue> RequiredParameters => GetRequiredProperties().Cast<IDomainValue>().ToArray();
@@ -51,6 +50,12 @@ public sealed class CreateEntityInstance : Effect {
 
         foreach (var policy in EntityType.Policies) {
             _ = policies.TryAdd(policy.Name, policy);
+        }
+
+        foreach (var property in EntityType.Properties) {
+            foreach (var policy in property.Policies) {
+                _ = policies.TryAdd(policy.Name, policy);
+            }
         }
 
         foreach (var stage in EnumerateInitialStageLineage()) {

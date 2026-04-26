@@ -85,6 +85,7 @@ public class Entity : IDomainType {
         }
 
         ValidateStageInheritance(stage);
+        stage.AttachToEntity(this);
         _stages.Add(stage);
     }
     public void AddPolicy(Policy policy) {
@@ -103,6 +104,10 @@ public class Entity : IDomainType {
     }
     public void AddAction(Action action) {
         action.ThrowIfNullOrMismatchedDomain(Domain);
+
+        if (!ReferenceEquals(action.Entity, this)) {
+            throw new InvalidOperationException($"Action '{action.Name}' must belong to entity '{Name}'.");
+        }
 
         if (_actions.Any(existing => string.Equals(existing.Name, action.Name, StringComparison.Ordinal))) {
             throw new InvalidOperationException($"Action '{action.Name}' already exists on entity '{Name}'.");

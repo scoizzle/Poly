@@ -47,13 +47,18 @@ internal static class MermaidTestDomainFactory {
         var caseAssignedEvent = new DomainEvent { Domain = domain, Name = "CaseAssigned" };
         caseAssignedEvent.AddProperty(new Property(domain, "AssignedTo", agent));
         var caseResolvedEvent = new DomainEvent { Domain = domain, Name = "CaseResolved" };
+        caseResolvedEvent.AddProperty(new Property(domain, "ResolutionSummary", stringType));
         supportCase.AddEvent(caseAssignedEvent);
         supportCase.AddEvent(caseResolvedEvent);
 
         var assignAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "Assign" };
-        assignAction.AddParameter(new Property(domain, "Agent", agent));
+        var assignAgentParameter = new Property(domain, "Agent", agent);
+        assignAction.AddParameter(assignAgentParameter);
         assignAction.AddEffect(new StageTransition { TargetStage = assignedStage });
-        assignAction.AddEffect(new PublishEvent { Event = caseAssignedEvent });
+        var publishAssigned = new PublishEvent { Event = caseAssignedEvent };
+        var assignedToProperty = caseAssignedEvent.Properties.Single(p => p.Name == "AssignedTo");
+        publishAssigned.BindProperty(assignedToProperty, assignAgentParameter);
+        assignAction.AddEffect(publishAssigned);
         newStage.AddAction(assignAction);
 
         var addNoteAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "AddNote" };
@@ -61,8 +66,13 @@ internal static class MermaidTestDomainFactory {
         inProgressStage.AddAction(addNoteAction);
 
         var resolveAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "Resolve" };
+        var resolutionSummaryParameter = new Property(domain, "ResolutionSummary", stringType);
+        resolveAction.AddParameter(resolutionSummaryParameter);
         resolveAction.AddEffect(new StageTransition { TargetStage = resolvedStage });
-        resolveAction.AddEffect(new PublishEvent { Event = caseResolvedEvent });
+        var publishResolved = new PublishEvent { Event = caseResolvedEvent };
+        var resolvedSummaryProperty = caseResolvedEvent.Properties.Single(p => p.Name == "ResolutionSummary");
+        publishResolved.BindProperty(resolvedSummaryProperty, resolutionSummaryParameter);
+        resolveAction.AddEffect(publishResolved);
         inProgressStage.AddAction(resolveAction);
 
         supportCase.AddStage(newStage);

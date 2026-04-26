@@ -34,26 +34,70 @@ public sealed class Domain {
         if (relationship.Domain != this)
             throw new InvalidOperationException("Relationship domain must match parent domain.");
 
-        if (relationship.Source.Domain != this || relationship.Target.Domain != this)
-            throw new InvalidOperationException("Relationship source and target entities must belong to the same domain.");
+        EvaluateRelationshipMutationPreconditions(
+            relationship,
+            relationship.Source,
+            relationship.Target,
+            relationship.Cardinality,
+            relationship.SourceOwnsTarget);
 
         if (_relationships.Any(existing => string.Equals(existing.Name, relationship.Name, StringComparison.Ordinal)))
             throw new InvalidOperationException($"A relationship with the name '{relationship.Name}' already exists in the domain.");
 
-        if (relationship.SourceOwnsTarget) {
-            if (relationship.Source is not Entity)
-                throw new InvalidOperationException("Ownership relationship source must be an entity.");
+        _relationships.Add(relationship);
+    }
 
-            if (relationship.Target is not Entity)
-                throw new InvalidOperationException("Ownership relationship target must be an entity.");
+    internal void EvaluateRelationshipMutationPreconditions(
+        Relationship relationship,
+        IDomainType? source,
+        IDomainType? target,
+        RelationshipCardinality cardinality,
+        bool sourceOwnsTarget) {
+        ArgumentNullException.ThrowIfNull(relationship);
 
-            if (relationship.Cardinality is RelationshipCardinality.ManyToOne or RelationshipCardinality.ManyToMany)
-                throw new InvalidOperationException("Ownership relationships must have one-to-one or one-to-many cardinality.");
+        var isRegistered = _relationships.Contains(relationship);
 
-            if (_relationships.Any(existing => existing.SourceOwnsTarget && ReferenceEquals(existing.Target, relationship.Target)))
-                throw new InvalidOperationException($"Target '{relationship.Target.Name}' already has an ownership relationship.");
+        if (source is null || target is null) {
+            if (isRegistered) {
+                throw new InvalidOperationException(
+                    $"Relationship '{relationship.Name}' is already registered and must keep both source and target defined.");
+            }
+
+            return;
         }
 
-        _relationships.Add(relationship);
+        if (!ReferenceEquals(source.Domain, this) || !ReferenceEquals(target.Domain, this)) {
+            throw new InvalidOperationException("Relationship source and target entities must belong to the same domain.");
+        }
+
+        if (sourceOwnsTarget) {
+            if (source is not Entity)
+                throw new InvalidOperationException("Ownership relationship source must be an entity.");
+
+            if (target is not Entity)
+                throw new InvalidOperationException("Ownership relationship target must be an entity.");
+
+            if (cardinality is RelationshipCardinality.ManyToOne or RelationshipCardinality.ManyToMany)
+                throw new InvalidOperationException("Ownership relationships must have one-to-one or one-to-many cardinality.");
+
+            if (_relationships.Any(existing =>
+                    !ReferenceEquals(existing, relationship)
+                    && existing.SourceOwnsTarget
+                    && ReferenceEquals(existing.Target, target))) {
+                throw new InvalidOperationException($"Target '{target.Name}' already has an ownership relationship.");
+            }
+        }
+
+        if (isRegistered) {
+            var attachedOwners = Types
+                .OfType<Entity>()
+                .Where(entity => entity.Relationships.Contains(relationship))
+                .ToArray();
+
+            if (attachedOwners.Any(owner => !ReferenceEquals(owner, source))) {
+                throw new InvalidOperationException(
+                    $"Relationship '{relationship.Name}' source must remain aligned with attached entity relationships.");
+            }
+        }
     }
 }

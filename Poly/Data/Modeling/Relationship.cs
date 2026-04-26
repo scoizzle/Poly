@@ -11,8 +11,40 @@ public enum RelationshipCardinality {
 }
 
 public sealed class Relationship(Domain domain, string name) : Entity(domain, name) {
-    public IDomainType Source { get; set; } = null!;
-    public IDomainType Target { get; set; } = null!;
-    public RelationshipCardinality Cardinality { get; set; } = RelationshipCardinality.OneToOne;
-    public bool SourceOwnsTarget { get; set; }
+    private IDomainType _source = null!;
+    private IDomainType _target = null!;
+    private RelationshipCardinality _cardinality = RelationshipCardinality.OneToOne;
+    private bool _sourceOwnsTarget;
+
+    public IDomainType Source {
+        get => _source;
+        set {
+            Domain.EvaluateRelationshipMutationPreconditions(this, value, _target, _cardinality, _sourceOwnsTarget);
+            _source = value;
+        }
+    }
+
+    public IDomainType Target {
+        get => _target;
+        set {
+            Domain.EvaluateRelationshipMutationPreconditions(this, _source, value, _cardinality, _sourceOwnsTarget);
+            _target = value;
+        }
+    }
+
+    public RelationshipCardinality Cardinality {
+        get => _cardinality;
+        set {
+            Domain.EvaluateRelationshipMutationPreconditions(this, _source, _target, value, _sourceOwnsTarget);
+            _cardinality = value;
+        }
+    }
+
+    public bool SourceOwnsTarget {
+        get => _sourceOwnsTarget;
+        set {
+            Domain.EvaluateRelationshipMutationPreconditions(this, _source, _target, _cardinality, value);
+            _sourceOwnsTarget = value;
+        }
+    }
 }

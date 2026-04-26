@@ -47,7 +47,7 @@ public class MermaidActionSequenceDiagramGeneratorTests {
 
         var result = new MermaidActionSequenceDiagramGenerator().Generate(action);
 
-        await Assert.That(result).Contains("Caller->>Aggregate: Resolve()");
+        await Assert.That(result).Contains("Caller->>Aggregate: Resolve(ResolutionSummary)");
         await Assert.That(result).Contains("Aggregate->>Aggregate: transition to Resolved");
         await Assert.That(result).Contains("Aggregate-->>EventBus: publish CaseResolved");
     }

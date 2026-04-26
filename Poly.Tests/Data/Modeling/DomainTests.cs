@@ -94,12 +94,11 @@ public class DomainTests {
         var invoice = CreatePrimitive(domain, "Invoice");
 
         var relationship = new Relationship(otherDomain, "CustomerInvoices") {
-            Source = customer,
-            Target = invoice
+            Source = customer
         };
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            domain.AddRelationship(relationship);
+            relationship.Target = invoice;
             await Task.CompletedTask;
         });
     }
@@ -113,12 +112,11 @@ public class DomainTests {
         domain.AddType(customer);
 
         var relationship = new Relationship(domain, "CustomerInvoices") {
-            Source = customer,
-            Target = invoice
+            Source = customer
         };
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            domain.AddRelationship(relationship);
+            relationship.Target = invoice;
             await Task.CompletedTask;
         });
     }
@@ -169,6 +167,82 @@ public class DomainTests {
                 Cardinality = RelationshipCardinality.OneToMany,
                 SourceOwnsTarget = true
             });
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task Domain_AddRelationship_AfterRegistration_AllowsValidDefinitionMutation() {
+        var domain = DomainTestFactory.CreateDomain();
+        var source = new Entity(domain, "Customer");
+        var target = new Entity(domain, "SupportCase");
+        domain.AddType(source);
+        domain.AddType(target);
+
+        var relationship = new Relationship(domain, "CustomerCases") {
+            Source = source,
+            Target = target,
+            Cardinality = RelationshipCardinality.OneToMany
+        };
+
+        domain.AddRelationship(relationship);
+
+        relationship.Cardinality = RelationshipCardinality.OneToOne;
+
+        await Assert.That(relationship.Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
+    }
+
+    [Test]
+    public async Task Relationship_Mutation_WithInvalidOwnershipCardinality_ThrowsInvalidOperationException() {
+        var domain = DomainTestFactory.CreateDomain();
+        var source = new Entity(domain, "Customer");
+        var target = new Entity(domain, "SupportCase");
+        domain.AddType(source);
+        domain.AddType(target);
+
+        var relationship = new Relationship(domain, "CustomerCases") {
+            Source = source,
+            Target = target,
+            Cardinality = RelationshipCardinality.ManyToMany,
+            SourceOwnsTarget = false
+        };
+
+        domain.AddRelationship(relationship);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+            relationship.SourceOwnsTarget = true;
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task Relationship_Mutation_WithDuplicateOwnershipTarget_ThrowsInvalidOperationException() {
+        var domain = DomainTestFactory.CreateDomain();
+        var customer = new Entity(domain, "Customer");
+        var agent = new Entity(domain, "Agent");
+        var note = new Entity(domain, "Note");
+        domain.AddType(customer);
+        domain.AddType(agent);
+        domain.AddType(note);
+
+        domain.AddRelationship(new Relationship(domain, "CustomerNotes") {
+            Source = customer,
+            Target = note,
+            Cardinality = RelationshipCardinality.OneToMany,
+            SourceOwnsTarget = true
+        });
+
+        var second = new Relationship(domain, "AgentNotes") {
+            Source = agent,
+            Target = note,
+            Cardinality = RelationshipCardinality.OneToMany,
+            SourceOwnsTarget = false
+        };
+
+        domain.AddRelationship(second);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+            second.SourceOwnsTarget = true;
             await Task.CompletedTask;
         });
     }
@@ -518,6 +592,47 @@ public class StageTests {
 
 public class ActionAndEventMutationTests {
     [Test]
+    public async Task Entity_AddAction_WithDifferentEntity_ThrowsInvalidOperationException() {
+        var domain = DomainTestFactory.CreateDomain();
+        var owner = new Entity(domain, "SupportCase");
+        var other = new Entity(domain, "Ticket");
+        var action = new DomainAction {
+            Domain = domain,
+            Entity = other,
+            Name = "Assign"
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+            owner.AddAction(action);
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task Stage_AddAction_WhenAttachedAndEntityMismatched_ThrowsInvalidOperationException() {
+        var domain = DomainTestFactory.CreateDomain();
+        var owner = new Entity(domain, "SupportCase");
+        var other = new Entity(domain, "Ticket");
+        var stage = new Stage {
+            Domain = domain,
+            Name = "New"
+        };
+
+        owner.AddStage(stage);
+
+        var mismatchedAction = new DomainAction {
+            Domain = domain,
+            Entity = other,
+            Name = "Assign"
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+            stage.AddAction(mismatchedAction);
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
     public async Task Event_AddProperty_WithDuplicateName_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var eventType = new Event {
@@ -583,6 +698,122 @@ public class ActionAndEventMutationTests {
             });
             await Task.CompletedTask;
         });
+    }
+
+    [Test]
+    public async Task Action_AddEffect_StageTransitionToForeignEntityStage_ThrowsInvalidOperationException() {
+        var domain = DomainTestFactory.CreateDomain();
+        var sourceEntity = new Entity(domain, "SupportCase");
+        var targetEntity = new Entity(domain, "Note");
+        var sourceAction = new DomainAction {
+            Domain = domain,
+            Entity = sourceEntity,
+            Name = "Assign"
+        };
+        var foreignStage = new Stage {
+            Domain = domain,
+            Name = "Draft"
+        };
+
+        sourceEntity.AddStage(new Stage {
+            Domain = domain,
+            Name = "New"
+        });
+        targetEntity.AddStage(foreignStage);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+            sourceAction.AddEffect(new StageTransition {
+                TargetStage = foreignStage
+            });
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task Action_AddEffect_PublishEventWithoutRequiredBindings_ThrowsInvalidOperationException() {
+        var domain = DomainTestFactory.CreateDomain();
+        var entity = new Entity(domain, "SupportCase");
+        var stringType = new Primitive {
+            Domain = domain,
+            Name = "string",
+            Category = TypeCategory.Text
+        };
+        var action = new DomainAction {
+            Domain = domain,
+            Entity = entity,
+            Name = "Assign"
+        };
+        var @event = new Event {
+            Domain = domain,
+            Name = "CaseAssigned"
+        };
+        @event.AddProperty(new Property(domain, "AssignedTo", stringType));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+            action.AddEffect(new PublishEvent { Event = @event });
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task Action_AddEffect_InvokeActionWithoutRequiredBindings_ThrowsInvalidOperationException() {
+        var domain = DomainTestFactory.CreateDomain();
+        var entity = new Entity(domain, "SupportCase");
+        var stringType = new Primitive {
+            Domain = domain,
+            Name = "string",
+            Category = TypeCategory.Text
+        };
+        var targetAction = new DomainAction {
+            Domain = domain,
+            Entity = entity,
+            Name = "Resolve"
+        };
+        targetAction.AddParameter(new Property(domain, "Reason", stringType));
+
+        var sourceAction = new DomainAction {
+            Domain = domain,
+            Entity = entity,
+            Name = "Escalate"
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+            sourceAction.AddEffect(new InvokeAction { TargetAction = targetAction });
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task Action_AddEffect_InvokeActionWithBoundParameters_AddsEffect() {
+        var domain = DomainTestFactory.CreateDomain();
+        var entity = new Entity(domain, "SupportCase");
+        var stringType = new Primitive {
+            Domain = domain,
+            Name = "string",
+            Category = TypeCategory.Text
+        };
+
+        var targetAction = new DomainAction {
+            Domain = domain,
+            Entity = entity,
+            Name = "Resolve"
+        };
+        var reasonParameter = new Property(domain, "Reason", stringType);
+        targetAction.AddParameter(reasonParameter);
+
+        var sourceAction = new DomainAction {
+            Domain = domain,
+            Entity = entity,
+            Name = "Escalate"
+        };
+        var sourceReason = new Property(domain, "SourceReason", stringType);
+
+        var invoke = new InvokeAction { TargetAction = targetAction };
+        invoke.BindParameter(reasonParameter, sourceReason);
+
+        sourceAction.AddEffect(invoke);
+
+        await Assert.That(sourceAction.Effects.Contains(invoke)).IsTrue();
     }
 
     [Test]

@@ -348,4 +348,22 @@ public static class DomainQueryExtensions {
             LocalPolicies: localPolicies,
             EffectivePolicies: effectivePolicies);
     }
+
+    public static RelationshipCapabilityView GetCapabilityView(this Relationship relationship) {
+        ArgumentNullException.ThrowIfNull(relationship);
+
+        var properties = relationship.GetAvailableProperties().ToArray();
+        var stages = relationship.GetAvailableStages().ToArray();
+        var policies = relationship.Policies.ToArray();
+
+        return new RelationshipCapabilityView(
+            RelationshipName: relationship.Name,
+            Source: relationship.Source,
+            Target: relationship.Target,
+            Cardinality: relationship.Cardinality,
+            SourceOwnsTarget: relationship.SourceOwnsTarget,
+            Properties: properties,
+            Stages: stages,
+            Policies: policies);
+    }
 }

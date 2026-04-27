@@ -201,6 +201,37 @@ public class DomainQueryExtensionsTests {
         await Assert.That(relationships).Contains("CustomerNotes");
     }
 
+    [Test]
+    public async Task Relationship_GetCapabilityView_ContainsCoreMetadata() {
+        var domain = BuildSupportCaseDomain();
+        var relationship = domain.RequireRelationship("CustomerCases");
+
+        var capability = relationship.GetCapabilityView();
+
+        await Assert.That(capability.RelationshipName).IsEqualTo("CustomerCases");
+        await Assert.That(capability.Cardinality).IsEqualTo(RelationshipCardinality.OneToMany);
+        await Assert.That(capability.SourceOwnsTarget).IsTrue();
+        await Assert.That(capability.Source).IsTypeOf<Entity>();
+        await Assert.That(capability.Target).IsTypeOf<Entity>();
+    }
+
+    [Test]
+    public async Task Relationship_GetCapabilityView_ContainsPropertiesStagesAndPolicies() {
+        var domain = BuildSupportCaseDomain();
+        var relationship = domain.RequireRelationship("AgentSupportCases");
+
+        var capability = relationship.GetCapabilityView();
+
+        await Assert.That(capability.Properties.Select(property => property.Name)).Contains("AssignedAt");
+        await Assert.That(capability.Properties.Select(property => property.Name)).Contains("UnassignedAt");
+        await Assert.That(capability.Stages.Select(stage => stage.Name)).Contains("Active");
+        await Assert.That(capability.Stages.Select(stage => stage.Name)).Contains("Inactive");
+
+        var customerNotes = domain.RequireRelationship("CustomerNotes").GetCapabilityView();
+        await Assert.That(customerNotes.Policies.Select(policy => policy.Name)).Contains("OnlyAgentsCanCreateUserNotes");
+        await Assert.That(customerNotes.Policies.Select(policy => policy.Name)).Contains("OnlyAgentsCanViewUserNotes");
+    }
+
     private static Domain BuildSupportCaseDomain() {
         return MermaidTestDomainFactory.BuildSupportCaseDomain();
     }

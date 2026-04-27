@@ -1,4 +1,5 @@
 using Poly.Data.Modeling.Effects;
+using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
@@ -16,3 +17,13 @@ public sealed record StageCapabilityView(
     IReadOnlyCollection<ActionCapabilityView> EffectiveActions,
     IReadOnlyCollection<Policy> LocalPolicies,
     IReadOnlyCollection<Policy> EffectivePolicies);
+
+public sealed record RelationshipCapabilityView(
+    string RelationshipName,
+    IDomainType Source,
+    IDomainType Target,
+    RelationshipCardinality Cardinality,
+    bool SourceOwnsTarget,
+    IReadOnlyCollection<Property> Properties,
+    IReadOnlyCollection<Stage> Stages,
+    IReadOnlyCollection<Policy> Policies);

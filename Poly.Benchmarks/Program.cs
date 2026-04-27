@@ -1,77 +1,22 @@
-using System;
-using System.Linq.Expressions;
+using System.CommandLine;
 
-using Poly.Benchmarks;
-using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
-using Poly.Interpretation.AbstractSyntaxTree.Boolean;
-using Poly.Interpretation.AbstractSyntaxTree.Comparison;
-using Poly.Interpretation.Analysis;
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.LinqExpressions;
-using Poly.Interpretation.Mermaid;
-using Poly.Validation;
+using Poly.Benchmarks.DomainModeling;
 
-// Playground.Main();
+var domainNameOption = new Option<string>("--name") {
+    Description = "Name for the domain being modeled."
+};
 
-var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver()
-    .UseMemberResolver()
-    .UseVariableScopeValidator()
-    .Build();
+var rootCommand = new RootCommand("Interactive domain modeling workbench") {
+    domainNameOption
+};
 
-// Create a complex demo AST showcasing various node types and nesting
-// Expression: ((age >= 18 && age <= 65) ? (salary * 1.1 + bonus) : salary) ?? 0
-
-var age = new Parameter("age");
-var salary = new Parameter("salary");
-var bonus = new Parameter("bonus");
-
-// Build the condition: (age >= 18 && age <= 65)
-var ageGreaterOrEqual18 = new GreaterThanOrEqual(
-    new Coalesce(age, new Constant(0)),  // age ?? 0
-    new Constant(18)
-);
-
-var ageLessOrEqual65 = new LessThanOrEqual(
-    new Coalesce(age, new Constant(0)),  // age ?? 0
-    new Constant(65)
-);
-
-var ageInRange = new And(ageGreaterOrEqual18, ageLessOrEqual65);
-
-// Build the "true" branch: (salary * 1.1 + bonus)
-var salaryValue = new Coalesce(salary, new Constant(0.0));
-var salaryMultiplied = new Multiply(salaryValue, new Constant(1.1));
-var bonusValue = new Coalesce(bonus, new Constant(0.0));
-var trueBranch = new Add(salaryMultiplied, bonusValue);
-
-// Build the "false" branch: salary
-var falseBranch = new Coalesce(salary, new Constant(0.0));
-
-// Build the conditional: condition ? trueBranch : falseBranch
-var conditional = new Conditional(ageInRange, trueBranch, falseBranch);
-
-// Wrap in coalesce for final safety: result ?? 0
-var body = new Coalesce(conditional, new Constant(0.0));
-
-var configuredAnalyzer = analyzer.With(ctx => {
-    // Pre-populate the context with parameter types for accurate analysis
-    ctx.SetResolvedType(age, ctx.TypeDefinitions.GetTypeDefinition(typeof(int?))!);
-    ctx.SetResolvedType(salary, ctx.TypeDefinitions.GetTypeDefinition(typeof(double?))!);
-    ctx.SetResolvedType(bonus, ctx.TypeDefinitions.GetTypeDefinition(typeof(double?))!);
+rootCommand.SetAction(parseResult => {
+    var domainName = parseResult.GetValue(domainNameOption) ?? "Interactive Domain";
+    InteractiveDomainConsole.Run(domainName);
+    return 0;
 });
 
-
-GC.Collect();
-var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-for (long i = 0; i < 10; i++) {
-    _ = configuredAnalyzer.Analyze(body);
-}
-
-stopwatch.Stop();
-Console.WriteLine($"Total time for 10 analyses: {stopwatch.Elapsed}");
+return await rootCommand.Parse(args).InvokeAsync();
 
 // if (analysisResult.Diagnostics.Count > 0) {
 //     Console.WriteLine("Analysis Diagnostics:");

@@ -56,7 +56,7 @@ internal static class MermaidTestDomainFactory {
         assignAction.AddParameter(assignAgentParameter);
         assignAction.AddEffect(new StageTransition { TargetStage = assignedStage });
         var publishAssigned = new PublishEvent { Event = caseAssignedEvent };
-        var assignedToProperty = caseAssignedEvent.Properties.Single(p => p.Name == "AssignedTo");
+        var assignedToProperty = caseAssignedEvent.RequireProperty("AssignedTo");
         publishAssigned.BindProperty(assignedToProperty, assignAgentParameter);
         assignAction.AddEffect(publishAssigned);
         newStage.AddAction(assignAction);
@@ -70,7 +70,7 @@ internal static class MermaidTestDomainFactory {
         resolveAction.AddParameter(resolutionSummaryParameter);
         resolveAction.AddEffect(new StageTransition { TargetStage = resolvedStage });
         var publishResolved = new PublishEvent { Event = caseResolvedEvent };
-        var resolvedSummaryProperty = caseResolvedEvent.Properties.Single(p => p.Name == "ResolutionSummary");
+        var resolvedSummaryProperty = caseResolvedEvent.RequireProperty("ResolutionSummary");
         publishResolved.BindProperty(resolvedSummaryProperty, resolutionSummaryParameter);
         resolveAction.AddEffect(publishResolved);
         inProgressStage.AddAction(resolveAction);
@@ -83,7 +83,7 @@ internal static class MermaidTestDomainFactory {
         var note = new Entity(domain, "Note", supportCase);
         note.AddProperty(new Property(domain, "Content", stringType));
         note.AddProperty(new Property(domain, "Author", user));
-        var noteAuthor = note.Properties.Single(p => p.Name == "Author");
+        var noteAuthor = note.RequireProperty("Author");
         var noteDraftStage = new Stage {
             Domain = domain,
             Name = "Draft",
@@ -98,7 +98,7 @@ internal static class MermaidTestDomainFactory {
             Name = "RequireTitle",
             AggregationStrategy = PolicyAggregationStrategy.All
         };
-        var supportCaseTitle = supportCase.Properties.Single(p => p.Name == "Title");
+        var supportCaseTitle = supportCase.RequireProperty("Title");
         requireTitle.AddRule(new PropertyRule {
             Value = supportCaseTitle,
             Constraints = new RequiredConstraint()
@@ -169,12 +169,34 @@ internal static class MermaidTestDomainFactory {
         };
         var activeAssignmentStage = new Stage { Domain = domain, Name = "Active" };
         var inactiveAssignmentStage = new Stage { Domain = domain, Name = "Inactive" };
+        var requireAssignedAtWhenActive = new Policy {
+            Domain = domain,
+            Name = "RequireAssignedAtWhenActive"
+        };
+        var requireUnassignedAtWhenInactive = new Policy {
+            Domain = domain,
+            Name = "RequireUnassignedAtWhenInactive"
+        };
         agentCases.AddStage(activeAssignmentStage);
         agentCases.AddStage(inactiveAssignmentStage);
         var assignedAt = new Property(domain, "AssignedAt", instantType);
         assignedAt.AddConstraint(new RequiredConstraint());
+        var unassignedAt = new Property(domain, "UnassignedAt", instantType);
         agentCases.AddProperty(assignedAt);
-        agentCases.AddProperty(new Property(domain, "UnassignedAt", instantType));
+        agentCases.AddProperty(unassignedAt);
+
+        requireAssignedAtWhenActive.AddRule(new PropertyRule {
+            Value = assignedAt,
+            Constraints = new RequiredConstraint()
+        });
+
+        requireUnassignedAtWhenInactive.AddRule(new PropertyRule {
+            Value = unassignedAt,
+            Constraints = new RequiredConstraint()
+        });
+
+        activeAssignmentStage.AddPolicy(requireAssignedAtWhenActive);
+        inactiveAssignmentStage.AddPolicy(requireUnassignedAtWhenInactive);
         domain.AddRelationship(agentCases);
         agent.AddRelationship(agentCases);
 

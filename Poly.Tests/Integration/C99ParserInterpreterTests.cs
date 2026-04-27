@@ -396,7 +396,7 @@ public class C99ParserInterpreterTests {
                 if (TryConsume(C99TokenKind.Dot)) {
                     var member = Expect(C99TokenKind.Identifier).Text;
                     var nextType = ResolveMemberType(currentType, member);
-                    currentNode = new MemberAccess(currentNode, member);
+                    currentNode = new Member(currentNode, member);
                     currentType = nextType;
                     continue;
                 }
@@ -542,7 +542,7 @@ public class C99ParserInterpreterTests {
             Node destination = sym.Param;
             while (TryConsume(C99TokenKind.Dot)) {
                 var member = Expect(C99TokenKind.Identifier).Text;
-                destination = new MemberAccess(destination, member);
+                destination = new Member(destination, member);
             }
 
             return destination;
@@ -628,7 +628,7 @@ public class C99ParserInterpreterTests {
             while (Check(C99TokenKind.Dot) || Check(C99TokenKind.LBracket)) {
                 if (TryConsume(C99TokenKind.Dot)) {
                     var member = Expect(C99TokenKind.Identifier).Text;
-                    expr = new MemberAccess(expr, member);
+                    expr = new Member(expr, member);
                 }
                 else {
                     Expect(C99TokenKind.LBracket);

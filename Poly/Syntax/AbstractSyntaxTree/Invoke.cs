@@ -6,7 +6,7 @@ namespace Poly.Syntax.AbstractSyntaxTree;
 /// <remarks>
 /// <para>
 /// <see cref="Delegate"/> is a structural reference to the method being called — typically a
-/// <see cref="MemberAccess"/> node (e.g. <c>target.MethodName</c>) resolved by
+/// <see cref="Member"/> node (e.g. <c>target.MethodName</c>) resolved by
 /// semantic analysis passes.
 /// </para>
 /// <para>
@@ -16,7 +16,7 @@ namespace Poly.Syntax.AbstractSyntaxTree;
 /// explicit in the tree.
 /// </para>
 /// </remarks>
-/// <param name="Delegate">The method reference node, typically a <see cref="MemberAccess"/>.</param>
+/// <param name="Delegate">The method reference node, typically a <see cref="Member"/>.</param>
 /// <param name="Arguments">The arguments to pass to the method.</param>
 public sealed record Invoke(Node Delegate, params Node[] Arguments) : Operator {
     public override IEnumerable<Node?> Children => [Delegate, .. Arguments];

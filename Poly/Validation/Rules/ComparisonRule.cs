@@ -24,8 +24,8 @@ public sealed class ComparisonRule : Rule {
     }
 
     public override Node BuildInterpretationTree(RuleBuildingContext context) {
-        var leftMember = new MemberAccess(context.Value, LeftPropertyName);
-        var rightMember = new MemberAccess(context.Value, RightPropertyName);
+        var leftMember = new Member(context.Value, LeftPropertyName);
+        var rightMember = new Member(context.Value, RightPropertyName);
 
         Node comparisonResult = Operator switch {
             ComparisonOperator.Equal => new Equal(leftMember, rightMember),

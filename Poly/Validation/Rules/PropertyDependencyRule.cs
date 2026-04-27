@@ -17,8 +17,8 @@ public sealed class PropertyDependencyRule : Rule {
     }
 
     public override Node BuildInterpretationTree(RuleBuildingContext context) {
-        var sourceMember = new MemberAccess(context.Value, SourcePropertyName);
-        var dependentMember = new MemberAccess(context.Value, DependentPropertyName);
+        var sourceMember = new Member(context.Value, SourcePropertyName);
+        var dependentMember = new Member(context.Value, DependentPropertyName);
 
         var sourceHasValue = new NotEqual(sourceMember, Null);
         var dependentHasValue = new NotEqual(dependentMember, Null);

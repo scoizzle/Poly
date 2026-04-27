@@ -5,7 +5,7 @@ internal static class MethodInvocationSemanticResolver {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(methodInv);
 
-        if (methodInv.Delegate is not MemberAccess memberAccess)
+        if (methodInv.Delegate is not Member memberAccess)
             return null;
 
         var targetType = context.GetResolvedType(memberAccess.Value);
@@ -56,7 +56,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
         var resolvedMember = node switch {
             // Member access - resolve the member being accessed
-            MemberAccess memberAccess => ResolveMemberAccessMember(context, memberAccess),
+            Member memberAccess => ResolveMemberAccessMember(context, memberAccess),
 
             // Method invocation - resolve the method being called
             Invoke methodInv => ResolveMethodInvocationMember(context, methodInv),
@@ -77,7 +77,7 @@ internal sealed class MemberResolver : INodeAnalyzer {
         this.AnalyzeChildren(context, node);
     }
 
-    private static ITypeMember? ResolveMemberAccessMember(AnalysisContext context, MemberAccess memberAccess) {
+    private static ITypeMember? ResolveMemberAccessMember(AnalysisContext context, Member memberAccess) {
         var instanceType = context.GetResolvedType(memberAccess.Value);
         if (instanceType == null)
             return null;

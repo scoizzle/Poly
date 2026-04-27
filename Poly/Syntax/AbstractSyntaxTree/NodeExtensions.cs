@@ -16,8 +16,8 @@ public static class NodeExtensions {
     /// </summary>
     /// <param name="instance">The instance expression.</param>
     /// <param name="memberName">The name of the member to access (property, field, or method).</param>
-    /// <returns>A <see cref="MemberAccess"/> operator representing the member access.</returns>
-    public static MemberAccess GetMember(this Node instance, string memberName) => new MemberAccess(instance, memberName);
+    /// <returns>A <see cref="Member"/> operator representing the member access.</returns>
+    public static Member GetMember(this Node instance, string memberName) => new Member(instance, memberName);
 
     /// <summary>
     /// Creates an index access operation for accessing an indexed member of this expression.
@@ -34,7 +34,7 @@ public static class NodeExtensions {
     /// <param name="methodName">The name of the method to invoke.</param>
     /// <param name="arguments">The method arguments.</param>
     /// <returns>An <see cref="AbstractSyntaxTree.Invoke"/> representing the method invocation.</returns>
-    public static Invoke Invoke(this Node instance, string methodName, params Node[] arguments) => new Invoke(new MemberAccess(instance, methodName), arguments);
+    public static Invoke Invoke(this Node instance, string methodName, params Node[] arguments) => new Invoke(new Member(instance, methodName), arguments);
 
     #endregion
 

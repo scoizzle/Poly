@@ -28,5 +28,5 @@ public sealed record RuleBuildingContext {
     /// </summary>
     /// <param name="propertyName">The name of the property to scope the context to.</param>
     /// <returns></returns>
-    internal RuleBuildingContext GetPropertyContext(string propertyName) => this with { Value = new MemberAccess(Value, propertyName) };
+    internal RuleBuildingContext GetPropertyContext(string propertyName) => this with { Value = new Member(Value, propertyName) };
 }

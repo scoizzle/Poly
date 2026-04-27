@@ -26,7 +26,7 @@ public sealed class MutualExclusionRule : Rule {
         if (MaxAllowed == 1) {
             // At most one property can be non-null
             var nonNullChecks = properties
-                .Select(name => new MemberAccess(context.Value, name))
+                .Select(name => new Member(context.Value, name))
                 .Select(member => new NotEqual(member, Null))
                 .ToList();
 

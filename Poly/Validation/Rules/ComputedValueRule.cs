@@ -32,9 +32,9 @@ public sealed class ComputedValueRule : Rule {
     }
 
     public override Node BuildInterpretationTree(RuleBuildingContext context) {
-        var target = new MemberAccess(context.Value, TargetPropertyName);
-        var left = new MemberAccess(context.Value, LeftOperandPropertyName);
-        var right = new MemberAccess(context.Value, RightOperandPropertyName);
+        var target = new Member(context.Value, TargetPropertyName);
+        var left = new Member(context.Value, LeftOperandPropertyName);
+        var right = new Member(context.Value, RightOperandPropertyName);
 
         Node computation = Operation switch {
             ArithmeticOperation.Add => new Add(left, right),

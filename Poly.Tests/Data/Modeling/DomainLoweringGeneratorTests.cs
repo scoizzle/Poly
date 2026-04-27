@@ -1,8 +1,12 @@
 using Poly.Data.Modeling;
 using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Syntax.Analysis;
-using Poly.Syntax.DomainModeling;
 using Poly.Tests.TestHelpers;
+
+using And = Poly.Syntax.AbstractSyntaxTree.Boolean.And;
+using Equal = Poly.Syntax.AbstractSyntaxTree.Equality.Equal;
+using GreaterThanOrEqual = Poly.Syntax.AbstractSyntaxTree.Comparison.GreaterThanOrEqual;
+using LessThanOrEqual = Poly.Syntax.AbstractSyntaxTree.Comparison.LessThanOrEqual;
 
 namespace Poly.Tests.Data.Modeling;
 
@@ -14,7 +18,7 @@ public class DomainLoweringGeneratorTests {
     [Test]
     public async Task Lower_EqualMemberLiteral_CompilesAndEvaluates() {
         var subject = new Parameter("@value", new TypeReference(typeof(Person).FullName!));
-        var clause = new Equal(new Member(subject, "Age"), new Literal(18));
+        var clause = new Equal(new Member(subject, "Age"), new Constant(18));
 
         var analysis = new AnalysisResult(new NodeMetadataStore());
         var generator = new DomainLoweringGenerator(analysis);
@@ -31,8 +35,8 @@ public class DomainLoweringGeneratorTests {
         var subject = new Parameter("@value", new TypeReference(typeof(Person).FullName!));
         var value = new Member(subject, "Age");
         var clause = new And(
-            new GreaterThanOrEqual(value, new Literal(18)),
-            new LessThanOrEqual(value, new Literal(65)));
+            new GreaterThanOrEqual(value, new Constant(18)),
+            new LessThanOrEqual(value, new Constant(65)));
 
         var analysis = new AnalysisResult(new NodeMetadataStore());
         var generator = new DomainLoweringGenerator(analysis);

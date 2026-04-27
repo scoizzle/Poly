@@ -1,12 +1,9 @@
-using Poly.Syntax.DomainModeling;
-
-using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
+using Poly.Syntax.AbstractSyntaxTree;
 
 using InterpAnd = Poly.Syntax.AbstractSyntaxTree.Boolean.And;
 using InterpEqual = Poly.Syntax.AbstractSyntaxTree.Equality.Equal;
 using InterpGreaterThanOrEqual = Poly.Syntax.AbstractSyntaxTree.Comparison.GreaterThanOrEqual;
 using InterpLessThanOrEqual = Poly.Syntax.AbstractSyntaxTree.Comparison.LessThanOrEqual;
-using InterpMember = Poly.Syntax.AbstractSyntaxTree.MemberAccess;
 using InterpNotEqual = Poly.Syntax.AbstractSyntaxTree.Equality.NotEqual;
 using InterpOr = Poly.Syntax.AbstractSyntaxTree.Boolean.Or;
 
@@ -36,15 +33,17 @@ public sealed class DomainLoweringGenerator {
     }
 
     private static Node LowerCore(Node expression, Node subjectRoot) {
+        _ = subjectRoot;
+
         return expression switch {
-            Literal literal => Wrap(literal.Value),
-            Member member => new InterpMember(LowerCore(member.Target, subjectRoot), member.Name),
-            And and => new InterpAnd(LowerCore(and.Left, subjectRoot), LowerCore(and.Right, subjectRoot)),
-            Or or => new InterpOr(LowerCore(or.Left, subjectRoot), LowerCore(or.Right, subjectRoot)),
-            Equal equal => new InterpEqual(LowerCore(equal.Left, subjectRoot), LowerCore(equal.Right, subjectRoot)),
-            NotEqual notEqual => new InterpNotEqual(LowerCore(notEqual.Left, subjectRoot), LowerCore(notEqual.Right, subjectRoot)),
-            GreaterThanOrEqual greaterThanOrEqual => new InterpGreaterThanOrEqual(LowerCore(greaterThanOrEqual.Left, subjectRoot), LowerCore(greaterThanOrEqual.Right, subjectRoot)),
-            LessThanOrEqual lessThanOrEqual => new InterpLessThanOrEqual(LowerCore(lessThanOrEqual.Left, subjectRoot), LowerCore(lessThanOrEqual.Right, subjectRoot)),
+            InterpAnd and => new InterpAnd(LowerCore(and.LeftHandValue, subjectRoot), LowerCore(and.RightHandValue, subjectRoot)),
+            InterpOr or => new InterpOr(LowerCore(or.LeftHandValue, subjectRoot), LowerCore(or.RightHandValue, subjectRoot)),
+            InterpEqual equal => new InterpEqual(LowerCore(equal.LeftHandValue, subjectRoot), LowerCore(equal.RightHandValue, subjectRoot)),
+            InterpNotEqual notEqual => new InterpNotEqual(LowerCore(notEqual.LeftHandValue, subjectRoot), LowerCore(notEqual.RightHandValue, subjectRoot)),
+            InterpGreaterThanOrEqual greaterThanOrEqual => new InterpGreaterThanOrEqual(LowerCore(greaterThanOrEqual.LeftHandValue, subjectRoot), LowerCore(greaterThanOrEqual.RightHandValue, subjectRoot)),
+            InterpLessThanOrEqual lessThanOrEqual => new InterpLessThanOrEqual(LowerCore(lessThanOrEqual.LeftHandValue, subjectRoot), LowerCore(lessThanOrEqual.RightHandValue, subjectRoot)),
+            Member memberAccess => new Member(LowerCore(memberAccess.Value, subjectRoot), memberAccess.MemberName),
+            Constant constant => new Constant(constant.Value),
             _ => expression
         };
     }

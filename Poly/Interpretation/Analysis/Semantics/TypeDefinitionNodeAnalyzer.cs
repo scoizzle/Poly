@@ -1,11 +1,10 @@
 using System.Collections.Frozen;
 
-using Poly.Interpretation.Analysis;
 using Poly.Syntax.Analysis;
-using Poly.Interpretation.Analysis.Semantics;
+using Poly.Syntax.AbstractSyntaxTree.TypeDefinitions;
 using Poly.Introspection.CommonLanguageRuntime;
 
-namespace Poly.Syntax.AbstractSyntaxTree.TypeDefinitions;
+namespace Poly.Interpretation.Analysis.Semantics;
 
 /// <summary>
 /// Analyzer that extracts ITypeDefinition instances from TypeDefinitionNode AST nodes.
@@ -130,7 +129,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
             .ToList() ?? [];
     }
 
-    internal ITypeDefinition ResolveType(Node typeNode) => TypeResolver.Resolve(typeNode, _provider);
+    internal ITypeDefinition ResolveType(Node typeNode) => AstTypeReferenceResolver.Resolve(typeNode, _provider);
 
     internal IReadOnlyList<IParameter> MapParameters(IReadOnlyList<Parameter>? parameters) {
         return parameters?
@@ -248,7 +247,7 @@ internal sealed class AstFieldDefinition : ITypeField {
 /// <summary>
 /// Utility class to resolve AST type reference nodes to ITypeDefinition.
 /// </summary>
-internal static class TypeResolver {
+internal static class AstTypeReferenceResolver {
     public static ITypeDefinition Resolve(Node typeNode, ITypeDefinitionProvider provider) {
         var clr = ClrTypeDefinitionRegistry.Shared;
 

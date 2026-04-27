@@ -10,7 +10,7 @@ public class ThisReferenceTests {
     [Test]
     public async Task Analyze_InstanceMethodBody_ThisReferenceResolvesToDeclaringTypeAndMembers() {
         var thisReference = new ThisReference();
-        var memberAccess = new MemberAccess(thisReference, "Name");
+        var memberAccess = new Member(thisReference, "Name");
         var typeNode = new TypeDefinitionNode(
             "Widget",
             "Sample",
@@ -97,7 +97,7 @@ public class ThisReferenceTests {
     [Test]
     public async Task Analyze_InstancePropertyGetter_ThisReferenceResolvesToDeclaringTypeAndMembers() {
         var thisReference = new ThisReference();
-        var memberAccess = new MemberAccess(thisReference, "Name");
+        var memberAccess = new Member(thisReference, "Name");
         var typeNode = new TypeDefinitionNode(
             "Widget",
             "Sample",

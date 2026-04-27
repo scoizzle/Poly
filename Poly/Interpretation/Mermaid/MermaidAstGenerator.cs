@@ -341,7 +341,7 @@ public sealed class MermaidAstGenerator {
                 builder.Append("Type As ");
                 builder.Append(typeAs.TargetTypeReference);
                 break;
-            case MemberAccess member:
+            case Member member:
                 builder.Append("Member Access .");
                 builder.Append(member.MemberName);
                 break;
@@ -350,7 +350,7 @@ public sealed class MermaidAstGenerator {
                 break;
             case Invoke method:
                 builder.Append("Method Call ");
-                if (method.Delegate is MemberAccess ma)
+                if (method.Delegate is Member ma)
                     builder.Append(ma.MemberName);
                 builder.Append("()");
                 break;
@@ -475,7 +475,7 @@ public sealed class MermaidAstGenerator {
             TypeAs typeAs => [(typeAs.Operand, "")],
 
             // Member access
-            MemberAccess member => [(member.Value, "")],
+            Member member => [(member.Value, "")],
             IndexAccess index => new[] { (index.Value, "target") }
                 .Concat(index.Arguments.Select((arg, i) => (arg, $"index{i}"))),
 

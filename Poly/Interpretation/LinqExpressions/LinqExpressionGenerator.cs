@@ -352,7 +352,7 @@ public sealed class LinqExpressionGenerator {
             Conditional cond => CompileConditional(cond, context),
 
             // Member and index access
-            MemberAccess member => Expression.PropertyOrField(CompileNode(member.Value, context), member.MemberName),
+            Member member => Expression.PropertyOrField(CompileNode(member.Value, context), member.MemberName),
             IndexAccess index => CompileIndexAccess(index, context),
 
             // Method invocation
@@ -992,12 +992,12 @@ public sealed class LinqExpressionGenerator {
 
     /// <summary>
     /// Compiles an invocation either as a direct method call when the delegate expression is a
-    /// <see cref="MemberAccess"/>, or as a general <see cref="Expression.Invoke(Expression, IEnumerable{Expression})"/>
+    /// <see cref="Member"/>, or as a general <see cref="Expression.Invoke(Expression, IEnumerable{Expression})"/>
     /// when invoking a first-class lambda or delegate value.
     /// </summary>
     private Expression CompileInvocation(Invoke invoke, CompilationContext context) {
         var argExprs = invoke.Arguments.Select(argument => CompileNode(argument, context)).ToArray();
-        if (invoke.Delegate is MemberAccess memberAccess) {
+        if (invoke.Delegate is Member memberAccess) {
             return Expression.Call(
                 CompileNode(memberAccess.Value, context),
                 memberAccess.MemberName,

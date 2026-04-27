@@ -40,7 +40,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
             LessThanOrEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             GreaterThan => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             GreaterThanOrEqual => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
-            MemberAccess memberAccess => ResolveMemberAccessType(context, memberAccess),
+            Member memberAccess => ResolveMemberAccessType(context, memberAccess),
             Invoke methodInv => ResolveMethodInvocationType(context, methodInv),
             New @new => ResolveConstructorInvocationType(context, @new),
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
@@ -105,7 +105,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveMemberAccessType(
         AnalysisContext context,
-        MemberAccess memberAccess) {
+        Member memberAccess) {
         var instanceType = ResolveNodeType(context, memberAccess.Value);
         if (instanceType == null)
             return null;
@@ -119,7 +119,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
         Invoke invoke) {
         // Resolve the target type through the method reference so the semantic
         // resolver can look it up by name when FindMatchingMethodOverloads is called.
-        if (invoke.Delegate is MemberAccess memberAccess) {
+        if (invoke.Delegate is Member memberAccess) {
             var targetType = ResolveNodeType(context, memberAccess.Value);
             if (targetType != null) {
                 context.SetResolvedType(memberAccess.Value, targetType);

@@ -1,7 +1,7 @@
-using Poly.Interpretation.AbstractSyntaxTree.Boolean;
-using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+using Poly.Syntax.AbstractSyntaxTree.Boolean;
+using Poly.Syntax.AbstractSyntaxTree.Comparison;
 
-using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
+using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Data.Modeling.Validation.Constraints;
 

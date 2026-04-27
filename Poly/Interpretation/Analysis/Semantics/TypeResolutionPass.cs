@@ -1,9 +1,9 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
-using Poly.Interpretation.AbstractSyntaxTree.Boolean;
-using Poly.Interpretation.AbstractSyntaxTree.Comparison;
-using Poly.Interpretation.AbstractSyntaxTree.Equality;
+using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
+using Poly.Syntax.AbstractSyntaxTree.Boolean;
+using Poly.Syntax.AbstractSyntaxTree.Comparison;
+using Poly.Syntax.AbstractSyntaxTree.Equality;
 
 internal sealed class TypeResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {

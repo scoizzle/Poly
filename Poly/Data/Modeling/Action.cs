@@ -31,4 +31,9 @@ public sealed class Action : IDomainObject {
 
         _effects.Add(effect);
     }
+
+    public bool RemoveEffect(Effect effect) {
+        ArgumentNullException.ThrowIfNull(effect);
+        return _effects.Remove(effect);
+    }
 }

@@ -1,6 +1,6 @@
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
-using Poly.Interpretation.AbstractSyntaxTree.Comparison;
-using Poly.Interpretation.AbstractSyntaxTree.Equality;
+using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
+using Poly.Syntax.AbstractSyntaxTree.Comparison;
+using Poly.Syntax.AbstractSyntaxTree.Equality;
 
 namespace Poly.Validation.Rules;
 

@@ -1,12 +1,12 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
-using Poly.Interpretation.AbstractSyntaxTree.Boolean;
-using Poly.Interpretation.AbstractSyntaxTree.Comparison;
-using Poly.Interpretation.AbstractSyntaxTree.Equality;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
+using Poly.Syntax.AbstractSyntaxTree.Boolean;
+using Poly.Syntax.AbstractSyntaxTree.Comparison;
+using Poly.Syntax.AbstractSyntaxTree.Equality;
+using Poly.Syntax.Analysis;
 
-using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
+using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Tests.Interpretation;
 

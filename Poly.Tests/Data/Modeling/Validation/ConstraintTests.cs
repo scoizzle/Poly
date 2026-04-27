@@ -1,7 +1,7 @@
 using Poly.Data.Modeling.Validation;
 using Poly.Data.Modeling.Validation.Constraints;
-using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Introspection;
+using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Data.Modeling.Validation;

@@ -183,7 +183,7 @@ new Assignment(variable, new Constant(42))
 ### Basic Arithmetic Expression
 
 ```csharp
-using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.LinqExpressions;
 using System.Linq.Expressions;

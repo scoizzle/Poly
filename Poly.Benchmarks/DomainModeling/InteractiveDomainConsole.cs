@@ -328,12 +328,8 @@ internal static class InteractiveDomainConsole {
     }
 
     private static void Step(string title, System.Action action) {
-        Console.WriteLine();
-        Console.WriteLine($"[Step] {title}");
-        Console.WriteLine("Press Enter to apply this step...");
-        _ = Console.ReadLine();
+        _ = title;
         action();
-        Console.WriteLine("Done.");
     }
 
     private static void AddPrimitive(Domain domain) {
@@ -418,7 +414,7 @@ internal static class InteractiveDomainConsole {
 
     private static void AddPropertyToEntity(Domain domain, Entity entity) {
         var name = PromptRequiredString("Property name");
-        var type = ChooseRequired<IDomainType>("Choose property type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
+        var type = ChooseRequired("Choose property type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
         var property = new Property(domain, name, type);
         entity.AddProperty(property);
 
@@ -516,7 +512,7 @@ internal static class InteractiveDomainConsole {
             switch (option) {
                 case 1:
                     var propertyName = PromptRequiredString("Event property name");
-                    var propertyType = ChooseRequired<IDomainType>("Choose event property type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
+                    var propertyType = ChooseRequired("Choose event property type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
                     @event.AddProperty(new Property(domain, propertyName, propertyType));
                     Console.WriteLine($"Added property '{propertyName}' to event '{@event.Name}'.");
                     break;
@@ -584,6 +580,7 @@ internal static class InteractiveDomainConsole {
                     "Add publish event effect",
                     "Add create entity instance effect",
                     "Add invoke action effect",
+                    "Manage effects",
                     "Back"
                 ]);
 
@@ -604,15 +601,92 @@ internal static class InteractiveDomainConsole {
                     AddInvokeActionEffect(entity, action);
                     break;
                 case 6:
+                    ManageActionEffects(domain, entity, action);
+                    break;
+                case 7:
                     done = true;
                     break;
             }
         }
     }
 
+    private static void ManageActionEffects(Domain domain, Entity entity, DomainAction action) {
+        var done = false;
+
+        while (!done) {
+            Console.WriteLine();
+            Console.WriteLine($"Effects on action '{action.Name}':");
+            var effects = action.Effects.ToArray();
+            if (effects.Length == 0) {
+                Console.WriteLine("  (none)");
+            }
+            else {
+                for (var i = 0; i < effects.Length; i++) {
+                    Console.WriteLine($"  {i + 1}. {DescribeEffect(effects[i])}");
+                }
+            }
+
+            var option = PromptMenu(
+                "Effect Editor",
+                [
+                    "Remove effect",
+                    "Replace effect",
+                    "Back"
+                ]);
+
+            switch (option) {
+                case 1:
+                    RemoveActionEffect(action);
+                    break;
+                case 2:
+                    ReplaceActionEffect(domain, entity, action);
+                    break;
+                case 3:
+                    done = true;
+                    break;
+            }
+        }
+    }
+
+    private static void RemoveActionEffect(DomainAction action) {
+        var effect = ChooseRequired("Choose effect to remove", action.Effects.ToArray());
+        _ = action.RemoveEffect(effect);
+        Console.WriteLine($"Removed effect: {DescribeEffect(effect)}");
+    }
+
+    private static void ReplaceActionEffect(Domain domain, Entity entity, DomainAction action) {
+        var existing = ChooseRequired("Choose effect to replace", action.Effects.ToArray());
+        _ = action.RemoveEffect(existing);
+        Console.WriteLine($"Removed effect: {DescribeEffect(existing)}");
+
+        var replacementType = PromptMenu(
+            "Choose replacement effect type",
+            [
+                "Stage transition",
+                "Publish event",
+                "Create entity instance",
+                "Invoke action"
+            ]);
+
+        switch (replacementType) {
+            case 1:
+                AddStageTransitionEffect(entity, action);
+                break;
+            case 2:
+                AddPublishEventEffect(entity, action);
+                break;
+            case 3:
+                AddCreateEntityInstanceEffect(domain, action);
+                break;
+            case 4:
+                AddInvokeActionEffect(entity, action);
+                break;
+        }
+    }
+
     private static void AddActionParameter(Domain domain, DomainAction action) {
         var name = PromptRequiredString("Parameter name");
-        var type = ChooseRequired<IDomainType>("Choose parameter type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
+        var type = ChooseRequired("Choose parameter type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
         action.AddParameter(new Property(domain, name, type));
         Console.WriteLine($"Added parameter '{name}' to action '{action.Name}'.");
     }
@@ -700,8 +774,8 @@ internal static class InteractiveDomainConsole {
 
     private static void AddRelationship(Domain domain) {
         var name = PromptRequiredString("Relationship name");
-        var source = ChooseRequired<IDomainType>("Choose relationship source type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
-        var target = ChooseRequired<IDomainType>("Choose relationship target type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
+        var source = ChooseRequired("Choose relationship source type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
+        var target = ChooseRequired("Choose relationship target type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
         var cardinality = PromptEnum<RelationshipCardinality>("Relationship cardinality");
         var sourceOwnsTarget = PromptYesNo("Does source own target?");
 
@@ -952,6 +1026,16 @@ internal static class InteractiveDomainConsole {
             Stage stage => stage.Name,
             Policy policy => policy.Name,
             _ => value.ToString() ?? typeof(T).Name
+        };
+    }
+
+    private static string DescribeEffect(Effect effect) {
+        return effect switch {
+            StageTransition transition => $"StageTransition -> {transition.TargetStage.Name}",
+            PublishEvent publishEvent => $"PublishEvent -> {publishEvent.Event.Name}",
+            CreateEntityInstance createEntity => $"CreateEntityInstance -> {createEntity.EntityType.Name} @ {createEntity.InitialStage?.Name ?? "(default)"}",
+            InvokeAction invokeAction => $"InvokeAction -> {invokeAction.TargetAction.Name}",
+            _ => effect.GetType().Name
         };
     }
 }

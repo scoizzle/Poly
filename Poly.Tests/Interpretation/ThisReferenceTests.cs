@@ -1,8 +1,8 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax.AbstractSyntaxTree.TypeDefinitions;
+using Poly.Syntax.Analysis;
 
 namespace Poly.Tests.Interpretation;
 

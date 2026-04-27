@@ -1,6 +1,6 @@
-using Poly.Interpretation.AbstractSyntaxTree.Boolean;
+using Poly.Syntax.AbstractSyntaxTree.Boolean;
 
-using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
+using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Data.Modeling.Validation;
 

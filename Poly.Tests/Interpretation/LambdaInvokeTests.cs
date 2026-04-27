@@ -1,8 +1,8 @@
 using System.Linq.Expressions;
 
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
-using Poly.Interpretation.AbstractSyntaxTree.Comparison;
+using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
+using Poly.Syntax.AbstractSyntaxTree.Comparison;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;

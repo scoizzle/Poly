@@ -1,6 +1,6 @@
 using Poly.Data.Modeling;
-using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Introspection;
+using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Data.Modeling;

@@ -1,12 +1,13 @@
 using System.Linq.Expressions;
 
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
-using Poly.Interpretation.AbstractSyntaxTree.Boolean;
-using Poly.Interpretation.AbstractSyntaxTree.Comparison;
-using Poly.Interpretation.AbstractSyntaxTree.Equality;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
+using Poly.Syntax.AbstractSyntaxTree.Boolean;
+using Poly.Syntax.AbstractSyntaxTree.Comparison;
+using Poly.Syntax.AbstractSyntaxTree.Equality;
+using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.LinqExpressions;
 
@@ -409,7 +410,7 @@ public sealed class LinqExpressionGenerator {
     }
 
     /// <summary>
-    /// Compiles a block into an <see cref="Expression.Block(System.Collections.Generic.IEnumerable{ParameterExpression}, System.Collections.Generic.IEnumerable{Expression})"/>.
+    /// Compiles a block into an <see cref="Expression.Block(IEnumerable{ParameterExpression}, IEnumerable{Expression})"/>.
     /// Block-scoped locals are declared up front in a child lexical scope, child nodes are
     /// emitted in sequence, and the outermost return-owning block closes the shared return label
     /// so nested <c>return</c> nodes terminate within the correct expression-tree scope.
@@ -425,7 +426,7 @@ public sealed class LinqExpressionGenerator {
             })
             .ToArray();
 
-        var compiledNodes = block.Nodes.Select(n => CompileNode(n, blockContext)).ToList<Expression>();
+        var compiledNodes = block.Nodes.Select(n => CompileNode(n, blockContext)).ToList();
 
         // The outermost block that introduced a "return" label closes it here so that
         // Return nodes nested anywhere inside (including in ForEachLoop bodies) have a
@@ -439,7 +440,7 @@ public sealed class LinqExpressionGenerator {
     }
 
     /// <summary>
-    /// Compiles an assignment into <see cref="Expression.Assign(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/>.
+    /// Compiles an assignment into <see cref="Expression.Assign(Expression, Expression)"/>.
     /// The destination is resolved as a writable variable, parameter, or member/index expression,
     /// and the value is converted when necessary so the emitted assignment matches the storage type.
     /// </summary>
@@ -484,7 +485,7 @@ public sealed class LinqExpressionGenerator {
     /// <summary>
     /// Compiles a ternary conditional of the form <c>condition ? ifTrue : ifFalse</c>.
     /// Each branch is emitted independently and, when possible, converted to a common type so the
-    /// resulting <see cref="Expression.Condition(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/> is type-correct.
+    /// resulting <see cref="Expression.Condition(Expression, Expression, Expression)"/> is type-correct.
     /// </summary>
     private Expression CompileConditional(Conditional cond, CompilationContext context) {
         var condition = CompileNode(cond.Condition, context);
@@ -594,7 +595,7 @@ public sealed class LinqExpressionGenerator {
     /// <summary>
     /// Compiles a null-coalescing expression of the form <c>left ?? right</c>.
     /// The emitted expression normalizes the left and right operands to compatible nullable or
-    /// reference types before producing the final <see cref="Expression.Coalesce(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/>.
+    /// reference types before producing the final <see cref="Expression.Coalesce(Expression, Expression)"/>.
     /// </summary>
     private Expression CompileCoalesce(Coalesce coalesce, CompilationContext context) {
         var leftExpr = CompileNode(coalesce.LeftHandValue, context);
@@ -665,7 +666,7 @@ public sealed class LinqExpressionGenerator {
     /// <summary>
     /// Compiles an index access such as <c>target[index]</c>.
     /// Arrays become writable array-access expressions, indexer properties become
-    /// <see cref="Expression.MakeIndex(System.Linq.Expressions.Expression, System.Reflection.PropertyInfo, System.Collections.Generic.IEnumerable{System.Linq.Expressions.Expression})"/>,
+    /// <see cref="Expression.MakeIndex(Expression, System.Reflection.PropertyInfo, IEnumerable{Expression})"/>,
     /// and other fallback shapes are emitted as array indexing when possible.
     /// </summary>
     private Expression CompileIndexAccess(IndexAccess indexAccess, CompilationContext context) {
@@ -690,8 +691,8 @@ public sealed class LinqExpressionGenerator {
 
     /// <summary>
     /// Compiles a cast such as <c>(T)value</c> or a checked cast by emitting the operand and then
-    /// wrapping it in either <see cref="Expression.Convert(System.Linq.Expressions.Expression, System.Type)"/> or
-    /// <see cref="Expression.ConvertChecked(System.Linq.Expressions.Expression, System.Type)"/>.
+    /// wrapping it in either <see cref="Expression.Convert(Expression, Type)"/> or
+    /// <see cref="Expression.ConvertChecked(Expression, Type)"/>.
     /// </summary>
     private Expression CompileTypeCast(TypeCast typeCast, CompilationContext context) {
         var operand = CompileNode(typeCast.Operand, context);
@@ -702,7 +703,7 @@ public sealed class LinqExpressionGenerator {
     }
 
     /// <summary>
-    /// Compiles a type test such as <c>value is T</c> into <see cref="Expression.TypeIs(System.Linq.Expressions.Expression, System.Type)"/>.
+    /// Compiles a type test such as <c>value is T</c> into <see cref="Expression.TypeIs(Expression, Type)"/>.
     /// </summary>
     private Expression CompileTypeIs(TypeIs typeIs, CompilationContext context) {
         var operand = CompileNode(typeIs.Operand, context);
@@ -711,7 +712,7 @@ public sealed class LinqExpressionGenerator {
     }
 
     /// <summary>
-    /// Compiles a safe cast such as <c>value as T</c> into <see cref="Expression.TypeAs(System.Linq.Expressions.Expression, System.Type)"/>
+    /// Compiles a safe cast such as <c>value as T</c> into <see cref="Expression.TypeAs(Expression, Type)"/>
     /// for reference/nullable targets and a nullable convert for non-nullable value type targets.
     /// </summary>
     private Expression CompileTypeAs(TypeAs typeAs, CompilationContext context) {
@@ -727,8 +728,8 @@ public sealed class LinqExpressionGenerator {
     }
 
     /// <summary>
-    /// Compiles an <c>if</c> statement into <see cref="Expression.IfThen(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/> or
-    /// <see cref="Expression.IfThenElse(System.Linq.Expressions.Expression, System.Linq.Expressions.Expression, System.Linq.Expressions.Expression)"/>.
+    /// Compiles an <c>if</c> statement into <see cref="Expression.IfThen(Expression, Expression)"/> or
+    /// <see cref="Expression.IfThenElse(Expression, Expression, Expression)"/>.
     /// The condition and branches are emitted in place, with branch typing normalized when possible.
     /// </summary>
     private Expression CompileIfStatement(IfStatement ifStmt, CompilationContext context) {
@@ -755,7 +756,7 @@ public sealed class LinqExpressionGenerator {
     /// <summary>
     /// Compiles a switch statement by emitting the switch value, compiling each case pattern/body
     /// pair into a <see cref="SwitchCase"/>, and then producing a single
-    /// <see cref="Expression.Switch(System.Type, System.Linq.Expressions.Expression, System.Linq.Expressions.Expression, System.Reflection.MethodInfo, System.Collections.Generic.IEnumerable{System.Linq.Expressions.SwitchCase})"/>.
+    /// <see cref="Expression.Switch(Type, Expression, Expression, System.Reflection.MethodInfo, IEnumerable{System.Linq.Expressions.SwitchCase})"/>.
     /// </summary>
     private Expression CompileSwitchStatement(SwitchStatement switchStmt, CompilationContext context) {
         var switchValue = CompileNode(switchStmt.Value, context);
@@ -945,8 +946,8 @@ public sealed class LinqExpressionGenerator {
     }
 
     /// <summary>
-    /// Compiles a <c>return</c> statement into <see cref="Expression.Return(System.Linq.Expressions.LabelTarget)"/> or
-    /// <see cref="Expression.Return(System.Linq.Expressions.LabelTarget, System.Linq.Expressions.Expression)"/>.
+    /// Compiles a <c>return</c> statement into <see cref="Expression.Return(LabelTarget)"/> or
+    /// <see cref="Expression.Return(LabelTarget, Expression)"/>.
     /// The enclosing function scope owns the shared return label, which is lazily created and typed
     /// from the first returned value so all returns in that scope target the same exit point.
     /// </summary>
@@ -968,7 +969,7 @@ public sealed class LinqExpressionGenerator {
     /// <summary>
     /// Compiles a lambda expression by creating a new lexical function scope, declaring the lambda
     /// parameters locally, compiling the body within that scope, and then closing any function-local
-    /// return label before emitting the final <see cref="Expression.Lambda(System.Linq.Expressions.Expression, System.Collections.Generic.IEnumerable{System.Linq.Expressions.ParameterExpression})"/>.
+    /// return label before emitting the final <see cref="Expression.Lambda(Expression, IEnumerable{ParameterExpression})"/>.
     /// </summary>
     private Expression CompileLambda(Lambda lambda, CompilationContext context) {
         var lambdaContext = context.CreateLambdaScope();
@@ -991,7 +992,7 @@ public sealed class LinqExpressionGenerator {
 
     /// <summary>
     /// Compiles an invocation either as a direct method call when the delegate expression is a
-    /// <see cref="MemberAccess"/>, or as a general <see cref="Expression.Invoke(System.Linq.Expressions.Expression, System.Collections.Generic.IEnumerable{System.Linq.Expressions.Expression})"/>
+    /// <see cref="MemberAccess"/>, or as a general <see cref="Expression.Invoke(Expression, IEnumerable{Expression})"/>
     /// when invoking a first-class lambda or delegate value.
     /// </summary>
     private Expression CompileInvocation(Invoke invoke, CompilationContext context) {
@@ -1010,7 +1011,7 @@ public sealed class LinqExpressionGenerator {
 
     /// <summary>
     /// Compiles a constructor invocation by selecting the resolved constructor and emitting an
-    /// <see cref="Expression.New(System.Reflection.ConstructorInfo, System.Collections.Generic.IEnumerable{System.Linq.Expressions.Expression})"/>.
+    /// <see cref="Expression.New(System.Reflection.ConstructorInfo, IEnumerable{Expression})"/>.
     /// Optional parameters are padded with their default values when omitted by the AST.
     /// </summary>
     private Expression CompileConstructor(New @new, CompilationContext context) {

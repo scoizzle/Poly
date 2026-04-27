@@ -1,8 +1,8 @@
 using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax.Analysis;
 
 using Expr = System.Linq.Expressions.Expression;
 using Exprs = System.Linq.Expressions;

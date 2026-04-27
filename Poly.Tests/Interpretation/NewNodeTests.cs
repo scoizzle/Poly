@@ -1,6 +1,6 @@
-using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;

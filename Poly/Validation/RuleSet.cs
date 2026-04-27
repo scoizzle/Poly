@@ -1,11 +1,12 @@
 using System.Linq.Expressions;
 
-using Poly.Interpretation.AbstractSyntaxTree;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax.Analysis;
 using Poly.Validation.Rules;
 
 namespace Poly.Validation;

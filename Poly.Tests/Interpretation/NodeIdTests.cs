@@ -1,4 +1,4 @@
-using Poly.Interpretation.AbstractSyntaxTree;
+using Poly.Syntax.AbstractSyntaxTree;
 
 namespace Poly.Tests.Interpretation;
 

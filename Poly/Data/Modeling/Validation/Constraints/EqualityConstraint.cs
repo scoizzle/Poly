@@ -1,6 +1,6 @@
-using Poly.Interpretation.AbstractSyntaxTree.Equality;
+using Poly.Syntax.AbstractSyntaxTree.Equality;
 
-using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
+using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Data.Modeling.Validation.Constraints;
 

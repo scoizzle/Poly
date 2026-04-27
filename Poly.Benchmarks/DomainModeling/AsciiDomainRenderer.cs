@@ -44,6 +44,21 @@ internal static class AsciiDomainRenderer {
         ArgumentNullException.ThrowIfNull(stage);
 
         var capability = stage.GetCapabilityView();
+        var localActionNames = stage.Actions.Select(action => action.Name).ToHashSet(StringComparer.Ordinal);
+        var localPolicyNames = stage.Policies.Select(policy => policy.Name).ToHashSet(StringComparer.Ordinal);
+
+        var effectiveActions = capability.EffectiveActions
+            .Select(action => localActionNames.Contains(action.ActionName)
+                ? action.ActionName
+                : $"{action.ActionName} [inherited]")
+            .ToArray();
+
+        var effectivePolicies = capability.EffectivePolicies
+            .Select(policy => localPolicyNames.Contains(policy.Name)
+                ? policy.Name
+                : $"{policy.Name} [inherited]")
+            .ToArray();
+
         var sb = new StringBuilder();
         sb.AppendLine("===============================================================");
         sb.AppendLine($" STAGE SUMMARY: {stage.Name}");
@@ -53,10 +68,8 @@ internal static class AsciiDomainRenderer {
         DrawBox(sb, [
             $"Stage: {stage.Name}",
             $"Parent: {stage.Parent?.Name ?? "(none)"}",
-            $"Local Actions: {FormatNameList(capability.LocalActions.Select(action => action.ActionName))}",
-            $"Effective Actions: {FormatNameList(capability.EffectiveActions.Select(action => action.ActionName))}",
-            $"Local Policies: {FormatNameList(capability.LocalPolicies.Select(policy => policy.Name))}",
-            $"Effective Policies: {FormatNameList(capability.EffectivePolicies.Select(policy => policy.Name))}"
+            $"Actions: {FormatNameList(effectiveActions)}",
+            $"Policies: {FormatNameList(effectivePolicies)}"
         ]);
 
         sb.AppendLine();
@@ -96,28 +109,62 @@ internal static class AsciiDomainRenderer {
     }
 
     private static void RenderEntity(StringBuilder sb, Entity entity) {
+        var effectiveProperties = GetEffectiveProperties(entity);
+        var effectiveStages = GetEffectiveStages(entity);
+        var effectiveEvents = GetEffectiveEvents(entity);
+        var effectiveActions = GetEffectiveActions(entity);
+
         var lines = new List<string> {
             $"Entity: {entity.Name}",
             $"Parent: {entity.ParentEntity?.Name ?? "(none)"}",
-            $"Properties: {FormatPropertyList(entity.Properties)}",
-            $"Stages: {FormatNameList(entity.Stages.Select(stage => stage.Name))}",
-            $"Events: {FormatNameList(entity.Events.Select(@event => @event.Name))}",
-            $"Actions: {FormatNameList(entity.Actions.Select(action => action.Name))}"
+            $"Properties: {FormatInheritedPropertyList(effectiveProperties, entity)}",
+            $"Stages: {FormatInheritedNameList(effectiveStages, entity, stage => stage.Name)}",
+            $"Events: {FormatInheritedNameList(effectiveEvents, entity, @event => @event.Name)}"
         };
+
+        lines.Add("Actions:");
+        foreach (var (action, owner) in effectiveActions.OrderBy(entry => entry.Item.Name)) {
+            var inheritedMarker = ReferenceEquals(owner, entity) ? string.Empty : " [inherited]";
+            lines.Add($"  - {action.Name}{inheritedMarker} | Params: {FormatPropertyList(action.Parameters.OfType<Property>())} | Effects: {FormatEffects(action)}");
+        }
 
         DrawBox(sb, lines);
 
-        foreach (var action in entity.Actions.OrderBy(action => action.Name)) {
-            sb.AppendLine($"    Action {action.Name}");
-            sb.AppendLine($"      Params: {FormatPropertyList(action.Parameters.OfType<Property>())}");
-            sb.AppendLine($"      Effects: {FormatEffects(action)}");
-        }
-
-        foreach (var @event in entity.Events.OrderBy(@event => @event.Name)) {
-            sb.AppendLine($"    Event {@event.Name}: {FormatPropertyList(@event.Properties)}");
+        foreach (var (@event, owner) in effectiveEvents.OrderBy(entry => entry.Item.Name)) {
+            var inheritedMarker = ReferenceEquals(owner, entity) ? string.Empty : " [inherited]";
+            sb.AppendLine($"    Event {@event.Name}{inheritedMarker}: {FormatPropertyList(@event.Properties)}");
         }
 
         sb.AppendLine();
+    }
+
+    private static List<(T Item, Entity Owner)> GetEffectiveByName<T>(Entity entity, Func<Entity, IEnumerable<T>> selector, Func<T, string> keySelector) {
+        var result = new Dictionary<string, (T Item, Entity Owner)>(StringComparer.Ordinal);
+
+        for (var current = entity; current is not null; current = current.ParentEntity) {
+            foreach (var item in selector(current)) {
+                var key = keySelector(item);
+                _ = result.TryAdd(key, (item, current));
+            }
+        }
+
+        return result.Values.ToList();
+    }
+
+    private static List<(Property Item, Entity Owner)> GetEffectiveProperties(Entity entity) {
+        return GetEffectiveByName(entity, owner => owner.Properties, property => property.Name);
+    }
+
+    private static List<(Stage Item, Entity Owner)> GetEffectiveStages(Entity entity) {
+        return GetEffectiveByName(entity, owner => owner.Stages, stage => stage.Name);
+    }
+
+    private static List<(Event Item, Entity Owner)> GetEffectiveEvents(Entity entity) {
+        return GetEffectiveByName(entity, owner => owner.Events, @event => @event.Name);
+    }
+
+    private static List<(DomainAction Item, Entity Owner)> GetEffectiveActions(Entity entity) {
+        return GetEffectiveByName(entity, owner => owner.Actions, action => action.Name);
     }
 
     private static void RenderRelationships(StringBuilder sb, Domain domain) {
@@ -170,6 +217,33 @@ internal static class AsciiDomainRenderer {
     private static string FormatPropertyList(IEnumerable<Property> properties) {
         var pairs = properties.Select(property => $"{property.Name}:{property.Type.Name}").ToArray();
         return pairs.Length == 0 ? "(none)" : string.Join(", ", pairs);
+    }
+
+    private static string FormatInheritedPropertyList(IEnumerable<(Property Item, Entity Owner)> properties, Entity selectedEntity) {
+        var values = properties
+            .OrderBy(entry => entry.Item.Name)
+            .Select(entry => {
+                var inherited = ReferenceEquals(entry.Owner, selectedEntity) ? string.Empty : " [inherited]";
+                return $"{entry.Item.Name}:{entry.Item.Type.Name}{inherited}";
+            })
+            .ToArray();
+
+        return values.Length == 0 ? "(none)" : string.Join(", ", values);
+    }
+
+    private static string FormatInheritedNameList<T>(
+        IEnumerable<(T Item, Entity Owner)> values,
+        Entity selectedEntity,
+        Func<T, string> nameSelector) {
+        var names = values
+            .OrderBy(entry => nameSelector(entry.Item))
+            .Select(entry => {
+                var inherited = ReferenceEquals(entry.Owner, selectedEntity) ? string.Empty : " [inherited]";
+                return $"{nameSelector(entry.Item)}{inherited}";
+            })
+            .ToArray();
+
+        return names.Length == 0 ? "(none)" : string.Join(", ", names);
     }
 
     private static string FormatNameList(IEnumerable<string> values) {

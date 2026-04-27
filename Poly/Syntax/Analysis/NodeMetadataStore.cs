@@ -1,7 +1,7 @@
 namespace Poly.Syntax.Analysis;
 
 public sealed class NodeMetadataStore {
-    private readonly Dictionary<(Poly.Syntax.AbstractSyntaxTree.NodeId, Type), IAnalysisMetadata> _metadata = new();
+    private readonly Dictionary<(NodeId, Type), IAnalysisMetadata> _metadata = new();
 
     public NodeMetadataStore() { }
 
@@ -12,25 +12,25 @@ public sealed class NodeMetadataStore {
         }
     }
 
-    public void Set<TMetadata>(Poly.Syntax.AbstractSyntaxTree.Node node, TMetadata data) where TMetadata : class, IAnalysisMetadata {
+    public void Set<TMetadata>(Node node, TMetadata data) where TMetadata : class, IAnalysisMetadata {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(data);
         _metadata.Add((node.Id, typeof(TMetadata)), data);
     }
 
-    public TMetadata? Get<TMetadata>(Poly.Syntax.AbstractSyntaxTree.Node node) where TMetadata : class, IAnalysisMetadata {
+    public TMetadata? Get<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata {
         ArgumentNullException.ThrowIfNull(node);
         return _metadata.TryGetValue((node.Id, typeof(TMetadata)), out var data) ? (TMetadata)data : null;
     }
 
-    public IEnumerable<IAnalysisMetadata> GetAll(Poly.Syntax.AbstractSyntaxTree.Node node) {
+    public IEnumerable<IAnalysisMetadata> GetAll(Node node) {
         ArgumentNullException.ThrowIfNull(node);
         return _metadata
             .Where(kvp => kvp.Key.Item1 == node.Id)
             .Select(kvp => kvp.Value);
     }
 
-    public TMetadata GetOrAdd<TMetadata>(Poly.Syntax.AbstractSyntaxTree.Node node, Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata {
+    public TMetadata GetOrAdd<TMetadata>(Node node, Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(factory);
 
@@ -42,7 +42,7 @@ public sealed class NodeMetadataStore {
         return (TMetadata)data;
     }
 
-    public void Remove<TMetadata>(Poly.Syntax.AbstractSyntaxTree.Node node) where TMetadata : class, IAnalysisMetadata {
+    public void Remove<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata {
         ArgumentNullException.ThrowIfNull(node);
         _metadata.Remove((node.Id, typeof(TMetadata)));
     }

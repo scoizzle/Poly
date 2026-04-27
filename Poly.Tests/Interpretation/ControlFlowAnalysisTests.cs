@@ -1,8 +1,8 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ControlFlow;
+using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax.Analysis;
 
-using static Poly.Interpretation.AbstractSyntaxTree.NodeExtensions;
+using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Tests.Interpretation;
 

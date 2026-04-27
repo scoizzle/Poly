@@ -1,4 +1,4 @@
-namespace Poly.Syntax.AbstractSyntaxTree.TypeDefinitions;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// Base AST node for type member definitions (properties, methods, fields).

@@ -3,10 +3,6 @@ using System.Text;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
-using Poly.Syntax.AbstractSyntaxTree.Boolean;
-using Poly.Syntax.AbstractSyntaxTree.Comparison;
-using Poly.Syntax.AbstractSyntaxTree.Equality;
 using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.Mermaid;

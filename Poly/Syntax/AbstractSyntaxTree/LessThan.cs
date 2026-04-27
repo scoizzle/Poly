@@ -1,4 +1,4 @@
-namespace Poly.Syntax.AbstractSyntaxTree.Comparison;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// Represents a less-than comparison between two values.

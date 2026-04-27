@@ -1,5 +1,4 @@
-using Poly.Syntax.AbstractSyntaxTree.Boolean;
-using Poly.Syntax.AbstractSyntaxTree.Equality;
+using Poly.Syntax.AbstractSyntaxTree;
 
 using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
 

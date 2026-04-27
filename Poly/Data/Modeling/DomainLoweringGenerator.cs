@@ -1,11 +1,11 @@
 using Poly.Syntax.AbstractSyntaxTree;
 
-using InterpAnd = Poly.Syntax.AbstractSyntaxTree.Boolean.And;
-using InterpEqual = Poly.Syntax.AbstractSyntaxTree.Equality.Equal;
-using InterpGreaterThanOrEqual = Poly.Syntax.AbstractSyntaxTree.Comparison.GreaterThanOrEqual;
-using InterpLessThanOrEqual = Poly.Syntax.AbstractSyntaxTree.Comparison.LessThanOrEqual;
-using InterpNotEqual = Poly.Syntax.AbstractSyntaxTree.Equality.NotEqual;
-using InterpOr = Poly.Syntax.AbstractSyntaxTree.Boolean.Or;
+using InterpAnd = Poly.Syntax.AbstractSyntaxTree.And;
+using InterpEqual = Poly.Syntax.AbstractSyntaxTree.Equal;
+using InterpGreaterThanOrEqual = Poly.Syntax.AbstractSyntaxTree.GreaterThanOrEqual;
+using InterpLessThanOrEqual = Poly.Syntax.AbstractSyntaxTree.LessThanOrEqual;
+using InterpNotEqual = Poly.Syntax.AbstractSyntaxTree.NotEqual;
+using InterpOr = Poly.Syntax.AbstractSyntaxTree.Or;
 
 namespace Poly.Data.Modeling;
 

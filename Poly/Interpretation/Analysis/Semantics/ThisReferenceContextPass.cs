@@ -1,4 +1,4 @@
-using Poly.Syntax.AbstractSyntaxTree.TypeDefinitions;
+using Poly.Syntax.AbstractSyntaxTree;
 
 namespace Poly.Interpretation.Analysis.Semantics;
 

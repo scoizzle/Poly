@@ -1,4 +1,4 @@
-namespace Poly.Syntax.AbstractSyntaxTree.Boolean;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// Represents a logical AND operation (short-circuiting) between two boolean values.

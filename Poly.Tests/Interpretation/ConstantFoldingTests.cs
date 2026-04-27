@@ -1,9 +1,5 @@
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
-using Poly.Syntax.AbstractSyntaxTree.Boolean;
-using Poly.Syntax.AbstractSyntaxTree.Comparison;
-using Poly.Syntax.AbstractSyntaxTree.Equality;
 using Poly.Syntax.Analysis;
 
 using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;

@@ -1,4 +1,4 @@
-namespace Poly.Syntax.AbstractSyntaxTree.TypeDefinitions;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// AST node representing a reference to a named type (by name, not CLR Type).

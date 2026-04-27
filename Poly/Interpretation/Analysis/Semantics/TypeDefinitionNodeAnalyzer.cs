@@ -1,8 +1,8 @@
 using System.Collections.Frozen;
 
-using Poly.Syntax.Analysis;
-using Poly.Syntax.AbstractSyntaxTree.TypeDefinitions;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.Analysis.Semantics;
 

@@ -1,4 +1,4 @@
-namespace Poly.Syntax.AbstractSyntaxTree.TypeDefinitions;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// AST node representing a collection type (array, list, set, etc.).

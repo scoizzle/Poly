@@ -1,4 +1,4 @@
-using Poly.Syntax.AbstractSyntaxTree.Boolean;
+using Poly.Syntax.AbstractSyntaxTree;
 
 namespace Poly.Validation.Rules;
 

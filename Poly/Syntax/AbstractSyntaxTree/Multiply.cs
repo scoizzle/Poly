@@ -1,4 +1,4 @@
-namespace Poly.Syntax.AbstractSyntaxTree.Arithmetic;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// Represents an multiplication operation between two values.

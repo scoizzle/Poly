@@ -1,4 +1,4 @@
-namespace Poly.Syntax.AbstractSyntaxTree.Arithmetic;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// Represents a unary negation operation that negates a numeric value.

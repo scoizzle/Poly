@@ -2,8 +2,6 @@ using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
-using Poly.Syntax.AbstractSyntaxTree.Boolean;
 using Poly.Syntax.Analysis;
 using Poly.Tests.TestHelpers;
 

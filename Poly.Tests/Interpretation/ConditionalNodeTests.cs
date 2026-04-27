@@ -1,6 +1,4 @@
 using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.AbstractSyntaxTree.Arithmetic;
-using Poly.Syntax.AbstractSyntaxTree.Comparison;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;

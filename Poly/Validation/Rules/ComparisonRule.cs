@@ -1,5 +1,4 @@
-using Poly.Syntax.AbstractSyntaxTree.Comparison;
-using Poly.Syntax.AbstractSyntaxTree.Equality;
+using Poly.Syntax.AbstractSyntaxTree;
 
 namespace Poly.Validation.Rules;
 

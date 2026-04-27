@@ -3,10 +3,10 @@ using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Syntax.Analysis;
 using Poly.Tests.TestHelpers;
 
-using And = Poly.Syntax.AbstractSyntaxTree.Boolean.And;
-using Equal = Poly.Syntax.AbstractSyntaxTree.Equality.Equal;
-using GreaterThanOrEqual = Poly.Syntax.AbstractSyntaxTree.Comparison.GreaterThanOrEqual;
-using LessThanOrEqual = Poly.Syntax.AbstractSyntaxTree.Comparison.LessThanOrEqual;
+using And = Poly.Syntax.AbstractSyntaxTree.And;
+using Equal = Poly.Syntax.AbstractSyntaxTree.Equal;
+using GreaterThanOrEqual = Poly.Syntax.AbstractSyntaxTree.GreaterThanOrEqual;
+using LessThanOrEqual = Poly.Syntax.AbstractSyntaxTree.LessThanOrEqual;
 
 namespace Poly.Tests.Data.Modeling;
 

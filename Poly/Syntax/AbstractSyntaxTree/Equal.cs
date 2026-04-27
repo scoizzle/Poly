@@ -1,4 +1,4 @@
-namespace Poly.Syntax.AbstractSyntaxTree.Equality;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// Represents an equality comparison between two values.

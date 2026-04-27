@@ -1,4 +1,4 @@
-namespace Poly.Interpretation.AbstractSyntaxTree;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// Represents a stable identifier for an AST node.
@@ -56,7 +56,7 @@ public readonly record struct NodeId {
     public override string ToString() => Value;
 
     /// <summary>
-    /// Implicit conversion to string for compatibility.
+    /// Explicit conversion to string for compatibility.
     /// </summary>
     public static explicit operator string(NodeId id) => id.Value;
 }

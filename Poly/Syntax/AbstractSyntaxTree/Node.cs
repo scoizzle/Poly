@@ -1,9 +1,9 @@
-namespace Poly.Interpretation.AbstractSyntaxTree;
+namespace Poly.Syntax.AbstractSyntaxTree;
 
 /// <summary>
 /// Base class for abstract syntax tree nodes.
 /// Nodes are pure data structures with no semantic responsibility.
-/// Type information is resolved by semantic analysis passes (INodeAnalyzer implementations).
+/// Type information is resolved by semantic analysis passes.
 /// Each node has a stable identifier for metadata storage and incremental analysis.
 /// </summary>
 public abstract record Node {

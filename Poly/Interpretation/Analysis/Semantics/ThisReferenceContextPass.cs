@@ -1,5 +1,3 @@
-using Poly.Syntax.AbstractSyntaxTree;
-
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal sealed class ThisReferenceContextAnalyzer : INodeAnalyzer {

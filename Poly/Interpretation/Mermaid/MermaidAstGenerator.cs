@@ -1,9 +1,4 @@
-using System.Text;
-
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
-using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.Mermaid;
 

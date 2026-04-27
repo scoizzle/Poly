@@ -1,7 +1,5 @@
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
-using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.Analysis;
 
 namespace Poly.Tests.Integration;
 
@@ -165,9 +163,9 @@ public class C99ParserInterpreterTests {
         }
     }
 
-    private struct C99Segment {
-        public C99Point start;
-        public C99Point end;
+    private readonly struct C99Segment(C99Point start, C99Point end) {
+        public readonly C99Point start = start;
+        public readonly C99Point end = end;
     }
 
     private sealed class C99Parser {

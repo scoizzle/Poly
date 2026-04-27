@@ -10,11 +10,13 @@ public enum RelationshipCardinality {
     ManyToMany
 }
 
-public sealed class Relationship(Domain domain, string name) : Entity(domain, name) {
+public sealed record Relationship : Entity {
     private IDomainType _source = null!;
     private IDomainType _target = null!;
     private RelationshipCardinality _cardinality = RelationshipCardinality.OneToOne;
     private bool _sourceOwnsTarget;
+
+    public Relationship(Domain domain, string name) : base(domain, name) { }
 
     public IDomainType Source {
         get => _source;

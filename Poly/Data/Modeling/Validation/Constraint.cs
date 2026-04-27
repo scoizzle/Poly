@@ -1,3 +1,5 @@
+using Poly.Syntax;
+
 namespace Poly.Data.Modeling.Validation;
 
 public interface Constraint {

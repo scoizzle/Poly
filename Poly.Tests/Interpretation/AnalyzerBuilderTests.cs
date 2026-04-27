@@ -1,8 +1,6 @@
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.Analysis;
 
 namespace Poly.Tests.Interpretation;
 

@@ -1,5 +1,4 @@
 using Poly.Interpretation.Mermaid;
-using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Integration;

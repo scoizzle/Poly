@@ -1,5 +1,3 @@
-using Poly.Syntax.AbstractSyntaxTree;
-
 namespace Poly.Tests.Interpretation;
 
 /// <summary>

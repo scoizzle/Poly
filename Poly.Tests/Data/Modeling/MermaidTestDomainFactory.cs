@@ -13,10 +13,10 @@ internal static class MermaidTestDomainFactory {
     internal static Domain BuildSupportCaseDomain() {
         var domain = DomainTestFactory.CreateDomain("Support Case Management");
 
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
-        var intType = new Primitive { Domain = domain, Name = "int", Category = TypeCategory.Integer };
-        var boolType = new Primitive { Domain = domain, Name = "bool", Category = TypeCategory.Primitive };
-        var instantType = new Primitive { Domain = domain, Name = "instant", Category = TypeCategory.Instant };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        var intType = new Primitive(domain, "int", TypeCategory.Integer);
+        var boolType = new Primitive(domain, "bool", TypeCategory.Primitive);
+        var instantType = new Primitive(domain, "instant", TypeCategory.Instant);
         domain.AddType(stringType);
         domain.AddType(intType);
         domain.AddType(boolType);
@@ -39,19 +39,19 @@ internal static class MermaidTestDomainFactory {
         supportCase.AddProperty(new Property(domain, "IsEscalated", boolType));
         domain.AddType(supportCase);
 
-        var newStage = new Stage { Domain = domain, Name = "New" };
-        var inProgressStage = new Stage { Domain = domain, Name = "InProgress" };
-        var assignedStage = new Stage { Domain = domain, Name = "Assigned", Parent = inProgressStage };
-        var resolvedStage = new Stage { Domain = domain, Name = "Resolved" };
+        var newStage = new Stage(domain, "New");
+        var inProgressStage = new Stage(domain, "InProgress");
+        var assignedStage = new Stage(domain, "Assigned") { Parent = inProgressStage };
+        var resolvedStage = new Stage(domain, "Resolved");
 
-        var caseAssignedEvent = new DomainEvent { Domain = domain, Name = "CaseAssigned" };
+        var caseAssignedEvent = new DomainEvent(domain, "CaseAssigned");
         caseAssignedEvent.AddProperty(new Property(domain, "AssignedTo", agent));
-        var caseResolvedEvent = new DomainEvent { Domain = domain, Name = "CaseResolved" };
+        var caseResolvedEvent = new DomainEvent(domain, "CaseResolved");
         caseResolvedEvent.AddProperty(new Property(domain, "ResolutionSummary", stringType));
         supportCase.AddEvent(caseAssignedEvent);
         supportCase.AddEvent(caseResolvedEvent);
 
-        var assignAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "Assign" };
+        var assignAction = new DomainAction(domain, "Assign", supportCase);
         var assignAgentParameter = new Property(domain, "Agent", agent);
         assignAction.AddParameter(assignAgentParameter);
         assignAction.AddEffect(new StageTransition { TargetStage = assignedStage });
@@ -61,11 +61,11 @@ internal static class MermaidTestDomainFactory {
         assignAction.AddEffect(publishAssigned);
         newStage.AddAction(assignAction);
 
-        var addNoteAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "AddNote" };
+        var addNoteAction = new DomainAction(domain, "AddNote", supportCase);
         addNoteAction.AddParameter(new Property(domain, "NoteText", stringType));
         inProgressStage.AddAction(addNoteAction);
 
-        var resolveAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "Resolve" };
+        var resolveAction = new DomainAction(domain, "Resolve", supportCase);
         var resolutionSummaryParameter = new Property(domain, "ResolutionSummary", stringType);
         resolveAction.AddParameter(resolutionSummaryParameter);
         resolveAction.AddEffect(new StageTransition { TargetStage = resolvedStage });
@@ -84,20 +84,12 @@ internal static class MermaidTestDomainFactory {
         note.AddProperty(new Property(domain, "Content", stringType));
         note.AddProperty(new Property(domain, "Author", user));
         var noteAuthor = note.RequireProperty("Author");
-        var noteDraftStage = new Stage {
-            Domain = domain,
-            Name = "Draft",
-            Parent = inProgressStage
-        };
+        var noteDraftStage = new Stage(domain, "Draft") { Parent = inProgressStage };
         note.AddStage(noteDraftStage);
 
         domain.AddType(note);
 
-        var requireTitle = new Policy {
-            Domain = domain,
-            Name = "RequireTitle",
-            AggregationStrategy = PolicyAggregationStrategy.All
-        };
+        var requireTitle = new Policy(domain, "RequireTitle") { AggregationStrategy = PolicyAggregationStrategy.All };
         var supportCaseTitle = supportCase.RequireProperty("Title");
         requireTitle.AddRule(new PropertyRule {
             Value = supportCaseTitle,
@@ -135,21 +127,13 @@ internal static class MermaidTestDomainFactory {
             SourceOwnsTarget = false
         };
 
-        var onlyAgentsCanCreateUserNotes = new Policy {
-            Domain = domain,
-            Name = "OnlyAgentsCanCreateUserNotes",
-            AggregationStrategy = PolicyAggregationStrategy.All
-        };
+        var onlyAgentsCanCreateUserNotes = new Policy(domain, "OnlyAgentsCanCreateUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
         onlyAgentsCanCreateUserNotes.AddRule(new PropertyRule {
             Value = noteAuthor,
             Constraints = new RequiredConstraint()
         });
 
-        var onlyAgentsCanViewUserNotes = new Policy {
-            Domain = domain,
-            Name = "OnlyAgentsCanViewUserNotes",
-            AggregationStrategy = PolicyAggregationStrategy.All
-        };
+        var onlyAgentsCanViewUserNotes = new Policy(domain, "OnlyAgentsCanViewUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
         onlyAgentsCanViewUserNotes.AddRule(new PropertyRule {
             Value = noteAuthor,
             Constraints = new RequiredConstraint()
@@ -167,16 +151,10 @@ internal static class MermaidTestDomainFactory {
             Cardinality = RelationshipCardinality.ManyToMany,
             SourceOwnsTarget = false
         };
-        var activeAssignmentStage = new Stage { Domain = domain, Name = "Active" };
-        var inactiveAssignmentStage = new Stage { Domain = domain, Name = "Inactive" };
-        var requireAssignedAtWhenActive = new Policy {
-            Domain = domain,
-            Name = "RequireAssignedAtWhenActive"
-        };
-        var requireUnassignedAtWhenInactive = new Policy {
-            Domain = domain,
-            Name = "RequireUnassignedAtWhenInactive"
-        };
+        var activeAssignmentStage = new Stage(domain, "Active");
+        var inactiveAssignmentStage = new Stage(domain, "Inactive");
+        var requireAssignedAtWhenActive = new Policy(domain, "RequireAssignedAtWhenActive");
+        var requireUnassignedAtWhenInactive = new Policy(domain, "RequireUnassignedAtWhenInactive");
         agentCases.AddStage(activeAssignmentStage);
         agentCases.AddStage(inactiveAssignmentStage);
         var assignedAt = new Property(domain, "AssignedAt", instantType);

@@ -1,5 +1,7 @@
 using System.Text.Json.Serialization;
 
+using Poly.Syntax;
+
 namespace Poly.Validation;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]

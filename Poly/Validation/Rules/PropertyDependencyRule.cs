@@ -1,7 +1,3 @@
-using Poly.Syntax.AbstractSyntaxTree;
-
-using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
-
 namespace Poly.Validation.Rules;
 
 public sealed class PropertyDependencyRule : Rule {

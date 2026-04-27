@@ -1,5 +1,3 @@
-using System.Text;
-
 using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Mermaid;

@@ -1,6 +1,3 @@
-using System.Linq.Expressions;
-
-using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;

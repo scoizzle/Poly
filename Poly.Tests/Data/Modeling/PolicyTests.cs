@@ -1,6 +1,4 @@
 using Poly.Data.Modeling;
-using Poly.Introspection;
-using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Data.Modeling;
@@ -9,8 +7,8 @@ public class PolicyTests {
     [Test]
     public async Task Stage_AddPolicy_ExposesPolicyInEnumeration() {
         var domain = DomainTestFactory.CreateDomain();
-        var stage = new Stage { Name = "Review", Domain = domain };
-        var policy = new Policy { Name = "ReviewPolicy", Domain = domain };
+        var stage = new Stage(domain, "Review");
+        var policy = new Policy(domain, "ReviewPolicy");
 
         stage.AddPolicy(policy);
 
@@ -20,8 +18,8 @@ public class PolicyTests {
     [Test]
     public async Task Stage_RemovePolicy_RemovesPolicyFromEnumeration() {
         var domain = DomainTestFactory.CreateDomain();
-        var stage = new Stage { Name = "Review", Domain = domain };
-        var policy = new Policy { Name = "ReviewPolicy", Domain = domain };
+        var stage = new Stage(domain, "Review");
+        var policy = new Policy(domain, "ReviewPolicy");
         stage.AddPolicy(policy);
 
         var wasRemoved = stage.RemovePolicy(policy);
@@ -33,11 +31,7 @@ public class PolicyTests {
     [Test]
     public async Task Policy_AllAggregation_WithOneFalseClause_FailsValidation() {
         var domain = DomainTestFactory.CreateDomain();
-        var policy = new Policy {
-            Name = "AgeGate",
-            Domain = domain,
-            AggregationStrategy = PolicyAggregationStrategy.All
-        };
+        var policy = new Policy(domain, "AgeGate") { AggregationStrategy = PolicyAggregationStrategy.All };
 
         policy.AddRule(new PredicateRule {
             Predicate = subject => subject.GetMember(nameof(PersonInput.Age)).GreaterThanOrEqual(new Constant(18))
@@ -55,11 +49,7 @@ public class PolicyTests {
     [Test]
     public async Task Policy_AnyAggregation_WithOneTrueClause_PassesValidation() {
         var domain = DomainTestFactory.CreateDomain();
-        var policy = new Policy {
-            Name = "AgeOrAdmin",
-            Domain = domain,
-            AggregationStrategy = PolicyAggregationStrategy.Any
-        };
+        var policy = new Policy(domain, "AgeOrAdmin") { AggregationStrategy = PolicyAggregationStrategy.Any };
 
         policy.AddRule(new PredicateRule {
             Predicate = subject => subject.GetMember(nameof(AccessRequest.Age)).GreaterThanOrEqual(new Constant(21))
@@ -77,11 +67,7 @@ public class PolicyTests {
     [Test]
     public async Task Policy_PredicateRule_CanRepresentCrossPropertyConstraint() {
         var domain = DomainTestFactory.CreateDomain();
-        var policy = new Policy {
-            Name = "DateWindow",
-            Domain = domain,
-            AggregationStrategy = PolicyAggregationStrategy.All
-        };
+        var policy = new Policy(domain, "DateWindow") { AggregationStrategy = PolicyAggregationStrategy.All };
 
         policy.AddRule(new PredicateRule {
             Predicate = subject => subject

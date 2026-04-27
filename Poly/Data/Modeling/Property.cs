@@ -3,23 +3,20 @@ using Poly.Data.Modeling.Validation;
 
 namespace Poly.Data.Modeling;
 
-public sealed class Property : IDomainValue {
+public sealed record Property : DomainObject, IDomainValue {
     private readonly List<Constraint> _constraints = [];
     private readonly List<Policy> _policies = [];
 
-    public Property(Domain domain, string name, IDomainType type) {
-        ArgumentNullException.ThrowIfNull(domain);
+    public Property(Domain domain, string name, IDomainType type) : base(domain) {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(type);
 
         type.ThrowIfMismatchedDomain(domain);
 
-        Domain = domain;
         Name = name;
         Type = type;
     }
 
-    public Domain Domain { get; }
     public IDomainType Type { get; }
     public string Name { get; set; }
     public IReadOnlyCollection<Constraint> Constraints => _constraints.AsReadOnly();

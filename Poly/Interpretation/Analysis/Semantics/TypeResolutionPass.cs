@@ -1,6 +1,6 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
-using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax.Nodes;
 
 internal sealed class TypeResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {

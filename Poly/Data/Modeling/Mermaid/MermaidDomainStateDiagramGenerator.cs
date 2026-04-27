@@ -1,5 +1,3 @@
-using System.Text;
-
 using Poly.Data.Modeling.Effects;
 
 namespace Poly.Data.Modeling.Mermaid;

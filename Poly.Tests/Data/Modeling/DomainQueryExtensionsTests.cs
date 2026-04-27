@@ -1,7 +1,5 @@
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
-using Poly.Data.Modeling.TypeSystem;
-using Poly.Introspection;
 
 using DomainAction = Poly.Data.Modeling.Action;
 
@@ -50,11 +48,7 @@ public class DomainQueryExtensionsTests {
         var domain = DomainTestFactory.CreateDomain();
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
-        var action = new DomainAction {
-            Domain = domain,
-            Entity = parent,
-            Name = "Approve"
-        };
+        var action = new DomainAction(domain, "Approve", parent);
         parent.AddAction(action);
 
         var childLocal = child.FindAction("Approve");
@@ -67,11 +61,7 @@ public class DomainQueryExtensionsTests {
         var domain = DomainTestFactory.CreateDomain();
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
-        var action = new DomainAction {
-            Domain = domain,
-            Entity = parent,
-            Name = "Approve"
-        };
+        var action = new DomainAction(domain, "Approve", parent);
         parent.AddAction(action);
 
         var resolved = child.FindActionInHierarchy("Approve");
@@ -83,20 +73,9 @@ public class DomainQueryExtensionsTests {
     public async Task Stage_FindActionInHierarchy_FindsParentStageAction() {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "Case");
-        var parentStage = new Stage {
-            Domain = domain,
-            Name = "Parent"
-        };
-        var childStage = new Stage {
-            Domain = domain,
-            Name = "Child",
-            Parent = parentStage
-        };
-        var action = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Escalate"
-        };
+        var parentStage = new Stage(domain, "Parent");
+        var childStage = new Stage(domain, "Child") { Parent = parentStage };
+        var action = new DomainAction(domain, "Escalate", entity);
         parentStage.AddAction(action);
 
         var resolved = childStage.FindActionInHierarchy("Escalate");

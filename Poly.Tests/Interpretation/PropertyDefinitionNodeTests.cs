@@ -1,5 +1,4 @@
 using Poly.Introspection;
-using Poly.Syntax.AbstractSyntaxTree;
 
 namespace Poly.Tests.Interpretation;
 

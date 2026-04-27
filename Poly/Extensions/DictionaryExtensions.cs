@@ -1,7 +1,7 @@
 namespace Poly.Extensions;
 
 public static class DictionaryExtensions {
-    extension<TKey, TValue>(Dictionary<TKey, TValue> dictionary) where TKey : notnull {
+    extension<TKey, TValue>(IDictionary<TKey, TValue> dictionary) where TKey : notnull {
         /// <summary>
         /// Gets the value associated with the specified key. If the key does not exist, invokes the valueFactory to create the value, adds it to the dictionary, and returns it.
         /// </summary>

@@ -1,6 +1,3 @@
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Syntax.AbstractSyntaxTree;
-
 namespace Poly.Interpretation.Analysis.ConstantFolding;
 
 /// <summary>

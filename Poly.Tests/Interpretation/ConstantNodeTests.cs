@@ -1,5 +1,3 @@
-using Poly.Interpretation;
-using Poly.Syntax.AbstractSyntaxTree;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;

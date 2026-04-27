@@ -10,5 +10,9 @@ global using System.Text;
 global using System.Text.RegularExpressions;
 
 global using Poly.Extensions;
+global using Poly.Syntax;
+global using Poly.Syntax.Nodes;
+
+global using static Poly.Syntax.NodeExtensions;
 
 [assembly: InternalsVisibleTo("Poly.Tests")]

@@ -21,12 +21,14 @@ namespace Poly.Data.Modeling;
 /// }
 /// </code>
 /// </remarks>
-public sealed class Event : IDomainType {
+public sealed record Event : DomainType {
     private readonly List<Property> _properties = [];
 
-    public required Domain Domain { get; init; }
-    public required string Name { get; set; } = string.Empty;
-    public IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
+    public Event(Domain domain, string name) : base(domain) {
+        Name = name;
+    }
+
+    public override IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
 
     public void AddProperty(Property property) {
         property.ThrowIfNullOrMismatchedDomain(Domain);

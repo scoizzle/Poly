@@ -2,8 +2,6 @@ using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.Mermaid;
 using Poly.Data.Modeling.TypeSystem;
-using Poly.Data.Modeling.Validation.Constraints;
-using Poly.Introspection;
 using Poly.Tests.Data.Modeling;
 
 namespace Poly.Tests.Integration;

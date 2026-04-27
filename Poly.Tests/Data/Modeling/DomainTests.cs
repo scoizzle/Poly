@@ -325,11 +325,7 @@ public class DomainTests {
     }
 
     private static Primitive CreatePrimitive(Domain domain, string name, TypeCategory category = TypeCategory.Primitive) {
-        return new Primitive {
-            Domain = domain,
-            Name = name,
-            Category = category
-        };
+        return new Primitive(domain, name, category);
     }
 
 }
@@ -341,17 +337,11 @@ public class StageTests {
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
 
-        var parentStage = new Stage {
-            Name = "Open",
-            Domain = domain
-        };
+        var parentStage = new Stage(domain, "Open");
 
         parent.AddStage(parentStage);
 
-        await Assert.That(() => child.AddStage(new Stage {
-            Name = "Draft",
-            Domain = domain
-        }))
+        await Assert.That(() => child.AddStage(new Stage(domain, "Draft")))
             .Throws<InvalidOperationException>()
                 .WithMessage("Stage 'Draft' on child entity 'Child' must have a parent stage when parent entity 'Parent' defines stages.");
     }
@@ -362,15 +352,8 @@ public class StageTests {
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
 
-        var parentStage = new Stage {
-            Name = "Open",
-            Domain = domain
-        };
-        var childStage = new Stage {
-            Name = "Draft",
-            Domain = domain,
-            Parent = parentStage
-        };
+        var parentStage = new Stage(domain, "Open");
+        var childStage = new Stage(domain, "Draft") { Parent = parentStage };
         parent.AddStage(parentStage);
         child.AddStage(childStage);
 
@@ -383,20 +366,9 @@ public class StageTests {
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
 
-        var parentStage = new Stage {
-            Name = "Open",
-            Domain = domain
-        };
-        var childStage = new Stage {
-            Name = "Draft",
-            Domain = domain,
-            Parent = parentStage
-        };
-        var grandChildStage = new Stage {
-            Name = "Review",
-            Domain = domain,
-            Parent = childStage
-        };
+        var parentStage = new Stage(domain, "Open");
+        var childStage = new Stage(domain, "Draft") { Parent = parentStage };
+        var grandChildStage = new Stage(domain, "Review") { Parent = childStage };
 
         parent.AddStage(parentStage);
         child.AddStage(childStage);
@@ -411,28 +383,13 @@ public class StageTests {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "Case");
 
-        var parent = new Stage {
-            Name = "Parent",
-            Domain = domain
-        };
+        var parent = new Stage(domain, "Parent");
 
-        var child = new Stage {
-            Name = "Child",
-            Domain = domain,
-            Parent = parent
-        };
+        var child = new Stage(domain, "Child") { Parent = parent };
 
-        var inheritedEscalate = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Escalate"
-        };
+        var inheritedEscalate = new DomainAction(domain, "Escalate", entity);
 
-        var localEscalate = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Escalate"
-        };
+        var localEscalate = new DomainAction(domain, "Escalate", entity);
 
         parent.AddAction(inheritedEscalate);
         child.AddAction(localEscalate);
@@ -448,40 +405,17 @@ public class StageTests {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "Case");
 
-        var grandParent = new Stage {
-            Name = "Grand Parent",
-            Domain = domain
-        };
+        var grandParent = new Stage(domain, "Grand Parent");
 
-        var parent = new Stage {
-            Name = "Parent",
-            Domain = domain,
-            Parent = grandParent
-        };
+        var parent = new Stage(domain, "Parent") { Parent = grandParent };
 
-        var child = new Stage {
-            Name = "Child",
-            Domain = domain,
-            Parent = parent
-        };
+        var child = new Stage(domain, "Child") { Parent = parent };
 
-        var triage = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Triage"
-        };
+        var triage = new DomainAction(domain, "Triage", entity);
 
-        var review = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Review"
-        };
+        var review = new DomainAction(domain, "Review", entity);
 
-        var complete = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Complete"
-        };
+        var complete = new DomainAction(domain, "Complete", entity);
 
         grandParent.AddAction(triage);
         parent.AddAction(review);
@@ -498,21 +432,12 @@ public class StageTests {
     [Test]
     public async Task Stage_AddPolicy_WithDuplicateName_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
-        var stage = new Stage {
-            Name = "Open",
-            Domain = domain
-        };
+        var stage = new Stage(domain, "Open");
 
-        stage.AddPolicy(new Policy {
-            Domain = domain,
-            Name = "RequireTitle"
-        });
+        stage.AddPolicy(new Policy(domain, "RequireTitle"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            stage.AddPolicy(new Policy {
-                Domain = domain,
-                Name = "RequireTitle"
-            });
+            stage.AddPolicy(new Policy(domain, "RequireTitle"));
             await Task.CompletedTask;
         });
     }
@@ -521,23 +446,12 @@ public class StageTests {
     public async Task Stage_AddAction_WithDuplicateName_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "Ticket");
-        var stage = new Stage {
-            Name = "Open",
-            Domain = domain
-        };
+        var stage = new Stage(domain, "Open");
 
-        stage.AddAction(new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Assign"
-        });
+        stage.AddAction(new DomainAction(domain, "Assign", entity));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            stage.AddAction(new DomainAction {
-                Domain = domain,
-                Entity = entity,
-                Name = "Assign"
-            });
+            stage.AddAction(new DomainAction(domain, "Assign", entity));
             await Task.CompletedTask;
         });
     }
@@ -545,20 +459,13 @@ public class StageTests {
     [Test]
     public async Task StageTransitionRequirementAnalyzer_IncludesPropertyPolicyRequirements() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive {
-            Domain = domain,
-            Name = "string",
-            Category = TypeCategory.Text
-        };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var ticket = new Entity(domain, "Ticket");
         var title = new Property(domain, "Title", stringType);
 
-        var titlePolicy = new Policy {
-            Domain = domain,
-            Name = "RequireTitleFromProperty"
-        };
+        var titlePolicy = new Policy(domain, "RequireTitleFromProperty");
 
         titlePolicy.AddRule(new PropertyRule {
             Value = title,
@@ -568,14 +475,8 @@ public class StageTests {
         title.AddPolicy(titlePolicy);
         ticket.AddProperty(title);
 
-        var triage = new Stage {
-            Name = "Triage",
-            Domain = domain
-        };
-        var open = new Stage {
-            Name = "Open",
-            Domain = domain
-        };
+        var triage = new Stage(domain, "Triage");
+        var open = new Stage(domain, "Open");
 
         ticket.AddStage(triage);
         ticket.AddStage(open);
@@ -588,6 +489,42 @@ public class StageTests {
         await Assert.That(currentRequiredNames).Contains("Title");
         await Assert.That(targetRequiredNames).Contains("Title");
     }
+
+    [Test]
+    public async Task DomainModelValidationAnalyzer_StageTransitionRequest_ProducesMetadata() {
+        var domain = DomainTestFactory.CreateDomain();
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        domain.AddType(stringType);
+
+        var ticket = new Entity(domain, "Ticket");
+        var title = new Property(domain, "Title", stringType);
+        var triage = new Stage(domain, "Triage");
+        var open = new Stage(domain, "Open");
+        var openPolicy = new Policy(domain, "RequireTitleAtOpen");
+
+        openPolicy.AddRule(new PropertyRule {
+            Value = title,
+            Constraints = new RequiredConstraint()
+        });
+
+        ticket.AddProperty(title);
+        open.AddPolicy(openPolicy);
+        ticket.AddStage(triage);
+        ticket.AddStage(open);
+
+        var request = new StageTransitionRequirementAnalysisRequest(triage, open, ticket);
+        var builder = new AnalyzerBuilder();
+        builder.UseDomainModelValidation();
+
+        var analysis = builder.Build().Analyze(request);
+        var newlyRequiredNames = analysis
+            .GetStageTransitionRequirements(request)
+            .NewlyRequiredProperties
+            .Select(property => property.Name)
+            .ToArray();
+
+        await Assert.That(newlyRequiredNames).Contains("Title");
+    }
 }
 
 public class ActionAndEventMutationTests {
@@ -596,11 +533,7 @@ public class ActionAndEventMutationTests {
         var domain = DomainTestFactory.CreateDomain();
         var owner = new Entity(domain, "SupportCase");
         var other = new Entity(domain, "Ticket");
-        var action = new DomainAction {
-            Domain = domain,
-            Entity = other,
-            Name = "Assign"
-        };
+        var action = new DomainAction(domain, "Assign", other);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
             owner.AddAction(action);
@@ -613,18 +546,11 @@ public class ActionAndEventMutationTests {
         var domain = DomainTestFactory.CreateDomain();
         var owner = new Entity(domain, "SupportCase");
         var other = new Entity(domain, "Ticket");
-        var stage = new Stage {
-            Domain = domain,
-            Name = "New"
-        };
+        var stage = new Stage(domain, "New");
 
         owner.AddStage(stage);
 
-        var mismatchedAction = new DomainAction {
-            Domain = domain,
-            Entity = other,
-            Name = "Assign"
-        };
+        var mismatchedAction = new DomainAction(domain, "Assign", other);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
             stage.AddAction(mismatchedAction);
@@ -635,15 +561,8 @@ public class ActionAndEventMutationTests {
     [Test]
     public async Task Event_AddProperty_WithDuplicateName_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
-        var eventType = new Event {
-            Domain = domain,
-            Name = "CaseAssigned"
-        };
-        var stringType = new Primitive {
-            Domain = domain,
-            Name = "string",
-            Category = TypeCategory.Text
-        };
+        var eventType = new Event(domain, "CaseAssigned");
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
 
         eventType.AddProperty(new Property(domain, "AssignedTo", stringType));
 
@@ -657,16 +576,8 @@ public class ActionAndEventMutationTests {
     public async Task Action_AddParameter_WithDuplicatePropertyName_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "SupportCase");
-        var stringType = new Primitive {
-            Domain = domain,
-            Name = "string",
-            Category = TypeCategory.Text
-        };
-        var action = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "AddNote"
-        };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        var action = new DomainAction(domain, "AddNote", entity);
 
         action.AddParameter(new Property(domain, "NoteText", stringType));
 
@@ -681,15 +592,8 @@ public class ActionAndEventMutationTests {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "SupportCase");
         var note = new Entity(domain, "Note");
-        var action = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "AddNote"
-        };
-        var wrongStage = new Stage {
-            Domain = domain,
-            Name = "Wrong"
-        };
+        var action = new DomainAction(domain, "AddNote", entity);
+        var wrongStage = new Stage(domain, "Wrong");
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
             action.AddEffect(new CreateEntityInstance {
@@ -705,20 +609,10 @@ public class ActionAndEventMutationTests {
         var domain = DomainTestFactory.CreateDomain();
         var sourceEntity = new Entity(domain, "SupportCase");
         var targetEntity = new Entity(domain, "Note");
-        var sourceAction = new DomainAction {
-            Domain = domain,
-            Entity = sourceEntity,
-            Name = "Assign"
-        };
-        var foreignStage = new Stage {
-            Domain = domain,
-            Name = "Draft"
-        };
+        var sourceAction = new DomainAction(domain, "Assign", sourceEntity);
+        var foreignStage = new Stage(domain, "Draft");
 
-        sourceEntity.AddStage(new Stage {
-            Domain = domain,
-            Name = "New"
-        });
+        sourceEntity.AddStage(new Stage(domain, "New"));
         targetEntity.AddStage(foreignStage);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
@@ -733,20 +627,9 @@ public class ActionAndEventMutationTests {
     public async Task Action_AddEffect_PublishEventWithoutRequiredBindings_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "SupportCase");
-        var stringType = new Primitive {
-            Domain = domain,
-            Name = "string",
-            Category = TypeCategory.Text
-        };
-        var action = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Assign"
-        };
-        var @event = new Event {
-            Domain = domain,
-            Name = "CaseAssigned"
-        };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        var action = new DomainAction(domain, "Assign", entity);
+        var @event = new Event(domain, "CaseAssigned");
         @event.AddProperty(new Property(domain, "AssignedTo", stringType));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
@@ -759,23 +642,11 @@ public class ActionAndEventMutationTests {
     public async Task Action_AddEffect_InvokeActionWithoutRequiredBindings_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "SupportCase");
-        var stringType = new Primitive {
-            Domain = domain,
-            Name = "string",
-            Category = TypeCategory.Text
-        };
-        var targetAction = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Resolve"
-        };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        var targetAction = new DomainAction(domain, "Resolve", entity);
         targetAction.AddParameter(new Property(domain, "Reason", stringType));
 
-        var sourceAction = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Escalate"
-        };
+        var sourceAction = new DomainAction(domain, "Escalate", entity);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
             sourceAction.AddEffect(new InvokeAction { TargetAction = targetAction });
@@ -787,25 +658,13 @@ public class ActionAndEventMutationTests {
     public async Task Action_AddEffect_InvokeActionWithBoundParameters_AddsEffect() {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "SupportCase");
-        var stringType = new Primitive {
-            Domain = domain,
-            Name = "string",
-            Category = TypeCategory.Text
-        };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
 
-        var targetAction = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Resolve"
-        };
+        var targetAction = new DomainAction(domain, "Resolve", entity);
         var reasonParameter = new Property(domain, "Reason", stringType);
         targetAction.AddParameter(reasonParameter);
 
-        var sourceAction = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = "Escalate"
-        };
+        var sourceAction = new DomainAction(domain, "Escalate", entity);
         var sourceReason = new Property(domain, "SourceReason", stringType);
 
         var invoke = new InvokeAction { TargetAction = targetAction };
@@ -819,23 +678,13 @@ public class ActionAndEventMutationTests {
     [Test]
     public async Task Property_AddPolicy_WithDuplicateName_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive {
-            Domain = domain,
-            Name = "string",
-            Category = TypeCategory.Text
-        };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         var property = new Property(domain, "Title", stringType);
 
-        property.AddPolicy(new Policy {
-            Domain = domain,
-            Name = "RequireTitle"
-        });
+        property.AddPolicy(new Policy(domain, "RequireTitle"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            property.AddPolicy(new Policy {
-                Domain = domain,
-                Name = "RequireTitle"
-            });
+            property.AddPolicy(new Policy(domain, "RequireTitle"));
             await Task.CompletedTask;
         });
     }

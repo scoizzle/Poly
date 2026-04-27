@@ -3,13 +3,18 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
-public sealed class Action : IDomainObject {
+public sealed record Action : DomainObject {
     private readonly List<IDomainValue> _parameters = [];
     private readonly List<Effect> _effects = [];
 
-    public required Domain Domain { get; init; }
-    public required Entity Entity { get; init; }
-    public required string Name { get; set; }
+    public Action(Domain domain, string name, Entity entity) : base(domain) {
+        ArgumentNullException.ThrowIfNull(entity);
+        Name = name;
+        Entity = entity;
+    }
+
+    public Entity Entity { get; }
+    public string Name { get; set; }
 
     public IReadOnlyCollection<IDomainValue> Parameters => _parameters.AsReadOnly();
     public IReadOnlyCollection<Effect> Effects => _effects.AsReadOnly();

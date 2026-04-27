@@ -12,7 +12,7 @@ public class MermaidDomainDiagramGeneratorTests {
     private static Domain BuildSimpleDomain() {
         var domain = DomainTestFactory.CreateDomain("Simple");
 
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var customer = new Entity(domain, "Customer");
@@ -85,13 +85,13 @@ public class MermaidDomainDiagramGeneratorTests {
     [Test]
     public async Task Generate_Stages_EmittedAsEnumerationClass() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var task = new Entity(domain, "Task");
         task.AddProperty(new Property(domain, "Title", stringType));
-        task.AddStage(new Stage { Domain = domain, Name = "Todo" });
-        task.AddStage(new Stage { Domain = domain, Name = "Done" });
+        task.AddStage(new Stage(domain, "Todo"));
+        task.AddStage(new Stage(domain, "Done"));
         domain.AddType(task);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
@@ -106,12 +106,12 @@ public class MermaidDomainDiagramGeneratorTests {
     [Test]
     public async Task Generate_SubStages_ShowParentAnnotation() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var task = new Entity(domain, "Task");
-        var parentStage = new Stage { Domain = domain, Name = "InProgress" };
-        var childStage = new Stage { Domain = domain, Name = "Blocked", Parent = parentStage };
+        var parentStage = new Stage(domain, "InProgress");
+        var childStage = new Stage(domain, "Blocked") { Parent = parentStage };
         task.AddStage(parentStage);
         task.AddStage(childStage);
         domain.AddType(task);
@@ -124,7 +124,7 @@ public class MermaidDomainDiagramGeneratorTests {
     [Test]
     public async Task Generate_Policies_EmittedAsNote() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var item = new Entity(domain, "Item");
@@ -132,7 +132,7 @@ public class MermaidDomainDiagramGeneratorTests {
         item.AddProperty(nameProp);
         domain.AddType(item);
 
-        var policy = new Policy { Domain = domain, Name = "RequireName" };
+        var policy = new Policy(domain, "RequireName");
         policy.AddRule(new PropertyRule { Value = nameProp, Constraints = new RequiredConstraint() });
         item.AddPolicy(policy);
 
@@ -145,7 +145,7 @@ public class MermaidDomainDiagramGeneratorTests {
     [Test]
     public async Task Generate_PropertyTypeReference_EmitsAssociationArrow() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var author = new Entity(domain, "Author");
@@ -165,7 +165,7 @@ public class MermaidDomainDiagramGeneratorTests {
     [Test]
     public async Task Generate_RichRelationship_EmittedAsClass_WithSourceAndTargetLinks() {
         var domain = DomainTestFactory.CreateDomain();
-        var instantType = new Primitive { Domain = domain, Name = "instant", Category = TypeCategory.Instant };
+        var instantType = new Primitive(domain, "instant", TypeCategory.Instant);
         domain.AddType(instantType);
 
         var agent = new Entity(domain, "Agent");
@@ -180,7 +180,7 @@ public class MermaidDomainDiagramGeneratorTests {
             SourceOwnsTarget = false
         };
         membership.AddProperty(new Property(domain, "JoinedAt", instantType));
-        membership.AddStage(new Stage { Domain = domain, Name = "Active" });
+        membership.AddStage(new Stage(domain, "Active"));
         domain.AddRelationship(membership);
         agent.AddRelationship(membership);
 
@@ -221,13 +221,13 @@ public class MermaidDomainDiagramGeneratorTests {
     [Test]
     public async Task Generate_Events_EmittedAsEventClass() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var entity = new Entity(domain, "Order");
         domain.AddType(entity);
 
-        var @event = new Event { Domain = domain, Name = "OrderPlaced" };
+        var @event = new Event(domain, "OrderPlaced");
         @event.AddProperty(new Property(domain, "OrderId", stringType));
         entity.AddEvent(@event);
         domain.AddType(@event);
@@ -242,7 +242,7 @@ public class MermaidDomainDiagramGeneratorTests {
     [Test]
     public async Task Generate_InheritedEntity_EmitsInheritanceArrow() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var user = new Entity(domain, "User");
@@ -260,12 +260,12 @@ public class MermaidDomainDiagramGeneratorTests {
     [Test]
     public async Task Generate_Actions_AppearAsMethodsOnEntity() {
         var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text };
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
         domain.AddType(stringType);
 
         var ticket = new Entity(domain, "Ticket");
-        var openStage = new Stage { Domain = domain, Name = "Open" };
-        var closeAction = new DomainAction { Domain = domain, Entity = ticket, Name = "Close" };
+        var openStage = new Stage(domain, "Open");
+        var closeAction = new DomainAction(domain, "Close", ticket);
         closeAction.AddParameter(new Property(domain, "Reason", stringType));
         openStage.AddAction(closeAction);
         ticket.AddStage(openStage);

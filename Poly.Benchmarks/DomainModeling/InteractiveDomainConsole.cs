@@ -6,7 +6,6 @@ using System.Reflection;
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
-using Poly.Data.Modeling.Validation;
 using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Introspection;
 
@@ -101,10 +100,10 @@ internal static class InteractiveDomainConsole {
         var domain = CreateDomain(domainName);
 
         Step("Create primitive types", () => {
-            domain.AddType(new Primitive { Domain = domain, Name = "string", Category = TypeCategory.Text });
-            domain.AddType(new Primitive { Domain = domain, Name = "int", Category = TypeCategory.Integer });
-            domain.AddType(new Primitive { Domain = domain, Name = "bool", Category = TypeCategory.Primitive });
-            domain.AddType(new Primitive { Domain = domain, Name = "instant", Category = TypeCategory.Instant });
+            domain.AddType(new Primitive(domain, "string", TypeCategory.Text));
+            domain.AddType(new Primitive(domain, "int", TypeCategory.Integer));
+            domain.AddType(new Primitive(domain, "bool", TypeCategory.Primitive));
+            domain.AddType(new Primitive(domain, "instant", TypeCategory.Instant));
         });
 
         Step("Create entities and inheritance", () => {
@@ -130,10 +129,10 @@ internal static class InteractiveDomainConsole {
 
         Step("Create SupportCase stages", () => {
             var supportCase = domain.RequireEntity("SupportCase");
-            var newStage = new Stage { Domain = domain, Name = "New" };
-            var inProgressStage = new Stage { Domain = domain, Name = "InProgress" };
-            var assignedStage = new Stage { Domain = domain, Name = "Assigned", Parent = inProgressStage };
-            var resolvedStage = new Stage { Domain = domain, Name = "Resolved" };
+            var newStage = new Stage(domain, "New");
+            var inProgressStage = new Stage(domain, "InProgress");
+            var assignedStage = new Stage(domain, "Assigned") { Parent = inProgressStage };
+            var resolvedStage = new Stage(domain, "Resolved");
 
             supportCase.AddStage(newStage);
             supportCase.AddStage(inProgressStage);
@@ -141,11 +140,7 @@ internal static class InteractiveDomainConsole {
             supportCase.AddStage(resolvedStage);
 
             var note = domain.RequireEntity("Note");
-            note.AddStage(new Stage {
-                Domain = domain,
-                Name = "Draft",
-                Parent = inProgressStage
-            });
+            note.AddStage(new Stage(domain, "Draft") { Parent = inProgressStage });
         });
 
         Step("Create SupportCase events", () => {
@@ -153,10 +148,10 @@ internal static class InteractiveDomainConsole {
             var agent = domain.RequireEntity("Agent");
             var stringType = domain.RequirePrimitive("string");
 
-            var caseAssigned = new Event { Domain = domain, Name = "CaseAssigned" };
+            var caseAssigned = new Event(domain, "CaseAssigned");
             caseAssigned.AddProperty(new Property(domain, "AssignedTo", agent));
 
-            var caseResolved = new Event { Domain = domain, Name = "CaseResolved" };
+            var caseResolved = new Event(domain, "CaseResolved");
             caseResolved.AddProperty(new Property(domain, "ResolutionSummary", stringType));
 
             supportCase.AddEvent(caseAssigned);
@@ -176,7 +171,7 @@ internal static class InteractiveDomainConsole {
             var agent = domain.RequireEntity("Agent");
             var stringType = domain.RequirePrimitive("string");
 
-            var assignAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "Assign" };
+            var assignAction = new DomainAction(domain, "Assign", supportCase);
             var assignAgentParameter = new Property(domain, "Agent", agent);
             assignAction.AddParameter(assignAgentParameter);
             assignAction.AddEffect(new StageTransition { TargetStage = assignedStage });
@@ -188,7 +183,7 @@ internal static class InteractiveDomainConsole {
             supportCase.AddAction(assignAction);
             newStage.AddAction(assignAction);
 
-            var addNoteAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "AddNote" };
+            var addNoteAction = new DomainAction(domain, "AddNote", supportCase);
             addNoteAction.AddParameter(new Property(domain, "NoteText", stringType));
             addNoteAction.AddEffect(new CreateEntityInstance {
                 EntityType = note,
@@ -198,7 +193,7 @@ internal static class InteractiveDomainConsole {
             supportCase.AddAction(addNoteAction);
             inProgressStage.AddAction(addNoteAction);
 
-            var resolveAction = new DomainAction { Domain = domain, Entity = supportCase, Name = "Resolve" };
+            var resolveAction = new DomainAction(domain, "Resolve", supportCase);
             var resolutionSummaryParameter = new Property(domain, "ResolutionSummary", stringType);
             resolveAction.AddParameter(resolutionSummaryParameter);
             resolveAction.AddEffect(new StageTransition { TargetStage = resolvedStage });
@@ -215,32 +210,20 @@ internal static class InteractiveDomainConsole {
             var supportCase = domain.RequireEntity("SupportCase");
             var note = domain.RequireEntity("Note");
 
-            var requireTitle = new Policy {
-                Domain = domain,
-                Name = "RequireTitle",
-                AggregationStrategy = PolicyAggregationStrategy.All
-            };
+            var requireTitle = new Policy(domain, "RequireTitle") { AggregationStrategy = PolicyAggregationStrategy.All };
             requireTitle.AddRule(new PropertyRule {
                 Value = supportCase.RequireProperty("Title"),
                 Constraints = new RequiredConstraint()
             });
             supportCase.AddPolicy(requireTitle);
 
-            var createNotesPolicy = new Policy {
-                Domain = domain,
-                Name = "OnlyAgentsCanCreateUserNotes",
-                AggregationStrategy = PolicyAggregationStrategy.All
-            };
+            var createNotesPolicy = new Policy(domain, "OnlyAgentsCanCreateUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
             createNotesPolicy.AddRule(new PropertyRule {
                 Value = note.RequireProperty("Author"),
                 Constraints = new RequiredConstraint()
             });
 
-            var viewNotesPolicy = new Policy {
-                Domain = domain,
-                Name = "OnlyAgentsCanViewUserNotes",
-                AggregationStrategy = PolicyAggregationStrategy.All
-            };
+            var viewNotesPolicy = new Policy(domain, "OnlyAgentsCanViewUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
             viewNotesPolicy.AddRule(new PropertyRule {
                 Value = note.RequireProperty("Author"),
                 Constraints = new RequiredConstraint()
@@ -290,8 +273,8 @@ internal static class InteractiveDomainConsole {
                 SourceOwnsTarget = false
             };
 
-            var active = new Stage { Domain = domain, Name = "Active" };
-            var inactive = new Stage { Domain = domain, Name = "Inactive" };
+            var active = new Stage(domain, "Active");
+            var inactive = new Stage(domain, "Inactive");
             agentCases.AddStage(active);
             agentCases.AddStage(inactive);
 
@@ -302,14 +285,14 @@ internal static class InteractiveDomainConsole {
             agentCases.AddProperty(assignedAt);
             agentCases.AddProperty(unassignedAt);
 
-            var requireAssignedAt = new Policy { Domain = domain, Name = "RequireAssignedAtWhenActive" };
+            var requireAssignedAt = new Policy(domain, "RequireAssignedAtWhenActive");
             requireAssignedAt.AddRule(new PropertyRule {
                 Value = assignedAt,
                 Constraints = new RequiredConstraint()
             });
             active.AddPolicy(requireAssignedAt);
 
-            var requireUnassignedAt = new Policy { Domain = domain, Name = "RequireUnassignedAtWhenInactive" };
+            var requireUnassignedAt = new Policy(domain, "RequireUnassignedAtWhenInactive");
             requireUnassignedAt.AddRule(new PropertyRule {
                 Value = unassignedAt,
                 Constraints = new RequiredConstraint()
@@ -336,11 +319,7 @@ internal static class InteractiveDomainConsole {
         var name = PromptRequiredString("Primitive name");
         var category = PromptEnum<TypeCategory>("Primitive category");
 
-        var primitive = new Primitive {
-            Domain = domain,
-            Name = name,
-            Category = category
-        };
+        var primitive = new Primitive(domain, name, category);
 
         domain.AddType(primitive);
         Console.WriteLine($"Added primitive '{name}'.");
@@ -435,11 +414,7 @@ internal static class InteractiveDomainConsole {
 
         var parent = ChooseOptional("Choose parent stage (optional)", parentCandidates.DistinctBy(stage => stage.Name).OrderBy(stage => stage.Name).ToArray());
 
-        var stage = new Stage {
-            Domain = entity.Domain,
-            Name = name,
-            Parent = parent
-        };
+        var stage = new Stage(entity.Domain, name) { Parent = parent };
 
         entity.AddStage(stage);
         Console.WriteLine($"Added stage '{name}' to entity '{entity.Name}'.");
@@ -484,10 +459,7 @@ internal static class InteractiveDomainConsole {
 
     private static void AddEventToEntity(Domain domain, Entity entity) {
         var eventName = PromptRequiredString("Event name");
-        var @event = new Event {
-            Domain = domain,
-            Name = eventName
-        };
+        var @event = new Event(domain, eventName);
 
         entity.AddEvent(@event);
         domain.AddType(@event);
@@ -525,11 +497,7 @@ internal static class InteractiveDomainConsole {
 
     private static void AddActionToEntity(Entity entity) {
         var actionName = PromptRequiredString("Action name");
-        var action = new DomainAction {
-            Domain = entity.Domain,
-            Entity = entity,
-            Name = actionName
-        };
+        var action = new DomainAction(entity.Domain, actionName, entity);
 
         entity.AddAction(action);
 
@@ -554,11 +522,7 @@ internal static class InteractiveDomainConsole {
 
     private static void CreateActionForStage(Domain domain, Entity entity, Stage stage) {
         var actionName = PromptRequiredString("Action name");
-        var action = new DomainAction {
-            Domain = domain,
-            Entity = entity,
-            Name = actionName
-        };
+        var action = new DomainAction(domain, actionName, entity);
 
         entity.AddAction(action);
         stage.AddAction(action);
@@ -835,11 +799,7 @@ internal static class InteractiveDomainConsole {
         var stageName = PromptRequiredString("Relationship stage name");
         var parent = ChooseOptional("Choose parent stage (optional)", relationship.Stages.OrderBy(stage => stage.Name).ToArray());
 
-        relationship.AddStage(new Stage {
-            Domain = relationship.Domain,
-            Name = stageName,
-            Parent = parent
-        });
+        relationship.AddStage(new Stage(relationship.Domain, stageName) { Parent = parent });
 
         Console.WriteLine($"Added stage '{stageName}' to relationship '{relationship.Name}'.");
     }
@@ -869,11 +829,7 @@ internal static class InteractiveDomainConsole {
         var policyName = PromptRequiredString("Policy name");
         var property = ChooseRequired("Choose target property", availableProperties.OrderBy(candidate => candidate.Name).ToArray());
 
-        var policy = new Policy {
-            Domain = domain,
-            Name = policyName,
-            AggregationStrategy = PolicyAggregationStrategy.All
-        };
+        var policy = new Policy(domain, policyName) { AggregationStrategy = PolicyAggregationStrategy.All };
 
         policy.AddRule(new PropertyRule {
             Value = property,
@@ -888,11 +844,7 @@ internal static class InteractiveDomainConsole {
         var policyName = PromptRequiredString("Policy name");
         var property = ChooseRequired("Choose target property", availableProperties.OrderBy(candidate => candidate.Name).ToArray());
 
-        var policy = new Policy {
-            Domain = domain,
-            Name = policyName,
-            AggregationStrategy = PolicyAggregationStrategy.All
-        };
+        var policy = new Policy(domain, policyName) { AggregationStrategy = PolicyAggregationStrategy.All };
 
         policy.AddRule(new PropertyRule {
             Value = property,

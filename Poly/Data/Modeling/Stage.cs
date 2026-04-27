@@ -2,17 +2,20 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
-public sealed class Stage : IDomainObject {
+public sealed record Stage : DomainObject {
     private readonly List<Policy> _policies = [];
     private readonly List<Action> _actions = [];
     private Entity? _ownerEntity;
 
-    public required string Name { get; set; }
-    public required Domain Domain { get; init; }
+    public Stage(Domain domain, string name) : base(domain) {
+        Name = name;
+    }
+
+    public string Name { get; set; }
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
     public IReadOnlyCollection<Action> Actions => _actions.AsReadOnly();
     public Stage? Parent { get; init; }
-    public IReadOnlyCollection<Stage> Children { get; init; } = [];
+    public new IReadOnlyCollection<Stage> Children { get; init; } = [];
 
     internal void AttachToEntity(Entity ownerEntity) {
         ArgumentNullException.ThrowIfNull(ownerEntity);

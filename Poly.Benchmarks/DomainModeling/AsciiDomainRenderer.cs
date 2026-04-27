@@ -5,7 +5,6 @@ using System.Text;
 
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
-using Poly.Data.Modeling.TypeSystem;
 
 using DomainAction = Poly.Data.Modeling.Action;
 

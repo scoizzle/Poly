@@ -36,7 +36,7 @@ namespace Poly.Data.Modeling;
 /// }
 /// </code>
 /// </remarks>
-public class Entity : IDomainType {
+public record Entity : DomainType {
     private readonly List<Property> _properties = [];
     private readonly List<Stage> _stages = [];
     private readonly List<Policy> _policies = [];
@@ -44,23 +44,19 @@ public class Entity : IDomainType {
     private readonly List<Event> _events = [];
     private readonly List<Relationship> _relationships = [];
 
-    public Entity(Domain domain, string name, Entity? parentEntity = null) {
-        ArgumentNullException.ThrowIfNull(domain);
+    public Entity(Domain domain, string name, Entity? parentEntity = null) : base(domain) {
         ArgumentNullException.ThrowIfNull(name);
 
         parentEntity?.ThrowIfMismatchedDomain(domain);
         ValidateParentEntityCycle(parentEntity);
 
-        Domain = domain;
         Name = name;
         ParentEntity = parentEntity;
     }
 
-    public Domain Domain { get; }
-    public string Name { get; set; }
     public Entity? ParentEntity { get; }
 
-    public IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
+    public override IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
     public IReadOnlyCollection<Stage> Stages => _stages.AsReadOnly();
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
     public IReadOnlyCollection<Action> Actions => _actions.AsReadOnly();

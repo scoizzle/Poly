@@ -1,8 +1,4 @@
 using Poly.Interpretation.Analysis.ConstantFolding;
-using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.Analysis;
-
-using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Tests.Interpretation;
 

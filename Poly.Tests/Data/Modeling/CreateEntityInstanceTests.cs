@@ -43,15 +43,9 @@ public class CreateEntityInstanceTests {
 
         note.AddProperty(title);
 
-        var draft = new Stage {
-            Domain = domain,
-            Name = "Draft"
-        };
+        var draft = new Stage(domain, "Draft");
 
-        var policy = new Policy {
-            Domain = domain,
-            Name = "RequireTitle"
-        };
+        var policy = new Policy(domain, "RequireTitle");
 
         policy.AddRule(new PropertyRule {
             Value = title,
@@ -75,6 +69,34 @@ public class CreateEntityInstanceTests {
     }
 
     [Test]
+    public async Task DomainModelValidationAnalyzer_RequiredPropertiesRequest_ProducesMetadata() {
+        var domain = DomainTestFactory.CreateDomain();
+        var note = CreateEntity(domain, "Note");
+        var stringType = CreatePrimitive(domain, "string");
+        var title = new Property(domain, "Title", stringType);
+        var draft = new Stage(domain, "Draft");
+        var titlePolicy = new Policy(domain, "RequireTitleFromProperty");
+
+        titlePolicy.AddRule(new PropertyRule {
+            Value = title,
+            Constraints = new RequiredConstraint()
+        });
+
+        title.AddPolicy(titlePolicy);
+        note.AddProperty(title);
+        note.AddStage(draft);
+
+        var request = new RequiredPropertiesAnalysisRequest(note, draft);
+        var builder = new AnalyzerBuilder();
+        builder.UseDomainModelValidation();
+
+        var analysis = builder.Build().Analyze(request);
+        var requiredNames = analysis.GetRequiredProperties(request).Select(property => property.Name).ToArray();
+
+        await Assert.That(requiredNames).Contains("Title");
+    }
+
+    [Test]
     public async Task CreateEntityInstance_RequiredParameters_IncludeInheritedInitialStagePolicyRequirements() {
         var domain = DomainTestFactory.CreateDomain();
         var note = CreateEntity(domain, "Note");
@@ -84,21 +106,11 @@ public class CreateEntityInstanceTests {
 
         note.AddProperty(title);
 
-        var parent = new Stage {
-            Domain = domain,
-            Name = "Parent"
-        };
+        var parent = new Stage(domain, "Parent");
 
-        var child = new Stage {
-            Domain = domain,
-            Name = "Child",
-            Parent = parent
-        };
+        var child = new Stage(domain, "Child") { Parent = parent };
 
-        var parentPolicy = new Policy {
-            Domain = domain,
-            Name = "RequireTitle"
-        };
+        var parentPolicy = new Policy(domain, "RequireTitle");
 
         parentPolicy.AddRule(new PropertyRule {
             Value = title,
@@ -127,10 +139,7 @@ public class CreateEntityInstanceTests {
         var stringType = CreatePrimitive(domain, "string");
         var title = new Property(domain, "Title", stringType);
 
-        var rootPolicy = new Policy {
-            Domain = domain,
-            Name = "RequireTitle"
-        };
+        var rootPolicy = new Policy(domain, "RequireTitle");
 
         rootPolicy.AddRule(new PropertyRule {
             Value = title,
@@ -159,10 +168,7 @@ public class CreateEntityInstanceTests {
 
         var title = new Property(domain, "Title", stringType);
 
-        var titlePolicy = new Policy {
-            Domain = domain,
-            Name = "RequireTitleFromProperty"
-        };
+        var titlePolicy = new Policy(domain, "RequireTitleFromProperty");
 
         titlePolicy.AddRule(new PropertyRule {
             Value = title,
@@ -189,16 +195,9 @@ public class CreateEntityInstanceTests {
         var parent = CreateEntity(domain, "Account");
         var child = CreateEntity(domain, "Ticket", parent);
 
-        var parentStage = new Stage {
-            Domain = domain,
-            Name = "Open"
-        };
+        var parentStage = new Stage(domain, "Open");
 
-        var childStage = new Stage {
-            Domain = domain,
-            Name = "Draft",
-            Parent = parentStage
-        };
+        var childStage = new Stage(domain, "Draft") { Parent = parentStage };
 
         parent.AddStage(parentStage);
         child.AddStage(childStage);
@@ -219,16 +218,9 @@ public class CreateEntityInstanceTests {
         var parent = CreateEntity(domain, "Account");
         var child = CreateEntity(domain, "Ticket");
 
-        var childParent = new Stage {
-            Domain = domain,
-            Name = "Review"
-        };
+        var childParent = new Stage(domain, "Review");
 
-        var childStage = new Stage {
-            Domain = domain,
-            Name = "Draft",
-            Parent = childParent
-        };
+        var childStage = new Stage(domain, "Draft") { Parent = childParent };
 
         child.AddStage(childParent);
         child.AddStage(childStage);
@@ -251,11 +243,7 @@ public class CreateEntityInstanceTests {
     }
 
     private static Primitive CreatePrimitive(Domain domain, string name, TypeCategory category = TypeCategory.Primitive) {
-        var primitive = new Primitive {
-            Domain = domain,
-            Name = name,
-            Category = category
-        };
+        var primitive = new Primitive(domain, name, category);
 
         domain.AddType(primitive);
         return primitive;

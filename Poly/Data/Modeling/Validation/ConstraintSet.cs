@@ -1,7 +1,3 @@
-using Poly.Syntax.AbstractSyntaxTree;
-
-using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
-
 namespace Poly.Data.Modeling.Validation;
 
 public enum ConstraintAggregationStrategy {

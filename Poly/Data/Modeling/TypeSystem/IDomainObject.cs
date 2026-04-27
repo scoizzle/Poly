@@ -1,5 +1,10 @@
 namespace Poly.Data.Modeling.TypeSystem;
 
+public abstract record DomainObject(Domain Domain) : Node, IDomainObject {
+    public virtual bool Equals(DomainObject? other) => ReferenceEquals(this, other);
+    public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);
+}
+
 /// <summary>
 /// Represents a domain, which is a logical grouping of related types and objects.
 /// </summary>

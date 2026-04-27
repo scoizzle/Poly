@@ -1,7 +1,4 @@
 using Poly.Data.Modeling.TypeSystem;
-using Poly.Syntax.AbstractSyntaxTree;
-
-using static Poly.Syntax.AbstractSyntaxTree.NodeExtensions;
 
 namespace Poly.Data.Modeling;
 
@@ -13,11 +10,14 @@ public enum PolicyAggregationStrategy {
 /// <summary>
 /// Represents a composable policy that can aggregate multiple policy rules.
 /// </summary>
-public sealed class Policy : IDomainObject {
+public sealed record Policy : DomainObject {
     private readonly List<IPolicyRule> _rules = [];
 
-    public required Domain Domain { get; init; }
-    public required string Name { get; set; }
+    public Policy(Domain domain, string name) : base(domain) {
+        Name = name;
+    }
+
+    public string Name { get; set; }
 
     public PolicyAggregationStrategy AggregationStrategy { get; init; } = PolicyAggregationStrategy.All;
 

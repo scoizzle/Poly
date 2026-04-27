@@ -1,7 +1,4 @@
-using System.Linq.Expressions;
-
-using Poly.Interpretation;
-using Poly.Syntax.AbstractSyntaxTree;
+using Poly.Syntax;
 
 namespace Poly.Validation;
 

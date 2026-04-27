@@ -1,10 +1,7 @@
 using System.Linq.Expressions;
 
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Syntax.AbstractSyntaxTree;
-using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.LinqExpressions;
 

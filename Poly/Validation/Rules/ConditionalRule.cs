@@ -1,5 +1,3 @@
-using Poly.Syntax.AbstractSyntaxTree;
-
 namespace Poly.Validation.Rules;
 
 public sealed class ConditionalRule : Rule {

@@ -10,6 +10,7 @@
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Poly\Poly.csproj" />
+		<ProjectReference Include="..\Poly.Mcp\Poly.Mcp.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 	  <Folder Include="Introspection/" />

@@ -29,19 +29,4 @@ public sealed partial record Event : DomainType {
     }
 
     public override IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
-
-    private void AddProperty(Property property) {
-        property.ThrowIfNullOrMismatchedDomain(Domain);
-
-        if (_properties.Any(existing => string.Equals(existing.Name, property.Name, StringComparison.Ordinal))) {
-            throw new InvalidOperationException($"Property '{property.Name}' already exists on event '{Name}'.");
-        }
-
-        _properties.Add(property);
-    }
-
-    private bool RemoveProperty(Property property) {
-        property.ThrowIfNullOrMismatchedDomain(Domain);
-        return _properties.Remove(property);
-    }
 }

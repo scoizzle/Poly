@@ -5,6 +5,7 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="Poly.Benchmarks/Poly.Benchmarks.csproj" />
+  <Project Path="Poly.Mcp/Poly.Mcp.csproj" />
   <Project Path="Poly.Tests/Poly.Tests.csproj" />
   <Project Path="Poly/Poly.csproj" />
 </Solution>

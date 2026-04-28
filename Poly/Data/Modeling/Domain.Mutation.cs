@@ -7,6 +7,8 @@ namespace Poly.Data.Modeling;
 public sealed partial record Domain {
     public sealed record MutationStep(string MutationName, System.Action Apply, System.Action Rollback);
 
+    public Mutation CreateMutation(DomainModelAnalyzer? analyzer = null) => new Mutation(this, analyzer ?? new DomainModelAnalyzer());
+
     public sealed class Mutation {
         private readonly Domain _domain;
         private readonly DomainModelAnalyzer _analyzer;
@@ -30,7 +32,7 @@ public sealed partial record Domain {
 
         public Mutation AddRelationship(Relationship relationship) => Track(relationship).AddStep(Domain.CreateAddRelationshipMutation(Domain, relationship));
 
-        public Mutation SetRelationship(Relationship relationship, IDomainType source, IDomainType target, RelationshipCardinality cardinality, bool sourceOwnsTarget)
+        public Mutation SetRelationship(Relationship relationship, Entity source, Entity target, RelationshipCardinality cardinality, bool sourceOwnsTarget)
             => Track(relationship).AddStep(Relationship.CreateSetShapeMutation(relationship, source, target, cardinality, sourceOwnsTarget));
 
         public Mutation AddProperty(Entity entity, Property property) => Track(entity).Track(property).AddStep(Entity.CreateAddPropertyMutation(entity, property));

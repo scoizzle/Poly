@@ -13,8 +13,8 @@ public sealed partial record Relationship {
 
     internal static Domain.MutationStep CreateSetShapeMutation(
         Relationship relationship,
-        IDomainType source,
-        IDomainType target,
+        Entity source,
+        Entity target,
         RelationshipCardinality cardinality,
         bool sourceOwnsTarget) {
         var previousSource = relationship.Source;
@@ -25,16 +25,16 @@ public sealed partial record Relationship {
         return new Domain.MutationStep(
             nameof(CreateSetShapeMutation),
             () => {
-                relationship._source = source;
-                relationship._target = target;
-                relationship._cardinality = cardinality;
-                relationship._sourceOwnsTarget = sourceOwnsTarget;
+                relationship.Source = source;
+                relationship.Target = target;
+                relationship.Cardinality = cardinality;
+                relationship.SourceOwnsTarget = sourceOwnsTarget;
             },
             () => {
-                relationship._source = previousSource;
-                relationship._target = previousTarget;
-                relationship._cardinality = previousCardinality;
-                relationship._sourceOwnsTarget = previousSourceOwnsTarget;
+                relationship.Source = previousSource;
+                relationship.Target = previousTarget;
+                relationship.Cardinality = previousCardinality;
+                relationship.SourceOwnsTarget = previousSourceOwnsTarget;
             });
     }
 

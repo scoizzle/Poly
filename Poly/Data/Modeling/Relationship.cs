@@ -11,55 +11,18 @@ public enum RelationshipCardinality {
 }
 
 public sealed partial record Relationship : Entity {
-    private IDomainType _source = null!;
-    private IDomainType _target = null!;
-    private RelationshipCardinality _cardinality = RelationshipCardinality.OneToOne;
-    private bool _sourceOwnsTarget;
-
-    public Relationship(Domain domain, string name) : base(domain, name) { }
-
-    public IDomainType Source {
-        get => _source;
-        set {
-            Domain.EvaluateRelationshipMutationPreconditions(this, value, _target, _cardinality, _sourceOwnsTarget);
-            _source = value;
-        }
-    }
-
-    public IDomainType Target {
-        get => _target;
-        set {
-            Domain.EvaluateRelationshipMutationPreconditions(this, _source, value, _cardinality, _sourceOwnsTarget);
-            _target = value;
-        }
-    }
-
-    public RelationshipCardinality Cardinality {
-        get => _cardinality;
-        set {
-            Domain.EvaluateRelationshipMutationPreconditions(this, _source, _target, value, _sourceOwnsTarget);
-            _cardinality = value;
-        }
-    }
-
-    public bool SourceOwnsTarget {
-        get => _sourceOwnsTarget;
-        set {
-            Domain.EvaluateRelationshipMutationPreconditions(this, _source, _target, _cardinality, value);
-            _sourceOwnsTarget = value;
-        }
-    }
-
-    private void ApplyShape(Domain domain, IDomainType source, IDomainType target, RelationshipCardinality cardinality, bool sourceOwnsTarget) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(target);
-
-        domain.EvaluateRelationshipMutationPreconditions(this, source, target, cardinality, sourceOwnsTarget);
-
+    public Relationship(Domain domain, string name, Entity source, Entity target, RelationshipCardinality cardinality, bool sourceOwnsTarget) : base(domain, name) {
         Source = source;
         Target = target;
         Cardinality = cardinality;
         SourceOwnsTarget = sourceOwnsTarget;
     }
+
+    public Entity Source { get; private set; }
+
+    public Entity Target { get; private set; }
+
+    public RelationshipCardinality Cardinality { get; private set; }
+
+    public bool SourceOwnsTarget { get; private set; }
 }

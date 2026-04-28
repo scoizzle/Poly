@@ -70,16 +70,12 @@ public class DomainTests {
     [Test]
     public async Task Domain_AddRelationship_WithMatchingDomain_AddsRelationship() {
         var domain = DomainTestFactory.CreateDomain();
-        var customer = CreatePrimitive(domain, "Customer");
-        var invoice = CreatePrimitive(domain, "Invoice");
+        var customer = new Entity(domain, "Customer");
+        var invoice = new Entity(domain, "Invoice");
         domain.AddType(customer);
         domain.AddType(invoice);
 
-        var relationship = new Relationship(domain, "CustomerInvoices") {
-            Source = customer,
-            Target = invoice,
-            Cardinality = RelationshipCardinality.OneToMany
-        };
+        var relationship = new Relationship(domain, "CustomerInvoices", customer, invoice, RelationshipCardinality.OneToMany, false);
 
         domain.AddRelationship(relationship);
 
@@ -90,15 +86,16 @@ public class DomainTests {
     public async Task Domain_AddRelationship_WithDifferentDomain_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var otherDomain = DomainTestFactory.CreateDomain("Other Domain");
-        var customer = CreatePrimitive(domain, "Customer");
-        var invoice = CreatePrimitive(domain, "Invoice");
+        var customer = new Entity(domain, "Customer");
+        var invoice = new Entity(domain, "Invoice");
 
-        var relationship = new Relationship(otherDomain, "CustomerInvoices") {
-            Source = customer
-        };
+        domain.AddType(customer);
+        domain.AddType(invoice);
+
+        var relationship = new Relationship(otherDomain, "CustomerInvoices", customer, invoice, RelationshipCardinality.OneToMany, false);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            relationship.Target = invoice;
+            domain.AddRelationship(relationship);
             await Task.CompletedTask;
         });
     }
@@ -107,16 +104,14 @@ public class DomainTests {
     public async Task Domain_AddRelationship_WithForeignEndpoint_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var otherDomain = DomainTestFactory.CreateDomain("Other Domain");
-        var customer = CreatePrimitive(domain, "Customer");
-        var invoice = CreatePrimitive(otherDomain, "Invoice");
+        var customer = new Entity(domain, "Customer");
+        var invoice = new Entity(otherDomain, "Invoice");
         domain.AddType(customer);
 
-        var relationship = new Relationship(domain, "CustomerInvoices") {
-            Source = customer
-        };
+        var relationship = new Relationship(domain, "CustomerInvoices", customer, invoice, RelationshipCardinality.OneToMany, false);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            relationship.Target = invoice;
+            domain.AddRelationship(relationship);
             await Task.CompletedTask;
         });
     }
@@ -129,16 +124,10 @@ public class DomainTests {
         domain.AddType(source);
         domain.AddType(target);
 
-        domain.AddRelationship(new Relationship(domain, "CustomerCases") {
-            Source = source,
-            Target = target
-        });
+        domain.AddRelationship(new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToOne, false));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            domain.AddRelationship(new Relationship(domain, "CustomerCases") {
-                Source = source,
-                Target = target
-            });
+            domain.AddRelationship(new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToOne, false));
             await Task.CompletedTask;
         });
     }
@@ -153,20 +142,10 @@ public class DomainTests {
         domain.AddType(agent);
         domain.AddType(note);
 
-        domain.AddRelationship(new Relationship(domain, "CustomerNotes") {
-            Source = customer,
-            Target = note,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = true
-        });
+        domain.AddRelationship(new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, true));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            domain.AddRelationship(new Relationship(domain, "AgentNotes") {
-                Source = agent,
-                Target = note,
-                Cardinality = RelationshipCardinality.OneToMany,
-                SourceOwnsTarget = true
-            });
+            domain.AddRelationship(new Relationship(domain, "AgentNotes", agent, note, RelationshipCardinality.OneToMany, true));
             await Task.CompletedTask;
         });
     }
@@ -179,15 +158,13 @@ public class DomainTests {
         domain.AddType(source);
         domain.AddType(target);
 
-        var relationship = new Relationship(domain, "CustomerCases") {
-            Source = source,
-            Target = target,
-            Cardinality = RelationshipCardinality.OneToMany
-        };
+        var relationship = new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToMany, false);
 
         domain.AddRelationship(relationship);
 
-        relationship.Cardinality = RelationshipCardinality.OneToOne;
+        var mutation = domain.CreateMutation();
+        _ = mutation.SetRelationship(relationship, source, target, RelationshipCardinality.OneToOne, false);
+        _ = mutation.Apply();
 
         await Assert.That(relationship.Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
     }
@@ -200,17 +177,14 @@ public class DomainTests {
         domain.AddType(source);
         domain.AddType(target);
 
-        var relationship = new Relationship(domain, "CustomerCases") {
-            Source = source,
-            Target = target,
-            Cardinality = RelationshipCardinality.ManyToMany,
-            SourceOwnsTarget = false
-        };
+        var relationship = new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.ManyToMany, false);
 
         domain.AddRelationship(relationship);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            relationship.SourceOwnsTarget = true;
+            var mutation = domain.CreateMutation();
+            _ = mutation.SetRelationship(relationship, source, target, RelationshipCardinality.ManyToMany, true);
+            _ = mutation.Apply();
             await Task.CompletedTask;
         });
     }
@@ -225,24 +199,16 @@ public class DomainTests {
         domain.AddType(agent);
         domain.AddType(note);
 
-        domain.AddRelationship(new Relationship(domain, "CustomerNotes") {
-            Source = customer,
-            Target = note,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = true
-        });
+        domain.AddRelationship(new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, true));
 
-        var second = new Relationship(domain, "AgentNotes") {
-            Source = agent,
-            Target = note,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = false
-        };
+        var second = new Relationship(domain, "AgentNotes", agent, note, RelationshipCardinality.OneToMany, false);
 
         domain.AddRelationship(second);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            second.SourceOwnsTarget = true;
+            var mutation = domain.CreateMutation();
+            _ = mutation.SetRelationship(second, agent, note, RelationshipCardinality.OneToMany, true);
+            _ = mutation.Apply();
             await Task.CompletedTask;
         });
     }
@@ -250,15 +216,13 @@ public class DomainTests {
     [Test]
     public async Task Relationship_AddProperty_WithMatchingDomain_AddsProperty() {
         var domain = DomainTestFactory.CreateDomain();
-        var source = CreatePrimitive(domain, "Customer");
-        var target = CreatePrimitive(domain, "SupportCase");
+        var source = new Entity(domain, "Customer");
+        var target = new Entity(domain, "SupportCase");
         var timestamp = CreatePrimitive(domain, "instant", TypeCategory.Instant);
+        domain.AddType(source);
+        domain.AddType(target);
 
-        var relationship = new Relationship(domain, "AgentSupportCases") {
-            Source = source,
-            Target = target,
-            Cardinality = RelationshipCardinality.ManyToMany
-        };
+        var relationship = new Relationship(domain, "AgentSupportCases", source, target, RelationshipCardinality.ManyToMany, false);
 
         var assignedAt = new Property(domain, "AssignedAt", timestamp);
 
@@ -271,15 +235,13 @@ public class DomainTests {
     public async Task Relationship_AddProperty_WithDifferentDomain_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var otherDomain = DomainTestFactory.CreateDomain("Other Domain");
-        var source = CreatePrimitive(domain, "Customer");
-        var target = CreatePrimitive(domain, "SupportCase");
+        var source = new Entity(domain, "Customer");
+        var target = new Entity(domain, "SupportCase");
         var timestamp = CreatePrimitive(otherDomain, "instant", TypeCategory.Instant);
+        domain.AddType(source);
+        domain.AddType(target);
 
-        var relationship = new Relationship(domain, "AgentSupportCases") {
-            Source = source,
-            Target = target,
-            Cardinality = RelationshipCardinality.ManyToMany
-        };
+        var relationship = new Relationship(domain, "AgentSupportCases", source, target, RelationshipCardinality.ManyToMany, false);
 
         var assignedAt = new Property(otherDomain, "AssignedAt", timestamp);
 
@@ -313,10 +275,7 @@ public class DomainTests {
         domain.AddType(source);
         domain.AddType(target);
 
-        var relationship = new Relationship(domain, "CustomerCases") {
-            Source = source,
-            Target = target
-        };
+        var relationship = new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToOne, false);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
             source.AddRelationship(relationship);

@@ -68,12 +68,7 @@ public class DomainLoweringGeneratorTests {
         domain.AddType(stringType);
         domain.AddType(customer);
         domain.AddType(supportCase);
-        domain.AddRelationship(new Relationship(domain, "CustomerCases") {
-            Source = customer,
-            Target = supportCase,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = true
-        });
+        domain.AddRelationship(new Relationship(domain, "CustomerCases", customer, supportCase, RelationshipCardinality.OneToMany, true));
 
         var analysis = new DomainModelAnalyzer().AnalyzeDomain(domain);
 

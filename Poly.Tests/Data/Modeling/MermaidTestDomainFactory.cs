@@ -98,21 +98,11 @@ internal static class MermaidTestDomainFactory {
         });
         mutation.AddPolicy(supportCase, requireTitle);
 
-        var ownership = new Relationship(domain, "CustomerCases") {
-            Source = customer,
-            Target = supportCase,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = true
-        };
+        var ownership = new Relationship(domain, "CustomerCases", customer, supportCase, RelationshipCardinality.OneToMany, true);
         mutation.AddRelationship(ownership);
         mutation.AddEntityRelationship(customer, ownership);
 
-        var caseNotes = new Relationship(domain, "SupportCaseNotes") {
-            Source = supportCase,
-            Target = note,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = true
-        };
+        var caseNotes = new Relationship(domain, "SupportCaseNotes", supportCase, note, RelationshipCardinality.OneToMany, true);
         mutation.AddRelationship(caseNotes);
         mutation.AddEntityRelationship(supportCase, caseNotes);
 
@@ -121,12 +111,7 @@ internal static class MermaidTestDomainFactory {
             InitialStage = noteDraftStage
         });
 
-        var customerNotes = new Relationship(domain, "CustomerNotes") {
-            Source = customer,
-            Target = note,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = false
-        };
+        var customerNotes = new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, false);
 
         var onlyAgentsCanCreateUserNotes = new Policy(domain, "OnlyAgentsCanCreateUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
         mutation.AddRule(onlyAgentsCanCreateUserNotes, new PropertyRule {
@@ -146,12 +131,7 @@ internal static class MermaidTestDomainFactory {
         mutation.AddRelationship(customerNotes);
         mutation.AddEntityRelationship(customer, customerNotes);
 
-        var agentCases = new Relationship(domain, "AgentSupportCases") {
-            Source = agent,
-            Target = supportCase,
-            Cardinality = RelationshipCardinality.ManyToMany,
-            SourceOwnsTarget = false
-        };
+        var agentCases = new Relationship(domain, "AgentSupportCases", agent, supportCase, RelationshipCardinality.ManyToMany, false);
         var activeAssignmentStage = new Stage(domain, "Active");
         var inactiveAssignmentStage = new Stage(domain, "Inactive");
         var requireAssignedAtWhenActive = new Policy(domain, "RequireAssignedAtWhenActive");

@@ -4,9 +4,8 @@ namespace Poly.Syntax.Nodes;
 /// Represents a parameter in an interpretation tree that will become a lambda parameter.
 /// </summary>
 /// <remarks>
-/// Parameters are structural syntax nodes containing only the parameter name and optional type hint.
-/// The actual type definition is resolved by semantic analysis passes (INodeAnalyzer implementations) and stored in the context.
-/// Expression caching for referential equality is handled by the interpretation middleware, not the node itself.
+/// Parameters are structural syntax nodes representing formal arguments to operations or functions.
+/// Type information and semantic resolution are determined by analysis passes specific to each interpretation context.
 /// </remarks>
 public sealed record Parameter(string Name, Node? TypeReference = null, Node? DefaultValue = null) : Node {
     public override IEnumerable<Node?> Children => [TypeReference, DefaultValue];

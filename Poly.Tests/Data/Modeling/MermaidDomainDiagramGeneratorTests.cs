@@ -23,12 +23,7 @@ public class MermaidDomainDiagramGeneratorTests {
         order.AddProperty(new Property(domain, "Total", stringType));
         domain.AddType(order);
 
-        var rel = new Relationship(domain, "CustomerOrders") {
-            Source = customer,
-            Target = order,
-            Cardinality = RelationshipCardinality.OneToMany,
-            SourceOwnsTarget = true
-        };
+        var rel = new Relationship(domain, "CustomerOrders", customer, order, RelationshipCardinality.OneToMany, true);
         domain.AddRelationship(rel);
         customer.AddRelationship(rel);
 
@@ -173,12 +168,14 @@ public class MermaidDomainDiagramGeneratorTests {
         var project = new Entity(domain, "Project");
         domain.AddType(project);
 
-        var membership = new Relationship(domain, "AgentProjects") {
-            Source = agent,
-            Target = project,
-            Cardinality = RelationshipCardinality.ManyToMany,
-            SourceOwnsTarget = false
-        };
+        var membership = new Relationship(
+            domain,
+            "AgentProjects",
+            agent,
+            project,
+            RelationshipCardinality.ManyToMany,
+            false
+        );
         membership.AddProperty(new Property(domain, "JoinedAt", instantType));
         membership.AddStage(new Stage(domain, "Active"));
         domain.AddRelationship(membership);
@@ -203,12 +200,14 @@ public class MermaidDomainDiagramGeneratorTests {
         var b = new Entity(domain, "B");
         domain.AddType(b);
 
-        var rel = new Relationship(domain, "AtoB") {
-            Source = a,
-            Target = b,
-            Cardinality = RelationshipCardinality.OneToOne,
-            SourceOwnsTarget = false
-        };
+        var rel = new Relationship(
+            domain,
+            "AtoB",
+            a,
+            b,
+            RelationshipCardinality.OneToOne,
+            false);
+
         domain.AddRelationship(rel);
         a.AddRelationship(rel);
 

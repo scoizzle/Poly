@@ -82,12 +82,7 @@ public class DomainMutationTests {
         _ = mutation.AddType(source);
         _ = mutation.AddType(target);
 
-        var relationship = new Relationship(domain, "SourceTarget") {
-            Source = source,
-            Target = target,
-            Cardinality = RelationshipCardinality.OneToOne,
-            SourceOwnsTarget = true
-        };
+        var relationship = new Relationship(domain, "SourceTarget", source, target, RelationshipCardinality.OneToOne, true);
 
         _ = mutation.AddRelationship(relationship);
         _ = mutation.AddEntityRelationship(source, relationship);

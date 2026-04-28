@@ -2,7 +2,7 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
-public sealed record Stage : DomainObject {
+public sealed partial record Stage : DomainObject {
     private readonly List<Policy> _policies = [];
     private readonly List<Action> _actions = [];
     private Entity? _ownerEntity;
@@ -11,9 +11,10 @@ public sealed record Stage : DomainObject {
         Name = name;
     }
 
-    public string Name { get; set; }
+    public string Name { get; internal set; }
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
     public IReadOnlyCollection<Action> Actions => _actions.AsReadOnly();
+    internal Entity? OwnerEntity => _ownerEntity;
     public Stage? Parent { get; init; }
     public new IReadOnlyCollection<Stage> Children { get; init; } = [];
 
@@ -37,7 +38,7 @@ public sealed record Stage : DomainObject {
         _ownerEntity = ownerEntity;
     }
 
-    public void AddPolicy(Policy policy) {
+    private void AddPolicy(Policy policy) {
         policy.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (_policies.Any(existing => string.Equals(existing.Name, policy.Name, StringComparison.Ordinal))) {
@@ -47,12 +48,12 @@ public sealed record Stage : DomainObject {
         _policies.Add(policy);
     }
 
-    public bool RemovePolicy(Policy policy) {
+    private bool RemovePolicy(Policy policy) {
         policy.ThrowIfNullOrMismatchedDomain(Domain);
         return _policies.Remove(policy);
     }
 
-    public void AddAction(Action action) {
+    private void AddAction(Action action) {
         action.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (_ownerEntity is not null && !ReferenceEquals(action.Entity, _ownerEntity)) {
@@ -67,7 +68,7 @@ public sealed record Stage : DomainObject {
         _actions.Add(action);
     }
 
-    public bool RemoveAction(Action action) {
+    private bool RemoveAction(Action action) {
         action.ThrowIfNullOrMismatchedDomain(Domain);
         return _actions.Remove(action);
     }

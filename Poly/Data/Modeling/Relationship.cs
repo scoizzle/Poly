@@ -10,7 +10,7 @@ public enum RelationshipCardinality {
     ManyToMany
 }
 
-public sealed record Relationship : Entity {
+public sealed partial record Relationship : Entity {
     private IDomainType _source = null!;
     private IDomainType _target = null!;
     private RelationshipCardinality _cardinality = RelationshipCardinality.OneToOne;
@@ -48,5 +48,18 @@ public sealed record Relationship : Entity {
             Domain.EvaluateRelationshipMutationPreconditions(this, _source, _target, _cardinality, value);
             _sourceOwnsTarget = value;
         }
+    }
+
+    private void ApplyShape(Domain domain, IDomainType source, IDomainType target, RelationshipCardinality cardinality, bool sourceOwnsTarget) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+
+        domain.EvaluateRelationshipMutationPreconditions(this, source, target, cardinality, sourceOwnsTarget);
+
+        Source = source;
+        Target = target;
+        Cardinality = cardinality;
+        SourceOwnsTarget = sourceOwnsTarget;
     }
 }

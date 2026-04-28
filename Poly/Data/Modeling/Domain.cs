@@ -2,50 +2,19 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
-public sealed class Domain {
-    private readonly Dictionary<string, IDomainType> _types = new();
+public sealed partial record Domain : DomainObject {
+    private readonly Lock _mutationLock = new();
+    private readonly List<DomainType> _types = new();
     private readonly List<Relationship> _relationships = new();
 
-    private Domain(ICollection<IDomainType> entities, ICollection<Relationship> relationships) {
-        foreach (var entity in entities)
-            AddType(entity);
-
-        foreach (var relationship in relationships)
-            AddRelationship(relationship);
+    public Domain(string name) {
+        Name = Guard.ThrowIfNullOrEmpty(name);
     }
 
-    public required string Name { get; set; }
-    public IReadOnlyCollection<IDomainType> Types => _types.Values;
+    public string Name { get; private set; } = string.Empty;
+    public IReadOnlyCollection<DomainType> Types => _types.AsReadOnly();
     public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
-
-    public void AddType(IDomainType type) {
-        ArgumentNullException.ThrowIfNull(type);
-
-        if (type.Domain != this)
-            throw new InvalidOperationException("Entity domain must match parent domain.");
-
-        if (!_types.TryAdd(type.Name, type))
-            throw new InvalidOperationException($"An entity with the name '{type.Name}' already exists in the domain.");
-    }
-
-    public void AddRelationship(Relationship relationship) {
-        ArgumentNullException.ThrowIfNull(relationship);
-
-        if (relationship.Domain != this)
-            throw new InvalidOperationException("Relationship domain must match parent domain.");
-
-        EvaluateRelationshipMutationPreconditions(
-            relationship,
-            relationship.Source,
-            relationship.Target,
-            relationship.Cardinality,
-            relationship.SourceOwnsTarget);
-
-        if (_relationships.Any(existing => string.Equals(existing.Name, relationship.Name, StringComparison.Ordinal)))
-            throw new InvalidOperationException($"A relationship with the name '{relationship.Name}' already exists in the domain.");
-
-        _relationships.Add(relationship);
-    }
+    public override IEnumerable<Node?> Children => [.. _types, .. _relationships];
 
     internal void EvaluateRelationshipMutationPreconditions(
         Relationship relationship,
@@ -99,5 +68,9 @@ public sealed class Domain {
                     $"Relationship '{relationship.Name}' source must remain aligned with attached entity relationships.");
             }
         }
+    }
+
+    public Mutation CreateMutation(DomainModelAnalyzer? analyzer = null) {
+        return new Mutation(this, analyzer ?? new DomainModelAnalyzer());
     }
 }

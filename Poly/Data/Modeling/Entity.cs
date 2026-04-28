@@ -36,7 +36,7 @@ namespace Poly.Data.Modeling;
 /// }
 /// </code>
 /// </remarks>
-public record Entity : DomainType {
+public partial record Entity : DomainType {
     private readonly List<Property> _properties = [];
     private readonly List<Stage> _stages = [];
     private readonly List<Policy> _policies = [];
@@ -48,7 +48,6 @@ public record Entity : DomainType {
         ArgumentNullException.ThrowIfNull(name);
 
         parentEntity?.ThrowIfMismatchedDomain(domain);
-        ValidateParentEntityCycle(parentEntity);
 
         Name = name;
         ParentEntity = parentEntity;
@@ -63,7 +62,7 @@ public record Entity : DomainType {
     public IReadOnlyCollection<Event> Events => _events.AsReadOnly();
     public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
 
-    public void AddProperty(Property property) {
+    private void AddProperty(Property property) {
         property.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (_properties.Any(existing => string.Equals(existing.Name, property.Name, StringComparison.Ordinal))) {
@@ -73,18 +72,40 @@ public record Entity : DomainType {
         _properties.Add(property);
     }
 
-    public void AddStage(Stage stage) {
+    private bool RemoveProperty(Property property) {
+        property.ThrowIfNullOrMismatchedDomain(Domain);
+        return _properties.Remove(property);
+    }
+
+    private void AddStage(Stage stage) {
         stage.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (_stages.Any(existing => string.Equals(existing.Name, stage.Name, StringComparison.Ordinal))) {
             throw new InvalidOperationException($"Stage '{stage.Name}' already exists on entity '{Name}'.");
         }
 
-        ValidateStageInheritance(stage);
+        if (ParentEntity is not null && ParentEntity.Stages.Count > 0) {
+            if (stage.Parent is null) {
+                throw new InvalidOperationException(
+                    $"Stage '{stage.Name}' on child entity '{Name}' must have a parent stage when parent entity '{ParentEntity.Name}' defines stages.");
+            }
+
+            if (!ParentEntity.Stages.Contains(stage.Parent)) {
+                throw new InvalidOperationException(
+                    $"Stage '{stage.Name}' on child entity '{Name}' must directly inherit from a stage defined on parent entity '{ParentEntity.Name}'.");
+            }
+        }
+
         stage.AttachToEntity(this);
         _stages.Add(stage);
     }
-    public void AddPolicy(Policy policy) {
+
+    private bool RemoveStage(Stage stage) {
+        stage.ThrowIfNullOrMismatchedDomain(Domain);
+        return _stages.Remove(stage);
+    }
+
+    private void AddPolicy(Policy policy) {
         policy.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (_policies.Any(existing => string.Equals(existing.Name, policy.Name, StringComparison.Ordinal))) {
@@ -94,11 +115,12 @@ public record Entity : DomainType {
         _policies.Add(policy);
     }
 
-    public bool RemovePolicy(Policy policy) {
+    private bool RemovePolicy(Policy policy) {
         policy.ThrowIfNullOrMismatchedDomain(Domain);
         return _policies.Remove(policy);
     }
-    public void AddAction(Action action) {
+
+    private void AddAction(Action action) {
         action.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (!ReferenceEquals(action.Entity, this)) {
@@ -112,7 +134,12 @@ public record Entity : DomainType {
         _actions.Add(action);
     }
 
-    public void AddEvent(Event @event) {
+    private bool RemoveAction(Action action) {
+        action.ThrowIfNullOrMismatchedDomain(Domain);
+        return _actions.Remove(action);
+    }
+
+    private void AddEvent(Event @event) {
         @event.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (_events.Any(existing => string.Equals(existing.Name, @event.Name, StringComparison.Ordinal))) {
@@ -122,7 +149,12 @@ public record Entity : DomainType {
         _events.Add(@event);
     }
 
-    public void AddRelationship(Relationship relationship) {
+    private bool RemoveEvent(Event @event) {
+        @event.ThrowIfNullOrMismatchedDomain(Domain);
+        return _events.Remove(@event);
+    }
+
+    private void AddRelationship(Relationship relationship) {
         relationship.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (!Domain.Relationships.Contains(relationship)) {
@@ -130,7 +162,7 @@ public record Entity : DomainType {
         }
 
         if (!ReferenceEquals(relationship.Source, this)) {
-            throw new InvalidOperationException($"Relationship '{relationship.Name}' source must be '{Name}'.");
+            throw new InvalidOperationException($"Relationship '{relationship.Name}' source must match entity '{Name}'.");
         }
 
         if (_relationships.Any(existing => string.Equals(existing.Name, relationship.Name, StringComparison.Ordinal))) {
@@ -140,33 +172,8 @@ public record Entity : DomainType {
         _relationships.Add(relationship);
     }
 
-    private void ValidateStageInheritance(Stage stage) {
-        if (ParentEntity is null || ParentEntity.Stages.Count == 0) {
-            return;
-        }
-
-        if (stage.Parent is null) {
-            throw new InvalidOperationException(
-                $"Stage '{stage.Name}' on child entity '{Name}' must have a parent stage when parent entity '{ParentEntity.Name}' defines stages.");
-        }
-
-        if (!ParentEntity.Stages.Contains(stage.Parent)) {
-            throw new InvalidOperationException(
-                $"Stage '{stage.Name}' on child entity '{Name}' must directly inherit from a stage defined on parent entity '{ParentEntity.Name}'.");
-        }
-    }
-
-    private void ValidateParentEntityCycle(Entity? parentEntity) {
-        if (parentEntity is null) {
-            return;
-        }
-
-        var lineage = new HashSet<Entity> { this };
-
-        for (var current = parentEntity; current is not null; current = current.ParentEntity) {
-            if (!lineage.Add(current)) {
-                throw new InvalidOperationException($"Entity '{Name}' cannot participate in an inheritance cycle.");
-            }
-        }
+    private bool RemoveRelationship(Relationship relationship) {
+        relationship.ThrowIfNullOrMismatchedDomain(Domain);
+        return _relationships.Remove(relationship);
     }
 }

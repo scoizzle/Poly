@@ -16,3 +16,4 @@ global using Poly.Syntax.Nodes;
 global using static Poly.Syntax.NodeExtensions;
 
 [assembly: InternalsVisibleTo("Poly.Tests")]
+[assembly: InternalsVisibleTo("Poly.Benchmarks")]

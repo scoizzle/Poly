@@ -30,11 +30,6 @@ public sealed class PublishEvent : Effect {
         eventProperty.ThrowIfMismatchedDomain(Event.Domain);
         value.ThrowIfMismatchedDomain(Event.Domain);
 
-        if (!Event.Properties.Any(p => string.Equals(p.Name, eventProperty.Name, StringComparison.Ordinal))) {
-            throw new InvalidOperationException(
-                $"Property '{eventProperty.Name}' does not exist on event '{Event.Name}'.");
-        }
-
         if (!ReferenceEquals(eventProperty.Type, value.Type)) {
             throw new InvalidOperationException(
                 $"Binding for event property '{eventProperty.Name}' requires type '{eventProperty.Type.Name}' but got '{value.Type.Name}'.");

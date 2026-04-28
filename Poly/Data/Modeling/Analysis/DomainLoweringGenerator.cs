@@ -1,9 +1,4 @@
-using InterpAnd = Poly.Syntax.Nodes.And;
-using InterpEqual = Poly.Syntax.Nodes.Equal;
-using InterpGreaterThanOrEqual = Poly.Syntax.Nodes.GreaterThanOrEqual;
-using InterpLessThanOrEqual = Poly.Syntax.Nodes.LessThanOrEqual;
-using InterpNotEqual = Poly.Syntax.Nodes.NotEqual;
-using InterpOr = Poly.Syntax.Nodes.Or;
+using Poly.Syntax.Nodes;
 
 namespace Poly.Data.Modeling;
 
@@ -34,12 +29,12 @@ public sealed class DomainLoweringGenerator {
         _ = subjectRoot;
 
         return expression switch {
-            InterpAnd and => new InterpAnd(LowerCore(and.LeftHandValue, subjectRoot), LowerCore(and.RightHandValue, subjectRoot)),
-            InterpOr or => new InterpOr(LowerCore(or.LeftHandValue, subjectRoot), LowerCore(or.RightHandValue, subjectRoot)),
-            InterpEqual equal => new InterpEqual(LowerCore(equal.LeftHandValue, subjectRoot), LowerCore(equal.RightHandValue, subjectRoot)),
-            InterpNotEqual notEqual => new InterpNotEqual(LowerCore(notEqual.LeftHandValue, subjectRoot), LowerCore(notEqual.RightHandValue, subjectRoot)),
-            InterpGreaterThanOrEqual greaterThanOrEqual => new InterpGreaterThanOrEqual(LowerCore(greaterThanOrEqual.LeftHandValue, subjectRoot), LowerCore(greaterThanOrEqual.RightHandValue, subjectRoot)),
-            InterpLessThanOrEqual lessThanOrEqual => new InterpLessThanOrEqual(LowerCore(lessThanOrEqual.LeftHandValue, subjectRoot), LowerCore(lessThanOrEqual.RightHandValue, subjectRoot)),
+            And and => new And(LowerCore(and.LeftHandValue, subjectRoot), LowerCore(and.RightHandValue, subjectRoot)),
+            Or or => new Or(LowerCore(or.LeftHandValue, subjectRoot), LowerCore(or.RightHandValue, subjectRoot)),
+            Equal equal => new Equal(LowerCore(equal.LeftHandValue, subjectRoot), LowerCore(equal.RightHandValue, subjectRoot)),
+            NotEqual notEqual => new NotEqual(LowerCore(notEqual.LeftHandValue, subjectRoot), LowerCore(notEqual.RightHandValue, subjectRoot)),
+            GreaterThanOrEqual greaterThanOrEqual => new GreaterThanOrEqual(LowerCore(greaterThanOrEqual.LeftHandValue, subjectRoot), LowerCore(greaterThanOrEqual.RightHandValue, subjectRoot)),
+            LessThanOrEqual lessThanOrEqual => new LessThanOrEqual(LowerCore(lessThanOrEqual.LeftHandValue, subjectRoot), LowerCore(lessThanOrEqual.RightHandValue, subjectRoot)),
             Member memberAccess => new Member(LowerCore(memberAccess.Value, subjectRoot), memberAccess.MemberName),
             Constant constant => new Constant(constant.Value),
             _ => expression

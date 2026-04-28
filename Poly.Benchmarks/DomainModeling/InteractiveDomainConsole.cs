@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
@@ -75,19 +74,7 @@ internal static class InteractiveDomainConsole {
     }
 
     private static Domain CreateDomain(string domainName) {
-        var domain = (Domain?)Activator.CreateInstance(
-            typeof(Domain),
-            BindingFlags.Instance | BindingFlags.NonPublic,
-            binder: null,
-            args: [new List<IDomainType>(), new List<Relationship>()],
-            culture: null);
-
-        if (domain is null) {
-            throw new InvalidOperationException("Failed to construct domain instance.");
-        }
-
-        domain.Name = domainName;
-        return domain;
+        return new Domain(domainName);
     }
 
     private static Domain RunGuidedSupportCaseSetup() {
@@ -98,33 +85,37 @@ internal static class InteractiveDomainConsole {
         var useDefaultName = PromptYesNo("Use default domain name 'Support Case Management'?");
         var domainName = useDefaultName ? "Support Case Management" : PromptRequiredString("Enter domain name");
         var domain = CreateDomain(domainName);
+        var mutator = new DomainMutator(domain);
+
+        using var batch = mutator.BeginBatch();
+        var domainMutator = batch.ForDomain();
 
         Step("Create primitive types", () => {
-            domain.AddType(new Primitive(domain, "string", TypeCategory.Text));
-            domain.AddType(new Primitive(domain, "int", TypeCategory.Integer));
-            domain.AddType(new Primitive(domain, "bool", TypeCategory.Primitive));
-            domain.AddType(new Primitive(domain, "instant", TypeCategory.Instant));
+            domainMutator.AddType(new Primitive(domain, "string", TypeCategory.Text));
+            domainMutator.AddType(new Primitive(domain, "int", TypeCategory.Integer));
+            domainMutator.AddType(new Primitive(domain, "bool", TypeCategory.Primitive));
+            domainMutator.AddType(new Primitive(domain, "instant", TypeCategory.Instant));
         });
 
         Step("Create entities and inheritance", () => {
             var user = new Entity(domain, "User");
-            user.AddProperty(new Property(domain, "Name", domain.RequirePrimitive("string")));
-            user.AddProperty(new Property(domain, "Email", domain.RequirePrimitive("string")));
-            domain.AddType(user);
+            batch.For(user).AddProperty(new Property(domain, "Name", domain.RequirePrimitive("string")));
+            batch.For(user).AddProperty(new Property(domain, "Email", domain.RequirePrimitive("string")));
+            domainMutator.AddType(user);
 
-            domain.AddType(new Entity(domain, "Customer", user));
-            domain.AddType(new Entity(domain, "Agent", user));
+            domainMutator.AddType(new Entity(domain, "Customer", user));
+            domainMutator.AddType(new Entity(domain, "Agent", user));
 
             var supportCase = new Entity(domain, "SupportCase");
-            supportCase.AddProperty(new Property(domain, "Title", domain.RequirePrimitive("string")));
-            supportCase.AddProperty(new Property(domain, "Priority", domain.RequirePrimitive("int")));
-            supportCase.AddProperty(new Property(domain, "IsEscalated", domain.RequirePrimitive("bool")));
-            domain.AddType(supportCase);
+            batch.For(supportCase).AddProperty(new Property(domain, "Title", domain.RequirePrimitive("string")));
+            batch.For(supportCase).AddProperty(new Property(domain, "Priority", domain.RequirePrimitive("int")));
+            batch.For(supportCase).AddProperty(new Property(domain, "IsEscalated", domain.RequirePrimitive("bool")));
+            domainMutator.AddType(supportCase);
 
             var note = new Entity(domain, "Note", supportCase);
-            note.AddProperty(new Property(domain, "Content", domain.RequirePrimitive("string")));
-            note.AddProperty(new Property(domain, "Author", user));
-            domain.AddType(note);
+            batch.For(note).AddProperty(new Property(domain, "Content", domain.RequirePrimitive("string")));
+            batch.For(note).AddProperty(new Property(domain, "Author", user));
+            domainMutator.AddType(note);
         });
 
         Step("Create SupportCase stages", () => {
@@ -134,13 +125,13 @@ internal static class InteractiveDomainConsole {
             var assignedStage = new Stage(domain, "Assigned") { Parent = inProgressStage };
             var resolvedStage = new Stage(domain, "Resolved");
 
-            supportCase.AddStage(newStage);
-            supportCase.AddStage(inProgressStage);
-            supportCase.AddStage(assignedStage);
-            supportCase.AddStage(resolvedStage);
+            batch.For(supportCase).AddStage(newStage);
+            batch.For(supportCase).AddStage(inProgressStage);
+            batch.For(supportCase).AddStage(assignedStage);
+            batch.For(supportCase).AddStage(resolvedStage);
 
             var note = domain.RequireEntity("Note");
-            note.AddStage(new Stage(domain, "Draft") { Parent = inProgressStage });
+            batch.For(note).AddStage(new Stage(domain, "Draft") { Parent = inProgressStage });
         });
 
         Step("Create SupportCase events", () => {
@@ -149,16 +140,16 @@ internal static class InteractiveDomainConsole {
             var stringType = domain.RequirePrimitive("string");
 
             var caseAssigned = new Event(domain, "CaseAssigned");
-            caseAssigned.AddProperty(new Property(domain, "AssignedTo", agent));
+            batch.For(caseAssigned).AddProperty(new Property(domain, "AssignedTo", agent));
 
             var caseResolved = new Event(domain, "CaseResolved");
-            caseResolved.AddProperty(new Property(domain, "ResolutionSummary", stringType));
+            batch.For(caseResolved).AddProperty(new Property(domain, "ResolutionSummary", stringType));
 
-            supportCase.AddEvent(caseAssigned);
-            supportCase.AddEvent(caseResolved);
+            batch.For(supportCase).AddEvent(caseAssigned);
+            batch.For(supportCase).AddEvent(caseResolved);
 
-            domain.AddType(caseAssigned);
-            domain.AddType(caseResolved);
+            domainMutator.AddType(caseAssigned);
+            domainMutator.AddType(caseResolved);
         });
 
         Step("Create SupportCase actions and effects", () => {
@@ -173,37 +164,37 @@ internal static class InteractiveDomainConsole {
 
             var assignAction = new DomainAction(domain, "Assign", supportCase);
             var assignAgentParameter = new Property(domain, "Agent", agent);
-            assignAction.AddParameter(assignAgentParameter);
-            assignAction.AddEffect(new StageTransition { TargetStage = assignedStage });
+            batch.For(assignAction).AddParameter(assignAgentParameter);
+            batch.For(assignAction).AddEffect(new StageTransition { TargetStage = assignedStage });
 
             var publishAssigned = new PublishEvent { Event = supportCase.RequireEvent("CaseAssigned") };
             publishAssigned.BindProperty(publishAssigned.Event.RequireProperty("AssignedTo"), assignAgentParameter);
-            assignAction.AddEffect(publishAssigned);
+            batch.For(assignAction).AddEffect(publishAssigned);
 
-            supportCase.AddAction(assignAction);
-            newStage.AddAction(assignAction);
+            batch.For(supportCase).AddAction(assignAction);
+            batch.For(newStage).AddAction(assignAction);
 
             var addNoteAction = new DomainAction(domain, "AddNote", supportCase);
-            addNoteAction.AddParameter(new Property(domain, "NoteText", stringType));
-            addNoteAction.AddEffect(new CreateEntityInstance {
+            batch.For(addNoteAction).AddParameter(new Property(domain, "NoteText", stringType));
+            batch.For(addNoteAction).AddEffect(new CreateEntityInstance {
                 EntityType = note,
                 InitialStage = note.RequireStage("Draft")
             });
 
-            supportCase.AddAction(addNoteAction);
-            inProgressStage.AddAction(addNoteAction);
+            batch.For(supportCase).AddAction(addNoteAction);
+            batch.For(inProgressStage).AddAction(addNoteAction);
 
             var resolveAction = new DomainAction(domain, "Resolve", supportCase);
             var resolutionSummaryParameter = new Property(domain, "ResolutionSummary", stringType);
-            resolveAction.AddParameter(resolutionSummaryParameter);
-            resolveAction.AddEffect(new StageTransition { TargetStage = resolvedStage });
+            batch.For(resolveAction).AddParameter(resolutionSummaryParameter);
+            batch.For(resolveAction).AddEffect(new StageTransition { TargetStage = resolvedStage });
 
             var publishResolved = new PublishEvent { Event = supportCase.RequireEvent("CaseResolved") };
             publishResolved.BindProperty(publishResolved.Event.RequireProperty("ResolutionSummary"), resolutionSummaryParameter);
-            resolveAction.AddEffect(publishResolved);
+            batch.For(resolveAction).AddEffect(publishResolved);
 
-            supportCase.AddAction(resolveAction);
-            inProgressStage.AddAction(resolveAction);
+            batch.For(supportCase).AddAction(resolveAction);
+            batch.For(inProgressStage).AddAction(resolveAction);
         });
 
         Step("Create SupportCase and relationship policies", () => {
@@ -211,20 +202,20 @@ internal static class InteractiveDomainConsole {
             var note = domain.RequireEntity("Note");
 
             var requireTitle = new Policy(domain, "RequireTitle") { AggregationStrategy = PolicyAggregationStrategy.All };
-            requireTitle.AddRule(new PropertyRule {
+            batch.For(requireTitle).AddRule(new PropertyRule {
                 Value = supportCase.RequireProperty("Title"),
                 Constraints = new RequiredConstraint()
             });
-            supportCase.AddPolicy(requireTitle);
+            batch.For(supportCase).AddPolicy(requireTitle);
 
             var createNotesPolicy = new Policy(domain, "OnlyAgentsCanCreateUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
-            createNotesPolicy.AddRule(new PropertyRule {
+            batch.For(createNotesPolicy).AddRule(new PropertyRule {
                 Value = note.RequireProperty("Author"),
                 Constraints = new RequiredConstraint()
             });
 
             var viewNotesPolicy = new Policy(domain, "OnlyAgentsCanViewUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
-            viewNotesPolicy.AddRule(new PropertyRule {
+            batch.For(viewNotesPolicy).AddRule(new PropertyRule {
                 Value = note.RequireProperty("Author"),
                 Constraints = new RequiredConstraint()
             });
@@ -235,10 +226,10 @@ internal static class InteractiveDomainConsole {
                 Cardinality = RelationshipCardinality.OneToMany,
                 SourceOwnsTarget = false
             };
-            customerNotes.AddPolicy(createNotesPolicy);
-            customerNotes.AddPolicy(viewNotesPolicy);
-            domain.AddRelationship(customerNotes);
-            domain.RequireEntity("Customer").AddRelationship(customerNotes);
+            batch.For(customerNotes).AddPolicy(createNotesPolicy);
+            batch.For(customerNotes).AddPolicy(viewNotesPolicy);
+            domainMutator.AddRelationship(customerNotes);
+            batch.For(domain.RequireEntity("Customer")).AddRelationship(customerNotes);
         });
 
         Step("Create SupportCase relationships", () => {
@@ -254,8 +245,8 @@ internal static class InteractiveDomainConsole {
                 Cardinality = RelationshipCardinality.OneToMany,
                 SourceOwnsTarget = true
             };
-            domain.AddRelationship(customerCases);
-            customer.AddRelationship(customerCases);
+            domainMutator.AddRelationship(customerCases);
+            batch.For(customer).AddRelationship(customerCases);
 
             var supportCaseNotes = new Relationship(domain, "SupportCaseNotes") {
                 Source = supportCase,
@@ -263,8 +254,8 @@ internal static class InteractiveDomainConsole {
                 Cardinality = RelationshipCardinality.OneToMany,
                 SourceOwnsTarget = true
             };
-            domain.AddRelationship(supportCaseNotes);
-            supportCase.AddRelationship(supportCaseNotes);
+            domainMutator.AddRelationship(supportCaseNotes);
+            batch.For(supportCase).AddRelationship(supportCaseNotes);
 
             var agentCases = new Relationship(domain, "AgentSupportCases") {
                 Source = agent,
@@ -275,33 +266,35 @@ internal static class InteractiveDomainConsole {
 
             var active = new Stage(domain, "Active");
             var inactive = new Stage(domain, "Inactive");
-            agentCases.AddStage(active);
-            agentCases.AddStage(inactive);
+            batch.For(agentCases).AddStage(active);
+            batch.For(agentCases).AddStage(inactive);
 
             var assignedAt = new Property(domain, "AssignedAt", instant);
-            assignedAt.AddConstraint(new RequiredConstraint());
+            batch.For(assignedAt).AddConstraint(new RequiredConstraint());
             var unassignedAt = new Property(domain, "UnassignedAt", instant);
 
-            agentCases.AddProperty(assignedAt);
-            agentCases.AddProperty(unassignedAt);
+            batch.For(agentCases).AddProperty(assignedAt);
+            batch.For(agentCases).AddProperty(unassignedAt);
 
             var requireAssignedAt = new Policy(domain, "RequireAssignedAtWhenActive");
-            requireAssignedAt.AddRule(new PropertyRule {
+            batch.For(requireAssignedAt).AddRule(new PropertyRule {
                 Value = assignedAt,
                 Constraints = new RequiredConstraint()
             });
-            active.AddPolicy(requireAssignedAt);
+            batch.For(active).AddPolicy(requireAssignedAt);
 
             var requireUnassignedAt = new Policy(domain, "RequireUnassignedAtWhenInactive");
-            requireUnassignedAt.AddRule(new PropertyRule {
+            batch.For(requireUnassignedAt).AddRule(new PropertyRule {
                 Value = unassignedAt,
                 Constraints = new RequiredConstraint()
             });
-            inactive.AddPolicy(requireUnassignedAt);
+            batch.For(inactive).AddPolicy(requireUnassignedAt);
 
-            domain.AddRelationship(agentCases);
-            agent.AddRelationship(agentCases);
+            domainMutator.AddRelationship(agentCases);
+            batch.For(agent).AddRelationship(agentCases);
         });
+
+        _ = batch.Commit();
 
         Console.WriteLine();
         Console.WriteLine("SupportCase setup complete.");
@@ -321,7 +314,8 @@ internal static class InteractiveDomainConsole {
 
         var primitive = new Primitive(domain, name, category);
 
-        domain.AddType(primitive);
+        var mutator = new DomainMutator(domain);
+        _ = mutator.ForDomain().AddType(primitive);
         Console.WriteLine($"Added primitive '{name}'.");
     }
 
@@ -330,7 +324,8 @@ internal static class InteractiveDomainConsole {
         var parent = ChooseOptional("Choose parent entity (optional)", domain.GetAvailableEntities().Where(entity => entity is not Relationship).OrderBy(entity => entity.Name).ToArray());
 
         var entity = new Entity(domain, name, parent);
-        domain.AddType(entity);
+        var mutator = new DomainMutator(domain);
+        _ = mutator.ForDomain().AddType(entity);
         Console.WriteLine($"Added entity '{name}'.");
     }
 
@@ -395,10 +390,12 @@ internal static class InteractiveDomainConsole {
         var name = PromptRequiredString("Property name");
         var type = ChooseRequired("Choose property type", domain.Types.OrderBy(candidate => candidate.Name).ToArray());
         var property = new Property(domain, name, type);
-        entity.AddProperty(property);
+
+        var mutator = new DomainMutator(domain);
+        _ = mutator.For(entity).AddProperty(property);
 
         if (PromptYesNo("Add RequiredConstraint to this property?")) {
-            property.AddConstraint(new RequiredConstraint());
+            _ = mutator.For(property).AddConstraint(new RequiredConstraint());
         }
 
         Console.WriteLine($"Added property '{name}' to entity '{entity.Name}'.");
@@ -416,7 +413,8 @@ internal static class InteractiveDomainConsole {
 
         var stage = new Stage(entity.Domain, name) { Parent = parent };
 
-        entity.AddStage(stage);
+        var mutator = new DomainMutator(entity.Domain);
+        _ = mutator.For(entity).AddStage(stage);
         Console.WriteLine($"Added stage '{name}' to entity '{entity.Name}'.");
     }
 

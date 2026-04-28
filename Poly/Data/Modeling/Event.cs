@@ -21,7 +21,7 @@ namespace Poly.Data.Modeling;
 /// }
 /// </code>
 /// </remarks>
-public sealed record Event : DomainType {
+public sealed partial record Event : DomainType {
     private readonly List<Property> _properties = [];
 
     public Event(Domain domain, string name) : base(domain) {
@@ -30,7 +30,7 @@ public sealed record Event : DomainType {
 
     public override IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
 
-    public void AddProperty(Property property) {
+    private void AddProperty(Property property) {
         property.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (_properties.Any(existing => string.Equals(existing.Name, property.Name, StringComparison.Ordinal))) {
@@ -38,5 +38,10 @@ public sealed record Event : DomainType {
         }
 
         _properties.Add(property);
+    }
+
+    private bool RemoveProperty(Property property) {
+        property.ThrowIfNullOrMismatchedDomain(Domain);
+        return _properties.Remove(property);
     }
 }

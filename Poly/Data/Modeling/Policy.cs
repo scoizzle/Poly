@@ -10,23 +10,18 @@ public enum PolicyAggregationStrategy {
 /// <summary>
 /// Represents a composable policy that can aggregate multiple policy rules.
 /// </summary>
-public sealed record Policy : DomainObject {
+public sealed partial record Policy : DomainObject {
     private readonly List<IPolicyRule> _rules = [];
 
     public Policy(Domain domain, string name) : base(domain) {
         Name = name;
     }
 
-    public string Name { get; set; }
+    public string Name { get; internal set; }
 
     public PolicyAggregationStrategy AggregationStrategy { get; init; } = PolicyAggregationStrategy.All;
 
     public IReadOnlyCollection<IPolicyRule> Rules => _rules.AsReadOnly();
-
-    public void AddRule(IPolicyRule rule) {
-        ArgumentNullException.ThrowIfNull(rule);
-        _rules.Add(rule);
-    }
 
     public Node ToInterpretationNode(Node subject) {
         ArgumentNullException.ThrowIfNull(subject);
@@ -38,6 +33,16 @@ public sealed record Policy : DomainObject {
             PolicyAggregationStrategy.Any => nodes.Aggregate((Node)False, (acc, node) => new Or(acc, node)),
             _ => throw new InvalidOperationException("Unknown aggregation strategy.")
         };
+    }
+
+    private void AddRule(IPolicyRule rule) {
+        ArgumentNullException.ThrowIfNull(rule);
+        _rules.Add(rule);
+    }
+
+    private bool RemoveRule(IPolicyRule rule) {
+        ArgumentNullException.ThrowIfNull(rule);
+        return _rules.Remove(rule);
     }
 }
 

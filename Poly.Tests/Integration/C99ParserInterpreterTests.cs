@@ -163,9 +163,11 @@ public class C99ParserInterpreterTests {
         }
     }
 
-    private readonly struct C99Segment(C99Point start, C99Point end) {
-        public readonly C99Point start = start;
-        public readonly C99Point end = end;
+    private struct C99Segment {
+#pragma warning disable CS0649
+        public C99Point start;
+        public C99Point end;
+#pragma warning restore CS0649
     }
 
     private sealed class C99Parser {

@@ -3,7 +3,7 @@ using Poly.Data.Modeling.Validation;
 
 namespace Poly.Data.Modeling;
 
-public sealed record Property : DomainObject, IDomainValue {
+public sealed partial record Property : DomainObject, IDomainValue {
     private readonly List<Constraint> _constraints = [];
     private readonly List<Policy> _policies = [];
 
@@ -18,26 +18,21 @@ public sealed record Property : DomainObject, IDomainValue {
     }
 
     public IDomainType Type { get; }
-    public string Name { get; set; }
+    public string Name { get; internal set; }
     public IReadOnlyCollection<Constraint> Constraints => _constraints.AsReadOnly();
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
 
-    public void AddConstraint(Constraint constraint) {
+    private void AddConstraint(Constraint constraint) {
         ArgumentNullException.ThrowIfNull(constraint);
-
-        if (_constraints.Contains(constraint)) {
-            throw new InvalidOperationException($"Constraint '{constraint.GetType().Name}' already exists on property '{Name}'.");
-        }
-
         _constraints.Add(constraint);
     }
 
-    public bool RemoveConstraint(Constraint constraint) {
+    private bool RemoveConstraint(Constraint constraint) {
         ArgumentNullException.ThrowIfNull(constraint);
         return _constraints.Remove(constraint);
     }
 
-    public void AddPolicy(Policy policy) {
+    private void AddPolicy(Policy policy) {
         policy.ThrowIfNullOrMismatchedDomain(Domain);
 
         if (_policies.Any(existing => string.Equals(existing.Name, policy.Name, StringComparison.Ordinal))) {
@@ -47,7 +42,7 @@ public sealed record Property : DomainObject, IDomainValue {
         _policies.Add(policy);
     }
 
-    public bool RemovePolicy(Policy policy) {
+    private bool RemovePolicy(Policy policy) {
         policy.ThrowIfNullOrMismatchedDomain(Domain);
         return _policies.Remove(policy);
     }

@@ -12,32 +12,34 @@ namespace Poly.Tests.Data.Modeling;
 internal static class MermaidTestDomainFactory {
     internal static Domain BuildSupportCaseDomain() {
         var domain = DomainTestFactory.CreateDomain("Support Case Management");
+        var mutation = domain.CreateMutation();
 
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
         var intType = new Primitive(domain, "int", TypeCategory.Integer);
         var boolType = new Primitive(domain, "bool", TypeCategory.Primitive);
         var instantType = new Primitive(domain, "instant", TypeCategory.Instant);
-        domain.AddType(stringType);
-        domain.AddType(intType);
-        domain.AddType(boolType);
-        domain.AddType(instantType);
+        mutation.AddType(stringType);
+        mutation.AddType(intType);
+        mutation.AddType(boolType);
+        mutation.AddType(instantType);
 
         var user = new Entity(domain, "User");
-        user.AddProperty(new Property(domain, "Name", stringType));
-        user.AddProperty(new Property(domain, "Email", stringType));
-        domain.AddType(user);
+        mutation.AddProperty(user, new Property(domain, "Name", stringType));
+        mutation.AddProperty(user, new Property(domain, "Email", stringType));
+        mutation.AddType(user);
 
         var customer = new Entity(domain, "Customer", user);
-        domain.AddType(customer);
+        mutation.AddType(customer);
 
         var agent = new Entity(domain, "Agent", user);
-        domain.AddType(agent);
+        mutation.AddType(agent);
 
         var supportCase = new Entity(domain, "SupportCase");
-        supportCase.AddProperty(new Property(domain, "Title", stringType));
-        supportCase.AddProperty(new Property(domain, "Priority", intType));
-        supportCase.AddProperty(new Property(domain, "IsEscalated", boolType));
-        domain.AddType(supportCase);
+        var supportCaseTitle = new Property(domain, "Title", stringType);
+        mutation.AddProperty(supportCase, supportCaseTitle);
+        mutation.AddProperty(supportCase, new Property(domain, "Priority", intType));
+        mutation.AddProperty(supportCase, new Property(domain, "IsEscalated", boolType));
+        mutation.AddType(supportCase);
 
         var newStage = new Stage(domain, "New");
         var inProgressStage = new Stage(domain, "InProgress");
@@ -45,57 +47,56 @@ internal static class MermaidTestDomainFactory {
         var resolvedStage = new Stage(domain, "Resolved");
 
         var caseAssignedEvent = new DomainEvent(domain, "CaseAssigned");
-        caseAssignedEvent.AddProperty(new Property(domain, "AssignedTo", agent));
+        var assignedToProperty = new Property(domain, "AssignedTo", agent);
+        mutation.AddProperty(caseAssignedEvent, assignedToProperty);
         var caseResolvedEvent = new DomainEvent(domain, "CaseResolved");
-        caseResolvedEvent.AddProperty(new Property(domain, "ResolutionSummary", stringType));
-        supportCase.AddEvent(caseAssignedEvent);
-        supportCase.AddEvent(caseResolvedEvent);
+        var resolutionSummaryProperty = new Property(domain, "ResolutionSummary", stringType);
+        mutation.AddProperty(caseResolvedEvent, resolutionSummaryProperty);
+        mutation.AddEvent(supportCase, caseAssignedEvent);
+        mutation.AddEvent(supportCase, caseResolvedEvent);
 
         var assignAction = new DomainAction(domain, "Assign", supportCase);
         var assignAgentParameter = new Property(domain, "Agent", agent);
-        assignAction.AddParameter(assignAgentParameter);
-        assignAction.AddEffect(new StageTransition { TargetStage = assignedStage });
+        mutation.AddParameter(assignAction, assignAgentParameter);
+        mutation.AddEffect(assignAction, new StageTransition { TargetStage = assignedStage });
         var publishAssigned = new PublishEvent { Event = caseAssignedEvent };
-        var assignedToProperty = caseAssignedEvent.RequireProperty("AssignedTo");
         publishAssigned.BindProperty(assignedToProperty, assignAgentParameter);
-        assignAction.AddEffect(publishAssigned);
-        newStage.AddAction(assignAction);
+        mutation.AddEffect(assignAction, publishAssigned);
+        mutation.AddAction(newStage, assignAction);
 
         var addNoteAction = new DomainAction(domain, "AddNote", supportCase);
-        addNoteAction.AddParameter(new Property(domain, "NoteText", stringType));
-        inProgressStage.AddAction(addNoteAction);
+        mutation.AddParameter(addNoteAction, new Property(domain, "NoteText", stringType));
+        mutation.AddAction(inProgressStage, addNoteAction);
 
         var resolveAction = new DomainAction(domain, "Resolve", supportCase);
         var resolutionSummaryParameter = new Property(domain, "ResolutionSummary", stringType);
-        resolveAction.AddParameter(resolutionSummaryParameter);
-        resolveAction.AddEffect(new StageTransition { TargetStage = resolvedStage });
+        mutation.AddParameter(resolveAction, resolutionSummaryParameter);
+        mutation.AddEffect(resolveAction, new StageTransition { TargetStage = resolvedStage });
         var publishResolved = new PublishEvent { Event = caseResolvedEvent };
-        var resolvedSummaryProperty = caseResolvedEvent.RequireProperty("ResolutionSummary");
-        publishResolved.BindProperty(resolvedSummaryProperty, resolutionSummaryParameter);
-        resolveAction.AddEffect(publishResolved);
-        inProgressStage.AddAction(resolveAction);
+        publishResolved.BindProperty(resolutionSummaryProperty, resolutionSummaryParameter);
+        mutation.AddEffect(resolveAction, publishResolved);
+        mutation.AddAction(inProgressStage, resolveAction);
 
-        supportCase.AddStage(newStage);
-        supportCase.AddStage(inProgressStage);
-        supportCase.AddStage(assignedStage);
-        supportCase.AddStage(resolvedStage);
+        mutation.AddStage(supportCase, newStage);
+        mutation.AddStage(supportCase, inProgressStage);
+        mutation.AddStage(supportCase, assignedStage);
+        mutation.AddStage(supportCase, resolvedStage);
 
         var note = new Entity(domain, "Note", supportCase);
-        note.AddProperty(new Property(domain, "Content", stringType));
-        note.AddProperty(new Property(domain, "Author", user));
-        var noteAuthor = note.RequireProperty("Author");
+        mutation.AddProperty(note, new Property(domain, "Content", stringType));
+        var noteAuthor = new Property(domain, "Author", user);
+        mutation.AddProperty(note, noteAuthor);
         var noteDraftStage = new Stage(domain, "Draft") { Parent = inProgressStage };
-        note.AddStage(noteDraftStage);
+        mutation.AddStage(note, noteDraftStage);
 
-        domain.AddType(note);
+        mutation.AddType(note);
 
         var requireTitle = new Policy(domain, "RequireTitle") { AggregationStrategy = PolicyAggregationStrategy.All };
-        var supportCaseTitle = supportCase.RequireProperty("Title");
-        requireTitle.AddRule(new PropertyRule {
+        mutation.AddRule(requireTitle, new PropertyRule {
             Value = supportCaseTitle,
             Constraints = new RequiredConstraint()
         });
-        supportCase.AddPolicy(requireTitle);
+        mutation.AddPolicy(supportCase, requireTitle);
 
         var ownership = new Relationship(domain, "CustomerCases") {
             Source = customer,
@@ -103,8 +104,8 @@ internal static class MermaidTestDomainFactory {
             Cardinality = RelationshipCardinality.OneToMany,
             SourceOwnsTarget = true
         };
-        domain.AddRelationship(ownership);
-        customer.AddRelationship(ownership);
+        mutation.AddRelationship(ownership);
+        mutation.AddEntityRelationship(customer, ownership);
 
         var caseNotes = new Relationship(domain, "SupportCaseNotes") {
             Source = supportCase,
@@ -112,10 +113,10 @@ internal static class MermaidTestDomainFactory {
             Cardinality = RelationshipCardinality.OneToMany,
             SourceOwnsTarget = true
         };
-        domain.AddRelationship(caseNotes);
-        supportCase.AddRelationship(caseNotes);
+        mutation.AddRelationship(caseNotes);
+        mutation.AddEntityRelationship(supportCase, caseNotes);
 
-        addNoteAction.AddEffect(new CreateEntityInstance {
+        mutation.AddEffect(addNoteAction, new CreateEntityInstance {
             EntityType = note,
             InitialStage = noteDraftStage
         });
@@ -128,22 +129,22 @@ internal static class MermaidTestDomainFactory {
         };
 
         var onlyAgentsCanCreateUserNotes = new Policy(domain, "OnlyAgentsCanCreateUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
-        onlyAgentsCanCreateUserNotes.AddRule(new PropertyRule {
+        mutation.AddRule(onlyAgentsCanCreateUserNotes, new PropertyRule {
             Value = noteAuthor,
             Constraints = new RequiredConstraint()
         });
 
         var onlyAgentsCanViewUserNotes = new Policy(domain, "OnlyAgentsCanViewUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
-        onlyAgentsCanViewUserNotes.AddRule(new PropertyRule {
+        mutation.AddRule(onlyAgentsCanViewUserNotes, new PropertyRule {
             Value = noteAuthor,
             Constraints = new RequiredConstraint()
         });
 
-        customerNotes.AddPolicy(onlyAgentsCanCreateUserNotes);
-        customerNotes.AddPolicy(onlyAgentsCanViewUserNotes);
+        mutation.AddPolicy(customerNotes, onlyAgentsCanCreateUserNotes);
+        mutation.AddPolicy(customerNotes, onlyAgentsCanViewUserNotes);
 
-        domain.AddRelationship(customerNotes);
-        customer.AddRelationship(customerNotes);
+        mutation.AddRelationship(customerNotes);
+        mutation.AddEntityRelationship(customer, customerNotes);
 
         var agentCases = new Relationship(domain, "AgentSupportCases") {
             Source = agent,
@@ -155,28 +156,30 @@ internal static class MermaidTestDomainFactory {
         var inactiveAssignmentStage = new Stage(domain, "Inactive");
         var requireAssignedAtWhenActive = new Policy(domain, "RequireAssignedAtWhenActive");
         var requireUnassignedAtWhenInactive = new Policy(domain, "RequireUnassignedAtWhenInactive");
-        agentCases.AddStage(activeAssignmentStage);
-        agentCases.AddStage(inactiveAssignmentStage);
+        mutation.AddStage(agentCases, activeAssignmentStage);
+        mutation.AddStage(agentCases, inactiveAssignmentStage);
         var assignedAt = new Property(domain, "AssignedAt", instantType);
-        assignedAt.AddConstraint(new RequiredConstraint());
+        mutation.AddConstraint(assignedAt, new RequiredConstraint());
         var unassignedAt = new Property(domain, "UnassignedAt", instantType);
-        agentCases.AddProperty(assignedAt);
-        agentCases.AddProperty(unassignedAt);
+        mutation.AddProperty(agentCases, assignedAt);
+        mutation.AddProperty(agentCases, unassignedAt);
 
-        requireAssignedAtWhenActive.AddRule(new PropertyRule {
+        mutation.AddRule(requireAssignedAtWhenActive, new PropertyRule {
             Value = assignedAt,
             Constraints = new RequiredConstraint()
         });
 
-        requireUnassignedAtWhenInactive.AddRule(new PropertyRule {
+        mutation.AddRule(requireUnassignedAtWhenInactive, new PropertyRule {
             Value = unassignedAt,
             Constraints = new RequiredConstraint()
         });
 
-        activeAssignmentStage.AddPolicy(requireAssignedAtWhenActive);
-        inactiveAssignmentStage.AddPolicy(requireUnassignedAtWhenInactive);
-        domain.AddRelationship(agentCases);
-        agent.AddRelationship(agentCases);
+        mutation.AddPolicy(activeAssignmentStage, requireAssignedAtWhenActive);
+        mutation.AddPolicy(inactiveAssignmentStage, requireUnassignedAtWhenInactive);
+        mutation.AddRelationship(agentCases);
+        mutation.AddEntityRelationship(agent, agentCases);
+
+        _ = mutation.Apply();
 
         return domain;
     }

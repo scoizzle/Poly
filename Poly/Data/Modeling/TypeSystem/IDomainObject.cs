@@ -1,6 +1,21 @@
 namespace Poly.Data.Modeling.TypeSystem;
 
-public abstract record DomainObject(Domain Domain) : Node, IDomainObject {
+public abstract record DomainObject : Node, IDomainObject {
+    protected DomainObject(Domain domain) {
+        Domain = domain ?? throw new ArgumentNullException(nameof(domain));
+    }
+
+    protected DomainObject() {
+        if (this is Domain domain) {
+            Domain = domain;
+            return;
+        }
+
+        throw new InvalidOperationException("Only Domain can use the parameterless DomainObject constructor.");
+    }
+
+    public Domain Domain { get; }
+
     public virtual bool Equals(DomainObject? other) => ReferenceEquals(this, other);
     public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);
 }

@@ -11,17 +11,16 @@ public enum PolicyAggregationStrategy {
 /// Represents a composable policy that can aggregate multiple policy rules.
 /// </summary>
 public sealed partial record Policy : DomainObject {
-    private readonly List<IPolicyRule> _rules = [];
+    internal readonly List<IPolicyRule> _rules = [];
 
     public Policy(Domain domain, string name) : base(domain) {
         Name = name;
     }
 
-    public string Name { get; internal set; }
-
     public PolicyAggregationStrategy AggregationStrategy { get; init; } = PolicyAggregationStrategy.All;
 
     public IReadOnlyCollection<IPolicyRule> Rules => _rules.AsReadOnly();
+    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _rules.OfType<DomainObject>()];
 
     public Node ToInterpretationNode(Node subject) {
         ArgumentNullException.ThrowIfNull(subject);
@@ -35,15 +34,6 @@ public sealed partial record Policy : DomainObject {
         };
     }
 
-    private void AddRule(IPolicyRule rule) {
-        ArgumentNullException.ThrowIfNull(rule);
-        _rules.Add(rule);
-    }
-
-    private bool RemoveRule(IPolicyRule rule) {
-        ArgumentNullException.ThrowIfNull(rule);
-        return _rules.Remove(rule);
-    }
 }
 
 /// <summary>

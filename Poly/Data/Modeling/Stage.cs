@@ -5,18 +5,19 @@ namespace Poly.Data.Modeling;
 public sealed partial record Stage : DomainObject {
     private readonly List<Policy> _policies = [];
     private readonly List<Action> _actions = [];
+    private readonly List<Stage> _childStages = [];
     private Entity? _ownerEntity;
 
     public Stage(Domain domain, string name) : base(domain) {
         Name = name;
     }
 
-    public string Name { get; internal set; }
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
     public IReadOnlyCollection<Action> Actions => _actions.AsReadOnly();
     internal Entity? OwnerEntity => _ownerEntity;
     public Stage? Parent { get; init; }
-    public new IReadOnlyCollection<Stage> Children { get; init; } = [];
+    public IReadOnlyCollection<Stage> ChildStages => _childStages.AsReadOnly();
+    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _policies, .. _actions, .. _childStages];
 
     internal void AttachToEntity(Entity ownerEntity) {
         ArgumentNullException.ThrowIfNull(ownerEntity);
@@ -36,41 +37,6 @@ public sealed partial record Stage : DomainObject {
         }
 
         _ownerEntity = ownerEntity;
-    }
-
-    private void AddPolicy(Policy policy) {
-        policy.ThrowIfNullOrMismatchedDomain(Domain);
-
-        if (_policies.Any(existing => string.Equals(existing.Name, policy.Name, StringComparison.Ordinal))) {
-            throw new InvalidOperationException($"Policy '{policy.Name}' already exists on stage '{Name}'.");
-        }
-
-        _policies.Add(policy);
-    }
-
-    private bool RemovePolicy(Policy policy) {
-        policy.ThrowIfNullOrMismatchedDomain(Domain);
-        return _policies.Remove(policy);
-    }
-
-    private void AddAction(Action action) {
-        action.ThrowIfNullOrMismatchedDomain(Domain);
-
-        if (_ownerEntity is not null && !ReferenceEquals(action.Entity, _ownerEntity)) {
-            throw new InvalidOperationException(
-                $"Action '{action.Name}' on stage '{Name}' must belong to entity '{_ownerEntity.Name}'.");
-        }
-
-        if (_actions.Any(existing => string.Equals(existing.Name, action.Name, StringComparison.Ordinal))) {
-            throw new InvalidOperationException($"Action '{action.Name}' already exists on stage '{Name}'.");
-        }
-
-        _actions.Add(action);
-    }
-
-    private bool RemoveAction(Action action) {
-        action.ThrowIfNullOrMismatchedDomain(Domain);
-        return _actions.Remove(action);
     }
 
     public IEnumerable<Policy> GetEffectivePolicies() {

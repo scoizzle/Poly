@@ -7,7 +7,10 @@ public interface INodeAnalyzer {
 public static class NodeAnalyzerExtensions {
     extension(INodeAnalyzer analyzer) {
         public void AnalyzeChildren(AnalysisContext context, Node node) {
-            foreach (var child in node.Children.Where(static c => c is not null)) {
+            foreach (var child in node.Children) {
+                if (child is null || !context.ShouldAnalyze(child))
+                    continue;
+
                 analyzer.Analyze(context, child!);
             }
         }

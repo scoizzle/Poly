@@ -18,32 +18,8 @@ public sealed partial record Property : DomainObject, IDomainValue {
     }
 
     public IDomainType Type { get; }
-    public string Name { get; internal set; }
     public IReadOnlyCollection<Constraint> Constraints => _constraints.AsReadOnly();
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
 
-    private void AddConstraint(Constraint constraint) {
-        ArgumentNullException.ThrowIfNull(constraint);
-        _constraints.Add(constraint);
-    }
-
-    private bool RemoveConstraint(Constraint constraint) {
-        ArgumentNullException.ThrowIfNull(constraint);
-        return _constraints.Remove(constraint);
-    }
-
-    private void AddPolicy(Policy policy) {
-        policy.ThrowIfNullOrMismatchedDomain(Domain);
-
-        if (_policies.Any(existing => string.Equals(existing.Name, policy.Name, StringComparison.Ordinal))) {
-            throw new InvalidOperationException($"Policy '{policy.Name}' already exists on property '{Name}'.");
-        }
-
-        _policies.Add(policy);
-    }
-
-    private bool RemovePolicy(Policy policy) {
-        policy.ThrowIfNullOrMismatchedDomain(Domain);
-        return _policies.Remove(policy);
-    }
+    public sealed override IEnumerable<DomainObject> ChildObjects => [/* TODO: .. _constraints, */.. _policies];
 }

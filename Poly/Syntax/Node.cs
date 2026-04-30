@@ -14,5 +14,5 @@ public abstract record Node {
     /// </summary>
     public NodeId Id { get; init; } = NodeId.NewId();
 
-    public virtual IEnumerable<Node?> Children => Enumerable.Empty<Node>();
+    public virtual IEnumerable<Node?> Children => [];
 }

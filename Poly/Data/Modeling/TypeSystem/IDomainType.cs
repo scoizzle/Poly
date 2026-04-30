@@ -1,7 +1,6 @@
 namespace Poly.Data.Modeling.TypeSystem;
 
 public abstract record DomainType(Domain Domain) : DomainObject(Domain), IDomainType {
-    public string Name { get; protected set => field = Guard.ThrowIfNullOrEmpty(value); } = string.Empty;
     public abstract IReadOnlyCollection<Property> Properties { get; }
 }
 

@@ -13,19 +13,19 @@ public class MermaidDomainDiagramGeneratorTests {
         var domain = DomainTestFactory.CreateDomain("Simple");
 
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        domain.AddType(stringType);
+        MutationApply.AddType(domain, stringType);
 
         var customer = new Entity(domain, "Customer");
-        customer.AddProperty(new Property(domain, "Name", stringType));
-        domain.AddType(customer);
+        MutationApply.AddProperty(customer, new Property(domain, "Name", stringType));
+        MutationApply.AddType(domain, customer);
 
         var order = new Entity(domain, "Order");
-        order.AddProperty(new Property(domain, "Total", stringType));
-        domain.AddType(order);
+        MutationApply.AddProperty(order, new Property(domain, "Total", stringType));
+        MutationApply.AddType(domain, order);
 
         var rel = new Relationship(domain, "CustomerOrders", customer, order, RelationshipCardinality.OneToMany, true);
-        domain.AddRelationship(rel);
-        customer.AddRelationship(rel);
+        MutationApply.AddRelationship(domain, rel);
+        MutationApply.AddRelationship(customer, rel);
 
         return domain;
     }
@@ -81,13 +81,13 @@ public class MermaidDomainDiagramGeneratorTests {
     public async Task Generate_Stages_EmittedAsEnumerationClass() {
         var domain = DomainTestFactory.CreateDomain();
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        domain.AddType(stringType);
+        MutationApply.AddType(domain, stringType);
 
         var task = new Entity(domain, "Task");
-        task.AddProperty(new Property(domain, "Title", stringType));
-        task.AddStage(new Stage(domain, "Todo"));
-        task.AddStage(new Stage(domain, "Done"));
-        domain.AddType(task);
+        MutationApply.AddProperty(task, new Property(domain, "Title", stringType));
+        MutationApply.AddStage(task, new Stage(domain, "Todo"));
+        MutationApply.AddStage(task, new Stage(domain, "Done"));
+        MutationApply.AddType(domain, task);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 
@@ -102,14 +102,14 @@ public class MermaidDomainDiagramGeneratorTests {
     public async Task Generate_SubStages_ShowParentAnnotation() {
         var domain = DomainTestFactory.CreateDomain();
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        domain.AddType(stringType);
+        MutationApply.AddType(domain, stringType);
 
         var task = new Entity(domain, "Task");
         var parentStage = new Stage(domain, "InProgress");
         var childStage = new Stage(domain, "Blocked") { Parent = parentStage };
-        task.AddStage(parentStage);
-        task.AddStage(childStage);
-        domain.AddType(task);
+        MutationApply.AddStage(task, parentStage);
+        MutationApply.AddStage(task, childStage);
+        MutationApply.AddType(domain, task);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 
@@ -120,16 +120,16 @@ public class MermaidDomainDiagramGeneratorTests {
     public async Task Generate_Policies_EmittedAsNote() {
         var domain = DomainTestFactory.CreateDomain();
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        domain.AddType(stringType);
+        MutationApply.AddType(domain, stringType);
 
         var item = new Entity(domain, "Item");
         var nameProp = new Property(domain, "Name", stringType);
-        item.AddProperty(nameProp);
-        domain.AddType(item);
+        MutationApply.AddProperty(item, nameProp);
+        MutationApply.AddType(domain, item);
 
         var policy = new Policy(domain, "RequireName");
-        policy.AddRule(new PropertyRule { Value = nameProp, Constraints = new RequiredConstraint() });
-        item.AddPolicy(policy);
+        MutationApply.AddRule(policy, new PropertyRule { Value = nameProp, Constraints = new RequiredConstraint() });
+        MutationApply.AddPolicy(item, policy);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 
@@ -141,16 +141,16 @@ public class MermaidDomainDiagramGeneratorTests {
     public async Task Generate_PropertyTypeReference_EmitsAssociationArrow() {
         var domain = DomainTestFactory.CreateDomain();
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        domain.AddType(stringType);
+        MutationApply.AddType(domain, stringType);
 
         var author = new Entity(domain, "Author");
-        author.AddProperty(new Property(domain, "Name", stringType));
-        domain.AddType(author);
+        MutationApply.AddProperty(author, new Property(domain, "Name", stringType));
+        MutationApply.AddType(domain, author);
 
         var book = new Entity(domain, "Book");
-        book.AddProperty(new Property(domain, "Title", stringType));
-        book.AddProperty(new Property(domain, "Author", author));
-        domain.AddType(book);
+        MutationApply.AddProperty(book, new Property(domain, "Title", stringType));
+        MutationApply.AddProperty(book, new Property(domain, "Author", author));
+        MutationApply.AddType(domain, book);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 
@@ -161,12 +161,12 @@ public class MermaidDomainDiagramGeneratorTests {
     public async Task Generate_RichRelationship_EmittedAsClass_WithSourceAndTargetLinks() {
         var domain = DomainTestFactory.CreateDomain();
         var instantType = new Primitive(domain, "instant", TypeCategory.Instant);
-        domain.AddType(instantType);
+        MutationApply.AddType(domain, instantType);
 
         var agent = new Entity(domain, "Agent");
-        domain.AddType(agent);
+        MutationApply.AddType(domain, agent);
         var project = new Entity(domain, "Project");
-        domain.AddType(project);
+        MutationApply.AddType(domain, project);
 
         var membership = new Relationship(
             domain,
@@ -176,10 +176,10 @@ public class MermaidDomainDiagramGeneratorTests {
             RelationshipCardinality.ManyToMany,
             false
         );
-        membership.AddProperty(new Property(domain, "JoinedAt", instantType));
-        membership.AddStage(new Stage(domain, "Active"));
-        domain.AddRelationship(membership);
-        agent.AddRelationship(membership);
+        MutationApply.AddProperty(membership, new Property(domain, "JoinedAt", instantType));
+        MutationApply.AddStage(membership, new Stage(domain, "Active"));
+        MutationApply.AddRelationship(domain, membership);
+        MutationApply.AddRelationship(agent, membership);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 
@@ -196,9 +196,9 @@ public class MermaidDomainDiagramGeneratorTests {
         var domain = DomainTestFactory.CreateDomain();
 
         var a = new Entity(domain, "A");
-        domain.AddType(a);
+        MutationApply.AddType(domain, a);
         var b = new Entity(domain, "B");
-        domain.AddType(b);
+        MutationApply.AddType(domain, b);
 
         var rel = new Relationship(
             domain,
@@ -208,8 +208,8 @@ public class MermaidDomainDiagramGeneratorTests {
             RelationshipCardinality.OneToOne,
             false);
 
-        domain.AddRelationship(rel);
-        a.AddRelationship(rel);
+        MutationApply.AddRelationship(domain, rel);
+        MutationApply.AddRelationship(a, rel);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 
@@ -221,15 +221,15 @@ public class MermaidDomainDiagramGeneratorTests {
     public async Task Generate_Events_EmittedAsEventClass() {
         var domain = DomainTestFactory.CreateDomain();
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        domain.AddType(stringType);
+        MutationApply.AddType(domain, stringType);
 
         var entity = new Entity(domain, "Order");
-        domain.AddType(entity);
+        MutationApply.AddType(domain, entity);
 
         var @event = new Event(domain, "OrderPlaced");
-        @event.AddProperty(new Property(domain, "OrderId", stringType));
-        entity.AddEvent(@event);
-        domain.AddType(@event);
+        MutationApply.AddProperty(@event, new Property(domain, "OrderId", stringType));
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddType(domain, @event);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 
@@ -242,14 +242,14 @@ public class MermaidDomainDiagramGeneratorTests {
     public async Task Generate_InheritedEntity_EmitsInheritanceArrow() {
         var domain = DomainTestFactory.CreateDomain();
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        domain.AddType(stringType);
+        MutationApply.AddType(domain, stringType);
 
         var user = new Entity(domain, "User");
-        user.AddProperty(new Property(domain, "Name", stringType));
-        domain.AddType(user);
+        MutationApply.AddProperty(user, new Property(domain, "Name", stringType));
+        MutationApply.AddType(domain, user);
 
         var agent = new Entity(domain, "Agent", user);
-        domain.AddType(agent);
+        MutationApply.AddType(domain, agent);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 
@@ -260,15 +260,15 @@ public class MermaidDomainDiagramGeneratorTests {
     public async Task Generate_Actions_AppearAsMethodsOnEntity() {
         var domain = DomainTestFactory.CreateDomain();
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        domain.AddType(stringType);
+        MutationApply.AddType(domain, stringType);
 
         var ticket = new Entity(domain, "Ticket");
         var openStage = new Stage(domain, "Open");
         var closeAction = new DomainAction(domain, "Close", ticket);
-        closeAction.AddParameter(new Property(domain, "Reason", stringType));
-        openStage.AddAction(closeAction);
-        ticket.AddStage(openStage);
-        domain.AddType(ticket);
+        MutationApply.AddParameter(closeAction, new Property(domain, "Reason", stringType));
+        MutationApply.AddAction(openStage, closeAction);
+        MutationApply.AddStage(ticket, openStage);
+        MutationApply.AddType(domain, ticket);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);
 

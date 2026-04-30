@@ -7,13 +7,9 @@ public sealed partial record Domain : DomainObject {
     private readonly List<DomainType> _types = new();
     private readonly List<Relationship> _relationships = new();
 
-    public string Name { get; private set; }
-
-    public Domain(string name) {
-        Name = name;
-    }
+    public Domain(string name) => Name = name;
 
     public IReadOnlyCollection<DomainType> Types => _types.AsReadOnly();
     public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
-    public override IEnumerable<Node?> Children => [.. _types, .. _relationships];
+    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _types, .. _relationships];
 }

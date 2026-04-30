@@ -59,4 +59,6 @@ public readonly record struct NodeId {
     /// Explicit conversion to string for compatibility.
     /// </summary>
     public static explicit operator string(NodeId id) => id.Value;
+
+    public static readonly NodeId None = default;
 }

@@ -10,7 +10,7 @@ public class PolicyTests {
         var stage = new Stage(domain, "Review");
         var policy = new Policy(domain, "ReviewPolicy");
 
-        stage.AddPolicy(policy);
+        MutationApply.AddPolicy(stage, policy);
 
         await Assert.That(stage.Policies.Contains(policy)).IsTrue();
     }
@@ -20,9 +20,9 @@ public class PolicyTests {
         var domain = DomainTestFactory.CreateDomain();
         var stage = new Stage(domain, "Review");
         var policy = new Policy(domain, "ReviewPolicy");
-        stage.AddPolicy(policy);
+        MutationApply.AddPolicy(stage, policy);
 
-        var wasRemoved = stage.RemovePolicy(policy);
+        var wasRemoved = MutationApply.RemovePolicy(stage, policy);
 
         await Assert.That(wasRemoved).IsTrue();
         await Assert.That(stage.Policies.Contains(policy)).IsFalse();
@@ -33,11 +33,11 @@ public class PolicyTests {
         var domain = DomainTestFactory.CreateDomain();
         var policy = new Policy(domain, "AgeGate") { AggregationStrategy = PolicyAggregationStrategy.All };
 
-        policy.AddRule(new PredicateRule {
+        MutationApply.AddRule(policy, new PredicateRule {
             Predicate = subject => subject.GetMember(nameof(PersonInput.Age)).GreaterThanOrEqual(new Constant(18))
         });
 
-        policy.AddRule(new PredicateRule {
+        MutationApply.AddRule(policy, new PredicateRule {
             Predicate = subject => subject.GetMember(nameof(PersonInput.IsVerified)).Equal(new Constant(true))
         });
 
@@ -51,11 +51,11 @@ public class PolicyTests {
         var domain = DomainTestFactory.CreateDomain();
         var policy = new Policy(domain, "AgeOrAdmin") { AggregationStrategy = PolicyAggregationStrategy.Any };
 
-        policy.AddRule(new PredicateRule {
+        MutationApply.AddRule(policy, new PredicateRule {
             Predicate = subject => subject.GetMember(nameof(AccessRequest.Age)).GreaterThanOrEqual(new Constant(21))
         });
 
-        policy.AddRule(new PredicateRule {
+        MutationApply.AddRule(policy, new PredicateRule {
             Predicate = subject => subject.GetMember(nameof(AccessRequest.IsAdmin)).Equal(new Constant(true))
         });
 
@@ -69,7 +69,7 @@ public class PolicyTests {
         var domain = DomainTestFactory.CreateDomain();
         var policy = new Policy(domain, "DateWindow") { AggregationStrategy = PolicyAggregationStrategy.All };
 
-        policy.AddRule(new PredicateRule {
+        MutationApply.AddRule(policy, new PredicateRule {
             Predicate = subject => subject
                 .GetMember(nameof(DateWindow.StartUtc))
                 .LessThanOrEqual(subject.GetMember(nameof(DateWindow.EndUtc)))

@@ -49,7 +49,7 @@ public class DomainQueryExtensionsTests {
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
         var action = new DomainAction(domain, "Approve", parent);
-        parent.AddAction(action);
+        MutationApply.AddAction(parent, action);
 
         var childLocal = child.FindAction("Approve");
 
@@ -62,7 +62,7 @@ public class DomainQueryExtensionsTests {
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
         var action = new DomainAction(domain, "Approve", parent);
-        parent.AddAction(action);
+        MutationApply.AddAction(parent, action);
 
         var resolved = child.FindActionInHierarchy("Approve");
 
@@ -76,7 +76,7 @@ public class DomainQueryExtensionsTests {
         var parentStage = new Stage(domain, "Parent");
         var childStage = new Stage(domain, "Child") { Parent = parentStage };
         var action = new DomainAction(domain, "Escalate", entity);
-        parentStage.AddAction(action);
+        MutationApply.AddAction(parentStage, action);
 
         var resolved = childStage.FindActionInHierarchy("Escalate");
 

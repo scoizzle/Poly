@@ -6,28 +6,48 @@ using ModelContextProtocol.Server;
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Introspection;
+using Poly.Syntax.Analysis;
 
 namespace Poly.Mcp;
 
 internal static class DomainSessionStore {
-    private static readonly ConcurrentDictionary<string, Domain> Sessions = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, (Domain Domain, AnalysisResult? LatestAnalysis)> Sessions = new(StringComparer.Ordinal);
 
-    public static string Create(string domainName, string? preferredSessionId = null) {
+    public static (string SessionId, Domain Domain) Create(string domainName, string? preferredSessionId = null) {
         var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)
             ? Guid.NewGuid().ToString("N")
             : preferredSessionId;
 
-        Sessions[sessionId] = new Domain(domainName);
-        return sessionId;
+        var domain = new Domain(domainName);
+        Sessions[sessionId] = (domain, default);
+        return (sessionId, domain);
     }
 
-    public static bool TryGet(string sessionId, out Domain domain) {
+    public static bool TryGet(string sessionId, out (Domain Domain, AnalysisResult? LatestAnalysis) session) {
         if (string.IsNullOrWhiteSpace(sessionId)) {
-            domain = null!;
+            session = (null!, null);
             return false;
         }
 
-        return Sessions.TryGetValue(sessionId, out domain!);
+        if (!Sessions.TryGetValue(sessionId, out var value)) {
+            session = (null!, null);
+            return false;
+        }
+
+        session = value;
+        return true;
+    }
+
+    public static void UpdateAnalysis(string sessionId, AnalysisResult analysis) {
+        if (string.IsNullOrWhiteSpace(sessionId)) {
+            throw new ArgumentException("Session ID is required.", nameof(sessionId));
+        }
+
+        if (!Sessions.TryGetValue(sessionId, out var value)) {
+            throw new InvalidOperationException($"Session '{sessionId}' was not found.");
+        }
+
+        Sessions[sessionId] = (value.Domain, analysis);
     }
 
     public static IReadOnlyCollection<string> ListSessionIds() => Sessions.Keys.OrderBy(static id => id, StringComparer.Ordinal).ToArray();
@@ -143,7 +163,7 @@ public static class DomainCapabilityTool {
                 Snapshot: null);
         }
 
-        if (!DomainSessionStore.TryGet(sessionId, out var domain)) {
+        if (!DomainSessionStore.TryGet(sessionId, out (Domain Domain, AnalysisResult? LatestAnalysis) session)) {
             return new DomainCapabilityResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' was not found.",
@@ -159,7 +179,7 @@ public static class DomainCapabilityTool {
             SessionId: sessionId,
             AvailableSessions: DomainSessionStore.ListSessionIds(),
             SupportedMutationOperations: SupportedMutationOperations,
-            Snapshot: BuildSnapshot(domain));
+            Snapshot: BuildSnapshot(session.Domain));
     }
 
     internal static DomainSnapshot BuildSnapshot(Domain domain) {
@@ -286,8 +306,7 @@ public static class DomainAuthoringTool {
 
             if (string.Equals(operation, "create_domain", StringComparison.Ordinal)) {
                 var domainName = RequireValue(request.DomainName, nameof(request.DomainName));
-                var sessionId = DomainSessionStore.Create(domainName, request.SessionId);
-                var createdDomain = DomainSessionStore.TryGet(sessionId, out var domain) ? domain : null;
+                var (sessionId, createdDomain) = DomainSessionStore.Create(domainName, request.SessionId);
 
                 return new DomainMutationResponse(
                     Success: true,
@@ -298,7 +317,7 @@ public static class DomainAuthoringTool {
             }
 
             var sessionIdForMutation = RequireValue(request.SessionId, nameof(request.SessionId));
-            if (!DomainSessionStore.TryGet(sessionIdForMutation, out var existingDomain)) {
+            if (!DomainSessionStore.TryGet(sessionIdForMutation, out (Domain Domain, AnalysisResult? LatestAnalysis) session)) {
                 return new DomainMutationResponse(
                     Success: false,
                     Message: $"Session '{sessionIdForMutation}' was not found.",
@@ -307,6 +326,7 @@ public static class DomainAuthoringTool {
                     Snapshot: null);
             }
 
+            var existingDomain = session.Domain;
             var mutation = existingDomain.CreateMutation();
 
             switch (operation) {
@@ -407,10 +427,12 @@ public static class DomainAuthoringTool {
                         Snapshot: DomainCapabilityTool.BuildSnapshot(existingDomain));
             }
 
-            var analysis = mutation.Apply();
+            var analysis = mutation.Apply(session.LatestAnalysis);
             var diagnostics = analysis.Diagnostics
                 .Select(static diagnostic => $"{diagnostic.Severity}: {diagnostic.Code} - {diagnostic.Message}")
                 .ToArray();
+
+            DomainSessionStore.UpdateAnalysis(sessionIdForMutation, analysis);
 
             return new DomainMutationResponse(
                 Success: true,

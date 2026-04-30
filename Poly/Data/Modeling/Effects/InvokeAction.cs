@@ -9,8 +9,6 @@ public sealed class InvokeAction : Effect {
 
     public IReadOnlyDictionary<string, IDomainValue> ParameterBindings => _parameterBindings;
 
-    public override IReadOnlyCollection<IDomainValue> RequiredParameters => _parameterBindings.Values.ToArray();
-
     public override void Validate(Entity entity) {
         ArgumentNullException.ThrowIfNull(entity);
 

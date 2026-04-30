@@ -9,8 +9,6 @@ public sealed class PublishEvent : Effect {
 
     public IReadOnlyDictionary<string, IDomainValue> PropertyBindings => _propertyBindings;
 
-    public override IReadOnlyCollection<IDomainValue> RequiredParameters => _propertyBindings.Values.ToArray();
-
     public override void Validate(Entity entity) {
         ArgumentNullException.ThrowIfNull(entity);
         Event.ThrowIfMismatchedDomain(entity.Domain);

@@ -3,8 +3,8 @@ using Poly.Data.Modeling.TypeSystem;
 namespace Poly.Data.Modeling;
 
 public sealed partial record Action : DomainObject {
-    private readonly List<Property> _parameters = [];
-    private readonly List<Effect> _effects = [];
+    internal readonly List<Property> _parameters = [];
+    internal readonly List<Effect> _effects = [];
 
     public Action(Domain domain, string name, Entity entity) : base(domain) {
         ArgumentNullException.ThrowIfNull(entity);
@@ -13,8 +13,9 @@ public sealed partial record Action : DomainObject {
     }
 
     public Entity Entity { get; }
-    public string Name { get; internal set; }
 
     public IReadOnlyCollection<Property> Parameters => _parameters.AsReadOnly();
     public IReadOnlyCollection<Effect> Effects => _effects.AsReadOnly();
+
+    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _parameters /*TODO: , .. _effects*/];
 }

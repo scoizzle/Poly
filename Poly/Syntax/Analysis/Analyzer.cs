@@ -6,7 +6,10 @@ namespace Poly.Syntax.Analysis;
 /// <param name="typeDefinitions">The provider for type definitions used during analysis.</param>
 /// <param name="analyzers">The collection of node analyzers to apply.</param>
 public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerable<INodeAnalyzer> analyzers) {
+    private readonly INodeAnalyzer[] analyzers = analyzers.ToArray();
     private readonly List<Action<AnalysisContext>> _actions = [];
+
+    public ITypeDefinitionProvider TypeDefinitions => typeDefinitions;
 
     /// <summary>
     /// Adds a custom action to be executed prior to analysis.
@@ -20,14 +23,14 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
     }
 
     /// <summary>
-    /// Analyzes the given AST node and produces an analysis result.
+    /// Adds a custom node analyzer to the collection of analyzers.
     /// </summary>
     /// <param name="root">The root AST node to analyze.</param>
+    /// <param name="context">The analysis context.</param>
     /// <returns>The result of the analysis.</returns>
-    public AnalysisResult Analyze(Node root) {
+    private AnalysisResult AnalyzeInternal(Node root, AnalysisContext context) {
         ArgumentNullException.ThrowIfNull(root);
-
-        var context = new AnalysisContext(typeDefinitions);
+        ArgumentNullException.ThrowIfNull(context);
 
         foreach (var action in _actions) {
             action(context);
@@ -37,6 +40,43 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
             analyzer.Analyze(context, root);
         }
 
-        return new AnalysisResult(context.Metadata, context.Diagnostics);
+        return new AnalysisResult(context);
+    }
+
+    /// <summary>
+    /// Analyzes the given AST node and produces an analysis result.
+    /// </summary>
+    /// <param name="root">The root AST node to analyze.</param>
+    /// <returns>The result of the analysis.</returns>
+    public AnalysisResult Analyze(Node root) {
+        ArgumentNullException.ThrowIfNull(root);
+
+        var context = new AnalysisContext(typeDefinitions);
+        return AnalyzeInternal(root, context);
+    }
+
+    /// <summary>
+    /// Analyzes the given AST node with reference to a prior analysis result, allowing for incremental analysis.
+    /// </summary>
+    /// <param name="root">The root AST node to analyze.</param>
+    /// <param name="priorAnalysis">The prior analysis result to reference.</param>
+    /// <param name="invalidatedNodes">The nodes that have been invalidated and need reanalysis.</param>
+    /// <returns>The result of the analysis.</returns>
+    public AnalysisResult Analyze(Node root, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(priorAnalysis);
+        ArgumentNullException.ThrowIfNull(invalidatedNodes);
+
+        if (!priorAnalysis.IsIncrementalAnalysisAvailable(root)) {
+            return Analyze(root);
+        }
+
+        var context = new AnalysisContext(
+            typeDefinitions,
+            priorAnalysis);
+
+        context.SetInvalidatedNodesForIncrementalAnalysis(root, invalidatedNodes);
+
+        return AnalyzeInternal(root, context);
     }
 }

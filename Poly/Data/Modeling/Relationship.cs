@@ -25,4 +25,7 @@ public sealed partial record Relationship : Entity {
     public RelationshipCardinality Cardinality { get; private set; }
 
     public bool SourceOwnsTarget { get; private set; }
+
+
+    public sealed override IEnumerable<DomainObject> ChildObjects => [Source, Target, .. base.ChildObjects];
 }

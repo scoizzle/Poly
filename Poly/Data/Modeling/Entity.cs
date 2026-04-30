@@ -61,4 +61,6 @@ public partial record Entity : DomainType {
     public IReadOnlyCollection<Action> Actions => _actions.AsReadOnly();
     public IReadOnlyCollection<Event> Events => _events.AsReadOnly();
     public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
+
+    public override IEnumerable<DomainObject> ChildObjects => [.. _properties, .. _stages, .. _policies, .. _actions, .. _events];
 }

@@ -15,6 +15,9 @@ public abstract record DomainObject : Node, IDomainObject {
     }
 
     public Domain Domain { get; }
+    public string Name { get; protected set => field = Guard.ThrowIfNullOrEmpty(value); } = string.Empty;
+    public virtual IEnumerable<DomainObject> ChildObjects => [];
+    public sealed override IEnumerable<Node?> Children => ChildObjects;
 
     public virtual bool Equals(DomainObject? other) => ReferenceEquals(this, other);
     public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);

@@ -72,7 +72,7 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// </summary>
     /// <typeparam name="TMetadata">The type of metadata to retrieve.</typeparam>
     /// <returns>The metadata of the specified type, or null if not found.</returns>
-    public TMetadata? GetMetadata<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata => Metadata.Get<TMetadata>(node);
+    public TMetadata? GetMetadata<TMetadata>(Node? node) where TMetadata : class, IAnalysisMetadata => Metadata.Get<TMetadata>(node);
 
     /// <summary>
     /// Gets or adds metadata of the specified type.
@@ -87,7 +87,7 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// </summary>
     /// <typeparam name="TMetadata">The type of metadata to set.</typeparam>
     /// <param name="metadata">The metadata instance to set.</param>
-    public void SetMetadata<TMetadata>(Node node, TMetadata metadata) where TMetadata : class, IAnalysisMetadata => Metadata.Set(node, metadata);
+    public void SetMetadata<TMetadata>(Node? node, TMetadata metadata) where TMetadata : class, IAnalysisMetadata => Metadata.Set(node, metadata);
 
     /// <summary>
     /// Removes metadata of the specified type.

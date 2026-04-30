@@ -29,7 +29,7 @@ public sealed record AnalysisResult : INodeMetadataProvider {
     /// <typeparam name="TMetadata">The type of metadata to retrieve.</typeparam>
     /// <param name="node">The node for which to retrieve metadata.</param>
     /// <returns>The metadata of the specified type, or null if not found.</returns>
-    public TMetadata? GetMetadata<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata => _metadata.Get<TMetadata>(node);
+    public TMetadata? GetMetadata<TMetadata>(Node? node) where TMetadata : class, IAnalysisMetadata => _metadata.Get<TMetadata>(node);
 
     internal NodeMetadataStore GetMetadataStore() => _metadata;
     internal Dictionary<NodeId, List<Diagnostic>> GetDiagnosticsDictionary() => _diagnostics;

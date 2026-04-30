@@ -23,33 +23,36 @@ public sealed class NodeMetadataStore {
         }
     }
 
-    public void Set<TMetadata>(Node node, TMetadata data) where TMetadata : class, IAnalysisMetadata {
-        ArgumentNullException.ThrowIfNull(node);
+    public void Set<TMetadata>(Node? node, TMetadata data) where TMetadata : class, IAnalysisMetadata {
         ArgumentNullException.ThrowIfNull(data);
-        GetOrCreateBucket(node.Id).Set(typeof(TMetadata), data);
+        GetOrCreateBucket(node?.Id ?? NodeId.Empty).Set(typeof(TMetadata), data);
     }
 
-    public TMetadata? Get<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata {
-        ArgumentNullException.ThrowIfNull(node);
-        return _buckets.TryGetValue(node.Id, out var bucket)
-            ? bucket.Get(typeof(TMetadata)) as TMetadata
-            : null;
+    public TMetadata? Get<TMetadata>(Node? node) where TMetadata : class, IAnalysisMetadata {
+        NodeBucket? bucket;
+        if (node is not null) {
+            if (_buckets.TryGetValue(node.Id, out bucket) && bucket.Get(typeof(TMetadata)) is TMetadata metadata) {
+                return metadata;
+            }
+        }
+
+        if (_buckets.TryGetValue(NodeId.Empty, out bucket) && bucket.Get(typeof(TMetadata)) is TMetadata globalMetadata) {
+            return globalMetadata;
+        }
+        return null;
     }
 
-    public IEnumerable<IAnalysisMetadata> GetAll(Node node) {
-        ArgumentNullException.ThrowIfNull(node);
-        return _buckets.TryGetValue(node.Id, out var bucket) ? bucket.GetAll() : [];
+    public IEnumerable<IAnalysisMetadata> GetAll(Node? node) {
+        return _buckets.TryGetValue(node?.Id ?? NodeId.Empty, out var bucket) ? bucket.GetAll() : [];
     }
 
-    public TMetadata GetOrAdd<TMetadata>(Node node, Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata {
-        ArgumentNullException.ThrowIfNull(node);
+    public TMetadata GetOrAdd<TMetadata>(Node? node, Func<TMetadata> factory) where TMetadata : class, IAnalysisMetadata {
         ArgumentNullException.ThrowIfNull(factory);
-        return (TMetadata)GetOrCreateBucket(node.Id).GetOrAdd(typeof(TMetadata), () => factory());
+        return (TMetadata)GetOrCreateBucket(node?.Id ?? NodeId.Empty).GetOrAdd(typeof(TMetadata), factory);
     }
 
-    public void Remove<TMetadata>(Node node) where TMetadata : class, IAnalysisMetadata {
-        ArgumentNullException.ThrowIfNull(node);
-        if (_buckets.TryGetValue(node.Id, out var bucket)) {
+    public void Remove<TMetadata>(Node? node) where TMetadata : class, IAnalysisMetadata {
+        if (_buckets.TryGetValue(node?.Id ?? NodeId.Empty, out var bucket)) {
             bucket.Remove(typeof(TMetadata));
         }
     }
@@ -57,9 +60,8 @@ public sealed class NodeMetadataStore {
     /// <summary>
     /// Removes all metadata for <paramref name="node"/> in O(1).
     /// </summary>
-    public void RemoveAll(Node node) {
-        ArgumentNullException.ThrowIfNull(node);
-        _buckets.Remove(node.Id);
+    public void RemoveAll(Node? node) {
+        _buckets.Remove(node?.Id ?? NodeId.Empty);
     }
 
     /// <summary>

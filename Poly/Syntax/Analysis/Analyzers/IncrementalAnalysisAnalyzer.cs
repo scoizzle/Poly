@@ -1,56 +1,72 @@
 namespace Poly.Syntax.Analysis;
 
+internal readonly record struct NodeRange(int StartInclusive, int EndExclusive);
+
+internal sealed record IncrementalAnalysisTreeIndex(
+    IReadOnlyDictionary<NodeId, NodeId> ParentByNodeId,
+    IReadOnlyDictionary<NodeId, NodeRange> SubtreeRangeByNodeId,
+    IReadOnlyList<NodeId> PreorderNodeIds
+) : IAnalysisMetadata;
+
 public sealed class IncrementalAnalysisAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(node);
 
-        var analysisTopology = context.GetIncrementalAnalysisTopology(node);
-        if (analysisTopology is null) {
-            BuildNodeIdToParentIdDictionary(context, node);
+        var treeIndex = context.GetIncrementalAnalysisTreeIndex();
+        if (treeIndex is null) {
+            BuildTreeIndex(context, node);
             return;
         }
 
-        var invalidatedNodes = context.GetInvalidatedNodes(node);
+        var invalidatedNodes = context.GetInvalidatedNodes();
         if (invalidatedNodes is null) {
             return;
         }
 
-        BuildAnalysisFilterList(context, node, analysisTopology, invalidatedNodes);
+        BuildAnalysisFilterList(context, node, treeIndex, invalidatedNodes);
     }
 
-    private static void BuildAnalysisFilterList(AnalysisContext context, Node node, IReadOnlyDictionary<NodeId, NodeId> analysisTopology, IEnumerable<Node> invalidatedNodes) {
+    private static void BuildAnalysisFilterList(AnalysisContext context, Node node, IncrementalAnalysisTreeIndex treeIndex, IEnumerable<Node> invalidatedNodes) {
         var affectedNodeIds = GetAffectedNodes().ToHashSet();
+        affectedNodeIds.Add(node.Id);
 
         foreach (var invalidatedNodeId in affectedNodeIds) {
             context.ClearMetadata(invalidatedNodeId);
             context.ClearDiagnostics(invalidatedNodeId);
         }
 
-        context.SetAffectedNodesForIncrementalAnalysis(node, affectedNodeIds);
+        // Rebuild the index so the next incremental pass sees the post-mutation tree shape.
+        BuildTreeIndex(context, node);
+
+        context.SetAffectedNodesForIncrementalAnalysis(affectedNodeIds);
 
         IEnumerable<NodeId> GetAffectedNodes() {
             foreach (var node in invalidatedNodes) {
-                yield return node.Id;
+                if (treeIndex.SubtreeRangeByNodeId.TryGetValue(node.Id, out var subtreeRange)) {
+                    for (var i = subtreeRange.StartInclusive; i < subtreeRange.EndExclusive; i++) {
+                        yield return treeIndex.PreorderNodeIds[i];
+                    }
+                }
 
                 var descendants = new Stack<Node>();
                 descendants.Push(node);
 
                 while (descendants.Count > 0) {
                     var current = descendants.Pop();
+                    yield return current.Id;
 
                     foreach (var child in current.Children) {
                         if (child is null) {
                             continue;
                         }
 
-                        yield return child.Id;
                         descendants.Push(child);
                     }
                 }
 
                 var currentId = node.Id;
-                while (analysisTopology.TryGetValue(currentId, out var nextParentId)) {
+                while (treeIndex.ParentByNodeId.TryGetValue(currentId, out var nextParentId)) {
                     yield return nextParentId;
                     currentId = nextParentId;
                 }
@@ -58,34 +74,42 @@ public sealed class IncrementalAnalysisAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void BuildNodeIdToParentIdDictionary(AnalysisContext context, Node node) {
+    private static void BuildTreeIndex(AnalysisContext context, Node node) {
         var parentByNodeId = new Dictionary<NodeId, NodeId>();
+        var subtreeRanges = new Dictionary<NodeId, NodeRange>();
+        var preorderNodeIds = new List<NodeId>();
 
-        Traverse(parentByNodeId, node, parentId: null);
+        Traverse(parentByNodeId, subtreeRanges, preorderNodeIds, node, parentId: null);
 
-        context.SetIncrementalAnalysisTopology(node, parentByNodeId);
+        context.SetIncrementalAnalysisTreeIndex(new IncrementalAnalysisTreeIndex(parentByNodeId, subtreeRanges, preorderNodeIds));
         return;
 
-        static void Traverse(Dictionary<NodeId, NodeId> parentByNodeId, Node current, NodeId? parentId) {
+        static void Traverse(
+            Dictionary<NodeId, NodeId> parentByNodeId,
+            Dictionary<NodeId, NodeRange> subtreeRanges,
+            List<NodeId> preorderNodeIds,
+            Node current,
+            NodeId? parentId) {
             if (parentId.HasValue && !parentByNodeId.TryAdd(current.Id, parentId.Value)) {
                 return;
             }
+
+            var startIndex = preorderNodeIds.Count;
+            preorderNodeIds.Add(current.Id);
 
             foreach (var child in current.Children) {
                 if (child is null)
                     continue;
 
-                Traverse(parentByNodeId, child, current.Id);
+                Traverse(parentByNodeId, subtreeRanges, preorderNodeIds, child, current.Id);
             }
+
+            subtreeRanges[current.Id] = new NodeRange(startIndex, preorderNodeIds.Count);
         }
     }
 }
 
 public static class IncrementalAnalysisAnalyzerExtensions {
-    private sealed record IncrementalAnalysisMetadata(
-        IReadOnlyDictionary<NodeId, NodeId> ParentByNodeId
-    ) : IAnalysisMetadata;
-
     internal sealed record IncrementalAnalysisMutationMetadata(
         IEnumerable<Node> InvalidatedNodes
     ) : IAnalysisMetadata;
@@ -102,49 +126,39 @@ public static class IncrementalAnalysisAnalyzerExtensions {
     }
 
     extension(INodeMetadataProvider context) {
-        private IncrementalAnalysisMetadata? GetIncrementalAnalysisMetadata(Node root) => context.GetMetadata<IncrementalAnalysisMetadata>(root);
-        public bool IsIncrementalAnalysisAvailable(Node root) {
-            ArgumentNullException.ThrowIfNull(root);
-            return context.GetIncrementalAnalysisMetadata(root) is not null;
+        public bool IsIncrementalAnalysisAvailable() {
+            return context.GetMetadata<IncrementalAnalysisTreeIndex>(default) is not null;
         }
 
-        public IReadOnlyDictionary<NodeId, NodeId>? GetIncrementalAnalysisTopology(Node root) {
-            ArgumentNullException.ThrowIfNull(root);
-            var parentsByNodeIds = context.GetIncrementalAnalysisMetadata(root)?.ParentByNodeId;
-            return parentsByNodeIds;
+        internal IncrementalAnalysisTreeIndex? GetIncrementalAnalysisTreeIndex() {
+            return context.GetMetadata<IncrementalAnalysisTreeIndex>(default);
         }
 
-        public IEnumerable<Node>? GetInvalidatedNodes(Node root) {
-            ArgumentNullException.ThrowIfNull(root);
-            var invalidatedNodes = context.GetMetadata<IncrementalAnalysisMutationMetadata>(root)?.InvalidatedNodes;
-            return invalidatedNodes;
+        internal IEnumerable<Node>? GetInvalidatedNodes() {
+            return context.GetMetadata<IncrementalAnalysisMutationMetadata>(default)?.InvalidatedNodes;
         }
 
         public bool ShouldAnalyze(Node node) {
             ArgumentNullException.ThrowIfNull(node);
-            return context.GetMetadata<IncrementalAnalysisNodeFilterMetadata>(node) is not IncrementalAnalysisNodeFilterMetadata filterMetadata
+            return context.GetMetadata<IncrementalAnalysisNodeFilterMetadata>(default) is not IncrementalAnalysisNodeFilterMetadata filterMetadata
                 || filterMetadata.AffectedNodeIds.Contains(node.Id);
         }
     }
 
     extension(AnalysisContext context) {
-        public void SetIncrementalAnalysisTopology(Node root, IReadOnlyDictionary<NodeId, NodeId> parentsByNodeIds) {
-            ArgumentNullException.ThrowIfNull(root);
-            ArgumentNullException.ThrowIfNull(parentsByNodeIds);
-            context.SetMetadata(root, new IncrementalAnalysisMetadata(parentsByNodeIds));
+        internal void SetIncrementalAnalysisTreeIndex(IncrementalAnalysisTreeIndex treeIndex) {
+            ArgumentNullException.ThrowIfNull(treeIndex);
+            context.SetMetadata(default, treeIndex);
         }
 
-        public void SetInvalidatedNodesForIncrementalAnalysis(Node root, IEnumerable<Node> invalidatedNodes) {
-            ArgumentNullException.ThrowIfNull(root);
+        public void SetInvalidatedNodesForIncrementalAnalysis(IEnumerable<Node> invalidatedNodes) {
             ArgumentNullException.ThrowIfNull(invalidatedNodes);
-            if (!context.IsIncrementalAnalysisAvailable(root)) return;
-            context.SetMetadata(root, new IncrementalAnalysisMutationMetadata(invalidatedNodes));
+            context.SetMetadata(default, new IncrementalAnalysisMutationMetadata(invalidatedNodes));
         }
 
-        public void SetAffectedNodesForIncrementalAnalysis(Node node, IReadOnlyCollection<NodeId> affectedNodeIds) {
-            ArgumentNullException.ThrowIfNull(node);
+        public void SetAffectedNodesForIncrementalAnalysis(IReadOnlyCollection<NodeId> affectedNodeIds) {
             ArgumentNullException.ThrowIfNull(affectedNodeIds);
-            context.SetMetadata(node, new IncrementalAnalysisNodeFilterMetadata(affectedNodeIds));
+            context.SetMetadata(default, new IncrementalAnalysisNodeFilterMetadata(affectedNodeIds));
         }
     }
 }

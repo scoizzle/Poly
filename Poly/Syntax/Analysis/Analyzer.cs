@@ -67,7 +67,7 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
         ArgumentNullException.ThrowIfNull(priorAnalysis);
         ArgumentNullException.ThrowIfNull(invalidatedNodes);
 
-        if (!priorAnalysis.IsIncrementalAnalysisAvailable(root)) {
+        if (!priorAnalysis.IsIncrementalAnalysisAvailable()) {
             return Analyze(root);
         }
 
@@ -75,7 +75,7 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
             typeDefinitions,
             priorAnalysis);
 
-        context.SetInvalidatedNodesForIncrementalAnalysis(root, invalidatedNodes);
+        context.SetInvalidatedNodesForIncrementalAnalysis(invalidatedNodes);
 
         return AnalyzeInternal(root, context);
     }

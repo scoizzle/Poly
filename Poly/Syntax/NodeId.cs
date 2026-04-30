@@ -60,5 +60,5 @@ public readonly record struct NodeId {
     /// </summary>
     public static explicit operator string(NodeId id) => id.Value;
 
-    public static readonly NodeId None = default;
+    public static readonly NodeId Empty = default;
 }

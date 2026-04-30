@@ -19,14 +19,16 @@ public sealed class AnalyzerBuilder {
         _typeDefinitions = [.. typeDefinitionProviders];
     }
 
-    public void AddAnalyzer(INodeAnalyzer analyzer) {
+    public AnalyzerBuilder AddAnalyzer(INodeAnalyzer analyzer) {
         ArgumentNullException.ThrowIfNull(analyzer);
         _analyzers.Add(analyzer);
+        return this;
     }
 
-    public void AddTypeDefinitionProvider(ITypeDefinitionProvider provider) {
+    public AnalyzerBuilder AddTypeDefinitionProvider(ITypeDefinitionProvider provider) {
         ArgumentNullException.ThrowIfNull(provider);
         _typeDefinitions.Add(provider);
+        return this;
     }
 
     public Analyzer Build() {

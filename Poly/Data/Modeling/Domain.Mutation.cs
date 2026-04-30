@@ -159,8 +159,6 @@ public sealed partial record Domain {
 
                     if (analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)) {
                         Rollback(appliedSteps);
-                        _completed = true;
-                        throw new DomainMutationValidationException("MutationApply", analysis.Diagnostics);
                     }
 
                     _completed = true;

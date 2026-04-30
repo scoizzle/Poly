@@ -16,53 +16,82 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             return;
         }
 
-        // switch (node) {
-        //     case RequiredPropertiesAnalysisRequest requiredPropertiesRequest:
-        //         context.SetMetadata(
-        //             requiredPropertiesRequest,
-        //             new RequiredPropertiesAnalysisMetadata(
-        //                 PolicyConstraintAnalysisHelpers.ComputeRequiredProperties(requiredPropertiesRequest.EntityType, requiredPropertiesRequest.InitialStage)));
-        //         break;
-        //     case StageTransitionRequirementAnalysisRequest transitionRequest:
-        //         var currentRequired = PolicyConstraintAnalysisHelpers.ComputeRequiredProperties(transitionRequest.EntityType, transitionRequest.CurrentStage);
-        //         var targetRequired = PolicyConstraintAnalysisHelpers.ComputeRequiredProperties(transitionRequest.EntityType, transitionRequest.TargetStage);
-        //         var currentByName = currentRequired.ToDictionary(property => property.Name, StringComparer.Ordinal);
-        //         var newlyRequired = targetRequired
-        //             .Where(property => !currentByName.ContainsKey(property.Name))
-        //             .ToArray();
-
-        //         context.SetMetadata(
-        //             transitionRequest,
-        //             new StageTransitionRequirementAnalysisMetadata(
-        //                 new StageTransitionRequirementAnalysis(currentRequired, targetRequired, newlyRequired)));
-        //         break;
-
-        //     case Domain domainRequest:
-        //         ValidateDomainPolicies(context, domainRequest.Domain);
-        //         break;
-        // }
+        switch (node) {
+            case Domain request:
+                AnalyzeDomain(context, request.Domain);
+                break;
+            case Entity entity:
+                AnalyzeEntity(context, entity);
+                break;
+            case Stage stage:
+                AnalyzeStage(context, stage);
+                break;
+        }
 
         this.AnalyzeChildren(context, node);
     }
 
-    private static void ValidateDomainPolicies(AnalysisContext context, Domain domain) {
+    private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
         foreach (var entity in domain.Types.OfType<Entity>().Where(context.ShouldAnalyze)) {
-            var propertyNames = entity.Properties
-                .Select(static property => property.Name)
-                .ToHashSet(StringComparer.Ordinal);
+            AnalyzeEntity(context, entity);
+        }
+    }
 
-            foreach (var policy in entity.Policies.Concat(entity.Properties.SelectMany(static property => property.Policies))) {
-                foreach (var rule in policy.Rules.OfType<Rule>()) {
-                    if (rule.Value is not Property property) {
-                        continue;
-                    }
+    private static void AnalyzeEntity(AnalysisContext context, Entity entity) {
+        ValidateEntityPolicies(context, entity);
 
-                    if (!propertyNames.Contains(property.Name)) {
-                        context.ReportError(
-                            policy,
-                            $"Policy '{policy.Name}' on entity '{entity.Name}' references property '{property.Name}' that is not defined on the entity.",
-                            DomainModelDiagnosticCodes.PolicyMissingProperty);
-                    }
+        var required = PolicyConstraintAnalysisHelpers.ComputeRequiredProperties(entity, stage: null);
+        context.SetMetadata(entity, new RequiredPropertiesAnalysisMetadata(required));
+
+        foreach (var stage in entity.Stages.Where(context.ShouldAnalyze)) {
+            AnalyzeStage(context, stage);
+        }
+    }
+
+    private static void AnalyzeStage(AnalysisContext context, Stage stage) {
+        var ownerEntity = stage.OwnerEntity;
+        if (ownerEntity is null || !context.ShouldAnalyze(ownerEntity)) {
+            return;
+        }
+
+        var targetRequired = PolicyConstraintAnalysisHelpers.ComputeRequiredProperties(ownerEntity, stage);
+        context.SetMetadata(stage, new RequiredPropertiesAnalysisMetadata(targetRequired));
+
+        var currentRequired = stage.Parent is null
+            ? Array.Empty<Property>()
+            : PolicyConstraintAnalysisHelpers.ComputeRequiredProperties(ownerEntity, stage.Parent);
+
+        var currentByName = currentRequired.ToDictionary(static property => property.Name, StringComparer.Ordinal);
+        var newlyRequired = targetRequired
+            .Where(property => !currentByName.ContainsKey(property.Name))
+            .ToArray();
+
+        context.SetMetadata(
+            stage,
+            new StageTransitionRequirementAnalysisMetadata(
+                new StageTransitionRequirementAnalysis(currentRequired, targetRequired, newlyRequired)));
+    }
+
+    private static void ValidateEntityPolicies(AnalysisContext context, Entity entity) {
+        if (entity is Relationship) {
+            return;
+        }
+
+        var propertyNames = entity.Properties
+            .Select(static property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var policy in entity.Policies.Concat(entity.Properties.SelectMany(static property => property.Policies))) {
+            foreach (var rule in policy.Rules.OfType<Rule>()) {
+                if (rule.Value is not Property property) {
+                    continue;
+                }
+
+                if (!propertyNames.Contains(property.Name)) {
+                    context.ReportError(
+                        policy,
+                        $"Policy '{policy.Name}' on entity '{entity.Name}' references property '{property.Name}' that is not defined on the entity.",
+                        DomainModelDiagnosticCodes.PolicyMissingProperty);
                 }
             }
         }

@@ -92,7 +92,7 @@ public sealed class DomainImplementationLoweringPass {
 
         var entities = domain.Types
             .OfType<Entity>()
-            .Select(LowerEntity)
+            .Select(entity => LowerEntity(entity, analysis))
             .ToArray();
 
         return new DomainImplementationModel(
@@ -101,18 +101,14 @@ public sealed class DomainImplementationLoweringPass {
             domain.Relationships.ToArray());
     }
 
-    private static EntityImplementationModel LowerEntity(Entity entity) {
-        var lineage = EnumerateEntityLineageRootToLeaf(entity).ToArray();
+    private static EntityImplementationModel LowerEntity(Entity entity, AnalysisResult analysis) {
+        var metadata = analysis.GetMetadata<EffectiveMemberMetadata>(entity);
+        if (metadata is null) {
+            throw new InvalidOperationException($"No EffectiveMemberMetadata found for entity '{entity.Name}'.");
+        }
 
-        var effectiveProperties = MergeByName(lineage.SelectMany(static current => current.Properties), static property => property.Name);
-        var effectiveActions = MergeByName(lineage.SelectMany(static current => current.Actions), static action => action.Name);
-        var effectivePolicies = MergeByName(lineage.SelectMany(static current => current.Policies), static policy => policy.Name);
-        var effectiveEvents = MergeByName(lineage.SelectMany(static current => current.Events), static @event => @event.Name);
-        var effectiveRelationships = MergeByName(lineage.SelectMany(static current => current.Relationships), static relationship => relationship.Name);
-
-        var stagesByName = MergeByName(lineage.SelectMany(static current => current.Stages), static stage => stage.Name);
-        var effectiveStages = stagesByName
-            .Select(static stage => new StageImplementationModel(
+        var effectiveStages = metadata.EffectiveStages
+            .Select(stage => new StageImplementationModel(
                 stage,
                 stage.GetEffectiveActions().ToArray(),
                 stage.GetEffectivePolicies().ToArray()))
@@ -120,33 +116,11 @@ public sealed class DomainImplementationLoweringPass {
 
         return new EntityImplementationModel(
             entity,
-            effectiveProperties,
-            effectiveActions,
-            effectivePolicies,
-            effectiveEvents,
-            effectiveRelationships,
+            metadata.EffectiveProperties,
+            metadata.EffectiveActions,
+            metadata.EffectivePolicies,
+            metadata.EffectiveEvents,
+            metadata.EffectiveRelationships,
             effectiveStages);
-    }
-
-    private static IEnumerable<Entity> EnumerateEntityLineageRootToLeaf(Entity entity) {
-        var stack = new Stack<Entity>();
-
-        for (var current = entity; current is not null; current = current.ParentEntity) {
-            stack.Push(current);
-        }
-
-        while (stack.Count > 0) {
-            yield return stack.Pop();
-        }
-    }
-
-    private static IReadOnlyCollection<TNode> MergeByName<TNode>(IEnumerable<TNode> nodes, Func<TNode, string> nameSelector) {
-        var byName = new Dictionary<string, TNode>(StringComparer.Ordinal);
-
-        foreach (var node in nodes) {
-            byName[nameSelector(node)] = node;
-        }
-
-        return byName.Values.ToArray();
     }
 }

@@ -41,12 +41,10 @@ public class DomainMutationTests {
             Constraints = new RequiredConstraint()
         });
 
-        await Assert.ThrowsAsync<DomainMutationValidationException>(async () => {
-            _ = mutation.AddPolicy(child, invalidPolicy);
-            _ = mutation.Apply();
-            await Task.CompletedTask;
-        });
-
+        _ = mutation.AddPolicy(child, invalidPolicy);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("ExternalValue"));
+        await Assert.That(error is not null).IsTrue();
         await Assert.That(child.Policies.Contains(invalidPolicy)).IsFalse();
     }
 
@@ -88,12 +86,9 @@ public class DomainMutationTests {
         _ = mutation.AddEntityRelationship(source, relationship);
 
         _ = mutation.SetRelationship(relationship, source, target, RelationshipCardinality.ManyToMany, true);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            _ = mutation.Apply();
-            await Task.CompletedTask;
-        });
-
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("must be one-to-one or one-to-many"));
+        await Assert.That(error is not null).IsTrue();
         await Assert.That(relationship.Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
     }
 

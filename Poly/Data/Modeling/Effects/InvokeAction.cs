@@ -9,24 +9,7 @@ public sealed class InvokeAction : Effect {
 
     public IReadOnlyDictionary<string, IDomainValue> ParameterBindings => _parameterBindings;
 
-    public override void Validate(Entity entity) {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        TargetAction.ThrowIfMismatchedDomain(entity.Domain);
-
-        var propertyParameters = TargetAction.Parameters.OfType<Property>().ToArray();
-        if (propertyParameters.Length != TargetAction.Parameters.Count) {
-            throw new InvalidOperationException(
-                $"InvokeAction for '{TargetAction.Name}' supports property parameters only.");
-        }
-
-        foreach (var targetParameter in propertyParameters) {
-            if (!HasBindingFor(targetParameter)) {
-                throw new InvalidOperationException(
-                    $"InvokeAction for '{TargetAction.Name}' is missing binding for parameter '{targetParameter.Name}'.");
-            }
-        }
-    }
+    // Validation is now performed by EffectBindingAnalyzer only.
 
     public void BindParameter(Property targetParameter, IDomainValue value) {
         ArgumentNullException.ThrowIfNull(targetParameter);

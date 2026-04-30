@@ -5,7 +5,11 @@ namespace Poly.Data.Modeling;
 
 internal static class PolicyConstraintAnalysisHelpers {
     public static IReadOnlyCollection<Property> ComputeRequiredProperties(Entity entityType, Stage? stage) {
-        var entityProperties = entityType.Properties.ToDictionary(property => property.Name, StringComparer.Ordinal);
+        // Allow duplicate property names; use the last property with a given name
+        var entityProperties = entityType.Properties
+            .GroupBy(property => property.Name, StringComparer.Ordinal)
+            .Select(group => group.Last())
+            .ToDictionary(property => property.Name, StringComparer.Ordinal);
         var requiredPropertiesByName = new Dictionary<string, Property>(StringComparer.Ordinal);
 
         foreach (var property in entityProperties.Values) {

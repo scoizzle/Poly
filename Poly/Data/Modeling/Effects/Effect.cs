@@ -11,5 +11,5 @@ namespace Poly.Data.Modeling.Effects;
 /// TODO: Consider adding a base class of type DomainObject to effects
 /// </remarks>
 public abstract class Effect {
-    public abstract void Validate(Entity entity);
+    // Validation is now performed by EffectBindingAnalyzer only.
 }

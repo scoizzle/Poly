@@ -20,11 +20,10 @@ public class PolicyTests {
         var domain = DomainTestFactory.CreateDomain();
         var stage = new Stage(domain, "Review");
         var policy = new Policy(domain, "ReviewPolicy");
+
         MutationApply.AddPolicy(stage, policy);
+        MutationApply.RemovePolicy(stage, policy);
 
-        var wasRemoved = MutationApply.RemovePolicy(stage, policy);
-
-        await Assert.That(wasRemoved).IsTrue();
         await Assert.That(stage.Policies.Contains(policy)).IsFalse();
     }
 

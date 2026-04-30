@@ -28,6 +28,56 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         ValidateStageInheritance(context, entity);
         ValidateStageActionVisibility(context, entity);
         ValidateTypeCompatibility(context, entity);
+
+        // Duplicate property name validation
+        var propertyGroups = entity.Properties.GroupBy(p => p.Name, StringComparer.Ordinal);
+        foreach (var group in propertyGroups) {
+            if (group.Count() > 1) {
+                foreach (var property in group) {
+                    context.ReportError(
+                        property,
+                        $"Duplicate property name '{property.Name}' found on entity '{entity.Name}'.",
+                        DomainModelDiagnosticCodes.SemanticTypeCompatibility // Use or define a more specific code if desired
+                    );
+                }
+            }
+        }
+
+        // Compute effective members (properties, actions, policies, events, relationships, stages)
+        var lineage = EnumerateEntityLineageRootToLeaf(entity).ToArray();
+        var effectiveProperties = MergeByName(lineage.SelectMany(static current => current.Properties), static property => property.Name);
+        var effectiveActions = MergeByName(lineage.SelectMany(static current => current.Actions), static action => action.Name);
+        var effectivePolicies = MergeByName(lineage.SelectMany(static current => current.Policies), static policy => policy.Name);
+        var effectiveEvents = MergeByName(lineage.SelectMany(static current => current.Events), static @event => @event.Name);
+        var effectiveRelationships = MergeByName(lineage.SelectMany(static current => current.Relationships), static relationship => relationship.Name);
+        var effectiveStages = MergeByName(lineage.SelectMany(static current => current.Stages), static stage => stage.Name);
+
+        context.Metadata.Set(entity, new EffectiveMemberMetadata {
+            EffectiveProperties = effectiveProperties,
+            EffectiveActions = effectiveActions,
+            EffectivePolicies = effectivePolicies,
+            EffectiveEvents = effectiveEvents,
+            EffectiveRelationships = effectiveRelationships,
+            EffectiveStages = effectiveStages
+        });
+    }
+
+    private static IEnumerable<Entity> EnumerateEntityLineageRootToLeaf(Entity entity) {
+        var stack = new Stack<Entity>();
+        for (var current = entity; current is not null; current = current.ParentEntity) {
+            stack.Push(current);
+        }
+        while (stack.Count > 0) {
+            yield return stack.Pop();
+        }
+    }
+
+    private static IReadOnlyCollection<TNode> MergeByName<TNode>(IEnumerable<TNode> nodes, Func<TNode, string> nameSelector) {
+        var byName = new Dictionary<string, TNode>(StringComparer.Ordinal);
+        foreach (var node in nodes) {
+            byName[nameSelector(node)] = node;
+        }
+        return byName.Values.ToArray();
     }
 
     private static void ValidateStageInheritance(AnalysisContext context, Entity entity) {

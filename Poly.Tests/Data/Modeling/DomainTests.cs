@@ -25,22 +25,21 @@ public class DomainTests {
         var otherDomain = DomainTestFactory.CreateDomain("Other Domain");
         var customer = CreatePrimitive(otherDomain, "Customer");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddType(parentDomain, customer);
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddType(parentDomain, customer);
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("domain"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
     public async Task Domain_AddType_WithDuplicateName_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
-
-        MutationApply.AddType(domain, CreatePrimitive(domain, "Customer"));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddType(domain, CreatePrimitive(domain, "Customer"));
-            await Task.CompletedTask;
-        });
+        var customer1 = CreatePrimitive(domain, "Customer");
+        var customer2 = CreatePrimitive(domain, "Customer");
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(customer1).AddType(customer2);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("Customer"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -94,10 +93,9 @@ public class DomainTests {
 
         var relationship = new Relationship(otherDomain, "CustomerInvoices", customer, invoice, RelationshipCardinality.OneToMany, false);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddRelationship(domain, relationship);
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddRelationship(domain, relationship);
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("domain"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -110,10 +108,9 @@ public class DomainTests {
 
         var relationship = new Relationship(domain, "CustomerInvoices", customer, invoice, RelationshipCardinality.OneToMany, false);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddRelationship(domain, relationship);
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddRelationship(domain, relationship);
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("domain"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -121,15 +118,14 @@ public class DomainTests {
         var domain = DomainTestFactory.CreateDomain();
         var source = new Entity(domain, "Customer");
         var target = new Entity(domain, "SupportCase");
-        MutationApply.AddType(domain, source);
-        MutationApply.AddType(domain, target);
-
-        MutationApply.AddRelationship(domain, new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToOne, false));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddRelationship(domain, new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToOne, false));
-            await Task.CompletedTask;
-        });
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(source).AddType(target);
+        var rel1 = new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToOne, false);
+        var rel2 = new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToOne, false);
+        _ = mutation.AddRelationship(rel1).AddRelationship(rel2);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("CustomerCases"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -143,11 +139,10 @@ public class DomainTests {
         MutationApply.AddType(domain, note);
 
         MutationApply.AddRelationship(domain, new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, true));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddRelationship(domain, new Relationship(domain, "AgentNotes", agent, note, RelationshipCardinality.OneToMany, true));
-            await Task.CompletedTask;
-        });
+        var second = new Relationship(domain, "AgentNotes", agent, note, RelationshipCardinality.OneToMany, true);
+        var result = MutationApply.AddRelationship(domain, second);
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("multiple ownership relationships"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -180,13 +175,9 @@ public class DomainTests {
         var relationship = new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.ManyToMany, false);
 
         MutationApply.AddRelationship(domain, relationship);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            var mutation = domain.CreateMutation();
-            _ = mutation.SetRelationship(relationship, source, target, RelationshipCardinality.ManyToMany, true);
-            _ = mutation.Apply();
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddRelationship(domain, new Relationship(domain, "OtherRel", source, target, RelationshipCardinality.ManyToMany, true));
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("must be one-to-one or one-to-many"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -200,17 +191,10 @@ public class DomainTests {
         MutationApply.AddType(domain, note);
 
         MutationApply.AddRelationship(domain, new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, true));
-
-        var second = new Relationship(domain, "AgentNotes", agent, note, RelationshipCardinality.OneToMany, false);
-
-        MutationApply.AddRelationship(domain, second);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            var mutation = domain.CreateMutation();
-            _ = mutation.SetRelationship(second, agent, note, RelationshipCardinality.OneToMany, true);
-            _ = mutation.Apply();
-            await Task.CompletedTask;
-        });
+        var second = new Relationship(domain, "AgentNotes", agent, note, RelationshipCardinality.OneToMany, true);
+        var result = MutationApply.AddRelationship(domain, second);
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("multiple ownership relationships"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -246,10 +230,9 @@ public class DomainTests {
 
         var assignedAt = new Property(otherDomain, "AssignedAt", timestamp);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddProperty(relationship, assignedAt);
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddProperty(relationship, assignedAt);
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("domain"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -257,15 +240,14 @@ public class DomainTests {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "Ticket");
         var stringType = CreatePrimitive(domain, "string", TypeCategory.Text);
-        MutationApply.AddType(domain, entity);
-        MutationApply.AddType(domain, stringType);
-
-        MutationApply.AddProperty(entity, new Property(domain, "Title", stringType));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddProperty(entity, new Property(domain, "Title", stringType));
-            await Task.CompletedTask;
-        });
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(entity).AddType(stringType);
+        var prop1 = new Property(domain, "Title", stringType);
+        var prop2 = new Property(domain, "Title", stringType);
+        _ = mutation.AddProperty(entity, prop1).AddProperty(entity, prop2);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate property name 'Title'"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -278,10 +260,9 @@ public class DomainTests {
 
         var relationship = new Relationship(domain, "CustomerCases", source, target, RelationshipCardinality.OneToOne, false);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddRelationship(source, relationship);
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddRelationship(source, relationship);
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("must be registered in domain"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     private static Primitive CreatePrimitive(Domain domain, string name, TypeCategory category = TypeCategory.Primitive) {
@@ -292,20 +273,31 @@ public class DomainTests {
 
 public class StageTests {
     [Test]
+    public async Task AddPolicy_WhenAnalyzerFails_RollsBackMutation() {
+        var domain = DomainTestFactory.CreateDomain();
+        var entity = new Entity(domain, "Ticket");
+        var stage = new Stage(domain, "Open");
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(entity).AddStage(entity, stage);
+        var policy = new Policy(domain, "RequireTitle");
+        _ = mutation.AddPolicy(stage, policy).AddPolicy(stage, policy);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("RequireTitle"));
+        await Assert.That(error is not null).IsTrue();
+    }
+    [Test]
     public async Task Entity_AddStage_WhenParentEntityHasStagesAndStageHasNoParent_ThrowsInvalidOperationException() {
         var domain = DomainTestFactory.CreateDomain();
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
-        MutationApply.AddType(domain, parent);
-        MutationApply.AddType(domain, child);
-
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(parent).AddType(child);
         var parentStage = new Stage(domain, "Open");
-
-        MutationApply.AddStage(parent, parentStage);
-
-        await Assert.That(() => MutationApply.AddStage(child, new Stage(domain, "Draft")))
-            .Throws<InvalidOperationException>()
-                .WithMessage("Stage 'Draft' on child entity 'Child' must have a parent stage when parent entity 'Parent' defines stages.");
+        var draftStage = new Stage(domain, "Draft");
+        _ = mutation.AddStage(parent, parentStage).AddStage(child, draftStage);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("must have a parent stage when parent entity 'Parent' defines stages."));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -329,19 +321,15 @@ public class StageTests {
         var domain = DomainTestFactory.CreateDomain();
         var parent = new Entity(domain, "Parent");
         var child = new Entity(domain, "Child", parent);
-        MutationApply.AddType(domain, parent);
-        MutationApply.AddType(domain, child);
-
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(parent).AddType(child);
         var parentStage = new Stage(domain, "Open");
         var childStage = new Stage(domain, "Draft") { Parent = parentStage };
         var grandChildStage = new Stage(domain, "Review") { Parent = childStage };
-
-        MutationApply.AddStage(parent, parentStage);
-        MutationApply.AddStage(child, childStage);
-
-        await Assert.That(() => MutationApply.AddStage(child, grandChildStage))
-            .Throws<InvalidOperationException>()
-                .WithMessage("Stage 'Review' on child entity 'Child' must directly inherit from a stage defined on parent entity 'Parent'.");
+        _ = mutation.AddStage(parent, parentStage).AddStage(child, childStage).AddStage(child, grandChildStage);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("must directly inherit from a stage defined on parent entity 'Parent'."));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -400,15 +388,12 @@ public class StageTests {
         var domain = DomainTestFactory.CreateDomain();
         var owner = new Entity(domain, "Ticket");
         var stage = new Stage(domain, "Open");
-        MutationApply.AddType(domain, owner);
-        MutationApply.AddStage(owner, stage);
-
-        MutationApply.AddPolicy(stage, new Policy(domain, "RequireTitle"));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddPolicy(stage, new Policy(domain, "RequireTitle"));
-            await Task.CompletedTask;
-        });
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(owner).AddStage(owner, stage);
+        _ = mutation.AddPolicy(stage, new Policy(domain, "RequireTitle")).AddPolicy(stage, new Policy(domain, "RequireTitle"));
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("RequireTitle"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -416,15 +401,12 @@ public class StageTests {
         var domain = DomainTestFactory.CreateDomain();
         var entity = new Entity(domain, "Ticket");
         var stage = new Stage(domain, "Open");
-        MutationApply.AddType(domain, entity);
-        MutationApply.AddStage(entity, stage);
-
-        MutationApply.AddAction(stage, new DomainAction(domain, "Assign", entity));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddAction(stage, new DomainAction(domain, "Assign", entity));
-            await Task.CompletedTask;
-        });
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(entity).AddStage(entity, stage);
+        _ = mutation.AddAction(stage, new DomainAction(domain, "Assign", entity)).AddAction(stage, new DomainAction(domain, "Assign", entity));
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("Assign"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -504,14 +486,13 @@ public class ActionAndEventMutationTests {
         var domain = DomainTestFactory.CreateDomain();
         var owner = new Entity(domain, "SupportCase");
         var other = new Entity(domain, "Ticket");
-        MutationApply.AddType(domain, owner);
-        MutationApply.AddType(domain, other);
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(owner).AddType(other);
         var action = new DomainAction(domain, "Assign", other);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddAction(owner, action);
-            await Task.CompletedTask;
-        });
+        _ = mutation.AddAction(owner, action);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Assign") && d.Message.Contains("entity"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -519,18 +500,15 @@ public class ActionAndEventMutationTests {
         var domain = DomainTestFactory.CreateDomain();
         var owner = new Entity(domain, "SupportCase");
         var other = new Entity(domain, "Ticket");
-        MutationApply.AddType(domain, owner);
-        MutationApply.AddType(domain, other);
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(owner).AddType(other);
         var stage = new Stage(domain, "New");
-
-        MutationApply.AddStage(owner, stage);
-
+        _ = mutation.AddStage(owner, stage);
         var mismatchedAction = new DomainAction(domain, "Assign", other);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddAction(stage, mismatchedAction);
-            await Task.CompletedTask;
-        });
+        _ = mutation.AddAction(stage, mismatchedAction);
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Assign") && d.Message.Contains("entity"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -538,14 +516,12 @@ public class ActionAndEventMutationTests {
         var domain = DomainTestFactory.CreateDomain();
         var eventType = new Event(domain, "CaseAssigned");
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        MutationApply.AddType(domain, eventType);
-
-        MutationApply.AddProperty(eventType, new Property(domain, "AssignedTo", stringType));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddProperty(eventType, new Property(domain, "AssignedTo", stringType));
-            await Task.CompletedTask;
-        });
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(eventType);
+        _ = mutation.AddProperty(eventType, new Property(domain, "AssignedTo", stringType)).AddProperty(eventType, new Property(domain, "AssignedTo", stringType));
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("AssignedTo"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -554,15 +530,12 @@ public class ActionAndEventMutationTests {
         var entity = new Entity(domain, "SupportCase");
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
         var action = new DomainAction(domain, "AddNote", entity);
-        MutationApply.AddType(domain, entity);
-        MutationApply.AddAction(entity, action);
-
-        MutationApply.AddParameter(action, new Property(domain, "NoteText", stringType));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddParameter(action, new Property(domain, "NoteText", stringType));
-            await Task.CompletedTask;
-        });
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(entity).AddAction(entity, action);
+        _ = mutation.AddParameter(action, new Property(domain, "NoteText", stringType)).AddParameter(action, new Property(domain, "NoteText", stringType));
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("NoteText"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -576,13 +549,12 @@ public class ActionAndEventMutationTests {
         MutationApply.AddType(domain, note);
         MutationApply.AddAction(entity, action);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddEffect(action, new CreateEntityInstance {
-                EntityType = note,
-                InitialStage = wrongStage
-            });
-            await Task.CompletedTask;
-        });
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(entity).AddType(note).AddAction(entity, action);
+        _ = mutation.AddEffect(action, new CreateEntityInstance { EntityType = note, InitialStage = wrongStage });
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Wrong"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -592,19 +564,13 @@ public class ActionAndEventMutationTests {
         var targetEntity = new Entity(domain, "Note");
         var sourceAction = new DomainAction(domain, "Assign", sourceEntity);
         var foreignStage = new Stage(domain, "Draft");
-        MutationApply.AddType(domain, sourceEntity);
-        MutationApply.AddType(domain, targetEntity);
-        MutationApply.AddAction(sourceEntity, sourceAction);
-
-        MutationApply.AddStage(sourceEntity, new Stage(domain, "New"));
-        MutationApply.AddStage(targetEntity, foreignStage);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddEffect(sourceAction, new StageTransition {
-                TargetStage = foreignStage
-            });
-            await Task.CompletedTask;
-        });
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(sourceEntity).AddType(targetEntity).AddAction(sourceEntity, sourceAction);
+        _ = mutation.AddStage(sourceEntity, new Stage(domain, "New")).AddStage(targetEntity, foreignStage);
+        _ = mutation.AddEffect(sourceAction, new StageTransition { TargetStage = foreignStage });
+        var result = mutation.Apply();
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Draft") && d.Message.Contains("entity"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -618,11 +584,9 @@ public class ActionAndEventMutationTests {
         MutationApply.AddType(domain, @event);
         MutationApply.AddAction(entity, action);
         MutationApply.AddProperty(@event, new Property(domain, "AssignedTo", stringType));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddEffect(action, new PublishEvent { Event = @event });
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddEffect(action, new PublishEvent { Event = @event });
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("AssignedTo"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -634,14 +598,11 @@ public class ActionAndEventMutationTests {
         MutationApply.AddType(domain, entity);
         MutationApply.AddAction(entity, targetAction);
         MutationApply.AddParameter(targetAction, new Property(domain, "Reason", stringType));
-
         var sourceAction = new DomainAction(domain, "Escalate", entity);
         MutationApply.AddAction(entity, sourceAction);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddEffect(sourceAction, new InvokeAction { TargetAction = targetAction });
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddEffect(sourceAction, new InvokeAction { TargetAction = targetAction });
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Reason"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]
@@ -673,12 +634,9 @@ public class ActionAndEventMutationTests {
         var property = new Property(domain, "Title", stringType);
         MutationApply.AddType(domain, owner);
         MutationApply.AddProperty(owner, property);
-
         MutationApply.AddPolicy(property, new Policy(domain, "RequireTitle"));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            MutationApply.AddPolicy(property, new Policy(domain, "RequireTitle"));
-            await Task.CompletedTask;
-        });
+        var result = MutationApply.AddPolicy(property, new Policy(domain, "RequireTitle"));
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("RequireTitle"));
+        await Assert.That(error is not null).IsTrue();
     }
 }

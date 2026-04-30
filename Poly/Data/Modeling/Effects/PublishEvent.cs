@@ -9,17 +9,7 @@ public sealed class PublishEvent : Effect {
 
     public IReadOnlyDictionary<string, IDomainValue> PropertyBindings => _propertyBindings;
 
-    public override void Validate(Entity entity) {
-        ArgumentNullException.ThrowIfNull(entity);
-        Event.ThrowIfMismatchedDomain(entity.Domain);
-
-        foreach (var eventProperty in Event.Properties) {
-            if (!HasBindingFor(eventProperty)) {
-                throw new InvalidOperationException(
-                    $"PublishEvent for '{Event.Name}' is missing binding for event property '{eventProperty.Name}'.");
-            }
-        }
-    }
+    // Validation is now performed by EffectBindingAnalyzer only.
 
     public void BindProperty(Property eventProperty, IDomainValue value) {
         ArgumentNullException.ThrowIfNull(eventProperty);

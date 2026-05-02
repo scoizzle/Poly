@@ -393,7 +393,7 @@ public static class DomainAuthoringTool {
                 case "add_action_to_entity": {
                         var entity = existingDomain.RequireEntity(RequireValue(request.EntityName, nameof(request.EntityName)));
                         var actionName = RequireValue(request.ActionName, nameof(request.ActionName));
-                        var action = new Poly.Data.Modeling.Action(existingDomain, actionName, entity);
+                        var action = new Data.Modeling.Action(existingDomain, actionName, entity);
                         _ = mutation.AddAction(entity, action);
                         break;
                     }

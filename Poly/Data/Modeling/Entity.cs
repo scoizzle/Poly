@@ -46,9 +46,6 @@ public partial record Entity : DomainType {
 
     public Entity(Domain domain, string name, Entity? parentEntity = null) : base(domain) {
         ArgumentNullException.ThrowIfNull(name);
-
-        parentEntity?.ThrowIfMismatchedDomain(domain);
-
         Name = name;
         ParentEntity = parentEntity;
     }

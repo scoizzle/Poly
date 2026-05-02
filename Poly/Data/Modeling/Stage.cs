@@ -22,8 +22,6 @@ public sealed partial record Stage : DomainObject {
     internal void AttachToEntity(Entity ownerEntity) {
         ArgumentNullException.ThrowIfNull(ownerEntity);
 
-        ownerEntity.ThrowIfMismatchedDomain(Domain);
-
         if (_ownerEntity is not null && !ReferenceEquals(_ownerEntity, ownerEntity)) {
             throw new InvalidOperationException(
                 $"Stage '{Name}' is already attached to entity '{_ownerEntity.Name}' and cannot be attached to '{ownerEntity.Name}'.");

@@ -15,9 +15,6 @@ public sealed class InvokeAction : Effect {
         ArgumentNullException.ThrowIfNull(targetParameter);
         ArgumentNullException.ThrowIfNull(value);
 
-        targetParameter.ThrowIfMismatchedDomain(TargetAction.Domain);
-        value.ThrowIfMismatchedDomain(TargetAction.Domain);
-
         if (!TargetAction.Parameters.OfType<Property>().Any(p => string.Equals(p.Name, targetParameter.Name, StringComparison.Ordinal))) {
             throw new InvalidOperationException(
                 $"Parameter '{targetParameter.Name}' does not exist on action '{TargetAction.Name}'.");

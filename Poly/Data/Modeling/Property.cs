@@ -10,9 +10,6 @@ public sealed partial record Property : DomainObject, IDomainValue {
     public Property(Domain domain, string name, IDomainType type) : base(domain) {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(type);
-
-        type.ThrowIfMismatchedDomain(domain);
-
         Name = name;
         Type = type;
     }

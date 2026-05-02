@@ -32,19 +32,3 @@ public interface IDomainObject {
     /// </summary>
     public Domain Domain { get; }
 }
-
-public static class IDomainObjectExtensions {
-    public static void ThrowIfNullOrMismatchedDomain([NotNull] this IDomainObject? domainObject, Domain domain, [CallerArgumentExpression("domainObject")] string paramName = "") {
-        if (domainObject is null) {
-            throw new ArgumentNullException(paramName);
-        }
-
-        ThrowIfMismatchedDomain(domainObject, domain, paramName);
-    }
-
-    public static void ThrowIfMismatchedDomain([NotNull] this IDomainObject domainObject, Domain domain, [CallerArgumentExpression("domainObject")] string paramName = "") {
-        if (!ReferenceEquals(domainObject.Domain, domain)) {
-            throw new InvalidOperationException("Domain objects must belong to the same domain.");
-        }
-    }
-}

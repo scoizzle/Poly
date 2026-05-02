@@ -47,12 +47,13 @@ public class DomainTests {
         var domain = DomainTestFactory.CreateDomain();
         var otherDomain = DomainTestFactory.CreateDomain("Other Domain");
 
-        var parent = new Entity(otherDomain, "Parent");
+        var parent = CreatePrimitive(otherDomain, "Parent");
+        var mutation = domain.CreateMutation();
+        _ = mutation.AddType(parent);
+        var result = mutation.Apply();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
-            _ = new Entity(domain, "Child", parent);
-            await Task.CompletedTask;
-        });
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.MutationInvariant && d.Message.Contains("Parent"));
+        await Assert.That(error is not null).IsTrue();
     }
 
     [Test]

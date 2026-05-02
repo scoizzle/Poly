@@ -15,9 +15,6 @@ public sealed class PublishEvent : Effect {
         ArgumentNullException.ThrowIfNull(eventProperty);
         ArgumentNullException.ThrowIfNull(value);
 
-        eventProperty.ThrowIfMismatchedDomain(Event.Domain);
-        value.ThrowIfMismatchedDomain(Event.Domain);
-
         if (!ReferenceEquals(eventProperty.Type, value.Type)) {
             throw new InvalidOperationException(
                 $"Binding for event property '{eventProperty.Name}' requires type '{eventProperty.Type.Name}' but got '{value.Type.Name}'.");

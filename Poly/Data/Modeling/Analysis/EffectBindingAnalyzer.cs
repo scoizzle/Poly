@@ -103,7 +103,7 @@ internal sealed class EffectBindingAnalyzer : INodeAnalyzer {
                     context.ReportError(action, $"Target stage '{stageTransition.TargetStage.Name}' must belong to entity '{ownerEntity.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
                 }
                 break;
-            case Poly.Data.Modeling.Effects.Mutations.Assign assign:
+            case Assign assign:
                 if (assign.Target == null || assign.Value == null) {
                     context.ReportError(action, $"Assign effect is missing Target or Value.", DomainModelDiagnosticCodes.EffectBinding);
                     break;

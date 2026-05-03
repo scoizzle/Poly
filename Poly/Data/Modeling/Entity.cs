@@ -37,14 +37,13 @@ namespace Poly.Data.Modeling;
 /// </code>
 /// </remarks>
 public partial record Entity : DomainType {
-    private readonly List<Property> _properties = [];
     private readonly List<Stage> _stages = [];
     private readonly List<Policy> _policies = [];
     private readonly List<Action> _actions = [];
     private readonly List<Event> _events = [];
     private readonly List<Relationship> _relationships = [];
 
-    public Entity(Domain domain, string name, Entity? parentEntity = null) : base(domain) {
+    public Entity(Domain domain, string name, Entity? parentEntity = null) : base(domain, name) {
         ArgumentNullException.ThrowIfNull(name);
         Name = name;
         ParentEntity = parentEntity;
@@ -52,12 +51,11 @@ public partial record Entity : DomainType {
 
     public Entity? ParentEntity { get; }
 
-    public override IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
     public IReadOnlyCollection<Stage> Stages => _stages.AsReadOnly();
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
     public IReadOnlyCollection<Action> Actions => _actions.AsReadOnly();
     public IReadOnlyCollection<Event> Events => _events.AsReadOnly();
     public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
 
-    public override IEnumerable<DomainObject> ChildObjects => [.. _properties, .. _stages, .. _policies, .. _actions, .. _events];
+    public override IEnumerable<DomainMember> ChildObjects => [.. _properties, .. _stages, .. _policies, .. _actions, .. _events];
 }

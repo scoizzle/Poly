@@ -2,16 +2,14 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Effects;
 
-public sealed class PublishEvent : Effect {
-    private readonly Dictionary<string, IDomainValue> _propertyBindings = new(StringComparer.Ordinal);
+public sealed record PublishEvent(Domain Domain) : Effect(Domain) {
+    private readonly Dictionary<string, DomainValue> _propertyBindings = new(StringComparer.Ordinal);
 
     public required Event Event { get; init; }
 
-    public IReadOnlyDictionary<string, IDomainValue> PropertyBindings => _propertyBindings;
+    public IReadOnlyDictionary<string, DomainValue> PropertyBindings => _propertyBindings;
 
-    // Validation is now performed by EffectBindingAnalyzer only.
-
-    public void BindProperty(Property eventProperty, IDomainValue value) {
+    public void BindProperty(Property eventProperty, DomainValue value) {
         ArgumentNullException.ThrowIfNull(eventProperty);
         ArgumentNullException.ThrowIfNull(value);
 

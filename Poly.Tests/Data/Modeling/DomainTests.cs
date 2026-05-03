@@ -409,76 +409,6 @@ public class StageTests {
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("Assign"));
         await Assert.That(error is not null).IsTrue();
     }
-
-    [Test]
-    public async Task StageTransitionRequirementAnalyzer_IncludesPropertyPolicyRequirements() {
-        var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        MutationApply.AddType(domain, stringType);
-
-        var ticket = new Entity(domain, "Ticket");
-        var title = new Property(domain, "Title", stringType);
-
-        var titlePolicy = new Policy(domain, "RequireTitleFromProperty");
-
-        MutationApply.AddRule(titlePolicy, new PropertyRule {
-            Value = title,
-            Constraints = new RequiredConstraint()
-        });
-
-        MutationApply.AddPolicy(title, titlePolicy);
-        MutationApply.AddProperty(ticket, title);
-
-        var triage = new Stage(domain, "Triage");
-        var open = new Stage(domain, "Open");
-
-        MutationApply.AddStage(ticket, triage);
-        MutationApply.AddStage(ticket, open);
-        MutationApply.AddType(domain, ticket);
-
-        // var analysis = StageTransitionRequirementAnalyzer.Analyze(triage, open, ticket);
-        // var currentRequiredNames = analysis.CurrentRequiredProperties.Select(p => p.Name).ToArray();
-        // var targetRequiredNames = analysis.TargetRequiredProperties.Select(p => p.Name).ToArray();
-
-        // await Assert.That(currentRequiredNames).Contains("Title");
-        // await Assert.That(targetRequiredNames).Contains("Title");
-    }
-
-    [Test]
-    public async Task DomainModelValidationAnalyzer_StageTransitionRequest_ProducesMetadata() {
-        var domain = DomainTestFactory.CreateDomain();
-        var stringType = new Primitive(domain, "string", TypeCategory.Text);
-        MutationApply.AddType(domain, stringType);
-
-        var ticket = new Entity(domain, "Ticket");
-        var title = new Property(domain, "Title", stringType);
-        var triage = new Stage(domain, "Triage");
-        var open = new Stage(domain, "Open");
-        var openPolicy = new Policy(domain, "RequireTitleAtOpen");
-
-        MutationApply.AddRule(openPolicy, new PropertyRule {
-            Value = title,
-            Constraints = new RequiredConstraint()
-        });
-
-        MutationApply.AddProperty(ticket, title);
-        MutationApply.AddPolicy(open, openPolicy);
-        MutationApply.AddStage(ticket, triage);
-        MutationApply.AddStage(ticket, open);
-
-        // var request = new StageTransitionRequirementAnalysisRequest(triage, open, ticket);
-        // var builder = new AnalyzerBuilder();
-        // builder.UseDomainModelValidation();
-
-        // var analysis = builder.Build().Analyze(request);
-        // var newlyRequiredNames = analysis
-        //     .GetStageTransitionRequirements(request)
-        //     .NewlyRequiredProperties
-        //     .Select(property => property.Name)
-        //     .ToArray();
-
-        // await Assert.That(newlyRequiredNames).Contains("Title");
-    }
 }
 
 public class ActionAndEventMutationTests {
@@ -552,7 +482,7 @@ public class ActionAndEventMutationTests {
 
         var mutation = domain.CreateMutation();
         _ = mutation.AddType(entity).AddType(note).AddAction(entity, action);
-        _ = mutation.AddEffect(action, new CreateEntityInstance { EntityType = note, InitialStage = wrongStage });
+        _ = mutation.AddEffect(action, new CreateEntityInstance(domain) { EntityType = note, InitialStage = wrongStage });
         var result = mutation.Apply();
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Wrong"));
         await Assert.That(error is not null).IsTrue();
@@ -568,7 +498,7 @@ public class ActionAndEventMutationTests {
         var mutation = domain.CreateMutation();
         _ = mutation.AddType(sourceEntity).AddType(targetEntity).AddAction(sourceEntity, sourceAction);
         _ = mutation.AddStage(sourceEntity, new Stage(domain, "New")).AddStage(targetEntity, foreignStage);
-        _ = mutation.AddEffect(sourceAction, new StageTransition { TargetStage = foreignStage });
+        _ = mutation.AddEffect(sourceAction, new StageTransition(domain) { TargetStage = foreignStage });
         var result = mutation.Apply();
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Draft") && d.Message.Contains("entity"));
         await Assert.That(error is not null).IsTrue();
@@ -585,7 +515,7 @@ public class ActionAndEventMutationTests {
         MutationApply.AddType(domain, @event);
         MutationApply.AddAction(entity, action);
         MutationApply.AddProperty(@event, new Property(domain, "AssignedTo", stringType));
-        var result = MutationApply.AddEffect(action, new PublishEvent { Event = @event });
+        var result = MutationApply.AddEffect(action, new PublishEvent(domain) { Event = @event });
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("AssignedTo"));
         await Assert.That(error is not null).IsTrue();
     }
@@ -601,7 +531,7 @@ public class ActionAndEventMutationTests {
         MutationApply.AddParameter(targetAction, new Property(domain, "Reason", stringType));
         var sourceAction = new DomainAction(domain, "Escalate", entity);
         MutationApply.AddAction(entity, sourceAction);
-        var result = MutationApply.AddEffect(sourceAction, new InvokeAction { TargetAction = targetAction });
+        var result = MutationApply.AddEffect(sourceAction, new InvokeAction(domain) { TargetAction = targetAction });
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Reason"));
         await Assert.That(error is not null).IsTrue();
     }
@@ -619,7 +549,7 @@ public class ActionAndEventMutationTests {
         var sourceAction = new DomainAction(domain, "Escalate", entity);
         var sourceReason = new Property(domain, "SourceReason", stringType);
 
-        var invoke = new InvokeAction { TargetAction = targetAction };
+        var invoke = new InvokeAction(domain) { TargetAction = targetAction };
         invoke.BindParameter(reasonParameter, sourceReason);
 
         MutationApply.AddEffect(sourceAction, invoke);

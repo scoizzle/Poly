@@ -3,7 +3,7 @@ using Poly.Data.Modeling.TypeSystem;
 namespace Poly.Data.Modeling;
 
 public sealed class DomainMutationIntentEngine {
-    internal static TNode ResolveNode<TNode>(Domain domain, DomainNodeReference reference) where TNode : DomainObject {
+    internal static TNode ResolveNode<TNode>(Domain domain, DomainNodeReference reference) where TNode : DomainMember {
         ArgumentNullException.ThrowIfNull(reference);
 
         var segments = reference.Path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -12,10 +12,10 @@ public sealed class DomainMutationIntentEngine {
             throw new ArgumentException("Node path cannot be null or empty.", nameof(reference));
         }
 
-        var current = domain as DomainObject;
+        var current = domain as DomainMember;
 
         foreach (var segment in segments) {
-            var next = current.ChildObjects.FirstOrDefault(child => child != null && string.Equals(child.Name, segment, StringComparison.Ordinal));
+            var next = current.ChildObjects.OfType<DomainMember>().FirstOrDefault(child => child != null && string.Equals(child.Name, segment, StringComparison.Ordinal));
 
             if (next is null)
                 throw new InvalidOperationException($"Could not resolve path '{reference.Path}' - segment '{segment}' not found under '{current.Name}'.");

@@ -2,7 +2,7 @@ using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
 namespace Poly.Data.Modeling;
 
-public sealed partial record Action : DomainObject {
+public sealed partial record Action : DomainMember {
     internal readonly List<Property> _parameters = [];
     internal readonly List<Effect> _effects = [];
 
@@ -17,5 +17,5 @@ public sealed partial record Action : DomainObject {
     public IReadOnlyCollection<Property> Parameters => _parameters.AsReadOnly();
     public IReadOnlyCollection<Effect> Effects => _effects.AsReadOnly();
 
-    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _parameters /*TODO: , .. _effects*/];
+    public sealed override IEnumerable<DomainMember> ChildObjects => [.. _parameters /*TODO: , .. _effects*/];
 }

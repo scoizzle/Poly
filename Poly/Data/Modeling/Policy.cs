@@ -1,4 +1,5 @@
 using Poly.Data.Modeling.TypeSystem;
+using Poly.Data.Modeling.Validation;
 
 namespace Poly.Data.Modeling;
 
@@ -10,42 +11,31 @@ public enum PolicyAggregationStrategy {
 /// <summary>
 /// Represents a composable policy that can aggregate multiple policy rules.
 /// </summary>
-public sealed partial record Policy : DomainObject {
-    internal readonly List<IPolicyRule> _rules = [];
+public sealed partial record Policy : DomainMember {
+    internal readonly List<Rule> _rules = [];
 
-    public Policy(Domain domain, string name) : base(domain) {
+    public Policy(Domain domain, string name) : base(domain, name) {
+        ArgumentNullException.ThrowIfNull(name);
         Name = name;
     }
 
     public PolicyAggregationStrategy AggregationStrategy { get; init; } = PolicyAggregationStrategy.All;
 
-    public IReadOnlyCollection<IPolicyRule> Rules => _rules.AsReadOnly();
-    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _rules.OfType<DomainObject>()];
+    public IReadOnlyCollection<Rule> Rules => _rules.AsReadOnly();
+    public sealed override IEnumerable<DomainMember> ChildObjects => [.. _rules];
 
     public Node ToInterpretationNode(Node subject) {
         ArgumentNullException.ThrowIfNull(subject);
 
-        var nodes = _rules.Select(rule => rule.ToInterpretationNode(subject));
+        var nodes = Rules.Select(rule => rule switch {
+            PredicateRule predicateRule => predicateRule.ToInterpretationNode(subject),
+            _ => rule.Constraints.ToInterpretationNode(subject)
+        });
 
         return AggregationStrategy switch {
             PolicyAggregationStrategy.All => nodes.Aggregate((Node)True, (acc, node) => new And(acc, node)),
             PolicyAggregationStrategy.Any => nodes.Aggregate((Node)False, (acc, node) => new Or(acc, node)),
             _ => throw new InvalidOperationException("Unknown aggregation strategy.")
         };
-    }
-
-}
-
-/// <summary>
-/// A policy rule backed by an expression factory, useful for cross-property predicates.
-/// </summary>
-public sealed class PredicateRule : IPolicyRule {
-    public required Func<Node, Node> Predicate { get; init; }
-
-    public Node ToInterpretationNode(Node subject) {
-        ArgumentNullException.ThrowIfNull(subject);
-        ArgumentNullException.ThrowIfNull(Predicate);
-
-        return Predicate(subject);
     }
 }

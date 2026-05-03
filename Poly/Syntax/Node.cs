@@ -15,4 +15,9 @@ public abstract record Node {
     public NodeId Id { get; init; } = NodeId.NewId();
 
     public virtual IEnumerable<Node?> Children => [];
+
+    protected virtual bool PrintMembers(System.Text.StringBuilder builder) {
+        builder.Append($"Id = {Id}");
+        return true;
+    }
 }

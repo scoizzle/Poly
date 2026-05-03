@@ -21,13 +21,5 @@ namespace Poly.Data.Modeling;
 /// }
 /// </code>
 /// </remarks>
-public sealed partial record Event : DomainType {
-    internal readonly List<Property> _properties = [];
-
-    public Event(Domain domain, string name) : base(domain) {
-        Name = name;
-    }
-
-    public override IReadOnlyCollection<Property> Properties => _properties.AsReadOnly();
-    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _properties];
+public sealed partial record Event(Domain Domain, string Name) : DomainType(Domain, Name) {
 }

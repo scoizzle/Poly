@@ -26,7 +26,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
-            builder.AddAnalyzer(new EffectBindingAnalyzer());
+            builder.AddAnalyzer(new EffectAnalyzer());
             return builder;
         }
 

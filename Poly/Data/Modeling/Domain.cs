@@ -2,12 +2,12 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
-public sealed partial record Domain : DomainObject {
+public sealed partial record Domain : DomainMember {
     private readonly Lock _mutationLock = new();
     private readonly List<DomainType> _types = new();
     private readonly List<Relationship> _relationships = new();
 
-    public Domain(string name) => Name = name;
+    public Domain(string name) : base(name) { }
 
     public IReadOnlyCollection<DomainType> Types => _types.AsReadOnly();
     public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();

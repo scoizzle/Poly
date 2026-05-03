@@ -58,8 +58,8 @@ internal static class MermaidTestDomainFactory {
         var assignAction = new DomainAction(domain, "Assign", supportCase);
         var assignAgentParameter = new Property(domain, "Agent", agent);
         mutation.AddParameter(assignAction, assignAgentParameter);
-        mutation.AddEffect(assignAction, new StageTransition { TargetStage = assignedStage });
-        var publishAssigned = new PublishEvent { Event = caseAssignedEvent };
+        mutation.AddEffect(assignAction, new StageTransition(domain) { TargetStage = assignedStage });
+        var publishAssigned = new PublishEvent(domain) { Event = caseAssignedEvent };
         publishAssigned.BindProperty(assignedToProperty, assignAgentParameter);
         mutation.AddEffect(assignAction, publishAssigned);
         mutation.AddAction(newStage, assignAction);
@@ -71,8 +71,8 @@ internal static class MermaidTestDomainFactory {
         var resolveAction = new DomainAction(domain, "Resolve", supportCase);
         var resolutionSummaryParameter = new Property(domain, "ResolutionSummary", stringType);
         mutation.AddParameter(resolveAction, resolutionSummaryParameter);
-        mutation.AddEffect(resolveAction, new StageTransition { TargetStage = resolvedStage });
-        var publishResolved = new PublishEvent { Event = caseResolvedEvent };
+        mutation.AddEffect(resolveAction, new StageTransition(domain) { TargetStage = resolvedStage });
+        var publishResolved = new PublishEvent(domain) { Event = caseResolvedEvent };
         publishResolved.BindProperty(resolutionSummaryProperty, resolutionSummaryParameter);
         mutation.AddEffect(resolveAction, publishResolved);
         mutation.AddAction(inProgressStage, resolveAction);
@@ -92,10 +92,7 @@ internal static class MermaidTestDomainFactory {
         mutation.AddType(note);
 
         var requireTitle = new Policy(domain, "RequireTitle") { AggregationStrategy = PolicyAggregationStrategy.All };
-        mutation.AddRule(requireTitle, new PropertyRule {
-            Value = supportCaseTitle,
-            Constraints = new RequiredConstraint()
-        });
+        mutation.AddRule(requireTitle, new PropertyRule(domain, "TitleRequired", supportCaseTitle, new RequiredConstraint()));
         mutation.AddPolicy(supportCase, requireTitle);
 
         var ownership = new Relationship(domain, "CustomerCases", customer, supportCase, RelationshipCardinality.OneToMany, true);
@@ -106,7 +103,7 @@ internal static class MermaidTestDomainFactory {
         mutation.AddRelationship(caseNotes);
         mutation.AddEntityRelationship(supportCase, caseNotes);
 
-        mutation.AddEffect(addNoteAction, new CreateEntityInstance {
+        mutation.AddEffect(addNoteAction, new CreateEntityInstance(domain) {
             EntityType = note,
             InitialStage = noteDraftStage
         });
@@ -114,16 +111,10 @@ internal static class MermaidTestDomainFactory {
         var customerNotes = new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, false);
 
         var onlyAgentsCanCreateUserNotes = new Policy(domain, "OnlyAgentsCanCreateUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
-        mutation.AddRule(onlyAgentsCanCreateUserNotes, new PropertyRule {
-            Value = noteAuthor,
-            Constraints = new RequiredConstraint()
-        });
+        mutation.AddRule(onlyAgentsCanCreateUserNotes, new PropertyRule(domain, "OnlyAgentsCanCreateUserNotes", noteAuthor, new RequiredConstraint()));
 
         var onlyAgentsCanViewUserNotes = new Policy(domain, "OnlyAgentsCanViewUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
-        mutation.AddRule(onlyAgentsCanViewUserNotes, new PropertyRule {
-            Value = noteAuthor,
-            Constraints = new RequiredConstraint()
-        });
+        mutation.AddRule(onlyAgentsCanViewUserNotes, new PropertyRule(domain, "OnlyAgentsCanViewUserNotes", noteAuthor, new RequiredConstraint()));
 
         mutation.AddPolicy(customerNotes, onlyAgentsCanCreateUserNotes);
         mutation.AddPolicy(customerNotes, onlyAgentsCanViewUserNotes);
@@ -144,22 +135,24 @@ internal static class MermaidTestDomainFactory {
         mutation.AddProperty(agentCases, assignedAt);
         mutation.AddProperty(agentCases, unassignedAt);
 
-        mutation.AddRule(requireAssignedAtWhenActive, new PropertyRule {
-            Value = assignedAt,
-            Constraints = new RequiredConstraint()
-        });
+        mutation.AddRule(requireAssignedAtWhenActive, new PropertyRule(domain, "RequireAssignedAtWhenActive", assignedAt, new RequiredConstraint()));
 
-        mutation.AddRule(requireUnassignedAtWhenInactive, new PropertyRule {
-            Value = unassignedAt,
-            Constraints = new RequiredConstraint()
-        });
+        mutation.AddRule(requireUnassignedAtWhenInactive, new PropertyRule(domain, "RequireUnassignedAtWhenInactive", unassignedAt, new RequiredConstraint()));
 
         mutation.AddPolicy(activeAssignmentStage, requireAssignedAtWhenActive);
         mutation.AddPolicy(inactiveAssignmentStage, requireUnassignedAtWhenInactive);
         mutation.AddRelationship(agentCases);
         mutation.AddEntityRelationship(agent, agentCases);
 
-        _ = mutation.Apply();
+        var result = mutation.Apply();
+
+        var errors = result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        if (errors.Count > 0) {
+            System.Console.WriteLine("Mutation errors:");
+            foreach (var error in errors) {
+                System.Console.WriteLine($"  [{error.Code}] {error.Message} on node {error.Node}");
+            }
+        }
 
         return domain;
     }

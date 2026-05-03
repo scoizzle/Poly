@@ -41,7 +41,7 @@ public static class MutationApply {
 
     public static AnalysisResult AddEffect(Action action, Effect effect) => Apply(action.Domain, mutation => mutation.AddEffect(action, effect));
 
-    public static AnalysisResult AddRule(Policy policy, IPolicyRule rule) => Apply(policy.Domain, mutation => mutation.AddRule(policy, rule));
+    public static AnalysisResult AddRule(Policy policy, Rule rule) => Apply(policy.Domain, mutation => mutation.AddRule(policy, rule));
 
     public static AnalysisResult AddConstraint(Property property, Constraint constraint) => Apply(property.Domain, mutation => mutation.AddConstraint(property, constraint));
 

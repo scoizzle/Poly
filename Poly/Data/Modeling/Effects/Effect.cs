@@ -8,8 +8,6 @@ namespace Poly.Data.Modeling.Effects;
 /// </summary>
 /// <remarks>
 /// Effects are designed to be extensible, allowing for a wide range of behaviors to be implemented
-/// TODO: Consider adding a base class of type DomainObject to effects
 /// </remarks>
-public abstract class Effect {
-    // Validation is now performed by EffectBindingAnalyzer only.
+public abstract record Effect(Domain Domain) : DomainObject(Domain) {
 }

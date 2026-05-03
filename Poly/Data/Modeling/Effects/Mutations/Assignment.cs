@@ -2,9 +2,7 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Effects.Mutations;
 
-public sealed class Assign : Mutation {
-    public required IDomainValue Target { get; init; }
-    public required IDomainValue Value { get; init; }
-
-    // Validation is now performed by EffectBindingAnalyzer only.
+public sealed record Assign(Domain Domain) : Mutation(Domain) {
+    public required DomainValue Target { get; init; }
+    public required DomainValue Value { get; init; }
 }

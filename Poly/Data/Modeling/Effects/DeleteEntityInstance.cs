@@ -2,7 +2,6 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Effects;
 
-public sealed record CreateEntityInstance(Domain Domain) : Effect(Domain) {
+public sealed record DeleteEntityInstance(Domain Domain) : Effect(Domain) {
     public required Entity EntityType { get; init; }
-    public Stage? InitialStage { get; init; }
 }

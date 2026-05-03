@@ -12,7 +12,7 @@ namespace Poly.Data.Modeling;
 public abstract record DomainMutationIntent;
 
 public sealed record DomainNodeReference(string Path) {
-    public static DomainNodeReference From(IDomainType type) {
+    public static DomainNodeReference From(DomainType type) {
         ArgumentNullException.ThrowIfNull(type);
         return new DomainNodeReference(type.Name);
     }

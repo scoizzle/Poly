@@ -20,8 +20,8 @@ public sealed record StageCapabilityView(
 
 public sealed record RelationshipCapabilityView(
     string RelationshipName,
-    IDomainType Source,
-    IDomainType Target,
+    DomainType Source,
+    DomainType Target,
     RelationshipCardinality Cardinality,
     bool SourceOwnsTarget,
     IReadOnlyCollection<Property> Properties,

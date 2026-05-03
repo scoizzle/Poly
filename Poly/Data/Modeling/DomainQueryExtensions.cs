@@ -4,7 +4,7 @@ using Poly.Data.Modeling.TypeSystem;
 namespace Poly.Data.Modeling;
 
 public static class DomainQueryExtensions {
-    public static IEnumerable<IDomainType> GetAvailableTypes(this Domain domain) {
+    public static IEnumerable<DomainType> GetAvailableTypes(this Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
 
         return domain.Types;
@@ -78,14 +78,14 @@ public static class DomainQueryExtensions {
         return domain.FindRelationship(name) ?? throw new InvalidOperationException($"Relationship '{name}' was not found in domain '{domain.Name}'.");
     }
 
-    public static IEnumerable<Relationship> FindRelationshipsBySource(this Domain domain, IDomainType source) {
+    public static IEnumerable<Relationship> FindRelationshipsBySource(this Domain domain, DomainType source) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(source);
 
         return domain.Relationships.Where(relationship => ReferenceEquals(relationship.Source, source));
     }
 
-    public static IEnumerable<Relationship> FindRelationshipsByTarget(this Domain domain, IDomainType target) {
+    public static IEnumerable<Relationship> FindRelationshipsByTarget(this Domain domain, DomainType target) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(target);
 

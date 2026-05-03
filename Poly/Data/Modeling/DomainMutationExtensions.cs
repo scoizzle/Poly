@@ -72,10 +72,10 @@ public static class DomainMutationExtensions {
 
     // ── Policy ───────────────────────────────────────────────────────────────
 
-    public static void AddRule(this Policy policy, IPolicyRule rule) =>
+    public static void AddRule(this Policy policy, Rule rule) =>
         policy.Domain.CreateMutation().AddRule(policy, rule).Apply();
 
-    public static void RemoveRule(this Policy policy, IPolicyRule rule) =>
+    public static void RemoveRule(this Policy policy, Rule rule) =>
         policy.Domain.CreateMutation().RemoveRule(policy, rule).Apply();
 
     // ── Property ─────────────────────────────────────────────────────────────

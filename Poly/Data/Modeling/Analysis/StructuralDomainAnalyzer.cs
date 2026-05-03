@@ -172,38 +172,8 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         ReportDuplicateNames(context, domain, domain.Types.Where(context.ShouldAnalyze), static type => type.Name, "type");
         ReportDuplicateNames(context, domain, domain.Relationships.Where(context.ShouldAnalyze), static relationship => relationship.Name, "relationship");
 
-        foreach (var entity in domain.Types.OfType<Entity>().Where(context.ShouldAnalyze)) {
-            ReportDuplicateNames(context, entity, entity.Properties, static property => property.Name, "property");
-            ReportDuplicateNames(context, entity, entity.Stages, static stage => stage.Name, "stage");
-            ReportDuplicateNames(context, entity, entity.Actions, static action => action.Name, "action");
-            ReportDuplicateNames(context, entity, entity.Policies, static policy => policy.Name, "policy");
-            ReportDuplicateNames(context, entity, entity.Events, static @event => @event.Name, "event");
-            ReportDuplicateNames(context, entity, entity.Relationships, static relationship => relationship.Name, "relationship");
-            ValidateEntityMembership(context, domain, entity);
-
-            foreach (var stage in entity.Stages) {
-                ReportDuplicateNames(context, stage, stage.Policies, static policy => policy.Name, "policy");
-                ReportDuplicateNames(context, stage, stage.Actions, static action => action.Name, "action");
-            }
-
-            foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(static stage => stage.Actions))) {
-                ReportDuplicateNames(context, action, action.Parameters, static parameter => parameter.Name, "parameter");
-            }
-
-            foreach (var @event in entity.Events) {
-                ReportDuplicateNames(context, @event, @event.Properties, static property => property.Name, "property");
-            }
-
-            foreach (var property in entity.Properties.Concat(entity.Events.SelectMany(static @event => @event.Properties))) {
-                ReportDuplicateNames(context, property, property.Policies, static policy => policy.Name, "policy");
-            }
-
-            ValidateParentCycle(context, entity);
-        }
-
         ValidateDomainMembership(context, domain);
         ValidateRelationshipEndpoints(context, domain);
-
         ValidateOwnershipCardinality(context, domain);
         ValidateOwnershipTargetUniqueness(context, domain);
     }
@@ -229,7 +199,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateEntityMembership(AnalysisContext context, Domain domain, Entity entity) {
-        static void ReportMismatchedDomain(AnalysisContext context, Node owner, DomainObject child, Domain domain, string childLabel, string childName) {
+        static void ReportMismatchedDomain(AnalysisContext context, Node owner, DomainMember child, Domain domain, string childLabel, string childName) {
             if (!ReferenceEquals(child.Domain, domain)) {
                 context.ReportError(
                     owner,

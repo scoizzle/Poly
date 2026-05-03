@@ -2,7 +2,7 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
-public sealed partial record Stage : DomainObject {
+public sealed partial record Stage : DomainMember {
     private readonly List<Policy> _policies = [];
     private readonly List<Action> _actions = [];
     private readonly List<Stage> _childStages = [];
@@ -17,7 +17,7 @@ public sealed partial record Stage : DomainObject {
     internal Entity? OwnerEntity => _ownerEntity;
     public Stage? Parent { get; init; }
     public IReadOnlyCollection<Stage> ChildStages => _childStages.AsReadOnly();
-    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _policies, .. _actions, .. _childStages];
+    public sealed override IEnumerable<DomainMember> ChildObjects => [.. _policies, .. _actions, .. _childStages];
 
     internal void AttachToEntity(Entity ownerEntity) {
         ArgumentNullException.ThrowIfNull(ownerEntity);

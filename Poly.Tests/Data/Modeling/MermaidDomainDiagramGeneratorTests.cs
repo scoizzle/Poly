@@ -128,7 +128,7 @@ public class MermaidDomainDiagramGeneratorTests {
         MutationApply.AddType(domain, item);
 
         var policy = new Policy(domain, "RequireName");
-        MutationApply.AddRule(policy, new PropertyRule { Value = nameProp, Constraints = new RequiredConstraint() });
+        MutationApply.AddRule(policy, new PropertyRule(domain, "NameRequired", nameProp, new RequiredConstraint()));
         MutationApply.AddPolicy(item, policy);
 
         var result = new MermaidDomainDiagramGenerator().Generate(domain);

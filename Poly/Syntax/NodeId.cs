@@ -6,6 +6,8 @@ namespace Poly.Syntax;
 /// Ensures correct incremental analysis by providing node identity across parser runs.
 /// </summary>
 public readonly record struct NodeId {
+    private static long _nextCounter;
+
     private NodeId(string value) {
         ArgumentException.ThrowIfNullOrEmpty(value);
         Value = value;
@@ -17,10 +19,14 @@ public readonly record struct NodeId {
     public string Value { get; }
 
     /// <summary>
-    /// Creates a new unique node identifier using a GUID.
+    /// Creates a new unique node identifier using a GUID combined with a monotonically increasing counter.
     /// Used for synthetic or programmatically-created nodes.
     /// </summary>
-    public static NodeId NewId() => new(Guid.CreateVersion7().ToString("N"));
+    public static NodeId NewId() {
+        var guid = Guid.CreateVersion7().ToString("N");
+        var counter = Interlocked.Increment(ref _nextCounter);
+        return new($"{guid}_{counter:x16}");
+    }
 
     /// <summary>
     /// Creates a node identifier from source position.

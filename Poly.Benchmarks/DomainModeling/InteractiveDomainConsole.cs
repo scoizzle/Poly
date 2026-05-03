@@ -161,9 +161,9 @@ internal static class InteractiveDomainConsole {
             var assignAction = new DomainAction(domain, "Assign", supportCase);
             var assignAgentParameter = new Property(domain, "Agent", agent);
             assignAction.AddParameter(assignAgentParameter);
-            assignAction.AddEffect(new StageTransition { TargetStage = assignedStage });
+            assignAction.AddEffect(new StageTransition(domain) { TargetStage = assignedStage });
 
-            var publishAssigned = new PublishEvent { Event = supportCase.RequireEvent("CaseAssigned") };
+            var publishAssigned = new PublishEvent(domain) { Event = supportCase.RequireEvent("CaseAssigned") };
             publishAssigned.BindProperty(publishAssigned.Event.RequireProperty("AssignedTo"), assignAgentParameter);
             assignAction.AddEffect(publishAssigned);
 
@@ -172,7 +172,7 @@ internal static class InteractiveDomainConsole {
 
             var addNoteAction = new DomainAction(domain, "AddNote", supportCase);
             addNoteAction.AddParameter(new Property(domain, "NoteText", stringType));
-            addNoteAction.AddEffect(new CreateEntityInstance {
+            addNoteAction.AddEffect(new CreateEntityInstance(domain) {
                 EntityType = note,
                 InitialStage = note.RequireStage("Draft")
             });
@@ -183,9 +183,9 @@ internal static class InteractiveDomainConsole {
             var resolveAction = new DomainAction(domain, "Resolve", supportCase);
             var resolutionSummaryParameter = new Property(domain, "ResolutionSummary", stringType);
             resolveAction.AddParameter(resolutionSummaryParameter);
-            resolveAction.AddEffect(new StageTransition { TargetStage = resolvedStage });
+            resolveAction.AddEffect(new StageTransition(domain) { TargetStage = resolvedStage });
 
-            var publishResolved = new PublishEvent { Event = supportCase.RequireEvent("CaseResolved") };
+            var publishResolved = new PublishEvent(domain) { Event = supportCase.RequireEvent("CaseResolved") };
             publishResolved.BindProperty(publishResolved.Event.RequireProperty("ResolutionSummary"), resolutionSummaryParameter);
             resolveAction.AddEffect(publishResolved);
 
@@ -198,23 +198,14 @@ internal static class InteractiveDomainConsole {
             var note = domain.RequireEntity("Note");
 
             var requireTitle = new Policy(domain, "RequireTitle") { AggregationStrategy = PolicyAggregationStrategy.All };
-            requireTitle.AddRule(new PropertyRule {
-                Value = supportCase.RequireProperty("Title"),
-                Constraints = new RequiredConstraint()
-            });
+            requireTitle.AddRule(new PropertyRule(domain, "TitleRequired", supportCase.RequireProperty("Title"), new RequiredConstraint()));
             supportCase.AddPolicy(requireTitle);
 
             var createNotesPolicy = new Policy(domain, "OnlyAgentsCanCreateUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
-            createNotesPolicy.AddRule(new PropertyRule {
-                Value = note.RequireProperty("Author"),
-                Constraints = new RequiredConstraint()
-            });
+            createNotesPolicy.AddRule(new PropertyRule(domain, "AuthorRequiredForNoteCreation", note.RequireProperty("Author"), new RequiredConstraint()));
 
             var viewNotesPolicy = new Policy(domain, "OnlyAgentsCanViewUserNotes") { AggregationStrategy = PolicyAggregationStrategy.All };
-            viewNotesPolicy.AddRule(new PropertyRule {
-                Value = note.RequireProperty("Author"),
-                Constraints = new RequiredConstraint()
-            });
+            viewNotesPolicy.AddRule(new PropertyRule(domain, "AuthorRequiredForNoteViewing", note.RequireProperty("Author"), new RequiredConstraint()));
 
             var customerNotes = new Relationship(
                 domain,
@@ -259,17 +250,11 @@ internal static class InteractiveDomainConsole {
             agentCases.AddProperty(unassignedAt);
 
             var requireAssignedAt = new Policy(domain, "RequireAssignedAtWhenActive");
-            requireAssignedAt.AddRule(new PropertyRule {
-                Value = assignedAt,
-                Constraints = new RequiredConstraint()
-            });
+            requireAssignedAt.AddRule(new PropertyRule(domain, "AssignedAtRequiredWhenActive", assignedAt, new RequiredConstraint()));
             active.AddPolicy(requireAssignedAt);
 
             var requireUnassignedAt = new Policy(domain, "RequireUnassignedAtWhenInactive");
-            requireUnassignedAt.AddRule(new PropertyRule {
-                Value = unassignedAt,
-                Constraints = new RequiredConstraint()
-            });
+            requireUnassignedAt.AddRule(new PropertyRule(domain, "UnassignedAtRequiredWhenInactive", unassignedAt, new RequiredConstraint()));
             inactive.AddPolicy(requireUnassignedAt);
 
             domain.AddRelationship(agentCases);
@@ -628,7 +613,7 @@ internal static class InteractiveDomainConsole {
 
     private static void AddStageTransitionEffect(Entity entity, DomainAction action) {
         var target = ChooseRequired("Choose target stage", entity.Stages.OrderBy(candidate => candidate.Name).ToArray());
-        action.AddEffect(new StageTransition {
+        action.AddEffect(new StageTransition(entity.Domain) {
             TargetStage = target
         });
 
@@ -637,7 +622,7 @@ internal static class InteractiveDomainConsole {
 
     private static void AddPublishEventEffect(Entity entity, DomainAction action) {
         var @event = ChooseRequired("Choose event to publish", entity.Events.OrderBy(candidate => candidate.Name).ToArray());
-        var effect = new PublishEvent {
+        var effect = new PublishEvent(entity.Domain) {
             Event = @event
         };
 
@@ -665,7 +650,7 @@ internal static class InteractiveDomainConsole {
             ? null
             : ChooseOptional("Choose initial stage (optional)", entityType.Stages.OrderBy(stage => stage.Name).ToArray());
 
-        action.AddEffect(new CreateEntityInstance {
+        action.AddEffect(new CreateEntityInstance(domain) {
             EntityType = entityType,
             InitialStage = initialStage
         });
@@ -675,7 +660,7 @@ internal static class InteractiveDomainConsole {
 
     private static void AddInvokeActionEffect(Entity entity, DomainAction action) {
         var targetAction = ChooseRequired("Choose target action", entity.Actions.OrderBy(candidate => candidate.Name).ToArray());
-        var effect = new InvokeAction {
+        var effect = new InvokeAction(entity.Domain) {
             TargetAction = targetAction
         };
 
@@ -697,7 +682,7 @@ internal static class InteractiveDomainConsole {
         Console.WriteLine($"Added invoke action effect for '{targetAction.Name}'.");
     }
 
-    private static IEnumerable<IDomainValue> GetBindableValues(DomainAction action) {
+    private static IEnumerable<DomainValue> GetBindableValues(DomainAction action) {
         foreach (var parameter in action.Parameters) {
             yield return parameter;
         }
@@ -797,10 +782,7 @@ internal static class InteractiveDomainConsole {
 
         var policy = new Policy(domain, policyName) { AggregationStrategy = PolicyAggregationStrategy.All };
 
-        policy.AddRule(new PropertyRule {
-            Value = property,
-            Constraints = new RequiredConstraint()
-        });
+        policy.AddRule(new PropertyRule(domain, $"{policyName}_{property.Name}", property, new RequiredConstraint()));
 
         owner.AddPolicy(policy);
         Console.WriteLine($"Added policy '{policyName}' to '{owner.Name}'.");
@@ -812,10 +794,7 @@ internal static class InteractiveDomainConsole {
 
         var policy = new Policy(domain, policyName) { AggregationStrategy = PolicyAggregationStrategy.All };
 
-        policy.AddRule(new PropertyRule {
-            Value = property,
-            Constraints = new RequiredConstraint()
-        });
+        policy.AddRule(new PropertyRule(domain, $"{policyName}_{property.Name}", property, new RequiredConstraint()));
 
         owner.AddPolicy(policy);
         Console.WriteLine($"Added policy '{policyName}' to stage '{owner.Name}'.");
@@ -938,7 +917,7 @@ internal static class InteractiveDomainConsole {
     private static string DescribeValue<T>(T value) {
         return value switch {
             null => "(null)",
-            IDomainType domainType => domainType.Name,
+            DomainType domainType => domainType.Name,
             Property property => $"{property.Name}:{property.Type.Name}",
             DomainAction action => action.Name,
             Stage stage => stage.Name,

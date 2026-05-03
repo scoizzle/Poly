@@ -93,10 +93,10 @@ public sealed partial record Domain {
 
         // ── Policy ───────────────────────────────────────────────────────────
 
-        public Mutation AddRule(Policy policy, IPolicyRule rule) =>
+        public Mutation AddRule(Policy policy, Rule rule) =>
             AddStep(new Policy.AddRuleCommand(policy, rule));
 
-        public Mutation RemoveRule(Policy policy, IPolicyRule rule) =>
+        public Mutation RemoveRule(Policy policy, Rule rule) =>
             AddStep(new Policy.RemoveRuleCommand(policy, rule));
 
         // ── Property ─────────────────────────────────────────────────────────

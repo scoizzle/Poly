@@ -487,7 +487,7 @@ public static class DomainAuthoringTool {
         throw new InvalidOperationException($"Unknown primitive category '{value}'.");
     }
 
-    private static IDomainType ResolveType(Domain domain, string typeName) {
+    private static DomainType ResolveType(Domain domain, string typeName) {
         foreach (var type in domain.Types) {
             if (string.Equals(type.Name, typeName, StringComparison.Ordinal)) {
                 return type;

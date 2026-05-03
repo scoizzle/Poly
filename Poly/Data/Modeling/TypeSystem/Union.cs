@@ -1,10 +1,7 @@
 namespace Poly.Data.Modeling.TypeSystem;
 
-public sealed record Union : DomainType {
-    public Union(Domain domain, string name) : base(domain) {
-        Name = name;
-    }
+public sealed record Union(Domain Domain, string Name) : DomainType(Domain, Name) {
+    public IReadOnlyCollection<DomainType> Options { get; init; } = [];
 
-    public IReadOnlyCollection<IDomainType> Options { get; init; } = [];
-    public override IReadOnlyCollection<Property> Properties { get; } = [];
+    public override IEnumerable<DomainObject> ChildObjects => Options;
 }

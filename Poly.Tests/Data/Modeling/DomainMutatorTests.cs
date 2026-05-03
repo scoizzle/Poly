@@ -36,10 +36,7 @@ public class DomainMutationTests {
         _ = mutation.AddProperty(parent, parentOnlyProperty);
 
         var invalidPolicy = new Policy(domain, "MissingPropertyPolicy");
-        _ = mutation.AddRule(invalidPolicy, new PropertyRule {
-            Value = parentOnlyProperty,
-            Constraints = new RequiredConstraint()
-        });
+        _ = mutation.AddRule(invalidPolicy, new PropertyRule(domain, "ExternalValueRequired", parentOnlyProperty, new RequiredConstraint()));
 
         _ = mutation.AddPolicy(child, invalidPolicy);
         var result = mutation.Apply();

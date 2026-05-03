@@ -2,16 +2,14 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Effects;
 
-public sealed class InvokeAction : Effect {
-    private readonly Dictionary<string, IDomainValue> _parameterBindings = new(StringComparer.Ordinal);
+public sealed record InvokeAction(Domain Domain) : Effect(Domain) {
+    private readonly Dictionary<string, DomainValue> _parameterBindings = new(StringComparer.Ordinal);
 
     public required Action TargetAction { get; init; }
 
-    public IReadOnlyDictionary<string, IDomainValue> ParameterBindings => _parameterBindings;
+    public IReadOnlyDictionary<string, DomainValue> ParameterBindings => _parameterBindings;
 
-    // Validation is now performed by EffectBindingAnalyzer only.
-
-    public void BindParameter(Property targetParameter, IDomainValue value) {
+    public void BindParameter(Property targetParameter, DomainValue value) {
         ArgumentNullException.ThrowIfNull(targetParameter);
         ArgumentNullException.ThrowIfNull(value);
 

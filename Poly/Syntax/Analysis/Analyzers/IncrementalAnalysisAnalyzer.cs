@@ -20,11 +20,9 @@ public sealed class IncrementalAnalysisAnalyzer : INodeAnalyzer {
         }
 
         var invalidatedNodes = context.GetInvalidatedNodes();
-        if (invalidatedNodes is null) {
-            return;
+        if (invalidatedNodes is not null) {
+            BuildAnalysisFilterList(context, node, treeIndex, invalidatedNodes);
         }
-
-        BuildAnalysisFilterList(context, node, treeIndex, invalidatedNodes);
     }
 
     private static void BuildAnalysisFilterList(AnalysisContext context, Node node, IncrementalAnalysisTreeIndex treeIndex, IEnumerable<Node> invalidatedNodes) {

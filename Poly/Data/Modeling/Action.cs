@@ -6,9 +6,8 @@ public sealed partial record Action : DomainMember {
     internal readonly List<Property> _parameters = [];
     internal readonly List<Effect> _effects = [];
 
-    public Action(Domain domain, string name, Entity entity) : base(domain) {
+    public Action(Domain domain, string name, Entity entity) : base(domain, name) {
         ArgumentNullException.ThrowIfNull(entity);
-        Name = name;
         Entity = entity;
     }
 

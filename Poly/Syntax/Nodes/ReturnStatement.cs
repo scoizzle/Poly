@@ -13,8 +13,8 @@ public sealed record Return(Node? Value = null) : Operator {
     /// <inheritdoc />
     public override string ToString() => Value is not null ? $"return {Value};" : "return;";
 
-    public static readonly Return Void = new();
-    public static readonly Return False = new(new Constant(false));
-    public static readonly Return True = new(new Constant(true));
-    public static readonly Return Null = new(new Constant(null));
+    public static Return Void => new();
+    public static Return False => new(new Constant(false));
+    public static Return True => new(new Constant(true));
+    public static Return Null => new(new Constant(null));
 }

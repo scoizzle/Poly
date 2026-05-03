@@ -9,7 +9,11 @@ public sealed record AnalysisResult : INodeMetadataProvider {
         ArgumentNullException.ThrowIfNull(context);
         _metadata = context.Metadata;
         _diagnostics = context.Diagnostics;
-        _allDiagnostics = new Lazy<IReadOnlyList<Diagnostic>>(() => _diagnostics.SelectMany(kvp => kvp.Value).ToList());
+        _allDiagnostics = new Lazy<IReadOnlyList<Diagnostic>>(() =>
+            _diagnostics
+                .SelectMany(kvp => kvp.Value)
+                .DistinctBy(d => (d.Node.Id, d.Severity, d.Code, d.Message))
+                .ToList());
     }
 
     /// <summary>

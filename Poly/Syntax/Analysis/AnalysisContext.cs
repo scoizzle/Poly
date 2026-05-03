@@ -48,6 +48,15 @@ public sealed class AnalysisContext : INodeMetadataProvider {
             Diagnostics[node.Id] = bucket;
         }
 
+        var isDuplicate = bucket.Any(d =>
+            d.Severity == severity &&
+            string.Equals(d.Code, code, StringComparison.Ordinal) &&
+            string.Equals(d.Message, message, StringComparison.Ordinal));
+
+        if (isDuplicate) {
+            return;
+        }
+
         bucket.Add(new Diagnostic(node, severity, message, code));
     }
 

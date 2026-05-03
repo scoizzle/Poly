@@ -6,8 +6,6 @@ namespace Poly.Syntax;
 /// Ensures correct incremental analysis by providing node identity across parser runs.
 /// </summary>
 public readonly record struct NodeId {
-    private static long _nextCounter;
-
     private NodeId(string value) {
         ArgumentException.ThrowIfNullOrEmpty(value);
         Value = value;
@@ -24,8 +22,7 @@ public readonly record struct NodeId {
     /// </summary>
     public static NodeId NewId() {
         var guid = Guid.CreateVersion7().ToString("N");
-        var counter = Interlocked.Increment(ref _nextCounter);
-        return new($"{guid}_{counter:x16}");
+        return new(guid);
     }
 
     /// <summary>

@@ -11,6 +11,10 @@ public sealed record ConstantValueMetadata(object? Value) : IAnalysisMetadata;
 /// </summary>
 public sealed class ConstantFoldingPass : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
+        if (!context.TryBeginAnalyzerVisit<ConstantFoldingPass>(node)) {
+            return;
+        }
+
         // Post-order traversal: analyze children first, then fold parent
         this.AnalyzeChildren(context, node);
 

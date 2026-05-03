@@ -54,6 +54,10 @@ internal static class ConstructorInvocationSemanticResolver {
 
 internal sealed class MemberResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
+        if (!context.TryBeginAnalyzerVisit<MemberResolver>(node)) {
+            return;
+        }
+
         var resolvedMember = node switch {
             // Member access - resolve the member being accessed
             Member memberAccess => ResolveMemberAccessMember(context, memberAccess),

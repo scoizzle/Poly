@@ -2,6 +2,10 @@ namespace Poly.Interpretation.Analysis.Semantics;
 
 internal sealed class ThisReferenceContextAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
+        if (!context.TryBeginAnalyzerVisit<ThisReferenceContextAnalyzer>(node)) {
+            return;
+        }
+
         if (node is ThisReference thisReference && context.GetResolvedType(thisReference) is null) {
             context.ReportDiagnostic(thisReference, DiagnosticSeverity.Error, "'this' can only be used inside an instance member body.", "TH0002");
             this.AnalyzeChildren(context, node);

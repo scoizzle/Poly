@@ -37,6 +37,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeEntityStandalone(AnalysisContext context, Entity entity) {
+        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(entity)) {
+            return;
+        }
+
         ReportDuplicateNames(context, entity, entity.Properties, static property => property.Name, "property");
         ReportDuplicateNames(context, entity, entity.Stages, static stage => stage.Name, "stage");
         ReportDuplicateNames(context, entity, entity.Actions, static action => action.Name, "action");
@@ -66,6 +70,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeStageStandalone(AnalysisContext context, Stage stage) {
+        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(stage)) {
+            return;
+        }
+
         ReportDuplicateNames(context, stage, stage.Policies, static policy => policy.Name, "policy");
         ReportDuplicateNames(context, stage, stage.Actions, static action => action.Name, "action");
 
@@ -96,6 +104,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeActionStandalone(AnalysisContext context, Action action) {
+        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(action)) {
+            return;
+        }
+
         ReportDuplicateNames(context, action, action.Parameters, static parameter => parameter.Name, "parameter");
 
         foreach (var parameter in action.Parameters) {
@@ -109,6 +121,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeEventStandalone(AnalysisContext context, Event @event) {
+        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(@event)) {
+            return;
+        }
+
         ReportDuplicateNames(context, @event, @event.Properties, static property => property.Name, "property");
 
         foreach (var property in @event.Properties) {
@@ -122,6 +138,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzePropertyStandalone(AnalysisContext context, Property property) {
+        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(property)) {
+            return;
+        }
+
         ReportDuplicateNames(context, property, property.Policies, static policy => policy.Name, "policy");
 
         foreach (var policy in property.Policies) {
@@ -135,6 +155,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateStandaloneRelationship(AnalysisContext context, Relationship relationship) {
+        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(relationship)) {
+            return;
+        }
+
         if (relationship.Source is null || relationship.Target is null) {
             context.ReportError(
                 relationship,
@@ -169,6 +193,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
+        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(domain)) {
+            return;
+        }
+
         ReportDuplicateNames(context, domain, domain.Types.Where(context.ShouldAnalyze), static type => type.Name, "type");
         ReportDuplicateNames(context, domain, domain.Relationships.Where(context.ShouldAnalyze), static relationship => relationship.Name, "relationship");
 

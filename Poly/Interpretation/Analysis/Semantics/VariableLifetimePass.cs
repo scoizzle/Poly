@@ -13,6 +13,10 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     private readonly Dictionary<string, Stack<Variable>> _variablesByName = new();
 
     public void Analyze(AnalysisContext context, Node node) {
+        if (!context.TryBeginAnalyzerVisit<ScopeValidator>(node)) {
+            return;
+        }
+
         switch (node) {
             case Block block:
                 AnalyzeBlock(context, block);

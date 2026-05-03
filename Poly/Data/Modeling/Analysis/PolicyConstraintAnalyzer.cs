@@ -83,12 +83,20 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
+        if (!context.TryBeginAnalyzerVisit<PolicyConstraintAnalyzer>(domain)) {
+            return;
+        }
+
         foreach (var entity in domain.Types.OfType<Entity>().Where(context.ShouldAnalyze)) {
             AnalyzeEntity(context, entity);
         }
     }
 
     private static void AnalyzeEntity(AnalysisContext context, Entity entity) {
+        if (!context.TryBeginAnalyzerVisit<PolicyConstraintAnalyzer>(entity)) {
+            return;
+        }
+
         ValidateEntityPolicies(context, entity);
 
         var required = PolicyConstraintHelpers.ComputeRequiredProperties(entity, stage: null);
@@ -107,6 +115,10 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {
+        if (!context.TryBeginAnalyzerVisit<PolicyConstraintAnalyzer>(stage)) {
+            return;
+        }
+
         var ownerEntity = stage.OwnerEntity;
         if (ownerEntity is null || !context.ShouldAnalyze(ownerEntity)) {
             return;
@@ -117,7 +129,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
 
         IReadOnlyCollection<Property> currentRequired = stage.Parent is not null && context.ShouldAnalyze(stage.Parent)
             ? context.GetMetadata<RequiredPropertiesAnalysisMetadata>(stage.Parent)?.Properties ?? Array.Empty<Property>()
-            : Array.Empty<Property>();
+            : context.GetMetadata<RequiredPropertiesAnalysisMetadata>(ownerEntity)?.Properties ?? Array.Empty<Property>();
 
         var currentByName = currentRequired.ToDictionary(static property => property.Name, StringComparer.Ordinal);
         var newlyRequired = targetRequired

@@ -4,6 +4,10 @@ using Poly.Syntax.Nodes;
 
 internal sealed class TypeResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
+        if (!context.TryBeginAnalyzerVisit<TypeResolver>(node)) {
+            return;
+        }
+
         var resolvedType = ResolveNodeType(context, node);
 
         if (resolvedType != null) {
@@ -123,9 +127,9 @@ internal sealed class TypeResolver : INodeAnalyzer {
             }
         }
         else
-        if (invoke.Delegate is Lambda lambda) {
-            return ResolveNodeType(context, lambda.Body);
-        }
+            if (invoke.Delegate is Lambda lambda) {
+                return ResolveNodeType(context, lambda.Body);
+            }
 
         foreach (var argument in invoke.Arguments) {
             var argumentType = ResolveNodeType(context, argument);

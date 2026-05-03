@@ -8,8 +8,7 @@ public sealed partial record Stage : DomainMember {
     private readonly List<Stage> _childStages = [];
     private Entity? _ownerEntity;
 
-    public Stage(Domain domain, string name) : base(domain) {
-        Name = name;
+    public Stage(Domain domain, string name) : base(domain, name) {
     }
 
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();

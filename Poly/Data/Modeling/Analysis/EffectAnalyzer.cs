@@ -34,6 +34,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeAction(AnalysisContext context, Action action) {
+        if (!context.TryBeginAnalyzerVisit<EffectAnalyzer>(action)) {
+            return;
+        }
+
         var ownerEntity = action.Entity;
         if (ownerEntity is null) {
             return;

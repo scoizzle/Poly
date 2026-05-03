@@ -77,6 +77,42 @@ public class AnalyzerIncrementalInvalidationTests {
         await Assert.That(result.Diagnostics[0].Node.Id).IsEqualTo(left.Id);
     }
 
+    [Test]
+    public async Task Analyze_WhenSameDiagnosticReportedTwice_DeduplicatesByNodeSeverityCodeAndMessage() {
+        var analyzer = CreateAnalyzer(new DuplicateDiagnosticAnalyzer());
+        var leaf = new TestLeaf(1);
+
+        var result = analyzer.Analyze(leaf);
+
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(1);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("DUP");
+        await Assert.That(result.Diagnostics[0].Message).IsEqualTo("Duplicate diagnostic");
+    }
+
+    [Test]
+    public async Task Analyze_WhenMultipleAnalyzersReportSameDiagnostic_DeduplicatesWithinSingleRun() {
+        var analyzer = CreateAnalyzer(new DuplicateDiagnosticAnalyzer(), new DuplicateDiagnosticAnalyzer());
+        var leaf = new TestLeaf(1);
+
+        var result = analyzer.Analyze(leaf);
+
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(1);
+        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("DUP");
+        await Assert.That(result.Diagnostics[0].Message).IsEqualTo("Duplicate diagnostic");
+    }
+
+    [Test]
+    public async Task Analyze_WhenAnalyzerRevisitsSameNode_MetadataSkipPreventsDuplicateWork() {
+        var analyzer = CreateAnalyzer(new DuplicateVisitAnalyzer());
+        var leaf = new TestLeaf(1);
+
+        var result = analyzer.Analyze(leaf);
+        var metadata = result.GetMetadata<TestVisitCountMetadata>(leaf);
+
+        await Assert.That(metadata).IsNotNull();
+        await Assert.That(metadata!.Count).IsEqualTo(1);
+    }
+
     private static Analyzer CreateAnalyzer(params INodeAnalyzer[] testAnalyzers) {
         var builder = new AnalyzerBuilder(new NoopTypeDefinitionProvider())
             .UseIncrementalAnalysis();
@@ -128,6 +164,34 @@ public class AnalyzerIncrementalInvalidationTests {
         }
     }
 
+    private sealed class DuplicateDiagnosticAnalyzer : INodeAnalyzer {
+        public void Analyze(AnalysisContext context, Node node) {
+            if (node is TestLeaf leaf) {
+                context.ReportError(leaf, "Duplicate diagnostic", "DUP");
+                context.ReportError(leaf, "Duplicate diagnostic", "DUP");
+            }
+
+            this.AnalyzeChildren(context, node);
+        }
+    }
+
+    private sealed class DuplicateVisitAnalyzer : INodeAnalyzer {
+        public void Analyze(AnalysisContext context, Node node) {
+            if (!context.TryBeginAnalyzerVisit<DuplicateVisitAnalyzer>(node)) {
+                return;
+            }
+
+            if (node is TestLeaf leaf) {
+                var visit = context.GetMetadata<TestVisitCountMetadata>(leaf)?.Count ?? 0;
+                context.SetMetadata(leaf, new TestVisitCountMetadata(visit + 1));
+
+                Analyze(context, leaf);
+            }
+
+            this.AnalyzeChildren(context, node);
+        }
+    }
+
     private sealed record TestLeaf(int Value) : Node;
 
     private sealed record TestParent(Node Child) : Node {
@@ -148,6 +212,8 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed record TestValueMetadata(int Value) : IAnalysisMetadata;
+
+    private sealed record TestVisitCountMetadata(int Count) : IAnalysisMetadata;
 
     private sealed class NoopTypeDefinitionProvider : ITypeDefinitionProvider {
         public ITypeDefinition? GetTypeDefinition(string name) => null;

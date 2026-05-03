@@ -14,6 +14,10 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     private FrozenDictionary<string, AstTypeDefinition>? _frozen;
 
     public void Analyze(AnalysisContext context, Node node) {
+        if (!context.TryBeginAnalyzerVisit<TypeDefinitionNodeAnalyzer>(node)) {
+            return;
+        }
+
         if (node is TypeDefinitionNode typeDef) {
             var definition = new AstTypeDefinition(typeDef, this);
             _types[typeDef.FullName] = definition;

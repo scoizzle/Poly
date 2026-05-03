@@ -16,6 +16,10 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     private readonly Stack<(BasicBlock Continue, BasicBlock Break)> _loopContexts = new();
 
     public void Analyze(AnalysisContext context, Node node) {
+        if (!context.TryBeginAnalyzerVisit<ControlFlowAnalysisPass>(node)) {
+            return;
+        }
+
         _cfg = new ControlFlowGraph();
         _currentBlock = _cfg.CreateBlock();
         _labeledBlocks.Clear();

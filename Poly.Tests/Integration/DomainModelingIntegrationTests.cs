@@ -354,18 +354,48 @@ public class DomainModelingIntegrationTests {
     [Test]
     public async Task SupportCase_TransitionRequirements_IncludeEntityRootPolicyRequirements() {
         var domain = BuildSupportCaseDomain();
+        var analyzer = new DomainModelAnalyzer();
+        var analysis = analyzer.Analyze(domain);
+
         var supportCase = domain.RequireEntity("SupportCase");
-        var current = supportCase.RequireStage("New");
-        var target = supportCase.RequireStage("InProgress");
+        var inProgress = supportCase.RequireStage("InProgress");
 
-        // var analysis = StageTransitionRequirementAnalyzer.Analyze(current, target, supportCase);
-        // var currentRequiredNames = analysis.CurrentRequiredProperties.Select(p => p.Name).ToArray();
-        // var targetRequiredNames = analysis.TargetRequiredProperties.Select(p => p.Name).ToArray();
-        // var newlyRequiredNames = analysis.NewlyRequiredProperties.Select(p => p.Name).ToArray();
+        var requirements = analysis.GetStageTransitionRequirements(inProgress);
+        var targetRequiredNames = requirements.TargetRequiredProperties.Select(p => p.Name).ToArray();
 
-        // await Assert.That(currentRequiredNames).Contains("Title");
-        // await Assert.That(targetRequiredNames).Contains("Title");
-        // await Assert.That(newlyRequiredNames).DoesNotContain("Title");
+        await Assert.That(targetRequiredNames).Contains("Title");
+    }
+
+    // ─── Relationships ────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task AgentSupportCasesRelationship_ActiveStage_HasRequiredProperties() {
+        var domain = BuildSupportCaseDomain();
+        var analyzer = new DomainModelAnalyzer();
+        var analysis = analyzer.Analyze(domain);
+
+        var relationship = domain.RequireRelationship("AgentSupportCases");
+        var active = relationship.RequireStage("Active");
+
+        var requirements = analysis.GetStageTransitionRequirements(active);
+        var targetRequiredNames = requirements.TargetRequiredProperties.Select(p => p.Name).ToArray();
+
+        await Assert.That(targetRequiredNames).Contains("AssignedAt");
+    }
+
+    [Test]
+    public async Task AgentSupportCasesRelationship_InactiveStage_HasRequiredProperties() {
+        var domain = BuildSupportCaseDomain();
+        var analyzer = new DomainModelAnalyzer();
+        var analysis = analyzer.Analyze(domain);
+
+        var relationship = domain.RequireRelationship("AgentSupportCases");
+        var inactive = relationship.RequireStage("Inactive");
+
+        var requirements = analysis.GetStageTransitionRequirements(inactive);
+        var targetRequiredNames = requirements.TargetRequiredProperties.Select(p => p.Name).ToArray();
+
+        await Assert.That(targetRequiredNames).Contains("UnassignedAt");
     }
 
     // ─── Relationships ────────────────────────────────────────────────────────
@@ -520,35 +550,6 @@ public class DomainModelingIntegrationTests {
         var relationship = domain.RequireRelationship("AgentSupportCases");
         var names = relationship.Stages.Select(s => s.Name).ToArray();
         await Assert.That(Array.IndexOf(names, "Active")).IsLessThan(Array.IndexOf(names, "Inactive"));
-    }
-
-    [Test]
-    public async Task AgentSupportCasesRelationship_ActiveStage_EffectivePolicies_RequireAssignedAt() {
-        var domain = BuildSupportCaseDomain();
-        var relationship = domain.RequireRelationship("AgentSupportCases");
-        var active = relationship.RequireStage("Active");
-        // var requiredNames = StageTransitionRequirementAnalyzer
-        //     .Analyze(active, active, relationship)
-        //     .CurrentRequiredProperties
-        //     .Select(p => p.Name)
-        //     .ToArray();
-
-        // await Assert.That(requiredNames).Contains("AssignedAt");
-        // await Assert.That(requiredNames).DoesNotContain("UnassignedAt");
-    }
-
-    [Test]
-    public async Task AgentSupportCasesRelationship_Transition_ActiveToInactive_NewlyRequiresUnassignedAt() {
-        var domain = BuildSupportCaseDomain();
-        var relationship = domain.RequireRelationship("AgentSupportCases");
-        var active = relationship.RequireStage("Active");
-        var inactive = relationship.RequireStage("Inactive");
-
-        // var analysis = StageTransitionRequirementAnalyzer.Analyze(active, inactive, relationship);
-        // var newlyRequiredNames = analysis.NewlyRequiredProperties.Select(p => p.Name).ToArray();
-
-        // await Assert.That(newlyRequiredNames).Contains("UnassignedAt");
-        // await Assert.That(newlyRequiredNames).DoesNotContain("AssignedAt");
     }
 
     [Test]

@@ -1,5 +1,6 @@
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
+using Poly.Syntax.Analysis;
 
 using DomainAction = Poly.Data.Modeling.Action;
 
@@ -8,7 +9,7 @@ namespace Poly.Tests.Data.Modeling;
 public class DomainQueryExtensionsTests {
     [Test]
     public async Task Domain_GetAvailableEntities_IncludesSupportCase() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
 
         var names = domain.GetAvailableEntities().Select(entity => entity.Name).ToArray();
 
@@ -17,7 +18,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Domain_GetAvailableRelationships_IncludesCustomerCases() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
 
         var names = domain.GetAvailableRelationships().Select(relationship => relationship.Name).ToArray();
 
@@ -26,7 +27,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Domain_FindEntity_ReturnsExpectedEntity() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
 
         var supportCase = domain.FindEntity("SupportCase");
 
@@ -35,7 +36,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Domain_RequireEntity_WhenMissing_ThrowsInvalidOperationException() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => {
             _ = domain.RequireEntity("DoesNotExist");
@@ -85,7 +86,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Stage_GetAvailableActionsInHierarchy_IncludesInheritedActions() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var assigned = supportCase.RequireStage("Assigned");
 
@@ -97,7 +98,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Action_RequireEffect_ReturnsTypedEffect() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var assignAction = supportCase.RequireStage("New").RequireAction("Assign");
 
@@ -108,7 +109,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Action_GetAvailablePublishedEvents_IncludesCaseAssigned() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var assignAction = supportCase.RequireStage("New").RequireAction("Assign");
 
@@ -119,7 +120,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Action_GetAvailableTransitionTargets_IncludesAssigned() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var assignAction = supportCase.RequireStage("New").RequireAction("Assign");
 
@@ -130,7 +131,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Action_RequireParameter_ReturnsExpectedParameter() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var resolveAction = supportCase.RequireStage("InProgress").RequireAction("Resolve");
 
@@ -141,11 +142,12 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Action_GetCapabilityView_ContainsExpectedCapabilities() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var assignAction = supportCase.RequireStage("New").RequireAction("Assign");
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
 
-        var capabilities = assignAction.GetCapabilityView();
+        var capabilities = analysis.GetCapabilityView(assignAction);
 
         await Assert.That(capabilities.ActionName).IsEqualTo("Assign");
         await Assert.That(capabilities.Parameters.Select(parameter => parameter.Name)).Contains("Agent");
@@ -157,11 +159,12 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Stage_GetCapabilityView_ContainsLocalAndEffectiveActions() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var assigned = supportCase.RequireStage("Assigned");
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
 
-        var capabilities = assigned.GetCapabilityView();
+        var capabilities = analysis.GetCapabilityView(assigned);
 
         await Assert.That(capabilities.StageName).IsEqualTo("Assigned");
         await Assert.That(capabilities.LocalActions.Count).IsEqualTo(0);
@@ -171,7 +174,7 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Domain_FindRelationshipsBySource_ReturnsMatchingRelationships() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var customer = domain.RequireEntity("Customer");
 
         var relationships = domain.FindRelationshipsBySource(customer).Select(r => r.Name).ToArray();
@@ -182,10 +185,11 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Relationship_GetCapabilityView_ContainsCoreMetadata() {
-        var domain = BuildSupportCaseDomain();
+        var (domain, _) = BuildSupportCaseDomain();
         var relationship = domain.RequireRelationship("CustomerCases");
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
 
-        var capability = relationship.GetCapabilityView();
+        var capability = analysis.GetCapabilityView(relationship);
 
         await Assert.That(capability.RelationshipName).IsEqualTo("CustomerCases");
         await Assert.That(capability.Cardinality).IsEqualTo(RelationshipCardinality.OneToMany);
@@ -196,22 +200,22 @@ public class DomainQueryExtensionsTests {
 
     [Test]
     public async Task Relationship_GetCapabilityView_ContainsPropertiesStagesAndPolicies() {
-        var domain = BuildSupportCaseDomain();
-        var relationship = domain.RequireRelationship("AgentSupportCases");
+        var (domain, _) = BuildSupportCaseDomain();
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
 
-        var capability = relationship.GetCapabilityView();
+        var capability = analysis.GetCapabilityView(domain.RequireRelationship("AgentSupportCases"));
 
         await Assert.That(capability.Properties.Select(property => property.Name)).Contains("AssignedAt");
         await Assert.That(capability.Properties.Select(property => property.Name)).Contains("UnassignedAt");
         await Assert.That(capability.Stages.Select(stage => stage.Name)).Contains("Active");
         await Assert.That(capability.Stages.Select(stage => stage.Name)).Contains("Inactive");
 
-        var customerNotes = domain.RequireRelationship("CustomerNotes").GetCapabilityView();
+        var customerNotes = analysis.GetCapabilityView(domain.RequireRelationship("CustomerNotes"));
         await Assert.That(customerNotes.Policies.Select(policy => policy.Name)).Contains("OnlyAgentsCanCreateUserNotes");
         await Assert.That(customerNotes.Policies.Select(policy => policy.Name)).Contains("OnlyAgentsCanViewUserNotes");
     }
 
-    private static Domain BuildSupportCaseDomain() {
+    private static (Domain Domain, AnalysisResult Analysis) BuildSupportCaseDomain() {
         return MermaidTestDomainFactory.BuildSupportCaseDomain();
     }
 }

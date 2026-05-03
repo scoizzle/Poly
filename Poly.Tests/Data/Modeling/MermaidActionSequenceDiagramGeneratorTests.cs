@@ -53,7 +53,7 @@ public class MermaidActionSequenceDiagramGeneratorTests {
     }
 
     private static DomainAction GetSupportCaseAction(string stageName, string actionName) {
-        var domain = MermaidTestDomainFactory.BuildSupportCaseDomain();
+        var (domain, _) = MermaidTestDomainFactory.BuildSupportCaseDomain();
         var supportCase = domain.Types.OfType<Entity>().Single(e => e.Name == "SupportCase");
         var stage = supportCase.Stages.Single(s => s.Name == stageName);
         return stage.Actions.Single(a => a.Name == actionName);

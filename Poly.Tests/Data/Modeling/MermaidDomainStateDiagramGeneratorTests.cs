@@ -5,7 +5,7 @@ namespace Poly.Tests.Data.Modeling;
 public class MermaidDomainStateDiagramGeneratorTests {
     [Test]
     public async Task Generate_UsesStateDiagramV2Header() {
-        var domain = MermaidTestDomainFactory.BuildSupportCaseDomain();
+        var (domain, _) = MermaidTestDomainFactory.BuildSupportCaseDomain();
 
         var result = new MermaidDomainStateDiagramGenerator().Generate(domain);
 
@@ -14,7 +14,7 @@ public class MermaidDomainStateDiagramGeneratorTests {
 
     [Test]
     public async Task Generate_IncludesSupportCaseStateMachineAndStages() {
-        var domain = MermaidTestDomainFactory.BuildSupportCaseDomain();
+        var (domain, _) = MermaidTestDomainFactory.BuildSupportCaseDomain();
 
         var result = new MermaidDomainStateDiagramGenerator().Generate(domain);
 
@@ -27,7 +27,7 @@ public class MermaidDomainStateDiagramGeneratorTests {
 
     [Test]
     public async Task Generate_EmitsTransitionsFromActions() {
-        var domain = MermaidTestDomainFactory.BuildSupportCaseDomain();
+        var (domain, _) = MermaidTestDomainFactory.BuildSupportCaseDomain();
 
         var result = new MermaidDomainStateDiagramGenerator().Generate(domain);
 
@@ -37,7 +37,7 @@ public class MermaidDomainStateDiagramGeneratorTests {
 
     [Test]
     public async Task Generate_EmitsSubstageRelationships() {
-        var domain = MermaidTestDomainFactory.BuildSupportCaseDomain();
+        var (domain, _) = MermaidTestDomainFactory.BuildSupportCaseDomain();
 
         var result = new MermaidDomainStateDiagramGenerator().Generate(domain);
 
@@ -46,7 +46,7 @@ public class MermaidDomainStateDiagramGeneratorTests {
 
     [Test]
     public async Task Generate_IncludesRelationshipStateMachines() {
-        var domain = MermaidTestDomainFactory.BuildSupportCaseDomain();
+        var (domain, _) = MermaidTestDomainFactory.BuildSupportCaseDomain();
 
         var result = new MermaidDomainStateDiagramGenerator().Generate(domain);
 

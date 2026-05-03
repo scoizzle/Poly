@@ -4,100 +4,70 @@ namespace Poly.Tests.Mcp;
 
 public class DomainMcpToolsTests {
     [Test]
-    public async Task ApplyDomainMutation_CreateDomain_ReturnsSessionAndSnapshot() {
+    public async Task CreateDomain_ReturnsSessionAndAffordances() {
         var sessionId = $"mcp-test-{Guid.NewGuid():N}";
 
-        var response = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "create_domain",
-            SessionId: sessionId,
-            DomainName: "Orders"));
+        var response = DomainAuthoringTool.CreateDomain("Orders", sessionId);
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.SessionId).IsEqualTo(sessionId);
-        await Assert.That(response.Snapshot).IsNotNull();
-        await Assert.That(response.Snapshot!.DomainName).IsEqualTo("Orders");
+        await Assert.That(response.DomainName).IsEqualTo("Orders");
+        await Assert.That(response.Affordances.Select(item => item.Tool)).Contains(nameof(DomainQueryTool.GetDomainOverview));
     }
 
     [Test]
-    public async Task ApplyDomainMutation_AddEntityAndProperty_UpdatesCapabilitySnapshot() {
+    public async Task AddEntityAndProperty_IterativeQueryReturnsEntityDetails() {
         var sessionId = $"mcp-test-{Guid.NewGuid():N}";
 
-        _ = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "create_domain",
-            SessionId: sessionId,
-            DomainName: "Catalog"));
-
-        _ = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "add_primitive",
-            SessionId: sessionId,
-            PrimitiveName: "NameText",
-            PrimitiveCategory: "Text"));
-
-        _ = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "add_entity",
-            SessionId: sessionId,
-            EntityName: "Product"));
-
-        var propertyResponse = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "add_property_to_entity",
-            SessionId: sessionId,
-            EntityName: "Product",
-            PropertyName: "Name",
-            TypeName: "NameText"));
+        _ = DomainAuthoringTool.CreateDomain("Catalog", sessionId);
+        _ = DomainAuthoringTool.AddPrimitive(sessionId, "NameText", "Text");
+        _ = DomainAuthoringTool.AddEntity(sessionId, "Product");
+        var propertyResponse = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Product", "Name", "NameText");
+        var entityQuery = DomainQueryTool.GetEntity(sessionId, "Product");
 
         await Assert.That(propertyResponse.Success).IsTrue();
-        await Assert.That(propertyResponse.Snapshot).IsNotNull();
+        await Assert.That(entityQuery.Success).IsTrue();
+        await Assert.That(entityQuery.Data).IsNotNull();
 
-        var product = propertyResponse.Snapshot!.Entities.Single(entity => entity.Name == "Product");
+        var product = entityQuery.Data!;
+        await Assert.That(product.Name).IsEqualTo("Product");
         await Assert.That(product.Properties.Select(property => property.Name)).Contains("Name");
     }
 
     [Test]
-    public async Task ApplyDomainMutation_AddRelationship_AttachesToSourceEntity() {
+    public async Task AddRelationship_IterativeQueriesExposeRelationshipAndEntityReference() {
         var sessionId = $"mcp-test-{Guid.NewGuid():N}";
 
-        _ = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "create_domain",
-            SessionId: sessionId,
-            DomainName: "Sales"));
+        _ = DomainAuthoringTool.CreateDomain("Sales", sessionId);
+        _ = DomainAuthoringTool.AddEntity(sessionId, "Customer");
+        _ = DomainAuthoringTool.AddEntity(sessionId, "Order");
 
-        _ = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "add_entity",
-            SessionId: sessionId,
-            EntityName: "Customer"));
-
-        _ = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "add_entity",
-            SessionId: sessionId,
-            EntityName: "Order"));
-
-        var relationshipResponse = DomainAuthoringTool.ApplyDomainMutation(new DomainMutationRequest(
-            Operation: "add_relationship",
-            SessionId: sessionId,
-            RelationshipName: "CustomerOrders",
-            SourceEntityName: "Customer",
-            TargetEntityName: "Order",
-            Cardinality: "OneToMany",
-            SourceOwnsTarget: true));
+        var relationshipResponse = DomainAuthoringTool.AddRelationship(
+            sessionId, "CustomerOrders", "Customer", "Order", "OneToMany", sourceOwnsTarget: true);
+        var relationshipQuery = DomainQueryTool.GetRelationship(sessionId, "CustomerOrders");
+        var customerQuery = DomainQueryTool.GetEntity(sessionId, "Customer", includeActions: false, includeStages: false);
 
         await Assert.That(relationshipResponse.Success).IsTrue();
-        await Assert.That(relationshipResponse.Snapshot).IsNotNull();
+        await Assert.That(relationshipQuery.Success).IsTrue();
+        await Assert.That(relationshipQuery.Data).IsNotNull();
+        await Assert.That(customerQuery.Success).IsTrue();
+        await Assert.That(customerQuery.Data).IsNotNull();
 
-        var relationship = relationshipResponse.Snapshot!.Relationships.Single(item => item.Name == "CustomerOrders");
+        var relationship = relationshipQuery.Data!;
         await Assert.That(relationship.Source).IsEqualTo("Customer");
         await Assert.That(relationship.Target).IsEqualTo("Order");
         await Assert.That(relationship.SourceOwnsTarget).IsTrue();
 
-        var customer = relationshipResponse.Snapshot.Entities.Single(entity => entity.Name == "Customer");
+        var customer = customerQuery.Data!;
         await Assert.That(customer.Relationships).Contains("CustomerOrders");
     }
 
     [Test]
-    public async Task InterrogateDomainCapabilities_WithoutSession_ReturnsSupportedOperations() {
+    public async Task InterrogateDomainCapabilities_WithoutSession_ReturnsSuccess() {
         var response = DomainCapabilityTool.InterrogateDomainCapabilities();
 
         await Assert.That(response.Success).IsTrue();
-        await Assert.That(response.SupportedMutationOperations).Contains("create_domain");
-        await Assert.That(response.Snapshot).IsNull();
+        await Assert.That(response.Overview).IsNull();
+        await Assert.That(response.Affordances.Select(item => item.Tool)).Contains(nameof(DomainAuthoringTool.CreateDomain));
     }
 }

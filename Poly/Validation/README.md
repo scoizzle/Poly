@@ -1,138 +1,82 @@
-# Validation System - RuleSet API
+# Validation System
 
-The `RuleSet<T>` and `RuleSetBuilder<T>` classes provide a fluent, strongly-typed API for building and executing validation rules.
+`Poly.Validation` composes validation logic as rule objects, converts those rules into AST nodes, runs semantic analysis, then compiles to an executable `Predicate<T>`.
 
-## Quick Example
+## Core Types
 
-```csharp
-using Poly.Validation;
-using Poly.Validation.Builders;
-
-// Define a record to validate
-public record Person(string Name, int Age);
-
-// Build a rule set
-RuleSet<Person> ruleSet = new RuleSetBuilder<Person>()
-    .Member(p => p.Name, r => r.NotNull().MinLength(1).MaxLength(100))
-    .Member(p => p.Age, r => r.Minimum(0).Maximum(150))
-    .Build();
-
-// Test instances
-Person validPerson = new("Alice", 30);
-Console.WriteLine(ruleSet.Test(validPerson));  // True
-
-Person invalidPerson = new("", 200);
-Console.WriteLine(ruleSet.Test(invalidPerson));  // False
-
-// View the combined rules
-Console.WriteLine(ruleSet.CombinedRules);
-// Output: Name: value != null and value.Length >= 1 && value.Length <= 100 and Age: value >= 0 and value <= 150
-```
+- `Rule` - abstract base type for all validation rules
+- `RuleSet<T>` - compiles a set of `Rule` instances into a callable predicate
+- `RuleBuildingContext` - carries the current value scope while building rule AST
 
 ## RuleSet<T>
 
-Represents a compiled set of validation rules for a specific type.
-
-### Properties
-
-- **`Rule CombinedRules`** - The combined rule representing all validation rules
-- **`Value RuleSetInterpretation`** - The interpretation tree representation
-- **`Expression ExpressionTree`** - The LINQ expression tree representation
-- **`Predicate<T> Predicate`** - The compiled predicate function
-
-### Methods
-
-- **`bool Test(T instance)`** - Tests whether an instance satisfies all rules
-- **`string ToString()`** - Returns a string representation of the rules
-
-## RuleSetBuilder<T>
-
-Provides a fluent API for building a RuleSet.
-
-### Methods
-
-#### `Member<TProperty>(Expression<Func<T, TProperty>> propertySelector, Action<ConstraintSetBuilder<TProperty>> constraintsBuilder)`
-
-Adds validation rules for a specific property.
+`RuleSet<T>` is created directly from rules.
 
 ```csharp
-.Member(p => p.Name, r => r
-    .NotNull()
-    .MinLength(1)
-    .MaxLength(100))
+using Poly.Validation;
+using Poly.Validation.Rules;
+
+var rules = new Rule[] {
+    new ComparisonRule("Start", ComparisonOperator.LessThanOrEqual, "End"),
+    new ComparisonRule("Total", ComparisonOperator.GreaterThanOrEqual, "Subtotal")
+};
+
+var ruleSet = new RuleSet<OrderWindow>(rules);
+
+bool isValid = ruleSet.Test(instance);
 ```
 
-#### `AddRule(Rule rule)`
+### Exposed Members
 
-Adds a custom rule to the rule set.
+- `CombinedRules` - `AndRule` containing all supplied rules
+- `RuleSetInterpretation` - AST (`Node`) generated from rules
+- `NodeTree` - LINQ expression tree representation
+- `Predicate` - compiled `Predicate<T>` delegate
+- `Test(T instance)` - executes validation
 
-```csharp
-.AddRule(new CustomValidationRule())
-```
+## Available Rule Types
 
-#### `Build()`
+Located in `Poly/Validation/Rules`:
 
-Builds the final RuleSet with all configured rules.
+- `AndRule`
+- `OrRule`
+- `NotRule`
+- `ComparisonRule`
+- `ConditionalRule`
+- `PropertyDependencyRule`
+- `MutualExclusionRule`
+- `ComputedValueRule`
+- `PropertyConstraintRule`
 
-```csharp
-RuleSet<Person> ruleSet = builder.Build();
-```
+## Authoring Custom Rules
 
-## Available Constraints
-
-### NotNull
-
-```csharp
-.Member(p => p.Name, r => r.NotNull())
-```
-
-### Length Constraints (strings and arrays)
-
-```csharp
-.Member(p => p.Name, r => r
-    .MinLength(1)
-    .MaxLength(100))
-```
-
-### Numeric Constraints
+Derive from `Rule` and implement `BuildInterpretationTree`.
 
 ```csharp
-.Member(p => p.Age, r => r
-    .Minimum(0)
-    .Maximum(150))
-```
+using Poly.Syntax;
 
-## How It Works
-
-1. **Build Phase**: The RuleSetBuilder collects property constraints and builds a combined `AndRule`
-2. **Compilation Phase**: The RuleSet converts rules into an interpretation tree, then to LINQ expressions
-3. **Execution Phase**: The compiled predicate is executed for fast validation
-
-The system uses three representations:
-- **Rules**: High-level validation logic
-- **Interpretation Trees**: Intermediate representation for building expressions
-- **LINQ Expressions**: Compiled to native code for maximum performance
-
-## Performance
-
-The compiled predicates are as fast as hand-written validation code. See `Poly.Benchmarks` for performance comparisons.
-
-## Extending with Custom Rules
-
-You can create custom rules by inheriting from `Rule` and implementing `BuildInterpretationTree`:
-
-```csharp
-public class CustomRule : Rule {
-    public override Expression BuildInterpretationTree(RuleBuildingContext context) {
-        // Build your interpretation tree here
+public sealed class AlwaysTrueRule : Rule {
+    public override Node BuildInterpretationTree(RuleBuildingContext context) {
+        return new Constant(true);
     }
 }
 ```
 
-Then add it using `AddRule`:
+## Serialization
 
-```csharp
-new RuleSetBuilder<Person>()
-    .AddRule(new CustomRule())
-    .Build();
-```
+`Rule` uses polymorphic JSON serialization via `[JsonPolymorphic]` and `[JsonDerivedType]` declarations on `Rule.cs`.
+
+When adding a new rule subtype:
+
+1. Add the rule class under `Poly/Validation/Rules`.
+2. Register the subtype discriminator in `Rule.cs`.
+
+## Execution Pipeline
+
+`RuleSet<T>` performs these steps:
+
+1. Build a combined rule tree (`AndRule`).
+2. Build AST (`Node`) through `BuildInterpretationTree`.
+3. Analyze AST using `AnalyzerBuilder` with semantic passes.
+4. Compile analyzed AST to LINQ expression.
+5. Compile to `Predicate<T>`.

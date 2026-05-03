@@ -10,7 +10,7 @@ using DomainEvent = Poly.Data.Modeling.Event;
 namespace Poly.Tests.Data.Modeling;
 
 internal static class MermaidTestDomainFactory {
-    internal static Domain BuildSupportCaseDomain() {
+    internal static (Domain Domain, AnalysisResult Analysis) BuildSupportCaseDomain() {
         var domain = DomainTestFactory.CreateDomain("Support Case Management");
         var mutation = domain.CreateMutation();
 
@@ -154,6 +154,6 @@ internal static class MermaidTestDomainFactory {
             }
         }
 
-        return domain;
+        return (domain, result);
     }
 }

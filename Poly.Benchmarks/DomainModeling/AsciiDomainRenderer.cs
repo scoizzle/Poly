@@ -5,6 +5,7 @@ using System.Text;
 
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
+using Poly.Syntax.Analysis;
 
 using DomainAction = Poly.Data.Modeling.Action;
 
@@ -42,7 +43,8 @@ internal static class AsciiDomainRenderer {
     public static string RenderStageSummary(Stage stage) {
         ArgumentNullException.ThrowIfNull(stage);
 
-        var capability = stage.GetCapabilityView();
+        var analysis = new DomainModelAnalyzer().Analyze(stage.Domain);
+        var capability = analysis.GetCapabilityView(stage);
         var localActionNames = stage.Actions.Select(action => action.Name).ToHashSet(StringComparer.Ordinal);
         var localPolicyNames = stage.Policies.Select(policy => policy.Name).ToHashSet(StringComparer.Ordinal);
 

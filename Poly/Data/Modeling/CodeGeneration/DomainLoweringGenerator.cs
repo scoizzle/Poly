@@ -108,10 +108,13 @@ public sealed class DomainImplementationLoweringPass {
         }
 
         var effectiveStages = metadata.EffectiveStages
-            .Select(stage => new StageImplementationModel(
-                stage,
-                stage.GetEffectiveActions().ToArray(),
-                stage.GetEffectivePolicies().ToArray()))
+            .Select(stage => {
+                var stageMetadata = analysis.GetMetadata<EffectiveStageMetadata>(stage);
+                return new StageImplementationModel(
+                    stage,
+                    stageMetadata?.EffectiveActions.ToArray() ?? [],
+                    stageMetadata?.EffectivePolicies.ToArray() ?? []);
+            })
             .ToArray();
 
         return new EntityImplementationModel(

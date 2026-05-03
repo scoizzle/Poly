@@ -60,6 +60,30 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             EffectiveRelationships = effectiveRelationships,
             EffectiveStages = effectiveStages
         });
+
+        foreach (var stage in entity.Stages) {
+            var effectiveStageActions = MergeByName(
+                EnumerateStageLineageRootToLeaf(stage).SelectMany(static s => s.Actions),
+                static action => action.Name);
+            var effectiveStagePolicies = MergeByName(
+                EnumerateStageLineageRootToLeaf(stage).SelectMany(static s => s.Policies),
+                static policy => policy.Name);
+
+            context.Metadata.Set(stage, new EffectiveStageMetadata {
+                EffectiveActions = effectiveStageActions,
+                EffectivePolicies = effectiveStagePolicies
+            });
+        }
+    }
+
+    private static IEnumerable<Stage> EnumerateStageLineageRootToLeaf(Stage stage) {
+        var stack = new Stack<Stage>();
+        for (var current = stage; current is not null; current = current.Parent) {
+            stack.Push(current);
+        }
+        while (stack.Count > 0) {
+            yield return stack.Pop();
+        }
     }
 
     private static IEnumerable<Entity> EnumerateEntityLineageRootToLeaf(Entity entity) {

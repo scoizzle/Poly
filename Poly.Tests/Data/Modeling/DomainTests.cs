@@ -349,7 +349,7 @@ public class StageTests {
         MutationApply.AddAction(parent, inheritedEscalate);
         MutationApply.AddAction(child, localEscalate);
 
-        var effectiveActions = child.GetEffectiveActions().ToArray();
+        var effectiveActions = child.GetAvailableActionsInHierarchy().ToArray();
 
         await Assert.That(effectiveActions.Length).IsEqualTo(1);
         await Assert.That(ReferenceEquals(effectiveActions.Single(), localEscalate)).IsTrue();
@@ -376,7 +376,7 @@ public class StageTests {
         MutationApply.AddAction(parent, review);
         MutationApply.AddAction(child, complete);
 
-        var names = child.GetEffectiveActions().Select(action => action.Name).ToArray();
+        var names = child.GetAvailableActionsInHierarchy().Select(action => action.Name).ToArray();
 
         await Assert.That(names.Length).IsEqualTo(3);
         await Assert.That(names).Contains("Triage");

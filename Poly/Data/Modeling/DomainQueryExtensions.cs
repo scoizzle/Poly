@@ -246,7 +246,13 @@ public static class DomainQueryExtensions {
     public static IEnumerable<Action> GetAvailableActionsInHierarchy(this Stage stage) {
         ArgumentNullException.ThrowIfNull(stage);
 
-        return stage.GetEffectiveActions();
+        var actionsByName = new Dictionary<string, Action>(StringComparer.Ordinal);
+        for (var current = stage; current is not null; current = current.Parent) {
+            foreach (var action in current.Actions) {
+                _ = actionsByName.TryAdd(action.Name, action);
+            }
+        }
+        return actionsByName.Values;
     }
 
     public static IEnumerable<Policy> GetAvailablePolicies(this Stage stage) {
@@ -258,7 +264,13 @@ public static class DomainQueryExtensions {
     public static IEnumerable<Policy> GetAvailablePoliciesInHierarchy(this Stage stage) {
         ArgumentNullException.ThrowIfNull(stage);
 
-        return stage.GetEffectivePolicies();
+        var policiesByName = new Dictionary<string, Policy>(StringComparer.Ordinal);
+        for (var current = stage; current is not null; current = current.Parent) {
+            foreach (var policy in current.Policies) {
+                _ = policiesByName.TryAdd(policy.Name, policy);
+            }
+        }
+        return policiesByName.Values;
     }
 
     public static T? FindEffect<T>(this Action action) where T : Effect {
@@ -315,55 +327,4 @@ public static class DomainQueryExtensions {
         return action.Effects.OfType<StageTransition>().Select(effect => effect.TargetStage);
     }
 
-    public static ActionCapabilityView GetCapabilityView(this Action action) {
-        ArgumentNullException.ThrowIfNull(action);
-
-        var parameters = action.GetAvailableParameters().ToArray();
-        var effects = action.GetAvailableEffects().ToArray();
-        var effectTypes = action.GetAvailableEffectTypes().ToArray();
-        var publishedEvents = action.GetAvailablePublishedEvents().ToArray();
-        var transitionTargets = action.GetAvailableTransitionTargets().ToArray();
-
-        return new ActionCapabilityView(
-            ActionName: action.Name,
-            Parameters: parameters,
-            Effects: effects,
-            EffectTypes: effectTypes,
-            PublishedEvents: publishedEvents,
-            TransitionTargets: transitionTargets);
-    }
-
-    public static StageCapabilityView GetCapabilityView(this Stage stage) {
-        ArgumentNullException.ThrowIfNull(stage);
-
-        var localActions = stage.GetAvailableActions().Select(action => action.GetCapabilityView()).ToArray();
-        var effectiveActions = stage.GetAvailableActionsInHierarchy().Select(action => action.GetCapabilityView()).ToArray();
-        var localPolicies = stage.GetAvailablePolicies().ToArray();
-        var effectivePolicies = stage.GetAvailablePoliciesInHierarchy().ToArray();
-
-        return new StageCapabilityView(
-            StageName: stage.Name,
-            LocalActions: localActions,
-            EffectiveActions: effectiveActions,
-            LocalPolicies: localPolicies,
-            EffectivePolicies: effectivePolicies);
-    }
-
-    public static RelationshipCapabilityView GetCapabilityView(this Relationship relationship) {
-        ArgumentNullException.ThrowIfNull(relationship);
-
-        var properties = relationship.GetAvailableProperties().ToArray();
-        var stages = relationship.GetAvailableStages().ToArray();
-        var policies = relationship.Policies.ToArray();
-
-        return new RelationshipCapabilityView(
-            RelationshipName: relationship.Name,
-            Source: relationship.Source,
-            Target: relationship.Target,
-            Cardinality: relationship.Cardinality,
-            SourceOwnsTarget: relationship.SourceOwnsTarget,
-            Properties: properties,
-            Stages: stages,
-            Policies: policies);
-    }
 }

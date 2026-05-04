@@ -159,6 +159,29 @@ RemoveRuleFromPolicyIntent
 4. Add an engine case in `DomainMutationIntentEngine.cs`.
 5. Add an MCP tool in `DomainTools.cs` and an affordance in `DomainAffordances.SessionRoot()`.
 
+## Expression Values
+
+To support reusable, first-class computed values, define an `ExpressionDomainValue` (a `DomainValue` whose value is computed from a Poly.Syntax AST expression). This enables UI/UX scenarios, sharing, and metadata for expressions.
+
+**Example:**
+
+```csharp
+var renewalCountExpr = new ExpressionDomainValue(domain, "RenewalCountPlusOne", intType) {
+    Expression = new Add(
+        new PropertyReference(loan.Property("RenewalCount")),
+        new Constant(1)
+    ),
+    Description = "Increments RenewalCount by 1"
+};
+
+var assign = new Assign(domain) {
+    Target = loan.Property("RenewalCount"),
+    Value = renewalCountExpr
+};
+```
+
+This pattern allows expressions to be named, reused, and referenced in effects, properties, or anywhere a `DomainValue` is accepted.
+
 ## Cross-Entity Mutation Guidance
 
 **Best Practice:**
@@ -185,3 +208,16 @@ new InvokeAction(domain) {
 ```
 
 This pattern applies to all cross-entity mutations: always use an explicit action on the target entity, and invoke it via `InvokeAction`.
+
+## Comments on Domain Objects
+
+Every domain object (entity, property, relationship, etc.) supports an append-only Comments collection. This allows authors to add descriptions, rationale, or discussion to any model element, preserving a full authoring history. Comments are never deleted or overwritten—new comments are always appended.
+
+**Example:**
+
+```csharp
+entity.AddComment("Initial creation by Alice.");
+entity.AddComment("Reviewed by Bob, 2026-05-04: Added validation policy.");
+```
+
+Use comments to document design decisions, review notes, or collaborative discussion directly on the model element.

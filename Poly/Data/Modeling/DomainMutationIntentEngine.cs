@@ -1,4 +1,10 @@
-using Poly.Data.Modeling.TypeSystem;
+                case AddCommentIntent addComment: {
+        // Path can refer to any DomainMember
+        var node = ResolveNode<DomainMember>(domain, new DomainNodeReference(addComment.NodePath));
+        _ = mutation.AddComment(node, addComment.Comment);
+        break;
+    }
+    using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 

@@ -1,6 +1,20 @@
 namespace Poly.Data.Modeling.TypeSystem;
 
+using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
+
 public abstract record DomainObject(Domain Domain) : Node {
+    private readonly List<string> _comments = new();
+    public IReadOnlyList<string> Comments => _comments.AsReadOnly();
+
+    /// <summary>
+    /// Appends a new comment/description to this domain object. Comments are append-only and preserve authoring history.
+    /// </summary>
+    public void AddComment(string comment) {
+        if (!string.IsNullOrWhiteSpace(comment))
+            _comments.Add(comment);
+    }
+
     protected DomainObject() : this(default!) {
         if (this is Domain domain) {
             Domain = domain;
@@ -16,9 +30,11 @@ public abstract record DomainObject(Domain Domain) : Node {
     public virtual bool Equals(DomainObject? other) => ReferenceEquals(this, other);
     public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);
 
-    protected override bool PrintMembers(System.Text.StringBuilder builder) {
+    protected override bool PrintMembers(StringBuilder builder) {
         base.PrintMembers(builder);
         builder.Append($", Domain = {Domain?.Name ?? "(null)"}");
+        if (_comments.Count > 0)
+            builder.Append($", Comments = [{string.Join("; ", _comments)}]");
         return true;
     }
 }

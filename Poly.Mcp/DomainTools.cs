@@ -181,7 +181,8 @@ internal static class DomainAffordances {
         new("command:remove-rule-from-policy", nameof(DomainAuthoringTool.RemoveRuleFromPolicy), new Dictionary<string, object?>(), "Remove a rule from a policy."),
         new("command:add-primitive", nameof(DomainAuthoringTool.AddPrimitive), new Dictionary<string, object?>(), "Create a new primitive type."),
         new("command:add-event-type", nameof(DomainAuthoringTool.AddEventType), new Dictionary<string, object?>(), "Create a new event type."),
-        new("command:add-relationship", nameof(DomainAuthoringTool.AddRelationship), new Dictionary<string, object?>(), "Create a relationship between two entities.")
+        new("command:add-relationship", nameof(DomainAuthoringTool.AddRelationship), new Dictionary<string, object?>(), "Create a relationship between two entities."),
+        new("command:add-comment", nameof(DomainAuthoringTool.AddComment), new Dictionary<string, object?>(), "Append a comment to a domain object.")
     ];
 
     public static IReadOnlyCollection<DomainAffordance> SessionScoped(string sessionId, params DomainAffordance[] additional) {
@@ -1182,6 +1183,17 @@ public static class DomainAuthoringTool {
             return Commit(sessionId, state.Domain, analysis, $"Parameter '{parameterName}' removed from action '{actionName}' on entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Appends a comment to a domain object by path.")]
+    public static DomainCommandResponse AddComment(string sessionId, string nodePath, string comment) {
+        if (!DomainSessionStore.TryGet(sessionId, out var session))
+            return new(false, $"Session '{sessionId}' not found.", sessionId, null, null, [], ["Session not found."]);
+        var engine = new DomainMutationIntentEngine();
+        var intent = new AddCommentIntent(nodePath, comment);
+        var analysis = engine.Apply(session.Domain, intent);
+        DomainSessionStore.UpdateAnalysis(sessionId, analysis);
+        return new(true, $"Comment added to '{nodePath}'.", sessionId, session.Domain.Name, session.Revision + 1, DomainAffordances.SessionScoped(sessionId), null);
     }
 
     private static DomainSessionState RequireSession(string sessionId) {

@@ -8,6 +8,12 @@ public sealed partial record Domain {
     public Mutation CreateMutation(DomainModelAnalyzer? analyzer = null) => new Mutation(this, analyzer ?? new DomainModelAnalyzer());
 
     public sealed class Mutation {
+
+        // ── Comments ──────────────────────────────────────────────────────
+        public Mutation AddComment(DomainObject target, string comment) {
+            AddStep(new AddCommentCommand(target, comment));
+            return this;
+        }
         private readonly Domain _domain;
         private readonly DomainModelAnalyzer _analyzer;
         private readonly List<DomainMutationCommand> _steps = [];

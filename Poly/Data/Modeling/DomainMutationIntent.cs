@@ -46,6 +46,7 @@ namespace Poly.Data.Modeling;
 [JsonDerivedType(typeof(RemoveRuleFromPolicyIntent), "RemoveRuleFromPolicy")]
 [JsonDerivedType(typeof(AddPolicyToActionIntent), "AddPolicyToAction")]
 [JsonDerivedType(typeof(RemovePolicyFromActionIntent), "RemovePolicyFromAction")]
+[JsonDerivedType(typeof(AddCommentIntent), "AddComment")]
 public abstract record DomainMutationIntent;
 
 public sealed record DomainNodeReference(string Path) {
@@ -238,3 +239,6 @@ public sealed record RemoveRuleFromPolicyIntent(
     string EntityName,
     string PolicyName,
     string RuleName) : DomainMutationIntent;
+
+[JsonDerivedType(typeof(AddCommentIntent), "AddComment")]
+public sealed record AddCommentIntent(string NodePath, string Comment) : DomainMutationIntent;

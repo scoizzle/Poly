@@ -137,4 +137,10 @@ public static class DomainMutationExtensions {
         action.Domain.CreateMutation().RemoveEffect(action, effect).Apply();
         return true;
     }
+
+    public static void AddComment(this DomainObject target, string comment) {
+        var mutation = target.Domain.CreateMutation();
+        mutation.AddComment(target, comment);
+        mutation.Apply();
+    }
 }

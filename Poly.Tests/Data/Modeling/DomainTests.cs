@@ -139,11 +139,16 @@ public class DomainTests {
         MutationApply.AddType(domain, agent);
         MutationApply.AddType(domain, note);
 
-        MutationApply.AddRelationship(domain, new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, true));
+        var first = new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, true);
         var second = new Relationship(domain, "AgentNotes", agent, note, RelationshipCardinality.OneToMany, true);
-        var result = MutationApply.AddRelationship(domain, second);
-        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("multiple ownership relationships"));
-        await Assert.That(error is not null).IsTrue();
+        var result1 = MutationApply.AddRelationship(domain, first);
+        var result2 = MutationApply.AddRelationship(domain, second);
+        var error1 = result1.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("multiple ownership relationships"));
+        var error2 = result2.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("multiple ownership relationships"));
+        await Assert.That(error1).IsNull();
+        await Assert.That(error2).IsNull();
+        await Assert.That(domain.Relationships.Contains(first)).IsTrue();
+        await Assert.That(domain.Relationships.Contains(second)).IsTrue();
     }
 
     [Test]
@@ -191,11 +196,16 @@ public class DomainTests {
         MutationApply.AddType(domain, agent);
         MutationApply.AddType(domain, note);
 
-        MutationApply.AddRelationship(domain, new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, true));
+        var first = new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, true);
         var second = new Relationship(domain, "AgentNotes", agent, note, RelationshipCardinality.OneToMany, true);
-        var result = MutationApply.AddRelationship(domain, second);
-        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("multiple ownership relationships"));
-        await Assert.That(error is not null).IsTrue();
+        var result1 = MutationApply.AddRelationship(domain, first);
+        var result2 = MutationApply.AddRelationship(domain, second);
+        var error1 = result1.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("multiple ownership relationships"));
+        var error2 = result2.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("multiple ownership relationships"));
+        await Assert.That(error1).IsNull();
+        await Assert.That(error2).IsNull();
+        await Assert.That(domain.Relationships.Contains(first)).IsTrue();
+        await Assert.That(domain.Relationships.Contains(second)).IsTrue();
     }
 
     [Test]

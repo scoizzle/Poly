@@ -158,3 +158,30 @@ RemoveRuleFromPolicyIntent
 3. Add an intent record to `DomainMutationIntent.cs` with a `[JsonDerivedType]` registration.
 4. Add an engine case in `DomainMutationIntentEngine.cs`.
 5. Add an MCP tool in `DomainTools.cs` and an affordance in `DomainAffordances.SessionRoot()`.
+
+## Cross-Entity Mutation Guidance
+
+**Best Practice:**
+
+To mutate state on another entity, do not directly assign or modify its properties. Instead, define an explicit action on the target entity that performs the desired mutation, and invoke that action using the `InvokeAction` effect from the source entity's action.
+
+This ensures:
+- All invariants and business rules are enforced by the target entity.
+- Cross-entity workflows are auditable and modular.
+- The model remains consistent and maintainable.
+
+**Example:**
+
+Suppose `CheckoutBook` on `Loan` needs to decrement `Book.AvailableCopies`:
+
+1. Define an action `DecrementAvailableCopies` on `Book`.
+2. In the `CheckoutBook` action's effects, add:
+
+```csharp
+new InvokeAction(domain) {
+    TargetAction = decrementAvailableCopiesAction,
+    ParameterBindings = { /* bind parameters as needed */ }
+}
+```
+
+This pattern applies to all cross-entity mutations: always use an explicit action on the target entity, and invoke it via `InvokeAction`.

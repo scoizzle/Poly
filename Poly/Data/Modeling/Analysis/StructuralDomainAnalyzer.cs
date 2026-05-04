@@ -203,7 +203,6 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         ValidateDomainMembership(context, domain);
         ValidateRelationshipEndpoints(context, domain);
         ValidateOwnershipCardinality(context, domain);
-        ValidateOwnershipTargetUniqueness(context, domain);
     }
 
     private static void ValidateDomainMembership(AnalysisContext context, Domain domain) {
@@ -374,22 +373,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void ValidateOwnershipTargetUniqueness(AnalysisContext context, Domain domain) {
-        var duplicateOwnershipTargets = domain.Relationships
-            .Where(context.ShouldAnalyze)
-            .Where(static relationship => relationship.SourceOwnsTarget && relationship.Target is not null)
-            .GroupBy(static relationship => relationship.Target)
-            .Where(static group => group.Key is not null && group.Count() > 1);
 
-        foreach (var group in duplicateOwnershipTargets) {
-            foreach (var relationship in group) {
-                context.ReportError(
-                    relationship,
-                    $"Target '{group.Key.Name}' has multiple ownership relationships.",
-                    DomainModelDiagnosticCodes.StructuralOwnership);
-            }
-        }
-    }
 
     private static string GetNodeName(Node node) {
         return node switch {

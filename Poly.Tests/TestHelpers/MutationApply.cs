@@ -29,7 +29,11 @@ public static class MutationApply {
 
     public static AnalysisResult AddPolicy(Relationship relationship, Policy policy) => Apply(relationship.Domain, mutation => mutation.AddPolicy(relationship, policy));
 
+    public static AnalysisResult AddPolicy(Action action, Policy policy) => Apply(action.Domain, mutation => mutation.AddPolicy(action, policy));
+
     public static AnalysisResult RemovePolicy(Stage stage, Policy policy) => Apply(stage.Domain, mutation => mutation.RemovePolicy(stage, policy));
+
+    public static AnalysisResult RemovePolicy(Action action, Policy policy) => Apply(action.Domain, mutation => mutation.RemovePolicy(action, policy));
 
     public static AnalysisResult AddAction(Entity entity, Action action) => Apply(entity.Domain, mutation => mutation.AddAction(entity, action));
 

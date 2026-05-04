@@ -2,17 +2,30 @@ using System;
 using System.CommandLine;
 
 using Poly.Benchmarks.DomainModeling;
+using Poly.Benchmarks.DomainModeling.Demos;
 
 var domainNameOption = new Option<string>("--name") {
     Description = "Name for the domain being modeled."
 };
 
+var libraryDomainOption = new Option<bool>("--library-domain") {
+    Description = "Test the Library Management System domain."
+};
+
 var rootCommand = new RootCommand("Interactive domain modeling workbench") {
-    domainNameOption
+    domainNameOption,
+    libraryDomainOption
 };
 
 rootCommand.SetAction(parseResult => {
     var domainName = parseResult.GetValue(domainNameOption) ?? "Interactive Domain";
+    var testLibraryDomain = parseResult.GetValue(libraryDomainOption);
+
+    if (testLibraryDomain) {
+        TestLibraryDomain.Run();
+        return 0;
+    }
+
     InteractiveDomainConsole.Run(domainName);
     return 0;
 });

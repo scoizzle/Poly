@@ -5,6 +5,8 @@ using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Introspection;
 using Poly.Tests.TestHelpers;
 
+using DomainAction = Poly.Data.Modeling.Action;
+
 namespace Poly.Tests.Data.Modeling;
 
 public class PolicyTests {
@@ -100,6 +102,80 @@ public class PolicyTests {
         var p = new Parameter("subject", TypeReference.To<T>());
         var interpretation = DomainLoweringGenerator.LowerPolicy(policy, p);
         return interpretation.CompileLambda<Func<T, bool>>([(p, typeof(T))]);
+    }
+
+    [Test]
+    public async Task Action_AddPolicy_ExposesPolicyInEnumeration() {
+        var domain = DomainTestFactory.CreateDomain();
+        var entity = new Entity(domain, "Order");
+        var action = new DomainAction(domain, "Submit", entity);
+        var policy = new Policy(domain, "SubmitPolicy");
+
+        MutationApply.AddPolicy(action, policy);
+
+        await Assert.That(action.Policies.Contains(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task Action_RemovePolicy_RemovesPolicyFromEnumeration() {
+        var domain = DomainTestFactory.CreateDomain();
+        var entity = new Entity(domain, "Order");
+        var action = new DomainAction(domain, "Submit", entity);
+        var policy = new Policy(domain, "SubmitPolicy");
+
+        MutationApply.AddPolicy(action, policy);
+        MutationApply.RemovePolicy(action, policy);
+
+        await Assert.That(action.Policies.Contains(policy)).IsFalse();
+    }
+
+    [Test]
+    public async Task Action_FindPolicy_ReturnsNullWhenNotFound() {
+        var domain = DomainTestFactory.CreateDomain();
+        var entity = new Entity(domain, "Order");
+        var action = new DomainAction(domain, "Submit", entity);
+
+        var result = action.FindPolicy("Missing");
+
+        await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    public async Task Action_RequirePolicy_ThrowsWhenNotFound() {
+        var domain = DomainTestFactory.CreateDomain();
+        var entity = new Entity(domain, "Order");
+        var action = new DomainAction(domain, "Submit", entity);
+
+        await Assert.That(() => action.RequirePolicy("Missing")).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task AddPolicyToActionIntent_RoundTrip_AttachesPolicyToAction() {
+        var engine = new DomainMutationIntentEngine();
+        var domain = new Domain("TestDomain");
+        var entity = new Entity(domain, "Order", null);
+        domain.CreateMutation().AddType(entity).Apply(null);
+
+        engine.Apply(domain, new AddActionToEntityIntent("Order", "Submit"));
+        engine.Apply(domain, new AddPolicyToActionIntent("Order", "Submit", "AuthPolicy"));
+
+        var action = entity.RequireAction("Submit");
+        await Assert.That(action.FindPolicy("AuthPolicy")).IsNotNull();
+    }
+
+    [Test]
+    public async Task RemovePolicyFromActionIntent_RoundTrip_DetachesPolicyFromAction() {
+        var engine = new DomainMutationIntentEngine();
+        var domain = new Domain("TestDomain");
+        var entity = new Entity(domain, "Order", null);
+        domain.CreateMutation().AddType(entity).Apply(null);
+
+        engine.Apply(domain, new AddActionToEntityIntent("Order", "Submit"));
+        engine.Apply(domain, new AddPolicyToActionIntent("Order", "Submit", "AuthPolicy"));
+        engine.Apply(domain, new RemovePolicyFromActionIntent("Order", "Submit", "AuthPolicy"));
+
+        var action = entity.RequireAction("Submit");
+        await Assert.That(action.FindPolicy("AuthPolicy")).IsNull();
     }
 
     private sealed record PersonInput(int Age, bool IsVerified);

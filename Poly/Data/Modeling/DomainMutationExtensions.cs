@@ -122,6 +122,12 @@ public static class DomainMutationExtensions {
     public static void RemoveParameter(this Action action, Property parameter) =>
         action.Domain.CreateMutation().RemoveParameter(action, parameter).Apply();
 
+    public static void AddPolicy(this Action action, Policy policy) =>
+        action.Domain.CreateMutation().AddPolicy(action, policy).Apply();
+
+    public static void RemovePolicy(this Action action, Policy policy) =>
+        action.Domain.CreateMutation().RemovePolicy(action, policy).Apply();
+
     public static bool AddEffect(this Action action, Effect effect) {
         action.Domain.CreateMutation().AddEffect(action, effect).Apply();
         return true;

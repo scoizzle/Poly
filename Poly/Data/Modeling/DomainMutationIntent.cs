@@ -44,6 +44,8 @@ namespace Poly.Data.Modeling;
 [JsonDerivedType(typeof(AddActorRoleRuleToPolicyIntent), "AddActorRoleRuleToPolicy")]
 [JsonDerivedType(typeof(AddCompositeRuleToPolicyIntent), "AddCompositeRuleToPolicy")]
 [JsonDerivedType(typeof(RemoveRuleFromPolicyIntent), "RemoveRuleFromPolicy")]
+[JsonDerivedType(typeof(AddPolicyToActionIntent), "AddPolicyToAction")]
+[JsonDerivedType(typeof(RemovePolicyFromActionIntent), "RemovePolicyFromAction")]
 public abstract record DomainMutationIntent;
 
 public sealed record DomainNodeReference(string Path) {
@@ -184,6 +186,17 @@ public sealed record AddPolicyToPropertyIntent(
 public sealed record RemovePolicyFromPropertyIntent(
     string EntityName,
     string PropertyName,
+    string PolicyName) : DomainMutationIntent;
+
+public sealed record AddPolicyToActionIntent(
+    string EntityName,
+    string ActionName,
+    string PolicyName,
+    PolicyAggregationStrategy Strategy = PolicyAggregationStrategy.All) : DomainMutationIntent;
+
+public sealed record RemovePolicyFromActionIntent(
+    string EntityName,
+    string ActionName,
     string PolicyName) : DomainMutationIntent;
 
 // ── Rule intents ─────────────────────────────────────────────────────────

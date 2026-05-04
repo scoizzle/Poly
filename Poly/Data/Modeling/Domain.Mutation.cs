@@ -141,6 +141,12 @@ public sealed partial record Domain {
         public Mutation RemoveEffect(Action action, Effect effect) =>
             AddStep(new Action.RemoveEffectCommand(action, effect));
 
+        public Mutation AddPolicy(Action action, Policy policy) =>
+            AddStep(new Action.AddPolicyCommand(action, policy));
+
+        public Mutation RemovePolicy(Action action, Policy policy) =>
+            AddStep(new Action.RemovePolicyCommand(action, policy));
+
         // ── Actor ────────────────────────────────────────────────────────────
 
         public Mutation SetActorSubjectProperty(Actor actor, Property? property) =>

@@ -172,6 +172,8 @@ internal static class DomainAffordances {
         new("command:remove-policy-from-stage", nameof(DomainAuthoringTool.RemovePolicyFromStage), new Dictionary<string, object?>(), "Remove a policy from a stage."),
         new("command:add-policy-to-property", nameof(DomainAuthoringTool.AddPolicyToProperty), new Dictionary<string, object?>(), "Create a policy on a property."),
         new("command:remove-policy-from-property", nameof(DomainAuthoringTool.RemovePolicyFromProperty), new Dictionary<string, object?>(), "Remove a policy from a property."),
+        new("command:add-policy-to-action", nameof(DomainAuthoringTool.AddPolicyToAction), new Dictionary<string, object?>(), "Create a policy on an action."),
+        new("command:remove-policy-from-action", nameof(DomainAuthoringTool.RemovePolicyFromAction), new Dictionary<string, object?>(), "Remove a policy from an action."),
         new("command:add-cross-property-rule", nameof(DomainAuthoringTool.AddCrossPropertyRuleToPolicy), new Dictionary<string, object?>(), "Add a cross-property comparison rule to a policy."),
         new("command:add-actor-type-rule", nameof(DomainAuthoringTool.AddActorTypeRuleToPolicy), new Dictionary<string, object?>(), "Require the actor to be a specific actor type."),
         new("command:add-actor-role-rule", nameof(DomainAuthoringTool.AddActorRoleRuleToPolicy), new Dictionary<string, object?>(), "Require the actor to have a specific role."),
@@ -727,6 +729,37 @@ public static class DomainAuthoringTool {
             var intent = new RemovePolicyFromPropertyIntent(entityName, propertyName, policyName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' removed from property '{propertyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Creates a policy on an action.")]
+    public static DomainCommandResponse AddPolicyToAction(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the new policy.")] string policyName,
+        [Description("Aggregation strategy: All (default) or Any.")] string? strategy = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new AddPolicyToActionIntent(entityName, actionName, policyName, ParseAggregationStrategy(strategy));
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' added to action '{actionName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a policy from an action.")]
+    public static DomainCommandResponse RemovePolicyFromAction(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the policy to remove.")] string policyName) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new RemovePolicyFromActionIntent(entityName, actionName, policyName);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' removed from action '{actionName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }

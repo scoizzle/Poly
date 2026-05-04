@@ -1,5 +1,8 @@
 namespace Poly.Data.Modeling;
 
+/// <summary>
+/// Represents an actor in the system, which can be a user, service, or any entity that can perform actions and have claims.
+/// </summary>
 public sealed partial record Actor : Entity {
     private readonly List<ActorClaimMapping> _claimMappings = [];
 

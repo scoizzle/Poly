@@ -271,6 +271,22 @@ public sealed class DomainMutationIntentEngine {
                         break;
                     }
 
+                case AddPolicyToActionIntent addActionPolicy: {
+                        var entity = domain.RequireEntity(addActionPolicy.EntityName);
+                        var action = entity.RequireAction(addActionPolicy.ActionName);
+                        var policy = new Policy(domain, addActionPolicy.PolicyName) { AggregationStrategy = addActionPolicy.Strategy };
+                        _ = mutation.AddPolicy(action, policy);
+                        break;
+                    }
+
+                case RemovePolicyFromActionIntent removeActionPolicy: {
+                        var entity = domain.RequireEntity(removeActionPolicy.EntityName);
+                        var action = entity.RequireAction(removeActionPolicy.ActionName);
+                        var policy = action.RequirePolicy(removeActionPolicy.PolicyName);
+                        _ = mutation.RemovePolicy(action, policy);
+                        break;
+                    }
+
                 case AddCrossPropertyRuleToPolicyIntent addCrossRule: {
                         var entity = domain.RequireEntity(addCrossRule.EntityName);
                         var policy = entity.RequirePolicy(addCrossRule.PolicyName);

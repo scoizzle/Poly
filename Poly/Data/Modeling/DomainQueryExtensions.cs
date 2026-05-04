@@ -370,6 +370,14 @@ public static class DomainQueryExtensions {
     public static Policy RequirePolicy(this Property property, string name) =>
         property.FindPolicy(name) ?? throw new InvalidOperationException($"Policy '{name}' was not found on property '{property.Name}'.");
 
+    public static Policy? FindPolicy(this Action action, string name) {
+        ArgumentNullException.ThrowIfNull(action);
+        return action.Policies.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+    }
+
+    public static Policy RequirePolicy(this Action action, string name) =>
+        action.FindPolicy(name) ?? throw new InvalidOperationException($"Policy '{name}' was not found on action '{action.Name}'.");
+
     // ── Rule helpers ─────────────────────────────────────────────────────────
 
     public static Rule? FindRule(this Policy policy, string name) {

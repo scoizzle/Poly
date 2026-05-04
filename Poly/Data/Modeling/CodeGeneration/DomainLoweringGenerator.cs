@@ -66,6 +66,13 @@ public sealed class DomainLoweringGenerator {
         return rule switch {
             PropertyRule propertyRule => LowerConstraint(propertyRule.Constraints, subject.GetMember(propertyRule.Value.Name)),
             CrossPropertyRule crossRule => LowerCrossProperty(crossRule, subject),
+            CompositeRule composite => composite.Operator switch {
+                LogicalOperator.And => new And(LowerRule(composite.Left, subject), LowerRule(composite.Right, subject)),
+                LogicalOperator.Or => new Or(LowerRule(composite.Left, subject), LowerRule(composite.Right, subject)),
+                _ => throw new InvalidOperationException($"Unknown logical operator '{composite.Operator}'.")
+            },
+            ActorTypeRule or ActorRoleRule or ActorPropertyRule =>
+                throw new NotSupportedException($"Rule type '{rule.GetType().Name}' requires actor evaluation context and cannot be lowered without it."),
             _ => throw new NotSupportedException($"Unknown rule type '{rule.GetType().Name}'.")
         };
     }

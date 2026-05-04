@@ -5,6 +5,7 @@ using ModelContextProtocol.Server;
 
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.TypeSystem;
+using Poly.Data.Modeling.Validation;
 using Poly.Introspection;
 using Poly.Syntax.Analysis;
 
@@ -160,6 +161,22 @@ internal static class DomainAffordances {
         new("query:event-types", nameof(DomainQueryTool.ListEventTypes), new Dictionary<string, object?>(), "List event types in the domain."),
         new("query:relationships", nameof(DomainQueryTool.ListRelationships), new Dictionary<string, object?>(), "List relationships in the domain."),
         new("command:add-entity", nameof(DomainAuthoringTool.AddEntity), new Dictionary<string, object?>(), "Create a new entity."),
+        new("command:add-actor", nameof(DomainAuthoringTool.AddActor), new Dictionary<string, object?>(), "Create a new actor entity."),
+        new("command:set-actor-subject-property", nameof(DomainAuthoringTool.SetActorSubjectProperty), new Dictionary<string, object?>(), "Set the actor property that maps to the principal subject ID."),
+        new("command:set-actor-role-claim-type", nameof(DomainAuthoringTool.SetActorRoleClaimType), new Dictionary<string, object?>(), "Set the claim type carrying role values for an actor."),
+        new("command:add-actor-claim-mapping", nameof(DomainAuthoringTool.AddActorClaimMapping), new Dictionary<string, object?>(), "Bind a principal claim type to an actor property."),
+        new("command:remove-actor-claim-mapping", nameof(DomainAuthoringTool.RemoveActorClaimMapping), new Dictionary<string, object?>(), "Remove a claim-to-property mapping from an actor."),
+        new("command:add-policy-to-entity", nameof(DomainAuthoringTool.AddPolicyToEntity), new Dictionary<string, object?>(), "Create a policy on an entity."),
+        new("command:remove-policy-from-entity", nameof(DomainAuthoringTool.RemovePolicyFromEntity), new Dictionary<string, object?>(), "Remove a policy from an entity."),
+        new("command:add-policy-to-stage", nameof(DomainAuthoringTool.AddPolicyToStage), new Dictionary<string, object?>(), "Create a policy on a stage."),
+        new("command:remove-policy-from-stage", nameof(DomainAuthoringTool.RemovePolicyFromStage), new Dictionary<string, object?>(), "Remove a policy from a stage."),
+        new("command:add-policy-to-property", nameof(DomainAuthoringTool.AddPolicyToProperty), new Dictionary<string, object?>(), "Create a policy on a property."),
+        new("command:remove-policy-from-property", nameof(DomainAuthoringTool.RemovePolicyFromProperty), new Dictionary<string, object?>(), "Remove a policy from a property."),
+        new("command:add-cross-property-rule", nameof(DomainAuthoringTool.AddCrossPropertyRuleToPolicy), new Dictionary<string, object?>(), "Add a cross-property comparison rule to a policy."),
+        new("command:add-actor-type-rule", nameof(DomainAuthoringTool.AddActorTypeRuleToPolicy), new Dictionary<string, object?>(), "Require the actor to be a specific actor type."),
+        new("command:add-actor-role-rule", nameof(DomainAuthoringTool.AddActorRoleRuleToPolicy), new Dictionary<string, object?>(), "Require the actor to have a specific role."),
+        new("command:add-composite-rule", nameof(DomainAuthoringTool.AddCompositeRuleToPolicy), new Dictionary<string, object?>(), "Combine two existing rules with And/Or."),
+        new("command:remove-rule-from-policy", nameof(DomainAuthoringTool.RemoveRuleFromPolicy), new Dictionary<string, object?>(), "Remove a rule from a policy."),
         new("command:add-primitive", nameof(DomainAuthoringTool.AddPrimitive), new Dictionary<string, object?>(), "Create a new primitive type."),
         new("command:add-event-type", nameof(DomainAuthoringTool.AddEventType), new Dictionary<string, object?>(), "Create a new event type."),
         new("command:add-relationship", nameof(DomainAuthoringTool.AddRelationship), new Dictionary<string, object?>(), "Create a relationship between two entities.")
@@ -539,6 +556,276 @@ public static class DomainAuthoringTool {
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
+
+    [McpServerTool, Description("Adds a new actor type to the domain.")]
+    public static DomainCommandResponse AddActor(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the new actor.")] string name,
+        [Description("Name of the parent entity to inherit from, if any.")] string? parentEntityName = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var parent = string.IsNullOrWhiteSpace(parentEntityName) ? null : state.Domain.RequireEntity(parentEntityName);
+            var analysis = state.Domain.CreateMutation().AddType(new Actor(state.Domain, name, parent)).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Actor '{name}' added.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Sets the property on an actor type that holds the external subject identifier (maps to the JWT 'sub' claim or equivalent). Pass null or empty to clear.")]
+    public static DomainCommandResponse SetActorSubjectProperty(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the actor type to configure.")] string actorName,
+        [Description("Name of the actor property that holds the external subject ID. Null or empty to clear.")] string? propertyName = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var actor = state.Domain.RequireActor(actorName);
+            var property = string.IsNullOrWhiteSpace(propertyName) ? null : actor.RequireProperty(propertyName);
+            var analysis = state.Domain.CreateMutation().SetActorSubjectProperty(actor, property).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, property is null
+                ? $"Subject property cleared on actor '{actorName}'."
+                : $"Subject property set to '{propertyName}' on actor '{actorName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Sets the claim type used to carry role values for an actor type (e.g. 'role' or 'roles'). Pass null or empty to clear and use the runtime default.")]
+    public static DomainCommandResponse SetActorRoleClaimType(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the actor type to configure.")] string actorName,
+        [Description("Claim type carrying role values. Null or empty to clear.")] string? roleClaimType = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var actor = state.Domain.RequireActor(actorName);
+            var value = string.IsNullOrWhiteSpace(roleClaimType) ? null : roleClaimType;
+            var analysis = state.Domain.CreateMutation().SetActorRoleClaimType(actor, value).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, value is null
+                ? $"Role claim type cleared on actor '{actorName}'."
+                : $"Role claim type set to '{value}' on actor '{actorName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds a claim-to-property mapping on an actor type, binding a named principal claim to an actor property.")]
+    public static DomainCommandResponse AddActorClaimMapping(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the actor type to configure.")] string actorName,
+        [Description("The claim type on the principal (e.g. 'email').")] string claimType,
+        [Description("The actor property name that receives the claim value.")] string propertyName) {
+        try {
+            var state = RequireSession(sessionId);
+            var actor = state.Domain.RequireActor(actorName);
+            var property = actor.RequireProperty(propertyName);
+            var mapping = new ActorClaimMapping(claimType, property);
+            var analysis = state.Domain.CreateMutation().AddActorClaimMapping(actor, mapping).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Claim mapping '{claimType}' → '{propertyName}' added to actor '{actorName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a claim-to-property mapping from an actor type by claim type.")]
+    public static DomainCommandResponse RemoveActorClaimMapping(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the actor type to configure.")] string actorName,
+        [Description("The claim type to remove.")] string claimType) {
+        try {
+            var state = RequireSession(sessionId);
+            var actor = state.Domain.RequireActor(actorName);
+            var mapping = actor.ClaimMappings.FirstOrDefault(m => string.Equals(m.ClaimType, claimType, StringComparison.Ordinal))
+                ?? throw new InvalidOperationException($"Claim mapping for '{claimType}' not found on actor '{actorName}'.");
+            var analysis = state.Domain.CreateMutation().RemoveActorClaimMapping(actor, mapping).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Claim mapping '{claimType}' removed from actor '{actorName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    // ── Policy tools ─────────────────────────────────────────────────────────
+
+    [McpServerTool, Description("Creates a policy on an entity.")]
+    public static DomainCommandResponse AddPolicyToEntity(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity.")] string entityName,
+        [Description("Name of the new policy.")] string policyName,
+        [Description("Aggregation strategy: All (default) or Any.")] string? strategy = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new AddPolicyToEntityIntent(entityName, policyName, ParseAggregationStrategy(strategy));
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' added to entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a policy from an entity.")]
+    public static DomainCommandResponse RemovePolicyFromEntity(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity.")] string entityName,
+        [Description("Name of the policy to remove.")] string policyName) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new RemovePolicyFromEntityIntent(entityName, policyName);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' removed from entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Creates a policy on a stage.")]
+    public static DomainCommandResponse AddPolicyToStage(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the stage.")] string entityName,
+        [Description("Name of the stage.")] string stageName,
+        [Description("Name of the new policy.")] string policyName,
+        [Description("Aggregation strategy: All (default) or Any.")] string? strategy = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new AddPolicyToStageIntent(entityName, stageName, policyName, ParseAggregationStrategy(strategy));
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' added to stage '{stageName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a policy from a stage.")]
+    public static DomainCommandResponse RemovePolicyFromStage(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the stage.")] string entityName,
+        [Description("Name of the stage.")] string stageName,
+        [Description("Name of the policy to remove.")] string policyName) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new RemovePolicyFromStageIntent(entityName, stageName, policyName);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' removed from stage '{stageName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Creates a policy on a property.")]
+    public static DomainCommandResponse AddPolicyToProperty(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the property.")] string entityName,
+        [Description("Name of the property.")] string propertyName,
+        [Description("Name of the new policy.")] string policyName,
+        [Description("Aggregation strategy: All (default) or Any.")] string? strategy = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new AddPolicyToPropertyIntent(entityName, propertyName, policyName, ParseAggregationStrategy(strategy));
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' added to property '{propertyName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a policy from a property.")]
+    public static DomainCommandResponse RemovePolicyFromProperty(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the property.")] string entityName,
+        [Description("Name of the property.")] string propertyName,
+        [Description("Name of the policy to remove.")] string policyName) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new RemovePolicyFromPropertyIntent(entityName, propertyName, policyName);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Policy '{policyName}' removed from property '{propertyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    // ── Rule tools ───────────────────────────────────────────────────────────
+
+    [McpServerTool, Description("Adds a cross-property comparison rule to a policy on an entity.")]
+    public static DomainCommandResponse AddCrossPropertyRuleToPolicy(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the policy.")] string entityName,
+        [Description("Name of the policy.")] string policyName,
+        [Description("Name for the new rule.")] string ruleName,
+        [Description("Name of the left-hand property.")] string leftPropertyName,
+        [Description("Name of the right-hand property.")] string rightPropertyName,
+        [Description("Comparison operator: Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual.")] string @operator) {
+        try {
+            var state = RequireSession(sessionId);
+            var op = Enum.Parse<DomainComparisonOperator>(@operator, ignoreCase: true);
+            var intent = new AddCrossPropertyRuleToPolicyIntent(entityName, policyName, ruleName, leftPropertyName, rightPropertyName, op);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"CrossProperty rule '{ruleName}' added to policy '{policyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds a rule to a policy requiring the evaluating actor to be of the specified actor type.")]
+    public static DomainCommandResponse AddActorTypeRuleToPolicy(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the policy.")] string entityName,
+        [Description("Name of the policy.")] string policyName,
+        [Description("Name for the new rule.")] string ruleName,
+        [Description("Name of the actor type the principal must be.")] string actorTypeName) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new AddActorTypeRuleToPolicyIntent(entityName, policyName, ruleName, actorTypeName);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"ActorType rule '{ruleName}' added to policy '{policyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds a rule to a policy requiring the evaluating actor to have a specific role.")]
+    public static DomainCommandResponse AddActorRoleRuleToPolicy(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the policy.")] string entityName,
+        [Description("Name of the policy.")] string policyName,
+        [Description("Name for the new rule.")] string ruleName,
+        [Description("Role value the actor must have.")] string role) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new AddActorRoleRuleToPolicyIntent(entityName, policyName, ruleName, role);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"ActorRole rule '{ruleName}' (role='{role}') added to policy '{policyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Combines two existing rules in the same policy with And or Or.")]
+    public static DomainCommandResponse AddCompositeRuleToPolicy(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the policy.")] string entityName,
+        [Description("Name of the policy.")] string policyName,
+        [Description("Name for the new composite rule.")] string ruleName,
+        [Description("Name of the left rule.")] string leftRuleName,
+        [Description("Name of the right rule.")] string rightRuleName,
+        [Description("Logical operator: And or Or.")] string @operator) {
+        try {
+            var state = RequireSession(sessionId);
+            var op = Enum.Parse<LogicalOperator>(@operator, ignoreCase: true);
+            var intent = new AddCompositeRuleToPolicyIntent(entityName, policyName, ruleName, leftRuleName, rightRuleName, op);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Composite rule '{ruleName}' ({leftRuleName} {op} {rightRuleName}) added to policy '{policyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a rule from a policy on an entity.")]
+    public static DomainCommandResponse RemoveRuleFromPolicy(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the policy.")] string entityName,
+        [Description("Name of the policy.")] string policyName,
+        [Description("Name of the rule to remove.")] string ruleName) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new RemoveRuleFromPolicyIntent(entityName, policyName, ruleName);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"Rule '{ruleName}' removed from policy '{policyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    private static PolicyAggregationStrategy ParseAggregationStrategy(string? value) {
+        if (string.IsNullOrWhiteSpace(value)) return PolicyAggregationStrategy.All;
+        if (Enum.TryParse<PolicyAggregationStrategy>(value, ignoreCase: true, out var parsed)) return parsed;
+        throw new InvalidOperationException($"Unknown aggregation strategy '{value}'. Expected 'All' or 'Any'.");
+    }
+
+    private static AnalysisResult ApplyIntent(DomainSessionState state, DomainMutationIntent intent) =>
+        new DomainMutationIntentEngine().Apply(state.Domain, intent, preMutationAnalysis: state.LatestAnalysis);
 
     [McpServerTool, Description("Adds a primitive type to the domain.")]
     public static DomainCommandResponse AddPrimitive(

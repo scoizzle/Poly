@@ -56,6 +56,20 @@ public static class DomainMutationExtensions {
     public static void RemoveRelationship(this Entity entity, Relationship relationship) =>
         entity.Domain.CreateMutation().RemoveEntityRelationship(entity, relationship).Apply();
 
+    // ── Actor ────────────────────────────────────────────────────────────────
+
+    public static void SetSubjectProperty(this Actor actor, Property? property) =>
+        actor.Domain.CreateMutation().SetActorSubjectProperty(actor, property).Apply();
+
+    public static void SetRoleClaimType(this Actor actor, string? roleClaimType) =>
+        actor.Domain.CreateMutation().SetActorRoleClaimType(actor, roleClaimType).Apply();
+
+    public static void AddClaimMapping(this Actor actor, ActorClaimMapping mapping) =>
+        actor.Domain.CreateMutation().AddActorClaimMapping(actor, mapping).Apply();
+
+    public static void RemoveClaimMapping(this Actor actor, ActorClaimMapping mapping) =>
+        actor.Domain.CreateMutation().RemoveActorClaimMapping(actor, mapping).Apply();
+
     // ── Stage ────────────────────────────────────────────────────────────────
 
     public static void AddPolicy(this Stage stage, Policy policy) =>

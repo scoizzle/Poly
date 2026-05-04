@@ -16,6 +16,12 @@ public static class DomainQueryExtensions {
         return domain.Types.OfType<Entity>();
     }
 
+    public static IEnumerable<Actor> GetAvailableActors(this Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+
+        return domain.Types.OfType<Actor>();
+    }
+
     public static IEnumerable<Primitive> GetAvailablePrimitives(this Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
 
@@ -43,6 +49,17 @@ public static class DomainQueryExtensions {
 
     public static Entity RequireEntity(this Domain domain, string name) {
         return domain.FindEntity(name) ?? throw new InvalidOperationException($"Entity '{name}' was not found in domain '{domain.Name}'.");
+    }
+
+    public static Actor? FindActor(this Domain domain, string name) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(name);
+
+        return domain.Types.OfType<Actor>().FirstOrDefault(actor => string.Equals(actor.Name, name, StringComparison.Ordinal));
+    }
+
+    public static Actor RequireActor(this Domain domain, string name) {
+        return domain.FindActor(name) ?? throw new InvalidOperationException($"Actor '{name}' was not found in domain '{domain.Name}'.");
     }
 
     public static Primitive? FindPrimitive(this Domain domain, string name) {
@@ -326,5 +343,41 @@ public static class DomainQueryExtensions {
 
         return action.Effects.OfType<StageTransition>().Select(effect => effect.TargetStage);
     }
+
+    // ── Policy helpers ───────────────────────────────────────────────────────
+
+    public static Policy? FindPolicy(this Entity entity, string name) {
+        ArgumentNullException.ThrowIfNull(entity);
+        return entity.Policies.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+    }
+
+    public static Policy RequirePolicy(this Entity entity, string name) =>
+        entity.FindPolicy(name) ?? throw new InvalidOperationException($"Policy '{name}' was not found on entity '{entity.Name}'.");
+
+    public static Policy? FindPolicy(this Stage stage, string name) {
+        ArgumentNullException.ThrowIfNull(stage);
+        return stage.Policies.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+    }
+
+    public static Policy RequirePolicy(this Stage stage, string name) =>
+        stage.FindPolicy(name) ?? throw new InvalidOperationException($"Policy '{name}' was not found on stage '{stage.Name}'.");
+
+    public static Policy? FindPolicy(this Property property, string name) {
+        ArgumentNullException.ThrowIfNull(property);
+        return property.Policies.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+    }
+
+    public static Policy RequirePolicy(this Property property, string name) =>
+        property.FindPolicy(name) ?? throw new InvalidOperationException($"Policy '{name}' was not found on property '{property.Name}'.");
+
+    // ── Rule helpers ─────────────────────────────────────────────────────────
+
+    public static Rule? FindRule(this Policy policy, string name) {
+        ArgumentNullException.ThrowIfNull(policy);
+        return policy.Rules.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
+    }
+
+    public static Rule RequireRule(this Policy policy, string name) =>
+        policy.FindRule(name) ?? throw new InvalidOperationException($"Rule '{name}' was not found in policy '{policy.Name}'.");
 
 }

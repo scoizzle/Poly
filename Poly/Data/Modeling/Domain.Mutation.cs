@@ -141,6 +141,20 @@ public sealed partial record Domain {
         public Mutation RemoveEffect(Action action, Effect effect) =>
             AddStep(new Action.RemoveEffectCommand(action, effect));
 
+        // ── Actor ────────────────────────────────────────────────────────────
+
+        public Mutation SetActorSubjectProperty(Actor actor, Property? property) =>
+            AddStep(new Actor.SetSubjectPropertyCommand(actor, property));
+
+        public Mutation SetActorRoleClaimType(Actor actor, string? roleClaimType) =>
+            AddStep(new Actor.SetRoleClaimTypeCommand(actor, roleClaimType));
+
+        public Mutation AddActorClaimMapping(Actor actor, ActorClaimMapping mapping) =>
+            AddStep(new Actor.AddClaimMappingCommand(actor, mapping));
+
+        public Mutation RemoveActorClaimMapping(Actor actor, ActorClaimMapping mapping) =>
+            AddStep(new Actor.RemoveClaimMappingCommand(actor, mapping));
+
         // ── Execution ────────────────────────────────────────────────────────
 
         public AnalysisResult Apply(AnalysisResult? preMutationAnalysis = null) {

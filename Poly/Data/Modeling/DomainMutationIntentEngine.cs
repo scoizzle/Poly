@@ -54,8 +54,42 @@ public sealed class DomainMutationIntentEngine {
                     break;
 
                 case AddEntityTypeIntent addEntityType:
-                    _ = mutation.AddType(CreateEntity(domain, addEntityType));
+                    _ = mutation.AddType(CreateEntity(domain, addEntityType.Name, addEntityType.ParentEntity, isActor: false));
                     break;
+
+                case AddActorTypeIntent addActorType:
+                    _ = mutation.AddType(CreateEntity(domain, addActorType.Name, addActorType.ParentEntity, isActor: true));
+                    break;
+
+                case SetActorSubjectPropertyIntent setSubject: {
+                        var actor = domain.RequireActor(setSubject.ActorName);
+                        var property = string.IsNullOrWhiteSpace(setSubject.PropertyName)
+                            ? null
+                            : actor.RequireProperty(setSubject.PropertyName);
+                        _ = mutation.SetActorSubjectProperty(actor, property);
+                        break;
+                    }
+
+                case SetActorRoleClaimTypeIntent setRole: {
+                        var actor = domain.RequireActor(setRole.ActorName);
+                        _ = mutation.SetActorRoleClaimType(actor, string.IsNullOrWhiteSpace(setRole.RoleClaimType) ? null : setRole.RoleClaimType);
+                        break;
+                    }
+
+                case AddActorClaimMappingIntent addMapping: {
+                        var actor = domain.RequireActor(addMapping.ActorName);
+                        var property = actor.RequireProperty(addMapping.PropertyName);
+                        _ = mutation.AddActorClaimMapping(actor, new ActorClaimMapping(addMapping.ClaimType, property));
+                        break;
+                    }
+
+                case RemoveActorClaimMappingIntent removeMapping: {
+                        var actor = domain.RequireActor(removeMapping.ActorName);
+                        var mapping = actor.ClaimMappings.FirstOrDefault(m => string.Equals(m.ClaimType, removeMapping.ClaimType, StringComparison.Ordinal))
+                            ?? throw new InvalidOperationException($"Claim mapping for '{removeMapping.ClaimType}' not found on actor '{removeMapping.ActorName}'.");
+                        _ = mutation.RemoveActorClaimMapping(actor, mapping);
+                        break;
+                    }
 
                 case AddEventTypeIntent addEventType:
                     _ = mutation.AddType(new Event(domain, addEventType.Name));
@@ -191,6 +225,93 @@ public sealed class DomainMutationIntentEngine {
                         break;
                     }
 
+                case AddPolicyToEntityIntent addEntityPolicy: {
+                        var entity = domain.RequireEntity(addEntityPolicy.EntityName);
+                        var policy = new Policy(domain, addEntityPolicy.PolicyName) { AggregationStrategy = addEntityPolicy.Strategy };
+                        _ = mutation.AddPolicy(entity, policy);
+                        break;
+                    }
+
+                case RemovePolicyFromEntityIntent removeEntityPolicy: {
+                        var entity = domain.RequireEntity(removeEntityPolicy.EntityName);
+                        var policy = entity.RequirePolicy(removeEntityPolicy.PolicyName);
+                        _ = mutation.RemovePolicy(entity, policy);
+                        break;
+                    }
+
+                case AddPolicyToStageIntent addStagePolicy: {
+                        var entity = domain.RequireEntity(addStagePolicy.EntityName);
+                        var stage = entity.RequireStage(addStagePolicy.StageName);
+                        var policy = new Policy(domain, addStagePolicy.PolicyName) { AggregationStrategy = addStagePolicy.Strategy };
+                        _ = mutation.AddPolicy(stage, policy);
+                        break;
+                    }
+
+                case RemovePolicyFromStageIntent removeStagePolicy: {
+                        var entity = domain.RequireEntity(removeStagePolicy.EntityName);
+                        var stage = entity.RequireStage(removeStagePolicy.StageName);
+                        var policy = stage.RequirePolicy(removeStagePolicy.PolicyName);
+                        _ = mutation.RemovePolicy(stage, policy);
+                        break;
+                    }
+
+                case AddPolicyToPropertyIntent addPropPolicy: {
+                        var entity = domain.RequireEntity(addPropPolicy.EntityName);
+                        var property = entity.RequireProperty(addPropPolicy.PropertyName);
+                        var policy = new Policy(domain, addPropPolicy.PolicyName) { AggregationStrategy = addPropPolicy.Strategy };
+                        _ = mutation.AddPolicy(property, policy);
+                        break;
+                    }
+
+                case RemovePolicyFromPropertyIntent removePropPolicy: {
+                        var entity = domain.RequireEntity(removePropPolicy.EntityName);
+                        var property = entity.RequireProperty(removePropPolicy.PropertyName);
+                        var policy = property.RequirePolicy(removePropPolicy.PolicyName);
+                        _ = mutation.RemovePolicy(property, policy);
+                        break;
+                    }
+
+                case AddCrossPropertyRuleToPolicyIntent addCrossRule: {
+                        var entity = domain.RequireEntity(addCrossRule.EntityName);
+                        var policy = entity.RequirePolicy(addCrossRule.PolicyName);
+                        var left = entity.RequireProperty(addCrossRule.LeftPropertyName);
+                        var right = entity.RequireProperty(addCrossRule.RightPropertyName);
+                        _ = mutation.AddRule(policy, new CrossPropertyRule(domain, addCrossRule.RuleName, left, right, addCrossRule.Operator));
+                        break;
+                    }
+
+                case AddActorTypeRuleToPolicyIntent addActorTypeRule: {
+                        var entity = domain.RequireEntity(addActorTypeRule.EntityName);
+                        var policy = entity.RequirePolicy(addActorTypeRule.PolicyName);
+                        var actorType = domain.RequireActor(addActorTypeRule.ActorTypeName);
+                        _ = mutation.AddRule(policy, new ActorTypeRule(domain, addActorTypeRule.RuleName, actorType));
+                        break;
+                    }
+
+                case AddActorRoleRuleToPolicyIntent addActorRoleRule: {
+                        var entity = domain.RequireEntity(addActorRoleRule.EntityName);
+                        var policy = entity.RequirePolicy(addActorRoleRule.PolicyName);
+                        _ = mutation.AddRule(policy, new ActorRoleRule(domain, addActorRoleRule.RuleName, addActorRoleRule.Role));
+                        break;
+                    }
+
+                case AddCompositeRuleToPolicyIntent addComposite: {
+                        var entity = domain.RequireEntity(addComposite.EntityName);
+                        var policy = entity.RequirePolicy(addComposite.PolicyName);
+                        var left = policy.RequireRule(addComposite.LeftRuleName);
+                        var right = policy.RequireRule(addComposite.RightRuleName);
+                        _ = mutation.AddRule(policy, new CompositeRule(domain, addComposite.RuleName, left, right, addComposite.Operator));
+                        break;
+                    }
+
+                case RemoveRuleFromPolicyIntent removeRule: {
+                        var entity = domain.RequireEntity(removeRule.EntityName);
+                        var policy = entity.RequirePolicy(removeRule.PolicyName);
+                        var rule = policy.RequireRule(removeRule.RuleName);
+                        _ = mutation.RemoveRule(policy, rule);
+                        break;
+                    }
+
                 default:
                     throw new NotSupportedException($"Unsupported domain mutation intent '{intent.GetType().Name}'.");
             }
@@ -204,12 +325,14 @@ public sealed class DomainMutationIntentEngine {
             ?? throw new InvalidOperationException($"Type '{typeName}' was not found in domain '{domain.Name}'.");
     }
 
-    private static Entity CreateEntity(Domain domain, AddEntityTypeIntent intent) {
-        var parent = intent.ParentEntity is null
+    private static Entity CreateEntity(Domain domain, string name, DomainNodeReference? parentEntity, bool isActor) {
+        var parent = parentEntity is null
             ? null
-            : ResolveNode<Entity>(domain, intent.ParentEntity);
+            : ResolveNode<Entity>(domain, parentEntity);
 
-        return new Entity(domain, intent.Name, parent);
+        return isActor
+            ? new Actor(domain, name, parent)
+            : new Entity(domain, name, parent);
     }
 
     private static Relationship CreateRelationship(Domain domain, AddRelationshipIntent intent) {

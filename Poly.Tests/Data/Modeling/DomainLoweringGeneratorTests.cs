@@ -26,7 +26,7 @@ public class DomainLoweringGeneratorTests {
         var analysis = new AnalysisResult(context);
         var generator = new DomainLoweringGenerator(analysis);
 
-        var lowered = generator.Lower(clause, subject);
+        var lowered = generator.Lower(clause);
         var predicate = lowered.CompileLambda<Func<Person, bool>>((subject, typeof(Person)));
 
         await Assert.That(predicate(new Person { Age = 18 })).IsTrue();
@@ -45,7 +45,7 @@ public class DomainLoweringGeneratorTests {
         var analysis = new AnalysisResult(context);
         var generator = new DomainLoweringGenerator(analysis);
 
-        var lowered = generator.Lower(clause, subject);
+        var lowered = generator.Lower(clause);
         var predicate = lowered.CompileLambda<Func<Person, bool>>((subject, typeof(Person)));
 
         await Assert.That(predicate(new Person { Age = 18 })).IsTrue();

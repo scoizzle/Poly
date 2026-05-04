@@ -6,9 +6,4 @@ public sealed class RequiredConstraint : Constraint {
     /// and is a no-op for non-nullable types.
     /// </summary>
     public TypeCategory ApplicableCategories => TypeCategory.None;
-
-    public Node ToInterpretationNode(Node value) {
-        var notNullCheck = new NotEqual(value, Null);
-        return notNullCheck;
-    }
 }

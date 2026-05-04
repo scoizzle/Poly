@@ -54,14 +54,4 @@ public sealed class ConstraintSet : Constraint {
 
         return sharedCategories ?? TypeCategory.None;
     }
-
-    public Node ToInterpretationNode(Node value) {
-        var nodes = Constraints.Select(c => c.ToInterpretationNode(value));
-
-        return AggregationStrategy switch {
-            ConstraintAggregationStrategy.All => nodes.Aggregate((Node)True, (acc, node) => new And(acc, node)),
-            ConstraintAggregationStrategy.Any => nodes.Aggregate((Node)False, (acc, node) => new Or(acc, node)),
-            _ => throw new InvalidOperationException("Unknown aggregation strategy.")
-        };
-    }
 }

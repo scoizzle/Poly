@@ -31,8 +31,14 @@ public sealed partial record Domain {
         public Mutation AddType(DomainType type) =>
             AddStep(new AddTypeCommand(Domain, type));
 
+        public Mutation RemoveType(DomainType type) =>
+            AddStep(new RemoveTypeCommand(Domain, type));
+
         public Mutation AddRelationship(Relationship relationship) =>
             AddStep(new AddRelationshipCommand(Domain, relationship));
+
+        public Mutation RemoveRelationship(Relationship relationship) =>
+            AddStep(new RemoveRelationshipCommand(Domain, relationship));
 
         // ── Entity ───────────────────────────────────────────────────────────
 

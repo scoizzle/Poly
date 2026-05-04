@@ -1,10 +1,12 @@
+using Poly.Data.Modeling.Validation;
+using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Syntax.Nodes;
 
 namespace Poly.Data.Modeling;
 
 /// <summary>
 /// Lowers Domain Modeling syntax clauses into executable interpretation AST nodes.
-/// The lowering process is contextualized by analysis results and a root subject node.
+/// The lowering process is contextualized by analysis results.
 /// </summary>
 public sealed class DomainLoweringGenerator {
     private readonly AnalysisResult _analysis;
@@ -14,30 +16,125 @@ public sealed class DomainLoweringGenerator {
         _analysis = analysis;
     }
 
-    public Node Lower(Node root, Node subjectRoot) {
+    public Node Lower(Node root) {
         ArgumentNullException.ThrowIfNull(root);
-        ArgumentNullException.ThrowIfNull(subjectRoot);
 
-        var lowered = LowerCore(root, subjectRoot);
+        var lowered = LowerCore(root);
 
         // Honor replacement metadata produced by analyzers for the lowered output.
         var replacement = _analysis.GetNodeReplacement(lowered);
         return replacement ?? lowered;
     }
 
-    private static Node LowerCore(Node expression, Node subjectRoot) {
-        _ = subjectRoot;
-
+    private static Node LowerCore(Node expression) {
         return expression switch {
-            And and => new And(LowerCore(and.LeftHandValue, subjectRoot), LowerCore(and.RightHandValue, subjectRoot)),
-            Or or => new Or(LowerCore(or.LeftHandValue, subjectRoot), LowerCore(or.RightHandValue, subjectRoot)),
-            Equal equal => new Equal(LowerCore(equal.LeftHandValue, subjectRoot), LowerCore(equal.RightHandValue, subjectRoot)),
-            NotEqual notEqual => new NotEqual(LowerCore(notEqual.LeftHandValue, subjectRoot), LowerCore(notEqual.RightHandValue, subjectRoot)),
-            GreaterThanOrEqual greaterThanOrEqual => new GreaterThanOrEqual(LowerCore(greaterThanOrEqual.LeftHandValue, subjectRoot), LowerCore(greaterThanOrEqual.RightHandValue, subjectRoot)),
-            LessThanOrEqual lessThanOrEqual => new LessThanOrEqual(LowerCore(lessThanOrEqual.LeftHandValue, subjectRoot), LowerCore(lessThanOrEqual.RightHandValue, subjectRoot)),
-            Member memberAccess => new Member(LowerCore(memberAccess.Value, subjectRoot), memberAccess.MemberName),
+            And and => new And(LowerCore(and.LeftHandValue), LowerCore(and.RightHandValue)),
+            Or or => new Or(LowerCore(or.LeftHandValue), LowerCore(or.RightHandValue)),
+            Equal equal => new Equal(LowerCore(equal.LeftHandValue), LowerCore(equal.RightHandValue)),
+            NotEqual notEqual => new NotEqual(LowerCore(notEqual.LeftHandValue), LowerCore(notEqual.RightHandValue)),
+            GreaterThanOrEqual greaterThanOrEqual => new GreaterThanOrEqual(LowerCore(greaterThanOrEqual.LeftHandValue), LowerCore(greaterThanOrEqual.RightHandValue)),
+            LessThanOrEqual lessThanOrEqual => new LessThanOrEqual(LowerCore(lessThanOrEqual.LeftHandValue), LowerCore(lessThanOrEqual.RightHandValue)),
+            Member memberAccess => new Member(LowerCore(memberAccess.Value), memberAccess.MemberName),
             Constant constant => new Constant(constant.Value),
             _ => expression
+        };
+    }
+
+    // ── Policy / Rule / Constraint lowering ──────────────────────────────────
+
+    public static Node LowerPolicy(Policy policy, Node subject) {
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(subject);
+
+        if (policy.Rules.Count == 0) {
+            return True;
+        }
+
+        var nodes = policy.Rules.Select(rule => LowerRule(rule, subject));
+
+        return policy.AggregationStrategy switch {
+            PolicyAggregationStrategy.All => nodes.Aggregate((Node)True, static (acc, node) => new And(acc, node)),
+            PolicyAggregationStrategy.Any => nodes.Aggregate((Node)False, static (acc, node) => new Or(acc, node)),
+            _ => throw new InvalidOperationException($"Unknown aggregation strategy '{policy.AggregationStrategy}'.")
+        };
+    }
+
+    public static Node LowerRule(Rule rule, Node subject) {
+        ArgumentNullException.ThrowIfNull(rule);
+        ArgumentNullException.ThrowIfNull(subject);
+
+        return rule switch {
+            PropertyRule propertyRule => LowerConstraint(propertyRule.Constraints, subject.GetMember(propertyRule.Value.Name)),
+            CrossPropertyRule crossRule => LowerCrossProperty(crossRule, subject),
+            _ => throw new NotSupportedException($"Unknown rule type '{rule.GetType().Name}'.")
+        };
+    }
+
+    public static Node LowerConstraint(Constraint constraint, Node value) {
+        ArgumentNullException.ThrowIfNull(constraint);
+        ArgumentNullException.ThrowIfNull(value);
+
+        return constraint switch {
+            RequiredConstraint => new NotEqual(value, Null),
+            EqualityConstraint eq => new Equal(value, Wrap(eq.Value)),
+            RangeConstraint range => LowerRange(range, value),
+            LengthConstraint length => LowerLength(length, value),
+            ConstraintSet set => LowerConstraintSet(set, value),
+            _ => throw new NotSupportedException($"Unknown constraint type '{constraint.GetType().Name}'.")
+        };
+    }
+
+    private static Node LowerRange(RangeConstraint range, Node value) {
+        Node? minCheck = range.MinValue is null ? null : new GreaterThanOrEqual(value, Wrap(range.MinValue));
+        Node? maxCheck = range.MaxValue is null ? null : new LessThanOrEqual(value, Wrap(range.MaxValue));
+
+        return (minCheck, maxCheck) switch {
+            (Node min, Node max) => new And(min, max),
+            (Node min, null) => min,
+            (null, Node max) => max,
+            _ => True
+        };
+    }
+
+    private static Node LowerLength(LengthConstraint length, Node value) {
+        var len = value.GetMember("Length");
+        Node? minCheck = length.MinLength.HasValue ? new GreaterThanOrEqual(len, Wrap(length.MinLength.Value)) : null;
+        Node? maxCheck = length.MaxLength.HasValue ? new LessThanOrEqual(len, Wrap(length.MaxLength.Value)) : null;
+
+        return (minCheck, maxCheck) switch {
+            (Node min, Node max) => new And(min, max),
+            (Node min, null) => min,
+            (null, Node max) => max,
+            _ => Wrap(true)
+        };
+    }
+
+    private static Node LowerConstraintSet(ConstraintSet set, Node value) {
+        if (set.Constraints.Count == 0) {
+            return True;
+        }
+
+        var nodes = set.Constraints.Select(c => LowerConstraint(c, value));
+
+        return set.AggregationStrategy switch {
+            ConstraintAggregationStrategy.All => nodes.Aggregate((Node)True, static (acc, node) => new And(acc, node)),
+            ConstraintAggregationStrategy.Any => nodes.Aggregate((Node)False, static (acc, node) => new Or(acc, node)),
+            _ => throw new InvalidOperationException($"Unknown aggregation strategy '{set.AggregationStrategy}'.")
+        };
+    }
+
+    private static Node LowerCrossProperty(CrossPropertyRule rule, Node subject) {
+        var left = subject.GetMember(rule.Left.Name);
+        var right = subject.GetMember(rule.Right.Name);
+
+        return rule.Operator switch {
+            DomainComparisonOperator.Equal => new Equal(left, right),
+            DomainComparisonOperator.NotEqual => new NotEqual(left, right),
+            DomainComparisonOperator.GreaterThan => new GreaterThan(left, right),
+            DomainComparisonOperator.GreaterThanOrEqual => new GreaterThanOrEqual(left, right),
+            DomainComparisonOperator.LessThan => new LessThan(left, right),
+            DomainComparisonOperator.LessThanOrEqual => new LessThanOrEqual(left, right),
+            _ => throw new InvalidOperationException($"Unknown comparison operator '{rule.Operator}'.")
         };
     }
 }

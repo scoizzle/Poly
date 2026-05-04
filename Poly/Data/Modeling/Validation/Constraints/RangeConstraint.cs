@@ -19,23 +19,4 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
     /// <inheritdoc />
     public TypeCategory ApplicableCategories => TypeCategory.Numeric | TypeCategory.Temporal;
 
-    /// <inheritdoc />
-    public Node ToInterpretationNode(Node value) {
-        Node? minCheck = MinValue is null
-            ? null
-            : new GreaterThanOrEqual(value, Wrap(MinValue));
-
-        Node? maxCheck = MaxValue is null
-            ? null
-            : new LessThanOrEqual(value, Wrap(MaxValue));
-
-        var rangeCheck = (minCheck, maxCheck) switch {
-            (Node min, Node max) => new And(min, max),
-            (Node min, null) => min,
-            (null, Node max) => max,
-            _ => True
-        };
-
-        return rangeCheck;
-    }
 }

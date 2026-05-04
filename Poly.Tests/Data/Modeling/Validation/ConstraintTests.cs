@@ -1,3 +1,4 @@
+using Poly.Data.Modeling;
 using Poly.Data.Modeling.Validation;
 using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Introspection;
@@ -220,8 +221,8 @@ public class ConstraintTests {
     }
 
     private static Func<T, bool> CompileConstraintPredicate<T>(Constraint constraint) {
-        var param = new Parameter("value", TypeReference.To<T>());
-        var interpretation = constraint.ToInterpretationNode(param);
-        return interpretation.CompileLambda<Func<T, bool>>((param, typeof(T)));
+        var p = new Parameter("value", TypeReference.To<T>());
+        var interpretation = DomainLoweringGenerator.LowerConstraint(constraint, p);
+        return interpretation.CompileLambda<Func<T, bool>>([(p, typeof(T))]);
     }
 }

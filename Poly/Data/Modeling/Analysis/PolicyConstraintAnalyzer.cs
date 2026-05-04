@@ -45,7 +45,7 @@ internal static class PolicyConstraintHelpers {
     }
 
     private static void CollectRequiredFromPolicy(Policy policy, Dictionary<string, Property> entityProperties, Dictionary<string, Property> required) {
-        foreach (var rule in policy.Rules.OfType<Rule>()) {
+        foreach (var rule in policy.Rules.OfType<PropertyRule>()) {
             if (rule.Value is not Property policyProperty) {
                 continue;
             }
@@ -157,7 +157,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             .ToHashSet(StringComparer.Ordinal);
 
         foreach (var policy in entity.Policies.Concat(entity.Properties.SelectMany(static property => property.Policies))) {
-            foreach (var rule in policy.Rules.OfType<Rule>()) {
+            foreach (var rule in policy.Rules.OfType<PropertyRule>()) {
                 if (rule.Value is not Property property) {
                     continue;
                 }
@@ -182,7 +182,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
 
         try {
             var constraintSet = new ConstraintSet(ConstraintAggregationStrategy.All, constraints);
-            return constraintSet.ToInterpretationNode(subject);
+            return DomainLoweringGenerator.LowerConstraint(constraintSet, subject);
         }
         catch (Exception ex) {
             context.ReportError(

@@ -1,24 +1,14 @@
+using Poly.Data.Modeling.TypeSystem;
+using Poly.Data.Modeling.Validation;
+
 namespace Poly.Data.Modeling;
 
 /// <summary>
-/// A rule that targets a single property value.
+/// A rule that targets a single property value with a set of constraints.
 /// </summary>
-/// <param name="Value"><inheritdoc/></param>
-/// <param name="Constraints"><inheritdoc/></param>
-public sealed record PropertyRule(Domain Domain, string Name, TypeSystem.DomainValue Value, Validation.Constraint Constraints) : Rule(Domain, Name, Value, Constraints);
-
+public sealed record PropertyRule(Domain Domain, string Name, DomainValue Value, Constraint Constraints) : Rule(Domain, Name);
 
 /// <summary>
-/// A policy rule backed by an expression factory, useful for cross-property predicates.
+/// A rule that expresses a comparison between two property values on the same domain object.
 /// </summary>
-/// <param name="Value"><inheritdoc/></param>
-/// <param name="Constraints"><inheritdoc/></param>
-/// <param name="Predicate"></param>
-public sealed record PredicateRule(Domain Domain, string Name, TypeSystem.DomainValue Value, Validation.Constraint Constraints, Func<Node, Node> Predicate) : Rule(Domain, Name, Value, Constraints) {
-    public Node ToInterpretationNode(Node subject) {
-        ArgumentNullException.ThrowIfNull(subject);
-        ArgumentNullException.ThrowIfNull(Predicate);
-
-        return Predicate(subject);
-    }
-}
+public sealed record CrossPropertyRule(Domain Domain, string Name, DomainValue Left, DomainValue Right, DomainComparisonOperator Operator) : Rule(Domain, Name);

@@ -9,24 +9,4 @@ public sealed class LengthConstraint(int? minLength = default, int? maxLength = 
     /// </summary>
     public TypeCategory ApplicableCategories => TypeCategory.Text | TypeCategory.Collection | TypeCategory.Binary;
 
-    public Node ToInterpretationNode(Node value) {
-        var length = value.GetMember("Length");
-
-        var minCheck = MinLength.HasValue
-            ? new GreaterThanOrEqual(length, Wrap(MinLength.Value))
-            : null;
-
-        var maxCheck = MaxLength.HasValue
-            ? new LessThanOrEqual(length, Wrap(MaxLength.Value))
-            : null;
-
-        var lengthCheck = (minCheck, maxCheck) switch {
-            (Node min, Node max) => new And(min, max),
-            (Node min, null) => min,
-            (null, Node max) => max,
-            _ => Wrap(true)
-        };
-
-        return lengthCheck;
-    }
 }

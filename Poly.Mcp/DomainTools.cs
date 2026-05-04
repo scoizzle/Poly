@@ -669,6 +669,201 @@ public static class DomainAuthoringTool {
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
 
+    [McpServerTool, Description("Removes a type (entity, primitive, or event type) from the domain by name.")]
+    public static DomainCommandResponse RemoveType(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the type to remove.")] string typeName) {
+        try {
+            var state = RequireSession(sessionId);
+            var type = state.Domain.Types.FirstOrDefault(t => string.Equals(t.Name, typeName, StringComparison.Ordinal))
+                ?? throw new InvalidOperationException($"Type '{typeName}' was not found in domain '{state.Domain.Name}'.");
+            var analysis = state.Domain.CreateMutation().RemoveType(type).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Type '{typeName}' removed.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a relationship from the domain, including the source entity back-reference.")]
+    public static DomainCommandResponse RemoveRelationship(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the relationship to remove.")] string name) {
+        try {
+            var state = RequireSession(sessionId);
+            var relationship = state.Domain.RequireRelationship(name);
+            var analysis = state.Domain.CreateMutation()
+                .RemoveEntityRelationship(relationship.Source, relationship)
+                .RemoveRelationship(relationship)
+                .Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Relationship '{name}' removed.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Updates the source, target, cardinality, and ownership of an existing relationship.")]
+    public static DomainCommandResponse SetRelationshipShape(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the relationship to update.")] string relationshipName,
+        [Description("Name of the new source entity.")] string sourceEntityName,
+        [Description("Name of the new target entity.")] string targetEntityName,
+        [Description("Cardinality: OneToOne, OneToMany, ManyToOne, or ManyToMany.")] string cardinality = nameof(RelationshipCardinality.OneToMany),
+        [Description("Whether the source entity owns and controls the lifecycle of target instances.")] bool sourceOwnsTarget = false) {
+        try {
+            var state = RequireSession(sessionId);
+            var relationship = state.Domain.RequireRelationship(relationshipName);
+            var source = state.Domain.RequireEntity(sourceEntityName);
+            var target = state.Domain.RequireEntity(targetEntityName);
+            var analysis = state.Domain.CreateMutation()
+                .SetRelationship(relationship, source, target, ParseCardinality(cardinality), sourceOwnsTarget)
+                .Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Relationship '{relationshipName}' shape updated.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a property from an entity.")]
+    public static DomainCommandResponse RemovePropertyFromEntity(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity.")] string entityName,
+        [Description("Name of the property to remove.")] string propertyName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var property = entity.RequireProperty(propertyName);
+            var analysis = state.Domain.CreateMutation().RemoveProperty(entity, property).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Property '{propertyName}' removed from entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a property from an event type.")]
+    public static DomainCommandResponse RemovePropertyFromEventType(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the event type.")] string eventTypeName,
+        [Description("Name of the property to remove.")] string propertyName) {
+        try {
+            var state = RequireSession(sessionId);
+            var eventType = state.Domain.RequireEventType(eventTypeName);
+            var property = eventType.RequireProperty(propertyName);
+            var analysis = state.Domain.CreateMutation().RemoveProperty(eventType, property).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Property '{propertyName}' removed from event type '{eventTypeName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a lifecycle stage from an entity.")]
+    public static DomainCommandResponse RemoveStageFromEntity(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity.")] string entityName,
+        [Description("Name of the stage to remove.")] string stageName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var stage = entity.RequireStage(stageName);
+            var analysis = state.Domain.CreateMutation().RemoveStage(entity, stage).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Stage '{stageName}' removed from entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes an action from an entity.")]
+    public static DomainCommandResponse RemoveActionFromEntity(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity.")] string entityName,
+        [Description("Name of the action to remove.")] string actionName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var analysis = state.Domain.CreateMutation().RemoveAction(entity, action).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Action '{actionName}' removed from entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes an event type association from an entity.")]
+    public static DomainCommandResponse RemoveEventFromEntity(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity.")] string entityName,
+        [Description("Name of the event type to disassociate.")] string eventTypeName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var @event = entity.RequireEvent(eventTypeName);
+            var analysis = state.Domain.CreateMutation().RemoveEvent(entity, @event).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Event '{eventTypeName}' removed from entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Assigns an existing entity action to a lifecycle stage, making it available in that stage.")]
+    public static DomainCommandResponse AddActionToStage(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity.")] string entityName,
+        [Description("Name of the stage.")] string stageName,
+        [Description("Name of the action to assign to the stage.")] string actionName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var stage = entity.RequireStage(stageName);
+            var action = entity.RequireAction(actionName);
+            var analysis = state.Domain.CreateMutation().AddAction(stage, action).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Action '{actionName}' assigned to stage '{stageName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes an action assignment from a lifecycle stage.")]
+    public static DomainCommandResponse RemoveActionFromStage(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity.")] string entityName,
+        [Description("Name of the stage.")] string stageName,
+        [Description("Name of the action to remove from the stage.")] string actionName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var stage = entity.RequireStage(stageName);
+            var action = stage.RequireAction(actionName);
+            var analysis = state.Domain.CreateMutation().RemoveAction(stage, action).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Action '{actionName}' removed from stage '{stageName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds a typed parameter to an action.")]
+    public static DomainCommandResponse AddParameterToAction(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the new parameter.")] string parameterName,
+        [Description("Name of the domain type for this parameter.")] string typeName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var type = ResolveType(state.Domain, typeName);
+            var analysis = state.Domain.CreateMutation().AddParameter(action, new Property(state.Domain, parameterName, type)).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Parameter '{parameterName}' added to action '{actionName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a parameter from an action.")]
+    public static DomainCommandResponse RemoveParameterFromAction(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the parameter to remove.")] string parameterName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var parameter = action.RequireParameter(parameterName);
+            var analysis = state.Domain.CreateMutation().RemoveParameter(action, parameter).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Parameter '{parameterName}' removed from action '{actionName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
     private static DomainSessionState RequireSession(string sessionId) {
         if (!DomainSessionStore.TryGet(sessionId, out var session)) {
             throw new InvalidOperationException($"Session '{sessionId}' was not found.");

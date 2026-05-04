@@ -1,4 +1,8 @@
 using Poly.Data.Modeling;
+using Poly.Data.Modeling.TypeSystem;
+using Poly.Data.Modeling.Validation;
+using Poly.Data.Modeling.Validation.Constraints;
+using Poly.Introspection;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Data.Modeling;
@@ -32,13 +36,16 @@ public class PolicyTests {
         var domain = DomainTestFactory.CreateDomain();
         var policy = new Policy(domain, "AgeGate") { AggregationStrategy = PolicyAggregationStrategy.All };
 
-        MutationApply.AddRule(policy, new PredicateRule(domain, "AgeGate_AgeRule", default!, default!, subject =>
-            subject.GetMember(nameof(PersonInput.Age)).GreaterThanOrEqual(new Constant(18))
-        ));
+        var intType = new Primitive(domain, "int", TypeCategory.Integer);
+        var boolType = new Primitive(domain, "bool", TypeCategory.Primitive);
 
-        MutationApply.AddRule(policy, new PredicateRule(domain, "AgeGate_VerifiedRule", default!, default!, subject =>
-            subject.GetMember(nameof(PersonInput.IsVerified)).Equal(new Constant(true))
-        ));
+        MutationApply.AddRule(policy, new PropertyRule(domain, "AgeGate_AgeRule",
+            new Property(domain, nameof(PersonInput.Age), intType),
+            new RangeConstraint(18, null)));
+
+        MutationApply.AddRule(policy, new PropertyRule(domain, "AgeGate_VerifiedRule",
+            new Property(domain, nameof(PersonInput.IsVerified), boolType),
+            new EqualityConstraint(true)));
 
         var predicate = CompilePolicyPredicate<PersonInput>(policy);
 
@@ -50,13 +57,16 @@ public class PolicyTests {
         var domain = DomainTestFactory.CreateDomain();
         var policy = new Policy(domain, "AgeOrAdmin") { AggregationStrategy = PolicyAggregationStrategy.Any };
 
-        MutationApply.AddRule(policy, new PredicateRule(domain, "AgeRule", default!, default!, subject =>
-            subject.GetMember(nameof(AccessRequest.Age)).GreaterThanOrEqual(new Constant(21))
-        ));
+        var intType = new Primitive(domain, "int", TypeCategory.Integer);
+        var boolType = new Primitive(domain, "bool", TypeCategory.Primitive);
 
-        MutationApply.AddRule(policy, new PredicateRule(domain, "AdminRule", default!, default!, subject =>
-            subject.GetMember(nameof(AccessRequest.IsAdmin)).Equal(new Constant(true))
-        ));
+        MutationApply.AddRule(policy, new PropertyRule(domain, "AgeRule",
+            new Property(domain, nameof(AccessRequest.Age), intType),
+            new RangeConstraint(21, null)));
+
+        MutationApply.AddRule(policy, new PropertyRule(domain, "AdminRule",
+            new Property(domain, nameof(AccessRequest.IsAdmin), boolType),
+            new EqualityConstraint(true)));
 
         var predicate = CompilePolicyPredicate<AccessRequest>(policy);
 
@@ -64,14 +74,16 @@ public class PolicyTests {
     }
 
     [Test]
-    public async Task Policy_PredicateRule_CanRepresentCrossPropertyConstraint() {
+    public async Task Policy_CrossPropertyRule_CanRepresentCrossPropertyConstraint() {
         var domain = DomainTestFactory.CreateDomain();
         var policy = new Policy(domain, "DateWindow") { AggregationStrategy = PolicyAggregationStrategy.All };
 
-        MutationApply.AddRule(policy, new PredicateRule(domain, "StartBeforeEnd", default!, default!, subject =>
-            subject.GetMember(nameof(DateWindow.StartUtc))
-                .LessThanOrEqual(subject.GetMember(nameof(DateWindow.EndUtc)))
-        ));
+        var instantType = new Primitive(domain, "instant", TypeCategory.Instant);
+
+        MutationApply.AddRule(policy, new CrossPropertyRule(domain, "StartBeforeEnd",
+            new Property(domain, nameof(DateWindow.StartUtc), instantType),
+            new Property(domain, nameof(DateWindow.EndUtc), instantType),
+            DomainComparisonOperator.LessThanOrEqual));
 
         var predicate = CompilePolicyPredicate<DateWindow>(policy);
 
@@ -85,10 +97,9 @@ public class PolicyTests {
     }
 
     private static Func<T, bool> CompilePolicyPredicate<T>(Policy policy) {
-        var parameter = new Parameter("subject", TypeReference.To<T>());
-        var interpretation = policy.ToInterpretationNode(parameter);
-
-        return interpretation.CompileLambda<Func<T, bool>>((parameter, typeof(T)));
+        var p = new Parameter("subject", TypeReference.To<T>());
+        var interpretation = DomainLoweringGenerator.LowerPolicy(policy, p);
+        return interpretation.CompileLambda<Func<T, bool>>([(p, typeof(T))]);
     }
 
     private sealed record PersonInput(int Age, bool IsVerified);

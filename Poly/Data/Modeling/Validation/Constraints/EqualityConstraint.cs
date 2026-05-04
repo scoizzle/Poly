@@ -7,10 +7,4 @@ public sealed class EqualityConstraint(object value) : Constraint {
     /// Equality constraint is universally applicable to any type that supports equality.
     /// </summary>
     public TypeCategory ApplicableCategories => TypeCategory.None;
-
-    public Node ToInterpretationNode(Node value) {
-        var valueLiteral = Wrap(Value);
-        var equalityCheck = new Equal(value, valueLiteral);
-        return equalityCheck;
-    }
 }

@@ -61,6 +61,10 @@ internal static class InteractiveDomainConsole {
                         Console.WriteLine(AsciiDomainRenderer.Render(domain));
                         break;
                     case 8:
+                        domain = Poly.Benchmarks.DomainModeling.Demos.ECommerceDomain.BuildECommerceDomain();
+                        Console.WriteLine("E-commerce domain loaded.");
+                        break;
+                    case 9:
                         shouldExit = true;
                         break;
                 }

@@ -333,20 +333,6 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static string GetNodeTypeLabel(DomainObject node) {
-        return node switch {
-            Actor => "Actor",
-            Relationship => "Relationship",
-            Entity => "Entity",
-            Stage => "Stage",
-            Action => "Action",
-            Event => "Event",
-            Property => "Property",
-            Policy => "Policy",
-            _ => node.GetType().Name
-        };
-    }
-
     private static void ValidateParentCycle(AnalysisContext context, Entity entity) {
         var visited = new HashSet<Entity> { entity };
 
@@ -379,7 +365,19 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         }
     }
 
-
+    private static string GetNodeTypeLabel(DomainObject node) {
+        return node switch {
+            Actor => "Actor",
+            Relationship => "Relationship",
+            Entity => "Entity",
+            Stage => "Stage",
+            Action => "Action",
+            Event => "Event",
+            Property => "Property",
+            Policy => "Policy",
+            _ => node.GetType().Name
+        };
+    }
 
     private static string GetNodeName(Node node) {
         return node switch {

@@ -102,4 +102,75 @@ public class DomainMutationTests {
             await Task.CompletedTask;
         });
     }
+
+    [Test]
+    public async Task AddType_WithForeignDomain_ReportsMutationInvariant_AndRollsBackCleanly() {
+        var domain = new Domain("Support");
+        var otherDomain = new Domain("Other");
+        var foreignType = new Primitive(otherDomain, "foreign-string", TypeCategory.Text);
+
+        var result = MutationApply.AddType(domain, foreignType);
+
+        await Assert.That(result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.MutationInvariant)).IsTrue();
+        await Assert.That(domain.Types.Any(t => t.Name == "foreign-string")).IsFalse();
+
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
+    public async Task AddType_WithDuplicateName_ReportsStructuralDuplicate_AndRollsBackCleanly() {
+        var domain = new Domain("Support");
+        var mutation = domain.CreateMutation();
+        var left = new Primitive(domain, "string", TypeCategory.Text);
+        var right = new Primitive(domain, "string", TypeCategory.Text);
+
+        _ = mutation.AddType(left).AddType(right);
+        var result = mutation.Apply();
+
+        await Assert.That(result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.StructuralDuplicate)).IsTrue();
+        await Assert.That(domain.Types.Any(t => t.Name == "string")).IsFalse();
+
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
+    public async Task AddRelationship_WithForeignEndpoint_ReportsMutationInvariant_AndRollsBackCleanly() {
+        var domain = new Domain("Support");
+        var otherDomain = new Domain("Other");
+
+        var customer = new Entity(domain, "Customer");
+        var externalCase = new Entity(otherDomain, "SupportCase");
+
+        _ = MutationApply.AddType(domain, customer);
+
+        var relationship = new Relationship(domain, "CustomerCases", customer, externalCase, RelationshipCardinality.OneToMany, false);
+        var result = MutationApply.AddRelationship(domain, relationship);
+
+        await Assert.That(result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.MutationInvariant)).IsTrue();
+        await Assert.That(domain.Relationships.Contains(relationship)).IsFalse();
+
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
+    public async Task AddEventProperty_WithDuplicateName_ReportsStructuralDuplicate_AndRollsBackCleanly() {
+        var domain = new Domain("Support");
+        var eventType = new Event(domain, "CaseAssigned");
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        var mutation = domain.CreateMutation();
+
+        _ = mutation.AddType(eventType).AddType(stringType);
+        _ = mutation.AddProperty(eventType, new Property(domain, "AssignedTo", stringType));
+        _ = mutation.AddProperty(eventType, new Property(domain, "AssignedTo", stringType));
+        var result = mutation.Apply();
+
+        await Assert.That(result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.StructuralDuplicate && d.Message.Contains("AssignedTo"))).IsTrue();
+        await Assert.That(eventType.Properties.Count).IsEqualTo(0);
+
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
 }

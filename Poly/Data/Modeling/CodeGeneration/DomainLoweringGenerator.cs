@@ -42,7 +42,7 @@ public sealed class DomainLoweringGenerator {
 
     // ── Policy / Rule / Constraint lowering ──────────────────────────────────
 
-    public static Node LowerPolicy(Policy policy, Node subject) {
+    public static Node LowerPolicy(Policy policy, Node subject, ActorEvaluationContext? actorContext = null) {
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(subject);
 
@@ -50,7 +50,7 @@ public sealed class DomainLoweringGenerator {
             return True;
         }
 
-        var nodes = policy.Rules.Select(rule => LowerRule(rule, subject));
+        var nodes = policy.Rules.Select(rule => LowerRule(rule, subject, actorContext));
 
         return policy.AggregationStrategy switch {
             PolicyAggregationStrategy.All => nodes.Aggregate((Node)True, static (acc, node) => new And(acc, node)),
@@ -59,7 +59,7 @@ public sealed class DomainLoweringGenerator {
         };
     }
 
-    public static Node LowerRule(Rule rule, Node subject) {
+    public static Node LowerRule(Rule rule, Node subject, ActorEvaluationContext? actorContext = null) {
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(subject);
 
@@ -67,12 +67,19 @@ public sealed class DomainLoweringGenerator {
             PropertyRule propertyRule => LowerConstraint(propertyRule.Constraints, subject.GetMember(propertyRule.Value.Name)),
             CrossPropertyRule crossRule => LowerCrossProperty(crossRule, subject),
             CompositeRule composite => composite.Operator switch {
-                LogicalOperator.And => new And(LowerRule(composite.Left, subject), LowerRule(composite.Right, subject)),
-                LogicalOperator.Or => new Or(LowerRule(composite.Left, subject), LowerRule(composite.Right, subject)),
+                LogicalOperator.And => new And(LowerRule(composite.Left, subject, actorContext), LowerRule(composite.Right, subject, actorContext)),
+                LogicalOperator.Or => new Or(LowerRule(composite.Left, subject, actorContext), LowerRule(composite.Right, subject, actorContext)),
                 _ => throw new InvalidOperationException($"Unknown logical operator '{composite.Operator}'.")
             },
-            ActorTypeRule or ActorRoleRule or ActorPropertyRule =>
-                throw new NotSupportedException($"Rule type '{rule.GetType().Name}' requires actor evaluation context and cannot be lowered without it."),
+            ActorTypeRule actorTypeRule => actorContext is not null
+                ? new TypeIs(actorContext.ActorSubject, new TypeReference(actorTypeRule.ActorType.Name))
+                : throw new NotSupportedException($"'{nameof(ActorTypeRule)}' requires an {nameof(ActorEvaluationContext)}."),
+            ActorRoleRule actorRoleRule => actorContext is not null
+                ? new Invoke(new Member(actorContext.ActorSubject, "IsInRole"), new Constant(actorRoleRule.Role))
+                : throw new NotSupportedException($"'{nameof(ActorRoleRule)}' requires an {nameof(ActorEvaluationContext)}."),
+            ActorPropertyRule actorPropertyRule => actorContext is not null
+                ? LowerConstraint(actorPropertyRule.Constraints, new Member(actorContext.ActorSubject, actorPropertyRule.ActorProperty.Name))
+                : throw new NotSupportedException($"'{nameof(ActorPropertyRule)}' requires an {nameof(ActorEvaluationContext)}."),
             _ => throw new NotSupportedException($"Unknown rule type '{rule.GetType().Name}'.")
         };
     }

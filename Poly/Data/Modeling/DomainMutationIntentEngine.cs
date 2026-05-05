@@ -1,10 +1,4 @@
-                case AddCommentIntent addComment: {
-        // Path can refer to any DomainMember
-        var node = ResolveNode<DomainMember>(domain, new DomainNodeReference(addComment.NodePath));
-        _ = mutation.AddComment(node, addComment.Comment);
-        break;
-    }
-    using Poly.Data.Modeling.TypeSystem;
+using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
@@ -317,6 +311,16 @@ public sealed class DomainMutationIntentEngine {
                         break;
                     }
 
+                case AddActorPropertyRuleToPolicyIntent addActorPropRule: {
+                        var entity = domain.RequireEntity(addActorPropRule.EntityName);
+                        var policy = entity.RequirePolicy(addActorPropRule.PolicyName);
+                        var actor = domain.RequireActor(addActorPropRule.ActorTypeName);
+                        var actorProperty = actor.RequireProperty(addActorPropRule.ActorPropertyName);
+                        var constraint = new Poly.Data.Modeling.Validation.Constraints.EqualityConstraint(addActorPropRule.ConstraintValue);
+                        _ = mutation.AddRule(policy, new ActorPropertyRule(domain, addActorPropRule.RuleName, actorProperty, constraint));
+                        break;
+                    }
+
                 case AddCompositeRuleToPolicyIntent addComposite: {
                         var entity = domain.RequireEntity(addComposite.EntityName);
                         var policy = entity.RequirePolicy(addComposite.PolicyName);
@@ -331,6 +335,12 @@ public sealed class DomainMutationIntentEngine {
                         var policy = entity.RequirePolicy(removeRule.PolicyName);
                         var rule = policy.RequireRule(removeRule.RuleName);
                         _ = mutation.RemoveRule(policy, rule);
+                        break;
+                    }
+
+                case AddCommentIntent addComment: {
+                        var node = ResolveNode<DomainMember>(domain, new DomainNodeReference(addComment.NodePath));
+                        _ = mutation.AddComment(node, addComment.Comment);
                         break;
                     }
 

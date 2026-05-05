@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.Mermaid;
@@ -41,8 +43,26 @@ public class DomainModelingIntegrationTests {
     [Test]
     public async Task Domain_TypeCount_MatchesExpected() {
         var (domain, _) = BuildSupportCaseDomain();
-        // 4 primitives + User + Customer + Agent + Note + SupportCase
-        await Assert.That(domain.Types.Count).IsEqualTo(9);
+
+        var types = domain.Types.ToArray();
+        foreach (var type in types) {
+            Debug.WriteLine($"{type.GetType().Name}: {type.Name}");
+        }
+
+        // Primitive: string
+        // Primitive: int
+        // Primitive: bool
+        // Primitive: instant
+        // Entity: User
+        // Entity: Customer
+        // Entity: Agent
+        // Entity: SupportCase
+        // Entity: Note
+        // Relationship: CustomerCases
+        // Relationship: SupportCaseNotes
+        // Relationship: CustomerNotes
+        // Relationship: AgentSupportCases
+        await Assert.That(types.Length).IsEqualTo(13);
     }
 
     // ─── Entity properties ─────────────────────────────────────────────────────

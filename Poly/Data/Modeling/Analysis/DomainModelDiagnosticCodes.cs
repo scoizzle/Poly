@@ -10,6 +10,7 @@ internal static class DomainModelDiagnosticCodes {
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string PolicyMissingProperty = "DMPOL001";
     public const string PolicyAstGeneration = "DMPOL002";
+    public const string PolicyActorReference = "DMPOL003";
     public const string EffectBinding = "DMEFF001";
     public const string EffectUnsatisfiedRequirement = "DMEFF002";
 }

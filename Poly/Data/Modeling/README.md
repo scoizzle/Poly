@@ -161,26 +161,23 @@ RemoveRuleFromPolicyIntent
 
 ## Expression Values
 
-To support reusable, first-class computed values, define an `ExpressionDomainValue` (a `DomainValue` whose value is computed from a Poly.Syntax AST expression). This enables UI/UX scenarios, sharing, and metadata for expressions.
+`ExpressionValue` is the unified, reusable type for named expressions in the domain model. It enables sharing, referencing, and metadata for computed values, and can be used anywhere a `DomainValue` is accepted (including in rules and effects).
 
 **Example:**
 
 ```csharp
-var renewalCountExpr = new ExpressionDomainValue(domain, "RenewalCountPlusOne", intType) {
+var intType = new Primitive(domain, "int", TypeCategory.Integer);
+var expr = new ExpressionValue(domain, "AgePlusOne", intType) {
     Expression = new Add(
-        new PropertyReference(loan.Property("RenewalCount")),
-        new Constant(1)
-    ),
-    Description = "Increments RenewalCount by 1"
+        new Member(new Parameter("subject", new TypeReference(typeof(PersonInput).FullName!)), "Age"),
+        new Constant(1))
 };
 
-var assign = new Assign(domain) {
-    Target = loan.Property("RenewalCount"),
-    Value = renewalCountExpr
-};
+var policy = new Policy(domain, "ExprPolicy");
+MutationApply.AddRule(policy, new PropertyRule(domain, "ExprRule", expr, new EqualityConstraint(19)));
 ```
 
-This pattern allows expressions to be named, reused, and referenced in effects, properties, or anywhere a `DomainValue` is accepted.
+This allows expressions to be named, reused, and referenced in rules, effects, or anywhere a `DomainValue` is accepted.
 
 ## Cross-Entity Mutation Guidance
 

@@ -1,6 +1,8 @@
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;
+using Poly.Data.Modeling.Validation.Constraints;
+using Poly.Syntax.Nodes;
 
 namespace Poly.Tests.Data.Modeling;
 
@@ -185,5 +187,168 @@ public class ActorRuleTests {
         var policy = new Policy(domain, "TestPolicy");
 
         await Assert.That(() => policy.RequireRule("NonExistent")).Throws<InvalidOperationException>();
+    }
+
+    // ── ActorPropertyRule intent ──────────────────────────────────────────────
+
+    [Test]
+    public async Task AddActorPropertyRuleToPolicyIntent_AddsRule() {
+        var engine = new DomainMutationIntentEngine();
+        var domain = new Domain("TestDomain");
+        var actor = new Actor(domain, "Employee", null);
+        var deptProperty = new Property(domain, "Department", DomainTestFactory.GetStringType(domain));
+        domain.CreateMutation()
+            .AddType(new Entity(domain, "Document", null))
+            .AddType(actor)
+            .AddProperty(actor, deptProperty)
+            .Apply(null);
+        engine.Apply(domain, new AddPolicyToEntityIntent("Document", "DeptPolicy"));
+
+        engine.Apply(domain, new AddActorPropertyRuleToPolicyIntent(
+            "Document", "DeptPolicy", "EmployeeDeptRule", "Employee", "Department", "Engineering"));
+
+        var policy = domain.RequireEntity("Document").RequirePolicy("DeptPolicy");
+        var rule = policy.RequireRule("EmployeeDeptRule") as ActorPropertyRule;
+        await Assert.That(rule).IsNotNull();
+        await Assert.That(rule!.ActorProperty.Name).IsEqualTo("Department");
+        await Assert.That(rule.Constraints).IsTypeOf<EqualityConstraint>();
+    }
+
+    // ── ActorEvaluationContext lowering ───────────────────────────────────────
+
+    [Test]
+    public async Task LowerRule_ActorTypeRule_WithContext_ProducesTypeIs() {
+        var domain = DomainTestFactory.CreateDomain();
+        var actor = new Actor(domain, "AdminUser", null);
+        var rule = new ActorTypeRule(domain, "MustBeAdmin", actor);
+        var actorNode = new Variable("actor", null);
+        var ctx = new ActorEvaluationContext(actorNode);
+
+        var lowered = DomainLoweringGenerator.LowerRule(rule, new Variable("subject", null), ctx);
+
+        await Assert.That(lowered).IsTypeOf<TypeIs>();
+        var typeIs = (TypeIs)lowered;
+        await Assert.That(typeIs.Operand).IsEqualTo(actorNode);
+    }
+
+    [Test]
+    public async Task LowerRule_ActorRoleRule_WithContext_ProducesInvokeIsInRole() {
+        var domain = DomainTestFactory.CreateDomain();
+        var rule = new ActorRoleRule(domain, "MustHaveEditorRole", "Editor");
+        var actorNode = new Variable("actor", null);
+        var ctx = new ActorEvaluationContext(actorNode);
+
+        var lowered = DomainLoweringGenerator.LowerRule(rule, new Variable("subject", null), ctx);
+
+        await Assert.That(lowered).IsTypeOf<Invoke>();
+        var invoke = (Invoke)lowered;
+        await Assert.That(invoke.Delegate).IsTypeOf<Member>();
+        var member = (Member)invoke.Delegate;
+        await Assert.That(member.MemberName).IsEqualTo("IsInRole");
+        await Assert.That(invoke.Arguments[0]).IsTypeOf<Constant>();
+        await Assert.That(((Constant)invoke.Arguments[0]).Value).IsEqualTo("Editor");
+    }
+
+    [Test]
+    public async Task LowerRule_ActorPropertyRule_WithContext_ProducesConstraintExpression() {
+        var domain = DomainTestFactory.CreateDomain();
+        var actor = new Actor(domain, "Employee", null);
+        var deptProperty = new Property(domain, "Department", DomainTestFactory.GetStringType(domain));
+        var constraint = new EqualityConstraint("Engineering");
+        var rule = new ActorPropertyRule(domain, "InEngineeringDept", deptProperty, constraint);
+        var actorNode = new Variable("actor", null);
+        var ctx = new ActorEvaluationContext(actorNode);
+
+        var lowered = DomainLoweringGenerator.LowerRule(rule, new Variable("subject", null), ctx);
+
+        await Assert.That(lowered).IsTypeOf<Equal>();
+    }
+
+    [Test]
+    public async Task LowerRule_ActorTypeRule_WithoutContext_Throws() {
+        var domain = DomainTestFactory.CreateDomain();
+        var actor = new Actor(domain, "AdminUser", null);
+        var rule = new ActorTypeRule(domain, "MustBeAdmin", actor);
+
+        await Assert.That(() => DomainLoweringGenerator.LowerRule(rule, new Variable("subject", null))).Throws<NotSupportedException>();
+    }
+
+    [Test]
+    public async Task LowerRule_CompositeRule_WithActorRules_PropagatesContext() {
+        var domain = DomainTestFactory.CreateDomain();
+        var actor = new Actor(domain, "AdminUser", null);
+        var left = new ActorTypeRule(domain, "IsAdmin", actor);
+        var right = new ActorRoleRule(domain, "HasEditorRole", "Editor");
+        var composite = new CompositeRule(domain, "AdminAndEditor", left, right, LogicalOperator.And);
+        var actorNode = new Variable("actor", null);
+        var ctx = new ActorEvaluationContext(actorNode);
+
+        var lowered = DomainLoweringGenerator.LowerRule(composite, new Variable("subject", null), ctx);
+
+        await Assert.That(lowered).IsTypeOf<And>();
+    }
+
+    // ── Diagnostics ───────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task Analysis_ActorTypeRule_WithUnregisteredActorType_ReportsDiagnostic() {
+        var domain = new Domain("TestDomain");
+        var actor = new Actor(domain, "AdminUser", null); // not added to domain
+        domain.CreateMutation()
+            .AddType(new Entity(domain, "Document", null))
+            .Apply(null);
+        var entity = domain.RequireEntity("Document");
+        var policy = new Policy(domain, "AccessPolicy");
+        var rule = new ActorTypeRule(domain, "MustBeAdmin", actor);
+
+        var result = domain.CreateMutation()
+            .AddPolicy(entity, policy)
+            .AddRule(policy, rule)
+            .Apply(null);
+
+        var errors = result.Diagnostics.Where(d => d.Code == "DMPOL003").ToList();
+        await Assert.That(errors.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Analysis_ActorPropertyRule_WithDetachedProperty_ReportsDiagnostic() {
+        var domain = new Domain("TestDomain");
+        // actor NOT added to domain, property belongs to no registered actor
+        var deptProperty = new Property(domain, "Department", DomainTestFactory.GetStringType(domain));
+        domain.CreateMutation()
+            .AddType(new Entity(domain, "Document", null))
+            .Apply(null);
+        var entity = domain.RequireEntity("Document");
+        var policy = new Policy(domain, "DeptPolicy");
+        var rule = new ActorPropertyRule(domain, "InEngineeringDept", deptProperty, new EqualityConstraint("Engineering"));
+
+        var result = domain.CreateMutation()
+            .AddPolicy(entity, policy)
+            .AddRule(policy, rule)
+            .Apply(null);
+
+        var errors = result.Diagnostics.Where(d => d.Code == "DMPOL003").ToList();
+        await Assert.That(errors.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Analysis_ValidActorTypeRule_ProducesNoDiagnostics() {
+        var domain = new Domain("TestDomain");
+        var actor = new Actor(domain, "AdminUser", null);
+        domain.CreateMutation()
+            .AddType(new Entity(domain, "Document", null))
+            .AddType(actor)
+            .Apply(null);
+        var entity = domain.RequireEntity("Document");
+        var policy = new Policy(domain, "AccessPolicy");
+        var rule = new ActorTypeRule(domain, "MustBeAdmin", actor);
+
+        var result = domain.CreateMutation()
+            .AddPolicy(entity, policy)
+            .AddRule(policy, rule)
+            .Apply(null);
+
+        var errors = result.Diagnostics.Where(d => d.Code == "DMPOL003").ToList();
+        await Assert.That(errors.Count).IsEqualTo(0);
     }
 }

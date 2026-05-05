@@ -4,12 +4,11 @@ namespace Poly.Data.Modeling;
 
 public sealed partial record Domain : DomainMember {
     private readonly Lock _mutationLock = new();
-    private readonly List<DomainType> _types = new();
-    private readonly List<Relationship> _relationships = new();
+    private readonly List<DomainObject> _objects = new();
 
     public Domain(string name) : base(name) { }
 
-    public IReadOnlyCollection<DomainType> Types => _types.AsReadOnly();
-    public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
-    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _types, .. _relationships];
+    // Type-specific helpers are now provided as extension methods in DomainExtensions.cs
+    public IReadOnlyCollection<DomainObject> Objects => _objects.AsReadOnly();
+    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _objects];
 }

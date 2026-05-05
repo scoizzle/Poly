@@ -177,6 +177,7 @@ internal static class DomainAffordances {
         new("command:add-cross-property-rule", nameof(DomainAuthoringTool.AddCrossPropertyRuleToPolicy), new Dictionary<string, object?>(), "Add a cross-property comparison rule to a policy."),
         new("command:add-actor-type-rule", nameof(DomainAuthoringTool.AddActorTypeRuleToPolicy), new Dictionary<string, object?>(), "Require the actor to be a specific actor type."),
         new("command:add-actor-role-rule", nameof(DomainAuthoringTool.AddActorRoleRuleToPolicy), new Dictionary<string, object?>(), "Require the actor to have a specific role."),
+        new("command:add-actor-property-rule", nameof(DomainAuthoringTool.AddActorPropertyRuleToPolicy), new Dictionary<string, object?>(), "Require an actor property to equal a specific value."),
         new("command:add-composite-rule", nameof(DomainAuthoringTool.AddCompositeRuleToPolicy), new Dictionary<string, object?>(), "Combine two existing rules with And/Or."),
         new("command:remove-rule-from-policy", nameof(DomainAuthoringTool.RemoveRuleFromPolicy), new Dictionary<string, object?>(), "Remove a rule from a policy."),
         new("command:add-primitive", nameof(DomainAuthoringTool.AddPrimitive), new Dictionary<string, object?>(), "Create a new primitive type."),
@@ -814,6 +815,24 @@ public static class DomainAuthoringTool {
             var intent = new AddActorRoleRuleToPolicyIntent(entityName, policyName, ruleName, role);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"ActorRole rule '{ruleName}' (role='{role}') added to policy '{policyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds a rule that checks an equality constraint against a property on the evaluating actor.")]
+    public static DomainCommandResponse AddActorPropertyRuleToPolicy(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the policy.")] string entityName,
+        [Description("Name of the policy.")] string policyName,
+        [Description("Name for the new rule.")] string ruleName,
+        [Description("Name of the actor type owning the property.")] string actorTypeName,
+        [Description("Name of the actor property to constrain.")] string actorPropertyName,
+        [Description("Value the actor property must equal.")] object constraintValue) {
+        try {
+            var state = RequireSession(sessionId);
+            var intent = new AddActorPropertyRuleToPolicyIntent(entityName, policyName, ruleName, actorTypeName, actorPropertyName, constraintValue);
+            var analysis = ApplyIntent(state, intent);
+            return Commit(sessionId, state.Domain, analysis, $"ActorProperty rule '{ruleName}' ({actorTypeName}.{actorPropertyName} == {constraintValue}) added to policy '{policyName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }

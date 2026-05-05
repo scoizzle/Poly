@@ -157,18 +157,67 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             .ToHashSet(StringComparer.Ordinal);
 
         foreach (var policy in entity.Policies.Concat(entity.Properties.SelectMany(static property => property.Policies))) {
-            foreach (var rule in policy.Rules.OfType<PropertyRule>()) {
-                if (rule.Value is not Property property) {
-                    continue;
-                }
+            foreach (var rule in policy.Rules) {
+                ValidateRule(context, policy, entity, rule);
+            }
+        }
+    }
 
-                if (!propertyNames.Contains(property.Name)) {
+    private static void ValidateRule(AnalysisContext context, Policy policy, Entity entity, Rule rule) {
+        switch (rule) {
+            case PropertyRule propertyRule:
+                if (propertyRule.Value is Property property && !entity.Properties.Contains(property)) {
                     context.ReportError(
                         policy,
                         $"Policy '{policy.Name}' on entity '{entity.Name}' references property '{property.Name}' that is not defined on the entity.",
                         DomainModelDiagnosticCodes.PolicyMissingProperty);
                 }
-            }
+                break;
+
+            case ActorTypeRule actorTypeRule: {
+                    var allActors = entity.Domain.Actors.ToList();
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] All actors in domain: {string.Join(", ", allActors.Select(a => a.Name))}");
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] ActorTypeRule references: {actorTypeRule.ActorType.Name} (object hash: {actorTypeRule.ActorType.GetHashCode()})");
+                    var registeredActor = allActors.FirstOrDefault(a => ReferenceEquals(a, actorTypeRule.ActorType));
+                    var registeredActorByName = allActors.FirstOrDefault(a => a.Name == actorTypeRule.ActorType.Name);
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Found by reference: {registeredActor?.Name ?? "null"}, by name: {registeredActorByName?.Name ?? "null"}");
+                    if (registeredActor is null && registeredActorByName is null) {
+                        context.ReportError(
+                            policy,
+                            $"Policy '{policy.Name}' references actor type '{actorTypeRule.ActorType.Name}' that is not registered in the domain.",
+                            DomainModelDiagnosticCodes.PolicyActorReference);
+                    }
+                    break;
+                }
+
+            case ActorPropertyRule actorPropertyRule: {
+                    if (actorPropertyRule.ActorProperty is Property actorProp) {
+                        var allActors = entity.Domain.Actors.ToList();
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] All actors in domain: {string.Join(", ", allActors.Select(a => a.Name))}");
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] ActorPropertyRule references property: {actorProp.Name} (object hash: {actorProp.GetHashCode()})");
+                        foreach (var a in allActors) {
+                            foreach (var p in a.Properties) {
+                                System.Diagnostics.Debug.WriteLine($"[DEBUG] Actor '{a.Name}' property: {p.Name} (object hash: {p.GetHashCode()})");
+                            }
+                        }
+                        var actorOwner = allActors.FirstOrDefault(a => a.Properties.Contains(actorProp));
+                        var actorOwnerByName = allActors.FirstOrDefault(a => a.Properties.Any(p => p.Name == actorProp.Name));
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Found owner by reference: {actorOwner?.Name ?? "null"}, by name: {actorOwnerByName?.Name ?? "null"}");
+                        if (actorOwner is null && actorOwnerByName is null) {
+                            context.ReportError(
+                                policy,
+                                $"Policy '{policy.Name}' references actor property '{actorProp.Name}' that does not belong to any actor type in the domain.",
+                                DomainModelDiagnosticCodes.PolicyActorReference);
+                        }
+                    }
+                    break;
+                }
+
+            case CompositeRule composite:
+                // Recursively validate both sides
+                ValidateRule(context, policy, entity, composite.Left);
+                ValidateRule(context, policy, entity, composite.Right);
+                break;
         }
     }
 

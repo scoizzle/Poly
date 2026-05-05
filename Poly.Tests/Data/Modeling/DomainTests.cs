@@ -28,6 +28,10 @@ public class DomainTests {
         var result = MutationApply.AddType(parentDomain, customer);
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("domain"));
         await Assert.That(error is not null).IsTrue();
+
+        // Validate rollback: re-analyze should yield no errors
+        var reanalysis = new DomainModelAnalyzer().Analyze(parentDomain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
     [Test]
@@ -97,6 +101,10 @@ public class DomainTests {
         var result = MutationApply.AddRelationship(domain, relationship);
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("domain"));
         await Assert.That(error is not null).IsTrue();
+
+        // Validate rollback: re-analyze should yield no errors
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
     [Test]
@@ -112,6 +120,10 @@ public class DomainTests {
         var result = MutationApply.AddRelationship(domain, relationship);
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("domain"));
         await Assert.That(error is not null).IsTrue();
+
+        // Validate rollback: re-analyze should yield no errors
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
     [Test]
@@ -127,6 +139,10 @@ public class DomainTests {
         var result = mutation.Apply();
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate") && d.Message.Contains("CustomerCases"));
         await Assert.That(error is not null).IsTrue();
+
+        // Validate rollback: re-analyze should yield no errors
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
     [Test]
@@ -244,6 +260,10 @@ public class DomainTests {
         var result = MutationApply.AddProperty(relationship, assignedAt);
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("domain"));
         await Assert.That(error is not null).IsTrue();
+
+        // Validate rollback: re-analyze should yield no errors
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
     [Test]
@@ -259,6 +279,10 @@ public class DomainTests {
         var result = mutation.Apply();
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate property name 'Title'"));
         await Assert.That(error is not null).IsTrue();
+
+        // Validate rollback: re-analyze should yield no errors
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
     [Test]
@@ -274,6 +298,10 @@ public class DomainTests {
         var result = MutationApply.AddRelationship(source, relationship);
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("must be registered in domain"));
         await Assert.That(error is not null).IsTrue();
+
+        // Validate rollback: re-analyze should yield no errors
+        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
     private static Primitive CreatePrimitive(Domain domain, string name, TypeCategory category = TypeCategory.Primitive) {

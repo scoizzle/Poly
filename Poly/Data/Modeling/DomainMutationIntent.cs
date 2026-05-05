@@ -42,6 +42,7 @@ namespace Poly.Data.Modeling;
 [JsonDerivedType(typeof(AddCrossPropertyRuleToPolicyIntent), "AddCrossPropertyRuleToPolicy")]
 [JsonDerivedType(typeof(AddActorTypeRuleToPolicyIntent), "AddActorTypeRuleToPolicy")]
 [JsonDerivedType(typeof(AddActorRoleRuleToPolicyIntent), "AddActorRoleRuleToPolicy")]
+[JsonDerivedType(typeof(AddActorPropertyRuleToPolicyIntent), "AddActorPropertyRuleToPolicy")]
 [JsonDerivedType(typeof(AddCompositeRuleToPolicyIntent), "AddCompositeRuleToPolicy")]
 [JsonDerivedType(typeof(RemoveRuleFromPolicyIntent), "RemoveRuleFromPolicy")]
 [JsonDerivedType(typeof(AddPolicyToActionIntent), "AddPolicyToAction")]
@@ -225,6 +226,15 @@ public sealed record AddActorRoleRuleToPolicyIntent(
     string RuleName,
     string Role) : DomainMutationIntent;
 
+/// <summary>Adds a rule that evaluates an equality constraint against a property on the evaluating actor.</summary>
+public sealed record AddActorPropertyRuleToPolicyIntent(
+    string EntityName,
+    string PolicyName,
+    string RuleName,
+    string ActorTypeName,
+    string ActorPropertyName,
+    object ConstraintValue) : DomainMutationIntent;
+
 /// <summary>Combines two existing rules in the same policy with And / Or.</summary>
 public sealed record AddCompositeRuleToPolicyIntent(
     string EntityName,
@@ -240,5 +250,4 @@ public sealed record RemoveRuleFromPolicyIntent(
     string PolicyName,
     string RuleName) : DomainMutationIntent;
 
-[JsonDerivedType(typeof(AddCommentIntent), "AddComment")]
 public sealed record AddCommentIntent(string NodePath, string Comment) : DomainMutationIntent;

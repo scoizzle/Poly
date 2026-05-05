@@ -41,28 +41,28 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, entity, entity.Properties, static property => property.Name, "property");
-        ReportDuplicateNames(context, entity, entity.Stages, static stage => stage.Name, "stage");
-        ReportDuplicateNames(context, entity, entity.Actions, static action => action.Name, "action");
-        ReportDuplicateNames(context, entity, entity.Policies, static policy => policy.Name, "policy");
-        ReportDuplicateNames(context, entity, entity.Events, static @event => @event.Name, "event");
-        ReportDuplicateNames(context, entity, entity.Relationships, static relationship => relationship.Name, "relationship");
+        ReportDuplicateNames(context, entity, entity.Properties, static property => property.Name);
+        ReportDuplicateNames(context, entity, entity.Stages, static stage => stage.Name);
+        ReportDuplicateNames(context, entity, entity.Actions, static action => action.Name);
+        ReportDuplicateNames(context, entity, entity.Policies, static policy => policy.Name);
+        ReportDuplicateNames(context, entity, entity.Events, static @event => @event.Name);
+        ReportDuplicateNames(context, entity, entity.Relationships, static relationship => relationship.Name);
 
         foreach (var stage in entity.Stages) {
-            ReportDuplicateNames(context, stage, stage.Policies, static policy => policy.Name, "policy");
-            ReportDuplicateNames(context, stage, stage.Actions, static action => action.Name, "action");
+            ReportDuplicateNames(context, stage, stage.Policies, static policy => policy.Name);
+            ReportDuplicateNames(context, stage, stage.Actions, static action => action.Name);
         }
 
         foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(static stage => stage.Actions))) {
-            ReportDuplicateNames(context, action, action.Parameters, static parameter => parameter.Name, "parameter");
+            ReportDuplicateNames(context, action, action.Parameters, static parameter => parameter.Name);
         }
 
         foreach (var @event in entity.Events) {
-            ReportDuplicateNames(context, @event, @event.Properties, static property => property.Name, "property");
+            ReportDuplicateNames(context, @event, @event.Properties, static property => property.Name);
         }
 
         foreach (var property in entity.Properties.Concat(entity.Events.SelectMany(static @event => @event.Properties))) {
-            ReportDuplicateNames(context, property, property.Policies, static policy => policy.Name, "policy");
+            ReportDuplicateNames(context, property, property.Policies, static policy => policy.Name);
         }
 
         ValidateEntityMembership(context, entity.Domain, entity);
@@ -74,8 +74,8 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, stage, stage.Policies, static policy => policy.Name, "policy");
-        ReportDuplicateNames(context, stage, stage.Actions, static action => action.Name, "action");
+        ReportDuplicateNames(context, stage, stage.Policies, static policy => policy.Name);
+        ReportDuplicateNames(context, stage, stage.Actions, static action => action.Name);
 
         foreach (var policy in stage.Policies) {
             if (!ReferenceEquals(policy.Domain, stage.Domain)) {
@@ -108,7 +108,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, action, action.Parameters, static parameter => parameter.Name, "parameter");
+        ReportDuplicateNames(context, action, action.Parameters, static parameter => parameter.Name);
 
         foreach (var parameter in action.Parameters) {
             if (!ReferenceEquals(parameter.Domain, action.Domain)) {
@@ -125,7 +125,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, @event, @event.Properties, static property => property.Name, "property");
+        ReportDuplicateNames(context, @event, @event.Properties, static property => property.Name);
 
         foreach (var property in @event.Properties) {
             if (!ReferenceEquals(property.Domain, @event.Domain)) {
@@ -142,7 +142,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, property, property.Policies, static policy => policy.Name, "policy");
+        ReportDuplicateNames(context, property, property.Policies, static policy => policy.Name);
 
         foreach (var policy in property.Policies) {
             if (!ReferenceEquals(policy.Domain, property.Domain)) {
@@ -197,8 +197,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, domain, domain.Types.Where(context.ShouldAnalyze), static type => type.Name, "type");
-        ReportDuplicateNames(context, domain, domain.Relationships.Where(context.ShouldAnalyze), static relationship => relationship.Name, "relationship");
+        ReportDuplicateNames(context, domain, domain.Objects.OfType<DomainMember>().Where(context.ShouldAnalyze), static type => type.Name);
 
         ValidateDomainMembership(context, domain);
         ValidateRelationshipEndpoints(context, domain);
@@ -206,20 +205,13 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainMembership(AnalysisContext context, Domain domain) {
-        foreach (var type in domain.Types.Where(context.ShouldAnalyze)) {
-            if (!ReferenceEquals(type.Domain, domain)) {
-                context.ReportError(
-                    type,
-                    $"Type '{type.Name}' does not belong to domain '{domain.Name}'.",
-                    DomainModelDiagnosticCodes.MutationInvariant);
-            }
-        }
+        foreach (var obj in domain.Objects.OfType<DomainMember>().Where(context.ShouldAnalyze)) {
+            if (!ReferenceEquals(obj.Domain, domain)) {
+                var identifier = obj is DomainMember member ? member.Name : obj.Id.Value;
 
-        foreach (var relationship in domain.Relationships.Where(context.ShouldAnalyze)) {
-            if (!ReferenceEquals(relationship.Domain, domain)) {
                 context.ReportError(
-                    relationship,
-                    $"Relationship '{relationship.Name}' does not belong to domain '{domain.Name}'.",
+                    obj,
+                    $"Domain Object '{identifier}' does not belong to domain '{domain.Name}'.",
                     DomainModelDiagnosticCodes.MutationInvariant);
             }
         }
@@ -328,17 +320,31 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         AnalysisContext context,
         Node owner,
         IEnumerable<TNode> items,
-        Func<TNode, string> keySelector,
-        string label)
-        where TNode : Node {
+        Func<TNode, string> keySelector)
+        where TNode : DomainObject {
         foreach (var group in items.GroupBy(keySelector, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
             foreach (var duplicate in group) {
+                var label = GetNodeTypeLabel(duplicate);
                 context.ReportError(
                     duplicate,
                     $"Duplicate {label} '{group.Key}' on '{GetNodeName(owner)}'.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
             }
         }
+    }
+
+    private static string GetNodeTypeLabel(DomainObject node) {
+        return node switch {
+            Actor => "Actor",
+            Relationship => "Relationship",
+            Entity => "Entity",
+            Stage => "Stage",
+            Action => "Action",
+            Event => "Event",
+            Property => "Property",
+            Policy => "Policy",
+            _ => node.GetType().Name
+        };
     }
 
     private static void ValidateParentCycle(AnalysisContext context, Entity entity) {

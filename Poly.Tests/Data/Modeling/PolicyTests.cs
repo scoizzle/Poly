@@ -11,6 +11,76 @@ namespace Poly.Tests.Data.Modeling;
 
 public class PolicyTests {
     [Test]
+    public async Task Policy_ActorTypeRule_InvalidActorType_ReportsDiagnostic() {
+        var domain = new Domain("TestDomain");
+        var entity = new Entity(domain, "Order");
+        MutationApply.AddType(domain, entity);
+
+        // ActorType not added to domain
+        var missingActor = new Actor(domain, "Ghost");
+        var policy = new Policy(domain, "AuthPolicy");
+        MutationApply.AddRule(policy, new ActorTypeRule(domain, "GhostRule", missingActor));
+
+        var result = MutationApply.AddPolicy(entity, policy);
+
+        var diagnostic = result.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains("Ghost");
+
+        var analyzer = new DomainModelAnalyzer();
+        var analysisResult = analyzer.Analyze(domain);
+        var analysisDiagnostic = analysisResult.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
+        await Assert.That(analysisDiagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task Policy_ActorPropertyRule_InvalidActorProperty_ReportsDiagnostic() {
+        var domain = new Domain("TestDomain");
+        var entity = new Entity(domain, "Order");
+        MutationApply.AddType(domain, entity);
+
+        // Property not attached to any actor
+        var strayProperty = new Property(domain, "Stray", new Primitive(domain, "string", TypeCategory.Text));
+        var policy = new Policy(domain, "AuthPolicy");
+        MutationApply.AddRule(policy, new ActorPropertyRule(domain, "StrayRule", strayProperty, new EqualityConstraint("foo")));
+        var result = MutationApply.AddPolicy(entity, policy);
+
+        var diagnostic = result.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains("Stray");
+
+        var analyzer = new DomainModelAnalyzer();
+        var analysisResult = analyzer.Analyze(domain);
+        var analysisDiagnostic = analysisResult.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
+        await Assert.That(analysisDiagnostic).IsNull();
+    }
+
+    [Test]
+    public async Task Policy_CompositeRule_InvalidChild_ReportsDiagnostic() {
+        var domain = new Domain("TestDomain");
+        var entity = new Entity(domain, "Order");
+        domain.CreateMutation().AddType(entity).Apply(null);
+
+        // Left child is invalid ActorTypeRule
+        var missingActor = new Actor(domain, "Ghost");
+        var left = new ActorTypeRule(domain, "GhostRule", missingActor);
+        // Right child is valid dummy rule
+        var right = new PropertyRule(domain, "Ok", new Property(domain, "P", new Primitive(domain, "int", TypeCategory.Integer)), new EqualityConstraint(1));
+        var composite = new CompositeRule(domain, "Composite", left, right, LogicalOperator.And);
+        var policy = new Policy(domain, "CompositePolicy");
+        MutationApply.AddRule(policy, composite);
+        var result = MutationApply.AddPolicy(entity, policy);
+
+        var diagnostic = result.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains("Ghost");
+
+        var analysisResult = new DomainModelAnalyzer().Analyze(domain);
+        var analysisDiagnostic = analysisResult.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
+        await Assert.That(analysisDiagnostic).IsNull();
+    }
+
+    [Test]
     public async Task Stage_AddPolicy_ExposesPolicyInEnumeration() {
         var domain = DomainTestFactory.CreateDomain();
         var stage = new Stage(domain, "Review");

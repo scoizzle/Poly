@@ -6,7 +6,7 @@ namespace Poly.Data.Modeling;
 /// <summary>
 /// Represents a named, reusable expression value (AST) for use in effects, properties, or other domain members.
 /// </summary>
-public sealed record ExpressionValue(Domain Domain, string Name, DomainType? Type = null) : DomainMember(Domain, Name) {
+public sealed record ExpressionValue(Domain Domain, string Name, DomainType Type) : DomainValue(Domain, Name, Type) {
     /// <summary>
     /// The Poly.Syntax AST node representing the expression.
     /// </summary>
@@ -15,7 +15,7 @@ public sealed record ExpressionValue(Domain Domain, string Name, DomainType? Typ
     /// <summary>
     /// Optional type for assignable/typed values. Null for untyped reusable expressions.
     /// </summary>
-    public DomainType? Type { get; init; } = Type;
+    // Type is provided by DomainValue base
 
     // Optionally, add Description, Category, etc. for UI/UX
     public string? Description { get; init; }

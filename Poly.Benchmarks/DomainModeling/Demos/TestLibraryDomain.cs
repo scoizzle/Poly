@@ -32,8 +32,9 @@ internal static class TestLibraryDomain {
         }
 
         // Check relationships
-        Console.WriteLine($"\nRelationships: {domain.Relationships.Count}");
-        foreach (var rel in domain.Relationships) {
+        var relationships = domain.Relationships.ToList();
+        Console.WriteLine($"\nRelationships: {relationships.Count}");
+        foreach (var rel in relationships) {
             Console.WriteLine($"  - {rel.Name}: {rel.Source.Name} -> {rel.Target.Name} ({rel.Cardinality})");
         }
 

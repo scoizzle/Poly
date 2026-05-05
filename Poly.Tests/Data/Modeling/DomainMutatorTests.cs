@@ -173,4 +173,49 @@ public class DomainMutationTests {
         var reanalysis = new DomainModelAnalyzer().Analyze(domain);
         await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
+
+    [Test]
+    public async Task AnalyzeIncremental_WithInvalidatedEventProperty_StillReportsStructuralDuplicate() {
+        var domain = new Domain("Support");
+        var analyzer = new DomainModelAnalyzer();
+        var eventType = new Event(domain, "CaseAssigned");
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+
+        new Domain.AddTypeCommand(domain, eventType).Apply();
+        new Domain.AddTypeCommand(domain, stringType).Apply();
+
+        var existingProperty = new Property(domain, "AssignedTo", stringType);
+        new Event.AddPropertyCommand(eventType, existingProperty).Apply();
+
+        var prior = analyzer.Analyze(domain);
+        await Assert.That(prior.HasErrors).IsFalse();
+
+        var duplicateProperty = new Property(domain, "AssignedTo", stringType);
+        new Event.AddPropertyCommand(eventType, duplicateProperty).Apply();
+
+        var incremental = analyzer.Analyze(domain, prior, [duplicateProperty]);
+        await Assert.That(incremental.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error
+            && d.Code == DomainModelDiagnosticCodes.StructuralDuplicate
+            && d.Message.Contains("AssignedTo"))).IsTrue();
+    }
+
+    [Test]
+    public async Task AnalyzeIncremental_WithInvalidatedForeignType_StillReportsMutationInvariant() {
+        var domain = new Domain("Support");
+        var analyzer = new DomainModelAnalyzer();
+        var local = new Primitive(domain, "string", TypeCategory.Text);
+        new Domain.AddTypeCommand(domain, local).Apply();
+
+        var prior = analyzer.Analyze(domain);
+        await Assert.That(prior.HasErrors).IsFalse();
+
+        var otherDomain = new Domain("Other");
+        var foreign = new Primitive(otherDomain, "foreign-string", TypeCategory.Text);
+        new Domain.AddTypeCommand(domain, foreign).Apply();
+
+        var incremental = analyzer.Analyze(domain, prior, [foreign]);
+        await Assert.That(incremental.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error
+            && d.Code == DomainModelDiagnosticCodes.MutationInvariant
+            && d.Message.Contains("foreign-string"))).IsTrue();
+    }
 }

@@ -8,32 +8,20 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        switch (node) {
-            case Domain request:
-                AnalyzeDomain(context, request.Domain);
-                break;
-            case Relationship relationship:
-                ValidateStandaloneRelationship(context, relationship);
-                AnalyzeEntityStandalone(context, relationship);
-                break;
-            case Entity entity:
-                AnalyzeEntityStandalone(context, entity);
-                break;
-            case Stage stage:
-                AnalyzeStageStandalone(context, stage);
-                break;
-            case Action action:
-                AnalyzeActionStandalone(context, action);
-                break;
-            case Event @event:
-                AnalyzeEventStandalone(context, @event);
-                break;
-            case Property property:
-                AnalyzePropertyStandalone(context, property);
-                break;
+        var domain = ResolveDomain(node);
+        if (domain is null) {
+            return;
         }
 
-        this.AnalyzeChildren(context, node);
+        AnalyzeDomain(context, domain);
+    }
+
+    private static Domain? ResolveDomain(Node node) {
+        return node switch {
+            Domain request => request.Domain,
+            DomainObject obj => obj.Domain,
+            _ => null
+        };
     }
 
     private static void AnalyzeEntityStandalone(AnalysisContext context, Entity entity) {
@@ -41,28 +29,31 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, entity, entity.Properties, static property => property.Name);
-        ReportDuplicateNames(context, entity, entity.Stages, static stage => stage.Name);
-        ReportDuplicateNames(context, entity, entity.Actions, static action => action.Name);
-        ReportDuplicateNames(context, entity, entity.Policies, static policy => policy.Name);
-        ReportDuplicateNames(context, entity, entity.Events, static @event => @event.Name);
-        ReportDuplicateNames(context, entity, entity.Relationships, static relationship => relationship.Name);
+        ReportDuplicateNames(context, entity, entity.Properties);
+        ReportDuplicateNames(context, entity, entity.Stages);
+        ReportDuplicateNames(context, entity, entity.Actions);
+        ReportDuplicateNames(context, entity, entity.Policies);
+        ReportDuplicateNames(context, entity, entity.Events);
+        ReportDuplicateNames(context, entity, entity.Relationships);
 
         foreach (var stage in entity.Stages) {
-            ReportDuplicateNames(context, stage, stage.Policies, static policy => policy.Name);
-            ReportDuplicateNames(context, stage, stage.Actions, static action => action.Name);
+            AnalyzeStageStandalone(context, stage);
         }
 
-        foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(static stage => stage.Actions))) {
-            ReportDuplicateNames(context, action, action.Parameters, static parameter => parameter.Name);
+        foreach (var action in entity.Actions) {
+            AnalyzeActionStandalone(context, action);
+        }
+
+        foreach (var stageAction in entity.Stages.SelectMany(static stage => stage.Actions)) {
+            AnalyzeActionStandalone(context, stageAction);
         }
 
         foreach (var @event in entity.Events) {
-            ReportDuplicateNames(context, @event, @event.Properties, static property => property.Name);
+            AnalyzeEventStandalone(context, @event);
         }
 
         foreach (var property in entity.Properties.Concat(entity.Events.SelectMany(static @event => @event.Properties))) {
-            ReportDuplicateNames(context, property, property.Policies, static policy => policy.Name);
+            AnalyzePropertyStandalone(context, property);
         }
 
         ValidateEntityMembership(context, entity.Domain, entity);
@@ -74,26 +65,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, stage, stage.Policies, static policy => policy.Name);
-        ReportDuplicateNames(context, stage, stage.Actions, static action => action.Name);
-
-        foreach (var policy in stage.Policies) {
-            if (!ReferenceEquals(policy.Domain, stage.Domain)) {
-                context.ReportError(
-                    stage,
-                    $"Policy '{policy.Name}' must belong to domain '{stage.Domain.Name}'.",
-                    DomainModelDiagnosticCodes.MutationInvariant);
-            }
-        }
+        ReportDuplicateNames(context, stage, stage.Policies);
+        ReportDuplicateNames(context, stage, stage.Actions);
 
         foreach (var action in stage.Actions) {
-            if (!ReferenceEquals(action.Domain, stage.Domain)) {
-                context.ReportError(
-                    stage,
-                    $"Action '{action.Name}' must belong to domain '{stage.Domain.Name}'.",
-                    DomainModelDiagnosticCodes.MutationInvariant);
-            }
-
             if (stage.OwnerEntity is not null && !ReferenceEquals(action.Entity, stage.OwnerEntity)) {
                 context.ReportError(
                     action,
@@ -108,16 +83,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, action, action.Parameters, static parameter => parameter.Name);
-
-        foreach (var parameter in action.Parameters) {
-            if (!ReferenceEquals(parameter.Domain, action.Domain)) {
-                context.ReportError(
-                    action,
-                    $"Parameter '{parameter.Name}' must belong to domain '{action.Domain.Name}'.",
-                    DomainModelDiagnosticCodes.MutationInvariant);
-            }
-        }
+        ReportDuplicateNames(context, action, action.Parameters);
     }
 
     private static void AnalyzeEventStandalone(AnalysisContext context, Event @event) {
@@ -125,16 +91,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, @event, @event.Properties, static property => property.Name);
-
-        foreach (var property in @event.Properties) {
-            if (!ReferenceEquals(property.Domain, @event.Domain)) {
-                context.ReportError(
-                    @event,
-                    $"Property '{property.Name}' must belong to domain '{@event.Domain.Name}'.",
-                    DomainModelDiagnosticCodes.MutationInvariant);
-            }
-        }
+        ReportDuplicateNames(context, @event, @event.Properties);
     }
 
     private static void AnalyzePropertyStandalone(AnalysisContext context, Property property) {
@@ -142,16 +99,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, property, property.Policies, static policy => policy.Name);
-
-        foreach (var policy in property.Policies) {
-            if (!ReferenceEquals(policy.Domain, property.Domain)) {
-                context.ReportError(
-                    property,
-                    $"Policy '{policy.Name}' must belong to domain '{property.Domain.Name}'.",
-                    DomainModelDiagnosticCodes.MutationInvariant);
-            }
-        }
+        ReportDuplicateNames(context, property, property.Policies);
     }
 
     private static void ValidateStandaloneRelationship(AnalysisContext context, Relationship relationship) {
@@ -197,15 +145,31 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ReportDuplicateNames(context, domain, domain.Objects.OfType<DomainMember>().Where(context.ShouldAnalyze), static type => type.Name);
+        ReportDuplicateNames(context, domain, domain.Objects.OfType<DomainMember>());
 
         ValidateDomainMembership(context, domain);
         ValidateRelationshipEndpoints(context, domain);
         ValidateOwnershipCardinality(context, domain);
+
+        foreach (var entity in domain.Entities) {
+            AnalyzeEntityStandalone(context, entity);
+        }
+
+        foreach (var relationship in domain.Relationships) {
+            ValidateStandaloneRelationship(context, relationship);
+        }
+
+        foreach (var @event in domain.Types.OfType<Event>()) {
+            AnalyzeEventStandalone(context, @event);
+
+            foreach (var property in @event.Properties) {
+                AnalyzePropertyStandalone(context, property);
+            }
+        }
     }
 
     private static void ValidateDomainMembership(AnalysisContext context, Domain domain) {
-        foreach (var obj in domain.Objects.OfType<DomainMember>().Where(context.ShouldAnalyze)) {
+        foreach (var obj in domain.Objects.OfType<DomainMember>()) {
             if (!ReferenceEquals(obj.Domain, domain)) {
                 var identifier = obj is DomainMember member ? member.Name : obj.Id.Value;
 
@@ -287,6 +251,17 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
 
             foreach (var action in stage.Actions) {
                 ReportMismatchedDomain(context, stage, action, domain, "Action", action.Name);
+
+                if (stage.OwnerEntity is not null && !ReferenceEquals(action.Entity, stage.OwnerEntity)) {
+                    context.ReportError(
+                        action,
+                        $"Action '{action.Name}' on stage '{stage.Name}' must belong to entity '{stage.OwnerEntity.Name}'.",
+                        DomainModelDiagnosticCodes.MutationInvariant);
+                }
+
+                foreach (var parameter in action.Parameters) {
+                    ReportMismatchedDomain(context, action, parameter, domain, "Parameter", parameter.Name);
+                }
             }
         }
 
@@ -298,7 +273,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateRelationshipEndpoints(AnalysisContext context, Domain domain) {
-        foreach (var relationship in domain.Relationships.Where(context.ShouldAnalyze)) {
+        foreach (var relationship in domain.Relationships) {
             if (relationship.Source is null || relationship.Target is null) {
                 context.ReportError(
                     relationship,
@@ -319,15 +294,14 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     private static void ReportDuplicateNames<TNode>(
         AnalysisContext context,
         Node owner,
-        IEnumerable<TNode> items,
-        Func<TNode, string> keySelector)
-        where TNode : DomainObject {
-        foreach (var group in items.GroupBy(keySelector, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
+        IEnumerable<TNode> items)
+        where TNode : DomainMember {
+        foreach (var group in items.GroupBy(static item => item.Name, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
             foreach (var duplicate in group) {
                 var label = GetNodeTypeLabel(duplicate);
                 context.ReportError(
                     duplicate,
-                    $"Duplicate {label} '{group.Key}' on '{GetNodeName(owner)}'.",
+                    $"Duplicate {label} '{group.Key}' on '{GetNodeName(owner)}'." + $" {label}s must have unique names within their owner.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
             }
         }
@@ -348,7 +322,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateOwnershipCardinality(AnalysisContext context, Domain domain) {
-        foreach (var relationship in domain.Relationships.Where(context.ShouldAnalyze).Where(static relationship => relationship.SourceOwnsTarget)) {
+        foreach (var relationship in domain.Relationships.Where(static relationship => relationship.SourceOwnsTarget)) {
             if (relationship.Source is not Entity || relationship.Target is not Entity) {
                 context.ReportError(
                     relationship,

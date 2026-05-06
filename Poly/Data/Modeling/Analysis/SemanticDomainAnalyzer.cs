@@ -1,3 +1,6 @@
+using Poly.Data.Modeling.TypeSystem;
+using Poly.Data.Modeling.Validation.Constraints;
+
 namespace Poly.Data.Modeling;
 
 internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
@@ -19,8 +22,32 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
+        ValidateDomainTypeModelingRules(context, domain);
+
         foreach (var entity in domain.Types.OfType<Entity>().Where(context.ShouldAnalyze)) {
             AnalyzeEntitySemantics(context, entity);
+        }
+    }
+
+    private static void ValidateDomainTypeModelingRules(AnalysisContext context, Domain domain) {
+        foreach (var primitive in domain.Types.OfType<Primitive>().Where(context.ShouldAnalyze)) {
+            ValidatePrimitiveCategoryModelingRules(context, primitive);
+        }
+    }
+
+    private static void ValidatePrimitiveCategoryModelingRules(AnalysisContext context, Primitive primitive) {
+        if (primitive.Category.Is(TypeCategory.Nullable)) {
+            context.ReportError(
+                primitive,
+                $"Primitive '{primitive.Name}' must not use TypeCategory.Nullable. Domain nullability is modeled by RequiredConstraint.",
+                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+        }
+
+        if (primitive.Category.Is(TypeCategory.Collection) || primitive.Category.Is(TypeCategory.Keyed)) {
+            context.ReportError(
+                primitive,
+                $"Primitive '{primitive.Name}' must not use collection categories. Domain multiplicity is modeled through relationships.",
+                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
         }
     }
 
@@ -28,6 +55,7 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         ValidateStageInheritance(context, entity);
         ValidateStageActionVisibility(context, entity);
         ValidateTypeCompatibility(context, entity);
+        ValidateDiscriminatorConstraints(context, entity);
 
         // Duplicate property name validation
         var propertyGroups = entity.Properties.GroupBy(p => p.Name, StringComparer.Ordinal);
@@ -78,7 +106,12 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
 
     private static IEnumerable<Stage> EnumerateStageLineageRootToLeaf(Stage stage) {
         var stack = new Stack<Stage>();
+        var visited = new HashSet<NodeId>();
         for (var current = stage; current is not null; current = current.Parent) {
+            if (!visited.Add(current.Id)) {
+                break;
+            }
+
             stack.Push(current);
         }
         while (stack.Count > 0) {
@@ -142,23 +175,114 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
 
     private static void ValidateTypeCompatibility(AnalysisContext context, Entity entity) {
         foreach (var property in entity.Properties) {
-            if (!ReferenceEquals(property.Type.Domain, entity.Domain)) {
-                context.ReportError(
-                    property,
-                    $"Property '{property.Name}' uses type '{property.Type.Name}' from a different domain.",
-                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
-            }
+            ValidateTypeUsage(context, entity, property, property.Type, $"Property '{property.Name}'");
         }
 
         foreach (var action in entity.Actions) {
             foreach (var parameter in action.Parameters.OfType<Property>()) {
-                if (!ReferenceEquals(parameter.Type.Domain, entity.Domain)) {
-                    context.ReportError(
-                        parameter,
-                        $"Action '{action.Name}' parameter '{parameter.Name}' uses a type from a different domain.",
-                        DomainModelDiagnosticCodes.SemanticTypeCompatibility);
-                }
+                ValidateTypeUsage(context, entity, parameter, parameter.Type, $"Action '{action.Name}' parameter '{parameter.Name}'");
             }
+        }
+    }
+
+    private static void ValidateTypeUsage(AnalysisContext context, Entity ownerEntity, Node reportNode, DomainType type, string usage) {
+        var expectedDomain = ownerEntity.Domain;
+        if (!ReferenceEquals(type.Domain, expectedDomain)) {
+            context.ReportError(
+                reportNode,
+                $"{usage} uses type '{type.Name}' from a different domain.",
+                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+            return;
+        }
+
+        // Domain modeling no longer treats union wrappers as first-class types; tagged alternatives are modeled via discriminator fields and policies.
+    }
+
+    private static void ValidateDiscriminatorConstraints(AnalysisContext context, Entity entity) {
+        var discriminatorConstraints = entity.Constraints.OfType<DiscriminatorConstraint>().ToArray();
+        if (discriminatorConstraints.Length == 0) {
+            return;
+        }
+
+        if (discriminatorConstraints.Length > 1) {
+            context.ReportError(
+                entity,
+                $"Entity '{entity.Name}' has multiple discriminator constraints. Only one discriminator constraint is allowed per entity.",
+                DomainModelDiagnosticCodes.DiscriminatorExclusivity);
+            return;
+        }
+
+        var discriminator = discriminatorConstraints[0];
+
+        // Validate discriminator property exists on entity
+        var discriminatorProperty = entity.Properties.FirstOrDefault(p => p.Name == discriminator.DiscriminatorPropertyName);
+        if (discriminatorProperty is null) {
+            context.ReportError(
+                entity,
+                $"Entity '{entity.Name}' discriminator property '{discriminator.DiscriminatorPropertyName}' was not found on the entity.",
+                DomainModelDiagnosticCodes.DiscriminatorExhaustiveness);
+            return;
+        }
+
+        // Validate discriminator property has an enum constraint (closed tag set)
+        var enumConstraint = discriminatorProperty.EffectiveConstraints.OfType<EnumConstraint>().LastOrDefault();
+        if (enumConstraint is null) {
+            context.ReportError(
+                entity,
+                $"Entity '{entity.Name}' discriminator property '{discriminator.DiscriminatorPropertyName}' must have an EnumConstraint to define the closed tag set.",
+                DomainModelDiagnosticCodes.DiscriminatorExhaustiveness);
+            return;
+        }
+
+        var enumValues = enumConstraint.Members.Select(static m => m.Name).ToHashSet(StringComparer.Ordinal);
+        var variantValues = discriminator.Variants.Select(static v => v.Value).ToHashSet(StringComparer.Ordinal);
+
+        // Check for unknown discriminator values in variants (not in enum)
+        var unknownValues = variantValues.Except(enumValues, StringComparer.Ordinal).ToArray();
+        if (unknownValues.Length > 0) {
+            context.ReportError(
+                entity,
+                $"Entity '{entity.Name}' discriminator constraint references unknown values not in the enum constraint: {string.Join(", ", unknownValues)}.",
+                DomainModelDiagnosticCodes.DiscriminatorExhaustiveness);
+        }
+
+        // Check for missing variant coverage (enum values without variant)
+        var missingValues = enumValues.Except(variantValues, StringComparer.Ordinal).ToArray();
+        if (missingValues.Length > 0) {
+            context.ReportWarning(
+                entity,
+                $"Entity '{entity.Name}' discriminator constraint is missing variant definitions for enum values: {string.Join(", ", missingValues)}.",
+                DomainModelDiagnosticCodes.DiscriminatorExhaustiveness);
+        }
+
+        // Validate property references in variants
+        var propertyNames = entity.Properties.Select(static p => p.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var variant in discriminator.Variants) {
+            var allProps = (variant.RequiredProperties ?? [])
+                .Concat(variant.ForbiddenProperties ?? [])
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            var invalidProps = allProps.Where(p => !propertyNames.Contains(p)).ToArray();
+            if (invalidProps.Length > 0) {
+                context.ReportError(
+                    entity,
+                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' references non-existent properties: {string.Join(", ", invalidProps)}.",
+                    DomainModelDiagnosticCodes.DiscriminatorLeakage);
+            }
+        }
+
+        // Check for overlapping/duplicate variant values (should be caught in constructor, but validate)
+        var duplicateVariants = discriminator.Variants
+            .GroupBy(static v => v.Value, StringComparer.Ordinal)
+            .Where(static g => g.Count() > 1)
+            .Select(static g => g.Key)
+            .ToArray();
+        if (duplicateVariants.Length > 0) {
+            context.ReportError(
+                entity,
+                $"Entity '{entity.Name}' discriminator constraint has duplicate variant definitions for values: {string.Join(", ", duplicateVariants)}.",
+                DomainModelDiagnosticCodes.DiscriminatorExclusivity);
         }
     }
 }

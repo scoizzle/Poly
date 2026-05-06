@@ -93,9 +93,20 @@ public sealed class DomainLoweringGenerator {
             EqualityConstraint eq => new Equal(value, Wrap(eq.Value)),
             RangeConstraint range => LowerRange(range, value),
             LengthConstraint length => LowerLength(length, value),
+            EnumConstraint @enum => LowerEnum(@enum, value),
             ConstraintSet set => LowerConstraintSet(set, value),
             _ => throw new NotSupportedException($"Unknown constraint type '{constraint.GetType().Name}'.")
         };
+    }
+
+    private static Node LowerEnum(EnumConstraint @enum, Node value) {
+        if (@enum.Members.Count == 0) {
+            return False;
+        }
+
+        return @enum.Members
+            .Select(member => (Node)new Equal(value, Wrap(member.EffectiveCanonicalValue)))
+            .Aggregate((Node)False, static (acc, check) => new Or(acc, check));
     }
 
     private static Node LowerRange(RangeConstraint range, Node value) {

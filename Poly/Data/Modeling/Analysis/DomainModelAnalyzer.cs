@@ -1,22 +1,46 @@
+using Poly.Syntax.Analysis;
+
 namespace Poly.Data.Modeling;
 
 public sealed class DomainModelAnalyzer {
-    private readonly Analyzer _analyzer = new AnalyzerBuilder()
-        .UseIncrementalAnalysis()
-        .UseDomainModelValidation()
-        .Build();
+    public AnalysisResult Analyze(Domain domain) =>
+        AnalyzeWithTelemetry(domain).Analysis;
 
-    public AnalysisResult Analyze(Domain domain) {
+    public AnalysisRun AnalyzeWithTelemetry(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
-        return _analyzer.Analyze(domain);
+
+        var collector = new AnalysisTelemetryCollector();
+        var analyzer = BuildInstrumentedAnalyzer(collector);
+        var started = Stopwatch.GetTimestamp();
+        var analysis = analyzer.Analyze(domain);
+        var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(started), incremental: false, invalidatedNodeCount: 0);
+
+        return new AnalysisRun(analysis, telemetry);
     }
 
-    public AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
+    public AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) =>
+        AnalyzeWithTelemetry(domain, priorAnalysis, invalidatedNodes).Analysis;
+
+    public AnalysisRun AnalyzeWithTelemetry(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(priorAnalysis);
         ArgumentNullException.ThrowIfNull(invalidatedNodes);
-        return _analyzer.Analyze(domain, priorAnalysis, invalidatedNodes);
+
+        var invalidated = invalidatedNodes.ToArray();
+        var collector = new AnalysisTelemetryCollector();
+        var analyzer = BuildInstrumentedAnalyzer(collector);
+        var started = Stopwatch.GetTimestamp();
+        var analysis = analyzer.Analyze(domain, priorAnalysis, invalidated);
+        var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(started), incremental: true, invalidatedNodeCount: invalidated.Length);
+
+        return new AnalysisRun(analysis, telemetry);
     }
+
+    private static Analyzer BuildInstrumentedAnalyzer(AnalysisTelemetryCollector collector) =>
+        new AnalyzerBuilder()
+            .UseIncrementalAnalysis()
+            .UseDomainModelValidation(collector)
+            .Build();
 }
 
 
@@ -31,8 +55,19 @@ public static class DomainModelAnalysisBuilderExtensions {
             return builder;
         }
 
-        public AnalyzerBuilder UseDomainModelValidation() {
-            return builder.UseDomainModelAnalysisPipeline();
+        internal AnalyzerBuilder UseDomainModelAnalysisPipeline(AnalysisTelemetryCollector collector) {
+            builder.AddAnalyzer(new TelemetryNodeAnalyzer(new StructuralDomainAnalyzer(), nameof(StructuralDomainAnalyzer), collector));
+            builder.AddAnalyzer(new TelemetryNodeAnalyzer(new SemanticDomainAnalyzer(), nameof(SemanticDomainAnalyzer), collector));
+            builder.AddAnalyzer(new TelemetryNodeAnalyzer(new PolicyConstraintAnalyzer(), nameof(PolicyConstraintAnalyzer), collector));
+            builder.AddAnalyzer(new TelemetryNodeAnalyzer(new EffectAnalyzer(), nameof(EffectAnalyzer), collector));
+            builder.AddAnalyzer(new TelemetryNodeAnalyzer(new CapabilityAnalyzer(), nameof(CapabilityAnalyzer), collector));
+            return builder;
         }
+
+        public AnalyzerBuilder UseDomainModelValidation() =>
+            builder.UseDomainModelAnalysisPipeline();
+
+        internal AnalyzerBuilder UseDomainModelValidation(AnalysisTelemetryCollector collector) =>
+            builder.UseDomainModelAnalysisPipeline(collector);
     }
 }

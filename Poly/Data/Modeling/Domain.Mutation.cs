@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;
@@ -113,6 +115,12 @@ public sealed partial record Domain {
         public Mutation RemoveConstraint(Property property, Constraint constraint) =>
             AddStep(new Property.RemoveConstraintCommand(property, constraint));
 
+        public Mutation AddConstraint(DomainType type, Constraint constraint) =>
+            AddStep(new DomainType.AddConstraintCommand(type, constraint));
+
+        public Mutation RemoveConstraint(DomainType type, Constraint constraint) =>
+            AddStep(new DomainType.RemoveConstraintCommand(type, constraint));
+
         public Mutation AddPolicy(Property property, Policy policy) =>
             AddStep(new Property.AddPolicyCommand(property, policy));
 
@@ -170,20 +178,31 @@ public sealed partial record Domain {
         // ── Execution ────────────────────────────────────────────────────────
 
         public AnalysisResult Apply(AnalysisResult? preMutationAnalysis = null) {
+            return ApplyWithTrace(preMutationAnalysis).Analysis;
+        }
+
+        public DomainMutationExecutionResult ApplyWithTrace(AnalysisResult? preMutationAnalysis = null) {
             EnsureNotCompleted();
 
             lock (Domain._mutationLock) {
                 EnsureNotCompleted();
 
                 var appliedSteps = new Stack<DomainMutationCommand>();
+                var stepTraces = new List<DomainMutationStepTrace>(_steps.Count);
+                var started = Stopwatch.GetTimestamp();
+                var rolledBack = false;
 
                 try {
                     foreach (var step in _steps) {
                         step.Apply();
                         appliedSteps.Push(step);
+                        stepTraces.Add(new DomainMutationStepTrace(
+                            step.GetType().Name,
+                            step.AffectedNodes.Select(static node => node.Id).Distinct().ToArray()));
                     }
 
-                    var affectedNodes = _steps.SelectMany(s => s.AffectedNodes).Distinct();
+                    var affectedNodes = _steps.SelectMany(static step => step.AffectedNodes).Distinct().ToArray();
+                    var affectedNodeIds = affectedNodes.Select(static node => node.Id).Distinct().ToArray();
 
                     var analysis = preMutationAnalysis is null
                         ? _analyzer.Analyze(Domain)
@@ -191,10 +210,21 @@ public sealed partial record Domain {
 
                     if (analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)) {
                         Rollback(appliedSteps);
+                        rolledBack = true;
                     }
 
                     _completed = true;
-                    return analysis;
+                    var trace = new DomainMutationTrace(
+                        stepTraces,
+                        affectedNodeIds,
+                        stepTraces.Count,
+                        rolledBack,
+                        !rolledBack,
+                        Stopwatch.GetElapsedTime(started),
+                        analysis.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
+                        analysis.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning));
+
+                    return new DomainMutationExecutionResult(analysis, trace);
                 }
                 catch {
                     Rollback(appliedSteps);

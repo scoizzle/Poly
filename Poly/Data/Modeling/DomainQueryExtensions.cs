@@ -73,6 +73,17 @@ public static class DomainQueryExtensions {
         return domain.FindPrimitive(name) ?? throw new InvalidOperationException($"Primitive '{name}' was not found in domain '{domain.Name}'.");
     }
 
+    public static DomainType? FindType(this Domain domain, string name) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(name);
+
+        return domain.Types.FirstOrDefault(type => string.Equals(type.Name, name, StringComparison.Ordinal));
+    }
+
+    public static DomainType RequireType(this Domain domain, string name) {
+        return domain.FindType(name) ?? throw new InvalidOperationException($"Type '{name}' was not found in domain '{domain.Name}'. Use GetDomain to see available types.");
+    }
+
     public static Event? FindEventType(this Domain domain, string name) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(name);

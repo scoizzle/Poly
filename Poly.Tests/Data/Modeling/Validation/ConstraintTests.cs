@@ -1,4 +1,5 @@
 using Poly.Data.Modeling;
+using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;
 using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Introspection;
@@ -159,6 +160,62 @@ public class ConstraintTests {
         await Assert.That(predicate("toolong")).IsFalse();
     }
 
+    // EnumConstraint (closed set)
+
+    [Test]
+    public async Task EnumConstraint_WithMatchingCanonicalValue_PassesValidation() {
+        var predicate = CompileConstraintPredicate<string>(new EnumConstraint(
+            new EnumConstraint.EnumMember("Open"),
+            new EnumConstraint.EnumMember("Closed")));
+
+        await Assert.That(predicate("Open")).IsTrue();
+        await Assert.That(predicate("Closed")).IsTrue();
+    }
+
+    [Test]
+    public async Task EnumConstraint_WithValueOutsideClosedSet_FailsValidation() {
+        var predicate = CompileConstraintPredicate<string>(new EnumConstraint(
+            new EnumConstraint.EnumMember("Open"),
+            new EnumConstraint.EnumMember("Closed")));
+
+        await Assert.That(predicate("Archived")).IsFalse();
+    }
+
+    [Test]
+    public async Task EnumConstraint_WithCanonicalValueOverride_PassesUsingCanonicalValue() {
+        var predicate = CompileConstraintPredicate<int>(new EnumConstraint(
+            new EnumConstraint.EnumMember("Open", 1, "Open Label"),
+            new EnumConstraint.EnumMember("Closed", 2, "Closed Label")));
+
+        await Assert.That(predicate(1)).IsTrue();
+        await Assert.That(predicate(2)).IsTrue();
+        await Assert.That(predicate(3)).IsFalse();
+    }
+
+    [Test]
+    public async Task EffectiveConstraints_PropertyEnumConstraint_OverridesTypeEnumConstraint() {
+        var domain = new Domain("Support");
+        var statusType = new Primitive(domain, "Status", TypeCategory.Text, [
+            new EnumConstraint(
+                new EnumConstraint.EnumMember("Open"),
+                new EnumConstraint.EnumMember("Closed"))
+        ]);
+        var ticket = new Entity(domain, "Ticket");
+        var status = new Property(domain, "Status", statusType);
+
+        MutationApply.AddType(domain, statusType);
+        MutationApply.AddType(domain, ticket);
+        MutationApply.AddProperty(ticket, status);
+        MutationApply.AddConstraint(status, new EnumConstraint(new EnumConstraint.EnumMember("Draft")));
+
+        var effectiveEnumConstraints = status.EffectiveConstraints
+            .OfType<EnumConstraint>()
+            .ToArray();
+
+        await Assert.That(effectiveEnumConstraints.Length).IsEqualTo(1);
+        await Assert.That(effectiveEnumConstraints[0].Members.Select(static member => member.Name)).IsEquivalentTo(["Draft"]);
+    }
+
     // ConstraintSet
 
     [Test]
@@ -224,5 +281,65 @@ public class ConstraintTests {
         var p = new Parameter("value", TypeReference.To<T>());
         var interpretation = DomainLoweringGenerator.LowerConstraint(constraint, p);
         return interpretation.CompileLambda<Func<T, bool>>([(p, typeof(T))]);
+    }
+    // DiscriminatorConstraint
+
+    [Test]
+    public async Task DiscriminatorConstraint_ValidSetup_StoresDiscriminatorPropertyAndVariants() {
+        var variants = new[] {
+            new DiscriminatorVariant("Open", ["CreatedBy"], []),
+            new DiscriminatorVariant("Closed", ["ClosedBy", "ClosedAt"], [])
+        };
+        var constraint = new DiscriminatorConstraint("Status", variants);
+
+        await Assert.That(constraint.DiscriminatorPropertyName).IsEqualTo("Status");
+        await Assert.That(constraint.Variants.Count).IsEqualTo(2);
+        await Assert.That(constraint.DiscriminatorValues).IsEquivalentTo(["Open", "Closed"]);
+    }
+
+    [Test]
+    public async Task DiscriminatorConstraint_GetVariant_ReturnsCorrectVariant() {
+        var variants = new[] {
+            new DiscriminatorVariant("Open", ["CreatedBy"], []),
+            new DiscriminatorVariant("Closed", ["ClosedBy"], [])
+        };
+        var constraint = new DiscriminatorConstraint("Status", variants);
+
+        var openVariant = constraint.GetVariant("Open");
+        await Assert.That(openVariant).IsNotNull();
+        await Assert.That(openVariant!.RequiredProperties).IsEquivalentTo(["CreatedBy"]);
+        await Assert.That(constraint.GetVariant("Unknown")).IsNull();
+    }
+
+    [Test]
+    public async Task DiscriminatorConstraint_DuplicateVariantValues_ThrowsArgumentException() {
+        var variants = new[] {
+            new DiscriminatorVariant("Open", ["A"], []),
+            new DiscriminatorVariant("Open", ["B"], [])
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(async () => {
+            _ = new DiscriminatorConstraint("Status", variants);
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task DiscriminatorConstraint_EmptyVariants_ThrowsArgumentException() {
+        await Assert.ThrowsAsync<ArgumentException>(async () => {
+            _ = new DiscriminatorConstraint("Status", []);
+            await Task.CompletedTask;
+        });
+    }
+
+    [Test]
+    public async Task DiscriminatorConstraint_ForbiddenProperties_AreStoredCorrectly() {
+        var variants = new[] {
+            new DiscriminatorVariant("Open", [], ["ClosedBy", "ClosedAt"])
+        };
+        var constraint = new DiscriminatorConstraint("Status", variants);
+
+        var variant = constraint.GetVariant("Open");
+        await Assert.That(variant!.ForbiddenProperties).IsEquivalentTo(["ClosedBy", "ClosedAt"]);
     }
 }

@@ -150,8 +150,5 @@ public sealed class MermaidDomainDiagramGenerator {
         _sb.AppendLine($"    {rel.Name} ..> {rel.Target.Name} : target");
     }
 
-    private static string GetTypeName(DomainType type) => type switch {
-        Collection c => $"{GetTypeName(c.ElementType)}[]",
-        _ => type.Name
-    };
+    private static string GetTypeName(DomainType type) => type.Name;
 }

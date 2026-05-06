@@ -5,8 +5,8 @@ public sealed class LengthConstraint(int? minLength = default, int? maxLength = 
     public int? MaxLength { get; set; } = maxLength;
 
     /// <summary>
-    /// Length constraints apply to Text and Collection types.
+    /// Length constraints apply to Text and Binary types.
     /// </summary>
-    public TypeCategory ApplicableCategories => TypeCategory.Text | TypeCategory.Collection | TypeCategory.Binary;
+    public TypeCategory ApplicableCategories => TypeCategory.Text | TypeCategory.Binary;
 
 }

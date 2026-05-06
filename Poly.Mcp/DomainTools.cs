@@ -1,19 +1,27 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Text.Json;
 
 using ModelContextProtocol.Server;
 
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;
+using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Introspection;
+using Poly.Syntax;
 using Poly.Syntax.Analysis;
 
 namespace Poly.Mcp;
 
-internal sealed record DomainSessionState(Domain Domain, AnalysisResult? LatestAnalysis, long Revision);
+internal sealed record DomainSessionState(
+    Domain Domain,
+    AnalysisResult? LatestAnalysis,
+    long Revision,
+    IReadOnlyDictionary<long, DomainSnapshot> RevisionSnapshots);
 
 internal static class DomainSessionStore {
+    private const int MaxRevisionSnapshots = 64;
     private static readonly ConcurrentDictionary<string, DomainSessionState> Sessions = new(StringComparer.Ordinal);
 
     public static (string SessionId, DomainSessionState State) Create(string domainName, string? preferredSessionId = null) {
@@ -21,7 +29,14 @@ internal static class DomainSessionStore {
             ? Guid.NewGuid().ToString("N")
             : preferredSessionId;
 
-        var state = new DomainSessionState(new Domain(domainName), LatestAnalysis: null, Revision: 0);
+        var domain = new Domain(domainName);
+        var bootstrap = domain.CreateMutation();
+        CanonicalBuiltInTypeCatalog.AddToMutation(bootstrap);
+        var initialAnalysis = bootstrap.Apply();
+        var snapshots = new Dictionary<long, DomainSnapshot> {
+            [0] = DomainDiffUtil.CaptureSnapshot(domain)
+        };
+        var state = new DomainSessionState(domain, LatestAnalysis: initialAnalysis, Revision: 0, RevisionSnapshots: snapshots);
         Sessions[sessionId] = state;
         return (sessionId, state);
     }
@@ -44,9 +59,29 @@ internal static class DomainSessionStore {
             throw new InvalidOperationException($"Session '{sessionId}' was not found.");
         }
 
-        var next = new DomainSessionState(value.Domain, analysis, value.Revision + 1);
+        var nextRevision = value.Revision + 1;
+        var snapshots = new Dictionary<long, DomainSnapshot>(value.RevisionSnapshots) {
+            [nextRevision] = DomainDiffUtil.CaptureSnapshot(value.Domain)
+        };
+
+        if (snapshots.Count > MaxRevisionSnapshots) {
+            foreach (var revision in snapshots.Keys.OrderBy(static revision => revision).Take(snapshots.Count - MaxRevisionSnapshots).ToArray()) {
+                snapshots.Remove(revision);
+            }
+        }
+
+        var next = new DomainSessionState(value.Domain, analysis, nextRevision, snapshots);
         Sessions[sessionId] = next;
         return next.Revision;
+    }
+
+    public static bool TryGetRevisionSnapshot(string sessionId, long revision, out DomainSnapshot snapshot) {
+        if (!TryGet(sessionId, out var session) || !session.RevisionSnapshots.TryGetValue(revision, out snapshot!)) {
+            snapshot = null!;
+            return false;
+        }
+
+        return true;
     }
 
     public static IReadOnlyCollection<string> ListSessionIds() => Sessions.Keys.OrderBy(static id => id, StringComparer.Ordinal).ToArray();
@@ -97,9 +132,62 @@ public sealed record DomainOverviewDto(
     IReadOnlyCollection<string> EventTypeNames,
     IReadOnlyCollection<string> RelationshipNames);
 
-public sealed record PrimitiveDto(string Name, string Category);
+public sealed record PrimitiveDto(string Name, string Category, bool IsRequired, bool IsNullable);
 
-public sealed record PropertyDto(string Name, string TypeName);
+public sealed record EnumMemberDto(string Name, object? CanonicalValue = null, string? Label = null);
+
+public sealed record DiscriminatorVariantDto(
+    string Value,
+    IReadOnlyCollection<string>? RequiredProperties = null,
+    IReadOnlyCollection<string>? ForbiddenProperties = null);
+
+public sealed record DiscriminatorConfigurationDto(
+    string EntityName,
+    string DiscriminatorPropertyName,
+    IReadOnlyCollection<DiscriminatorVariantDto> Variants);
+
+public sealed record ConstraintDto(
+    string Kind,
+    object? Value = null,
+    object? MinValue = null,
+    object? MaxValue = null,
+    int? MinLength = null,
+    int? MaxLength = null,
+    IReadOnlyCollection<EnumMemberDto>? EnumMembers = null,
+    string? DiscriminatorPropertyName = null,
+    IReadOnlyCollection<DiscriminatorVariantDto>? Variants = null);
+
+public sealed record PropertyExportDto(string Name, string TypeName, IReadOnlyCollection<ConstraintDto> Constraints);
+
+public sealed record PrimitiveExportDto(string Name, string Category, IReadOnlyCollection<ConstraintDto> Constraints);
+
+public sealed record EntityExportDto(
+    string Name,
+    bool IsActor,
+    string? ParentEntityName,
+    IReadOnlyCollection<PropertyExportDto> Properties);
+
+public sealed record EventTypeExportDto(string Name, IReadOnlyCollection<PropertyExportDto> Properties);
+
+public sealed record RelationshipExportDto(
+    string Name,
+    string SourceEntityName,
+    string TargetEntityName,
+    string Cardinality,
+    bool SourceOwnsTarget);
+
+public sealed record DomainSessionExportDto(
+    string DomainName,
+    IReadOnlyCollection<PrimitiveExportDto> Primitives,
+    IReadOnlyCollection<EntityExportDto> Entities,
+    IReadOnlyCollection<EventTypeExportDto> EventTypes,
+    IReadOnlyCollection<RelationshipExportDto> Relationships);
+
+public sealed record PropertyDto(
+    string Name,
+    string TypeName,
+    IReadOnlyCollection<EnumMemberDto> LocalEnumMembers,
+    IReadOnlyCollection<EnumMemberDto> EffectiveEnumMembers);
 
 public sealed record EntityListItemDto(
     string Name,
@@ -154,9 +242,46 @@ public sealed record RelationshipDetailsDto(
     IReadOnlyCollection<string> Stages,
     IReadOnlyCollection<string> Policies);
 
+public sealed record DomainHealthDto(
+    bool HasErrors,
+    int ErrorCount,
+    int WarningCount,
+    TimeSpan TotalAnalysisTime,
+    bool Incremental,
+    IReadOnlyCollection<AnalyzerPassTelemetry> Passes);
+
+public sealed record DomainInvalidityDto(
+    int ErrorCount,
+    int WarningCount,
+    IReadOnlyCollection<NodeInvalidityNodeReport> Nodes);
+
+public sealed record DomainRevisionDiffDto(
+    long FromRevision,
+    long ToRevision,
+    int AddedCount,
+    int RemovedCount,
+    int ChangedCount,
+    IReadOnlyCollection<DomainNodeSnapshot> Added,
+    IReadOnlyCollection<DomainNodeSnapshot> Removed,
+    IReadOnlyCollection<DomainNodeChange> Changed);
+
+public sealed record MutationTraceDto(
+    bool Succeeded,
+    bool RolledBack,
+    int AppliedStepCount,
+    TimeSpan Duration,
+    int ErrorCount,
+    int WarningCount,
+    IReadOnlyCollection<NodeId> AffectedNodeIds,
+    IReadOnlyCollection<DomainMutationStepTrace> Steps,
+    IReadOnlyCollection<string> Diagnostics);
+
 internal static class DomainAffordances {
     public static IReadOnlyCollection<DomainAffordance> SessionRoot() => [
         new("query:overview", nameof(DomainQueryTool.GetDomainOverview), new Dictionary<string, object?>(), "Get domain overview for the active session."),
+        new("query:health", nameof(DomainOperabilityTool.GetDomainHealth), new Dictionary<string, object?>(), "Get analyzer telemetry and diagnostic summary for the domain."),
+        new("query:invalidity", nameof(DomainOperabilityTool.ExplainInvalidDomain), new Dictionary<string, object?>(), "Get grouped invalidity reasons and hints by node."),
+        new("query:revision-diff", nameof(DomainOperabilityTool.DiffDomainRevision), new Dictionary<string, object?>(), "Compare two stored domain revisions."),
         new("query:entities", nameof(DomainQueryTool.ListEntities), new Dictionary<string, object?>(), "List entities in the domain."),
         new("query:event-types", nameof(DomainQueryTool.ListEventTypes), new Dictionary<string, object?>(), "List event types in the domain."),
         new("query:relationships", nameof(DomainQueryTool.ListRelationships), new Dictionary<string, object?>(), "List relationships in the domain."),
@@ -181,9 +306,14 @@ internal static class DomainAffordances {
         new("command:add-composite-rule", nameof(DomainAuthoringTool.AddCompositeRuleToPolicy), new Dictionary<string, object?>(), "Combine two existing rules with And/Or."),
         new("command:remove-rule-from-policy", nameof(DomainAuthoringTool.RemoveRuleFromPolicy), new Dictionary<string, object?>(), "Remove a rule from a policy."),
         new("command:add-primitive", nameof(DomainAuthoringTool.AddPrimitive), new Dictionary<string, object?>(), "Create a new primitive type."),
+        new("command:add-enum-constraint-to-type", nameof(DomainAuthoringTool.AddEnumConstraintToType), new Dictionary<string, object?>(), "Attach a closed enum constraint to a domain type."),
+        new("command:add-enum-constraint-to-entity-property", nameof(DomainAuthoringTool.AddEnumConstraintToEntityProperty), new Dictionary<string, object?>(), "Attach a closed enum constraint to an entity property."),
         new("command:add-event-type", nameof(DomainAuthoringTool.AddEventType), new Dictionary<string, object?>(), "Create a new event type."),
         new("command:add-relationship", nameof(DomainAuthoringTool.AddRelationship), new Dictionary<string, object?>(), "Create a relationship between two entities."),
+        new("command:apply-mutation-with-trace", nameof(DomainOperabilityTool.ApplyMutationWithTrace), new Dictionary<string, object?>(), "Apply a basic mutation and return detailed mutation trace."),
         new("command:add-comment", nameof(DomainAuthoringTool.AddComment), new Dictionary<string, object?>(), "Append a comment to a domain object.")
+        ,new("command:export-domain-session", nameof(DomainAuthoringTool.ExportDomainSession), new Dictionary<string, object?>(), "Export the current domain session as a portable payload.")
+        ,new("command:import-domain-session", nameof(DomainAuthoringTool.ImportDomainSession), new Dictionary<string, object?>(), "Import a domain session payload into a new or preferred session ID.")
     ];
 
     public static IReadOnlyCollection<DomainAffordance> SessionScoped(string sessionId, params DomainAffordance[] additional) {
@@ -229,7 +359,8 @@ public static class DomainCapabilityTool {
                 AvailableSessions: DomainSessionStore.ListSessionIds(),
                 Overview: null,
                 Affordances: [
-                    new DomainAffordance("command:create-domain", nameof(DomainAuthoringTool.CreateDomain), new Dictionary<string, object?>(), "Create a new domain session.")
+                    new DomainAffordance("command:create-domain", nameof(DomainAuthoringTool.CreateDomain), new Dictionary<string, object?>(), "Create a new domain session."),
+                    new DomainAffordance("command:import-domain-session", nameof(DomainAuthoringTool.ImportDomainSession), new Dictionary<string, object?>(), "Import a domain session payload into a new or preferred session ID.")
                 ]);
         }
 
@@ -273,7 +404,7 @@ public static class DomainQueryTool {
             var session = RequireSession(sessionId);
             var primitives = session.Domain.GetAvailablePrimitives()
                 .OrderBy(static primitive => primitive.Name, StringComparer.Ordinal)
-                .Select(static primitive => new PrimitiveDto(primitive.Name, primitive.Category.ToString()))
+                .Select(static primitive => new PrimitiveDto(primitive.Name, primitive.Category.ToString(), primitive.IsRequired, primitive.IsNullable))
                 .ToArray();
             return QueryOk<IReadOnlyCollection<PrimitiveDto>>(sessionId, session, primitives, "Primitive types returned.");
         }
@@ -321,7 +452,7 @@ public static class DomainQueryTool {
                 Properties: includeProperties
                     ? entity.Properties
                         .OrderBy(static property => property.Name, StringComparer.Ordinal)
-                        .Select(static property => new PropertyDto(property.Name, property.Type.Name))
+                        .Select(static property => ToPropertyDto(property))
                         .ToArray()
                     : [],
                 Events: includeEvents
@@ -393,7 +524,7 @@ public static class DomainQueryTool {
                 Name: eventType.Name,
                 Properties: eventType.Properties
                     .OrderBy(static property => property.Name, StringComparer.Ordinal)
-                    .Select(static property => new PropertyDto(property.Name, property.Type.Name))
+                    .Select(static property => ToPropertyDto(property))
                     .ToArray());
 
             var affordances = DomainAffordances.SessionScoped(
@@ -440,7 +571,7 @@ public static class DomainQueryTool {
                 SourceOwnsTarget: relationship.SourceOwnsTarget,
                 Properties: relationship.Properties
                     .OrderBy(static property => property.Name, StringComparer.Ordinal)
-                    .Select(static property => new PropertyDto(property.Name, property.Type.Name))
+                    .Select(static property => ToPropertyDto(property))
                     .ToArray(),
                 Stages: relationship.Stages
                     .Select(static stage => stage.Name)
@@ -474,6 +605,27 @@ public static class DomainQueryTool {
             RelationshipNames: relationshipNames);
     }
 
+    private static PropertyDto ToPropertyDto(Property property) {
+        var localEnum = property.Constraints.OfType<EnumConstraint>().LastOrDefault();
+        var effectiveEnum = property.EffectiveConstraints.OfType<EnumConstraint>().LastOrDefault();
+
+        return new PropertyDto(
+            Name: property.Name,
+            TypeName: property.Type.Name,
+            LocalEnumMembers: ToEnumMemberDtos(localEnum),
+            EffectiveEnumMembers: ToEnumMemberDtos(effectiveEnum));
+    }
+
+    private static IReadOnlyCollection<EnumMemberDto> ToEnumMemberDtos(EnumConstraint? constraint) {
+        if (constraint is null) {
+            return [];
+        }
+
+        return constraint.Members
+            .Select(static member => new EnumMemberDto(member.Name, member.CanonicalValue, member.Label))
+            .ToArray();
+    }
+
     private static DomainSessionState RequireSession(string sessionId) {
         if (!DomainSessionStore.TryGet(sessionId, out var session)) {
             throw new InvalidOperationException($"Session '{sessionId}' was not found.");
@@ -495,6 +647,32 @@ public static class DomainQueryTool {
         }
 
         return updated.LatestAnalysis!;
+    }
+
+    [McpServerTool, Description("Queries the discriminator configuration for an entity.")]
+    public static DomainQueryResponse<DiscriminatorConfigurationDto> GetDiscriminatorConfiguration(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the target entity.")] string entityName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var discriminator = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
+
+            if (discriminator is null) {
+                return QueryOk<DiscriminatorConfigurationDto?>(sessionId, state, null, $"Entity '{entityName}' does not have a discriminator constraint.");
+            }
+
+            var dto = new DiscriminatorConfigurationDto(
+                entityName,
+                discriminator.DiscriminatorPropertyName,
+                discriminator.Variants.Select(static v => new DiscriminatorVariantDto(
+                    v.Value,
+                    v.RequiredProperties,
+                    v.ForbiddenProperties)).ToArray());
+
+            return QueryOk(sessionId, state, dto, $"Discriminator configuration retrieved for entity '{entityName}'.");
+        }
+        catch (Exception ex) { return QueryFail<DiscriminatorConfigurationDto>(sessionId, ex); }
     }
 
     private static DomainQueryResponse<TPayload> QueryOk<TPayload>(
@@ -523,6 +701,318 @@ public static class DomainQueryTool {
 }
 
 [McpServerToolType]
+public static class DomainOperabilityTool {
+    private const string CodeSessionNotFound = "SESSION_NOT_FOUND";
+    private const string CodeRevisionNotFound = "REVISION_NOT_FOUND";
+    private const string CodeUnsupportedMutation = "UNSUPPORTED_MUTATION";
+    private const string CodeAnalysisFailed = "ANALYSIS_FAILED";
+
+    private const string CategoryNotFound = "NotFound";
+    private const string CategoryInvalidArgument = "InvalidArgument";
+    private const string CategoryAnalysis = "Analysis";
+
+    [McpServerTool, Description("Returns domain health including analyzer telemetry and diagnostic totals.")]
+    public static DomainQueryResponse<DomainHealthDto> GetDomainHealth(string sessionId) {
+        try {
+            var session = RequireSession(sessionId);
+            var analyzer = new DomainModelAnalyzer();
+            var run = analyzer.AnalyzeWithTelemetry(session.Domain);
+            _ = DomainSessionStore.UpdateAnalysis(sessionId, run.Analysis);
+
+            if (!DomainSessionStore.TryGet(sessionId, out var updated)) {
+                throw new InvalidOperationException($"Session '{sessionId}' was not found after analysis update.");
+            }
+
+            var data = new DomainHealthDto(
+                HasErrors: run.Analysis.HasErrors,
+                ErrorCount: run.Analysis.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
+                WarningCount: run.Analysis.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning),
+                TotalAnalysisTime: run.Telemetry.TotalElapsed,
+                Incremental: run.Telemetry.Incremental,
+                Passes: run.Telemetry.Passes);
+
+            return new DomainQueryResponse<DomainHealthDto>(
+                Success: true,
+                Message: "Domain health returned.",
+                SessionId: sessionId,
+                Revision: updated.Revision,
+                Data: data,
+                Affordances: DomainAffordances.SessionScoped(sessionId));
+        }
+        catch (Exception ex) {
+            var (code, category) = ClassifyAnalysisFailure(ex);
+            return Fail<DomainHealthDto>(sessionId, ex, code, category);
+        }
+    }
+
+    [McpServerTool, Description("Explains invalid domain state by grouping diagnostics per node and attaching remediation hints.")]
+    public static DomainQueryResponse<DomainInvalidityDto> ExplainInvalidDomain(string sessionId) {
+        try {
+            var session = RequireSession(sessionId);
+            var analysis = session.LatestAnalysis ?? new DomainModelAnalyzer().Analyze(session.Domain);
+            _ = DomainSessionStore.UpdateAnalysis(sessionId, analysis);
+
+            if (!DomainSessionStore.TryGet(sessionId, out var updated)) {
+                throw new InvalidOperationException($"Session '{sessionId}' was not found after analysis update.");
+            }
+
+            var report = DomainInvalidityExplainer.Explain(analysis);
+            var data = new DomainInvalidityDto(report.ErrorCount, report.WarningCount, report.Nodes);
+
+            return new DomainQueryResponse<DomainInvalidityDto>(
+                Success: true,
+                Message: "Domain invalidity explanation returned.",
+                SessionId: sessionId,
+                Revision: updated.Revision,
+                Data: data,
+                Affordances: DomainAffordances.SessionScoped(sessionId));
+        }
+        catch (Exception ex) {
+            var (code, category) = ClassifyAnalysisFailure(ex);
+            return Fail<DomainInvalidityDto>(sessionId, ex, code, category);
+        }
+    }
+
+    [McpServerTool, Description("Diffs two stored domain revisions and returns added, removed, and changed nodes.")]
+    public static DomainQueryResponse<DomainRevisionDiffDto> DiffDomainRevision(string sessionId, long fromRevision, long? toRevision = null) {
+        try {
+            var session = RequireSession(sessionId);
+            var targetRevision = toRevision ?? session.Revision;
+
+            if (!DomainSessionStore.TryGetRevisionSnapshot(sessionId, fromRevision, out var fromSnapshot)) {
+                throw new InvalidOperationException($"Revision '{fromRevision}' was not found for session '{sessionId}'.");
+            }
+
+            if (!DomainSessionStore.TryGetRevisionSnapshot(sessionId, targetRevision, out var toSnapshot)) {
+                throw new InvalidOperationException($"Revision '{targetRevision}' was not found for session '{sessionId}'.");
+            }
+
+            var analysis = session.LatestAnalysis;
+            var diff = DomainDiffUtil.CompareSnapshots(fromSnapshot, toSnapshot, analysis);
+
+            var data = new DomainRevisionDiffDto(
+                FromRevision: fromRevision,
+                ToRevision: targetRevision,
+                AddedCount: diff.Added.Count,
+                RemovedCount: diff.Removed.Count,
+                ChangedCount: diff.Changed.Count,
+                Added: diff.Added,
+                Removed: diff.Removed,
+                Changed: diff.Changed);
+
+            return new DomainQueryResponse<DomainRevisionDiffDto>(
+                Success: true,
+                Message: $"Domain diff from revision {fromRevision} to {targetRevision} returned.",
+                SessionId: sessionId,
+                Revision: session.Revision,
+                Data: data,
+                Affordances: DomainAffordances.SessionScoped(sessionId));
+        }
+        catch (Exception ex) {
+            var (code, category) = ClassifyDiffFailure(ex);
+            return Fail<DomainRevisionDiffDto>(sessionId, ex, code, category);
+        }
+    }
+
+    [McpServerTool, Description("Applies a mutation and returns detailed mutation trace. Supported mutationType values: SetDomainName, AddPrimitive, AddEntity, AddActor, AddRelationship, AddProperty, AddEventType, AddStage, AddAction, RemoveType.")]
+    public static DomainQueryResponse<MutationTraceDto> ApplyMutationWithTrace(
+        string sessionId,
+        string mutationType,
+        string name,
+        string? category = null,
+        string? parentEntityName = null,
+        string? entityName = null,
+        string? typeName = null,
+        string? sourceName = null,
+        string? targetName = null,
+        string? cardinality = null,
+        bool? sourceOwnsTarget = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var mutation = state.Domain.CreateMutation();
+
+            switch (mutationType) {
+                case "SetDomainName":
+                    mutation.SetDomainName(name);
+                    break;
+                case "AddPrimitive": {
+                        var typeCategory = ParseTypeCategory(category);
+                        mutation.AddType(new Primitive(state.Domain, name, typeCategory));
+                        break;
+                    }
+                case "AddEntity": {
+                        var parent = string.IsNullOrWhiteSpace(parentEntityName) ? null : state.Domain.RequireEntity(parentEntityName);
+                        mutation.AddType(new Entity(state.Domain, name, parent));
+                        break;
+                    }
+                case "AddActor": {
+                        var parent = string.IsNullOrWhiteSpace(parentEntityName) ? null : state.Domain.RequireEntity(parentEntityName);
+                        mutation.AddType(new Actor(state.Domain, name, parent));
+                        break;
+                    }
+                case "AddRelationship": {
+                        if (string.IsNullOrWhiteSpace(sourceName)) throw new InvalidOperationException("sourceName is required for AddRelationship.");
+                        if (string.IsNullOrWhiteSpace(targetName)) throw new InvalidOperationException("targetName is required for AddRelationship.");
+                        var src = state.Domain.RequireEntity(sourceName);
+                        var tgt = state.Domain.RequireEntity(targetName);
+                        var rel = new Relationship(state.Domain, name, src, tgt, ParseCardinality(cardinality), sourceOwnsTarget ?? false);
+                        mutation.AddRelationship(rel);
+                        break;
+                    }
+                case "AddProperty": {
+                        if (string.IsNullOrWhiteSpace(entityName)) throw new InvalidOperationException("entityName is required for AddProperty.");
+                        if (string.IsNullOrWhiteSpace(typeName)) throw new InvalidOperationException("typeName is required for AddProperty.");
+                        var propEntity = state.Domain.RequireEntity(entityName);
+                        var propType = state.Domain.RequireType(typeName);
+                        mutation.AddProperty(propEntity, new Property(state.Domain, name, propType));
+                        break;
+                    }
+                case "AddEventType": {
+                        mutation.AddType(new Event(state.Domain, name));
+                        break;
+                    }
+                case "AddStage": {
+                        if (string.IsNullOrWhiteSpace(entityName)) throw new InvalidOperationException("entityName is required for AddStage.");
+                        var stageEntity = state.Domain.RequireEntity(entityName);
+                        mutation.AddStage(stageEntity, new Stage(state.Domain, name));
+                        break;
+                    }
+                case "AddAction": {
+                        if (string.IsNullOrWhiteSpace(entityName)) throw new InvalidOperationException("entityName is required for AddAction.");
+                        var actionEntity = state.Domain.RequireEntity(entityName);
+                        mutation.AddAction(actionEntity, new Poly.Data.Modeling.Action(state.Domain, name, actionEntity));
+                        break;
+                    }
+                case "RemoveType": {
+                        var removeType = state.Domain.GetAvailableTypes().FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal))
+                            ?? throw new InvalidOperationException($"Type '{name}' was not found in domain.");
+                        mutation.RemoveType(removeType);
+                        break;
+                    }
+                default:
+                    throw new InvalidOperationException($"Unsupported mutationType '{mutationType}'. Supported values are SetDomainName, AddPrimitive, AddEntity, AddActor, AddRelationship, AddProperty, AddEventType, AddStage, AddAction, RemoveType.");
+            }
+
+            var execution = mutation.ApplyWithTrace(state.LatestAnalysis);
+            var revision = DomainSessionStore.UpdateAnalysis(sessionId, execution.Analysis);
+
+            var diagnostics = execution.Analysis.Diagnostics
+                .Select(static diagnostic => $"{diagnostic.Severity}: {diagnostic.Code} - {diagnostic.Message}")
+                .ToArray();
+
+            var data = new MutationTraceDto(
+                Succeeded: execution.Trace.Succeeded,
+                RolledBack: execution.Trace.RolledBack,
+                AppliedStepCount: execution.Trace.AppliedStepCount,
+                Duration: execution.Trace.Duration,
+                ErrorCount: execution.Trace.ErrorCount,
+                WarningCount: execution.Trace.WarningCount,
+                AffectedNodeIds: execution.Trace.AffectedNodeIds,
+                Steps: execution.Trace.Steps,
+                Diagnostics: diagnostics);
+
+            return new DomainQueryResponse<MutationTraceDto>(
+                Success: true,
+                Message: $"Mutation '{mutationType}' applied with trace.",
+                SessionId: sessionId,
+                Revision: revision,
+                Data: data,
+                Affordances: DomainAffordances.SessionScoped(sessionId));
+        }
+        catch (Exception ex) {
+            var (code, diagnosticCategory) = ClassifyMutationFailure(ex);
+            return Fail<MutationTraceDto>(sessionId, ex, code, diagnosticCategory);
+        }
+    }
+
+    private static DomainSessionState RequireSession(string sessionId) {
+        if (!DomainSessionStore.TryGet(sessionId, out var session)) {
+            throw new InvalidOperationException($"Session '{sessionId}' was not found.");
+        }
+
+        return session;
+    }
+
+    private static RelationshipCardinality ParseCardinality(string? value) {
+        if (string.IsNullOrWhiteSpace(value)) {
+            return RelationshipCardinality.OneToMany;
+        }
+
+        if (Enum.TryParse<RelationshipCardinality>(value, ignoreCase: true, out var parsed)) {
+            return parsed;
+        }
+
+        throw new InvalidOperationException($"Unknown cardinality '{value}'.");
+    }
+
+    private static TypeCategory ParseTypeCategory(string? value) {
+        if (string.IsNullOrWhiteSpace(value)) {
+            return TypeCategory.Primitive;
+        }
+
+        if (Enum.TryParse<TypeCategory>(value, ignoreCase: true, out var parsed)) {
+            return parsed;
+        }
+
+        throw new InvalidOperationException($"Unknown type category '{value}'.");
+    }
+
+    private static (string Code, string Category) ClassifyDiffFailure(Exception ex) {
+        if (IsSessionNotFound(ex)) {
+            return (CodeSessionNotFound, CategoryNotFound);
+        }
+
+        if (IsRevisionNotFound(ex)) {
+            return (CodeRevisionNotFound, CategoryNotFound);
+        }
+
+        return (CodeAnalysisFailed, CategoryAnalysis);
+    }
+
+    private static (string Code, string Category) ClassifyAnalysisFailure(Exception ex) {
+        if (IsSessionNotFound(ex)) {
+            return (CodeSessionNotFound, CategoryNotFound);
+        }
+
+        return (CodeAnalysisFailed, CategoryAnalysis);
+    }
+
+    private static (string Code, string Category) ClassifyMutationFailure(Exception ex) {
+        if (IsSessionNotFound(ex)) {
+            return (CodeSessionNotFound, CategoryNotFound);
+        }
+
+        if (IsUnsupportedMutation(ex)) {
+            return (CodeUnsupportedMutation, CategoryInvalidArgument);
+        }
+
+        return (CodeAnalysisFailed, CategoryAnalysis);
+    }
+
+    private static DomainQueryResponse<TPayload> Fail<TPayload>(string sessionId, Exception ex, string code, string category) =>
+        new(
+            Success: false,
+            Message: ex.Message,
+            SessionId: sessionId,
+            Revision: null,
+            Data: default,
+            Affordances: [],
+            Diagnostics: [
+                $"code={code};category={category};message={ex.Message}",
+                ex.ToString()
+            ]);
+
+    private static bool IsSessionNotFound(Exception ex) =>
+        ex is InvalidOperationException && ex.Message.Contains("Session '", StringComparison.Ordinal) && ex.Message.Contains("was not found", StringComparison.Ordinal);
+
+    private static bool IsRevisionNotFound(Exception ex) =>
+        ex is InvalidOperationException && ex.Message.Contains("Revision '", StringComparison.Ordinal) && ex.Message.Contains("was not found", StringComparison.Ordinal);
+
+    private static bool IsUnsupportedMutation(Exception ex) =>
+        ex is InvalidOperationException && ex.Message.Contains("Unsupported mutationType", StringComparison.Ordinal);
+}
+
+[McpServerToolType]
 public static class DomainAuthoringTool {
     [McpServerTool, Description("Creates a new Poly domain session with the given name. Returns the session ID for subsequent commands and queries.")]
     public static DomainCommandResponse CreateDomain(
@@ -531,6 +1021,141 @@ public static class DomainAuthoringTool {
         try {
             var (id, state) = DomainSessionStore.Create(domainName, sessionId);
             return Ok(id, state.Domain.Name, state.Revision, $"Created domain '{domainName}' in session '{id}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Exports the current domain session as a portable payload for persistence or transfer.")]
+    public static DomainQueryResponse<DomainSessionExportDto> ExportDomainSession(
+        [Description("The session ID.")] string sessionId) {
+        try {
+            var state = RequireSession(sessionId);
+            var payload = BuildExportPayload(state.Domain);
+            return new DomainQueryResponse<DomainSessionExportDto>(
+                Success: true,
+                Message: $"Domain session '{sessionId}' exported.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: payload,
+                Affordances: DomainAffordances.SessionScoped(sessionId));
+        }
+        catch (Exception ex) {
+            return new DomainQueryResponse<DomainSessionExportDto>(
+                Success: false,
+                Message: ex.Message,
+                SessionId: sessionId,
+                Revision: null,
+                Data: default,
+                Affordances: [],
+                Diagnostics: [ex.ToString()]);
+        }
+    }
+
+    [McpServerTool, Description("Imports a portable domain payload into a new or preferred session ID.")]
+    public static DomainCommandResponse ImportDomainSession(
+        [Description("Portable domain payload previously produced by ExportDomainSession.")] DomainSessionExportDto payload,
+        [Description("Optional preferred session ID. A unique ID is generated if omitted.")] string? sessionId = null) {
+        try {
+            ArgumentNullException.ThrowIfNull(payload);
+            var (id, state) = DomainSessionStore.Create(payload.DomainName, sessionId);
+
+            var mutation = state.Domain.CreateMutation();
+            var typeByName = new Dictionary<string, DomainType>(StringComparer.Ordinal);
+            foreach (var type in state.Domain.Types) {
+                typeByName[type.Name] = type;
+            }
+
+            var entityByName = new Dictionary<string, Entity>(StringComparer.Ordinal);
+
+            foreach (var primitiveDto in payload.Primitives.OrderBy(static p => p.Name, StringComparer.Ordinal)) {
+                if (!typeByName.ContainsKey(primitiveDto.Name)) {
+                    var primitive = new Primitive(state.Domain, primitiveDto.Name, ParseTypeCategory(primitiveDto.Category));
+                    mutation.AddType(primitive);
+                    typeByName[primitive.Name] = primitive;
+                }
+
+                var primitiveType = (Primitive)typeByName[primitiveDto.Name];
+                ApplyTypeConstraints(mutation, primitiveType, primitiveDto.Constraints);
+            }
+
+            Entity EnsureEntity(EntityExportDto dto) {
+                if (entityByName.TryGetValue(dto.Name, out var existing)) {
+                    return existing;
+                }
+
+                Entity? parent = null;
+                if (!string.IsNullOrWhiteSpace(dto.ParentEntityName)) {
+                    var parentDto = payload.Entities.FirstOrDefault(e => string.Equals(e.Name, dto.ParentEntityName, StringComparison.Ordinal));
+                    if (parentDto is null) {
+                        throw new InvalidOperationException($"Parent entity '{dto.ParentEntityName}' not found in import payload.");
+                    }
+
+                    parent = EnsureEntity(parentDto);
+                }
+
+                Entity created = dto.IsActor
+                    ? new Actor(state.Domain, dto.Name, parent)
+                    : new Entity(state.Domain, dto.Name, parent);
+
+                mutation.AddType(created);
+                entityByName[created.Name] = created;
+                typeByName[created.Name] = created;
+                return created;
+            }
+
+            foreach (var entityDto in payload.Entities.OrderBy(static e => e.Name, StringComparer.Ordinal)) {
+                _ = EnsureEntity(entityDto);
+            }
+
+            foreach (var eventDto in payload.EventTypes.OrderBy(static e => e.Name, StringComparer.Ordinal)) {
+                if (typeByName.ContainsKey(eventDto.Name)) {
+                    continue;
+                }
+
+                var @event = new Event(state.Domain, eventDto.Name);
+                mutation.AddType(@event);
+                typeByName[@event.Name] = @event;
+            }
+
+            foreach (var entityDto in payload.Entities) {
+                var entity = entityByName[entityDto.Name];
+                foreach (var propertyDto in entityDto.Properties) {
+                    var type = ResolveType(typeByName, propertyDto.TypeName, state.Domain.Name);
+                    var property = new Property(state.Domain, propertyDto.Name, type);
+                    mutation.AddProperty(entity, property);
+                    foreach (var constraint in BuildConstraints(propertyDto.Constraints)) {
+                        mutation.AddConstraint(property, constraint);
+                    }
+                }
+            }
+
+            foreach (var eventDto in payload.EventTypes) {
+                var eventType = (Event)ResolveType(typeByName, eventDto.Name, state.Domain.Name);
+                foreach (var propertyDto in eventDto.Properties) {
+                    var type = ResolveType(typeByName, propertyDto.TypeName, state.Domain.Name);
+                    var property = new Property(state.Domain, propertyDto.Name, type);
+                    mutation.AddProperty(eventType, property);
+                    foreach (var constraint in BuildConstraints(propertyDto.Constraints)) {
+                        mutation.AddConstraint(property, constraint);
+                    }
+                }
+            }
+
+            foreach (var relationshipDto in payload.Relationships) {
+                if (!entityByName.TryGetValue(relationshipDto.SourceEntityName, out var source)) {
+                    throw new InvalidOperationException($"Relationship source entity '{relationshipDto.SourceEntityName}' was not found in import payload.");
+                }
+
+                if (!entityByName.TryGetValue(relationshipDto.TargetEntityName, out var target)) {
+                    throw new InvalidOperationException($"Relationship target entity '{relationshipDto.TargetEntityName}' was not found in import payload.");
+                }
+
+                var relationship = new Relationship(state.Domain, relationshipDto.Name, source, target, ParseCardinality(relationshipDto.Cardinality), relationshipDto.SourceOwnsTarget);
+                mutation.AddRelationship(relationship).AddEntityRelationship(source, relationship);
+            }
+
+            var analysis = mutation.Apply(state.LatestAnalysis);
+            return Commit(id, state.Domain, analysis, $"Imported domain '{payload.DomainName}' into session '{id}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
@@ -884,12 +1509,181 @@ public static class DomainAuthoringTool {
     public static DomainCommandResponse AddPrimitive(
         [Description("The session ID.")] string sessionId,
         [Description("Name of the new primitive type.")] string name,
-        [Description("Type category: Primitive, Enum, or Value. Defaults to Primitive.")] string? category = null) {
+        [Description("Type category (e.g. Numeric, Text, Temporal). Defaults to Primitive.")] string? category = null) {
         try {
             var state = RequireSession(sessionId);
             var typeCategory = ParseTypeCategory(category);
+            ValidatePrimitiveCategoryForDomainModeling(typeCategory, name);
             var analysis = state.Domain.CreateMutation().AddType(new Primitive(state.Domain, name, typeCategory)).Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"Primitive '{name}' ({typeCategory}) added.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds or replaces a closed enum constraint on an existing domain type.")]
+    public static DomainCommandResponse AddEnumConstraintToType(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of an existing domain type.")] string typeName,
+        [Description("Closed enum members. Each member has Name and optional CanonicalValue/Label.")] EnumMemberDto[] members) {
+        try {
+            var state = RequireSession(sessionId);
+            var type = state.Domain.RequireType(typeName);
+            var enumConstraint = BuildEnumConstraint(members);
+
+            var mutation = state.Domain.CreateMutation();
+            foreach (var existing in type.Constraints.Where(static constraint => constraint.IsOrContains<EnumConstraint>()).ToArray()) {
+                mutation.RemoveConstraint(type, existing);
+            }
+
+            var analysis = mutation
+                .AddConstraint(type, enumConstraint)
+                .Apply(state.LatestAnalysis);
+
+            return Commit(sessionId, state.Domain, analysis, $"Enum constraint applied to type '{typeName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds or replaces a closed enum constraint on an entity property. Property-level enum overrides type-level enum.")]
+    public static DomainCommandResponse AddEnumConstraintToEntityProperty(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the target entity.")] string entityName,
+        [Description("Name of the target property.")] string propertyName,
+        [Description("Closed enum members. Each member has Name and optional CanonicalValue/Label.")] EnumMemberDto[] members) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var property = entity.RequireProperty(propertyName);
+            var enumConstraint = BuildEnumConstraint(members);
+
+            var mutation = state.Domain.CreateMutation();
+            foreach (var existing in property.Constraints.Where(static constraint => constraint.IsOrContains<EnumConstraint>()).ToArray()) {
+                mutation.RemoveConstraint(property, existing);
+            }
+
+            var analysis = mutation
+                .AddConstraint(property, enumConstraint)
+                .Apply(state.LatestAnalysis);
+
+            return Commit(sessionId, state.Domain, analysis, $"Enum constraint applied to property '{propertyName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Sets or replaces the discriminator constraint on an entity. Defines a tagged-union shape with a discriminator property and variant definitions.")]
+    public static DomainCommandResponse SetDiscriminator(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the target entity.")] string entityName,
+        [Description("Name of the discriminator property on the entity.")] string discriminatorPropertyName,
+        [Description("Variant definitions. Each variant maps a discriminator value to required/forbidden properties.")] DiscriminatorVariantDto[] variants) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var discriminatorConstraint = new DiscriminatorConstraint(
+                discriminatorPropertyName,
+                variants.Select(static v => new DiscriminatorVariant(
+                    v.Value,
+                    v.RequiredProperties ?? [],
+                    v.ForbiddenProperties ?? [])));
+
+            var mutation = state.Domain.CreateMutation();
+            foreach (var existing in entity.Constraints.OfType<DiscriminatorConstraint>().ToArray()) {
+                mutation.RemoveConstraint(entity, existing);
+            }
+
+            var analysis = mutation
+                .AddConstraint(entity, discriminatorConstraint)
+                .Apply(state.LatestAnalysis);
+
+            return Commit(sessionId, state.Domain, analysis, $"Discriminator constraint set on entity '{entityName}' with property '{discriminatorPropertyName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes the discriminator constraint from an entity.")]
+    public static DomainCommandResponse RemoveDiscriminator(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the target entity.")] string entityName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+
+            var mutation = state.Domain.CreateMutation();
+            foreach (var existing in entity.Constraints.OfType<DiscriminatorConstraint>().ToArray()) {
+                mutation.RemoveConstraint(entity, existing);
+            }
+
+            var analysis = mutation.Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Discriminator constraint removed from entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds or updates a variant in the discriminator constraint on an entity.")]
+    public static DomainCommandResponse AddOrUpdateDiscriminatorVariant(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the target entity.")] string entityName,
+        [Description("The discriminator value for this variant.")] string variantValue,
+        [Description("Properties required when this variant is active.")] string[]? requiredProperties = null,
+        [Description("Properties that must not be present when this variant is active.")] string[]? forbiddenProperties = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var existingDiscriminator = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
+
+            if (existingDiscriminator is null) {
+                return Fail(sessionId, new InvalidOperationException($"Entity '{entityName}' does not have a discriminator constraint. Use SetDiscriminator first."));
+            }
+
+            var updatedVariants = existingDiscriminator.Variants
+                .Where(v => v.Value != variantValue)
+                .Append(new DiscriminatorVariant(variantValue, requiredProperties ?? [], forbiddenProperties ?? []))
+                .ToArray();
+
+            var newDiscriminator = new DiscriminatorConstraint(existingDiscriminator.DiscriminatorPropertyName, updatedVariants);
+
+            var mutation = state.Domain.CreateMutation();
+            mutation.RemoveConstraint(entity, existingDiscriminator);
+            var analysis = mutation
+                .AddConstraint(entity, newDiscriminator)
+                .Apply(state.LatestAnalysis);
+
+            return Commit(sessionId, state.Domain, analysis, $"Variant '{variantValue}' added/updated on entity '{entityName}' discriminator.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a variant from the discriminator constraint on an entity.")]
+    public static DomainCommandResponse RemoveDiscriminatorVariant(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the target entity.")] string entityName,
+        [Description("The discriminator value of the variant to remove.")] string variantValue) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var existingDiscriminator = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
+
+            if (existingDiscriminator is null) {
+                return Fail(sessionId, new InvalidOperationException($"Entity '{entityName}' does not have a discriminator constraint."));
+            }
+
+            var updatedVariants = existingDiscriminator.Variants
+                .Where(v => v.Value != variantValue)
+                .ToArray();
+
+            if (updatedVariants.Length == existingDiscriminator.Variants.Count) {
+                return Fail(sessionId, new InvalidOperationException($"Variant '{variantValue}' was not found in the discriminator constraint."));
+            }
+
+            var newDiscriminator = new DiscriminatorConstraint(existingDiscriminator.DiscriminatorPropertyName, updatedVariants);
+
+            var mutation = state.Domain.CreateMutation();
+            mutation.RemoveConstraint(entity, existingDiscriminator);
+            var analysis = mutation
+                .AddConstraint(entity, newDiscriminator)
+                .Apply(state.LatestAnalysis);
+
+            return Commit(sessionId, state.Domain, analysis, $"Variant '{variantValue}' removed from entity '{entityName}' discriminator.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
@@ -911,12 +1705,13 @@ public static class DomainAuthoringTool {
         [Description("The session ID.")] string sessionId,
         [Description("Name of the target entity.")] string entityName,
         [Description("Name of the new property.")] string propertyName,
-        [Description("Name of the domain type for this property.")] string typeName) {
+        [Description("Name of an existing domain type for this property (e.g. \"Text\", \"DateTime\"). Use GetDomain to see available types.")] string typeName) {
         try {
             var state = RequireSession(sessionId);
             var entity = state.Domain.RequireEntity(entityName);
-            var type = ResolveType(state.Domain, typeName);
-            var analysis = state.Domain.CreateMutation().AddProperty(entity, new Property(state.Domain, propertyName, type)).Apply(state.LatestAnalysis);
+            var mutation = state.Domain.CreateMutation();
+            var type = state.Domain.RequireType(typeName);
+            var analysis = mutation.AddProperty(entity, new Property(state.Domain, propertyName, type)).Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"Property '{propertyName}' added to entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
@@ -927,12 +1722,13 @@ public static class DomainAuthoringTool {
         [Description("The session ID.")] string sessionId,
         [Description("Name of the target event type.")] string eventTypeName,
         [Description("Name of the new property.")] string propertyName,
-        [Description("Name of the domain type for this property.")] string typeName) {
+        [Description("Name of an existing domain type for this property (e.g. \"Text\", \"DateTime\"). Use GetDomain to see available types.")] string typeName) {
         try {
             var state = RequireSession(sessionId);
             var eventType = state.Domain.RequireEventType(eventTypeName);
-            var type = ResolveType(state.Domain, typeName);
-            var analysis = state.Domain.CreateMutation().AddProperty(eventType, new Property(state.Domain, propertyName, type)).Apply(state.LatestAnalysis);
+            var mutation = state.Domain.CreateMutation();
+            var type = state.Domain.RequireType(typeName);
+            var analysis = mutation.AddProperty(eventType, new Property(state.Domain, propertyName, type)).Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"Property '{propertyName}' added to event type '{eventTypeName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
@@ -1175,13 +1971,14 @@ public static class DomainAuthoringTool {
         [Description("Name of the entity owning the action.")] string entityName,
         [Description("Name of the action.")] string actionName,
         [Description("Name of the new parameter.")] string parameterName,
-        [Description("Name of the domain type for this parameter.")] string typeName) {
+        [Description("Name of an existing domain type for this parameter (e.g. \"Uuid\", \"Text\"). Use GetDomain to see available types.")] string typeName) {
         try {
             var state = RequireSession(sessionId);
             var entity = state.Domain.RequireEntity(entityName);
             var action = entity.RequireAction(actionName);
-            var type = ResolveType(state.Domain, typeName);
-            var analysis = state.Domain.CreateMutation().AddParameter(action, new Property(state.Domain, parameterName, type)).Apply(state.LatestAnalysis);
+            var mutation = state.Domain.CreateMutation();
+            var type = state.Domain.RequireType(typeName);
+            var analysis = mutation.AddParameter(action, new Property(state.Domain, parameterName, type)).Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"Parameter '{parameterName}' added to action '{actionName}' on entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
@@ -1279,13 +2076,141 @@ public static class DomainAuthoringTool {
         throw new InvalidOperationException($"Unknown type category '{value}'.");
     }
 
-    private static DomainType ResolveType(Domain domain, string typeName) {
-        foreach (var type in domain.Types) {
-            if (string.Equals(type.Name, typeName, StringComparison.Ordinal)) {
-                return type;
-            }
+    private static void ValidatePrimitiveCategoryForDomainModeling(TypeCategory category, string primitiveName) {
+        if (category.Is(TypeCategory.Nullable)) {
+            throw new InvalidOperationException(
+                $"Primitive '{primitiveName}' cannot use TypeCategory.Nullable. Domain nullability is modeled by RequiredConstraint.");
         }
 
-        throw new InvalidOperationException($"Type '{typeName}' was not found in domain '{domain.Name}'.");
+        if (category.Is(TypeCategory.Collection) || category.Is(TypeCategory.Keyed)) {
+            throw new InvalidOperationException(
+                $"Primitive '{primitiveName}' cannot use collection categories (Collection/Keyed). Domain multiplicity is modeled through relationships.");
+        }
+    }
+
+    private static EnumConstraint BuildEnumConstraint(IEnumerable<EnumMemberDto> members) {
+        ArgumentNullException.ThrowIfNull(members);
+
+        var materialized = members
+            .Select(static member => new EnumConstraint.EnumMember(member.Name, member.CanonicalValue, member.Label))
+            .ToArray();
+
+        if (materialized.Length == 0) {
+            throw new InvalidOperationException("Enum constraint requires at least one member.");
+        }
+
+        return new EnumConstraint(materialized);
+    }
+
+    private static DomainSessionExportDto BuildExportPayload(Domain domain) {
+        var primitives = domain.GetAvailablePrimitives()
+            .OrderBy(static primitive => primitive.Name, StringComparer.Ordinal)
+            .Select(static primitive => new PrimitiveExportDto(
+                primitive.Name,
+                primitive.Category.ToString(),
+                ToConstraintDtos(primitive.Constraints)))
+            .ToArray();
+
+        var entities = domain.GetAvailableEntities()
+            .Where(static entity => entity is not Relationship)
+            .OrderBy(static entity => entity.Name, StringComparer.Ordinal)
+            .Select(static entity => new EntityExportDto(
+                Name: entity.Name,
+                IsActor: entity is Actor,
+                ParentEntityName: entity.ParentEntity?.Name,
+                Properties: entity.Properties
+                    .OrderBy(static property => property.Name, StringComparer.Ordinal)
+                    .Select(static property => new PropertyExportDto(property.Name, property.Type.Name, ToConstraintDtos(property.Constraints)))
+                    .ToArray()))
+            .ToArray();
+
+        var eventTypes = domain.GetAvailableEventTypes()
+            .OrderBy(static @event => @event.Name, StringComparer.Ordinal)
+            .Select(static @event => new EventTypeExportDto(
+                Name: @event.Name,
+                Properties: @event.Properties
+                    .OrderBy(static property => property.Name, StringComparer.Ordinal)
+                    .Select(static property => new PropertyExportDto(property.Name, property.Type.Name, ToConstraintDtos(property.Constraints)))
+                    .ToArray()))
+            .ToArray();
+
+        var relationships = domain.GetAvailableRelationships()
+            .OrderBy(static relationship => relationship.Name, StringComparer.Ordinal)
+            .Select(static relationship => new RelationshipExportDto(
+                relationship.Name,
+                relationship.Source.Name,
+                relationship.Target.Name,
+                relationship.Cardinality.ToString(),
+                relationship.SourceOwnsTarget))
+            .ToArray();
+
+        return new DomainSessionExportDto(domain.Name, primitives, entities, eventTypes, relationships);
+    }
+
+    private static IReadOnlyCollection<ConstraintDto> ToConstraintDtos(IEnumerable<Constraint> constraints) {
+        return constraints.Select(ToConstraintDto).Where(static dto => dto is not null).Select(static dto => dto!).ToArray();
+    }
+
+    private static ConstraintDto? ToConstraintDto(Constraint constraint) {
+        return constraint switch {
+            RequiredConstraint => new ConstraintDto("Required"),
+            EqualityConstraint equality => new ConstraintDto("Equality", Value: equality.Value),
+            RangeConstraint range => new ConstraintDto("Range", MinValue: range.MinValue, MaxValue: range.MaxValue),
+            LengthConstraint length => new ConstraintDto("Length", MinLength: length.MinLength, MaxLength: length.MaxLength),
+            EnumConstraint @enum => new ConstraintDto("Enum", EnumMembers: @enum.Members.Select(static m => new EnumMemberDto(m.Name, m.CanonicalValue, m.Label)).ToArray()),
+            DiscriminatorConstraint discriminator => new ConstraintDto(
+                "Discriminator",
+                DiscriminatorPropertyName: discriminator.DiscriminatorPropertyName,
+                Variants: discriminator.Variants.Select(static v => new DiscriminatorVariantDto(
+                    v.Value,
+                    v.RequiredProperties,
+                    v.ForbiddenProperties)).ToArray()),
+            _ => null
+        };
+    }
+
+    private static IEnumerable<Constraint> BuildConstraints(IEnumerable<ConstraintDto> constraints) {
+        foreach (var dto in constraints ?? []) {
+            switch (dto.Kind) {
+                case "Required":
+                    yield return new RequiredConstraint();
+                    break;
+                case "Equality":
+                    yield return new EqualityConstraint(dto.Value!);
+                    break;
+                case "Range":
+                    yield return new RangeConstraint(dto.MinValue, dto.MaxValue);
+                    break;
+                case "Length":
+                    yield return new LengthConstraint(dto.MinLength, dto.MaxLength);
+                    break;
+                case "Enum":
+                    yield return BuildEnumConstraint(dto.EnumMembers ?? []);
+                    break;
+                case "Discriminator":
+                    var variants = (dto.Variants ?? []).Select(static v =>
+                        new DiscriminatorVariant(v.Value, v.RequiredProperties ?? [], v.ForbiddenProperties ?? []));
+                    yield return new DiscriminatorConstraint(dto.DiscriminatorPropertyName!, variants);
+                    break;
+            }
+        }
+    }
+
+    private static void ApplyTypeConstraints(Domain.Mutation mutation, DomainType type, IReadOnlyCollection<ConstraintDto> constraintDtos) {
+        foreach (var existing in type.Constraints.ToArray()) {
+            mutation.RemoveConstraint(type, existing);
+        }
+
+        foreach (var constraint in BuildConstraints(constraintDtos)) {
+            mutation.AddConstraint(type, constraint);
+        }
+    }
+
+    private static DomainType ResolveType(IDictionary<string, DomainType> typeByName, string typeName, string domainName) {
+        if (typeByName.TryGetValue(typeName, out var type)) {
+            return type;
+        }
+
+        throw new InvalidOperationException($"Type '{typeName}' was not found in import payload for domain '{domainName}'.");
     }
 }

@@ -38,6 +38,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
 
         foreach (var stage in entity.Stages) {
             AnalyzeStageStandalone(context, stage);
+            ValidateStageParentCycle(context, stage);
         }
 
         foreach (var action in entity.Actions) {
@@ -315,6 +316,20 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                 context.ReportError(
                     entity,
                     $"Entity '{entity.Name}' participates in an inheritance cycle.",
+                    DomainModelDiagnosticCodes.StructuralCycle);
+                return;
+            }
+        }
+    }
+
+    private static void ValidateStageParentCycle(AnalysisContext context, Stage stage) {
+        var visited = new HashSet<NodeId> { stage.Id };
+
+        for (var current = stage.Parent; current is not null; current = current.Parent) {
+            if (!visited.Add(current.Id)) {
+                context.ReportError(
+                    stage,
+                    $"Stage '{stage.Name}' participates in an inheritance cycle.",
                     DomainModelDiagnosticCodes.StructuralCycle);
                 return;
             }

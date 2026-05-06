@@ -20,7 +20,7 @@ internal static class PolicyConstraintHelpers {
         var required = new Dictionary<string, Property>(StringComparer.Ordinal);
 
         foreach (var property in entityProperties.Values) {
-            if (property.Constraints.Any(static c => c.IsOrContains<RequiredConstraint>())) {
+            if (property.EffectiveConstraints.Any(static c => c.IsOrContains<RequiredConstraint>())) {
                 required[property.Name] = property;
             }
         }
@@ -211,8 +211,12 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     }
 
     private static Node? BuildPropertyValidationAst(AnalysisContext context, Property property) {
-        var constraints = property.Constraints;
+        var constraints = property.EffectiveConstraints;
         if (constraints.Count == 0) {
+            return null;
+        }
+
+        if (!ValidateEnumConstraintCompatibility(context, property, constraints)) {
             return null;
         }
 
@@ -229,6 +233,86 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 DomainModelDiagnosticCodes.PolicyAstGeneration);
             return null;
         }
+    }
+
+    private static bool ValidateEnumConstraintCompatibility(AnalysisContext context, Property property, IReadOnlyCollection<Constraint> constraints) {
+        var enumConstraint = constraints.OfType<EnumConstraint>().LastOrDefault();
+        if (enumConstraint is null) {
+            return true;
+        }
+
+        var canonicalValues = enumConstraint.Members.Select(static member => member.EffectiveCanonicalValue).ToArray();
+
+        foreach (var range in constraints.OfType<RangeConstraint>()) {
+            if (canonicalValues.Any(value => !IsCompatibleWithRange(value, range))) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' has incompatible EnumConstraint and RangeConstraint canonical values.",
+                    DomainModelDiagnosticCodes.PolicyAstGeneration);
+                return false;
+            }
+        }
+
+        foreach (var _ in constraints.OfType<LengthConstraint>()) {
+            if (canonicalValues.Any(static value => value is not string && value is not Array)) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' has incompatible EnumConstraint and LengthConstraint canonical values.",
+                    DomainModelDiagnosticCodes.PolicyAstGeneration);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsCompatibleWithRange(object? value, RangeConstraint range) {
+        if (value is null) {
+            return false;
+        }
+
+        if (value is not IComparable comparableValue) {
+            return false;
+        }
+
+        if (range.MinValue is not null && !AreRangeOperandsCompatible(value, range.MinValue)) {
+            return false;
+        }
+
+        if (range.MaxValue is not null && !AreRangeOperandsCompatible(value, range.MaxValue)) {
+            return false;
+        }
+
+        _ = comparableValue;
+        return true;
+    }
+
+    private static bool AreRangeOperandsCompatible(object left, object right) {
+        var leftType = left.GetType();
+        var rightType = right.GetType();
+
+        if (leftType == rightType) {
+            return true;
+        }
+
+        return IsNumericType(leftType) && IsNumericType(rightType);
+    }
+
+    private static bool IsNumericType(Type type) {
+        return Type.GetTypeCode(type) switch {
+            TypeCode.Byte => true,
+            TypeCode.SByte => true,
+            TypeCode.Int16 => true,
+            TypeCode.UInt16 => true,
+            TypeCode.Int32 => true,
+            TypeCode.UInt32 => true,
+            TypeCode.Int64 => true,
+            TypeCode.UInt64 => true,
+            TypeCode.Single => true,
+            TypeCode.Double => true,
+            TypeCode.Decimal => true,
+            _ => false
+        };
     }
 
     private static Node? BuildTransitionValidationAst(AnalysisContext context, Stage stage, IReadOnlyCollection<Property> newlyRequired) {
@@ -284,6 +368,40 @@ public static class PolicyConstraintAnalyzerExtensions {
             ArgumentNullException.ThrowIfNull(stage);
 
             return result.GetMetadata<TransitionValidationAstMetadata>(stage)?.TransitionGuardAst;
+        }
+    }
+    private static void ValidateDiscriminatorLeakage(AnalysisContext context, Entity entity) {
+        var discriminatorConstraint = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
+        if (discriminatorConstraint is null) {
+            return;
+        }
+
+        var entityPropertyNames = entity.Properties
+            .Select(static p => p.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var variant in discriminatorConstraint.Variants) {
+            var undefinedRequired = (variant.RequiredProperties ?? [])
+                .Where(p => !entityPropertyNames.Contains(p))
+                .ToArray();
+
+            if (undefinedRequired.Length > 0) {
+                context.ReportError(
+                    entity,
+                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' requires properties not defined on the entity: {string.Join(", ", undefinedRequired)}.",
+                    DomainModelDiagnosticCodes.DiscriminatorLeakage);
+            }
+
+            var undefinedForbidden = (variant.ForbiddenProperties ?? [])
+                .Where(p => !entityPropertyNames.Contains(p))
+                .ToArray();
+
+            if (undefinedForbidden.Length > 0) {
+                context.ReportWarning(
+                    entity,
+                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' forbids properties not defined on the entity: {string.Join(", ", undefinedForbidden)}.",
+                    DomainModelDiagnosticCodes.DiscriminatorLeakage);
+            }
         }
     }
 }

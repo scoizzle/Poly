@@ -1,3 +1,5 @@
+using System.Reflection;
+
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
@@ -44,6 +46,27 @@ public class DomainModelDiagnosticContractTests {
 
         await Assert.That(diagnostic).IsNotNull();
         await Assert.That(diagnostic!.Message).Contains(DomainModelDiagnosticContracts.Semantic.StageInheritanceFragment);
+    }
+
+    [Test]
+    public async Task StructuralAnalyzer_StageInheritanceCycle_UsesExpectedCodeAndMessageFragment() {
+        var domain = new Domain("Support");
+        var entity = new Entity(domain, "Ticket");
+        var a = new Stage(domain, "A");
+        var b = new Stage(domain, "B") { Parent = a };
+        var parentField = typeof(Stage).GetField("<Parent>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Stage parent backing field was not found.");
+        parentField.SetValue(a, b);
+
+        new Domain.AddTypeCommand(domain, entity).Apply();
+        new Entity.AddStageCommand(entity, a).Apply();
+        new Entity.AddStageCommand(entity, b).Apply();
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.StructuralCycle);
+
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains("participates in an inheritance cycle", StringComparison.Ordinal);
     }
 
     [Test]
@@ -198,6 +221,26 @@ public class DomainModelDiagnosticContractTests {
 
         await Assert.That(diagnostic).IsNotNull();
         await Assert.That(diagnostic!.Message).Contains(DomainModelDiagnosticContracts.Policy.AstGenerationFragment);
+    }
+
+    [Test]
+    public async Task PolicyAnalyzer_IncompatibleEnumAndRangeConstraint_UsesExpectedCodeAndMessageFragment() {
+        var domain = new Domain("Support");
+        var entity = new Entity(domain, "Order");
+        var statusType = new Primitive(domain, "Status", TypeCategory.Text);
+        var property = new Property(domain, "Status", statusType);
+
+        new Domain.AddTypeCommand(domain, statusType).Apply();
+        new Domain.AddTypeCommand(domain, entity).Apply();
+        new Entity.AddPropertyCommand(entity, property).Apply();
+        new Property.AddConstraintCommand(property, new EnumConstraint(new EnumConstraint.EnumMember("Open"), new EnumConstraint.EnumMember("Closed"))).Apply();
+        new Property.AddConstraintCommand(property, new RangeConstraint(0, 2)).Apply();
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.PolicyAstGeneration);
+
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains("incompatible EnumConstraint", StringComparison.Ordinal);
     }
 
     [Test]

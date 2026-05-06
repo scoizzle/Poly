@@ -65,6 +65,139 @@ var ruleSet = new RuleSet<Person>(rules);
 var isValid = ruleSet.Test(person);
 ```
 
+## MCP Operability Tools
+
+The MCP server in `Poly.Mcp` exposes four operability tools for domain sessions:
+
+- `GetDomainHealth(sessionId)`
+- `ExplainInvalidDomain(sessionId)`
+- `DiffDomainRevision(sessionId, fromRevision, toRevision?)`
+- `ApplyMutationWithTrace(sessionId, mutationType, name, category?, parentEntityName?)`
+
+### Request examples
+
+```json
+{ "sessionId": "demo-session" }
+```
+
+```json
+{ "sessionId": "demo-session", "fromRevision": 3, "toRevision": 8 }
+```
+
+```json
+{ "sessionId": "demo-session", "mutationType": "AddEntity", "name": "Ticket" }
+```
+
+### Success response example (`GetDomainHealth`)
+
+```json
+{
+    "success": true,
+    "message": "Domain health returned.",
+    "sessionId": "demo-session",
+    "revision": 12,
+    "data": {
+        "hasErrors": false,
+        "errorCount": 0,
+        "warningCount": 0,
+        "totalAnalysisTime": "00:00:00.0048123",
+        "incremental": false,
+        "passes": [
+            { "passName": "StructuralDomainAnalyzer", "elapsed": "00:00:00.0003456", "diagnosticCount": 0, "invalidatedNodeCount": 0 }
+        ]
+    },
+    "affordances": []
+}
+```
+
+### Success response example (`ExplainInvalidDomain`)
+
+```json
+{
+    "success": true,
+    "message": "Domain invalidity explanation returned.",
+    "sessionId": "demo-session",
+    "revision": 13,
+    "data": {
+        "errorCount": 1,
+        "warningCount": 0,
+        "nodes": [
+            {
+                "nodeId": "...",
+                "nodeKind": "Primitive",
+                "nodeName": "dup",
+                "reasons": [
+                    { "severity": "Error", "code": "DM001", "message": "Duplicate type name.", "hint": "Rename the duplicate type." }
+                ]
+            }
+        ]
+    },
+    "affordances": []
+}
+```
+
+### Success response example (`DiffDomainRevision`)
+
+```json
+{
+    "success": true,
+    "message": "Domain diff from revision 3 to 8 returned.",
+    "sessionId": "demo-session",
+    "revision": 8,
+    "data": {
+        "fromRevision": 3,
+        "toRevision": 8,
+        "addedCount": 2,
+        "removedCount": 0,
+        "changedCount": 1,
+        "added": [],
+        "removed": [],
+        "changed": []
+    },
+    "affordances": []
+}
+```
+
+### Success response example (`ApplyMutationWithTrace`)
+
+```json
+{
+    "success": true,
+    "message": "Mutation 'AddEntity' applied with trace.",
+    "sessionId": "demo-session",
+    "revision": 14,
+    "data": {
+        "succeeded": true,
+        "rolledBack": false,
+        "appliedStepCount": 1,
+        "duration": "00:00:00.0009123",
+        "errorCount": 0,
+        "warningCount": 0,
+        "affectedNodeIds": ["..."],
+        "steps": [],
+        "diagnostics": []
+    },
+    "affordances": []
+}
+```
+
+### Failure response example (stable diagnostics)
+
+```json
+{
+    "success": false,
+    "message": "Unsupported mutationType 'Nope'. Supported values are SetDomainName, AddPrimitive, AddEntity.",
+    "sessionId": "demo-session",
+    "revision": null,
+    "data": null,
+    "affordances": [],
+    "diagnostics": [
+        "code=UNSUPPORTED_MUTATION;category=InvalidArgument;message=Unsupported mutationType 'Nope'. Supported values are SetDomainName, AddPrimitive, AddEntity.",
+        "<exception details>"
+    ]
+}
+```
+
 ## Build and Test
 
 ```bash

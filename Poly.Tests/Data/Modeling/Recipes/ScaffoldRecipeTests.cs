@@ -1,4 +1,5 @@
 using Poly.Data.Modeling;
+using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.Recipes;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;

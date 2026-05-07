@@ -1,6 +1,7 @@
 using System.Diagnostics;
 
 using Poly.Data.Modeling;
+using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.Mermaid;
 using Poly.Data.Modeling.TypeSystem;

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 
 using Poly.Data.Modeling;
+using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.Effects;
 using Poly.Syntax.Analysis;
 

@@ -1,3 +1,4 @@
+using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;

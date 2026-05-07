@@ -1,6 +1,6 @@
 using Poly.Syntax.Analysis;
 
-namespace Poly.Data.Modeling;
+namespace Poly.Data.Modeling.Analysis;
 
 public sealed class DomainModelAnalyzer {
     public AnalysisResult Analyze(Domain domain) =>
@@ -52,6 +52,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
             builder.AddAnalyzer(new EffectAnalyzer());
             builder.AddAnalyzer(new CapabilityAnalyzer());
+            builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
             return builder;
         }
 
@@ -61,6 +62,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new TelemetryNodeAnalyzer(new PolicyConstraintAnalyzer(), nameof(PolicyConstraintAnalyzer), collector));
             builder.AddAnalyzer(new TelemetryNodeAnalyzer(new EffectAnalyzer(), nameof(EffectAnalyzer), collector));
             builder.AddAnalyzer(new TelemetryNodeAnalyzer(new CapabilityAnalyzer(), nameof(CapabilityAnalyzer), collector));
+            builder.AddAnalyzer(new TelemetryNodeAnalyzer(new ConstraintPropagationAnalyzer(), nameof(ConstraintPropagationAnalyzer), collector));
             return builder;
         }
 

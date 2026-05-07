@@ -1,5 +1,6 @@
 using System.Diagnostics;
 
+using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;

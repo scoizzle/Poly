@@ -5,6 +5,7 @@ using System.Text.Json;
 using ModelContextProtocol.Server;
 
 using Poly.Data.Modeling;
+using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;
 using Poly.Data.Modeling.Validation.Constraints;

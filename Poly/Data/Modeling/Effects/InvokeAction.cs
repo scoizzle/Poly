@@ -1,3 +1,5 @@
+using System.Linq;
+
 using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Effects;
@@ -30,4 +32,31 @@ public sealed record InvokeAction(Domain Domain) : Effect(Domain) {
     }
 
     internal bool HasBindingFor(Property targetParameter) => _parameterBindings.ContainsKey(targetParameter.Name);
+
+    /// <summary>
+    /// Bind a parameter to a specific named output from a prior effect.
+    /// At code generation, this becomes: BindParameter(param, priorEffect.Output[name]).
+    /// </summary>
+    public void BindParameterFrom(string targetParamName, Effect sourceEffect, string sourceOutputName) {
+        ArgumentNullException.ThrowIfNull(targetParamName);
+        ArgumentNullException.ThrowIfNull(sourceEffect);
+        ArgumentNullException.ThrowIfNull(sourceOutputName);
+
+        if (!sourceEffect.Result.HasOutput(sourceOutputName)) {
+            throw new InvalidOperationException(
+                $"Source effect '{sourceEffect.GetType().Name}' does not produce output '{sourceOutputName}'.");
+        }
+
+        // Find the target parameter on TargetAction
+        var targetParam = TargetAction.Parameters.OfType<Property>()
+            .FirstOrDefault(p => string.Equals(p.Name, targetParamName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"Parameter '{targetParamName}' does not exist on action '{TargetAction.Name}'.");
+
+        // Store the wiring: parameter <- EffectValueRef
+        if (!_parameterBindings.TryAdd(targetParamName, new EffectValueRef(sourceEffect.GetType().Name, sourceOutputName))) {
+            throw new InvalidOperationException(
+                $"Binding for parameter '{targetParamName}' already exists on action '{TargetAction.Name}'.");
+        }
+    }
 }

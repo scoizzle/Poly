@@ -375,38 +375,4 @@ public static class PolicyConstraintAnalyzerExtensions {
             return result.GetMetadata<TransitionValidationAstMetadata>(stage)?.TransitionGuardAst;
         }
     }
-    private static void ValidateDiscriminatorLeakage(AnalysisContext context, Entity entity) {
-        var discriminatorConstraint = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
-        if (discriminatorConstraint is null) {
-            return;
-        }
-
-        var entityPropertyNames = entity.Properties
-            .Select(static p => p.Name)
-            .ToHashSet(StringComparer.Ordinal);
-
-        foreach (var variant in discriminatorConstraint.Variants) {
-            var undefinedRequired = (variant.RequiredProperties ?? [])
-                .Where(p => !entityPropertyNames.Contains(p))
-                .ToArray();
-
-            if (undefinedRequired.Length > 0) {
-                context.ReportError(
-                    entity,
-                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' requires properties not defined on the entity: {string.Join(", ", undefinedRequired)}.",
-                    DomainModelDiagnosticCodes.DiscriminatorLeakage);
-            }
-
-            var undefinedForbidden = (variant.ForbiddenProperties ?? [])
-                .Where(p => !entityPropertyNames.Contains(p))
-                .ToArray();
-
-            if (undefinedForbidden.Length > 0) {
-                context.ReportWarning(
-                    entity,
-                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' forbids properties not defined on the entity: {string.Join(", ", undefinedForbidden)}.",
-                    DomainModelDiagnosticCodes.DiscriminatorLeakage);
-            }
-        }
-    }
 }

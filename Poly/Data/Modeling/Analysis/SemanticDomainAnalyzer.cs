@@ -55,7 +55,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         ValidateStageInheritance(context, entity);
         ValidateStageActionVisibility(context, entity);
         ValidateTypeCompatibility(context, entity);
-        ValidateDiscriminatorConstraints(context, entity);
 
         // Duplicate property name validation
         var propertyGroups = entity.Properties.GroupBy(p => p.Name, StringComparer.Ordinal);
@@ -201,115 +200,5 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         }
 
         // Domain modeling no longer treats union wrappers as first-class types; tagged alternatives are modeled via discriminator fields and policies.
-    }
-
-    private static void ValidateDiscriminatorConstraints(AnalysisContext context, Entity entity) {
-        var discriminatorConstraints = entity.Constraints.OfType<DiscriminatorConstraint>().ToArray();
-        if (discriminatorConstraints.Length == 0) {
-            return;
-        }
-
-        if (discriminatorConstraints.Length > 1) {
-            context.ReportError(
-                entity,
-                $"Entity '{entity.Name}' has multiple discriminator constraints. Only one discriminator constraint is allowed per entity.",
-                DomainModelDiagnosticCodes.DiscriminatorExclusivity);
-            return;
-        }
-
-        var discriminator = discriminatorConstraints[0];
-
-        // Validate discriminator property exists on entity
-        var discriminatorProperty = entity.Properties.FirstOrDefault(p => p.Name == discriminator.DiscriminatorPropertyName);
-        if (discriminatorProperty is null) {
-            context.ReportError(
-                entity,
-                $"Entity '{entity.Name}' discriminator property '{discriminator.DiscriminatorPropertyName}' was not found on the entity.",
-                DomainModelDiagnosticCodes.DiscriminatorExhaustiveness);
-            return;
-        }
-
-        // Validate discriminator property has an enum constraint (closed tag set)
-        var enumConstraint = discriminatorProperty.EffectiveConstraints.OfType<EnumConstraint>().LastOrDefault();
-        if (enumConstraint is null) {
-            context.ReportError(
-                entity,
-                $"Entity '{entity.Name}' discriminator property '{discriminator.DiscriminatorPropertyName}' must have an EnumConstraint to define the closed tag set.",
-                DomainModelDiagnosticCodes.DiscriminatorExhaustiveness);
-            return;
-        }
-
-        var enumValues = enumConstraint.Members.Select(static m => m.Name).ToHashSet(StringComparer.Ordinal);
-        var variantValues = discriminator.Variants.Select(static v => v.Value).ToHashSet(StringComparer.Ordinal);
-
-        // Check for unknown discriminator values in variants (not in enum)
-        var unknownValues = variantValues.Except(enumValues, StringComparer.Ordinal).ToArray();
-        if (unknownValues.Length > 0) {
-            context.ReportError(
-                entity,
-                $"Entity '{entity.Name}' discriminator constraint references unknown values not in the enum constraint: {string.Join(", ", unknownValues)}.",
-                DomainModelDiagnosticCodes.DiscriminatorExhaustiveness);
-        }
-
-        // Check for missing variant coverage (enum values without variant)
-        var missingValues = enumValues.Except(variantValues, StringComparer.Ordinal).ToArray();
-        if (missingValues.Length > 0) {
-            context.ReportWarning(
-                entity,
-                $"Entity '{entity.Name}' discriminator constraint is missing variant definitions for enum values: {string.Join(", ", missingValues)}.",
-                DomainModelDiagnosticCodes.DiscriminatorExhaustiveness);
-        }
-
-        // Validate property references in variants
-        var propertyNames = entity.Properties.Select(static p => p.Name).ToHashSet(StringComparer.Ordinal);
-        foreach (var variant in discriminator.Variants) {
-            var requiredProperties = (variant.RequiredProperties ?? []).ToArray();
-            var forbiddenProperties = (variant.ForbiddenProperties ?? []).ToArray();
-            var allProps = requiredProperties
-                .Concat(forbiddenProperties)
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-
-            var invalidProps = allProps.Where(p => !propertyNames.Contains(p)).ToArray();
-            if (invalidProps.Length > 0) {
-                context.ReportError(
-                    entity,
-                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' references non-existent properties: {string.Join(", ", invalidProps)}.",
-                    DomainModelDiagnosticCodes.DiscriminatorLeakage);
-            }
-
-            var contradictoryProps = requiredProperties
-                .Intersect(forbiddenProperties, StringComparer.Ordinal)
-                .ToArray();
-            if (contradictoryProps.Length > 0) {
-                context.ReportError(
-                    entity,
-                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' both requires and forbids properties: {string.Join(", ", contradictoryProps)}.",
-                    DomainModelDiagnosticCodes.DiscriminatorLeakage);
-            }
-
-            var mentionsDiscriminatorProperty = allProps
-                .Where(propertyName => string.Equals(propertyName, discriminator.DiscriminatorPropertyName, StringComparison.Ordinal))
-                .ToArray();
-            if (mentionsDiscriminatorProperty.Length > 0) {
-                context.ReportError(
-                    entity,
-                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' must not list discriminator property '{discriminator.DiscriminatorPropertyName}' as required or forbidden.",
-                    DomainModelDiagnosticCodes.DiscriminatorExclusivity);
-            }
-        }
-
-        // Check for overlapping/duplicate variant values (should be caught in constructor, but validate)
-        var duplicateVariants = discriminator.Variants
-            .GroupBy(static v => v.Value, StringComparer.Ordinal)
-            .Where(static g => g.Count() > 1)
-            .Select(static g => g.Key)
-            .ToArray();
-        if (duplicateVariants.Length > 0) {
-            context.ReportError(
-                entity,
-                $"Entity '{entity.Name}' discriminator constraint has duplicate variant definitions for values: {string.Join(", ", duplicateVariants)}.",
-                DomainModelDiagnosticCodes.DiscriminatorExclusivity);
-        }
     }
 }

@@ -13,7 +13,4 @@ internal static class DomainModelDiagnosticCodes {
     public const string PolicyActorReference = "DMPOL003";
     public const string EffectBinding = "DMEFF001";
     public const string EffectUnsatisfiedRequirement = "DMEFF002";
-    public const string DiscriminatorExclusivity = "DMDIS001";
-    public const string DiscriminatorExhaustiveness = "DMDIS002";
-    public const string DiscriminatorLeakage = "DMDIS003";
 }

@@ -136,16 +136,6 @@ public sealed record PrimitiveDto(string Name, string Category, bool IsRequired,
 
 public sealed record EnumMemberDto(string Name, object? CanonicalValue = null, string? Label = null);
 
-public sealed record DiscriminatorVariantDto(
-    string Value,
-    IReadOnlyCollection<string>? RequiredProperties = null,
-    IReadOnlyCollection<string>? ForbiddenProperties = null);
-
-public sealed record DiscriminatorConfigurationDto(
-    string EntityName,
-    string DiscriminatorPropertyName,
-    IReadOnlyCollection<DiscriminatorVariantDto> Variants);
-
 public sealed record ConstraintDto(
     string Kind,
     object? Value = null,
@@ -153,9 +143,7 @@ public sealed record ConstraintDto(
     object? MaxValue = null,
     int? MinLength = null,
     int? MaxLength = null,
-    IReadOnlyCollection<EnumMemberDto>? EnumMembers = null,
-    string? DiscriminatorPropertyName = null,
-    IReadOnlyCollection<DiscriminatorVariantDto>? Variants = null);
+    IReadOnlyCollection<EnumMemberDto>? EnumMembers = null);
 
 public sealed record PropertyExportDto(string Name, string TypeName, IReadOnlyCollection<ConstraintDto> Constraints);
 
@@ -648,53 +636,6 @@ public static class DomainQueryTool {
         }
 
         return updated.LatestAnalysis!;
-    }
-
-    [McpServerTool, Description("Queries the discriminator configuration for an entity.")]
-    public static DomainQueryResponse<DiscriminatorConfigurationDto?> GetDiscriminatorConfiguration(
-        [Description("The session ID.")] string sessionId,
-        [Description("Name of the target entity.")] string entityName) {
-        try {
-            var state = RequireSession(sessionId);
-            var entity = state.Domain.RequireEntity(entityName);
-            var discriminator = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
-
-            if (discriminator is null) {
-                return new DomainQueryResponse<DiscriminatorConfigurationDto?>(
-                    Success: true,
-                    Message: $"Entity '{entityName}' does not have a discriminator constraint.",
-                    SessionId: sessionId,
-                    Revision: state.Revision,
-                    Data: null,
-                    Affordances: DomainAffordances.SessionScoped(sessionId));
-            }
-
-            var dto = new DiscriminatorConfigurationDto(
-                entityName,
-                discriminator.DiscriminatorPropertyName,
-                discriminator.Variants.Select(static v => new DiscriminatorVariantDto(
-                    v.Value,
-                    v.RequiredProperties,
-                    v.ForbiddenProperties)).ToArray());
-
-            return new DomainQueryResponse<DiscriminatorConfigurationDto?>(
-                Success: true,
-                Message: $"Discriminator configuration retrieved for entity '{entityName}'.",
-                SessionId: sessionId,
-                Revision: state.Revision,
-                Data: (DiscriminatorConfigurationDto?)dto,
-                Affordances: DomainAffordances.SessionScoped(sessionId));
-        }
-        catch (Exception ex) {
-            return new DomainQueryResponse<DiscriminatorConfigurationDto?>(
-                Success: false,
-                Message: ex.Message,
-                SessionId: sessionId,
-                Revision: null,
-                Data: null,
-                Affordances: [],
-                Diagnostics: [ex.ToString()]);
-        }
     }
 
     private static DomainQueryResponse<TPayload> QueryOk<TPayload>(
@@ -1597,124 +1538,6 @@ public static class DomainAuthoringTool {
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
 
-    [McpServerTool, Description("Sets or replaces the discriminator constraint on an entity. Defines a tagged-union shape with a discriminator property and variant definitions.")]
-    public static DomainCommandResponse SetDiscriminator(
-        [Description("The session ID.")] string sessionId,
-        [Description("Name of the target entity.")] string entityName,
-        [Description("Name of the discriminator property on the entity.")] string discriminatorPropertyName,
-        [Description("Variant definitions. Each variant maps a discriminator value to required/forbidden properties.")] DiscriminatorVariantDto[] variants) {
-        try {
-            var state = RequireSession(sessionId);
-            var entity = state.Domain.RequireEntity(entityName);
-            var discriminatorConstraint = new DiscriminatorConstraint(
-                discriminatorPropertyName,
-                variants.Select(static v => new DiscriminatorVariant(
-                    v.Value,
-                    v.RequiredProperties ?? [],
-                    v.ForbiddenProperties ?? [])));
-
-            var mutation = state.Domain.CreateMutation();
-            foreach (var existing in entity.Constraints.OfType<DiscriminatorConstraint>().ToArray()) {
-                mutation.RemoveConstraint(entity, existing);
-            }
-
-            var analysis = mutation
-                .AddConstraint(entity, discriminatorConstraint)
-                .Apply(state.LatestAnalysis);
-
-            return Commit(sessionId, state.Domain, analysis, $"Discriminator constraint set on entity '{entityName}' with property '{discriminatorPropertyName}'.");
-        }
-        catch (Exception ex) { return Fail(sessionId, ex); }
-    }
-
-    [McpServerTool, Description("Removes the discriminator constraint from an entity.")]
-    public static DomainCommandResponse RemoveDiscriminator(
-        [Description("The session ID.")] string sessionId,
-        [Description("Name of the target entity.")] string entityName) {
-        try {
-            var state = RequireSession(sessionId);
-            var entity = state.Domain.RequireEntity(entityName);
-
-            var mutation = state.Domain.CreateMutation();
-            foreach (var existing in entity.Constraints.OfType<DiscriminatorConstraint>().ToArray()) {
-                mutation.RemoveConstraint(entity, existing);
-            }
-
-            var analysis = mutation.Apply(state.LatestAnalysis);
-            return Commit(sessionId, state.Domain, analysis, $"Discriminator constraint removed from entity '{entityName}'.");
-        }
-        catch (Exception ex) { return Fail(sessionId, ex); }
-    }
-
-    [McpServerTool, Description("Adds or updates a variant in the discriminator constraint on an entity.")]
-    public static DomainCommandResponse AddOrUpdateDiscriminatorVariant(
-        [Description("The session ID.")] string sessionId,
-        [Description("Name of the target entity.")] string entityName,
-        [Description("The discriminator value for this variant.")] string variantValue,
-        [Description("Properties required when this variant is active.")] string[]? requiredProperties = null,
-        [Description("Properties that must not be present when this variant is active.")] string[]? forbiddenProperties = null) {
-        try {
-            var state = RequireSession(sessionId);
-            var entity = state.Domain.RequireEntity(entityName);
-            var existingDiscriminator = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
-
-            if (existingDiscriminator is null) {
-                return Fail(sessionId, new InvalidOperationException($"Entity '{entityName}' does not have a discriminator constraint. Use SetDiscriminator first."));
-            }
-
-            var updatedVariants = existingDiscriminator.Variants
-                .Where(v => v.Value != variantValue)
-                .Append(new DiscriminatorVariant(variantValue, requiredProperties ?? [], forbiddenProperties ?? []))
-                .ToArray();
-
-            var newDiscriminator = new DiscriminatorConstraint(existingDiscriminator.DiscriminatorPropertyName, updatedVariants);
-
-            var mutation = state.Domain.CreateMutation();
-            mutation.RemoveConstraint(entity, existingDiscriminator);
-            var analysis = mutation
-                .AddConstraint(entity, newDiscriminator)
-                .Apply(state.LatestAnalysis);
-
-            return Commit(sessionId, state.Domain, analysis, $"Variant '{variantValue}' added/updated on entity '{entityName}' discriminator.");
-        }
-        catch (Exception ex) { return Fail(sessionId, ex); }
-    }
-
-    [McpServerTool, Description("Removes a variant from the discriminator constraint on an entity.")]
-    public static DomainCommandResponse RemoveDiscriminatorVariant(
-        [Description("The session ID.")] string sessionId,
-        [Description("Name of the target entity.")] string entityName,
-        [Description("The discriminator value of the variant to remove.")] string variantValue) {
-        try {
-            var state = RequireSession(sessionId);
-            var entity = state.Domain.RequireEntity(entityName);
-            var existingDiscriminator = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
-
-            if (existingDiscriminator is null) {
-                return Fail(sessionId, new InvalidOperationException($"Entity '{entityName}' does not have a discriminator constraint."));
-            }
-
-            var updatedVariants = existingDiscriminator.Variants
-                .Where(v => v.Value != variantValue)
-                .ToArray();
-
-            if (updatedVariants.Length == existingDiscriminator.Variants.Count) {
-                return Fail(sessionId, new InvalidOperationException($"Variant '{variantValue}' was not found in the discriminator constraint."));
-            }
-
-            var newDiscriminator = new DiscriminatorConstraint(existingDiscriminator.DiscriminatorPropertyName, updatedVariants);
-
-            var mutation = state.Domain.CreateMutation();
-            mutation.RemoveConstraint(entity, existingDiscriminator);
-            var analysis = mutation
-                .AddConstraint(entity, newDiscriminator)
-                .Apply(state.LatestAnalysis);
-
-            return Commit(sessionId, state.Domain, analysis, $"Variant '{variantValue}' removed from entity '{entityName}' discriminator.");
-        }
-        catch (Exception ex) { return Fail(sessionId, ex); }
-    }
-
     [McpServerTool, Description("Adds an event type to the domain.")]
     public static DomainCommandResponse AddEventType(
         [Description("The session ID.")] string sessionId,
@@ -2188,13 +2011,6 @@ public static class DomainAuthoringTool {
             RangeConstraint range => new ConstraintDto("Range", MinValue: range.MinValue, MaxValue: range.MaxValue),
             LengthConstraint length => new ConstraintDto("Length", MinLength: length.MinLength, MaxLength: length.MaxLength),
             EnumConstraint @enum => new ConstraintDto("Enum", EnumMembers: @enum.Members.Select(static m => new EnumMemberDto(m.Name, m.CanonicalValue, m.Label)).ToArray()),
-            DiscriminatorConstraint discriminator => new ConstraintDto(
-                "Discriminator",
-                DiscriminatorPropertyName: discriminator.DiscriminatorPropertyName,
-                Variants: discriminator.Variants.Select(static v => new DiscriminatorVariantDto(
-                    v.Value,
-                    v.RequiredProperties,
-                    v.ForbiddenProperties)).ToArray()),
             _ => null
         };
     }
@@ -2216,11 +2032,6 @@ public static class DomainAuthoringTool {
                     break;
                 case "Enum":
                     yield return BuildEnumConstraint(dto.EnumMembers ?? []);
-                    break;
-                case "Discriminator":
-                    var variants = (dto.Variants ?? []).Select(static v =>
-                        new DiscriminatorVariant(v.Value, v.RequiredProperties ?? [], v.ForbiddenProperties ?? []));
-                    yield return new DiscriminatorConstraint(dto.DiscriminatorPropertyName!, variants);
                     break;
             }
         }

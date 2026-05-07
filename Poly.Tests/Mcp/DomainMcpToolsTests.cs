@@ -498,6 +498,9 @@ public class DomainMcpToolsTests {
         _ = DomainAuthoringTool.AddPrimitive(sessionId, "StatusType", "Text");
         _ = DomainAuthoringTool.AddEntity(sessionId, "Order");
         _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "Status", "StatusType");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "CreatedAt", "DateTime");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "StartedAt", "DateTime");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "CompletedAt", "DateTime");
         _ = DomainAuthoringTool.AddEnumConstraintToEntityProperty(sessionId, "Order", "Status", [
             new EnumMemberDto("Pending"),
             new EnumMemberDto("Processing"),
@@ -511,7 +514,7 @@ public class DomainMcpToolsTests {
         ]);
 
         await Assert.That(response.Success).IsTrue();
-        await Assert.That(response.Message).Contains("discriminator constraint set");
+        await Assert.That(response.Message).Contains("Discriminator constraint set");
     }
 
     [Test]
@@ -520,12 +523,13 @@ public class DomainMcpToolsTests {
         _ = DomainAuthoringTool.CreateDomain("Orders", sessionId);
         _ = DomainAuthoringTool.AddEntity(sessionId, "Order");
         _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "Status", "Text");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "CreatedAt", "DateTime");
 
         var response = DomainAuthoringTool.SetDiscriminator(sessionId, "Order", "Status", [
             new DiscriminatorVariantDto("Pending", ["CreatedAt"], [])
         ]);
 
-        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Diagnostics).IsNotNull();
     }
 
@@ -536,6 +540,8 @@ public class DomainMcpToolsTests {
         _ = DomainAuthoringTool.AddPrimitive(sessionId, "StatusType", "Text");
         _ = DomainAuthoringTool.AddEntity(sessionId, "Order");
         _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "Status", "StatusType");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "CreatedAt", "DateTime");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "UpdatedAt", "DateTime");
         _ = DomainAuthoringTool.AddEnumConstraintToEntityProperty(sessionId, "Order", "Status", [
             new EnumMemberDto("Pending"),
             new EnumMemberDto("Completed")
@@ -556,6 +562,8 @@ public class DomainMcpToolsTests {
         _ = DomainAuthoringTool.AddPrimitive(sessionId, "StatusType", "Text");
         _ = DomainAuthoringTool.AddEntity(sessionId, "Order");
         _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "Status", "StatusType");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "CreatedAt", "DateTime");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "CompletedAt", "DateTime");
         _ = DomainAuthoringTool.AddEnumConstraintToEntityProperty(sessionId, "Order", "Status", [
             new EnumMemberDto("Pending"),
             new EnumMemberDto("Completed")
@@ -580,6 +588,8 @@ public class DomainMcpToolsTests {
         _ = DomainAuthoringTool.AddPrimitive(sessionId, "StatusType", "Text");
         _ = DomainAuthoringTool.AddEntity(sessionId, "Order");
         _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "Status", "StatusType");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "CreatedAt", "DateTime");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Order", "CompletedAt", "DateTime");
         _ = DomainAuthoringTool.AddEnumConstraintToEntityProperty(sessionId, "Order", "Status", [
             new EnumMemberDto("Pending"),
             new EnumMemberDto("Completed")

@@ -165,6 +165,7 @@ public sealed record EntityExportDto(
     string Name,
     bool IsActor,
     string? ParentEntityName,
+    IReadOnlyCollection<ConstraintDto> Constraints,
     IReadOnlyCollection<PropertyExportDto> Properties);
 
 public sealed record EventTypeExportDto(string Name, IReadOnlyCollection<PropertyExportDto> Properties);
@@ -650,7 +651,7 @@ public static class DomainQueryTool {
     }
 
     [McpServerTool, Description("Queries the discriminator configuration for an entity.")]
-    public static DomainQueryResponse<DiscriminatorConfigurationDto> GetDiscriminatorConfiguration(
+    public static DomainQueryResponse<DiscriminatorConfigurationDto?> GetDiscriminatorConfiguration(
         [Description("The session ID.")] string sessionId,
         [Description("Name of the target entity.")] string entityName) {
         try {
@@ -659,7 +660,13 @@ public static class DomainQueryTool {
             var discriminator = entity.Constraints.OfType<DiscriminatorConstraint>().LastOrDefault();
 
             if (discriminator is null) {
-                return QueryOk<DiscriminatorConfigurationDto?>(sessionId, state, null, $"Entity '{entityName}' does not have a discriminator constraint.");
+                return new DomainQueryResponse<DiscriminatorConfigurationDto?>(
+                    Success: true,
+                    Message: $"Entity '{entityName}' does not have a discriminator constraint.",
+                    SessionId: sessionId,
+                    Revision: state.Revision,
+                    Data: null,
+                    Affordances: DomainAffordances.SessionScoped(sessionId));
             }
 
             var dto = new DiscriminatorConfigurationDto(
@@ -670,9 +677,24 @@ public static class DomainQueryTool {
                     v.RequiredProperties,
                     v.ForbiddenProperties)).ToArray());
 
-            return QueryOk(sessionId, state, dto, $"Discriminator configuration retrieved for entity '{entityName}'.");
+            return new DomainQueryResponse<DiscriminatorConfigurationDto?>(
+                Success: true,
+                Message: $"Discriminator configuration retrieved for entity '{entityName}'.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: (DiscriminatorConfigurationDto?)dto,
+                Affordances: DomainAffordances.SessionScoped(sessionId));
         }
-        catch (Exception ex) { return QueryFail<DiscriminatorConfigurationDto>(sessionId, ex); }
+        catch (Exception ex) {
+            return new DomainQueryResponse<DiscriminatorConfigurationDto?>(
+                Success: false,
+                Message: ex.Message,
+                SessionId: sessionId,
+                Revision: null,
+                Data: null,
+                Affordances: [],
+                Diagnostics: [ex.ToString()]);
+        }
     }
 
     private static DomainQueryResponse<TPayload> QueryOk<TPayload>(
@@ -1119,6 +1141,11 @@ public static class DomainAuthoringTool {
 
             foreach (var entityDto in payload.Entities) {
                 var entity = entityByName[entityDto.Name];
+
+                foreach (var constraint in BuildConstraints(entityDto.Constraints)) {
+                    mutation.AddConstraint(entity, constraint);
+                }
+
                 foreach (var propertyDto in entityDto.Properties) {
                     var type = ResolveType(typeByName, propertyDto.TypeName, state.Domain.Name);
                     var property = new Property(state.Domain, propertyDto.Name, type);
@@ -2026,9 +2053,11 @@ public static class DomainAuthoringTool {
             .Select(static diagnostic => $"{diagnostic.Severity}: {diagnostic.Code} - {diagnostic.Message}")
             .ToArray();
 
+        var hasErrors = analysis.Diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
         return new DomainCommandResponse(
-            Success: true,
-            Message: message,
+            Success: !hasErrors,
+            Message: hasErrors ? $"{message} Validation failed and mutation was rolled back." : message,
             SessionId: sessionId,
             DomainName: domain.Name,
             Revision: revision,
@@ -2118,6 +2147,7 @@ public static class DomainAuthoringTool {
                 Name: entity.Name,
                 IsActor: entity is Actor,
                 ParentEntityName: entity.ParentEntity?.Name,
+                Constraints: ToConstraintDtos(entity.Constraints),
                 Properties: entity.Properties
                     .OrderBy(static property => property.Name, StringComparer.Ordinal)
                     .Select(static property => new PropertyExportDto(property.Name, property.Type.Name, ToConstraintDtos(property.Constraints)))

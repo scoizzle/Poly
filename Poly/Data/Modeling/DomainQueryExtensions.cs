@@ -261,7 +261,12 @@ public static class DomainQueryExtensions {
         ArgumentNullException.ThrowIfNull(stage);
         ArgumentNullException.ThrowIfNull(name);
 
+        var visited = new HashSet<NodeId>();
         for (var current = stage; current is not null; current = current.Parent) {
+            if (!visited.Add(current.Id)) {
+                break;
+            }
+
             var local = current.FindAction(name);
             if (local is not null) {
                 return local;
@@ -275,7 +280,12 @@ public static class DomainQueryExtensions {
         ArgumentNullException.ThrowIfNull(stage);
 
         var actionsByName = new Dictionary<string, Action>(StringComparer.Ordinal);
+        var visited = new HashSet<NodeId>();
         for (var current = stage; current is not null; current = current.Parent) {
+            if (!visited.Add(current.Id)) {
+                break;
+            }
+
             foreach (var action in current.Actions) {
                 _ = actionsByName.TryAdd(action.Name, action);
             }
@@ -293,7 +303,12 @@ public static class DomainQueryExtensions {
         ArgumentNullException.ThrowIfNull(stage);
 
         var policiesByName = new Dictionary<string, Policy>(StringComparer.Ordinal);
+        var visited = new HashSet<NodeId>();
         for (var current = stage; current is not null; current = current.Parent) {
+            if (!visited.Add(current.Id)) {
+                break;
+            }
+
             foreach (var policy in current.Policies) {
                 _ = policiesByName.TryAdd(policy.Name, policy);
             }

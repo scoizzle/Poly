@@ -35,7 +35,12 @@ internal static class PolicyConstraintHelpers {
             }
         }
 
+        var visitedStages = new HashSet<NodeId>();
         for (var current = stage; current is not null; current = current.Parent) {
+            if (!visitedStages.Add(current.Id)) {
+                break;
+            }
+
             foreach (var policy in current.Policies) {
                 CollectRequiredFromPolicy(policy, entityProperties, required);
             }

@@ -53,6 +53,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new EffectAnalyzer());
             builder.AddAnalyzer(new CapabilityAnalyzer());
             builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
+            builder.AddAnalyzer(new EnumConstraintSubsetAnalyzer());
             return builder;
         }
 
@@ -63,6 +64,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new TelemetryNodeAnalyzer(new EffectAnalyzer(), nameof(EffectAnalyzer), collector));
             builder.AddAnalyzer(new TelemetryNodeAnalyzer(new CapabilityAnalyzer(), nameof(CapabilityAnalyzer), collector));
             builder.AddAnalyzer(new TelemetryNodeAnalyzer(new ConstraintPropagationAnalyzer(), nameof(ConstraintPropagationAnalyzer), collector));
+            builder.AddAnalyzer(new TelemetryNodeAnalyzer(new EnumConstraintSubsetAnalyzer(), nameof(EnumConstraintSubsetAnalyzer), collector));
             return builder;
         }
 

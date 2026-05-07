@@ -8,6 +8,7 @@ internal static class DomainModelDiagnosticCodes {
     public const string SemanticStageInheritance = "DMSEM001";
     public const string SemanticActionVisibility = "DMSEM002";
     public const string SemanticTypeCompatibility = "DMSEM003";
+    public const string SemanticConstraintMismatch = "DMSEM004";
     public const string PolicyMissingProperty = "DMPOL001";
     public const string PolicyAstGeneration = "DMPOL002";
     public const string PolicyActorReference = "DMPOL003";

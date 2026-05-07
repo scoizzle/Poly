@@ -274,6 +274,65 @@ public class DomainModelDiagnosticContractTests {
         await Assert.That(diagnostic!.Message).Contains(DomainModelDiagnosticContracts.Effect.UnsatisfiedRequirementFragment);
     }
 
+    [Test]
+    public async Task EnumConstraintSubsetAnalyzer_InvalidSubset_ReportsError() {
+        var domain = new Domain("Support");
+        var parent = new Entity(domain, "Parent");
+        var child = new Entity(domain, "Child", parent);
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+
+        var parentProperty = new Property(domain, "Status", stringType);
+        var childProperty = new Property(domain, "Status", stringType);
+
+        new Domain.AddTypeCommand(domain, stringType).Apply();
+        new Domain.AddTypeCommand(domain, parent).Apply();
+        new Domain.AddTypeCommand(domain, child).Apply();
+        new Entity.AddPropertyCommand(parent, parentProperty).Apply();
+        new Property.AddConstraintCommand(parentProperty, new EnumConstraint(
+            new EnumConstraint.EnumMember("Active"),
+            new EnumConstraint.EnumMember("Inactive"),
+            new EnumConstraint.EnumMember("Pending"))).Apply();
+        new Entity.AddPropertyCommand(child, childProperty).Apply();
+        new Property.AddConstraintCommand(childProperty, new EnumConstraint(
+            new EnumConstraint.EnumMember("Active"),
+            new EnumConstraint.EnumMember("Unknown"))).Apply();
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch);
+
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains(DomainModelDiagnosticContracts.Semantic.ConstraintMismatchFragment);
+    }
+
+    [Test]
+    public async Task EnumConstraintSubsetAnalyzer_ValidSubset_NoError() {
+        var domain = new Domain("Support");
+        var parent = new Entity(domain, "Parent");
+        var child = new Entity(domain, "Child", parent);
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+
+        var parentProperty = new Property(domain, "Status", stringType);
+        var childProperty = new Property(domain, "Status", stringType);
+
+        new Domain.AddTypeCommand(domain, stringType).Apply();
+        new Domain.AddTypeCommand(domain, parent).Apply();
+        new Domain.AddTypeCommand(domain, child).Apply();
+        new Entity.AddPropertyCommand(parent, parentProperty).Apply();
+        new Property.AddConstraintCommand(parentProperty, new EnumConstraint(
+            new EnumConstraint.EnumMember("Active"),
+            new EnumConstraint.EnumMember("Inactive"),
+            new EnumConstraint.EnumMember("Pending"))).Apply();
+        new Entity.AddPropertyCommand(child, childProperty).Apply();
+        new Property.AddConstraintCommand(childProperty, new EnumConstraint(
+            new EnumConstraint.EnumMember("Active"),
+            new EnumConstraint.EnumMember("Inactive"))).Apply();
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch);
+
+        await Assert.That(diagnostic).IsNull();
+    }
+
     private sealed record UnsupportedConstraint : Constraint {
         public TypeCategory ApplicableCategories => TypeCategory.None;
     }

@@ -38,7 +38,7 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
 
     private static void CollectDownstreamConstraints(
         IEnumerable<Effect> effects,
-        Property param,
+        Property? param,
         List<Constraint> accumulated,
         HashSet<Effect> visited) {
 
@@ -47,31 +47,102 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
 
             switch (effect) {
                 case InvokeAction invoke:
-                    // Check if invoke references our parameter
-                    foreach (var binding in invoke.ParameterBindings) {
-                        if (binding.Value is EffectValueRef eRef && eRef.SourceEffectName == param.Name) {
-                            // This invoke uses our parameter - collect constraints from target action
+                    // Check if this invoke references our parameter (if we have one)
+                    if (param is not null) {
+                        foreach (var binding in invoke.ParameterBindings) {
+                            if (binding.Value is EffectValueRef eRef &&
+                                eRef.SourceEffectName == param.Name) {
+                                // Collect from target action
+                                if (invoke.TargetAction is not null) {
+                                    CollectFromAction(invoke.TargetAction, accumulated, visited);
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        // No specific param — collect from ALL invokes
+                        if (invoke.TargetAction is not null) {
                             CollectFromAction(invoke.TargetAction, accumulated, visited);
                         }
                     }
                     break;
 
                 case Conditional cond:
-                    CollectDownstreamConstraints(cond.ChildEffects, param, accumulated, visited);
+                    if (param is null) {
+                        CollectFromEffects(cond.ChildEffects, accumulated, visited);
+                    }
+                    else {
+                        CollectDownstreamConstraints(cond.ChildEffects, param, accumulated, visited);
+                    }
                     break;
 
                 case Assign assign:
-                    // Check if target references our parameter
-                    if (assign.Target is Property prop && ReferencesParameter(prop, param)) {
-                        accumulated.AddRange(prop.Type.Constraints);
+                    // Collect constraints from the target's TYPE if it's a Property
+                    if (assign.Target is Property prop) {
+                        if (param is null || ReferencesParameter(prop, param)) {
+                            accumulated.AddRange(prop.Type.Constraints);
+                        }
                     }
                     break;
             }
         }
     }
 
-    private static void CollectFromAction(Action target, List<Constraint> accumulated, HashSet<Effect> visited) {
-        CollectDownstreamConstraints(target.Effects, null!, accumulated, visited);
+    private static void CollectFromAction(
+        Action target,
+        List<Constraint> accumulated,
+        HashSet<Effect> visited) {
+
+        // Collect constraints from ALL property accesses in this action's effects
+        foreach (var effect in target.Effects) {
+            if (!visited.Add(effect)) continue;
+
+            switch (effect) {
+                case Assign assign:
+                    if (assign.Target is Property prop) {
+                        accumulated.AddRange(prop.Type.Constraints);
+                    }
+                    break;
+
+                case InvokeAction nestedInvoke:
+                    if (nestedInvoke.TargetAction is not null) {
+                        CollectFromAction(nestedInvoke.TargetAction, accumulated, visited);
+                    }
+                    break;
+
+                case Conditional cond:
+                    CollectFromEffects(cond.ChildEffects, accumulated, visited);
+                    break;
+            }
+        }
+    }
+
+    private static void CollectFromEffects(
+        IEnumerable<Effect> effects,
+        List<Constraint> accumulated,
+        HashSet<Effect> visited) {
+
+        foreach (var effect in effects) {
+            if (!visited.Add(effect)) continue;
+
+            switch (effect) {
+                case Assign assign:
+                    if (assign.Target is Property prop) {
+                        accumulated.AddRange(prop.Type.Constraints);
+                    }
+                    break;
+
+                case InvokeAction nestedInvoke:
+                    if (nestedInvoke.TargetAction is not null) {
+                        CollectFromAction(nestedInvoke.TargetAction, accumulated, visited);
+                    }
+                    break;
+
+                case Conditional cond:
+                    CollectFromEffects(cond.ChildEffects, accumulated, visited);
+                    break;
+            }
+        }
     }
 
     private static bool ReferencesParameter(Property prop, Property param) {

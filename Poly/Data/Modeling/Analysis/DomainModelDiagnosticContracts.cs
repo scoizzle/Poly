@@ -12,6 +12,7 @@ internal static class DomainModelDiagnosticContracts {
         public const string StageInheritanceFragment = "must have a parent stage";
         public const string ActionVisibilityFragment = "must belong to entity";
         public const string TypeCompatibilityFragment = "from a different domain";
+        public const string ConstraintMismatchFragment = "is not a subset of parent's constraint";
     }
 
     internal static class Policy {

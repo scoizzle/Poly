@@ -1,3 +1,5 @@
+using System.Reflection;
+
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
 using Poly.Syntax.Analysis;
@@ -68,6 +70,40 @@ public class DomainQueryExtensionsTests {
         var resolved = child.FindActionInHierarchy("Approve");
 
         await Assert.That(ReferenceEquals(resolved, action)).IsTrue();
+    }
+
+    [Test]
+    public async Task Entity_FindActionInHierarchy_WithParentCycle_DoesNotLoop() {
+        var domain = DomainTestFactory.CreateDomain();
+        var parent = new Entity(domain, "Parent");
+        var child = new Entity(domain, "Child", parent);
+        var action = new DomainAction(domain, "Approve", parent);
+        MutationApply.AddAction(parent, action);
+
+        var parentField = typeof(Entity).GetField("<ParentEntity>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Entity parent backing field was not found.");
+        parentField.SetValue(parent, child);
+
+        var resolved = child.FindActionInHierarchy("Approve");
+
+        await Assert.That(ReferenceEquals(resolved, action)).IsTrue();
+    }
+
+    [Test]
+    public async Task Entity_GetAvailableActionsInHierarchy_WithParentCycle_DoesNotLoop() {
+        var domain = DomainTestFactory.CreateDomain();
+        var parent = new Entity(domain, "Parent");
+        var child = new Entity(domain, "Child", parent);
+        var action = new DomainAction(domain, "Approve", parent);
+        MutationApply.AddAction(parent, action);
+
+        var parentField = typeof(Entity).GetField("<ParentEntity>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Entity parent backing field was not found.");
+        parentField.SetValue(parent, child);
+
+        var names = child.GetAvailableActionsInHierarchy().Select(static item => item.Name).ToArray();
+
+        await Assert.That(names).IsEquivalentTo(["Approve"]);
     }
 
     [Test]

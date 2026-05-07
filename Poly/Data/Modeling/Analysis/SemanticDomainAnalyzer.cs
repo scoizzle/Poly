@@ -121,7 +121,12 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
 
     private static IEnumerable<Entity> EnumerateEntityLineageRootToLeaf(Entity entity) {
         var stack = new Stack<Entity>();
+        var visited = new HashSet<NodeId>();
         for (var current = entity; current is not null; current = current.ParentEntity) {
+            if (!visited.Add(current.Id)) {
+                break;
+            }
+
             stack.Push(current);
         }
         while (stack.Count > 0) {
@@ -258,8 +263,10 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         // Validate property references in variants
         var propertyNames = entity.Properties.Select(static p => p.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var variant in discriminator.Variants) {
-            var allProps = (variant.RequiredProperties ?? [])
-                .Concat(variant.ForbiddenProperties ?? [])
+            var requiredProperties = (variant.RequiredProperties ?? []).ToArray();
+            var forbiddenProperties = (variant.ForbiddenProperties ?? []).ToArray();
+            var allProps = requiredProperties
+                .Concat(forbiddenProperties)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
 
@@ -269,6 +276,26 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
                     entity,
                     $"Entity '{entity.Name}' discriminator variant '{variant.Value}' references non-existent properties: {string.Join(", ", invalidProps)}.",
                     DomainModelDiagnosticCodes.DiscriminatorLeakage);
+            }
+
+            var contradictoryProps = requiredProperties
+                .Intersect(forbiddenProperties, StringComparer.Ordinal)
+                .ToArray();
+            if (contradictoryProps.Length > 0) {
+                context.ReportError(
+                    entity,
+                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' both requires and forbids properties: {string.Join(", ", contradictoryProps)}.",
+                    DomainModelDiagnosticCodes.DiscriminatorLeakage);
+            }
+
+            var mentionsDiscriminatorProperty = allProps
+                .Where(propertyName => string.Equals(propertyName, discriminator.DiscriminatorPropertyName, StringComparison.Ordinal))
+                .ToArray();
+            if (mentionsDiscriminatorProperty.Length > 0) {
+                context.ReportError(
+                    entity,
+                    $"Entity '{entity.Name}' discriminator variant '{variant.Value}' must not list discriminator property '{discriminator.DiscriminatorPropertyName}' as required or forbidden.",
+                    DomainModelDiagnosticCodes.DiscriminatorExclusivity);
             }
         }
 

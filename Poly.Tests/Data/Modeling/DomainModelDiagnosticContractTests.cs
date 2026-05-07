@@ -244,6 +244,52 @@ public class DomainModelDiagnosticContractTests {
     }
 
     [Test]
+    public async Task SemanticAnalyzer_DiscriminatorVariantConflictingPropertyRules_UsesExpectedCodeAndMessageFragment() {
+        var domain = new Domain("Support");
+        var entity = new Entity(domain, "Order");
+        var statusType = new Primitive(domain, "Status", TypeCategory.Text);
+        var status = new Property(domain, "Status", statusType);
+        var createdAt = new Property(domain, "CreatedAt", statusType);
+
+        new Domain.AddTypeCommand(domain, statusType).Apply();
+        new Domain.AddTypeCommand(domain, entity).Apply();
+        new Entity.AddPropertyCommand(entity, status).Apply();
+        new Entity.AddPropertyCommand(entity, createdAt).Apply();
+        new Property.AddConstraintCommand(status, new EnumConstraint(new EnumConstraint.EnumMember("Open"))).Apply();
+        new Entity.AddConstraintCommand(entity, new DiscriminatorConstraint("Status", [
+            new DiscriminatorVariant("Open", ["CreatedAt"], ["CreatedAt"])
+        ])).Apply();
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.DiscriminatorLeakage);
+
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains("both requires and forbids", StringComparison.Ordinal);
+    }
+
+    [Test]
+    public async Task SemanticAnalyzer_DiscriminatorVariantMentionsDiscriminatorProperty_UsesExpectedCodeAndMessageFragment() {
+        var domain = new Domain("Support");
+        var entity = new Entity(domain, "Order");
+        var statusType = new Primitive(domain, "Status", TypeCategory.Text);
+        var status = new Property(domain, "Status", statusType);
+
+        new Domain.AddTypeCommand(domain, statusType).Apply();
+        new Domain.AddTypeCommand(domain, entity).Apply();
+        new Entity.AddPropertyCommand(entity, status).Apply();
+        new Property.AddConstraintCommand(status, new EnumConstraint(new EnumConstraint.EnumMember("Open"))).Apply();
+        new Entity.AddConstraintCommand(entity, new DiscriminatorConstraint("Status", [
+            new DiscriminatorVariant("Open", ["Status"], [])
+        ])).Apply();
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.DiscriminatorExclusivity);
+
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains("must not list discriminator property", StringComparison.Ordinal);
+    }
+
+    [Test]
     public async Task EffectAnalyzer_TransitionMissingRequiredPropertyCoverage_UsesExpectedCodeAndMessageFragment() {
         var domain = new Domain("Support");
         var entity = new Entity(domain, "SupportCase");

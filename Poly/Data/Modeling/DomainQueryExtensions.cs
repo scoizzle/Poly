@@ -181,7 +181,12 @@ public static class DomainQueryExtensions {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(name);
 
+        var visited = new HashSet<NodeId>();
         for (var current = entity; current is not null; current = current.ParentEntity) {
+            if (!visited.Add(current.Id)) {
+                break;
+            }
+
             var local = current.FindAction(name);
             if (local is not null) {
                 return local;
@@ -195,8 +200,13 @@ public static class DomainQueryExtensions {
         ArgumentNullException.ThrowIfNull(entity);
 
         var actionsByName = new Dictionary<string, Action>(StringComparer.Ordinal);
+        var visited = new HashSet<NodeId>();
 
         for (var current = entity; current is not null; current = current.ParentEntity) {
+            if (!visited.Add(current.Id)) {
+                break;
+            }
+
             foreach (var action in current.Actions) {
                 _ = actionsByName.TryAdd(action.Name, action);
             }

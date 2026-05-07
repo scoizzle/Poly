@@ -136,6 +136,8 @@ public sealed record PrimitiveDto(string Name, string Category, bool IsRequired,
 
 public sealed record EnumMemberDto(string Name, object? CanonicalValue = null, string? Label = null);
 
+public sealed record ConstraintTypeDto(string TypeName, string DisplayName, string[] ParameterNames);
+
 public sealed record ConstraintDto(
     string Kind,
     object? Value = null,
@@ -288,16 +290,19 @@ internal static class DomainAffordances {
         new("command:remove-policy-from-property", nameof(DomainAuthoringTool.RemovePolicyFromProperty), new Dictionary<string, object?>(), "Remove a policy from a property."),
         new("command:add-policy-to-action", nameof(DomainAuthoringTool.AddPolicyToAction), new Dictionary<string, object?>(), "Create a policy on an action."),
         new("command:remove-policy-from-action", nameof(DomainAuthoringTool.RemovePolicyFromAction), new Dictionary<string, object?>(), "Remove a policy from an action."),
-        new("command:add-cross-property-rule", nameof(DomainAuthoringTool.AddCrossPropertyRuleToPolicy), new Dictionary<string, object?>(), "Add a cross-property comparison rule to a policy."),
-        new("command:add-actor-type-rule", nameof(DomainAuthoringTool.AddActorTypeRuleToPolicy), new Dictionary<string, object?>(), "Require the actor to be a specific actor type."),
-        new("command:add-actor-role-rule", nameof(DomainAuthoringTool.AddActorRoleRuleToPolicy), new Dictionary<string, object?>(), "Require the actor to have a specific role."),
-        new("command:add-actor-property-rule", nameof(DomainAuthoringTool.AddActorPropertyRuleToPolicy), new Dictionary<string, object?>(), "Require an actor property to equal a specific value."),
-        new("command:add-composite-rule", nameof(DomainAuthoringTool.AddCompositeRuleToPolicy), new Dictionary<string, object?>(), "Combine two existing rules with And/Or."),
-        new("command:remove-rule-from-policy", nameof(DomainAuthoringTool.RemoveRuleFromPolicy), new Dictionary<string, object?>(), "Remove a rule from a policy."),
+        new("command:add-cross-property-rule", nameof(DomainAuthoringTool.AddCrossPropertyRuleToPolicy), new Dictionary<string, object?> { ["sessionId"] = "", ["entityName"] = "", ["policyName"] = "", ["ruleName"] = "", ["leftPropertyName"] = "", ["rightPropertyName"] = "", ["operator"] = "", ["stageName"] = null, ["actionName"] = null, ["propertyName"] = null }, "Add a cross-property comparison rule to a policy."),
+        new("command:add-actor-type-rule", nameof(DomainAuthoringTool.AddActorTypeRuleToPolicy), new Dictionary<string, object?> { ["sessionId"] = "", ["entityName"] = "", ["policyName"] = "", ["ruleName"] = "", ["actorTypeName"] = "", ["stageName"] = null, ["actionName"] = null, ["propertyName"] = null }, "Require the actor to be a specific actor type."),
+        new("command:add-actor-role-rule", nameof(DomainAuthoringTool.AddActorRoleRuleToPolicy), new Dictionary<string, object?> { ["sessionId"] = "", ["entityName"] = "", ["policyName"] = "", ["ruleName"] = "", ["role"] = "", ["stageName"] = null, ["actionName"] = null, ["propertyName"] = null }, "Require the actor to have a specific role."),
+        new("command:add-actor-property-rule", nameof(DomainAuthoringTool.AddActorPropertyRuleToPolicy), new Dictionary<string, object?> { ["sessionId"] = "", ["entityName"] = "", ["policyName"] = "", ["ruleName"] = "", ["actorTypeName"] = "", ["actorPropertyName"] = "", ["constraintValue"] = "", ["stageName"] = null, ["actionName"] = null, ["propertyName"] = null }, "Require an actor property to equal a specific value."),
+        new("command:add-composite-rule", nameof(DomainAuthoringTool.AddCompositeRuleToPolicy), new Dictionary<string, object?> { ["sessionId"] = "", ["entityName"] = "", ["policyName"] = "", ["ruleName"] = "", ["leftRuleName"] = "", ["rightRuleName"] = "", ["operator"] = "", ["stageName"] = null, ["actionName"] = null, ["propertyName"] = null }, "Combine two existing rules with And/Or."),
+        new("command:remove-rule-from-policy", nameof(DomainAuthoringTool.RemoveRuleFromPolicy), new Dictionary<string, object?> { ["sessionId"] = "", ["entityName"] = "", ["policyName"] = "", ["ruleName"] = "", ["stageName"] = null, ["actionName"] = null, ["propertyName"] = null }, "Remove a rule from a policy."),
         new("command:add-primitive", nameof(DomainAuthoringTool.AddPrimitive), new Dictionary<string, object?>(), "Create a new primitive type."),
         new("command:add-enum-constraint-to-type", nameof(DomainAuthoringTool.AddEnumConstraintToType), new Dictionary<string, object?>(), "Attach a closed enum constraint to a domain type."),
         new("command:add-enum-constraint-to-entity-property", nameof(DomainAuthoringTool.AddEnumConstraintToEntityProperty), new Dictionary<string, object?>(), "Attach a closed enum constraint to an entity property."),
-        new("command:add-event-type", nameof(DomainAuthoringTool.AddEventType), new Dictionary<string, object?>(), "Create a new event type."),
+        new("command:get-available-constraint-types", nameof(DomainAuthoringTool.GetAvailableConstraintTypes), new Dictionary<string, object?> { ["sessionId"] = "", ["typeName"] = null, ["entityName"] = null, ["propertyName"] = null }, "Returns constraint types applicable to a domain type or entity property."),
+        new("command:add-constraint-to-type", nameof(DomainAuthoringTool.AddConstraintToType), new Dictionary<string, object?> { ["sessionId"] = "", ["typeName"] = "", ["constraintType"] = "", ["minLength"] = null, ["maxLength"] = null, ["minValue"] = null, ["maxValue"] = null, ["members"] = null, ["value"] = null }, "Add or replace a constraint on a domain type by constraint type name."),
+        new("command:add-constraint-to-entity-property", nameof(DomainAuthoringTool.AddConstraintToEntityProperty), new Dictionary<string, object?> { ["sessionId"] = "", ["entityName"] = "", ["propertyName"] = "", ["constraintType"] = "", ["minLength"] = null, ["maxLength"] = null, ["minValue"] = null, ["maxValue"] = null, ["members"] = null, ["value"] = null }, "Add or replace a constraint on an entity property by constraint type name."),
+        new("command:add-event-type", nameof(DomainAuthoringTool.AddEventType), new Dictionary<string, object?> { ["sessionId"] = "", ["name"] = "" }, "Create a new event type."),
         new("command:add-relationship", nameof(DomainAuthoringTool.AddRelationship), new Dictionary<string, object?>(), "Create a relationship between two entities."),
         new("command:apply-mutation-with-trace", nameof(DomainOperabilityTool.ApplyMutationWithTrace), new Dictionary<string, object?>(), "Apply a basic mutation and return detailed mutation trace."),
         new("command:add-comment", nameof(DomainAuthoringTool.AddComment), new Dictionary<string, object?>(), "Append a comment to a domain object.")
@@ -1361,7 +1366,7 @@ public static class DomainAuthoringTool {
 
     // ── Rule tools ───────────────────────────────────────────────────────────
 
-    [McpServerTool, Description("Adds a cross-property comparison rule to a policy on an entity.")]
+    [McpServerTool, Description("Adds a cross-property comparison rule to a policy.")]
     public static DomainCommandResponse AddCrossPropertyRuleToPolicy(
         [Description("The session ID.")] string sessionId,
         [Description("Name of the entity owning the policy.")] string entityName,
@@ -1369,11 +1374,14 @@ public static class DomainAuthoringTool {
         [Description("Name for the new rule.")] string ruleName,
         [Description("Name of the left-hand property.")] string leftPropertyName,
         [Description("Name of the right-hand property.")] string rightPropertyName,
-        [Description("Comparison operator: Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual.")] string @operator) {
+        [Description("Comparison operator: Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual.")] string @operator,
+        [Description("Stage owning the policy, if any.")] string? stageName = null,
+        [Description("Action owning the policy, if any.")] string? actionName = null,
+        [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
             var op = Enum.Parse<DomainComparisonOperator>(@operator, ignoreCase: true);
-            var intent = new AddCrossPropertyRuleToPolicyIntent(entityName, policyName, ruleName, leftPropertyName, rightPropertyName, op);
+            var intent = new AddCrossPropertyRuleToPolicyIntent(entityName, policyName, ruleName, leftPropertyName, rightPropertyName, op, stageName, actionName, propertyName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"CrossProperty rule '{ruleName}' added to policy '{policyName}'.");
         }
@@ -1386,10 +1394,13 @@ public static class DomainAuthoringTool {
         [Description("Name of the entity owning the policy.")] string entityName,
         [Description("Name of the policy.")] string policyName,
         [Description("Name for the new rule.")] string ruleName,
-        [Description("Name of the actor type the principal must be.")] string actorTypeName) {
+        [Description("Name of the actor type the principal must be.")] string actorTypeName,
+        [Description("Stage owning the policy, if any.")] string? stageName = null,
+        [Description("Action owning the policy, if any.")] string? actionName = null,
+        [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
-            var intent = new AddActorTypeRuleToPolicyIntent(entityName, policyName, ruleName, actorTypeName);
+            var intent = new AddActorTypeRuleToPolicyIntent(entityName, policyName, ruleName, actorTypeName, stageName, actionName, propertyName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"ActorType rule '{ruleName}' added to policy '{policyName}'.");
         }
@@ -1402,10 +1413,13 @@ public static class DomainAuthoringTool {
         [Description("Name of the entity owning the policy.")] string entityName,
         [Description("Name of the policy.")] string policyName,
         [Description("Name for the new rule.")] string ruleName,
-        [Description("Role value the actor must have.")] string role) {
+        [Description("Role value the actor must have.")] string role,
+        [Description("Stage owning the policy, if any.")] string? stageName = null,
+        [Description("Action owning the policy, if any.")] string? actionName = null,
+        [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
-            var intent = new AddActorRoleRuleToPolicyIntent(entityName, policyName, ruleName, role);
+            var intent = new AddActorRoleRuleToPolicyIntent(entityName, policyName, ruleName, role, stageName, actionName, propertyName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"ActorRole rule '{ruleName}' (role='{role}') added to policy '{policyName}'.");
         }
@@ -1420,10 +1434,13 @@ public static class DomainAuthoringTool {
         [Description("Name for the new rule.")] string ruleName,
         [Description("Name of the actor type owning the property.")] string actorTypeName,
         [Description("Name of the actor property to constrain.")] string actorPropertyName,
-        [Description("Value the actor property must equal.")] object constraintValue) {
+        [Description("Value the actor property must equal.")] object constraintValue,
+        [Description("Stage owning the policy, if any.")] string? stageName = null,
+        [Description("Action owning the policy, if any.")] string? actionName = null,
+        [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
-            var intent = new AddActorPropertyRuleToPolicyIntent(entityName, policyName, ruleName, actorTypeName, actorPropertyName, constraintValue);
+            var intent = new AddActorPropertyRuleToPolicyIntent(entityName, policyName, ruleName, actorTypeName, actorPropertyName, constraintValue, stageName, actionName, propertyName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"ActorProperty rule '{ruleName}' ({actorTypeName}.{actorPropertyName} == {constraintValue}) added to policy '{policyName}'.");
         }
@@ -1438,26 +1455,32 @@ public static class DomainAuthoringTool {
         [Description("Name for the new composite rule.")] string ruleName,
         [Description("Name of the left rule.")] string leftRuleName,
         [Description("Name of the right rule.")] string rightRuleName,
-        [Description("Logical operator: And or Or.")] string @operator) {
+        [Description("Logical operator: And or Or.")] string @operator,
+        [Description("Stage owning the policy, if any.")] string? stageName = null,
+        [Description("Action owning the policy, if any.")] string? actionName = null,
+        [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
             var op = Enum.Parse<LogicalOperator>(@operator, ignoreCase: true);
-            var intent = new AddCompositeRuleToPolicyIntent(entityName, policyName, ruleName, leftRuleName, rightRuleName, op);
+            var intent = new AddCompositeRuleToPolicyIntent(entityName, policyName, ruleName, leftRuleName, rightRuleName, op, stageName, actionName, propertyName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"Composite rule '{ruleName}' ({leftRuleName} {op} {rightRuleName}) added to policy '{policyName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
 
-    [McpServerTool, Description("Removes a rule from a policy on an entity.")]
+    [McpServerTool, Description("Removes a rule from a policy.")]
     public static DomainCommandResponse RemoveRuleFromPolicy(
         [Description("The session ID.")] string sessionId,
         [Description("Name of the entity owning the policy.")] string entityName,
         [Description("Name of the policy.")] string policyName,
-        [Description("Name of the rule to remove.")] string ruleName) {
+        [Description("Name of the rule to remove.")] string ruleName,
+        [Description("Stage owning the policy, if any.")] string? stageName = null,
+        [Description("Action owning the policy, if any.")] string? actionName = null,
+        [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
-            var intent = new RemoveRuleFromPolicyIntent(entityName, policyName, ruleName);
+            var intent = new RemoveRuleFromPolicyIntent(entityName, policyName, ruleName, stageName, actionName, propertyName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"Rule '{ruleName}' removed from policy '{policyName}'.");
         }
@@ -1534,6 +1557,104 @@ public static class DomainAuthoringTool {
                 .Apply(state.LatestAnalysis);
 
             return Commit(sessionId, state.Domain, analysis, $"Enum constraint applied to property '{propertyName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Returns all available constraint types.")]
+    public static DomainQueryResponse<IReadOnlyCollection<ConstraintTypeDto>> GetAvailableConstraintTypes(
+        [Description("The session ID.")] string sessionId) {
+        try {
+            var state = RequireSession(sessionId);
+
+            var available = new List<ConstraintTypeDto> {
+                new ConstraintTypeDto("Length", "Length", new[] { "minLength", "maxLength" }),
+                new ConstraintTypeDto("Range", "Range", new[] { "minValue", "maxValue" }),
+                new ConstraintTypeDto("Required", "Required", Array.Empty<string>()),
+                new ConstraintTypeDto("Enum", "Enum", new[] { "members" }),
+                new ConstraintTypeDto("Equality", "Equality", new[] { "value" })
+            };
+
+            return new DomainQueryResponse<IReadOnlyCollection<ConstraintTypeDto>>(
+                Success: true,
+                Message: $"Found {available.Count} constraint types.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: available.ToArray(),
+                Affordances: DomainAffordances.SessionScoped(sessionId));
+        }
+        catch (Exception ex) {
+            return new DomainQueryResponse<IReadOnlyCollection<ConstraintTypeDto>>(
+                Success: false,
+                Message: ex.Message,
+                SessionId: sessionId,
+                Revision: null,
+                Data: default,
+                Affordances: [],
+                Diagnostics: [ex.ToString()]);
+        }
+    }
+
+    [McpServerTool, Description("Adds or replaces a constraint on an existing domain type by constraint type name.")]
+    public static DomainCommandResponse AddConstraintToType(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of an existing domain type.")] string typeName,
+        [Description("Constraint type name: Length, Range, Required, Enum, Equality.")] string constraintType,
+        [Description("For Length: minimum length. Null means no minimum.")] int? minLength = null,
+        [Description("For Length: maximum length. Null means no maximum.")] int? maxLength = null,
+        [Description("For Range: minimum value. Null means no minimum.")] object? minValue = null,
+        [Description("For Range: maximum value. Null means no maximum.")] object? maxValue = null,
+        [Description("For Enum: closed enum members (each has Name, optional CanonicalValue/Label).")] EnumMemberDto[]? members = null,
+        [Description("For Equality: the value to equal.")] object? value = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var type = state.Domain.RequireType(typeName);
+
+            var (constraint, constraintName) = BuildConstraint(constraintType, minLength, maxLength, minValue, maxValue, members, value);
+
+            var mutation = state.Domain.CreateMutation();
+            foreach (var existing in type.Constraints.Where(c => c.GetType().Name.StartsWith(constraint.GetType().Name.Replace("Constraint", ""), StringComparison.Ordinal)).ToArray()) {
+                mutation.RemoveConstraint(type, existing);
+            }
+
+            var analysis = mutation
+                .AddConstraint(type, constraint)
+                .Apply(state.LatestAnalysis);
+
+            return Commit(sessionId, state.Domain, analysis, $"{constraintName} constraint applied to type '{typeName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds or replaces a constraint on an entity property by constraint type name. Property-level overrides type-level.")]
+    public static DomainCommandResponse AddConstraintToEntityProperty(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the target entity.")] string entityName,
+        [Description("Name of the target property.")] string propertyName,
+        [Description("Constraint type name: Length, Range, Required, Enum, Equality.")] string constraintType,
+        [Description("For Length: minimum length. Null means no minimum.")] int? minLength = null,
+        [Description("For Length: maximum length. Null means no maximum.")] int? maxLength = null,
+        [Description("For Range: minimum value. Null means no minimum.")] object? minValue = null,
+        [Description("For Range: maximum value. Null means no maximum.")] object? maxValue = null,
+        [Description("For Enum: closed enum members (each has Name, optional CanonicalValue/Label).")] EnumMemberDto[]? members = null,
+        [Description("For Equality: the value to equal.")] object? value = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var property = entity.RequireProperty(propertyName);
+
+            var (constraint, constraintName) = BuildConstraint(constraintType, minLength, maxLength, minValue, maxValue, members, value);
+
+            var mutation = state.Domain.CreateMutation();
+            foreach (var existing in property.Constraints.Where(c => c.GetType().Name.StartsWith(constraint.GetType().Name.Replace("Constraint", ""), StringComparison.Ordinal)).ToArray()) {
+                mutation.RemoveConstraint(property, existing);
+            }
+
+            var analysis = mutation
+                .AddConstraint(property, constraint)
+                .Apply(state.LatestAnalysis);
+
+            return Commit(sessionId, state.Domain, analysis, $"{constraintName} constraint applied to property '{propertyName}' on entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
@@ -1952,6 +2073,26 @@ public static class DomainAuthoringTool {
         }
 
         return new EnumConstraint(materialized);
+    }
+
+    private static (Constraint Constraint, string Name) BuildConstraint(
+        string constraintType,
+        int? minLength,
+        int? maxLength,
+        object? minValue,
+        object? maxValue,
+        EnumMemberDto[]? members,
+        object? value) {
+        return constraintType.ToLowerInvariant() switch {
+            "length" => (new LengthConstraint(minLength, maxLength), "Length"),
+            "range" => (new RangeConstraint(minValue, maxValue), "Range"),
+            "required" => (new RequiredConstraint(), "Required"),
+            "equality" => value is null
+                ? throw new ArgumentException("Equality constraint requires a non-null value.", nameof(value))
+                : (new EqualityConstraint(value), "Equality"),
+            "enum" => (BuildEnumConstraint(members ?? []), "Enum"),
+            _ => throw new ArgumentException($"Unknown constraint type '{constraintType}'. Use GetAvailableConstraintTypes to see valid types.")
+        };
     }
 
     private static DomainSessionExportDto BuildExportPayload(Domain domain) {

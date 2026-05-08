@@ -67,7 +67,8 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             Effects: action.Effects.ToArray(),
             EffectTypes: action.Effects.Select(static e => e.GetType()).Distinct().ToArray(),
             PublishedEvents: action.Effects.OfType<PublishEvent>().Select(static e => e.Event).ToArray(),
-            TransitionTargets: action.Effects.OfType<StageTransition>().Select(static e => e.TargetStage).ToArray());
+            TransitionTargets: action.Effects.OfType<StageTransition>().Select(static e => e.TargetStage).ToArray(),
+            Trigger: action.Trigger);
 
         context.SetMetadata(action, new ActionCapabilityMetadata(view));
     }

@@ -41,9 +41,20 @@ public static class MutationApply {
 
     public static AnalysisResult AddEvent(Entity entity, Event @event) => Apply(entity.Domain, mutation => mutation.AddEvent(entity, @event));
 
+    public static AnalysisResult AddEventSubscription(Entity entity, EventSubscription subscription) => Apply(entity.Domain, mutation => mutation.AddEventSubscription(entity, subscription));
+
     public static AnalysisResult AddParameter(Action action, Property parameter) => Apply(action.Domain, mutation => mutation.AddParameter(action, parameter));
 
+    public static AnalysisResult AddEventSubscriptionCorrelation(EventSubscription subscription, EventCorrelationBinding binding) =>
+        Apply(subscription.Domain, mutation => mutation.AddEventSubscriptionCorrelation(subscription, binding));
+
+    public static AnalysisResult SetEventSubscriptionAudience(EventSubscription subscription, EventSubscriptionAudience audience) =>
+        Apply(subscription.Domain, mutation => mutation.SetEventSubscriptionAudience(subscription, audience));
+
     public static AnalysisResult AddEffect(Action action, Effect effect) => Apply(action.Domain, mutation => mutation.AddEffect(action, effect));
+
+    public static AnalysisResult SetEventHandlerTrigger(Action action, Event eventType, string eventParameterName) =>
+        Apply(action.Domain, mutation => mutation.SetEventHandlerTrigger(action, eventType, eventParameterName));
 
     public static AnalysisResult AddRule(Policy policy, Rule rule) => Apply(policy.Domain, mutation => mutation.AddRule(policy, rule));
 

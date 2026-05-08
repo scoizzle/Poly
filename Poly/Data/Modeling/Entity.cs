@@ -41,6 +41,7 @@ public partial record Entity : DomainType {
     private readonly List<Policy> _policies = [];
     private readonly List<Action> _actions = [];
     private readonly List<Event> _events = [];
+    private readonly List<EventSubscription> _eventSubscriptions = [];
     private readonly List<Relationship> _relationships = [];
 
     public Entity(Domain domain, string name, Entity? parentEntity = null) : base(domain, name) {
@@ -55,7 +56,8 @@ public partial record Entity : DomainType {
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
     public IReadOnlyCollection<Action> Actions => _actions.AsReadOnly();
     public IReadOnlyCollection<Event> Events => _events.AsReadOnly();
+    public IReadOnlyCollection<EventSubscription> EventSubscriptions => _eventSubscriptions.AsReadOnly();
     public IReadOnlyCollection<Relationship> Relationships => _relationships.AsReadOnly();
 
-    public override IEnumerable<DomainMember> ChildObjects => [.. _properties, .. _stages, .. _policies, .. _actions, .. _events];
+    public override IEnumerable<DomainObject> ChildObjects => [.. _properties, .. _stages, .. _policies, .. _actions, .. _events, .. _eventSubscriptions];
 }

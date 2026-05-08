@@ -75,6 +75,12 @@ public sealed partial record Domain {
         public Mutation RemoveEvent(Entity entity, Event @event) =>
             AddStep(new Entity.RemoveEventCommand(entity, @event));
 
+        public Mutation AddEventSubscription(Entity entity, EventSubscription subscription) =>
+            AddStep(new Entity.AddEventSubscriptionCommand(entity, subscription));
+
+        public Mutation RemoveEventSubscription(Entity entity, EventSubscription subscription) =>
+            AddStep(new Entity.RemoveEventSubscriptionCommand(entity, subscription));
+
         public Mutation AddEntityRelationship(Entity entity, Relationship relationship) =>
             AddStep(new Entity.AddRelationshipRefCommand(entity, relationship));
 
@@ -154,6 +160,24 @@ public sealed partial record Domain {
             effect._bindings.TryGetValue(propertyName, out var previous);
             return AddStep(new Action.SetEventPropertyBindingCommand(action, effect, propertyName, source, previous));
         }
+
+        public Mutation AddEventSubscriptionCorrelation(EventSubscription subscription, EventCorrelationBinding binding) =>
+            AddStep(new EventSubscription.AddCorrelationBindingCommand(subscription, binding));
+
+        public Mutation RemoveEventSubscriptionCorrelation(EventSubscription subscription, EventCorrelationBinding binding) =>
+            AddStep(new EventSubscription.RemoveCorrelationBindingCommand(subscription, binding));
+
+        public Mutation SetEventSubscriptionAudience(EventSubscription subscription, EventSubscriptionAudience audience) =>
+            AddStep(new EventSubscription.SetAudienceCommand(subscription, audience, subscription._audience));
+
+        public Mutation SetActionTrigger(Action action, ActionTrigger trigger) =>
+            AddStep(new Action.SetTriggerCommand(action, trigger, action._trigger));
+
+        public Mutation SetEventHandlerTrigger(Action action, Event eventType, string eventParameterName) =>
+            SetActionTrigger(action, new ActionTrigger.EventHandler(eventType, eventParameterName));
+
+        public Mutation SetCommandTrigger(Action action) =>
+            SetActionTrigger(action, ActionTrigger.Default);
 
         public Mutation AddPolicy(Action action, Policy policy) =>
             AddStep(new Action.AddPolicyCommand(action, policy));

@@ -27,5 +27,5 @@ public sealed partial record Relationship : Entity {
     public bool SourceOwnsTarget { get; private set; }
 
 
-    public sealed override IEnumerable<DomainMember> ChildObjects => [Source, Target, .. base.ChildObjects];
+    public sealed override IEnumerable<DomainObject> ChildObjects => [Source, Target, .. base.ChildObjects];
 }

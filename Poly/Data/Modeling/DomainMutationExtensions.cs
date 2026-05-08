@@ -47,6 +47,12 @@ public static class DomainMutationExtensions {
     public static void AddEvent(this Entity entity, Event @event) =>
         entity.Domain.CreateMutation().AddEvent(entity, @event).Apply();
 
+    public static void AddEventSubscription(this Entity entity, EventSubscription subscription) =>
+        entity.Domain.CreateMutation().AddEventSubscription(entity, subscription).Apply();
+
+    public static void RemoveEventSubscription(this Entity entity, EventSubscription subscription) =>
+        entity.Domain.CreateMutation().RemoveEventSubscription(entity, subscription).Apply();
+
     public static void RemoveEvent(this Entity entity, Event @event) =>
         entity.Domain.CreateMutation().RemoveEvent(entity, @event).Apply();
 
@@ -140,6 +146,21 @@ public static class DomainMutationExtensions {
 
     public static void SetEventPropertyBinding(this Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) =>
         action.Domain.CreateMutation().SetEventPropertyBinding(action, effect, propertyName, source).Apply();
+
+    public static void SetEventHandlerTrigger(this Action action, Event eventType, string eventParameterName) =>
+        action.Domain.CreateMutation().SetEventHandlerTrigger(action, eventType, eventParameterName).Apply();
+
+    public static void SetCommandTrigger(this Action action) =>
+        action.Domain.CreateMutation().SetCommandTrigger(action).Apply();
+
+    public static void AddEventSubscriptionCorrelation(this EventSubscription subscription, EventCorrelationBinding binding) =>
+        subscription.Domain.CreateMutation().AddEventSubscriptionCorrelation(subscription, binding).Apply();
+
+    public static void RemoveEventSubscriptionCorrelation(this EventSubscription subscription, EventCorrelationBinding binding) =>
+        subscription.Domain.CreateMutation().RemoveEventSubscriptionCorrelation(subscription, binding).Apply();
+
+    public static void SetAudience(this EventSubscription subscription, EventSubscriptionAudience audience) =>
+        subscription.Domain.CreateMutation().SetEventSubscriptionAudience(subscription, audience).Apply();
 
     public static void AddComment(this DomainObject target, string comment) {
         var mutation = target.Domain.CreateMutation();

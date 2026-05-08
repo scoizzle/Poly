@@ -9,7 +9,14 @@ public sealed record ActionCapabilityView(
     IReadOnlyCollection<Effect> Effects,
     IReadOnlyCollection<Type> EffectTypes,
     IReadOnlyCollection<Event> PublishedEvents,
-    IReadOnlyCollection<Stage> TransitionTargets);
+    IReadOnlyCollection<Stage> TransitionTargets,
+    ActionTrigger Trigger);
+
+public sealed record EventSubscriptionCapabilityView(
+    string EventTypeName,
+    string HandlerActionName,
+    EventSubscriptionAudience Audience,
+    IReadOnlyCollection<EventCorrelationBinding> Correlations);
 
 public sealed record StageCapabilityView(
     string StageName,

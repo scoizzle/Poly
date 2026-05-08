@@ -16,6 +16,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             case Action action:
                 AnalyzeAction(context, action);
                 break;
+            case EventSubscription subscription:
+                AnalyzeSubscription(context, subscription);
+                break;
         }
 
         this.AnalyzeChildren(context, node);
@@ -30,6 +33,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
                 AnalyzeAction(context, action);
             }
+
+            foreach (var subscription in entity.EventSubscriptions.Where(context.ShouldAnalyze)) {
+                AnalyzeSubscription(context, subscription);
+            }
         }
     }
 
@@ -40,6 +47,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         var ownerEntity = action.Entity;
         if (ownerEntity is null) {
+            return;
+        }
+
+        if (!ValidateActionTrigger(context, action, ownerEntity)) {
             return;
         }
 
@@ -284,6 +295,122 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         return true;
+    }
+
+    private static bool ValidateActionTrigger(AnalysisContext context, Action action, Entity ownerEntity) {
+        var subscriptions = ownerEntity.EventSubscriptions.Where(subscription => ReferenceEquals(subscription.HandlerAction, action)).ToArray();
+
+        switch (action.Trigger) {
+            case ActionTrigger.Command:
+                if (subscriptions.Length > 0) {
+                    context.ReportError(action, $"Command action '{action.Name}' cannot have event subscriptions.", DomainModelDiagnosticCodes.ActionTrigger);
+                    return false;
+                }
+                return true;
+            case ActionTrigger.EventHandler eventHandler:
+                if (!ReferenceEquals(eventHandler.EventType.Domain, ownerEntity.Domain)) {
+                    context.ReportError(action, $"Event handler trigger event '{eventHandler.EventType.Name}' does not belong to the same domain as entity '{ownerEntity.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
+                    return false;
+                }
+
+                var parameter = action.Parameters.OfType<Property>()
+                    .FirstOrDefault(p => string.Equals(p.Name, eventHandler.EventParameterName, StringComparison.Ordinal));
+                if (parameter is null) {
+                    context.ReportError(action, $"Event handler action '{action.Name}' requires parameter '{eventHandler.EventParameterName}' for event '{eventHandler.EventType.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
+                    return false;
+                }
+
+                if (!ReferenceEquals(parameter.Type, eventHandler.EventType)) {
+                    context.ReportError(action, $"Event handler action '{action.Name}' parameter '{eventHandler.EventParameterName}' has type '{parameter.Type.Name}' but must be '{eventHandler.EventType.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
+                    return false;
+                }
+
+                if (subscriptions.Length != 1) {
+                    context.ReportError(action, $"Event handler action '{action.Name}' must have exactly one event subscription on entity '{ownerEntity.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
+                    return false;
+                }
+
+                var subscription = subscriptions[0];
+                if (!ReferenceEquals(subscription.EventType, eventHandler.EventType)) {
+                    context.ReportError(action, $"Event handler action '{action.Name}' trigger event '{eventHandler.EventType.Name}' does not match subscribed event '{subscription.EventType.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
+                    return false;
+                }
+
+                return true;
+            default:
+                context.ReportError(action, $"Action '{action.Name}' has unsupported trigger type '{action.Trigger.GetType().Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
+                return false;
+        }
+    }
+
+    private static void AnalyzeSubscription(AnalysisContext context, EventSubscription subscription) {
+        if (!context.TryBeginAnalyzerVisit<EffectAnalyzer>(subscription)) {
+            return;
+        }
+
+        if (!ReferenceEquals(subscription.ConsumerEntity.Domain, subscription.Domain)) {
+            context.ReportError(subscription, $"Event subscription consumer entity '{subscription.ConsumerEntity.Name}' does not belong to domain '{subscription.Domain.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (!ReferenceEquals(subscription.EventType.Domain, subscription.Domain)) {
+            context.ReportError(subscription, $"Event subscription event '{subscription.EventType.Name}' does not belong to domain '{subscription.Domain.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (!ReferenceEquals(subscription.HandlerAction.Domain, subscription.Domain)) {
+            context.ReportError(subscription, $"Event subscription handler '{subscription.HandlerAction.Name}' does not belong to domain '{subscription.Domain.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (!ReferenceEquals(subscription.HandlerAction.Entity, subscription.ConsumerEntity)) {
+            context.ReportError(subscription, $"Event subscription handler '{subscription.HandlerAction.Name}' must belong to consumer entity '{subscription.ConsumerEntity.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (!subscription.ConsumerEntity.Actions.Contains(subscription.HandlerAction)) {
+            context.ReportError(subscription, $"Event subscription handler '{subscription.HandlerAction.Name}' is not registered on consumer entity '{subscription.ConsumerEntity.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (subscription.HandlerAction.Trigger is not ActionTrigger.EventHandler trigger) {
+            context.ReportError(subscription, $"Event subscription handler '{subscription.HandlerAction.Name}' must be configured with an EventHandler trigger.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (!ReferenceEquals(trigger.EventType, subscription.EventType)) {
+            context.ReportError(subscription, $"Event subscription event '{subscription.EventType.Name}' does not match handler trigger event '{trigger.EventType.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (subscription.ConsumerEntity.EventSubscriptions.Count(candidate => ReferenceEquals(candidate.HandlerAction, subscription.HandlerAction)) > 1) {
+            context.ReportError(subscription, $"Handler action '{subscription.HandlerAction.Name}' cannot have more than one event subscription.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (subscription.Audience is EventSubscriptionAudience.Correlated && subscription.Correlations.Count == 0) {
+            context.ReportError(subscription, $"Correlated event subscription '{subscription.Name}' requires at least one correlation binding.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        foreach (var binding in subscription.Correlations) {
+            var eventProperty = subscription.EventType.Properties.FirstOrDefault(property => string.Equals(property.Name, binding.EventPropertyName, StringComparison.Ordinal));
+            if (eventProperty is null) {
+                context.ReportError(subscription, $"Event subscription correlation references missing event property '{binding.EventPropertyName}' on event '{subscription.EventType.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+                return;
+            }
+
+            var consumerProperty = subscription.ConsumerEntity.Properties.FirstOrDefault(property => string.Equals(property.Name, binding.ConsumerPropertyName, StringComparison.Ordinal));
+            if (consumerProperty is null) {
+                context.ReportError(subscription, $"Event subscription correlation references missing consumer property '{binding.ConsumerPropertyName}' on entity '{subscription.ConsumerEntity.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+                return;
+            }
+
+            if (!ReferenceEquals(eventProperty.Type, consumerProperty.Type)) {
+                context.ReportError(subscription, $"Event subscription correlation '{binding.EventPropertyName}->{binding.ConsumerPropertyName}' has mismatched types '{eventProperty.Type.Name}' and '{consumerProperty.Type.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+                return;
+            }
+        }
     }
 
     private static IReadOnlySet<Property> ComputeCoveredProperties(Action action) {

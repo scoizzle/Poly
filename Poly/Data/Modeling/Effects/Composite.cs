@@ -6,6 +6,7 @@ public sealed record Composite(Domain Domain) : Effect(Domain) {
     private readonly List<Effect> _childEffects = [];
 
     public IReadOnlyCollection<Effect> ChildEffects => _childEffects.AsReadOnly();
+    public override IEnumerable<DomainObject> ChildObjects => _childEffects;
 
     public void AddEffect(Effect effect) {
         ArgumentNullException.ThrowIfNull(effect);

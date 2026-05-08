@@ -9,15 +9,4 @@ namespace Poly.Data.Modeling.Effects;
 public sealed record EffectValueRef(string SourceEffectName, string OutputName) : DomainValue(
     null!,
     $"{SourceEffectName}.{OutputName}",
-    null!) {
-
-    /// <summary>
-    /// The name of the effect that produces the value.
-    /// </summary>
-    public string SourceEffectName => SourceEffectName;
-
-    /// <summary>
-    /// The specific named output on that effect.
-    /// </summary>
-    public string OutputName => OutputName;
-}
+    null!);

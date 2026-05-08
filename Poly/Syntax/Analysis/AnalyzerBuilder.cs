@@ -4,7 +4,7 @@ namespace Poly.Syntax.Analysis;
 
 public sealed class AnalyzerBuilder {
     private readonly TypeDefinitionProviderCollection _typeDefinitions;
-    private readonly List<INodeAnalyzer> _analyzers = new();
+    private readonly List<(INodeAnalyzer Analyzer, string PassName)> _analyzers = new();
 
     public AnalyzerBuilder()
         : this([ClrTypeDefinitionRegistry.Shared]) {
@@ -19,9 +19,9 @@ public sealed class AnalyzerBuilder {
         _typeDefinitions = [.. typeDefinitionProviders];
     }
 
-    public AnalyzerBuilder AddAnalyzer(INodeAnalyzer analyzer) {
+    public AnalyzerBuilder AddAnalyzer(INodeAnalyzer analyzer, string? passName = null) {
         ArgumentNullException.ThrowIfNull(analyzer);
-        _analyzers.Add(analyzer);
+        _analyzers.Add((analyzer, passName ?? analyzer.GetType().Name));
         return this;
     }
 

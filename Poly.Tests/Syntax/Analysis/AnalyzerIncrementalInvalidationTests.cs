@@ -46,7 +46,7 @@ public class AnalyzerIncrementalInvalidationTests {
         var staleMetadata = new NodeMetadataStore();
         staleMetadata.Set(initialRoot, new TestValueMetadata(999));
         staleMetadata.Set(initialLeaf, new TestValueMetadata(999));
-        var priorAnalysisWithoutTopology = new AnalysisResult(context);
+        var priorAnalysisWithoutTopology = new AnalysisResult(context, AnalysisTelemetry.Empty);
 
         var updatedLeaf = initialLeaf with { Value = 2, Id = initialLeaf.Id };
         var updatedRoot = initialRoot with { Child = updatedLeaf, Id = initialRoot.Id };
@@ -113,6 +113,35 @@ public class AnalyzerIncrementalInvalidationTests {
         await Assert.That(metadata!.Count).IsEqualTo(1);
     }
 
+    [Test]
+    public async Task Analyze_WhenPassesAreNamed_TelemetryPreservesExecutionOrder() {
+        var builder = new AnalyzerBuilder(new NoopTypeDefinitionProvider())
+            .AddAnalyzer(new NoopAnalyzer(), "pass-b")
+            .AddAnalyzer(new NoopAnalyzer(), "pass-a");
+
+        var analyzer = builder.Build();
+        var result = analyzer.Analyze(new TestLeaf(1));
+
+        await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(2);
+        await Assert.That(result.Telemetry.Passes[0].PassName).IsEqualTo("pass-b");
+        await Assert.That(result.Telemetry.Passes[1].PassName).IsEqualTo("pass-a");
+    }
+
+    [Test]
+    public async Task Analyze_IncrementalRun_CapturesIncrementalTelemetry() {
+        var analyzer = CreateAnalyzer(new TestMetadataAnalyzer());
+        var initialLeaf = new TestLeaf(1);
+        var initialRoot = new TestParent(initialLeaf);
+        var priorAnalysis = analyzer.Analyze(initialRoot);
+
+        var updatedLeaf = initialLeaf with { Value = 2, Id = initialLeaf.Id };
+        var updatedRoot = initialRoot with { Child = updatedLeaf, Id = initialRoot.Id };
+        var result = analyzer.Analyze(updatedRoot, priorAnalysis, [updatedLeaf]);
+
+        await Assert.That(result.Telemetry.Incremental).IsTrue();
+        await Assert.That(result.Telemetry.InvalidatedNodeCount).IsEqualTo(1);
+    }
+
     private static Analyzer CreateAnalyzer(params INodeAnalyzer[] testAnalyzers) {
         var builder = new AnalyzerBuilder(new NoopTypeDefinitionProvider())
             .UseIncrementalAnalysis();
@@ -122,6 +151,12 @@ public class AnalyzerIncrementalInvalidationTests {
         }
 
         return builder.Build();
+    }
+
+    private sealed class NoopAnalyzer : INodeAnalyzer {
+        public void Analyze(AnalysisContext context, Node node) {
+            this.AnalyzeChildren(context, node);
+        }
     }
 
     private sealed class TestMetadataAnalyzer : INodeAnalyzer {

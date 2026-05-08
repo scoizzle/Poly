@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Effects;
@@ -43,6 +45,11 @@ public abstract record Effect(Domain Domain) : DomainObject(Domain) {
         }
         targetEffect._incomingBindings[targetParamName] = new EffectValueRef(GetType().Name, outputName);
     }
+
+    public IReadOnlyDictionary<string, EffectValueRef> IncomingBindings =>
+        _incomingBindings is not null
+            ? _incomingBindings
+            : ImmutableDictionary<string, EffectValueRef>.Empty;
 
     private Dictionary<string, EffectValueRef>? _incomingBindings;
 }

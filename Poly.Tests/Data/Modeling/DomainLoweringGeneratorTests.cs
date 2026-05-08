@@ -3,6 +3,7 @@ using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Syntax.Analysis;
 using Poly.Tests.TestHelpers;
 
 using And = Poly.Syntax.Nodes.And;
@@ -24,7 +25,7 @@ public class DomainLoweringGeneratorTests {
         var clause = new Equal(new Member(subject, "Age"), new Constant(18));
 
         var context = new AnalysisContext(ClrTypeDefinitionRegistry.Shared);
-        var analysis = new AnalysisResult(context);
+        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
         var generator = new DomainLoweringGenerator(analysis);
 
         var lowered = generator.Lower(clause);
@@ -43,7 +44,7 @@ public class DomainLoweringGeneratorTests {
             new LessThanOrEqual(value, new Constant(65)));
 
         var context = new AnalysisContext(ClrTypeDefinitionRegistry.Shared);
-        var analysis = new AnalysisResult(context);
+        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
         var generator = new DomainLoweringGenerator(analysis);
 
         var lowered = generator.Lower(clause);

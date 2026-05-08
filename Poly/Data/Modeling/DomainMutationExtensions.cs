@@ -12,159 +12,152 @@ public static class DomainMutationExtensions {
 
     // ── Domain ───────────────────────────────────────────────────────────────
 
-    public static void AddType(this Domain domain, DomainType type) =>
+    public static AnalysisResult AddType(this Domain domain, DomainType type) =>
         domain.CreateMutation().AddType(type).Apply();
 
-    public static void AddRelationship(this Domain domain, Relationship relationship) =>
+    public static AnalysisResult AddRelationship(this Domain domain, Relationship relationship) =>
         domain.CreateMutation().AddRelationship(relationship).Apply();
 
     // ── Entity ───────────────────────────────────────────────────────────────
 
-    public static void AddProperty(this Entity entity, Property property) =>
+    public static AnalysisResult AddProperty(this Entity entity, Property property) =>
         entity.Domain.CreateMutation().AddProperty(entity, property).Apply();
 
-    public static void RemoveProperty(this Entity entity, Property property) =>
+    public static AnalysisResult RemoveProperty(this Entity entity, Property property) =>
         entity.Domain.CreateMutation().RemoveProperty(entity, property).Apply();
 
-    public static void AddStage(this Entity entity, Stage stage) =>
+    public static AnalysisResult AddStage(this Entity entity, Stage stage) =>
         entity.Domain.CreateMutation().AddStage(entity, stage).Apply();
 
-    public static void RemoveStage(this Entity entity, Stage stage) =>
+    public static AnalysisResult RemoveStage(this Entity entity, Stage stage) =>
         entity.Domain.CreateMutation().RemoveStage(entity, stage).Apply();
 
-    public static void AddPolicy(this Entity entity, Policy policy) =>
+    public static AnalysisResult AddPolicy(this Entity entity, Policy policy) =>
         entity.Domain.CreateMutation().AddPolicy(entity, policy).Apply();
 
-    public static void RemovePolicy(this Entity entity, Policy policy) =>
+    public static AnalysisResult RemovePolicy(this Entity entity, Policy policy) =>
         entity.Domain.CreateMutation().RemovePolicy(entity, policy).Apply();
 
-    public static void AddAction(this Entity entity, Action action) =>
+    public static AnalysisResult AddAction(this Entity entity, Action action) =>
         entity.Domain.CreateMutation().AddAction(entity, action).Apply();
 
-    public static void RemoveAction(this Entity entity, Action action) =>
+    public static AnalysisResult RemoveAction(this Entity entity, Action action) =>
         entity.Domain.CreateMutation().RemoveAction(entity, action).Apply();
 
-    public static void AddEvent(this Entity entity, Event @event) =>
+    public static AnalysisResult AddEvent(this Entity entity, Event @event) =>
         entity.Domain.CreateMutation().AddEvent(entity, @event).Apply();
 
-    public static void AddEventSubscription(this Entity entity, EventSubscription subscription) =>
+    public static AnalysisResult AddEventSubscription(this Entity entity, EventSubscription subscription) =>
         entity.Domain.CreateMutation().AddEventSubscription(entity, subscription).Apply();
 
-    public static void RemoveEventSubscription(this Entity entity, EventSubscription subscription) =>
+    public static AnalysisResult RemoveEventSubscription(this Entity entity, EventSubscription subscription) =>
         entity.Domain.CreateMutation().RemoveEventSubscription(entity, subscription).Apply();
 
-    public static void RemoveEvent(this Entity entity, Event @event) =>
+    public static AnalysisResult RemoveEvent(this Entity entity, Event @event) =>
         entity.Domain.CreateMutation().RemoveEvent(entity, @event).Apply();
 
-    public static void AddRelationship(this Entity entity, Relationship relationship) =>
+    public static AnalysisResult AddRelationship(this Entity entity, Relationship relationship) =>
         entity.Domain.CreateMutation().AddEntityRelationship(entity, relationship).Apply();
 
-    public static void RemoveRelationship(this Entity entity, Relationship relationship) =>
+    public static AnalysisResult RemoveRelationship(this Entity entity, Relationship relationship) =>
         entity.Domain.CreateMutation().RemoveEntityRelationship(entity, relationship).Apply();
 
     // ── Actor ────────────────────────────────────────────────────────────────
 
-    public static void SetSubjectProperty(this Actor actor, Property? property) =>
+    public static AnalysisResult SetSubjectProperty(this Actor actor, Property? property) =>
         actor.Domain.CreateMutation().SetActorSubjectProperty(actor, property).Apply();
 
-    public static void SetRoleClaimType(this Actor actor, string? roleClaimType) =>
+    public static AnalysisResult SetRoleClaimType(this Actor actor, string? roleClaimType) =>
         actor.Domain.CreateMutation().SetActorRoleClaimType(actor, roleClaimType).Apply();
 
-    public static void AddClaimMapping(this Actor actor, ActorClaimMapping mapping) =>
+    public static AnalysisResult AddClaimMapping(this Actor actor, ActorClaimMapping mapping) =>
         actor.Domain.CreateMutation().AddActorClaimMapping(actor, mapping).Apply();
 
-    public static void RemoveClaimMapping(this Actor actor, ActorClaimMapping mapping) =>
+    public static AnalysisResult RemoveClaimMapping(this Actor actor, ActorClaimMapping mapping) =>
         actor.Domain.CreateMutation().RemoveActorClaimMapping(actor, mapping).Apply();
 
     // ── Stage ────────────────────────────────────────────────────────────────
 
-    public static void AddPolicy(this Stage stage, Policy policy) =>
+    public static AnalysisResult AddPolicy(this Stage stage, Policy policy) =>
         stage.Domain.CreateMutation().AddPolicy(stage, policy).Apply();
 
-    public static void RemovePolicy(this Stage stage, Policy policy) =>
+    public static AnalysisResult RemovePolicy(this Stage stage, Policy policy) =>
         stage.Domain.CreateMutation().RemovePolicy(stage, policy).Apply();
 
-    public static void AddAction(this Stage stage, Action action) =>
+    public static AnalysisResult AddAction(this Stage stage, Action action) =>
         stage.Domain.CreateMutation().AddAction(stage, action).Apply();
 
-    public static void RemoveAction(this Stage stage, Action action) =>
+    public static AnalysisResult RemoveAction(this Stage stage, Action action) =>
         stage.Domain.CreateMutation().RemoveAction(stage, action).Apply();
 
     // ── Policy ───────────────────────────────────────────────────────────────
 
-    public static void AddRule(this Policy policy, Rule rule) =>
+    public static AnalysisResult AddRule(this Policy policy, Rule rule) =>
         policy.Domain.CreateMutation().AddRule(policy, rule).Apply();
 
-    public static void RemoveRule(this Policy policy, Rule rule) =>
+    public static AnalysisResult RemoveRule(this Policy policy, Rule rule) =>
         policy.Domain.CreateMutation().RemoveRule(policy, rule).Apply();
 
     // ── Property ─────────────────────────────────────────────────────────────
 
-    public static void AddConstraint(this Property property, Constraint constraint) =>
+    public static AnalysisResult AddConstraint(this Property property, Constraint constraint) =>
         property.Domain.CreateMutation().AddConstraint(property, constraint).Apply();
 
-    public static void RemoveConstraint(this Property property, Constraint constraint) =>
+    public static AnalysisResult RemoveConstraint(this Property property, Constraint constraint) =>
         property.Domain.CreateMutation().RemoveConstraint(property, constraint).Apply();
 
-    public static void AddPolicy(this Property property, Policy policy) =>
+    public static AnalysisResult AddPolicy(this Property property, Policy policy) =>
         property.Domain.CreateMutation().AddPolicy(property, policy).Apply();
 
-    public static void RemovePolicy(this Property property, Policy policy) =>
+    public static AnalysisResult RemovePolicy(this Property property, Policy policy) =>
         property.Domain.CreateMutation().RemovePolicy(property, policy).Apply();
 
     // ── Event ────────────────────────────────────────────────────────────────
 
-    public static void AddProperty(this Event @event, Property property) =>
+    public static AnalysisResult AddProperty(this Event @event, Property property) =>
         @event.Domain.CreateMutation().AddProperty(@event, property).Apply();
 
-    public static void RemoveProperty(this Event @event, Property property) =>
+    public static AnalysisResult RemoveProperty(this Event @event, Property property) =>
         @event.Domain.CreateMutation().RemoveProperty(@event, property).Apply();
 
     // ── Action ───────────────────────────────────────────────────────────────
 
-    public static void AddParameter(this Action action, Property parameter) =>
+    public static AnalysisResult AddParameter(this Action action, Property parameter) =>
         action.Domain.CreateMutation().AddParameter(action, parameter).Apply();
 
-    public static void RemoveParameter(this Action action, Property parameter) =>
+    public static AnalysisResult RemoveParameter(this Action action, Property parameter) =>
         action.Domain.CreateMutation().RemoveParameter(action, parameter).Apply();
 
-    public static void AddPolicy(this Action action, Policy policy) =>
+    public static AnalysisResult AddPolicy(this Action action, Policy policy) =>
         action.Domain.CreateMutation().AddPolicy(action, policy).Apply();
 
-    public static void RemovePolicy(this Action action, Policy policy) =>
+    public static AnalysisResult RemovePolicy(this Action action, Policy policy) =>
         action.Domain.CreateMutation().RemovePolicy(action, policy).Apply();
 
-    public static bool AddEffect(this Action action, Effect effect) {
+    public static AnalysisResult AddEffect(this Action action, Effect effect) =>
         action.Domain.CreateMutation().AddEffect(action, effect).Apply();
-        return true;
-    }
 
-    public static bool RemoveEffect(this Action action, Effect effect) {
+    public static AnalysisResult RemoveEffect(this Action action, Effect effect) =>
         action.Domain.CreateMutation().RemoveEffect(action, effect).Apply();
-        return true;
-    }
 
-    public static void SetEventPropertyBinding(this Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) =>
+    public static AnalysisResult SetEventPropertyBinding(this Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) =>
         action.Domain.CreateMutation().SetEventPropertyBinding(action, effect, propertyName, source).Apply();
 
-    public static void SetEventHandlerTrigger(this Action action, Event eventType, string eventParameterName) =>
+    public static AnalysisResult SetEventHandlerTrigger(this Action action, Event eventType, string eventParameterName) =>
         action.Domain.CreateMutation().SetEventHandlerTrigger(action, eventType, eventParameterName).Apply();
 
-    public static void SetCommandTrigger(this Action action) =>
+    public static AnalysisResult SetCommandTrigger(this Action action) =>
         action.Domain.CreateMutation().SetCommandTrigger(action).Apply();
 
-    public static void AddEventSubscriptionCorrelation(this EventSubscription subscription, EventCorrelationBinding binding) =>
+    public static AnalysisResult AddEventSubscriptionCorrelation(this EventSubscription subscription, EventCorrelationBinding binding) =>
         subscription.Domain.CreateMutation().AddEventSubscriptionCorrelation(subscription, binding).Apply();
 
-    public static void RemoveEventSubscriptionCorrelation(this EventSubscription subscription, EventCorrelationBinding binding) =>
+    public static AnalysisResult RemoveEventSubscriptionCorrelation(this EventSubscription subscription, EventCorrelationBinding binding) =>
         subscription.Domain.CreateMutation().RemoveEventSubscriptionCorrelation(subscription, binding).Apply();
 
-    public static void SetAudience(this EventSubscription subscription, EventSubscriptionAudience audience) =>
+    public static AnalysisResult SetAudience(this EventSubscription subscription, EventSubscriptionAudience audience) =>
         subscription.Domain.CreateMutation().SetEventSubscriptionAudience(subscription, audience).Apply();
 
-    public static void AddComment(this DomainObject target, string comment) {
-        var mutation = target.Domain.CreateMutation();
-        mutation.AddComment(target, comment);
-        mutation.Apply();
-    }
+    public static AnalysisResult AddComment(this DomainObject target, string comment) =>
+        target.Domain.CreateMutation().AddComment(target, comment).Apply();
 }

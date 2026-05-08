@@ -744,17 +744,17 @@ public static class DomainOperabilityTool {
         try {
             var session = RequireSession(sessionId);
             var analyzer = new DomainModelAnalyzer();
-            var run = analyzer.AnalyzeWithTelemetry(session.Domain);
-            _ = DomainSessionStore.UpdateAnalysis(sessionId, run.Analysis);
+            var run = analyzer.Analyze(session.Domain);
+            _ = DomainSessionStore.UpdateAnalysis(sessionId, run);
 
             if (!DomainSessionStore.TryGet(sessionId, out var updated)) {
                 throw new InvalidOperationException($"Session '{sessionId}' was not found after analysis update.");
             }
 
             var data = new DomainHealthDto(
-                HasErrors: run.Analysis.HasErrors,
-                ErrorCount: run.Analysis.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
-                WarningCount: run.Analysis.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning),
+                HasErrors: run.HasErrors,
+                ErrorCount: run.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
+                WarningCount: run.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning),
                 TotalAnalysisTime: run.Telemetry.TotalElapsed,
                 Incremental: run.Telemetry.Incremental,
                 Passes: run.Telemetry.Passes);
@@ -1506,7 +1506,7 @@ public static class DomainAuthoringTool {
         try {
             var state = RequireSession(sessionId);
             var op = Enum.Parse<DomainComparisonOperator>(@operator, ignoreCase: true);
-            var intent = new AddCrossPropertyRuleToPolicyIntent(entityName, policyName, ruleName, leftPropertyName, rightPropertyName, op, stageName, actionName, propertyName);
+            var intent = new AddCrossPropertyRuleToPolicyIntent(PolicyTarget.From(entityName, stageName, actionName, propertyName), policyName, ruleName, leftPropertyName, rightPropertyName, op);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"CrossProperty rule '{ruleName}' added to policy '{policyName}'.");
         }
@@ -1525,7 +1525,7 @@ public static class DomainAuthoringTool {
         [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
-            var intent = new AddActorTypeRuleToPolicyIntent(entityName, policyName, ruleName, actorTypeName, stageName, actionName, propertyName);
+            var intent = new AddActorTypeRuleToPolicyIntent(PolicyTarget.From(entityName, stageName, actionName, propertyName), policyName, ruleName, actorTypeName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"ActorType rule '{ruleName}' added to policy '{policyName}'.");
         }
@@ -1544,7 +1544,7 @@ public static class DomainAuthoringTool {
         [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
-            var intent = new AddActorRoleRuleToPolicyIntent(entityName, policyName, ruleName, role, stageName, actionName, propertyName);
+            var intent = new AddActorRoleRuleToPolicyIntent(PolicyTarget.From(entityName, stageName, actionName, propertyName), policyName, ruleName, role);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"ActorRole rule '{ruleName}' (role='{role}') added to policy '{policyName}'.");
         }
@@ -1565,7 +1565,7 @@ public static class DomainAuthoringTool {
         [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
-            var intent = new AddActorPropertyRuleToPolicyIntent(entityName, policyName, ruleName, actorTypeName, actorPropertyName, constraintValue, stageName, actionName, propertyName);
+            var intent = new AddActorPropertyRuleToPolicyIntent(PolicyTarget.From(entityName, stageName, actionName, propertyName), policyName, ruleName, actorTypeName, actorPropertyName, constraintValue);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"ActorProperty rule '{ruleName}' ({actorTypeName}.{actorPropertyName} == {constraintValue}) added to policy '{policyName}'.");
         }
@@ -1587,7 +1587,7 @@ public static class DomainAuthoringTool {
         try {
             var state = RequireSession(sessionId);
             var op = Enum.Parse<LogicalOperator>(@operator, ignoreCase: true);
-            var intent = new AddCompositeRuleToPolicyIntent(entityName, policyName, ruleName, leftRuleName, rightRuleName, op, stageName, actionName, propertyName);
+            var intent = new AddCompositeRuleToPolicyIntent(PolicyTarget.From(entityName, stageName, actionName, propertyName), policyName, ruleName, leftRuleName, rightRuleName, op);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"Composite rule '{ruleName}' ({leftRuleName} {op} {rightRuleName}) added to policy '{policyName}'.");
         }
@@ -1605,7 +1605,7 @@ public static class DomainAuthoringTool {
         [Description("Property owning the policy, if any.")] string? propertyName = null) {
         try {
             var state = RequireSession(sessionId);
-            var intent = new RemoveRuleFromPolicyIntent(entityName, policyName, ruleName, stageName, actionName, propertyName);
+            var intent = new RemoveRuleFromPolicyIntent(PolicyTarget.From(entityName, stageName, actionName, propertyName), policyName, ruleName);
             var analysis = ApplyIntent(state, intent);
             return Commit(sessionId, state.Domain, analysis, $"Rule '{ruleName}' removed from policy '{policyName}'.");
         }

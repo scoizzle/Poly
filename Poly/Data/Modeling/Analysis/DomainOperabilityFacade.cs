@@ -4,12 +4,12 @@ using Poly.Syntax.Analysis;
 namespace Poly.Data.Modeling;
 
 public sealed record DomainOperabilitySnapshot(
-    AnalysisRun AnalysisRun,
+    AnalysisResult Analysis,
     NodeInvalidityReport Invalidity
 );
 
 public sealed record DomainOperabilityDelta(
-    AnalysisRun AnalysisRun,
+    AnalysisResult Analysis,
     NodeInvalidityReport Invalidity,
     DomainDiffReport Diff
 );
@@ -19,10 +19,10 @@ public static class DomainOperabilityFacade {
         ArgumentNullException.ThrowIfNull(domain);
 
         var subjectAnalyzer = analyzer ?? new DomainModelAnalyzer();
-        var analysisRun = subjectAnalyzer.AnalyzeWithTelemetry(domain);
-        var invalidity = DomainInvalidityExplainer.Explain(analysisRun.Analysis);
+        var analysis = subjectAnalyzer.Analyze(domain);
+        var invalidity = DomainInvalidityExplainer.Explain(analysis);
 
-        return new DomainOperabilitySnapshot(analysisRun, invalidity);
+        return new DomainOperabilitySnapshot(analysis, invalidity);
     }
 
     public static DomainOperabilityDelta AnalyzeExplainDiff(Domain before, Domain after, DomainModelAnalyzer? analyzer = null) {
@@ -30,10 +30,10 @@ public static class DomainOperabilityFacade {
         ArgumentNullException.ThrowIfNull(after);
 
         var subjectAnalyzer = analyzer ?? new DomainModelAnalyzer();
-        var analysisRun = subjectAnalyzer.AnalyzeWithTelemetry(after);
-        var invalidity = DomainInvalidityExplainer.Explain(analysisRun.Analysis);
-        var diff = DomainDiffUtil.Compare(before, after, analysisRun.Analysis);
+        var analysis = subjectAnalyzer.Analyze(after);
+        var invalidity = DomainInvalidityExplainer.Explain(analysis);
+        var diff = DomainDiffUtil.Compare(before, after, analysis);
 
-        return new DomainOperabilityDelta(analysisRun, invalidity, diff);
+        return new DomainOperabilityDelta(analysis, invalidity, diff);
     }
 }

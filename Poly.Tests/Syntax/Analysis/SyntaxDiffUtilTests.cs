@@ -48,7 +48,7 @@ public class SyntaxDiffUtilTests {
 
         var context = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
         context.ReportWarning(afterLeaf, "changed leaf", "DIFF001");
-        var analysis = new AnalysisResult(context);
+        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
 
         var diff = SyntaxDiffUtil.CompareSnapshots(beforeSnapshot, afterSnapshot, analysis);
         var changed = diff.Changed.Single(entry => entry.NodeId == changedId);

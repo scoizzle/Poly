@@ -16,12 +16,6 @@ public static class DomainQueryExtensions {
         return domain.Types.OfType<Entity>();
     }
 
-    public static IEnumerable<Actor> GetAvailableActors(this Domain domain) {
-        ArgumentNullException.ThrowIfNull(domain);
-
-        return domain.Types.OfType<Actor>();
-    }
-
     public static IEnumerable<Primitive> GetAvailablePrimitives(this Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
 
@@ -137,12 +131,6 @@ public static class DomainQueryExtensions {
         return entity.FindStage(name) ?? throw new InvalidOperationException($"Stage '{name}' was not found on entity '{entity.Name}'.");
     }
 
-    public static IEnumerable<Stage> GetAvailableStages(this Entity entity) {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        return entity.Stages;
-    }
-
     public static Property? FindProperty(this Entity entity, string name) {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(name);
@@ -154,12 +142,6 @@ public static class DomainQueryExtensions {
         return entity.FindProperty(name) ?? throw new InvalidOperationException($"Property '{name}' was not found on entity '{entity.Name}'.");
     }
 
-    public static IEnumerable<Property> GetAvailableProperties(this Entity entity) {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        return entity.Properties;
-    }
-
     public static Action? FindAction(this Entity entity, string name) {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(name);
@@ -169,12 +151,6 @@ public static class DomainQueryExtensions {
 
     public static Action RequireAction(this Entity entity, string name) {
         return entity.FindAction(name) ?? throw new InvalidOperationException($"Action '{name}' was not found on entity '{entity.Name}'.");
-    }
-
-    public static IEnumerable<Action> GetAvailableActions(this Entity entity) {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        return entity.Actions;
     }
 
     public static Action? FindActionInHierarchy(this Entity entity, string name) {
@@ -226,18 +202,6 @@ public static class DomainQueryExtensions {
         return entity.FindEvent(name) ?? throw new InvalidOperationException($"Event '{name}' was not found on entity '{entity.Name}'.");
     }
 
-    public static IEnumerable<Event> GetAvailableEvents(this Entity entity) {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        return entity.Events;
-    }
-
-    public static IEnumerable<Relationship> GetAvailableRelationships(this Entity entity) {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        return entity.Relationships;
-    }
-
     public static Property? FindProperty(this Event @event, string name) {
         ArgumentNullException.ThrowIfNull(@event);
         ArgumentNullException.ThrowIfNull(name);
@@ -259,12 +223,6 @@ public static class DomainQueryExtensions {
 
     public static Action RequireAction(this Stage stage, string name) {
         return stage.FindAction(name) ?? throw new InvalidOperationException($"Action '{name}' was not found on stage '{stage.Name}'.");
-    }
-
-    public static IEnumerable<Action> GetAvailableActions(this Stage stage) {
-        ArgumentNullException.ThrowIfNull(stage);
-
-        return stage.Actions;
     }
 
     public static Action? FindActionInHierarchy(this Stage stage, string name) {
@@ -303,12 +261,6 @@ public static class DomainQueryExtensions {
         return actionsByName.Values;
     }
 
-    public static IEnumerable<Policy> GetAvailablePolicies(this Stage stage) {
-        ArgumentNullException.ThrowIfNull(stage);
-
-        return stage.Policies;
-    }
-
     public static IEnumerable<Policy> GetAvailablePoliciesInHierarchy(this Stage stage) {
         ArgumentNullException.ThrowIfNull(stage);
 
@@ -337,18 +289,6 @@ public static class DomainQueryExtensions {
                ?? throw new InvalidOperationException($"Effect '{typeof(T).Name}' was not found on action '{action.Name}'.");
     }
 
-    public static IEnumerable<Effect> GetAvailableEffects(this Action action) {
-        ArgumentNullException.ThrowIfNull(action);
-
-        return action.Effects;
-    }
-
-    public static IEnumerable<Type> GetAvailableEffectTypes(this Action action) {
-        ArgumentNullException.ThrowIfNull(action);
-
-        return action.Effects.Select(effect => effect.GetType()).Distinct();
-    }
-
     public static Property? FindParameter(this Action action, string name) {
         ArgumentNullException.ThrowIfNull(action);
         ArgumentNullException.ThrowIfNull(name);
@@ -360,12 +300,6 @@ public static class DomainQueryExtensions {
     public static Property RequireParameter(this Action action, string name) {
         return action.FindParameter(name)
                ?? throw new InvalidOperationException($"Parameter '{name}' was not found on action '{action.Name}'.");
-    }
-
-    public static IEnumerable<Property> GetAvailableParameters(this Action action) {
-        ArgumentNullException.ThrowIfNull(action);
-
-        return action.Parameters.OfType<Property>();
     }
 
     public static IEnumerable<Event> GetAvailablePublishedEvents(this Action action) {

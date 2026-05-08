@@ -289,23 +289,8 @@ public sealed class DomainMutationIntentEngine {
                     }
 
                 case AddCrossPropertyRuleToPolicyIntent addCrossRule: {
-                        var entity = domain.RequireEntity(addCrossRule.EntityName);
-                        Policy crossPolicy;
-                        if (!string.IsNullOrWhiteSpace(addCrossRule.StageName)) {
-                            var stage = entity.RequireStage(addCrossRule.StageName);
-                            crossPolicy = stage.RequirePolicy(addCrossRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addCrossRule.ActionName)) {
-                            var action = entity.RequireAction(addCrossRule.ActionName);
-                            crossPolicy = action.RequirePolicy(addCrossRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addCrossRule.PropertyName)) {
-                            var property = entity.RequireProperty(addCrossRule.PropertyName);
-                            crossPolicy = property.RequirePolicy(addCrossRule.PolicyName);
-                        }
-                        else {
-                            crossPolicy = entity.RequirePolicy(addCrossRule.PolicyName);
-                        }
+                        var crossPolicy = ResolvePolicy(domain, addCrossRule.Target, addCrossRule.PolicyName);
+                        var entity = domain.RequireEntity(addCrossRule.Target.EntityName);
                         var left = entity.RequireProperty(addCrossRule.LeftPropertyName);
                         var right = entity.RequireProperty(addCrossRule.RightPropertyName);
                         _ = mutation.AddRule(crossPolicy, new CrossPropertyRule(domain, addCrossRule.RuleName, left, right, addCrossRule.Operator));
@@ -313,68 +298,20 @@ public sealed class DomainMutationIntentEngine {
                     }
 
                 case AddActorTypeRuleToPolicyIntent addActorTypeRule: {
-                        var entity = domain.RequireEntity(addActorTypeRule.EntityName);
-                        Policy actorTypePolicy;
-                        if (!string.IsNullOrWhiteSpace(addActorTypeRule.StageName)) {
-                            var stage = entity.RequireStage(addActorTypeRule.StageName);
-                            actorTypePolicy = stage.RequirePolicy(addActorTypeRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addActorTypeRule.ActionName)) {
-                            var action = entity.RequireAction(addActorTypeRule.ActionName);
-                            actorTypePolicy = action.RequirePolicy(addActorTypeRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addActorTypeRule.PropertyName)) {
-                            var property = entity.RequireProperty(addActorTypeRule.PropertyName);
-                            actorTypePolicy = property.RequirePolicy(addActorTypeRule.PolicyName);
-                        }
-                        else {
-                            actorTypePolicy = entity.RequirePolicy(addActorTypeRule.PolicyName);
-                        }
+                        var actorTypePolicy = ResolvePolicy(domain, addActorTypeRule.Target, addActorTypeRule.PolicyName);
                         var actorType = domain.RequireActor(addActorTypeRule.ActorTypeName);
                         _ = mutation.AddRule(actorTypePolicy, new ActorTypeRule(domain, addActorTypeRule.RuleName, actorType));
                         break;
                     }
 
                 case AddActorRoleRuleToPolicyIntent addActorRoleRule: {
-                        var entity = domain.RequireEntity(addActorRoleRule.EntityName);
-                        Policy actorRolePolicy;
-                        if (!string.IsNullOrWhiteSpace(addActorRoleRule.StageName)) {
-                            var stage = entity.RequireStage(addActorRoleRule.StageName);
-                            actorRolePolicy = stage.RequirePolicy(addActorRoleRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addActorRoleRule.ActionName)) {
-                            var action = entity.RequireAction(addActorRoleRule.ActionName);
-                            actorRolePolicy = action.RequirePolicy(addActorRoleRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addActorRoleRule.PropertyName)) {
-                            var property = entity.RequireProperty(addActorRoleRule.PropertyName);
-                            actorRolePolicy = property.RequirePolicy(addActorRoleRule.PolicyName);
-                        }
-                        else {
-                            actorRolePolicy = entity.RequirePolicy(addActorRoleRule.PolicyName);
-                        }
+                        var actorRolePolicy = ResolvePolicy(domain, addActorRoleRule.Target, addActorRoleRule.PolicyName);
                         _ = mutation.AddRule(actorRolePolicy, new ActorRoleRule(domain, addActorRoleRule.RuleName, addActorRoleRule.Role));
                         break;
                     }
 
                 case AddActorPropertyRuleToPolicyIntent addActorPropRule: {
-                        var entity = domain.RequireEntity(addActorPropRule.EntityName);
-                        Policy actorPropPolicy;
-                        if (!string.IsNullOrWhiteSpace(addActorPropRule.StageName)) {
-                            var stage = entity.RequireStage(addActorPropRule.StageName);
-                            actorPropPolicy = stage.RequirePolicy(addActorPropRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addActorPropRule.ActionName)) {
-                            var action = entity.RequireAction(addActorPropRule.ActionName);
-                            actorPropPolicy = action.RequirePolicy(addActorPropRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addActorPropRule.PropertyName)) {
-                            var property = entity.RequireProperty(addActorPropRule.PropertyName);
-                            actorPropPolicy = property.RequirePolicy(addActorPropRule.PolicyName);
-                        }
-                        else {
-                            actorPropPolicy = entity.RequirePolicy(addActorPropRule.PolicyName);
-                        }
+                        var actorPropPolicy = ResolvePolicy(domain, addActorPropRule.Target, addActorPropRule.PolicyName);
                         var actor = domain.RequireActor(addActorPropRule.ActorTypeName);
                         var actorProperty = actor.RequireProperty(addActorPropRule.ActorPropertyName);
                         var constraint = new Poly.Data.Modeling.Validation.Constraints.EqualityConstraint(addActorPropRule.ConstraintValue);
@@ -383,23 +320,7 @@ public sealed class DomainMutationIntentEngine {
                     }
 
                 case AddCompositeRuleToPolicyIntent addComposite: {
-                        var entity = domain.RequireEntity(addComposite.EntityName);
-                        Policy compositePolicy;
-                        if (!string.IsNullOrWhiteSpace(addComposite.StageName)) {
-                            var stage = entity.RequireStage(addComposite.StageName);
-                            compositePolicy = stage.RequirePolicy(addComposite.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addComposite.ActionName)) {
-                            var action = entity.RequireAction(addComposite.ActionName);
-                            compositePolicy = action.RequirePolicy(addComposite.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(addComposite.PropertyName)) {
-                            var property = entity.RequireProperty(addComposite.PropertyName);
-                            compositePolicy = property.RequirePolicy(addComposite.PolicyName);
-                        }
-                        else {
-                            compositePolicy = entity.RequirePolicy(addComposite.PolicyName);
-                        }
+                        var compositePolicy = ResolvePolicy(domain, addComposite.Target, addComposite.PolicyName);
                         var left = compositePolicy.RequireRule(addComposite.LeftRuleName);
                         var right = compositePolicy.RequireRule(addComposite.RightRuleName);
                         _ = mutation.AddRule(compositePolicy, new CompositeRule(domain, addComposite.RuleName, left, right, addComposite.Operator));
@@ -407,23 +328,7 @@ public sealed class DomainMutationIntentEngine {
                     }
 
                 case RemoveRuleFromPolicyIntent removeRule: {
-                        var entity = domain.RequireEntity(removeRule.EntityName);
-                        Policy removeRulePolicy;
-                        if (!string.IsNullOrWhiteSpace(removeRule.StageName)) {
-                            var stage = entity.RequireStage(removeRule.StageName);
-                            removeRulePolicy = stage.RequirePolicy(removeRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(removeRule.ActionName)) {
-                            var action = entity.RequireAction(removeRule.ActionName);
-                            removeRulePolicy = action.RequirePolicy(removeRule.PolicyName);
-                        }
-                        else if (!string.IsNullOrWhiteSpace(removeRule.PropertyName)) {
-                            var property = entity.RequireProperty(removeRule.PropertyName);
-                            removeRulePolicy = property.RequirePolicy(removeRule.PolicyName);
-                        }
-                        else {
-                            removeRulePolicy = entity.RequirePolicy(removeRule.PolicyName);
-                        }
+                        var removeRulePolicy = ResolvePolicy(domain, removeRule.Target, removeRule.PolicyName);
                         var rule = removeRulePolicy.RequireRule(removeRule.RuleName);
                         _ = mutation.RemoveRule(removeRulePolicy, rule);
                         break;
@@ -464,4 +369,13 @@ public sealed class DomainMutationIntentEngine {
 
         return new Relationship(domain, intent.Name, source, target, intent.Cardinality, intent.SourceOwnsTarget);
     }
+
+    private static Policy ResolvePolicy(Domain domain, PolicyTarget target, string policyName) =>
+        target switch {
+            EntityPolicyTarget e => domain.RequireEntity(e.EntityName).RequirePolicy(policyName),
+            StagePolicyTarget s => domain.RequireEntity(s.EntityName).RequireStage(s.StageName).RequirePolicy(policyName),
+            ActionPolicyTarget a => domain.RequireEntity(a.EntityName).RequireAction(a.ActionName).RequirePolicy(policyName),
+            PropertyPolicyTarget p => domain.RequireEntity(p.EntityName).RequireProperty(p.PropertyName).RequirePolicy(policyName),
+            _ => throw new NotSupportedException($"Unsupported policy target type '{target.GetType().Name}'.")
+        };
 }

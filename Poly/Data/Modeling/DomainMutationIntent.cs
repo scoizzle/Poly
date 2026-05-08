@@ -201,71 +201,77 @@ public sealed record RemovePolicyFromActionIntent(
     string ActionName,
     string PolicyName) : DomainMutationIntent;
 
+// ── Policy target ─────────────────────────────────────────────────────────
+
+/// <summary>Identifies which policy owner (entity, stage, action, or property) should be targeted.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(EntityPolicyTarget), "Entity")]
+[JsonDerivedType(typeof(StagePolicyTarget), "Stage")]
+[JsonDerivedType(typeof(ActionPolicyTarget), "Action")]
+[JsonDerivedType(typeof(PropertyPolicyTarget), "Property")]
+public abstract record PolicyTarget(string EntityName) {
+    /// <summary>Builds the appropriate target from nullable discriminant strings.</summary>
+    public static PolicyTarget From(string entityName, string? stageName, string? actionName, string? propertyName) =>
+        (!string.IsNullOrWhiteSpace(stageName), !string.IsNullOrWhiteSpace(actionName), !string.IsNullOrWhiteSpace(propertyName)) switch {
+            (true, _, _) => new StagePolicyTarget(entityName, stageName!),
+            (_, true, _) => new ActionPolicyTarget(entityName, actionName!),
+            (_, _, true) => new PropertyPolicyTarget(entityName, propertyName!),
+            _ => new EntityPolicyTarget(entityName)
+        };
+}
+
+public sealed record EntityPolicyTarget(string EntityName) : PolicyTarget(EntityName);
+public sealed record StagePolicyTarget(string EntityName, string StageName) : PolicyTarget(EntityName);
+public sealed record ActionPolicyTarget(string EntityName, string ActionName) : PolicyTarget(EntityName);
+public sealed record PropertyPolicyTarget(string EntityName, string PropertyName) : PolicyTarget(EntityName);
+
 // ── Rule intents ─────────────────────────────────────────────────────────
 
 /// <summary>Adds a cross-property comparison rule to a policy.</summary>
 public sealed record AddCrossPropertyRuleToPolicyIntent(
-    string EntityName,
+    PolicyTarget Target,
     string PolicyName,
     string RuleName,
     string LeftPropertyName,
     string RightPropertyName,
-    DomainComparisonOperator Operator,
-    string? StageName = null,
-    string? ActionName = null,
-    string? PropertyName = null) : DomainMutationIntent;
+    DomainComparisonOperator Operator) : DomainMutationIntent;
 
 /// <summary>Adds a rule requiring the evaluating actor to be of the given actor type.</summary>
 public sealed record AddActorTypeRuleToPolicyIntent(
-    string EntityName,
+    PolicyTarget Target,
     string PolicyName,
     string RuleName,
-    string ActorTypeName,
-    string? StageName = null,
-    string? ActionName = null,
-    string? PropertyName = null) : DomainMutationIntent;
+    string ActorTypeName) : DomainMutationIntent;
 
 /// <summary>Adds a rule requiring the evaluating actor to have a specific role claim value.</summary>
 public sealed record AddActorRoleRuleToPolicyIntent(
-    string EntityName,
+    PolicyTarget Target,
     string PolicyName,
     string RuleName,
-    string Role,
-    string? StageName = null,
-    string? ActionName = null,
-    string? PropertyName = null) : DomainMutationIntent;
+    string Role) : DomainMutationIntent;
 
 /// <summary>Adds a rule that evaluates an equality constraint against a property on the evaluating actor.</summary>
 public sealed record AddActorPropertyRuleToPolicyIntent(
-    string EntityName,
+    PolicyTarget Target,
     string PolicyName,
     string RuleName,
     string ActorTypeName,
     string ActorPropertyName,
-    object ConstraintValue,
-    string? StageName = null,
-    string? ActionName = null,
-    string? PropertyName = null) : DomainMutationIntent;
+    object ConstraintValue) : DomainMutationIntent;
 
 /// <summary>Combines two existing rules in the same policy with And / Or.</summary>
 public sealed record AddCompositeRuleToPolicyIntent(
-    string EntityName,
+    PolicyTarget Target,
     string PolicyName,
     string RuleName,
     string LeftRuleName,
     string RightRuleName,
-    LogicalOperator Operator,
-    string? StageName = null,
-    string? ActionName = null,
-    string? PropertyName = null) : DomainMutationIntent;
+    LogicalOperator Operator) : DomainMutationIntent;
 
 /// <summary>Removes a rule from a policy.</summary>
 public sealed record RemoveRuleFromPolicyIntent(
-    string EntityName,
+    PolicyTarget Target,
     string PolicyName,
-    string RuleName,
-    string? StageName = null,
-    string? ActionName = null,
-    string? PropertyName = null) : DomainMutationIntent;
+    string RuleName) : DomainMutationIntent;
 
 public sealed record AddCommentIntent(string NodePath, string Comment) : DomainMutationIntent;

@@ -1,5 +1,3 @@
-using System.Reflection;
-
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
@@ -107,12 +105,9 @@ public class EffectWiringTests {
 
         sourceEffect.BindOutputTo("output1", targetEffect, "param1");
 
-        var field = typeof(Effect).GetField("_incomingBindings", BindingFlags.NonPublic | BindingFlags.Instance);
-        var incomingBindings = field?.GetValue(targetEffect) as Dictionary<string, EffectValueRef>;
-
-        await Assert.That(incomingBindings).IsNotNull();
-        await Assert.That(incomingBindings!.ContainsKey("param1")).IsTrue();
-        await Assert.That(incomingBindings["param1"]).IsAssignableTo<EffectValueRef>();
+        await Assert.That(targetEffect.IncomingBindings).IsNotEmpty();
+        await Assert.That(targetEffect.IncomingBindings["param1"].SourceEffectName).IsEqualTo(sourceEffect.GetType().Name);
+        await Assert.That(targetEffect.IncomingBindings["param1"].OutputName).IsEqualTo("output1");
     }
 
     [Test]
@@ -244,12 +239,9 @@ public class EffectWiringTests {
 
         effectA.BindOutputTo("output1", effectB, "input1");
 
-        var field = typeof(Effect).GetField("_incomingBindings", BindingFlags.NonPublic | BindingFlags.Instance);
-        var incomingBindings = field?.GetValue(effectB) as Dictionary<string, EffectValueRef>;
-
-        await Assert.That(incomingBindings).IsNotNull();
-        await Assert.That(incomingBindings!.ContainsKey("input1")).IsTrue();
-        await Assert.That(incomingBindings["input1"]).IsAssignableTo<EffectValueRef>();
+        await Assert.That(effectB.IncomingBindings).IsNotEmpty();
+        await Assert.That(effectB.IncomingBindings["input1"].SourceEffectName).IsEqualTo(effectA.GetType().Name);
+        await Assert.That(effectB.IncomingBindings["input1"].OutputName).IsEqualTo("output1");
     }
 
     private sealed record TestDomainValue(Domain domain, string name, DomainType type) : DomainValue(domain, name, type);

@@ -1,7 +1,13 @@
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Analysis;
+using Poly.Data.Modeling.Effects;
+using Poly.Data.Modeling.Effects.Mutations;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Introspection;
+using Poly.Syntax.Analysis;
+
+using DomainAction = Poly.Data.Modeling.Action;
+using EffectConditional = Poly.Data.Modeling.Effects.Conditional;
 
 namespace Poly.Tests.Data.Modeling;
 
@@ -13,8 +19,8 @@ public class DomainOperabilityTests {
 
         var snapshot = DomainOperabilityFacade.Capture(domain);
 
-        await Assert.That(snapshot.AnalysisRun.Analysis.HasErrors).IsFalse();
-        await Assert.That(snapshot.AnalysisRun.Telemetry.Passes.Count).IsGreaterThan(0);
+        await Assert.That(snapshot.Analysis.HasErrors).IsFalse();
+        await Assert.That(snapshot.Analysis.Telemetry.Passes.Count).IsGreaterThan(0);
         await Assert.That(snapshot.Invalidity.ErrorCount).IsEqualTo(0);
     }
 
@@ -35,7 +41,7 @@ public class DomainOperabilityTests {
 
         var delta = DomainOperabilityFacade.AnalyzeExplainDiff(before, after);
 
-        await Assert.That(delta.AnalysisRun.Telemetry.Passes.Count).IsGreaterThan(0);
+        await Assert.That(delta.Analysis.Telemetry.Passes.Count).IsGreaterThan(0);
         await Assert.That(delta.Diff.Changed.Any(change => change.NodeId == entityId)).IsTrue();
         await Assert.That(delta.Invalidity.ErrorCount).IsEqualTo(0);
     }
@@ -79,14 +85,14 @@ public class DomainOperabilityTests {
     }
 
     [Test]
-    public async Task AnalyzeWithTelemetry_CapturesPipelinePasses() {
+    public async Task Analyze_CapturesPipelinePasses() {
         var domain = new Domain("Support");
         domain.CreateMutation().AddType(new Primitive(domain, "string", TypeCategory.Text)).Apply();
 
         var analyzer = new DomainModelAnalyzer();
-        var run = analyzer.AnalyzeWithTelemetry(domain);
+        var run = analyzer.Analyze(domain);
 
-        await Assert.That(run.Analysis.HasErrors).IsFalse();
+        await Assert.That(run.HasErrors).IsFalse();
         await Assert.That(run.Telemetry.Passes.Count).IsGreaterThan(0);
         await Assert.That(run.Telemetry.TotalElapsed).IsGreaterThanOrEqualTo(TimeSpan.Zero);
         await Assert.That(run.Telemetry.Incremental).IsFalse();
@@ -96,7 +102,7 @@ public class DomainOperabilityTests {
     }
 
     [Test]
-    public async Task AnalyzeWithTelemetry_Incremental_TracksInvalidatedCount() {
+    public async Task Analyze_Incremental_TracksInvalidatedCount() {
         var domain = new Domain("Support");
         var stringType = new Primitive(domain, "string", TypeCategory.Text);
         var entity = new Entity(domain, "Ticket");
@@ -109,7 +115,7 @@ public class DomainOperabilityTests {
         var title = new Property(domain, "Title", stringType);
         domain.CreateMutation().AddProperty(entity, title).Apply(initial);
 
-        var run = analyzer.AnalyzeWithTelemetry(domain, initial, [title]);
+        var run = analyzer.Analyze(domain, initial, [title]);
 
         await Assert.That(run.Telemetry.Incremental).IsTrue();
         await Assert.That(run.Telemetry.InvalidatedNodeCount).IsEqualTo(1);
@@ -287,5 +293,77 @@ public class DomainOperabilityTests {
         await Assert.That(diff.Added.Count).IsEqualTo(100);
         await Assert.That(diff.Removed.Count).IsEqualTo(0);
         await Assert.That(diff.Changed.Count).IsGreaterThanOrEqualTo(1);
+    }
+
+    [Test]
+    public async Task DomainModelAnalysis_TraversalAnalyzer_VisitsNestedEffectTreeNodes() {
+        var domain = new Domain("Traversal");
+        var textType = new Primitive(domain, "Text", TypeCategory.Text);
+        var entity = new Entity(domain, "Ticket");
+        var title = new Property(domain, "Title", textType);
+        var action = new DomainAction(domain, "UpdateTitle", entity);
+
+        var assign = new Assign(domain) {
+            Target = title,
+            Value = new Property(domain, "NewTitle", textType)
+        };
+
+        var nestedComposite = new Composite(domain);
+        nestedComposite.AddEffect(assign);
+
+        var conditional = new EffectConditional(domain) {
+            Condition = new Constant(true)
+        };
+        conditional.AddEffect(nestedComposite);
+
+        var rootComposite = new Composite(domain);
+        rootComposite.AddEffect(conditional);
+
+        domain.CreateMutation()
+            .AddType(textType)
+            .AddType(entity)
+            .AddProperty(entity, title)
+            .AddAction(entity, action)
+            .AddEffect(action, rootComposite)
+            .Apply();
+
+        var traversal = new TreeTraversalCoverageAnalyzer();
+        var analyzer = new AnalyzerBuilder()
+            .UseIncrementalAnalysis()
+            .UseDomainModelValidation()
+            .AddAnalyzer(traversal)
+            .Build();
+
+        var analysis = analyzer.Analyze(domain);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var expectedNodes = new Node[] {
+            domain,
+            textType,
+            entity,
+            title,
+            action,
+            rootComposite,
+            conditional,
+            nestedComposite,
+            assign
+        };
+
+        foreach (var expected in expectedNodes) {
+            await Assert.That(traversal.VisitedNodeIds.Contains(expected.Id)).IsTrue();
+        }
+    }
+
+    private sealed class TreeTraversalCoverageAnalyzer : INodeAnalyzer {
+        public HashSet<NodeId> VisitedNodeIds { get; } = new();
+
+        public void Analyze(AnalysisContext context, Node node) {
+            if (!context.TryBeginAnalyzerVisit<TreeTraversalCoverageAnalyzer>(node)) {
+                return;
+            }
+
+            VisitedNodeIds.Add(node.Id);
+            this.AnalyzeChildren(context, node);
+        }
     }
 }

@@ -5,8 +5,9 @@ public sealed record AnalysisResult : INodeMetadataProvider {
     private readonly Dictionary<NodeId, List<Diagnostic>> _diagnostics;
     private readonly Lazy<IReadOnlyList<Diagnostic>> _allDiagnostics;
 
-    public AnalysisResult(AnalysisContext context) {
+    public AnalysisResult(AnalysisContext context, AnalysisTelemetry telemetry) {
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(telemetry);
         _metadata = context.Metadata;
         _diagnostics = context.Diagnostics;
         _allDiagnostics = new Lazy<IReadOnlyList<Diagnostic>>(() =>
@@ -14,7 +15,13 @@ public sealed record AnalysisResult : INodeMetadataProvider {
                 .SelectMany(kvp => kvp.Value)
                 .DistinctBy(d => (d.Node.Id, d.Severity, d.Code, d.Message))
                 .ToList());
+        Telemetry = telemetry;
     }
+
+    /// <summary>
+    /// Gets the per-pass timing telemetry captured during analysis.
+    /// </summary>
+    public AnalysisTelemetry Telemetry { get; }
 
     /// <summary>
     /// Gets the collection of diagnostics produced during analysis.

@@ -92,7 +92,7 @@ public class ActorRuleTests {
             .Apply(null);
         engine.Apply(domain, new AddPolicyToEntityIntent("Order", "AccessPolicy"));
 
-        engine.Apply(domain, new AddActorTypeRuleToPolicyIntent("Order", "AccessPolicy", "MustBeAdmin", "AdminUser"));
+        engine.Apply(domain, new AddActorTypeRuleToPolicyIntent(new EntityPolicyTarget("Order"), "AccessPolicy", "MustBeAdmin", "AdminUser"));
 
         var policy = domain.RequireEntity("Order").RequirePolicy("AccessPolicy");
         var rule = policy.FindRule("MustBeAdmin");
@@ -107,7 +107,7 @@ public class ActorRuleTests {
         domain.CreateMutation().AddType(new Entity(domain, "Order", null)).Apply(null);
         engine.Apply(domain, new AddPolicyToEntityIntent("Order", "AccessPolicy"));
 
-        engine.Apply(domain, new AddActorRoleRuleToPolicyIntent("Order", "AccessPolicy", "HasEditorRole", "Editor"));
+        engine.Apply(domain, new AddActorRoleRuleToPolicyIntent(new EntityPolicyTarget("Order"), "AccessPolicy", "HasEditorRole", "Editor"));
 
         var policy = domain.RequireEntity("Order").RequirePolicy("AccessPolicy");
         var rule = policy.RequireRule("HasEditorRole") as ActorRoleRule;
@@ -124,10 +124,10 @@ public class ActorRuleTests {
             .AddType(new Actor(domain, "AdminUser", null))
             .Apply(null);
         engine.Apply(domain, new AddPolicyToEntityIntent("Order", "AccessPolicy"));
-        engine.Apply(domain, new AddActorTypeRuleToPolicyIntent("Order", "AccessPolicy", "IsAdmin", "AdminUser"));
-        engine.Apply(domain, new AddActorRoleRuleToPolicyIntent("Order", "AccessPolicy", "HasEditorRole", "Editor"));
+        engine.Apply(domain, new AddActorTypeRuleToPolicyIntent(new EntityPolicyTarget("Order"), "AccessPolicy", "IsAdmin", "AdminUser"));
+        engine.Apply(domain, new AddActorRoleRuleToPolicyIntent(new EntityPolicyTarget("Order"), "AccessPolicy", "HasEditorRole", "Editor"));
 
-        engine.Apply(domain, new AddCompositeRuleToPolicyIntent("Order", "AccessPolicy", "AdminOrEditor", "IsAdmin", "HasEditorRole", LogicalOperator.Or));
+        engine.Apply(domain, new AddCompositeRuleToPolicyIntent(new EntityPolicyTarget("Order"), "AccessPolicy", "AdminOrEditor", "IsAdmin", "HasEditorRole", LogicalOperator.Or));
 
         var policy = domain.RequireEntity("Order").RequirePolicy("AccessPolicy");
         var composite = policy.RequireRule("AdminOrEditor") as CompositeRule;
@@ -143,9 +143,9 @@ public class ActorRuleTests {
         var domain = new Domain("TestDomain");
         domain.CreateMutation().AddType(new Entity(domain, "Order", null)).Apply(null);
         engine.Apply(domain, new AddPolicyToEntityIntent("Order", "AccessPolicy"));
-        engine.Apply(domain, new AddActorRoleRuleToPolicyIntent("Order", "AccessPolicy", "HasEditorRole", "Editor"));
+        engine.Apply(domain, new AddActorRoleRuleToPolicyIntent(new EntityPolicyTarget("Order"), "AccessPolicy", "HasEditorRole", "Editor"));
 
-        engine.Apply(domain, new RemoveRuleFromPolicyIntent("Order", "AccessPolicy", "HasEditorRole"));
+        engine.Apply(domain, new RemoveRuleFromPolicyIntent(new EntityPolicyTarget("Order"), "AccessPolicy", "HasEditorRole"));
 
         var policy = domain.RequireEntity("Order").RequirePolicy("AccessPolicy");
         await Assert.That(policy.FindRule("HasEditorRole")).IsNull();
@@ -205,7 +205,7 @@ public class ActorRuleTests {
         engine.Apply(domain, new AddPolicyToEntityIntent("Document", "DeptPolicy"));
 
         engine.Apply(domain, new AddActorPropertyRuleToPolicyIntent(
-            "Document", "DeptPolicy", "EmployeeDeptRule", "Employee", "Department", "Engineering"));
+            new EntityPolicyTarget("Document"), "DeptPolicy", "EmployeeDeptRule", "Employee", "Department", "Engineering"));
 
         var policy = domain.RequireEntity("Document").RequirePolicy("DeptPolicy");
         var rule = policy.RequireRule("EmployeeDeptRule") as ActorPropertyRule;

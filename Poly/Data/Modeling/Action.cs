@@ -20,5 +20,5 @@ public sealed partial record Action : DomainMember {
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
     public ActionTrigger Trigger => _trigger;
 
-    public sealed override IEnumerable<DomainMember> ChildObjects => [.. _parameters, .. _policies];
+    public sealed override IEnumerable<DomainObject> ChildObjects => [.. _parameters, .. _policies, .. _effects];
 }

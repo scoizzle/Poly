@@ -14,6 +14,16 @@ internal static class DomainModelDiagnosticCodes {
     public const string PolicyActorReference = "DMPOL003";
     public const string EffectBinding = "DMEFF001";
     public const string EffectUnsatisfiedRequirement = "DMEFF002";
+    public const string EffectPrePostCondition = "DMEFF003";
     public const string ActionTrigger = "DMACT001";
+    public const string ActionOrderingCausality = "DMACT002";
+    public const string ActionIdempotencyReplay = "DMACT003";
+    public const string ActionEventContract = "DMAEV001";
     public const string EventSubscription = "DMEVT001";
+    public const string EventFlowLiveness = "DMEVT002";
+    public const string EventCorrelationSoundness = "DMEVT003";
+    public const string ConstraintFixedPoint = "DMCST001";
+    public const string ConstraintSatisfiability = "DMCST002";
+    public const string RuleCoverage = "DMCOV001";
+    public const string DiagnosticDrift = "DMQAL001";
 }

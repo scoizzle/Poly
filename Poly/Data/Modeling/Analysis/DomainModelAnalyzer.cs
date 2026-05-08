@@ -32,6 +32,8 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new CapabilityAnalyzer());
             builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
             builder.AddAnalyzer(new EnumConstraintSubsetAnalyzer());
+            builder.AddAnalyzer(new ActionEventQualityAnalyzer());
+            builder.AddAnalyzer(new ConstraintQualityAnalyzer());
             return builder;
         }
 

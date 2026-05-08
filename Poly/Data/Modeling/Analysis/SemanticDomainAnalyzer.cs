@@ -56,21 +56,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         ValidateStageActionVisibility(context, entity);
         ValidateTypeCompatibility(context, entity);
 
-        // Duplicate property name validation
-        var propertyGroups = entity.Properties.GroupBy(p => p.Name, StringComparer.Ordinal);
-        foreach (var group in propertyGroups) {
-            if (group.Count() > 1) {
-                foreach (var property in group) {
-                    context.ReportError(
-                        property,
-                        $"Duplicate property name '{property.Name}' found on entity '{entity.Name}'.",
-                        DomainModelDiagnosticCodes.SemanticTypeCompatibility // Use or define a more specific code if desired
-                    );
-                }
-            }
-        }
-
-        // Compute effective members (properties, actions, policies, events, relationships, stages)
         var lineage = EnumerateEntityLineageRootToLeaf(entity).ToArray();
         var effectiveProperties = MergeByName(lineage.SelectMany(static current => current.Properties), static property => property.Name);
         var effectiveActions = MergeByName(lineage.SelectMany(static current => current.Actions), static action => action.Name);

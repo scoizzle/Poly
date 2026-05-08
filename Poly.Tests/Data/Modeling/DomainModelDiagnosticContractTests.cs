@@ -30,6 +30,32 @@ public class DomainModelDiagnosticContractTests {
     }
 
     [Test]
+    public async Task StructuralAnalyzer_DuplicateEntityProperty_UsesStructuralDuplicateOnly() {
+        var domain = new Domain("Support");
+        var entity = new Entity(domain, "Ticket");
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        var left = new Property(domain, "Title", stringType);
+        var right = new Property(domain, "Title", stringType);
+
+        new Domain.AddTypeCommand(domain, stringType).Apply();
+        new Domain.AddTypeCommand(domain, entity).Apply();
+        new Entity.AddPropertyCommand(entity, left).Apply();
+        new Entity.AddPropertyCommand(entity, right).Apply();
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var structuralDuplicate = analysis.Diagnostics.FirstOrDefault(d =>
+            d.Severity == DiagnosticSeverity.Error &&
+            d.Code == DomainModelDiagnosticCodes.StructuralDuplicate &&
+            d.Message.Contains("Title", StringComparison.Ordinal));
+
+        await Assert.That(structuralDuplicate).IsNotNull();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error &&
+            d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility &&
+            d.Message.Contains("Duplicate", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
     public async Task SemanticAnalyzer_StageInheritance_UsesExpectedCodeAndMessageFragment() {
         var domain = new Domain("Support");
         var parent = new Entity(domain, "Parent");

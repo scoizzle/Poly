@@ -1,5 +1,6 @@
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.Effects.Mutations;
+using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling;
 
@@ -116,7 +117,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                                     context.ReportError(action, $"PublishEvent binding for event property '{eventProperty.Name}' references action parameter '{ap.ParameterName}' which does not exist on action '{action.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
                                     return false;
                                 }
-                                if (!ReferenceEquals(param.Type, eventProperty.Type)) {
+                                if (!DomainTypeAssignability.CanAssign(eventProperty.Type, param.Type)) {
                                     context.ReportError(action, $"PublishEvent binding for event property '{eventProperty.Name}': action parameter '{ap.ParameterName}' has type '{param.Type.Name}' but event property expects '{eventProperty.Type.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
                                     return false;
                                 }
@@ -128,7 +129,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                                     context.ReportError(action, $"PublishEvent binding for event property '{eventProperty.Name}' references entity property '{ep.PropertyName}' which does not exist on entity '{ownerEntity.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
                                     return false;
                                 }
-                                if (!ReferenceEquals(prop.Type, eventProperty.Type)) {
+                                if (!DomainTypeAssignability.CanAssign(eventProperty.Type, prop.Type)) {
                                     context.ReportError(action, $"PublishEvent binding for event property '{eventProperty.Name}': entity property '{ep.PropertyName}' has type '{prop.Type.Name}' but event property expects '{eventProperty.Type.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
                                     return false;
                                 }
@@ -269,7 +270,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     context.ReportError(action, $"Assign effect Target/Value do not belong to the same domain as entity '{ownerEntity.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
                     return false;
                 }
-                if (!ReferenceEquals(assign.Target.Type, assign.Value.Type)) {
+                if (!DomainTypeAssignability.CanAssign(assign.Target.Type, assign.Value.Type)) {
                     context.ReportError(action, $"Assign effect requires matching types for target and value, but got '{assign.Target.Type.Name}' and '{assign.Value.Type.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
                     return false;
                 }
@@ -320,7 +321,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     return false;
                 }
 
-                if (!ReferenceEquals(parameter.Type, eventHandler.EventType)) {
+                if (!DomainTypeAssignability.CanAssign(parameter.Type, eventHandler.EventType)) {
                     context.ReportError(action, $"Event handler action '{action.Name}' parameter '{eventHandler.EventParameterName}' has type '{parameter.Type.Name}' but must be '{eventHandler.EventType.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
                     return false;
                 }
@@ -406,7 +407,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 return;
             }
 
-            if (!ReferenceEquals(eventProperty.Type, consumerProperty.Type)) {
+            if (!DomainTypeAssignability.CanAssign(consumerProperty.Type, eventProperty.Type)) {
                 context.ReportError(subscription, $"Event subscription correlation '{binding.EventPropertyName}->{binding.ConsumerPropertyName}' has mismatched types '{eventProperty.Type.Name}' and '{consumerProperty.Type.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
                 return;
             }

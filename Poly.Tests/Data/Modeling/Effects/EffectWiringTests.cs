@@ -182,6 +182,43 @@ public class EffectWiringTests {
     }
 
     [Test]
+    public async Task InvokeAction_BindParameter_WhenParameterIsBaseEntity_AllowsDerivedValue() {
+        var domain = CreateDomain();
+        var owner = CreateEntity(domain, "Owner");
+        var baseEntity = CreateEntity(domain, "BaseEntity");
+        var derivedEntity = new Entity(domain, "DerivedEntity", baseEntity);
+        var action = CreateAction(domain, "DoSomething", owner);
+        var parameter = CreateParameter(domain, "input1", baseEntity);
+        var domainValue = new TestDomainValue(domain, "testValue", derivedEntity);
+
+        action._parameters.Add(parameter);
+
+        var effect = new InvokeAction(domain) { TargetAction = action };
+        effect.BindParameter(parameter, domainValue);
+
+        await Assert.That(effect.ParameterBindings.ContainsKey("input1")).IsTrue();
+        await Assert.That(effect.ParameterBindings["input1"]).IsEqualTo(domainValue);
+    }
+
+    [Test]
+    public async Task InvokeAction_BindParameter_WhenParameterIsDerivedEntity_ThrowsForBaseValue() {
+        var domain = CreateDomain();
+        var owner = CreateEntity(domain, "Owner");
+        var baseEntity = CreateEntity(domain, "BaseEntity");
+        var derivedEntity = new Entity(domain, "DerivedEntity", baseEntity);
+        var action = CreateAction(domain, "DoSomething", owner);
+        var parameter = CreateParameter(domain, "input1", derivedEntity);
+        var domainValue = new TestDomainValue(domain, "testValue", baseEntity);
+
+        action._parameters.Add(parameter);
+
+        var effect = new InvokeAction(domain) { TargetAction = action };
+
+        await Assert.That(() => effect.BindParameter(parameter, domainValue))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
     public async Task InvokeAction_BindParameterFrom_WithSourceEffect_WorksCorrectly() {
         var domain = CreateDomain();
         var entity = CreateEntity(domain, "Person");
@@ -200,6 +237,47 @@ public class EffectWiringTests {
 
         await Assert.That(effect.ParameterBindings.ContainsKey("input1")).IsTrue();
         await Assert.That(effect.ParameterBindings["input1"]).IsAssignableTo<EffectValueRef>();
+    }
+
+    [Test]
+    public async Task InvokeAction_BindParameterFrom_WhenParameterIsBaseEntity_AllowsDerivedOutput() {
+        var domain = CreateDomain();
+        var owner = CreateEntity(domain, "Owner");
+        var baseEntity = CreateEntity(domain, "BaseEntity");
+        var derivedEntity = new Entity(domain, "DerivedEntity", baseEntity);
+        var action = CreateAction(domain, "DoSomething", owner);
+        var parameter = CreateParameter(domain, "input1", baseEntity);
+
+        action._parameters.Add(parameter);
+
+        var sourceEffect = new TestEffect(domain);
+        sourceEffect.Produces("output1", derivedEntity);
+
+        var effect = new InvokeAction(domain) { TargetAction = action };
+        effect.BindParameterFrom("input1", sourceEffect, "output1");
+
+        await Assert.That(effect.ParameterBindings.ContainsKey("input1")).IsTrue();
+        await Assert.That(effect.ParameterBindings["input1"]).IsAssignableTo<EffectValueRef>();
+    }
+
+    [Test]
+    public async Task InvokeAction_BindParameterFrom_WhenParameterIsDerivedEntity_ThrowsForBaseOutput() {
+        var domain = CreateDomain();
+        var owner = CreateEntity(domain, "Owner");
+        var baseEntity = CreateEntity(domain, "BaseEntity");
+        var derivedEntity = new Entity(domain, "DerivedEntity", baseEntity);
+        var action = CreateAction(domain, "DoSomething", owner);
+        var parameter = CreateParameter(domain, "input1", derivedEntity);
+
+        action._parameters.Add(parameter);
+
+        var sourceEffect = new TestEffect(domain);
+        sourceEffect.Produces("output1", baseEntity);
+
+        var effect = new InvokeAction(domain) { TargetAction = action };
+
+        await Assert.That(() => effect.BindParameterFrom("input1", sourceEffect, "output1"))
+            .Throws<InvalidOperationException>();
     }
 
     [Test]

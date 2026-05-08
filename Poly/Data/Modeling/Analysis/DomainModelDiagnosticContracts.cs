@@ -24,5 +24,30 @@ internal static class DomainModelDiagnosticContracts {
     internal static class Effect {
         public const string BindingFragment = "missing binding";
         public const string UnsatisfiedRequirementFragment = "requires property";
+        public const string PrePostFragment = "invalid post-state";
+    }
+
+    internal static class ActionEvent {
+        public const string ContractFragment = "event contract";
+        public const string OrderingFragment = "causality";
+        public const string ReplayFragment = "idempotency";
+    }
+
+    internal static class Event {
+        public const string LivenessFragment = "not observed";
+        public const string CorrelationFragment = "correlation";
+    }
+
+    internal static class Constraint {
+        public const string FixedPointFragment = "constraint fixed-point";
+        public const string SatisfiabilityFragment = "unsatisfiable";
+    }
+
+    internal static class Coverage {
+        public const string RuleCoverageFragment = "coverage";
+    }
+
+    internal static class Quality {
+        public const string DriftFragment = "drift";
     }
 }

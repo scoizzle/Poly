@@ -278,7 +278,10 @@ public class DomainTests {
         var prop2 = new Property(domain, "Title", stringType);
         _ = mutation.AddProperty(entity, prop1).AddProperty(entity, prop2);
         var result = mutation.Apply();
-        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Duplicate property name 'Title'"));
+        var error = result.Diagnostics.FirstOrDefault(d =>
+            d.Severity == DiagnosticSeverity.Error &&
+            d.Code == DomainModelDiagnosticCodes.StructuralDuplicate &&
+            d.Message.Contains("Title", StringComparison.Ordinal));
         await Assert.That(error is not null).IsTrue();
 
         // Validate rollback: re-analyze should yield no errors

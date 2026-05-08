@@ -477,6 +477,64 @@ public class NewEffectTests {
     }
 
     [Test]
+    public async Task PublishEvent_ActionParameterBinding_WhenEventPropertyIsBase_AllowsDerivedParameterType() {
+        var domain = CreateDomain();
+        var entity = CreateEntity(domain, "Order");
+        var baseIdentity = CreateEntity(domain, "IdentityBase");
+        var derivedIdentity = new Entity(domain, "IdentityDerived", baseIdentity);
+        var @event = new Event(domain, "OrderPlaced");
+        var action = CreateAction(domain, "PlaceOrder", entity);
+        var param = new Property(domain, "Identity", derivedIdentity);
+        var eventProp = new Property(domain, "Identity", baseIdentity);
+
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddType(domain, baseIdentity);
+        MutationApply.AddType(domain, derivedIdentity);
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddProperty(@event, eventProp);
+        MutationApply.AddAction(entity, action);
+        MutationApply.AddParameter(action, param);
+
+        var effect = new PublishEvent(domain) { Event = @event };
+        var result = domain.CreateMutation()
+            .AddEffect(action, effect)
+            .SetEventPropertyBinding(action, effect, eventProp.Name, new EventPropertyBindingSource.ActionParameter(param.Name))
+            .Apply();
+
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        await Assert.That(error is null).IsTrue();
+    }
+
+    [Test]
+    public async Task PublishEvent_ActionParameterBinding_WhenEventPropertyIsDerived_RejectsBaseParameterType() {
+        var domain = CreateDomain();
+        var entity = CreateEntity(domain, "Order");
+        var baseIdentity = CreateEntity(domain, "IdentityBase");
+        var derivedIdentity = new Entity(domain, "IdentityDerived", baseIdentity);
+        var @event = new Event(domain, "OrderPlaced");
+        var action = CreateAction(domain, "PlaceOrder", entity);
+        var param = new Property(domain, "Identity", baseIdentity);
+        var eventProp = new Property(domain, "Identity", derivedIdentity);
+
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddType(domain, baseIdentity);
+        MutationApply.AddType(domain, derivedIdentity);
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddProperty(@event, eventProp);
+        MutationApply.AddAction(entity, action);
+        MutationApply.AddParameter(action, param);
+
+        var effect = new PublishEvent(domain) { Event = @event };
+        var result = domain.CreateMutation()
+            .AddEffect(action, effect)
+            .SetEventPropertyBinding(action, effect, eventProp.Name, new EventPropertyBindingSource.ActionParameter(param.Name))
+            .Apply();
+
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        await Assert.That(error is not null).IsTrue();
+    }
+
+    [Test]
     public async Task PublishEvent_MissingBinding_ReportsError() {
         var domain = CreateDomain();
         var primitive = CreatePrimitive(domain, "string");

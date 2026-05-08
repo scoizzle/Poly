@@ -20,7 +20,7 @@ public sealed record InvokeAction(Domain Domain) : Effect(Domain) {
                 $"Parameter '{targetParameter.Name}' does not exist on action '{TargetAction.Name}'.");
         }
 
-        if (!ReferenceEquals(targetParameter.Type, value.Type)) {
+        if (!DomainTypeAssignability.CanAssign(targetParameter.Type, value.Type)) {
             throw new InvalidOperationException(
                 $"Binding for parameter '{targetParameter.Name}' requires type '{targetParameter.Type.Name}' but got '{value.Type.Name}'.");
         }
@@ -57,6 +57,12 @@ public sealed record InvokeAction(Domain Domain) : Effect(Domain) {
             .FirstOrDefault(p => string.Equals(p.Name, targetParamName, StringComparison.Ordinal))
             ?? throw new InvalidOperationException(
                 $"Parameter '{targetParamName}' does not exist on action '{TargetAction.Name}'.");
+
+        var sourceOutputType = sourceEffect.Result.Outputs[sourceOutputName];
+        if (!DomainTypeAssignability.CanAssign(targetParam.Type, sourceOutputType)) {
+            throw new InvalidOperationException(
+                $"Binding for parameter '{targetParamName}' requires type '{targetParam.Type.Name}' but source output '{sourceOutputName}' has type '{sourceOutputType.Name}'.");
+        }
 
         // Store the wiring: parameter <- EffectValueRef
         if (!_parameterBindings.TryAdd(targetParamName, new EffectValueRef(sourceEffect.GetType().Name, sourceOutputName))) {

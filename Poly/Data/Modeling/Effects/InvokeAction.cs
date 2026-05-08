@@ -42,6 +42,11 @@ public sealed record InvokeAction(Domain Domain) : Effect(Domain) {
         ArgumentNullException.ThrowIfNull(sourceEffect);
         ArgumentNullException.ThrowIfNull(sourceOutputName);
 
+        if (TargetAction is null) {
+            throw new InvalidOperationException(
+                $"Cannot bind parameter '{targetParamName}': TargetAction is not set.");
+        }
+
         if (!sourceEffect.Result.HasOutput(sourceOutputName)) {
             throw new InvalidOperationException(
                 $"Source effect '{sourceEffect.GetType().Name}' does not produce output '{sourceOutputName}'.");

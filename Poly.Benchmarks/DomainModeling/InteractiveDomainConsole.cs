@@ -168,8 +168,10 @@ internal static class InteractiveDomainConsole {
             assignAction.AddEffect(new StageTransition(domain) { TargetStage = assignedStage });
 
             var publishAssigned = new PublishEvent(domain) { Event = supportCase.RequireEvent("CaseAssigned") };
-            publishAssigned.BindProperty(publishAssigned.Event.RequireProperty("AssignedTo"), assignAgentParameter);
-            assignAction.AddEffect(publishAssigned);
+            domain.CreateMutation()
+                .AddEffect(assignAction, publishAssigned)
+                .SetEventPropertyBinding(assignAction, publishAssigned, "AssignedTo", new EventPropertyBindingSource.ActionParameter(assignAgentParameter.Name))
+                .Apply();
 
             supportCase.AddAction(assignAction);
             newStage.AddAction(assignAction);
@@ -190,8 +192,10 @@ internal static class InteractiveDomainConsole {
             resolveAction.AddEffect(new StageTransition(domain) { TargetStage = resolvedStage });
 
             var publishResolved = new PublishEvent(domain) { Event = supportCase.RequireEvent("CaseResolved") };
-            publishResolved.BindProperty(publishResolved.Event.RequireProperty("ResolutionSummary"), resolutionSummaryParameter);
-            resolveAction.AddEffect(publishResolved);
+            domain.CreateMutation()
+                .AddEffect(resolveAction, publishResolved)
+                .SetEventPropertyBinding(resolveAction, publishResolved, "ResolutionSummary", new EventPropertyBindingSource.ActionParameter(resolutionSummaryParameter.Name))
+                .Apply();
 
             supportCase.AddAction(resolveAction);
             inProgressStage.AddAction(resolveAction);
@@ -630,6 +634,7 @@ internal static class InteractiveDomainConsole {
             Event = @event
         };
 
+        var bindings = new List<(string PropertyName, EventPropertyBindingSource Source)>();
         foreach (var eventProperty in @event.Properties.OrderBy(property => property.Name)) {
             var candidates = GetBindableValues(action)
                 .Where(value => ReferenceEquals(value.Type, eventProperty.Type))
@@ -641,10 +646,18 @@ internal static class InteractiveDomainConsole {
             }
 
             var source = ChooseRequired($"Choose binding source for event property '{eventProperty.Name}'", candidates);
-            effect.BindProperty(eventProperty, source);
+            var bindingSource = action.Parameters.OfType<Property>().Any(p => ReferenceEquals(p, source))
+                ? (EventPropertyBindingSource)new EventPropertyBindingSource.ActionParameter(((Property)source).Name)
+                : new EventPropertyBindingSource.EntityProperty(((Property)source).Name);
+            bindings.Add((eventProperty.Name, bindingSource));
         }
 
-        action.AddEffect(effect);
+        var mutation = entity.Domain.CreateMutation().AddEffect(action, effect);
+        foreach (var (propName, bindingSource) in bindings) {
+            mutation.SetEventPropertyBinding(action, effect, propName, bindingSource);
+        }
+
+        mutation.Apply();
         Console.WriteLine($"Added publish event effect for '{@event.Name}'.");
     }
 

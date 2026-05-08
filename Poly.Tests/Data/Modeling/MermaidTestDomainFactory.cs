@@ -60,8 +60,8 @@ internal static class MermaidTestDomainFactory {
         mutation.AddParameter(assignAction, assignAgentParameter);
         mutation.AddEffect(assignAction, new StageTransition(domain) { TargetStage = assignedStage });
         var publishAssigned = new PublishEvent(domain) { Event = caseAssignedEvent };
-        publishAssigned.BindProperty(assignedToProperty, assignAgentParameter);
         mutation.AddEffect(assignAction, publishAssigned);
+        mutation.SetEventPropertyBinding(assignAction, publishAssigned, assignedToProperty.Name, new EventPropertyBindingSource.ActionParameter(assignAgentParameter.Name));
         mutation.AddAction(newStage, assignAction);
 
         var addNoteAction = new DomainAction(domain, "AddNote", supportCase);
@@ -73,8 +73,8 @@ internal static class MermaidTestDomainFactory {
         mutation.AddParameter(resolveAction, resolutionSummaryParameter);
         mutation.AddEffect(resolveAction, new StageTransition(domain) { TargetStage = resolvedStage });
         var publishResolved = new PublishEvent(domain) { Event = caseResolvedEvent };
-        publishResolved.BindProperty(resolutionSummaryProperty, resolutionSummaryParameter);
         mutation.AddEffect(resolveAction, publishResolved);
+        mutation.SetEventPropertyBinding(resolveAction, publishResolved, resolutionSummaryProperty.Name, new EventPropertyBindingSource.ActionParameter(resolutionSummaryParameter.Name));
         mutation.AddAction(inProgressStage, resolveAction);
 
         mutation.AddStage(supportCase, newStage);

@@ -221,17 +221,21 @@ internal static class HealthcareDomain {
         processPaymentAction.AddParameter(paymentDateParam);
         processPaymentAction.AddParameter(paymentAmountParam);
         var publishPayment = new PublishEvent(domain) { Event = billing.RequireEvent("PaymentReceived") };
-        publishPayment.BindProperty(publishPayment.Event.RequireProperty("PaymentDate"), paymentDateParam);
-        publishPayment.BindProperty(publishPayment.Event.RequireProperty("Amount"), paymentAmountParam);
-        processPaymentAction.AddEffect(publishPayment);
+        domain.CreateMutation()
+            .AddEffect(processPaymentAction, publishPayment)
+            .SetEventPropertyBinding(processPaymentAction, publishPayment, "PaymentDate", new EventPropertyBindingSource.ActionParameter(paymentDateParam.Name))
+            .SetEventPropertyBinding(processPaymentAction, publishPayment, "Amount", new EventPropertyBindingSource.ActionParameter(paymentAmountParam.Name))
+            .Apply();
         billing.AddAction(processPaymentAction);
 
         var assignRoomAction = new DomainAction(domain, "AssignRoom", appointment);
         var roomNumberParam = new Property(domain, "RoomNumber", stringType);
         assignRoomAction.AddParameter(roomNumberParam);
         var publishRoom = new PublishEvent(domain) { Event = appointment.RequireEvent("RoomAssigned") };
-        publishRoom.BindProperty(publishRoom.Event.RequireProperty("RoomNumber"), roomNumberParam);
-        assignRoomAction.AddEffect(publishRoom);
+        domain.CreateMutation()
+            .AddEffect(assignRoomAction, publishRoom)
+            .SetEventPropertyBinding(assignRoomAction, publishRoom, "RoomNumber", new EventPropertyBindingSource.ActionParameter(roomNumberParam.Name))
+            .Apply();
         appointment.AddAction(assignRoomAction);
         appointment.RequireStage("Scheduled").AddAction(assignRoomAction);
         appointment.RequireStage("Confirmed").AddAction(assignRoomAction);

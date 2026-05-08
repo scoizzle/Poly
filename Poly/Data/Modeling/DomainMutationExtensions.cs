@@ -138,6 +138,9 @@ public static class DomainMutationExtensions {
         return true;
     }
 
+    public static void SetEventPropertyBinding(this Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) =>
+        action.Domain.CreateMutation().SetEventPropertyBinding(action, effect, propertyName, source).Apply();
+
     public static void AddComment(this DomainObject target, string comment) {
         var mutation = target.Domain.CreateMutation();
         mutation.AddComment(target, comment);

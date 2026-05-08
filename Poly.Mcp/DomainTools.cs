@@ -6,6 +6,7 @@ using ModelContextProtocol.Server;
 
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Analysis;
+using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;
 using Poly.Data.Modeling.Validation.Constraints;
@@ -148,6 +149,13 @@ public sealed record ConstraintDto(
     int? MaxLength = null,
     IReadOnlyCollection<EnumMemberDto>? EnumMembers = null);
 
+public sealed record EventPropertyBindingExportDto(string EventTypeName, string PropertyName, string SourceKind, string SourceName);
+
+public sealed record ActionExportDto(
+    string Name,
+    IReadOnlyCollection<PropertyExportDto> Parameters,
+    IReadOnlyCollection<EventPropertyBindingExportDto> PublishEventBindings);
+
 public sealed record PropertyExportDto(string Name, string TypeName, IReadOnlyCollection<ConstraintDto> Constraints);
 
 public sealed record PrimitiveExportDto(string Name, string Category, IReadOnlyCollection<ConstraintDto> Constraints);
@@ -157,7 +165,8 @@ public sealed record EntityExportDto(
     bool IsActor,
     string? ParentEntityName,
     IReadOnlyCollection<ConstraintDto> Constraints,
-    IReadOnlyCollection<PropertyExportDto> Properties);
+    IReadOnlyCollection<PropertyExportDto> Properties,
+    IReadOnlyCollection<ActionExportDto>? Actions = null);
 
 public sealed record EventTypeExportDto(string Name, IReadOnlyCollection<PropertyExportDto> Properties);
 
@@ -1128,6 +1137,39 @@ public static class DomainAuthoringTool {
                 mutation.AddRelationship(relationship).AddEntityRelationship(source, relationship);
             }
 
+            foreach (var entityDto in payload.Entities) {
+                var entity = entityByName[entityDto.Name];
+                foreach (var actionDto in entityDto.Actions ?? []) {
+                    var action = new Data.Modeling.Action(state.Domain, actionDto.Name, entity);
+                    mutation.AddAction(entity, action);
+
+                    foreach (var paramDto in actionDto.Parameters) {
+                        var paramType = ResolveType(typeByName, paramDto.TypeName, state.Domain.Name);
+                        var param = new Property(state.Domain, paramDto.Name, paramType);
+                        mutation.AddParameter(action, param);
+                        foreach (var constraint in BuildConstraints(paramDto.Constraints)) {
+                            mutation.AddConstraint(param, constraint);
+                        }
+                    }
+
+                    var bindingsByEvent = actionDto.PublishEventBindings
+                        .GroupBy(static b => b.EventTypeName, StringComparer.Ordinal);
+                    foreach (var eventGroup in bindingsByEvent) {
+                        var eventType = (Event)ResolveType(typeByName, eventGroup.Key, state.Domain.Name);
+                        var effect = new PublishEvent(state.Domain) { Event = eventType };
+                        mutation.AddEffect(action, effect);
+                        foreach (var bindingDto in eventGroup) {
+                            EventPropertyBindingSource source = bindingDto.SourceKind switch {
+                                "ActionParameter" => new EventPropertyBindingSource.ActionParameter(bindingDto.SourceName),
+                                "EntityProperty" => new EventPropertyBindingSource.EntityProperty(bindingDto.SourceName),
+                                _ => throw new InvalidOperationException($"Unknown sourceKind '{bindingDto.SourceKind}'.")
+                            };
+                            mutation.SetEventPropertyBinding(action, effect, bindingDto.PropertyName, source);
+                        }
+                    }
+                }
+            }
+
             var analysis = mutation.Apply(state.LatestAnalysis);
             return Commit(id, state.Domain, analysis, $"Imported domain '{payload.DomainName}' into session '{id}'.");
         }
@@ -1973,6 +2015,75 @@ public static class DomainAuthoringTool {
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
 
+    [McpServerTool, Description("Adds a PublishEvent effect to an action. After adding, use SetEventPropertyBinding to bind each event property.")]
+    public static DomainCommandResponse AddPublishEventEffect(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the event type to publish.")] string eventTypeName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var eventType = state.Domain.RequireEventType(eventTypeName);
+            var effect = new PublishEvent(state.Domain) { Event = eventType };
+            var analysis = state.Domain.CreateMutation().AddEffect(action, effect).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"PublishEvent '{eventTypeName}' added to action '{actionName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Binds an event property to a value source on a PublishEvent effect. sourceKind must be 'ActionParameter' or 'EntityProperty'. sourceName is the parameter or property name.")]
+    public static DomainCommandResponse SetEventPropertyBinding(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the event type being published.")] string eventTypeName,
+        [Description("Name of the event property to bind.")] string propertyName,
+        [Description("Source kind: 'ActionParameter' or 'EntityProperty'.")] string sourceKind,
+        [Description("Name of the action parameter or entity property that provides the value.")] string sourceName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var eventType = state.Domain.RequireEventType(eventTypeName);
+
+            var effect = action.Effects.OfType<PublishEvent>().FirstOrDefault(e => ReferenceEquals(e.Event, eventType))
+                ?? throw new InvalidOperationException($"Action '{actionName}' does not have a PublishEvent effect for '{eventTypeName}'. Add it first with AddPublishEventEffect.");
+
+            EventPropertyBindingSource source = sourceKind switch {
+                "ActionParameter" => new EventPropertyBindingSource.ActionParameter(sourceName),
+                "EntityProperty" => new EventPropertyBindingSource.EntityProperty(sourceName),
+                _ => throw new InvalidOperationException($"Unknown sourceKind '{sourceKind}'. Must be 'ActionParameter' or 'EntityProperty'.")
+            };
+
+            var analysis = state.Domain.CreateMutation().SetEventPropertyBinding(action, effect, propertyName, source).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Binding set: event property '{propertyName}' ← {sourceKind} '{sourceName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Removes a PublishEvent effect from an action.")]
+    public static DomainCommandResponse RemovePublishEventEffect(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the event type whose PublishEvent effect should be removed.")] string eventTypeName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var eventType = state.Domain.RequireEventType(eventTypeName);
+
+            var effect = action.Effects.OfType<PublishEvent>().FirstOrDefault(e => ReferenceEquals(e.Event, eventType))
+                ?? throw new InvalidOperationException($"Action '{actionName}' does not have a PublishEvent effect for '{eventTypeName}'.");
+
+            var analysis = state.Domain.CreateMutation().RemoveEffect(action, effect).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"PublishEvent '{eventTypeName}' removed from action '{actionName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
     [McpServerTool, Description("Appends a comment to a domain object by path.")]
     public static DomainCommandResponse AddComment(string sessionId, string nodePath, string comment) {
         if (!DomainSessionStore.TryGet(sessionId, out var session))
@@ -2116,6 +2227,30 @@ public static class DomainAuthoringTool {
                 Properties: entity.Properties
                     .OrderBy(static property => property.Name, StringComparer.Ordinal)
                     .Select(static property => new PropertyExportDto(property.Name, property.Type.Name, ToConstraintDtos(property.Constraints)))
+                    .ToArray(),
+                Actions: entity.Actions
+                    .OrderBy(static action => action.Name, StringComparer.Ordinal)
+                    .Select(static action => new ActionExportDto(
+                        Name: action.Name,
+                        Parameters: action.Parameters
+                            .Select(static p => new PropertyExportDto(p.Name, p.Type.Name, ToConstraintDtos(p.Constraints)))
+                            .ToArray(),
+                        PublishEventBindings: action.Effects.OfType<PublishEvent>()
+                            .SelectMany(static pe => pe.PropertyBindings
+                                .Select(kvp => new EventPropertyBindingExportDto(
+                                    EventTypeName: pe.Event.Name,
+                                    PropertyName: kvp.Key,
+                                    SourceKind: kvp.Value switch {
+                                        EventPropertyBindingSource.ActionParameter => "ActionParameter",
+                                        EventPropertyBindingSource.EntityProperty => "EntityProperty",
+                                        _ => "Unknown"
+                                    },
+                                    SourceName: kvp.Value switch {
+                                        EventPropertyBindingSource.ActionParameter ap => ap.ParameterName,
+                                        EventPropertyBindingSource.EntityProperty ep => ep.PropertyName,
+                                        _ => string.Empty
+                                    })))
+                            .ToArray()))
                     .ToArray()))
             .ToArray();
 

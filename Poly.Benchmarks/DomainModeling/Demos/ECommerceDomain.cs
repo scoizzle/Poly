@@ -224,8 +224,10 @@ internal static class ECommerceDomain {
         var placeOrder = new DomainAction(domain, "PlaceOrder", order);
         placeOrder.AddEffect(new StageTransition(domain) { TargetStage = order.RequireStage("Pending") });
         var publishOrderPlaced = new PublishEvent(domain) { Event = order.RequireEvent("OrderPlaced") };
-        publishOrderPlaced.BindProperty(order.RequireEvent("OrderPlaced").RequireProperty("OrderId"), order.RequireProperty("OrderId"));
-        placeOrder.AddEffect(publishOrderPlaced);
+        domain.CreateMutation()
+            .AddEffect(placeOrder, publishOrderPlaced)
+            .SetEventPropertyBinding(placeOrder, publishOrderPlaced, "OrderId", new EventPropertyBindingSource.EntityProperty("OrderId"))
+            .Apply();
         order.AddAction(placeOrder);
         order.RequireStage("Cart").AddAction(placeOrder);
 
@@ -234,8 +236,10 @@ internal static class ECommerceDomain {
         cancelOrder.AddParameter(cancelReasonParam);
         cancelOrder.AddEffect(new StageTransition(domain) { TargetStage = order.RequireStage("Cancelled") });
         var publishOrderCancelled = new PublishEvent(domain) { Event = order.RequireEvent("OrderCancelled") };
-        publishOrderCancelled.BindProperty(order.RequireEvent("OrderCancelled").RequireProperty("Reason"), cancelReasonParam);
-        cancelOrder.AddEffect(publishOrderCancelled);
+        domain.CreateMutation()
+            .AddEffect(cancelOrder, publishOrderCancelled)
+            .SetEventPropertyBinding(cancelOrder, publishOrderCancelled, "Reason", new EventPropertyBindingSource.ActionParameter(cancelReasonParam.Name))
+            .Apply();
         order.AddAction(cancelOrder);
         order.RequireStage("Pending").AddAction(cancelOrder);
         order.RequireStage("Paid").AddAction(cancelOrder);
@@ -246,9 +250,11 @@ internal static class ECommerceDomain {
         processPayment.AddParameter(transactionIdParam);
         processPayment.AddEffect(new StageTransition(domain) { TargetStage = payment.RequireStage("Captured") });
         var publishPaymentProcessed = new PublishEvent(domain) { Event = payment.RequireEvent("PaymentProcessed") };
-        publishPaymentProcessed.BindProperty(payment.RequireEvent("PaymentProcessed").RequireProperty("TransactionId"), transactionIdParam);
-        publishPaymentProcessed.BindProperty(payment.RequireEvent("PaymentProcessed").RequireProperty("Amount"), payment.RequireProperty("Amount"));
-        processPayment.AddEffect(publishPaymentProcessed);
+        domain.CreateMutation()
+            .AddEffect(processPayment, publishPaymentProcessed)
+            .SetEventPropertyBinding(processPayment, publishPaymentProcessed, "TransactionId", new EventPropertyBindingSource.ActionParameter(transactionIdParam.Name))
+            .SetEventPropertyBinding(processPayment, publishPaymentProcessed, "Amount", new EventPropertyBindingSource.EntityProperty("Amount"))
+            .Apply();
         payment.AddAction(processPayment);
 
         var failPayment = new DomainAction(domain, "FailPayment", payment);
@@ -256,8 +262,10 @@ internal static class ECommerceDomain {
         failPayment.AddParameter(failureReasonParam);
         failPayment.AddEffect(new StageTransition(domain) { TargetStage = payment.RequireStage("Failed") });
         var publishPaymentFailed = new PublishEvent(domain) { Event = payment.RequireEvent("PaymentFailed") };
-        publishPaymentFailed.BindProperty(payment.RequireEvent("PaymentFailed").RequireProperty("FailureReason"), failureReasonParam);
-        failPayment.AddEffect(publishPaymentFailed);
+        domain.CreateMutation()
+            .AddEffect(failPayment, publishPaymentFailed)
+            .SetEventPropertyBinding(failPayment, publishPaymentFailed, "FailureReason", new EventPropertyBindingSource.ActionParameter(failureReasonParam.Name))
+            .Apply();
         payment.AddAction(failPayment);
 
         var markPaid = new DomainAction(domain, "MarkPaid", order);
@@ -277,9 +285,11 @@ internal static class ECommerceDomain {
         createShipment.AddParameter(carrierParam);
         createShipment.AddEffect(new StageTransition(domain) { TargetStage = shipment.RequireStage("Preparing") });
         var publishShipmentCreated = new PublishEvent(domain) { Event = shipment.RequireEvent("ShipmentCreated") };
-        publishShipmentCreated.BindProperty(shipment.RequireEvent("ShipmentCreated").RequireProperty("TrackingNumber"), trackingNumberParam);
-        publishShipmentCreated.BindProperty(shipment.RequireEvent("ShipmentCreated").RequireProperty("Carrier"), carrierParam);
-        createShipment.AddEffect(publishShipmentCreated);
+        domain.CreateMutation()
+            .AddEffect(createShipment, publishShipmentCreated)
+            .SetEventPropertyBinding(createShipment, publishShipmentCreated, "TrackingNumber", new EventPropertyBindingSource.ActionParameter(trackingNumberParam.Name))
+            .SetEventPropertyBinding(createShipment, publishShipmentCreated, "Carrier", new EventPropertyBindingSource.ActionParameter(carrierParam.Name))
+            .Apply();
         shipment.AddAction(createShipment);
 
         var markShipped = new DomainAction(domain, "MarkShipped", order);
@@ -290,17 +300,21 @@ internal static class ECommerceDomain {
         var markDelivered = new DomainAction(domain, "MarkDelivered", shipment);
         markDelivered.AddEffect(new StageTransition(domain) { TargetStage = shipment.RequireStage("Delivered") });
         var publishShipmentDelivered = new PublishEvent(domain) { Event = shipment.RequireEvent("ShipmentDelivered") };
-        publishShipmentDelivered.BindProperty(shipment.RequireEvent("ShipmentDelivered").RequireProperty("DeliveryDate"), shipment.RequireProperty("ActualDelivery"));
-        markDelivered.AddEffect(publishShipmentDelivered);
+        domain.CreateMutation()
+            .AddEffect(markDelivered, publishShipmentDelivered)
+            .SetEventPropertyBinding(markDelivered, publishShipmentDelivered, "DeliveryDate", new EventPropertyBindingSource.EntityProperty("ActualDelivery"))
+            .Apply();
         shipment.AddAction(markDelivered);
         shipment.RequireStage("OutForDelivery").AddAction(markDelivered);
 
         var addProduct = new DomainAction(domain, "AddProduct", product);
         addProduct.AddEffect(new StageTransition(domain) { TargetStage = product.RequireStage("Draft") });
         var publishProductCreated = new PublishEvent(domain) { Event = product.RequireEvent("ProductCreated") };
-        publishProductCreated.BindProperty(product.RequireEvent("ProductCreated").RequireProperty("SKU"), product.RequireProperty("SKU"));
-        publishProductCreated.BindProperty(product.RequireEvent("ProductCreated").RequireProperty("Name"), product.RequireProperty("Name"));
-        addProduct.AddEffect(publishProductCreated);
+        domain.CreateMutation()
+            .AddEffect(addProduct, publishProductCreated)
+            .SetEventPropertyBinding(addProduct, publishProductCreated, "SKU", new EventPropertyBindingSource.EntityProperty("SKU"))
+            .SetEventPropertyBinding(addProduct, publishProductCreated, "Name", new EventPropertyBindingSource.EntityProperty("Name"))
+            .Apply();
         product.AddAction(addProduct);
 
         var activateProduct = new DomainAction(domain, "ActivateProduct", product);
@@ -312,8 +326,10 @@ internal static class ECommerceDomain {
         var newQuantityParam = new Property(domain, "NewQuantity", domain.RequirePrimitive("int"));
         updateStock.AddParameter(newQuantityParam);
         var publishStockUpdated = new PublishEvent(domain) { Event = product.RequireEvent("StockUpdated") };
-        publishStockUpdated.BindProperty(product.RequireEvent("StockUpdated").RequireProperty("NewQuantity"), newQuantityParam);
-        updateStock.AddEffect(publishStockUpdated);
+        domain.CreateMutation()
+            .AddEffect(updateStock, publishStockUpdated)
+            .SetEventPropertyBinding(updateStock, publishStockUpdated, "NewQuantity", new EventPropertyBindingSource.ActionParameter(newQuantityParam.Name))
+            .Apply();
         product.AddAction(updateStock);
 
         var addOrderItem = new DomainAction(domain, "AddOrderItem", orderItem);

@@ -1,4 +1,5 @@
 using Poly.Data.Modeling;
+using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Introspection;
 
@@ -417,6 +418,167 @@ public class NewEffectTests {
 
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("EntityType"));
         await Assert.That(error is not null).IsTrue();
+    }
+
+    // PublishEvent binding tests
+
+    [Test]
+    public async Task PublishEvent_AllPropertiesBoundViaActionParameter_Succeeds() {
+        var domain = CreateDomain();
+        var primitive = CreatePrimitive(domain, "string");
+        var entity = CreateEntity(domain, "Order");
+        var @event = new Event(domain, "OrderPlaced");
+        var action = CreateAction(domain, "PlaceOrder", entity);
+        var param = new Property(domain, "OrderId", primitive);
+        var eventProp = new Property(domain, "OrderId", primitive);
+
+        MutationApply.AddType(domain, primitive);
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddProperty(@event, eventProp);
+        MutationApply.AddAction(entity, action);
+        MutationApply.AddParameter(action, param);
+
+        var effect = new PublishEvent(domain) { Event = @event };
+        var result = domain.CreateMutation()
+            .AddEffect(action, effect)
+            .SetEventPropertyBinding(action, effect, eventProp.Name, new EventPropertyBindingSource.ActionParameter(param.Name))
+            .Apply();
+
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        await Assert.That(error is null).IsTrue();
+    }
+
+    [Test]
+    public async Task PublishEvent_AllPropertiesBoundViaEntityProperty_Succeeds() {
+        var domain = CreateDomain();
+        var primitive = CreatePrimitive(domain, "string");
+        var entity = CreateEntity(domain, "Order");
+        var @event = new Event(domain, "OrderPlaced");
+        var action = CreateAction(domain, "PlaceOrder", entity);
+        var entityProp = new Property(domain, "OrderId", primitive);
+        var eventProp = new Property(domain, "OrderId", primitive);
+
+        MutationApply.AddType(domain, primitive);
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddProperty(entity, entityProp);
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddProperty(@event, eventProp);
+        MutationApply.AddAction(entity, action);
+
+        var effect = new PublishEvent(domain) { Event = @event };
+        var result = domain.CreateMutation()
+            .AddEffect(action, effect)
+            .SetEventPropertyBinding(action, effect, eventProp.Name, new EventPropertyBindingSource.EntityProperty(entityProp.Name))
+            .Apply();
+
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        await Assert.That(error is null).IsTrue();
+    }
+
+    [Test]
+    public async Task PublishEvent_MissingBinding_ReportsError() {
+        var domain = CreateDomain();
+        var primitive = CreatePrimitive(domain, "string");
+        var entity = CreateEntity(domain, "Order");
+        var @event = new Event(domain, "OrderPlaced");
+        var action = CreateAction(domain, "PlaceOrder", entity);
+        var eventProp = new Property(domain, "OrderId", primitive);
+
+        MutationApply.AddType(domain, primitive);
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddProperty(@event, eventProp);
+        MutationApply.AddAction(entity, action);
+
+        var effect = new PublishEvent(domain) { Event = @event };
+        var result = MutationApply.AddEffect(action, effect);
+
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        await Assert.That(error is not null).IsTrue();
+    }
+
+    [Test]
+    public async Task PublishEvent_BindingReferencesNonexistentParameter_ReportsError() {
+        var domain = CreateDomain();
+        var primitive = CreatePrimitive(domain, "string");
+        var entity = CreateEntity(domain, "Order");
+        var @event = new Event(domain, "OrderPlaced");
+        var action = CreateAction(domain, "PlaceOrder", entity);
+        var eventProp = new Property(domain, "OrderId", primitive);
+
+        MutationApply.AddType(domain, primitive);
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddProperty(@event, eventProp);
+        MutationApply.AddAction(entity, action);
+
+        var effect = new PublishEvent(domain) { Event = @event };
+        var result = domain.CreateMutation()
+            .AddEffect(action, effect)
+            .SetEventPropertyBinding(action, effect, eventProp.Name, new EventPropertyBindingSource.ActionParameter("NonExistentParam"))
+            .Apply();
+
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        await Assert.That(error is not null).IsTrue();
+    }
+
+    [Test]
+    public async Task PublishEvent_BindingReferencesNonexistentEntityProperty_ReportsError() {
+        var domain = CreateDomain();
+        var primitive = CreatePrimitive(domain, "string");
+        var entity = CreateEntity(domain, "Order");
+        var @event = new Event(domain, "OrderPlaced");
+        var action = CreateAction(domain, "PlaceOrder", entity);
+        var eventProp = new Property(domain, "OrderId", primitive);
+
+        MutationApply.AddType(domain, primitive);
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddProperty(@event, eventProp);
+        MutationApply.AddAction(entity, action);
+
+        var effect = new PublishEvent(domain) { Event = @event };
+        var result = domain.CreateMutation()
+            .AddEffect(action, effect)
+            .SetEventPropertyBinding(action, effect, eventProp.Name, new EventPropertyBindingSource.EntityProperty("NonExistentProp"))
+            .Apply();
+
+        var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        await Assert.That(error is not null).IsTrue();
+    }
+
+    [Test]
+    public async Task SetEventPropertyBinding_Rollback_RemovesBinding() {
+        var domain = CreateDomain();
+        var primitive = CreatePrimitive(domain, "string");
+        var entity = CreateEntity(domain, "Order");
+        var @event = new Event(domain, "OrderPlaced");
+        var action = CreateAction(domain, "PlaceOrder", entity);
+        var param = new Property(domain, "OrderId", primitive);
+        var eventProp = new Property(domain, "OrderId", primitive);
+
+        MutationApply.AddType(domain, primitive);
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddEvent(entity, @event);
+        MutationApply.AddProperty(@event, eventProp);
+        MutationApply.AddAction(entity, action);
+        MutationApply.AddParameter(action, param);
+
+        var effect = new PublishEvent(domain) { Event = @event };
+        domain.CreateMutation().AddEffect(action, effect)
+            .SetEventPropertyBinding(action, effect, eventProp.Name, new EventPropertyBindingSource.ActionParameter(param.Name))
+            .Apply();
+
+        // Now overwrite with a bad binding — should roll back to old binding
+        var badResult = domain.CreateMutation()
+            .SetEventPropertyBinding(action, effect, eventProp.Name, new EventPropertyBindingSource.ActionParameter("DoesNotExist"))
+            .Apply();
+
+        // After rollback, the original binding should still be present
+        await Assert.That(effect.PropertyBindings.ContainsKey(eventProp.Name)).IsTrue();
+        var binding = effect.PropertyBindings[eventProp.Name] as EventPropertyBindingSource.ActionParameter;
+        await Assert.That(binding?.ParameterName).IsEqualTo(param.Name);
     }
 
     private sealed record TestDomainValue(Domain domain, string name, DomainType type) : DomainValue(domain, name, type);

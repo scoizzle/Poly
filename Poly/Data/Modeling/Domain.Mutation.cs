@@ -150,6 +150,11 @@ public sealed partial record Domain {
         public Mutation RemoveEffect(Action action, Effect effect) =>
             AddStep(new Action.RemoveEffectCommand(action, effect));
 
+        public Mutation SetEventPropertyBinding(Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) {
+            effect._bindings.TryGetValue(propertyName, out var previous);
+            return AddStep(new Action.SetEventPropertyBindingCommand(action, effect, propertyName, source, previous));
+        }
+
         public Mutation AddPolicy(Action action, Policy policy) =>
             AddStep(new Action.AddPolicyCommand(action, policy));
 

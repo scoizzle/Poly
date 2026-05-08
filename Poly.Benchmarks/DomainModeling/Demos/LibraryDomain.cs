@@ -172,8 +172,10 @@ internal static class LibraryDomain {
         checkoutBook.AddParameter(new Property(domain, "MemberName", stringType));
         checkoutBook.AddEffect(new StageTransition(domain) { TargetStage = activeStage });
         var publishBookCheckedOut = new PublishEvent(domain) { Event = bookCheckedOut };
-        publishBookCheckedOut.BindProperty(bookCheckedOut.RequireProperty("BookTitle"), checkoutBookParam);
-        checkoutBook.AddEffect(publishBookCheckedOut);
+        domain.CreateMutation()
+            .AddEffect(checkoutBook, publishBookCheckedOut)
+            .SetEventPropertyBinding(checkoutBook, publishBookCheckedOut, "BookTitle", new EventPropertyBindingSource.ActionParameter(checkoutBookParam.Name))
+            .Apply();
         loan.AddAction(checkoutBook);
 
         // ReturnBook - Loan, from Active/Overdue/Renewed -> Returned
@@ -182,9 +184,11 @@ internal static class LibraryDomain {
         returnBook.AddParameter(conditionParam);
         returnBook.AddEffect(new StageTransition(domain) { TargetStage = returnedStage });
         var publishBookReturned = new PublishEvent(domain) { Event = bookReturned };
-        publishBookReturned.BindProperty(bookReturned.RequireProperty("ReturnDate"), loan.RequireProperty("ReturnDate"));
-        publishBookReturned.BindProperty(bookReturned.RequireProperty("Condition"), conditionParam);
-        returnBook.AddEffect(publishBookReturned);
+        domain.CreateMutation()
+            .AddEffect(returnBook, publishBookReturned)
+            .SetEventPropertyBinding(returnBook, publishBookReturned, "ReturnDate", new EventPropertyBindingSource.EntityProperty("ReturnDate"))
+            .SetEventPropertyBinding(returnBook, publishBookReturned, "Condition", new EventPropertyBindingSource.ActionParameter(conditionParam.Name))
+            .Apply();
         loan.AddAction(returnBook);
         activeStage.AddAction(returnBook);
         overdueStage.AddAction(returnBook);
@@ -239,9 +243,11 @@ internal static class LibraryDomain {
         issueFine.AddParameter(amountParam);
         issueFine.AddParameter(reasonParam);
         var publishFineIssued = new PublishEvent(domain) { Event = fineIssued };
-        publishFineIssued.BindProperty(fineIssued.RequireProperty("Amount"), amountParam);
-        publishFineIssued.BindProperty(fineIssued.RequireProperty("Reason"), reasonParam);
-        issueFine.AddEffect(publishFineIssued);
+        domain.CreateMutation()
+            .AddEffect(issueFine, publishFineIssued)
+            .SetEventPropertyBinding(issueFine, publishFineIssued, "Amount", new EventPropertyBindingSource.ActionParameter(amountParam.Name))
+            .SetEventPropertyBinding(issueFine, publishFineIssued, "Reason", new EventPropertyBindingSource.ActionParameter(reasonParam.Name))
+            .Apply();
         fine.AddAction(issueFine);
 
         // PayFine - Fine, from none
@@ -252,9 +258,11 @@ internal static class LibraryDomain {
         var addBook = new DomainAction(domain, "AddBook", book);
         addBook.AddEffect(new StageTransition(domain) { TargetStage = availableStage });
         var publishBookAdded = new PublishEvent(domain) { Event = bookAdded };
-        publishBookAdded.BindProperty(bookAdded.RequireProperty("ISBN"), book.RequireProperty("ISBN"));
-        publishBookAdded.BindProperty(bookAdded.RequireProperty("Title"), book.RequireProperty("Title"));
-        addBook.AddEffect(publishBookAdded);
+        domain.CreateMutation()
+            .AddEffect(addBook, publishBookAdded)
+            .SetEventPropertyBinding(addBook, publishBookAdded, "ISBN", new EventPropertyBindingSource.EntityProperty("ISBN"))
+            .SetEventPropertyBinding(addBook, publishBookAdded, "Title", new EventPropertyBindingSource.EntityProperty("Title"))
+            .Apply();
         book.AddAction(addBook);
 
         // ArchiveBook - Book, from Available/OutOfStock/Reserved -> Archived

@@ -94,9 +94,35 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     return false;
                 }
                 foreach (var eventProperty in publishEvent.Event.Properties) {
-                    if (!publishEvent.HasBindingFor(eventProperty)) {
+                    if (!publishEvent.PropertyBindings.TryGetValue(eventProperty.Name, out var bindingSource)) {
                         context.ReportError(action, $"PublishEvent for '{publishEvent.Event.Name}' is missing binding for event property '{eventProperty.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
                         return false;
+                    }
+                    switch (bindingSource) {
+                        case EventPropertyBindingSource.ActionParameter ap: {
+                                var param = action.Parameters.OfType<Property>().FirstOrDefault(p => string.Equals(p.Name, ap.ParameterName, StringComparison.Ordinal));
+                                if (param is null) {
+                                    context.ReportError(action, $"PublishEvent binding for event property '{eventProperty.Name}' references action parameter '{ap.ParameterName}' which does not exist on action '{action.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
+                                    return false;
+                                }
+                                if (!ReferenceEquals(param.Type, eventProperty.Type)) {
+                                    context.ReportError(action, $"PublishEvent binding for event property '{eventProperty.Name}': action parameter '{ap.ParameterName}' has type '{param.Type.Name}' but event property expects '{eventProperty.Type.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
+                                    return false;
+                                }
+                                break;
+                            }
+                        case EventPropertyBindingSource.EntityProperty ep: {
+                                var prop = ownerEntity.Properties.FirstOrDefault(p => string.Equals(p.Name, ep.PropertyName, StringComparison.Ordinal));
+                                if (prop is null) {
+                                    context.ReportError(action, $"PublishEvent binding for event property '{eventProperty.Name}' references entity property '{ep.PropertyName}' which does not exist on entity '{ownerEntity.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
+                                    return false;
+                                }
+                                if (!ReferenceEquals(prop.Type, eventProperty.Type)) {
+                                    context.ReportError(action, $"PublishEvent binding for event property '{eventProperty.Name}': entity property '{ep.PropertyName}' has type '{prop.Type.Name}' but event property expects '{eventProperty.Type.Name}'.", DomainModelDiagnosticCodes.EffectBinding);
+                                    return false;
+                                }
+                                break;
+                            }
                     }
                 }
                 break;

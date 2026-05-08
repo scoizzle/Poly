@@ -18,5 +18,5 @@ public sealed partial record Action : DomainMember {
     public IReadOnlyCollection<Effect> Effects => _effects.AsReadOnly();
     public IReadOnlyCollection<Policy> Policies => _policies.AsReadOnly();
 
-    public sealed override IEnumerable<DomainMember> ChildObjects => [.. _parameters, .. _policies /*TODO: , .. _effects*/];
+    public sealed override IEnumerable<DomainMember> ChildObjects => [.. _parameters, .. _policies];
 }

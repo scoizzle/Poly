@@ -19,7 +19,7 @@ public class EventSubscriptionTests {
         var consumerOrderId = new Property(domain, "OrderId", orderIdType);
         var handler = new DomainAction(domain, "OnPaymentReceived", order);
         var eventParameter = new Property(domain, "event", paymentReceived);
-        var subscription = new EventSubscription(domain, order, paymentReceived, handler);
+        var subscription = new EventSubscription(domain, order, paymentReceived, handler, "event");
 
         var result = domain.CreateMutation()
             .AddType(orderIdType)
@@ -49,7 +49,7 @@ public class EventSubscriptionTests {
         var paymentReceived = new Event(domain, "PaymentReceived");
         var handler = new DomainAction(domain, "OnPaymentReceived", order);
         var eventParameter = new Property(domain, "event", paymentReceived);
-        var subscription = new EventSubscription(domain, order, paymentReceived, handler);
+        var subscription = new EventSubscription(domain, order, paymentReceived, handler, "event");
 
         var result = domain.CreateMutation()
             .AddType(payment)
@@ -75,7 +75,7 @@ public class EventSubscriptionTests {
         var paymentReceived = new Event(domain, "PaymentReceived");
         var handler = new DomainAction(domain, "OnPaymentReceived", payment);
         var eventParameter = new Property(domain, "event", paymentReceived);
-        var subscription = new EventSubscription(domain, order, paymentReceived, handler);
+        var subscription = new EventSubscription(domain, order, paymentReceived, handler, "event");
 
         var result = domain.CreateMutation()
             .AddType(payment)
@@ -104,7 +104,7 @@ public class EventSubscriptionTests {
         var consumerIdentity = new Property(domain, "Identity", baseIdentity);
         var handler = new DomainAction(domain, "OnPaymentReceived", order);
         var eventParameter = new Property(domain, "event", paymentReceived);
-        var subscription = new EventSubscription(domain, order, paymentReceived, handler);
+        var subscription = new EventSubscription(domain, order, paymentReceived, handler, "event");
 
         var result = domain.CreateMutation()
             .AddType(payment)
@@ -139,7 +139,7 @@ public class EventSubscriptionTests {
         var consumerIdentity = new Property(domain, "Identity", derivedIdentity);
         var handler = new DomainAction(domain, "OnPaymentReceived", order);
         var eventParameter = new Property(domain, "event", paymentReceived);
-        var subscription = new EventSubscription(domain, order, paymentReceived, handler);
+        var subscription = new EventSubscription(domain, order, paymentReceived, handler, "event");
 
         var result = domain.CreateMutation()
             .AddType(payment)
@@ -163,13 +163,13 @@ public class EventSubscriptionTests {
     }
 
     [Test]
-    public async Task EventSubscription_CommandAction_ReportsError() {
+    public async Task EventSubscription_MissingHandlerParameter_ReportsError() {
         var domain = new Domain("Commerce");
         var payment = new Entity(domain, "Payment");
         var order = new Entity(domain, "Order");
         var paymentReceived = new Event(domain, "PaymentReceived");
         var handler = new DomainAction(domain, "OnPaymentReceived", order);
-        var subscription = new EventSubscription(domain, order, paymentReceived, handler);
+        var subscription = new EventSubscription(domain, order, paymentReceived, handler, "event");
 
         var result = domain.CreateMutation()
             .AddType(payment)
@@ -180,7 +180,7 @@ public class EventSubscriptionTests {
             .AddEventSubscription(order, subscription)
             .Apply();
 
-        var diagnostic = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.ActionTrigger);
+        var diagnostic = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.EventSubscription);
         await Assert.That(diagnostic).IsNotNull();
     }
 }

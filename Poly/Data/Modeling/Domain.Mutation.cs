@@ -168,7 +168,13 @@ public sealed partial record Domain {
             AddStep(new EventSubscription.RemoveCorrelationBindingCommand(subscription, binding));
 
         public Mutation SetEventSubscriptionAudience(EventSubscription subscription, EventSubscriptionAudience audience) =>
-            AddStep(new EventSubscription.SetAudienceCommand(subscription, audience, subscription._audience));
+            AddStep(new EventSubscription.SetAudienceCommand(subscription, audience, subscription.Audience));
+
+        public Mutation SetEventSubscriptionRoutingMode(EventSubscription subscription, EventSubscriptionRoutingMode routingMode) =>
+            AddStep(new EventSubscription.SetRoutingModeCommand(subscription, routingMode, subscription._routingMode));
+
+        public Mutation SetEventSubscriptionEventParameter(EventSubscription subscription, string eventParameterName) =>
+            AddStep(new EventSubscription.SetEventParameterNameCommand(subscription, eventParameterName, subscription._eventParameterName));
 
         public Mutation SetActionTrigger(Action action, ActionTrigger trigger) =>
             AddStep(new Action.SetTriggerCommand(action, trigger, action._trigger));

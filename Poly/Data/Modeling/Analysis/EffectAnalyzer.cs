@@ -51,10 +51,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (!ValidateActionTrigger(context, action, ownerEntity)) {
-            return;
-        }
-
         if (!ValidateEffectBindings(context, action)) {
             return;
         }
@@ -298,52 +294,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         return true;
     }
 
-    private static bool ValidateActionTrigger(AnalysisContext context, Action action, Entity ownerEntity) {
-        var subscriptions = ownerEntity.EventSubscriptions.Where(subscription => ReferenceEquals(subscription.HandlerAction, action)).ToArray();
-
-        switch (action.Trigger) {
-            case ActionTrigger.Command:
-                if (subscriptions.Length > 0) {
-                    context.ReportError(action, $"Command action '{action.Name}' cannot have event subscriptions.", DomainModelDiagnosticCodes.ActionTrigger);
-                    return false;
-                }
-                return true;
-            case ActionTrigger.EventHandler eventHandler:
-                if (!ReferenceEquals(eventHandler.EventType.Domain, ownerEntity.Domain)) {
-                    context.ReportError(action, $"Event handler trigger event '{eventHandler.EventType.Name}' does not belong to the same domain as entity '{ownerEntity.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
-                    return false;
-                }
-
-                var parameter = action.Parameters.OfType<Property>()
-                    .FirstOrDefault(p => string.Equals(p.Name, eventHandler.EventParameterName, StringComparison.Ordinal));
-                if (parameter is null) {
-                    context.ReportError(action, $"Event handler action '{action.Name}' requires parameter '{eventHandler.EventParameterName}' for event '{eventHandler.EventType.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
-                    return false;
-                }
-
-                if (!DomainTypeAssignability.CanAssign(parameter.Type, eventHandler.EventType)) {
-                    context.ReportError(action, $"Event handler action '{action.Name}' parameter '{eventHandler.EventParameterName}' has type '{parameter.Type.Name}' but must be '{eventHandler.EventType.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
-                    return false;
-                }
-
-                if (subscriptions.Length != 1) {
-                    context.ReportError(action, $"Event handler action '{action.Name}' must have exactly one event subscription on entity '{ownerEntity.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
-                    return false;
-                }
-
-                var subscription = subscriptions[0];
-                if (!ReferenceEquals(subscription.EventType, eventHandler.EventType)) {
-                    context.ReportError(action, $"Event handler action '{action.Name}' trigger event '{eventHandler.EventType.Name}' does not match subscribed event '{subscription.EventType.Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
-                    return false;
-                }
-
-                return true;
-            default:
-                context.ReportError(action, $"Action '{action.Name}' has unsupported trigger type '{action.Trigger.GetType().Name}'.", DomainModelDiagnosticCodes.ActionTrigger);
-                return false;
-        }
-    }
-
     private static void AnalyzeSubscription(AnalysisContext context, EventSubscription subscription) {
         if (!context.TryBeginAnalyzerVisit<EffectAnalyzer>(subscription)) {
             return;
@@ -374,13 +324,21 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (subscription.HandlerAction.Trigger is not ActionTrigger.EventHandler trigger) {
-            context.ReportError(subscription, $"Event subscription handler '{subscription.HandlerAction.Name}' must be configured with an EventHandler trigger.", DomainModelDiagnosticCodes.EventSubscription);
+        if (string.IsNullOrWhiteSpace(subscription.EventParameterName)) {
+            context.ReportError(subscription, $"Event subscription '{subscription.Name}' requires a non-empty event parameter name.", DomainModelDiagnosticCodes.EventSubscription);
             return;
         }
 
-        if (!ReferenceEquals(trigger.EventType, subscription.EventType)) {
-            context.ReportError(subscription, $"Event subscription event '{subscription.EventType.Name}' does not match handler trigger event '{trigger.EventType.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+        var eventParameter = subscription.HandlerAction.Parameters
+            .OfType<Property>()
+            .FirstOrDefault(parameter => string.Equals(parameter.Name, subscription.EventParameterName, StringComparison.Ordinal));
+        if (eventParameter is null) {
+            context.ReportError(subscription, $"Event subscription '{subscription.Name}' references missing handler parameter '{subscription.EventParameterName}' on action '{subscription.HandlerAction.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
+            return;
+        }
+
+        if (!DomainTypeAssignability.CanAssign(eventParameter.Type, subscription.EventType)) {
+            context.ReportError(subscription, $"Event subscription '{subscription.Name}' parameter '{subscription.EventParameterName}' has type '{eventParameter.Type.Name}' but must accept '{subscription.EventType.Name}'.", DomainModelDiagnosticCodes.EventSubscription);
             return;
         }
 
@@ -389,7 +347,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (subscription.Audience is EventSubscriptionAudience.Correlated && subscription.Correlations.Count == 0) {
+        if (subscription.RoutingMode is EventSubscriptionRoutingMode.Correlated && subscription.Correlations.Count == 0) {
             context.ReportError(subscription, $"Correlated event subscription '{subscription.Name}' requires at least one correlation binding.", DomainModelDiagnosticCodes.EventSubscription);
             return;
         }

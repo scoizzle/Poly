@@ -22,7 +22,7 @@ public class ActionEventConstraintAnalysisTests {
         var eventId = new Property(domain, "EventId", text);
         var handler = new DomainAction(domain, "HandleAssigned", consumer);
         var payloadParam = new Property(domain, "evt", payloadEvent);
-        var subscription = new EventSubscription(domain, consumer, triggerEvent, handler);
+        var subscription = new EventSubscription(domain, consumer, triggerEvent, handler, "evt");
 
         new Domain.AddTypeCommand(domain, text).Apply();
         new Domain.AddTypeCommand(domain, producer).Apply();
@@ -32,7 +32,6 @@ public class ActionEventConstraintAnalysisTests {
         new Event.AddPropertyCommand(triggerEvent, eventId).Apply();
         new Entity.AddActionCommand(consumer, handler).Apply();
         new Poly.Data.Modeling.Action.AddParameterCommand(handler, payloadParam).Apply();
-        new Poly.Data.Modeling.Action.SetTriggerCommand(handler, new ActionTrigger.EventHandler(triggerEvent, "evt"), ActionTrigger.Default).Apply();
         new Entity.AddEventSubscriptionCommand(consumer, subscription).Apply();
 
         var analysis = new DomainModelAnalyzer().Analyze(domain);
@@ -97,7 +96,7 @@ public class ActionEventConstraintAnalysisTests {
         var eEnv = new Property(domain, "Environment", text);
         var handler = new DomainAction(domain, "Handle", consumer);
         var param = new Property(domain, "evt", @event);
-        var subscription = new EventSubscription(domain, consumer, @event, handler);
+        var subscription = new EventSubscription(domain, consumer, @event, handler, "evt");
 
         domain.CreateMutation()
             .AddType(text)
@@ -109,7 +108,6 @@ public class ActionEventConstraintAnalysisTests {
             .AddProperty(@event, eEnv)
             .AddAction(consumer, handler)
             .AddParameter(handler, param)
-            .SetEventHandlerTrigger(handler, @event, "evt")
             .AddEventSubscription(consumer, subscription)
             .SetEventSubscriptionAudience(subscription, new EventSubscriptionAudience.Correlated())
             .AddEventSubscriptionCorrelation(subscription, new EventCorrelationBinding(domain, "TenantId", "TenantId"))
@@ -152,7 +150,7 @@ public class ActionEventConstraintAnalysisTests {
         var handler = new DomainAction(domain, "HandleCreated", consumer);
         var evtParam = new Property(domain, "evt", @event);
         var create = new CreateEntityInstance(domain) { EntityType = consumer };
-        var subscription = new EventSubscription(domain, consumer, @event, handler);
+        var subscription = new EventSubscription(domain, consumer, @event, handler, "evt");
 
         domain.CreateMutation()
             .AddType(producer)
@@ -160,7 +158,6 @@ public class ActionEventConstraintAnalysisTests {
             .AddType(@event)
             .AddAction(consumer, handler)
             .AddParameter(handler, evtParam)
-            .SetEventHandlerTrigger(handler, @event, "evt")
             .AddEffect(handler, create)
             .AddEventSubscription(consumer, subscription)
             .Apply();

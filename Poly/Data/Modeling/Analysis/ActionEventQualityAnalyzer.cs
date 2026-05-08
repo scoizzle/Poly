@@ -71,14 +71,19 @@ internal sealed class ActionEventQualityAnalyzer : INodeAnalyzer {
             return;
         }
 
+        var subscriptionsByAction = entity.EventSubscriptions
+            .GroupBy(static subscription => subscription.HandlerAction)
+            .ToDictionary(static group => group.Key, static group => group.First(), EqualityComparer<Action>.Default);
+
         foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(static stage => stage.Actions))) {
             if (!context.ShouldAnalyze(action)) {
                 continue;
             }
 
-            ValidateEventContract(context, action);
+            subscriptionsByAction.TryGetValue(action, out var subscription);
+            ValidateEventContract(context, action, subscription);
             ValidateActionOrdering(context, action);
-            ValidateReplaySafety(context, action);
+            ValidateReplaySafety(context, action, subscription is not null);
             ValidateRuleCoverage(context, action);
         }
 
@@ -170,25 +175,25 @@ internal sealed class ActionEventQualityAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void ValidateEventContract(AnalysisContext context, Action action) {
-        if (action.Trigger is not ActionTrigger.EventHandler trigger) {
+    private static void ValidateEventContract(AnalysisContext context, Action action, EventSubscription? subscription) {
+        if (subscription is null) {
             return;
         }
 
         var parameter = action.Parameters
             .OfType<Property>()
-            .FirstOrDefault(p => string.Equals(p.Name, trigger.EventParameterName, StringComparison.Ordinal));
+            .FirstOrDefault(p => string.Equals(p.Name, subscription.EventParameterName, StringComparison.Ordinal));
         if (parameter?.Type is not Event parameterEventType) {
             return;
         }
 
-        foreach (var contractProperty in trigger.EventType.Properties) {
+        foreach (var contractProperty in subscription.EventType.Properties) {
             var candidate = parameterEventType.Properties
                 .FirstOrDefault(p => string.Equals(p.Name, contractProperty.Name, StringComparison.Ordinal));
             if (candidate is null) {
                 context.ReportError(
                     action,
-                    $"Action '{action.Name}' event contract is missing property '{contractProperty.Name}' required by event '{trigger.EventType.Name}'.",
+                    $"Action '{action.Name}' event contract is missing property '{contractProperty.Name}' required by event '{subscription.EventType.Name}'.",
                     DomainModelDiagnosticCodes.ActionEventContract);
                 continue;
             }
@@ -218,8 +223,8 @@ internal sealed class ActionEventQualityAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void ValidateReplaySafety(AnalysisContext context, Action action) {
-        if (action.Trigger is not ActionTrigger.EventHandler) {
+    private static void ValidateReplaySafety(AnalysisContext context, Action action, bool isEventHandler) {
+        if (!isEventHandler) {
             return;
         }
 
@@ -266,7 +271,7 @@ internal sealed class ActionEventQualityAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateCorrelationSoundness(AnalysisContext context, EventSubscription subscription) {
-        if (subscription.Audience is not EventSubscriptionAudience.Correlated) {
+        if (subscription.RoutingMode is not EventSubscriptionRoutingMode.Correlated) {
             return;
         }
 

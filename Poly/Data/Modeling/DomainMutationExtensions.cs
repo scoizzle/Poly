@@ -158,6 +158,12 @@ public static class DomainMutationExtensions {
     public static AnalysisResult SetAudience(this EventSubscription subscription, EventSubscriptionAudience audience) =>
         subscription.Domain.CreateMutation().SetEventSubscriptionAudience(subscription, audience).Apply();
 
+    public static AnalysisResult SetRoutingMode(this EventSubscription subscription, EventSubscriptionRoutingMode routingMode) =>
+        subscription.Domain.CreateMutation().SetEventSubscriptionRoutingMode(subscription, routingMode).Apply();
+
+    public static AnalysisResult SetEventParameter(this EventSubscription subscription, string eventParameterName) =>
+        subscription.Domain.CreateMutation().SetEventSubscriptionEventParameter(subscription, eventParameterName).Apply();
+
     public static AnalysisResult AddComment(this DomainObject target, string comment) =>
         target.Domain.CreateMutation().AddComment(target, comment).Apply();
 }

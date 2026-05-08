@@ -156,6 +156,8 @@ public sealed record EventSubscriptionCorrelationExportDto(string EventPropertyN
 public sealed record EventSubscriptionExportDto(
     string EventTypeName,
     string HandlerActionName,
+    string EventParameterName,
+    string RoutingMode,
     string AudienceKind,
     IReadOnlyCollection<EventSubscriptionCorrelationExportDto> Correlations);
 
@@ -224,6 +226,8 @@ public sealed record EntityActionDto(
 public sealed record EventSubscriptionDto(
     string EventTypeName,
     string HandlerActionName,
+    string EventParameterName,
+    string RoutingMode,
     string AudienceKind,
     IReadOnlyCollection<EventSubscriptionCorrelationExportDto> Correlations);
 
@@ -335,9 +339,10 @@ internal static class DomainAffordances {
         new("command:add-constraint-to-type", nameof(DomainAuthoringTool.AddConstraintToType), new Dictionary<string, object?> { ["sessionId"] = "", ["typeName"] = "", ["constraintType"] = "", ["minLength"] = null, ["maxLength"] = null, ["minValue"] = null, ["maxValue"] = null, ["members"] = null, ["value"] = null }, "Add or replace a constraint on a domain type by constraint type name."),
         new("command:add-constraint-to-entity-property", nameof(DomainAuthoringTool.AddConstraintToEntityProperty), new Dictionary<string, object?> { ["sessionId"] = "", ["entityName"] = "", ["propertyName"] = "", ["constraintType"] = "", ["minLength"] = null, ["maxLength"] = null, ["minValue"] = null, ["maxValue"] = null, ["members"] = null, ["value"] = null }, "Add or replace a constraint on an entity property by constraint type name."),
         new("command:add-event-type", nameof(DomainAuthoringTool.AddEventType), new Dictionary<string, object?> { ["sessionId"] = "", ["name"] = "" }, "Create a new event type."),
-        new("command:set-action-event-handler-trigger", nameof(DomainAuthoringTool.SetActionEventHandlerTrigger), new Dictionary<string, object?>(), "Set an action trigger to consume a specific event via a named event parameter."),
-        new("command:set-action-command-trigger", nameof(DomainAuthoringTool.SetActionCommandTrigger), new Dictionary<string, object?>(), "Set an action back to the default command trigger."),
-        new("command:add-event-subscription", nameof(DomainAuthoringTool.AddEventSubscription), new Dictionary<string, object?>(), "Subscribe an event-handler action to a domain event."),
+        new("command:upsert-event-handler-subscription", nameof(DomainAuthoringTool.UpsertEventHandlerSubscription), new Dictionary<string, object?>(), "Create or update an event-handler subscription in one operation."),
+        new("command:set-action-event-handler-trigger", nameof(DomainAuthoringTool.SetActionEventHandlerTrigger), new Dictionary<string, object?>(), "Compatibility alias: configure an action subscription to consume a specific event via a named event parameter."),
+        new("command:set-action-command-trigger", nameof(DomainAuthoringTool.SetActionCommandTrigger), new Dictionary<string, object?>(), "Compatibility alias: remove subscriptions for an action to make it command-triggered."),
+        new("command:add-event-subscription", nameof(DomainAuthoringTool.AddEventSubscription), new Dictionary<string, object?>(), "Compatibility alias: create an event-handler subscription."),
         new("command:add-event-subscription-correlation", nameof(DomainAuthoringTool.AddEventSubscriptionCorrelation), new Dictionary<string, object?>(), "Add a correlation binding used to target consumer instances for an event subscription."),
         new("command:set-event-subscription-audience", nameof(DomainAuthoringTool.SetEventSubscriptionAudience), new Dictionary<string, object?>(), "Change an event subscription between Broadcast and Correlated delivery."),
         new("command:remove-event-subscription", nameof(DomainAuthoringTool.RemoveEventSubscription), new Dictionary<string, object?>(), "Remove an event subscription from an entity."),
@@ -497,19 +502,19 @@ public static class DomainQueryTool {
                     ? entity.Actions
                         .OrderBy(static action => action.Name, StringComparer.Ordinal)
                         .Select(action => analysis.GetCapabilityView(action))
-                        .Select(static view => new EntityActionDto(
-                            Name: view.ActionName,
-                            ParameterNames: view.Parameters.Select(static parameter => parameter.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
-                            EffectTypes: view.EffectTypes.Select(static type => type.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
-                            PublishedEvents: view.PublishedEvents.Select(static @event => @event.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
-                            TransitionTargets: view.TransitionTargets.Select(static stage => stage.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
-                            TriggerKind: view.Trigger switch {
-                                ActionTrigger.Command => "Command",
-                                ActionTrigger.EventHandler => "EventHandler",
-                                _ => view.Trigger.GetType().Name
-                            },
-                            TriggerEventName: view.Trigger is ActionTrigger.EventHandler handlerForName ? handlerForName.EventType.Name : null,
-                            TriggerEventParameterName: view.Trigger is ActionTrigger.EventHandler handlerForParameter ? handlerForParameter.EventParameterName : null))
+                        .Select(view => {
+                            var subscription = entity.EventSubscriptions.FirstOrDefault(subscription =>
+                                string.Equals(subscription.HandlerAction.Name, view.ActionName, StringComparison.Ordinal));
+                            return new EntityActionDto(
+                                Name: view.ActionName,
+                                ParameterNames: view.Parameters.Select(static parameter => parameter.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
+                                EffectTypes: view.EffectTypes.Select(static type => type.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
+                                PublishedEvents: view.PublishedEvents.Select(static @event => @event.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
+                                TransitionTargets: view.TransitionTargets.Select(static stage => stage.Name).OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
+                                TriggerKind: subscription is null ? "Command" : "EventHandler",
+                                TriggerEventName: subscription?.EventType.Name,
+                                TriggerEventParameterName: subscription?.EventParameterName);
+                        })
                         .ToArray()
                     : [],
                 Stages: includeStages
@@ -532,6 +537,8 @@ public static class DomainQueryTool {
                     .Select(static subscription => new EventSubscriptionDto(
                         EventTypeName: subscription.EventType.Name,
                         HandlerActionName: subscription.HandlerAction.Name,
+                        EventParameterName: subscription.EventParameterName,
+                        RoutingMode: subscription.RoutingMode.ToString(),
                         AudienceKind: subscription.Audience switch {
                             EventSubscriptionAudience.Broadcast => "Broadcast",
                             EventSubscriptionAudience.Correlated => "Correlated",
@@ -1094,6 +1101,45 @@ public static class DomainAuthoringTool {
             }
 
             var entityByName = new Dictionary<string, Entity>(StringComparer.Ordinal);
+            string ResolveLegacyEventParameter(EntityExportDto entityDto, Poly.Data.Modeling.Action handlerAction, Event eventType) {
+                var actionDto = entityDto.Actions?.FirstOrDefault(a => string.Equals(a.Name, handlerAction.Name, StringComparison.Ordinal));
+                if (actionDto?.Trigger is not null
+                    && string.Equals(actionDto.Trigger.Kind, "EventHandler", StringComparison.Ordinal)
+                    && string.Equals(actionDto.Trigger.EventTypeName, eventType.Name, StringComparison.Ordinal)
+                    && !string.IsNullOrWhiteSpace(actionDto.Trigger.EventParameterName)) {
+                    return actionDto.Trigger.EventParameterName;
+                }
+
+                var fallback = handlerAction.Parameters
+                    .OfType<Property>()
+                    .FirstOrDefault(parameter => CanAssignForImport(parameter.Type, eventType));
+                if (fallback is not null) {
+                    return fallback.Name;
+                }
+
+                throw new InvalidOperationException($"Event subscription '{handlerAction.Name}<-{eventType.Name}' is missing EventParameterName in import payload.");
+            }
+
+            static bool CanAssignForImport(DomainType targetType, DomainType sourceType) {
+                if (ReferenceEquals(targetType, sourceType)) {
+                    return true;
+                }
+
+                if (targetType is Entity targetEntity && sourceType is Entity sourceEntity) {
+                    var visited = new HashSet<Entity>(EqualityComparer<Entity>.Default);
+                    for (var current = sourceEntity; current is not null; current = current.ParentEntity) {
+                        if (!visited.Add(current)) {
+                            break;
+                        }
+
+                        if (ReferenceEquals(current, targetEntity)) {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
 
             foreach (var primitiveDto in payload.Primitives.OrderBy(static p => p.Name, StringComparer.Ordinal)) {
                 if (!typeByName.ContainsKey(primitiveDto.Name)) {
@@ -1202,19 +1248,6 @@ public static class DomainAuthoringTool {
                         }
                     }
 
-                    if (actionDto.Trigger is not null && string.Equals(actionDto.Trigger.Kind, "EventHandler", StringComparison.Ordinal)) {
-                        if (string.IsNullOrWhiteSpace(actionDto.Trigger.EventTypeName)) {
-                            throw new InvalidOperationException($"Action '{action.Name}' has EventHandler trigger with missing EventTypeName.");
-                        }
-
-                        if (string.IsNullOrWhiteSpace(actionDto.Trigger.EventParameterName)) {
-                            throw new InvalidOperationException($"Action '{action.Name}' has EventHandler trigger with missing EventParameterName.");
-                        }
-
-                        var triggerEventType = (Event)ResolveType(typeByName, actionDto.Trigger.EventTypeName, state.Domain.Name);
-                        mutation.SetEventHandlerTrigger(action, triggerEventType, actionDto.Trigger.EventParameterName);
-                    }
-
                     var bindingsByEvent = actionDto.PublishEventBindings
                         .GroupBy(static b => b.EventTypeName, StringComparer.Ordinal);
                     foreach (var eventGroup in bindingsByEvent) {
@@ -1235,20 +1268,20 @@ public static class DomainAuthoringTool {
                 foreach (var subscriptionDto in entityDto.EventSubscriptions ?? []) {
                     var eventType = (Event)ResolveType(typeByName, subscriptionDto.EventTypeName, state.Domain.Name);
                     var handlerAction = entity.RequireAction(subscriptionDto.HandlerActionName);
-                    var subscription = new EventSubscription(state.Domain, entity, eventType, handlerAction);
+                    var eventParameterName = !string.IsNullOrWhiteSpace(subscriptionDto.EventParameterName)
+                        ? subscriptionDto.EventParameterName
+                        : ResolveLegacyEventParameter(entityDto, handlerAction, eventType);
+                    var subscription = new EventSubscription(state.Domain, entity, eventType, handlerAction, eventParameterName);
                     mutation.AddEventSubscription(entity, subscription);
 
                     foreach (var correlationDto in subscriptionDto.Correlations) {
                         mutation.AddEventSubscriptionCorrelation(subscription, new EventCorrelationBinding(state.Domain, correlationDto.EventPropertyName, correlationDto.ConsumerPropertyName));
                     }
 
-                    EventSubscriptionAudience audience = subscriptionDto.AudienceKind switch {
-                        "Broadcast" => new EventSubscriptionAudience.Broadcast(),
-                        "Correlated" => new EventSubscriptionAudience.Correlated(),
-                        _ => throw new InvalidOperationException($"Unknown event subscription audience '{subscriptionDto.AudienceKind}'.")
-                    };
-
-                    mutation.SetEventSubscriptionAudience(subscription, audience);
+                    mutation.SetEventSubscriptionRoutingMode(subscription, ParseRoutingMode(
+                        !string.IsNullOrWhiteSpace(subscriptionDto.RoutingMode)
+                            ? subscriptionDto.RoutingMode
+                            : subscriptionDto.AudienceKind));
                 }
             }
 
@@ -1616,6 +1649,50 @@ public static class DomainAuthoringTool {
         if (string.IsNullOrWhiteSpace(value)) return PolicyAggregationStrategy.All;
         if (Enum.TryParse<PolicyAggregationStrategy>(value, ignoreCase: true, out var parsed)) return parsed;
         throw new InvalidOperationException($"Unknown aggregation strategy '{value}'. Expected 'All' or 'Any'.");
+    }
+
+    private static EventSubscriptionRoutingMode ParseRoutingMode(string? value) {
+        if (string.IsNullOrWhiteSpace(value)) {
+            return EventSubscriptionRoutingMode.Broadcast;
+        }
+
+        if (Enum.TryParse<EventSubscriptionRoutingMode>(value, ignoreCase: true, out var parsed)) {
+            return parsed;
+        }
+
+        throw new InvalidOperationException($"Unknown routing mode '{value}'. Expected 'Broadcast' or 'Correlated'.");
+    }
+
+    private static AnalysisResult UpsertEventHandlerSubscription(
+        DomainSessionState state,
+        Entity entity,
+        Poly.Data.Modeling.Action action,
+        Event eventType,
+        string eventParameterName,
+        EventSubscriptionRoutingMode routingMode) {
+
+        var mutation = state.Domain.CreateMutation();
+        var existingForAction = entity.EventSubscriptions
+            .FirstOrDefault(subscription => ReferenceEquals(subscription.HandlerAction, action));
+
+        if (existingForAction is null) {
+            var created = new EventSubscription(state.Domain, entity, eventType, action, eventParameterName);
+            mutation
+                .AddEventSubscription(entity, created)
+                .SetEventSubscriptionRoutingMode(created, routingMode);
+            return mutation.Apply(state.LatestAnalysis);
+        }
+
+        if (!ReferenceEquals(existingForAction.EventType, eventType)) {
+            throw new InvalidOperationException(
+                $"Action '{action.Name}' is already subscribed to event '{existingForAction.EventType.Name}'. Remove it before switching to '{eventType.Name}'.");
+        }
+
+        mutation
+            .SetEventSubscriptionEventParameter(existingForAction, eventParameterName)
+            .SetEventSubscriptionRoutingMode(existingForAction, routingMode);
+
+        return mutation.Apply(state.LatestAnalysis);
     }
 
     private static AnalysisResult ApplyIntent(DomainSessionState state, DomainMutationIntent intent) =>
@@ -2109,10 +2186,7 @@ public static class DomainAuthoringTool {
             var entity = state.Domain.RequireEntity(entityName);
             var action = entity.RequireAction(actionName);
             var eventType = state.Domain.RequireEventType(eventTypeName);
-
-            var analysis = state.Domain.CreateMutation()
-                .SetEventHandlerTrigger(action, eventType, eventParameterName)
-                .Apply(state.LatestAnalysis);
+            var analysis = UpsertEventHandlerSubscription(state, entity, action, eventType, eventParameterName, EventSubscriptionRoutingMode.Broadcast);
 
             return Commit(sessionId, state.Domain, analysis, $"Action '{actionName}' configured as event handler for '{eventTypeName}' using parameter '{eventParameterName}'.");
         }
@@ -2128,10 +2202,12 @@ public static class DomainAuthoringTool {
             var state = RequireSession(sessionId);
             var entity = state.Domain.RequireEntity(entityName);
             var action = entity.RequireAction(actionName);
+            var mutation = state.Domain.CreateMutation();
+            foreach (var subscription in entity.EventSubscriptions.Where(subscription => ReferenceEquals(subscription.HandlerAction, action)).ToArray()) {
+                mutation.RemoveEventSubscription(entity, subscription);
+            }
 
-            var analysis = state.Domain.CreateMutation()
-                .SetCommandTrigger(action)
-                .Apply(state.LatestAnalysis);
+            var analysis = mutation.Apply(state.LatestAnalysis);
 
             return Commit(sessionId, state.Domain, analysis, $"Action '{actionName}' configured as command trigger.");
         }
@@ -2151,18 +2227,37 @@ public static class DomainAuthoringTool {
             var entity = state.Domain.RequireEntity(entityName);
             var action = entity.RequireAction(actionName);
             var eventType = state.Domain.RequireEventType(eventTypeName);
-            var subscription = new EventSubscription(state.Domain, entity, eventType, action);
-            EventSubscriptionAudience audience = string.Equals(audienceKind, "Correlated", StringComparison.OrdinalIgnoreCase)
-                ? new EventSubscriptionAudience.Correlated()
-                : new EventSubscriptionAudience.Broadcast();
-
-            var analysis = state.Domain.CreateMutation()
-                .SetEventHandlerTrigger(action, eventType, eventParameterName)
-                .AddEventSubscription(entity, subscription)
-                .SetEventSubscriptionAudience(subscription, audience)
-                .Apply(state.LatestAnalysis);
+            var routingMode = ParseRoutingMode(audienceKind);
+            var analysis = UpsertEventHandlerSubscription(state, entity, action, eventType, eventParameterName, routingMode);
 
             return Commit(sessionId, state.Domain, analysis, $"Event subscription added: '{actionName}' handles '{eventTypeName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Creates or updates an event-handler subscription as the canonical handler configuration. This sets event parameter and routing mode in one operation.")]
+    public static DomainCommandResponse UpsertEventHandlerSubscription(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the consumer entity.")] string entityName,
+        [Description("Name of the handler action on the consumer entity.")] string actionName,
+        [Description("Name of the consumed event type.")] string eventTypeName,
+        [Description("Name of the action parameter that receives the event payload.")] string eventParameterName,
+        [Description("Routing mode: Broadcast (default) or Correlated.")] string? routingMode = null) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var eventType = state.Domain.RequireEventType(eventTypeName);
+
+            var analysis = UpsertEventHandlerSubscription(
+                state,
+                entity,
+                action,
+                eventType,
+                eventParameterName,
+                ParseRoutingMode(routingMode));
+
+            return Commit(sessionId, state.Domain, analysis, $"Event subscription upserted: '{actionName}' handles '{eventTypeName}' on entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
@@ -2207,13 +2302,9 @@ public static class DomainAuthoringTool {
             var subscription = entity.EventSubscriptions.FirstOrDefault(s => ReferenceEquals(s.HandlerAction, action) && ReferenceEquals(s.EventType, eventType))
                 ?? throw new InvalidOperationException($"Event subscription for action '{actionName}' and event '{eventTypeName}' was not found on entity '{entityName}'.");
 
-            EventSubscriptionAudience audience = audienceKind switch {
-                "Broadcast" => new EventSubscriptionAudience.Broadcast(),
-                "Correlated" => new EventSubscriptionAudience.Correlated(),
-                _ => throw new InvalidOperationException($"Unknown audience '{audienceKind}'. Must be Broadcast or Correlated.")
-            };
-
-            var analysis = state.Domain.CreateMutation().SetEventSubscriptionAudience(subscription, audience).Apply(state.LatestAnalysis);
+            var analysis = state.Domain.CreateMutation()
+                .SetEventSubscriptionRoutingMode(subscription, ParseRoutingMode(audienceKind))
+                .Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"Audience for subscription '{actionName}<-{eventTypeName}' set to '{audienceKind}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
@@ -2225,7 +2316,7 @@ public static class DomainAuthoringTool {
         [Description("Name of the consumer entity.")] string entityName,
         [Description("Name of the handler action.")] string actionName,
         [Description("Name of the consumed event type.")] string eventTypeName,
-        [Description("If true, also revert the action trigger back to Command.")] bool resetTrigger = false) {
+        [Description("Deprecated compatibility flag. Ignored because subscriptions are now canonical.")] bool resetTrigger = false) {
         try {
             var state = RequireSession(sessionId);
             var entity = state.Domain.RequireEntity(entityName);
@@ -2234,12 +2325,9 @@ public static class DomainAuthoringTool {
             var subscription = entity.EventSubscriptions.FirstOrDefault(s => ReferenceEquals(s.HandlerAction, action) && ReferenceEquals(s.EventType, eventType))
                 ?? throw new InvalidOperationException($"Event subscription for action '{actionName}' and event '{eventTypeName}' was not found on entity '{entityName}'.");
 
-            var mutation = state.Domain.CreateMutation().RemoveEventSubscription(entity, subscription);
-            if (resetTrigger) {
-                mutation.SetCommandTrigger(action);
-            }
-
-            var analysis = mutation.Apply(state.LatestAnalysis);
+            var analysis = state.Domain.CreateMutation()
+                .RemoveEventSubscription(entity, subscription)
+                .Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"Event subscription '{actionName}<-{eventTypeName}' removed from entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
@@ -2452,32 +2540,33 @@ public static class DomainAuthoringTool {
             .Select(static entity => {
                 var actions = entity.Actions
                     .OrderBy(static action => action.Name, StringComparer.Ordinal)
-                    .Select(static action => new ActionExportDto(
-                        Name: action.Name,
-                        Parameters: action.Parameters
-                            .Select(static p => new PropertyExportDto(p.Name, p.Type.Name, ToConstraintDtos(p.Constraints)))
-                            .ToArray(),
-                        PublishEventBindings: action.Effects.OfType<PublishEvent>()
-                            .SelectMany(static pe => pe.PropertyBindings
-                                .Select(kvp => new EventPropertyBindingExportDto(
-                                    EventTypeName: pe.Event.Name,
-                                    PropertyName: kvp.Key,
-                                    SourceKind: kvp.Value switch {
-                                        EventPropertyBindingSource.ActionParameter => "ActionParameter",
-                                        EventPropertyBindingSource.EntityProperty => "EntityProperty",
-                                        _ => "Unknown"
-                                    },
-                                    SourceName: kvp.Value switch {
-                                        EventPropertyBindingSource.ActionParameter ap => ap.ParameterName,
-                                        EventPropertyBindingSource.EntityProperty ep => ep.PropertyName,
-                                        _ => string.Empty
-                                    })))
-                            .ToArray(),
-                        Trigger: action.Trigger switch {
-                            ActionTrigger.Command => null,
-                            ActionTrigger.EventHandler handler => new ActionTriggerExportDto("EventHandler", handler.EventType.Name, handler.EventParameterName),
-                            _ => null
-                        }))
+                    .Select(action => {
+                        var subscription = entity.EventSubscriptions.FirstOrDefault(candidate => ReferenceEquals(candidate.HandlerAction, action));
+                        return new ActionExportDto(
+                            Name: action.Name,
+                            Parameters: action.Parameters
+                                .Select(static p => new PropertyExportDto(p.Name, p.Type.Name, ToConstraintDtos(p.Constraints)))
+                                .ToArray(),
+                            PublishEventBindings: action.Effects.OfType<PublishEvent>()
+                                .SelectMany(static pe => pe.PropertyBindings
+                                    .Select(kvp => new EventPropertyBindingExportDto(
+                                        EventTypeName: pe.Event.Name,
+                                        PropertyName: kvp.Key,
+                                        SourceKind: kvp.Value switch {
+                                            EventPropertyBindingSource.ActionParameter => "ActionParameter",
+                                            EventPropertyBindingSource.EntityProperty => "EntityProperty",
+                                            _ => "Unknown"
+                                        },
+                                        SourceName: kvp.Value switch {
+                                            EventPropertyBindingSource.ActionParameter ap => ap.ParameterName,
+                                            EventPropertyBindingSource.EntityProperty ep => ep.PropertyName,
+                                            _ => string.Empty
+                                        })))
+                                .ToArray(),
+                            Trigger: subscription is null
+                                ? null
+                                : new ActionTriggerExportDto("EventHandler", subscription.EventType.Name, subscription.EventParameterName));
+                    })
                     .ToArray();
 
                 var subscriptions = entity.EventSubscriptions
@@ -2485,6 +2574,8 @@ public static class DomainAuthoringTool {
                     .Select(static subscription => new EventSubscriptionExportDto(
                         EventTypeName: subscription.EventType.Name,
                         HandlerActionName: subscription.HandlerAction.Name,
+                        EventParameterName: subscription.EventParameterName,
+                        RoutingMode: subscription.RoutingMode.ToString(),
                         AudienceKind: subscription.Audience switch {
                             EventSubscriptionAudience.Broadcast => "Broadcast",
                             EventSubscriptionAudience.Correlated => "Correlated",

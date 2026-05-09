@@ -88,6 +88,8 @@ internal sealed class ContractImportTypeResolver {
                     _openApiResolved[schemaName] = resolved;
                     return resolved;
                 }
+
+                throw new InvalidOperationException($"OpenAPI schema reference '{refValue}' could not be resolved.");
             }
         }
 
@@ -98,7 +100,7 @@ internal sealed class ContractImportTypeResolver {
                 "boolean" => EnsurePrimitive("Boolean", TypeCategory.Boolean),
                 "integer" => EnsurePrimitive("Number", TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Primitive),
                 "number" => EnsurePrimitive("Number", TypeCategory.Numeric | TypeCategory.FloatingPoint | TypeCategory.Primitive),
-                "array" => EnsurePrimitive($"{NormalizeName(fallbackName)}Collection", TypeCategory.Structured | TypeCategory.Collection | TypeCategory.Primitive),
+                "array" => ResolveArraySchema(root, schema, fallbackName),
                 "object" => ResolveObjectSchema(root, schema, fallbackName),
                 _ => EnsurePrimitive("Text", TypeCategory.Text | TypeCategory.Primitive)
             };
@@ -138,6 +140,14 @@ internal sealed class ContractImportTypeResolver {
         }
 
         return entity;
+    }
+
+    private DomainType ResolveArraySchema(JsonElement root, JsonElement schema, string fallbackName) {
+        if (schema.TryGetProperty("items", out var items) && items.ValueKind is JsonValueKind.Object or JsonValueKind.Null) {
+            _ = ResolveOpenApiSchema(root, items, $"{NormalizeName(fallbackName)}Item");
+        }
+
+        return EnsurePrimitive($"{NormalizeName(fallbackName)}Collection", TypeCategory.Structured | TypeCategory.Primitive);
     }
 
     private DomainType ResolveStringSchema(JsonElement schema) {

@@ -138,6 +138,33 @@ public class ContractIntegrationTests {
     }
 
     [Test]
+    public async Task ContractBinding_IncompatiblePayloadType_ReportsError() {
+        var domain = new Domain("Support");
+        var entity = new Entity(domain, "Ticket");
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        var numberType = new Primitive(domain, "number", TypeCategory.Numeric | TypeCategory.Primitive);
+        var action = new DomainAction(domain, "SyncTicket", entity);
+        var payload = new Property(domain, "payload", stringType);
+        var contract = new ImportedContract(domain, "CrmContract", ContractSourceKind.ExternalProvider, "crm://contracts/ticket", "v1");
+        var endpoint = new ContractEndpoint(domain, "UpdateTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, numberType);
+        var binding = new ContractBinding(domain, "CrmTicketSync", contract, endpoint, action, "payload");
+
+        var analysis = domain.CreateMutation()
+            .AddType(stringType)
+            .AddType(numberType)
+            .AddType(entity)
+            .AddAction(entity, action)
+            .AddParameter(action, payload)
+            .AddImportedContract(contract)
+            .AddContractEndpoint(contract, endpoint)
+            .AddContractBinding(binding)
+            .Apply();
+
+        var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.ContractIntegration);
+        await Assert.That(diagnostic).IsNotNull();
+    }
+
+    [Test]
     public async Task ContractBinding_FakeOpenApiProvider_WiredThroughDomain_DoesNotReportError() {
         var domain = new Domain("Support");
         SeedCorePrimitiveTypes(domain);

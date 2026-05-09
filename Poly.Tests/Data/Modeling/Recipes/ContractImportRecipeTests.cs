@@ -170,6 +170,99 @@ public class ContractImportRecipeTests {
             .Throws<InvalidOperationException>();
     }
 
+    [Test]
+    public async Task OpenApiContractImport_UnresolvedComponentReference_Throws() {
+        var domain = new Domain("Support");
+        domain.AddType(new Primitive(domain, "Text", TypeCategory.Text | TypeCategory.Primitive));
+        domain.AddType(new Primitive(domain, "Boolean", TypeCategory.Boolean));
+        domain.AddType(new Primitive(domain, "Number", TypeCategory.Numeric | TypeCategory.Primitive));
+
+        var recipe = new OpenApiContractImportRecipe();
+        var source = new ContractImportSource.OpenApiJson(
+            """
+            {
+              "openapi": "3.0.3",
+              "info": { "title": "BrokenApi" },
+              "paths": {
+                "/broken": {
+                  "post": {
+                    "operationId": "createBroken",
+                    "requestBody": {
+                      "content": {
+                        "application/json": {
+                          "schema": { "$ref": "#/components/schemas/MissingSchema" }
+                        }
+                      }
+                    },
+                    "responses": {
+                      "200": { "description": "ok" }
+                    }
+                  }
+                }
+              },
+              "components": { "schemas": { } }
+            }
+            """,
+            "v1");
+
+        await Assert.That(() => recipe.ImportInto(domain, source, new ContractImportOptions { ContractName = "BrokenContract" }))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task OpenApiContractImport_ArraySchema_UsesStructuredModeling() {
+        var domain = new Domain("Support");
+        domain.AddType(new Primitive(domain, "Text", TypeCategory.Text | TypeCategory.Primitive));
+        domain.AddType(new Primitive(domain, "Boolean", TypeCategory.Boolean));
+        domain.AddType(new Primitive(domain, "Number", TypeCategory.Numeric | TypeCategory.Primitive));
+
+        var recipe = new OpenApiContractImportRecipe();
+        var source = new ContractImportSource.OpenApiJson(
+            """
+            {
+              "openapi": "3.0.3",
+              "info": { "title": "ArrayApi" },
+              "paths": {
+                "/items": {
+                  "get": {
+                    "operationId": "listItems",
+                    "responses": {
+                      "200": {
+                        "description": "ok",
+                        "content": {
+                          "application/json": {
+                            "schema": {
+                              "type": "array",
+                              "items": { "$ref": "#/components/schemas/Item" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "components": {
+                "schemas": {
+                  "Item": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "integer", "format": "int64" }
+                    }
+                  }
+                }
+              }
+            }
+            """,
+            "v1");
+
+        var result = recipe.ImportInto(domain, source, new ContractImportOptions { ContractName = "ArrayContract" });
+
+        await Assert.That(result.Analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        await Assert.That(domain.FindType("listItemsPayloadCollection")).IsNotNull();
+        await Assert.That(domain.FindType("Item")).IsTypeOf<Entity>();
+    }
+
     public interface SampleClrContract {
         CreateTicketResult CreateTicket(CreateTicketRequest request);
         event EventHandler<TicketCreatedEventArgs> TicketCreated;

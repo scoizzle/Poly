@@ -34,6 +34,16 @@ public static class DomainQueryExtensions {
         return domain.Relationships;
     }
 
+    public static IEnumerable<ImportedContract> GetAvailableImportedContracts(this Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+        return domain.Objects.OfType<ImportedContract>();
+    }
+
+    public static IEnumerable<ContractBinding> GetAvailableContractBindings(this Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+        return domain.Objects.OfType<ContractBinding>();
+    }
+
     public static Entity? FindEntity(this Domain domain, string name) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(name);
@@ -98,6 +108,26 @@ public static class DomainQueryExtensions {
 
     public static Relationship RequireRelationship(this Domain domain, string name) {
         return domain.FindRelationship(name) ?? throw new InvalidOperationException($"Relationship '{name}' was not found in domain '{domain.Name}'.");
+    }
+
+    public static ImportedContract? FindImportedContract(this Domain domain, string name) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(name);
+        return domain.GetAvailableImportedContracts().FirstOrDefault(contract => string.Equals(contract.Name, name, StringComparison.Ordinal));
+    }
+
+    public static ImportedContract RequireImportedContract(this Domain domain, string name) {
+        return domain.FindImportedContract(name) ?? throw new InvalidOperationException($"Imported contract '{name}' was not found in domain '{domain.Name}'.");
+    }
+
+    public static ContractBinding? FindContractBinding(this Domain domain, string name) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(name);
+        return domain.GetAvailableContractBindings().FirstOrDefault(binding => string.Equals(binding.Name, name, StringComparison.Ordinal));
+    }
+
+    public static ContractBinding RequireContractBinding(this Domain domain, string name) {
+        return domain.FindContractBinding(name) ?? throw new InvalidOperationException($"Contract binding '{name}' was not found in domain '{domain.Name}'.");
     }
 
     public static IEnumerable<Relationship> FindRelationshipsBySource(this Domain domain, DomainType source) {

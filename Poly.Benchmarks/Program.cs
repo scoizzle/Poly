@@ -12,17 +12,28 @@ var libraryDomainOption = new Option<bool>("--library-domain") {
     Description = "Test the Library Management System domain."
 };
 
+var ecommerceDomainOption = new Option<bool>("--ecommerce-domain") {
+    Description = "Test the E-commerce domain with imported OpenAPI contract wiring."
+};
+
 var rootCommand = new RootCommand("Interactive domain modeling workbench") {
     domainNameOption,
-    libraryDomainOption
+    libraryDomainOption,
+    ecommerceDomainOption
 };
 
 rootCommand.SetAction(parseResult => {
     var domainName = parseResult.GetValue(domainNameOption) ?? "Interactive Domain";
     var testLibraryDomain = parseResult.GetValue(libraryDomainOption);
+    var testECommerceDomain = parseResult.GetValue(ecommerceDomainOption);
 
     if (testLibraryDomain) {
         TestLibraryDomain.Run();
+        return 0;
+    }
+
+    if (testECommerceDomain) {
+        TestECommerceDomain.Run();
         return 0;
     }
 

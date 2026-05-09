@@ -26,4 +26,5 @@ internal static class DomainModelDiagnosticCodes {
     public const string ConstraintSatisfiability = "DMCST002";
     public const string RuleCoverage = "DMCOV001";
     public const string DiagnosticDrift = "DMQAL001";
+    public const string ContractIntegration = "DMCON001";
 }

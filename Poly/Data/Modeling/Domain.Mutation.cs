@@ -43,6 +43,18 @@ public sealed partial record Domain {
         public Mutation RemoveRelationship(Relationship relationship) =>
             AddStep(new RemoveRelationshipCommand(Domain, relationship));
 
+        public Mutation AddImportedContract(ImportedContract contract) =>
+            AddStep(new AddImportedContractCommand(Domain, contract));
+
+        public Mutation RemoveImportedContract(ImportedContract contract) =>
+            AddStep(new RemoveImportedContractCommand(Domain, contract));
+
+        public Mutation AddContractBinding(ContractBinding binding) =>
+            AddStep(new AddContractBindingCommand(Domain, binding));
+
+        public Mutation RemoveContractBinding(ContractBinding binding) =>
+            AddStep(new RemoveContractBindingCommand(Domain, binding));
+
         // ── Entity ───────────────────────────────────────────────────────────
 
         public Mutation AddProperty(Entity entity, Property property) =>
@@ -190,6 +202,18 @@ public sealed partial record Domain {
 
         public Mutation RemovePolicy(Action action, Policy policy) =>
             AddStep(new Action.RemovePolicyCommand(action, policy));
+
+        public Mutation AddContractEndpoint(ImportedContract contract, ContractEndpoint endpoint) =>
+            AddStep(new ImportedContract.AddEndpointCommand(contract, endpoint));
+
+        public Mutation RemoveContractEndpoint(ImportedContract contract, ContractEndpoint endpoint) =>
+            AddStep(new ImportedContract.RemoveEndpointCommand(contract, endpoint));
+
+        public Mutation AddContractFieldMap(ContractBinding binding, ContractFieldMap map) =>
+            AddStep(new ContractBinding.AddFieldMapCommand(binding, map));
+
+        public Mutation RemoveContractFieldMap(ContractBinding binding, ContractFieldMap map) =>
+            AddStep(new ContractBinding.RemoveFieldMapCommand(binding, map));
 
         // ── Actor ────────────────────────────────────────────────────────────
 

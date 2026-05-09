@@ -460,6 +460,30 @@ public class DomainModelDiagnosticContractTests {
         await Assert.That(diagnostic).IsNotNull();
     }
 
+    [Test]
+    public async Task ContractIntegrationAnalyzer_MissingBindingParameter_UsesExpectedCodeAndMessageFragment() {
+        var domain = new Domain("Support");
+        var entity = new Entity(domain, "Ticket");
+        var stringType = new Primitive(domain, "string", TypeCategory.Text);
+        var action = new DomainAction(domain, "SyncTicket", entity);
+        var contract = new ImportedContract(domain, "CrmContract", ContractSourceKind.ExternalProvider, "crm://contracts/ticket", "v1");
+        var endpoint = new ContractEndpoint(domain, "UpdateTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, stringType);
+        var binding = new ContractBinding(domain, "CrmTicketSync", contract, endpoint, action, "payload");
+
+        new Domain.AddTypeCommand(domain, stringType).Apply();
+        new Domain.AddTypeCommand(domain, entity).Apply();
+        new Entity.AddActionCommand(entity, action).Apply();
+        new Domain.AddImportedContractCommand(domain, contract).Apply();
+        new ImportedContract.AddEndpointCommand(contract, endpoint).Apply();
+        new Domain.AddContractBindingCommand(domain, binding).Apply();
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.ContractIntegration);
+
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Message).Contains(DomainModelDiagnosticContracts.Contract.IntegrationFragment);
+    }
+
     private sealed record UnsupportedConstraint : Constraint {
         public TypeCategory ApplicableCategories => TypeCategory.None;
     }

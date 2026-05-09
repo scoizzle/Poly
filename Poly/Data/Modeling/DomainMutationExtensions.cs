@@ -18,6 +18,18 @@ public static class DomainMutationExtensions {
     public static AnalysisResult AddRelationship(this Domain domain, Relationship relationship) =>
         domain.CreateMutation().AddRelationship(relationship).Apply();
 
+    public static AnalysisResult AddImportedContract(this Domain domain, ImportedContract contract) =>
+        domain.CreateMutation().AddImportedContract(contract).Apply();
+
+    public static AnalysisResult RemoveImportedContract(this Domain domain, ImportedContract contract) =>
+        domain.CreateMutation().RemoveImportedContract(contract).Apply();
+
+    public static AnalysisResult AddContractBinding(this Domain domain, ContractBinding binding) =>
+        domain.CreateMutation().AddContractBinding(binding).Apply();
+
+    public static AnalysisResult RemoveContractBinding(this Domain domain, ContractBinding binding) =>
+        domain.CreateMutation().RemoveContractBinding(binding).Apply();
+
     // ── Entity ───────────────────────────────────────────────────────────────
 
     public static AnalysisResult AddProperty(this Entity entity, Property property) =>
@@ -163,6 +175,18 @@ public static class DomainMutationExtensions {
 
     public static AnalysisResult SetEventParameter(this EventSubscription subscription, string eventParameterName) =>
         subscription.Domain.CreateMutation().SetEventSubscriptionEventParameter(subscription, eventParameterName).Apply();
+
+    public static AnalysisResult AddEndpoint(this ImportedContract contract, ContractEndpoint endpoint) =>
+        contract.Domain.CreateMutation().AddContractEndpoint(contract, endpoint).Apply();
+
+    public static AnalysisResult RemoveEndpoint(this ImportedContract contract, ContractEndpoint endpoint) =>
+        contract.Domain.CreateMutation().RemoveContractEndpoint(contract, endpoint).Apply();
+
+    public static AnalysisResult AddFieldMap(this ContractBinding binding, ContractFieldMap map) =>
+        binding.Domain.CreateMutation().AddContractFieldMap(binding, map).Apply();
+
+    public static AnalysisResult RemoveFieldMap(this ContractBinding binding, ContractFieldMap map) =>
+        binding.Domain.CreateMutation().RemoveContractFieldMap(binding, map).Apply();
 
     public static AnalysisResult AddComment(this DomainObject target, string comment) =>
         target.Domain.CreateMutation().AddComment(target, comment).Apply();

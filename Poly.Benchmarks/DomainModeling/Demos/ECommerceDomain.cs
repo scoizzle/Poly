@@ -3,6 +3,8 @@ using System.Linq;
 
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Effects;
+using Poly.Data.Modeling.Recipes.Contracts;
+using Poly.Data.Modeling.Recipes.Contracts.OpenApi;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Introspection;
@@ -20,6 +22,7 @@ internal static class ECommerceDomain {
         CreateStages(domain);
         CreateEvents(domain);
         CreateActions(domain);
+        IntegrateFakeShippingProviderContract(domain);
         CreateRelationships(domain);
         CreatePolicies(domain);
 
@@ -338,6 +341,76 @@ internal static class ECommerceDomain {
             InitialStage = null
         });
         orderItem.AddAction(addOrderItem);
+    }
+
+    private static void IntegrateFakeShippingProviderContract(Domain domain) {
+        const string fakeShippingOpenApi = """
+            {
+              "openapi": "3.0.3",
+              "info": { "title": "FakeShippingProvider" },
+              "servers": [{ "url": "https://api.fake-shipping.local" }],
+              "paths": {
+                "/shipments": {
+                  "post": {
+                    "operationId": "createShipment",
+                    "requestBody": {
+                      "required": true,
+                      "content": {
+                        "application/json": {
+                          "schema": { "$ref": "#/components/schemas/CreateShipmentRequest" }
+                        }
+                      }
+                    },
+                    "responses": {
+                      "200": { "description": "ok" }
+                    }
+                  }
+                }
+              },
+              "components": {
+                "schemas": {
+                  "CreateShipmentRequest": {
+                    "type": "object",
+                    "properties": {
+                      "orderId": { "type": "string", "format": "uuid" },
+                      "postalCode": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+            """;
+
+        var importer = new OpenApiContractImportRecipe();
+        var importResult = importer.ImportInto(
+            domain,
+            new ContractImportSource.OpenApiJson(fakeShippingOpenApi, "v1"),
+            new ContractImportOptions {
+                ContractName = "FakeShippingContract",
+                DefaultDirection = ContractEndpointDirection.Inbound
+            });
+
+        var shipment = domain.RequireEntity("Shipment");
+        var createShipment = shipment.RequireAction("CreateShipment");
+        var payloadType = domain.RequireType("CreateShipmentRequest");
+        var payloadParameter = new Property(domain, "CarrierRequest", payloadType);
+
+        var contract = domain.RequireImportedContract("FakeShippingContract");
+        var endpoint = contract.Endpoints.First(ep => ep.Name == "createShipment");
+        var binding = new ContractBinding(
+            domain,
+            "FakeShippingCreateShipmentBinding",
+            contract,
+            endpoint,
+            createShipment,
+            payloadParameter.Name);
+
+        _ = domain.CreateMutation()
+            .AddParameter(createShipment, payloadParameter)
+            .AddContractBinding(binding)
+            .AddContractFieldMap(binding, new ContractFieldMap(domain, "OrderIdFieldMap", "orderId", "OrderId"))
+            .AddContractFieldMap(binding, new ContractFieldMap(domain, "PostalCodeFieldMap", "postalCode", "ShippingAddress"))
+            .Apply(importResult.Analysis);
     }
 
     private static void CreateRelationships(Domain domain) {

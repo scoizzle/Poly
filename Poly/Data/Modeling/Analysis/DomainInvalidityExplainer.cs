@@ -42,6 +42,7 @@ public static class DomainInvalidityExplainer {
         DomainModelDiagnosticCodes.ConstraintSatisfiability => "Adjust constraint bounds/combinations so at least one value can satisfy the property contract.",
         DomainModelDiagnosticCodes.RuleCoverage => "Ensure mutation paths explicitly satisfy required property constraints.",
         DomainModelDiagnosticCodes.DiagnosticDrift => "Keep diagnostic code catalog, analyzer output, and contract tests aligned.",
+        DomainModelDiagnosticCodes.ContractIntegration => "Align imported contract endpoints and local action parameters so contract bindings are type-safe and resolvable.",
         _ when message.Contains("Duplicate", StringComparison.Ordinal) => "Rename duplicates so each sibling member name is unique.",
         _ => "Review this diagnostic and adjust the referenced node configuration to satisfy analyzer invariants."
     };

@@ -50,4 +50,8 @@ internal static class DomainModelDiagnosticContracts {
     internal static class Quality {
         public const string DriftFragment = "drift";
     }
+
+    internal static class Contract {
+        public const string IntegrationFragment = "Contract binding";
+    }
 }

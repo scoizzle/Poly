@@ -524,7 +524,7 @@ public class ActionAndEventMutationTests {
 
         var mutation = domain.CreateMutation();
         _ = mutation.AddType(entity).AddType(note).AddAction(entity, action);
-        _ = mutation.AddEffect(action, new CreateEntityInstance(domain) { EntityType = note, InitialStage = wrongStage });
+        _ = mutation.AddEffect(action, new CreateEntityInstance(domain, note, wrongStage));
         var result = mutation.Apply();
         var error = result.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Wrong"));
         await Assert.That(error is not null).IsTrue();

@@ -178,10 +178,7 @@ internal static class InteractiveDomainConsole {
 
             var addNoteAction = new DomainAction(domain, "AddNote", supportCase);
             addNoteAction.AddParameter(new Property(domain, "NoteText", stringType));
-            addNoteAction.AddEffect(new CreateEntityInstance(domain) {
-                EntityType = note,
-                InitialStage = note.RequireStage("Draft")
-            });
+            addNoteAction.AddEffect(new CreateEntityInstance(domain, note, note.RequireStage("Draft")));
 
             supportCase.AddAction(addNoteAction);
             inProgressStage.AddAction(addNoteAction);
@@ -667,10 +664,7 @@ internal static class InteractiveDomainConsole {
             ? null
             : ChooseOptional("Choose initial stage (optional)", entityType.Stages.OrderBy(stage => stage.Name).ToArray());
 
-        action.AddEffect(new CreateEntityInstance(domain) {
-            EntityType = entityType,
-            InitialStage = initialStage
-        });
+        action.AddEffect(new CreateEntityInstance(domain, entityType, initialStage));
 
         Console.WriteLine($"Added create entity instance effect for '{entityType.Name}'.");
     }

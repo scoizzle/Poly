@@ -45,9 +45,8 @@ public class ConstraintPropagationAnalyzerTests {
         MutationApply.AddAction(entity, outerAction);
         MutationApply.AddParameter(outerAction, outerBookParam);
 
-        var createEffect = new CreateEntityInstance(domain) { EntityType = entity };
+        var createEffect = new CreateEntityInstance(domain, entity);
         MutationApply.AddEffect(outerAction, createEffect);
-        createEffect.InitializeResult();
 
         var invokeEffect = new InvokeAction(domain) { TargetAction = innerAction };
         MutationApply.AddEffect(outerAction, invokeEffect);
@@ -84,18 +83,16 @@ public class ConstraintPropagationAnalyzerTests {
         // ActionA invokes ActionB
         var invokeB = new InvokeAction(domain) { TargetAction = actionB };
         MutationApply.AddEffect(actionA, invokeB);
-        var createForB = new CreateEntityInstance(domain) { EntityType = entity };
+        var createForB = new CreateEntityInstance(domain, entity);
         MutationApply.AddEffect(actionA, createForB);
-        createForB.InitializeResult();
-        invokeB.BindParameterFrom("item", createForB, "entity");
+        invokeB.BindParameterFrom("item", createForB, CreateEntityInstance.ResultParameterName);
 
         // ActionB invokes ActionA (cycle)
         var invokeA = new InvokeAction(domain) { TargetAction = actionA };
         MutationApply.AddEffect(actionB, invokeA);
-        var createForA = new CreateEntityInstance(domain) { EntityType = entity };
+        var createForA = new CreateEntityInstance(domain, entity);
         MutationApply.AddEffect(actionB, createForA);
-        createForA.InitializeResult();
-        invokeA.BindParameterFrom("item", createForA, "entity");
+        invokeA.BindParameterFrom("item", createForA, CreateEntityInstance.ResultParameterName);
 
         // Run analysis - should complete without infinite recursion
         var analyzer = new DomainModelAnalyzer();
@@ -136,10 +133,9 @@ public class ConstraintPropagationAnalyzerTests {
 
         var invokeC = new InvokeAction(domain) { TargetAction = actionC };
         MutationApply.AddEffect(actionB, invokeC);
-        var createForC = new CreateEntityInstance(domain) { EntityType = entity };
+        var createForC = new CreateEntityInstance(domain, entity);
         MutationApply.AddEffect(actionB, createForC);
-        createForC.InitializeResult();
-        invokeC.BindParameterFrom("doc", createForC, "entity");
+        invokeC.BindParameterFrom("doc", createForC, CreateEntityInstance.ResultParameterName);
 
         // Outermost action A - invokes B
         var actionA = new DomainAction(domain, "HandleDocument", entity);
@@ -149,10 +145,9 @@ public class ConstraintPropagationAnalyzerTests {
 
         var invokeB = new InvokeAction(domain) { TargetAction = actionB };
         MutationApply.AddEffect(actionA, invokeB);
-        var createForB = new CreateEntityInstance(domain) { EntityType = entity };
+        var createForB = new CreateEntityInstance(domain, entity);
         MutationApply.AddEffect(actionA, createForB);
-        createForB.InitializeResult();
-        invokeB.BindParameterFrom("doc", createForB, "entity");
+        invokeB.BindParameterFrom("doc", createForB, CreateEntityInstance.ResultParameterName);
 
         // Run analysis
         var analyzer = new DomainModelAnalyzer();

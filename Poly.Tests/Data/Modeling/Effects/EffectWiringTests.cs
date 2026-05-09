@@ -124,21 +124,17 @@ public class EffectWiringTests {
     public async Task CreateEntityInstance_InitializeResult_ProducesEntityOutput() {
         var domain = CreateDomain();
         var entity = CreateEntity(domain, "Person");
-        var effect = new CreateEntityInstance(domain) { EntityType = entity };
+        var effect = new CreateEntityInstance(domain, entity);
 
-        effect.InitializeResult();
-
-        await Assert.That(effect.Result.HasOutput("entity")).IsTrue();
-        await Assert.That(effect.Result.Outputs["entity"]).IsEqualTo(entity);
+        await Assert.That(effect.Result.HasOutput(CreateEntityInstance.ResultParameterName)).IsTrue();
+        await Assert.That(effect.Result.Outputs[CreateEntityInstance.ResultParameterName]).IsEqualTo(entity);
     }
 
     [Test]
     public async Task CreateEntityInstance_InitializeResult_DoesNotProduceInitialStageByDefault() {
         var domain = CreateDomain();
         var entity = CreateEntity(domain, "Person");
-        var effect = new CreateEntityInstance(domain) { EntityType = entity };
-
-        effect.InitializeResult();
+        var effect = new CreateEntityInstance(domain, entity);
 
         await Assert.That(effect.Result.HasOutput("initialStage")).IsFalse();
     }

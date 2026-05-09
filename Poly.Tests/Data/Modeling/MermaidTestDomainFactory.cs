@@ -103,10 +103,7 @@ internal static class MermaidTestDomainFactory {
         mutation.AddRelationship(caseNotes);
         mutation.AddEntityRelationship(supportCase, caseNotes);
 
-        mutation.AddEffect(addNoteAction, new CreateEntityInstance(domain) {
-            EntityType = note,
-            InitialStage = noteDraftStage
-        });
+        mutation.AddEffect(addNoteAction, new CreateEntityInstance(domain, note, noteDraftStage));
 
         var customerNotes = new Relationship(domain, "CustomerNotes", customer, note, RelationshipCardinality.OneToMany, false);
 

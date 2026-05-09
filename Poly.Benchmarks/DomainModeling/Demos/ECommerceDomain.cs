@@ -336,10 +336,7 @@ internal static class ECommerceDomain {
         product.AddAction(updateStock);
 
         var addOrderItem = new DomainAction(domain, "AddOrderItem", orderItem);
-        addOrderItem.AddEffect(new CreateEntityInstance(domain) {
-            EntityType = orderItem,
-            InitialStage = null
-        });
+        addOrderItem.AddEffect(new CreateEntityInstance(domain, orderItem, null));
         orderItem.AddAction(addOrderItem);
     }
 

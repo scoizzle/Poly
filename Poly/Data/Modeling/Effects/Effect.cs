@@ -15,6 +15,10 @@ namespace Poly.Data.Modeling.Effects;
 public abstract record Effect(Domain Domain) : DomainObject(Domain) {
     private readonly EffectResult _result = new();
 
+    protected Effect(Domain domain, Action<EffectResult> configureResults) : this(domain) {
+        configureResults?.Invoke(_result);
+    }
+
     /// <summary>
     /// Declares what this effect produces — like a function return type (named tuple).
     /// Use this to wire outputs to inputs of downstream effects.

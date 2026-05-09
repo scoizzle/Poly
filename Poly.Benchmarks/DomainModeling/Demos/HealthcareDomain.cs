@@ -187,10 +187,7 @@ internal static class HealthcareDomain {
         completeAction.AddEffect(new StageTransition(domain) { TargetStage = appointment.RequireStage("Completed") });
         var publishCompleted = new PublishEvent(domain) { Event = appointment.RequireEvent("AppointmentCompleted") };
         completeAction.AddEffect(publishCompleted);
-        completeAction.AddEffect(new CreateEntityInstance(domain) {
-            EntityType = medicalRecord,
-            InitialStage = medicalRecord.RequireStage("Draft")
-        });
+        completeAction.AddEffect(new CreateEntityInstance(domain, medicalRecord, appointment.RequireStage("Draft")));
         appointment.AddAction(completeAction);
         appointment.RequireStage("InProgress").AddAction(completeAction);
 

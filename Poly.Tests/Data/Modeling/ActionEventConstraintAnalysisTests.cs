@@ -149,7 +149,7 @@ public class ActionEventConstraintAnalysisTests {
         var @event = new Event(domain, "TicketCreated");
         var handler = new DomainAction(domain, "HandleCreated", consumer);
         var evtParam = new Property(domain, "evt", @event);
-        var create = new CreateEntityInstance(domain) { EntityType = consumer };
+        var create = new CreateEntityInstance(domain, consumer);
         var subscription = new EventSubscription(domain, consumer, @event, handler, "evt");
 
         domain.CreateMutation()

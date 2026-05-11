@@ -13,7 +13,8 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     private readonly PropertyInfo _propertyInfo;
     private readonly IEnumerable<ClrParameter>? _parameters;
     private readonly string _name;
-    private readonly bool _isStatic;
+    private readonly LifetimeModifier _lifetimeModifier;
+    private readonly AccessModifier _accessModifier;
 
     public ClrTypeProperty(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter>? parameters, PropertyInfo propertyInfo) {
         ArgumentNullException.ThrowIfNull(memberType);
@@ -25,8 +26,11 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
         _parameters = parameters;
         _propertyInfo = propertyInfo;
         _name = propertyInfo.Name;
-        _isStatic = (propertyInfo.GetGetMethod(nonPublic: true)?.IsStatic ?? false) ||
-                    (propertyInfo.GetSetMethod(nonPublic: true)?.IsStatic ?? false);
+        _lifetimeModifier = propertyInfo.GetGetMethod(nonPublic: true)?.IsStatic == true ||
+                            propertyInfo.GetSetMethod(nonPublic: true)?.IsStatic == true
+            ? LifetimeModifier.Static
+            : LifetimeModifier.Instance;
+        _accessModifier = ClrAccessModifierResolver.Resolve(propertyInfo);
     }
 
     /// <summary>
@@ -55,9 +59,14 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     public PropertyInfo PropertyInfo => _propertyInfo;
 
     /// <summary>
+    /// Gets the property visibility.
+    /// </summary>
+    public override AccessModifier AccessModifier => _accessModifier;
+
+    /// <summary>
     /// Gets whether this property's getter or setter is static.
     /// </summary>
-    public override bool IsStatic => _isStatic;
+    public override LifetimeModifier LifetimeModifier => _lifetimeModifier;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}{(_parameters is null ? string.Empty : $"[{string.Join(", ", _parameters)}]")}";
 }

@@ -29,7 +29,8 @@ internal sealed class ClrTypeSyntheticProperty : ClrPropertyMember {
     public override ClrTypeDefinition DeclaringTypeDefinition => _declaringType;
     public override IEnumerable<ClrParameter>? Parameters => _parameters;
     public override string Name => _name;
-    public override bool IsStatic => _isStatic;
+    public override AccessModifier AccessModifier => AccessModifier.Public;
+    public override LifetimeModifier LifetimeModifier => _isStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}[{string.Join(", ", _parameters)}]";
 }

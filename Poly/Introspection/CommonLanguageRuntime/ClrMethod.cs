@@ -58,9 +58,14 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     public MethodInfo MethodInfo => _methodInfo;
 
     /// <summary>
+    /// Gets the method visibility.
+    /// </summary>
+    public override AccessModifier AccessModifier => ClrAccessModifierResolver.Resolve(_methodInfo);
+
+    /// <summary>
     /// Gets whether this method is static.
     /// </summary>
-    public override bool IsStatic => _methodInfo.IsStatic;
+    public override LifetimeModifier LifetimeModifier => _methodInfo.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}({string.Join(", ", _parameters)})";
 }

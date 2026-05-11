@@ -50,9 +50,14 @@ internal sealed class ClrConstructor : ClrTypeMember, ITypeConstructor {
     public ConstructorInfo ConstructorInfo => _constructorInfo;
 
     /// <summary>
+    /// Gets the constructor visibility.
+    /// </summary>
+    public override AccessModifier AccessModifier => ClrAccessModifierResolver.Resolve(_constructorInfo);
+
+    /// <summary>
     /// Gets whether this constructor is static.
     /// </summary>
-    public override bool IsStatic => _constructorInfo.IsStatic;
+    public override LifetimeModifier LifetimeModifier => _constructorInfo.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
 
     public override string ToString() => $"{DeclaringTypeDefinition}({string.Join(", ", _parameters)})";
 }

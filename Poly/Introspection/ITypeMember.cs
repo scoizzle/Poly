@@ -27,7 +27,12 @@ public interface ITypeMember {
     IEnumerable<IParameter>? Parameters { get; }
 
     /// <summary>
-    /// Gets whether this is a static member.
+    /// Gets the visibility of this member.
     /// </summary>
-    bool IsStatic { get; }
+    AccessModifier AccessModifier { get; }
+
+    /// <summary>
+    /// Gets whether this member is instance- or type-scoped.
+    /// </summary>
+    LifetimeModifier LifetimeModifier { get; }
 }

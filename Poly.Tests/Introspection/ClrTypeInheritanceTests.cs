@@ -31,10 +31,11 @@ public class ClrTypeInheritanceTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithProperty>();
 
-        var baseMembers = derivedType.Properties.WithName("BaseName");
+        var baseMembers = derivedType.Properties.WithName("BaseName").ToList();
 
         // Property inherited from base should be accessible
         await Assert.That(baseMembers.Count()).IsGreaterThan(0);
+        await Assert.That(baseMembers[0].DeclaringTypeDefinition.Name).IsEqualTo(nameof(BaseWithProperty));
     }
 
     [Test]
@@ -42,10 +43,11 @@ public class ClrTypeInheritanceTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithMethod>();
 
-        var baseMembers = derivedType.Methods.WithName("BaseMethod");
+        var baseMembers = derivedType.Methods.WithName("BaseMethod").ToList();
 
         // Method inherited from base should be accessible
         await Assert.That(baseMembers.Count()).IsGreaterThan(0);
+        await Assert.That(baseMembers[0].DeclaringTypeDefinition.Name).IsEqualTo(nameof(BaseWithMethod));
     }
 
     [Test]
@@ -95,10 +97,10 @@ public class ClrTypeInheritanceTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var derivedType = registry.GetTypeDefinition<DerivedWithOverride>();
 
-        var properties = derivedType.Properties.ToList();
-        var overriddenProp = properties.FirstOrDefault(p => p.Name == "OverridableProperty");
+        var overriddenProperties = derivedType.Properties.WithName("OverridableProperty").ToList();
 
-        await Assert.That(overriddenProp).IsNotNull();
+        await Assert.That(overriddenProperties).HasSingleItem();
+        await Assert.That(overriddenProperties[0].DeclaringTypeDefinition.Name).IsEqualTo(nameof(DerivedWithOverride));
     }
 
     [Test]
@@ -152,8 +154,19 @@ public class ClrTypeInheritanceTests {
 
         var members = derivedType.Properties.WithName("HiddenProperty").ToList();
 
-        // Should have the hidden member accessible
-        await Assert.That(members.Count()).IsGreaterThan(0);
+        await Assert.That(members).HasSingleItem();
+        await Assert.That(members[0].DeclaringTypeDefinition.Name).IsEqualTo(nameof(DerivedWithHiddenMember));
+    }
+
+    [Test]
+    public async Task HiddenField_PrefersDerived() {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var derivedType = registry.GetTypeDefinition<DerivedWithHiddenField>();
+
+        var members = derivedType.Fields.WithName("HiddenField").ToList();
+
+        await Assert.That(members).HasSingleItem();
+        await Assert.That(members[0].DeclaringTypeDefinition.Name).IsEqualTo(nameof(DerivedWithHiddenField));
     }
 
     // Helper classes for testing
@@ -254,5 +267,13 @@ public class ClrTypeInheritanceTests {
 
     public class DerivedWithHiddenMember : BaseWithHiddenMember {
         public new string HiddenProperty { get; set; } = "derived";
+    }
+
+    public class BaseWithHiddenField {
+        public string HiddenField = "base";
+    }
+
+    public class DerivedWithHiddenField : BaseWithHiddenField {
+        public new string HiddenField = "derived";
     }
 }

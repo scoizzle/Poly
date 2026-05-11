@@ -50,9 +50,14 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
 
 
     /// <summary>
-    /// Gets whether this field is static.
+    /// Gets the field visibility.
     /// </summary>
-    public override bool IsStatic => _fieldInfo.IsStatic;
+    public override AccessModifier AccessModifier => ClrAccessModifierResolver.Resolve(_fieldInfo);
+
+    /// <summary>
+    /// Gets whether this field is static or instance-scoped.
+    /// </summary>
+    public override LifetimeModifier LifetimeModifier => _fieldInfo.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

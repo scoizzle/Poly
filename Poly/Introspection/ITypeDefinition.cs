@@ -23,6 +23,11 @@ public interface ITypeDefinition {
     string? Namespace { get; }
 
     /// <summary>
+    /// Gets the visibility of the type.
+    /// </summary>
+    AccessModifier AccessModifier { get; }
+
+    /// <summary>
     /// Gets the fully-qualified name combining <see cref="Namespace"/> and <see cref="Name"/>.
     /// </summary>
     string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;

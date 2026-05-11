@@ -107,4 +107,52 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(samePropertyType).IsEqualTo(typeof(int));
         await Assert.That(mixedPropertyType).IsEqualTo(typeof(object));
     }
+
+    [Test]
+    public async Task Analyze_DerivedType_InheritsMembersMostDerivedFirst() {
+        var baseType = new TypeDefinitionNode(
+            "BaseWidget",
+            "Sample",
+            Properties: [
+                new PropertyDefinitionNode("BaseOnly", new PrimitiveTypeReference(PrimitiveType.String)),
+                new PropertyDefinitionNode("Shared", new PrimitiveTypeReference(PrimitiveType.String))
+            ],
+            Methods: [
+                new MethodDefinitionNode("BaseMethod", new PrimitiveTypeReference(PrimitiveType.String)),
+                new MethodDefinitionNode("SharedMethod", new PrimitiveTypeReference(PrimitiveType.String))
+            ],
+            Fields: [
+                new FieldDefinitionNode("BaseField", new PrimitiveTypeReference(PrimitiveType.String)),
+                new FieldDefinitionNode("SharedField", new PrimitiveTypeReference(PrimitiveType.String))
+            ]);
+        var subjectType = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Properties: [
+                new PropertyDefinitionNode("Shared", new PrimitiveTypeReference(PrimitiveType.String))
+            ],
+            Methods: [
+                new MethodDefinitionNode("SharedMethod", new PrimitiveTypeReference(PrimitiveType.String))
+            ],
+            Fields: [
+                new FieldDefinitionNode("SharedField", new PrimitiveTypeReference(PrimitiveType.String))
+            ],
+            BaseType: new NamedTypeReference("BaseWidget", "Sample"));
+
+        var analyzerPass = new TypeDefinitionNodeAnalyzer();
+        var analyzer = new AnalyzerBuilder(analyzerPass);
+        analyzer.AddAnalyzer(analyzerPass);
+
+        var analysis = analyzer.Build().Analyze(new Block([baseType, subjectType]));
+        var resolvedType = analysis.GetMetadata<TypeDefinitionMetadata>(subjectType)?.TypeDefinition;
+
+        await Assert.That(resolvedType).IsNotNull();
+        await Assert.That(resolvedType!.Properties.WithName("BaseOnly").Single().DeclaringTypeDefinition.FullName).IsEqualTo("Sample.BaseWidget");
+        await Assert.That(resolvedType.Methods.WithName("BaseMethod").Single().DeclaringTypeDefinition.FullName).IsEqualTo("Sample.BaseWidget");
+        await Assert.That(resolvedType.Fields.WithName("BaseField").Single().DeclaringTypeDefinition.FullName).IsEqualTo("Sample.BaseWidget");
+
+        await Assert.That(resolvedType.Properties.WithName("Shared").Single().DeclaringTypeDefinition.FullName).IsEqualTo("Sample.Widget");
+        await Assert.That(resolvedType.Methods.WithName("SharedMethod").Single().DeclaringTypeDefinition.FullName).IsEqualTo("Sample.Widget");
+        await Assert.That(resolvedType.Fields.WithName("SharedField").Single().DeclaringTypeDefinition.FullName).IsEqualTo("Sample.Widget");
+    }
 }

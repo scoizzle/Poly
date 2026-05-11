@@ -5,7 +5,9 @@ internal abstract class ClrTypeMember : ITypeMember {
     public abstract ClrTypeDefinition DeclaringTypeDefinition { get; }
     public abstract IEnumerable<ClrParameter>? Parameters { get; }
     public abstract string Name { get; }
-    public abstract bool IsStatic { get; }
+    public abstract AccessModifier AccessModifier { get; }
+    public abstract LifetimeModifier LifetimeModifier { get; }
+    public bool IsStatic => LifetimeModifier == LifetimeModifier.Static;
 
     ITypeDefinition ITypeMember.MemberTypeDefinition => MemberTypeDefinition;
     ITypeDefinition ITypeMember.DeclaringTypeDefinition => DeclaringTypeDefinition;

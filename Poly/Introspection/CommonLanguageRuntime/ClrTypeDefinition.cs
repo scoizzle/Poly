@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using System.Reflection;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
@@ -9,6 +8,12 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// Thread-safe for concurrent reads after construction.
 /// </summary>
 internal sealed class ClrTypeDefinition : IClrTypeDefinition {
+    private readonly Lazy<IReadOnlyList<ClrTypeField>> _fields;
+    private readonly Lazy<IReadOnlyList<ClrPropertyMember>> _properties;
+    private readonly Lazy<IReadOnlyList<ClrMethod>> _methods;
+    private readonly Lazy<IReadOnlyList<ClrConstructor>> _constructors;
+    private readonly Lazy<IReadOnlyList<ClrTypeMember>> _members;
+
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
@@ -17,25 +22,49 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         BaseType = GetBaseTypeResolver(type, provider);
         Interfaces = GetInterfacesResolver(type, provider);
         GenericParameters = BuildGenericParameterCollection(type, provider);
-        Fields = BuildFieldCollection(type, this, provider);
-        Properties = BuildPropertyCollection(type, this, provider);
-        Methods = BuildMethodCollection(type, this, provider);
-        Constructors = BuildConstructorCollection(type, this, provider);
-        Members = BuildMemberCollection(Fields, Properties, Methods);
+        var declaredFields = BuildDeclaredFieldCollection(type, this, provider);
+        var declaredProperties = BuildDeclaredPropertyCollection(type, this, provider);
+        var declaredMethods = BuildDeclaredMethodCollection(type, this, provider);
+
+        _fields = new(() => ComposeMemberCollection(
+            declaredFields,
+            BaseType,
+            Interfaces,
+            includeInterfaceMembers: false,
+            static typeDefinition => typeDefinition.Fields,
+            static field => $"{field.Name}|{field.LifetimeModifier}"));
+        _properties = new(() => ComposeMemberCollection(
+            declaredProperties,
+            BaseType,
+            Interfaces,
+            includeInterfaceMembers: RuntimeType.IsInterface,
+            static typeDefinition => typeDefinition.Properties,
+            GetPropertySignature,
+            property => !RuntimeType.IsArray || property.DeclaringTypeDefinition == this || property.Parameters is null));
+        _methods = new(() => ComposeMemberCollection(
+            declaredMethods,
+            BaseType,
+            Interfaces,
+            includeInterfaceMembers: RuntimeType.IsInterface,
+            static typeDefinition => typeDefinition.Methods,
+            GetMethodSignature));
+        _constructors = new(() => BuildConstructorCollection(type, this, provider));
+        _members = new(() => BuildMemberCollection(Fields, Properties, Methods));
     }
 
     public string Name => RuntimeType.Name;
     public string? Namespace => RuntimeType.Namespace;
     public string FullName => RuntimeType.FullName ?? RuntimeType.Name;
+    public AccessModifier AccessModifier => ClrAccessModifierResolver.Resolve(RuntimeType);
     public Type RuntimeType { get; }
     public ClrTypeDefinition? BaseType { get; }
-    public FrozenSet<ClrTypeDefinition> Interfaces { get; }
-    public FrozenSet<ClrParameter> GenericParameters { get; }
-    public FrozenSet<ClrTypeField> Fields { get; }
-    public FrozenSet<ClrPropertyMember> Properties { get; }
-    public FrozenSet<ClrMethod> Methods { get; }
-    public FrozenSet<ClrConstructor> Constructors { get; }
-    public FrozenSet<ClrTypeMember> Members { get; }
+    public IReadOnlyList<ClrTypeDefinition> Interfaces { get; }
+    public IReadOnlyList<ClrParameter> GenericParameters { get; }
+    public IReadOnlyList<ClrTypeField> Fields => _fields.Value;
+    public IReadOnlyList<ClrPropertyMember> Properties => _properties.Value;
+    public IReadOnlyList<ClrMethod> Methods => _methods.Value;
+    public IReadOnlyList<ClrConstructor> Constructors => _constructors.Value;
+    public IReadOnlyList<ClrTypeMember> Members => _members.Value;
 
     ITypeDefinition? ITypeDefinition.BaseType => BaseType;
     IEnumerable<ITypeDefinition> ITypeDefinition.Interfaces => Interfaces;
@@ -49,16 +78,17 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     public override string ToString() => FullName;
 
     private static readonly BindingFlags MemberSearchCriteria = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+    private static readonly BindingFlags DeclaredMemberSearchCriteria = MemberSearchCriteria | BindingFlags.DeclaredOnly;
 
-    private static FrozenSet<ClrTypeField> BuildFieldCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
+    private static IReadOnlyList<ClrTypeField> BuildDeclaredFieldCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(provider);
 
         var fields = type
-            .GetFields(MemberSearchCriteria)
+            .GetFields(DeclaredMemberSearchCriteria)
             .Select(ConstructMemberField)
-            .ToFrozenSet();
+            .ToArray();
 
         return fields;
 
@@ -73,15 +103,17 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     }
 
 
-    private static FrozenSet<ClrPropertyMember> BuildPropertyCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
+    private static IReadOnlyList<ClrPropertyMember> BuildDeclaredPropertyCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(provider);
 
-        var properties = type.GetProperties(MemberSearchCriteria)
+        var properties = type.GetProperties(DeclaredMemberSearchCriteria)
             .Select(ConstructMemberProperty)
             .Concat(BuildSyntheticProperties(type, declaringType, provider))
-            .ToFrozenSet();
+            .GroupBy(GetPropertySignature)
+            .Select(static group => group.First())
+            .ToArray();
 
         return properties;
 
@@ -124,16 +156,16 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     }
 
 
-    private static FrozenSet<ClrMethod> BuildMethodCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
+    private static IReadOnlyList<ClrMethod> BuildDeclaredMethodCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(provider);
 
         var methods = type
-            .GetMethods(MemberSearchCriteria)
+            .GetMethods(DeclaredMemberSearchCriteria)
             .Where(mi => !mi.IsSpecialName) // Exclude property accessors and other special methods
             .Select(ConstructMethod)
-            .ToFrozenSet();
+            .ToArray();
 
         return methods;
 
@@ -146,15 +178,15 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         }
     }
 
-    private static FrozenSet<ClrConstructor> BuildConstructorCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
+    private static IReadOnlyList<ClrConstructor> BuildConstructorCollection(Type type, ClrTypeDefinition declaringType, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(provider);
 
         var constructors = type
-            .GetConstructors(MemberSearchCriteria)
+            .GetConstructors(DeclaredMemberSearchCriteria)
             .Select(ConstructConstructor)
-            .ToFrozenSet();
+            .ToArray();
 
         return constructors;
 
@@ -181,7 +213,51 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         return new ClrParameter(parameterName, type, pi.Position, pi.IsOptional, pi.DefaultValue);
     }
 
-    private static FrozenSet<ClrTypeMember> BuildMemberCollection(
+    private static IReadOnlyList<TMember> ComposeMemberCollection<TMember>(
+        IEnumerable<TMember> declaredMembers,
+        ClrTypeDefinition? baseType,
+        IEnumerable<ClrTypeDefinition> interfaces,
+        bool includeInterfaceMembers,
+        Func<ClrTypeDefinition, IEnumerable<TMember>> inheritedMemberSelector,
+        Func<TMember, string> keySelector,
+        Func<TMember, bool>? inheritedMemberFilter = null
+    ) where TMember : ITypeMember {
+        ArgumentNullException.ThrowIfNull(declaredMembers);
+        ArgumentNullException.ThrowIfNull(interfaces);
+        ArgumentNullException.ThrowIfNull(inheritedMemberSelector);
+        ArgumentNullException.ThrowIfNull(keySelector);
+
+        var members = new List<TMember>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        AddMembers(declaredMembers);
+
+        if (baseType is not null) {
+            AddMembers(inheritedMemberSelector(baseType), inheritedMemberFilter);
+        }
+
+        if (includeInterfaceMembers) {
+            foreach (var implementedInterface in interfaces) {
+                AddMembers(inheritedMemberSelector(implementedInterface), inheritedMemberFilter);
+            }
+        }
+
+        return members;
+
+        void AddMembers(IEnumerable<TMember> source, Func<TMember, bool>? filter = null) {
+            foreach (var member in source) {
+                if (filter is not null && !filter(member)) {
+                    continue;
+                }
+
+                if (seen.Add(keySelector(member))) {
+                    members.Add(member);
+                }
+            }
+        }
+    }
+
+    private static IReadOnlyList<ClrTypeMember> BuildMemberCollection(
         IEnumerable<ClrTypeField> fields,
         IEnumerable<ClrPropertyMember> properties,
         IEnumerable<ClrMethod> methods
@@ -194,23 +270,14 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             .Concat(fields)
             .Concat(properties)
             .Concat(methods)
-            .ToFrozenSet();
+            .ToArray();
     }
 
-    private static FrozenDictionary<string, FrozenSet<ClrTypeMember>> BuildMemberDictionary(
-        IEnumerable<ClrTypeMember> members
-    ) {
-        ArgumentNullException.ThrowIfNull(members);
-        return members
-            .GroupBy(m => m.Name)
-            .ToFrozenDictionary(g => g.Key, g => g.ToFrozenSet());
-    }
-
-    private static FrozenSet<ClrParameter> BuildGenericParameterCollection(Type type, ClrTypeDefinitionRegistry provider) {
+    private static IReadOnlyList<ClrParameter> BuildGenericParameterCollection(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
-        if (!type.IsGenericType) return FrozenSet<ClrParameter>.Empty;
+        if (!type.IsGenericType) return [];
 
         var args = type.GetGenericArguments();
         Type[] namesSource;
@@ -228,7 +295,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             parameters.Add(new ClrParameter(paramName, lazyType, i, isOptional: false, defaultValue: null));
         }
 
-        return parameters.ToFrozenSet();
+        return parameters;
     }
 
     private static ClrTypeDefinition? GetBaseTypeResolver(Type type, ClrTypeDefinitionRegistry provider) {
@@ -243,12 +310,29 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
 
 
 
-    private static FrozenSet<ClrTypeDefinition> GetInterfacesResolver(Type type, ClrTypeDefinitionRegistry provider) {
+    private static IReadOnlyList<ClrTypeDefinition> GetInterfacesResolver(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
         var interfaces = type.GetInterfaces();
-        return interfaces.Select(provider.GetTypeDefinition).ToFrozenSet();
+        return interfaces.Select(provider.GetTypeDefinition).ToArray();
+    }
+
+    private static string GetMethodSignature(ClrMethod method) {
+        ArgumentNullException.ThrowIfNull(method);
+        return $"{method.Name}|{method.LifetimeModifier}|{GetParameterSignature(method.Parameters)}";
+    }
+
+    private static string GetPropertySignature(ClrPropertyMember property) {
+        ArgumentNullException.ThrowIfNull(property);
+        var propertyName = property.Name.EndsWith(".Item", StringComparison.Ordinal) ? "Item" : property.Name;
+        return $"{propertyName}|{property.LifetimeModifier}|{GetParameterSignature(property.Parameters)}";
+    }
+
+    private static string GetParameterSignature(IEnumerable<IParameter>? parameters) {
+        return parameters is null
+            ? string.Empty
+            : string.Join(",", parameters.Select(static parameter => parameter.ParameterTypeDefinition.FullName));
     }
 
     private static PrimitiveType? GetPrimitiveTypeId(Type type) {

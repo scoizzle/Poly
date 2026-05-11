@@ -130,6 +130,7 @@ public class TypeDefinitionProviderCollectionTests {
     private class MockTypeDefinition(string name) : ITypeDefinition {
         public string Name { get; } = name;
         public string? Namespace => null;
+        public AccessModifier AccessModifier => AccessModifier.Public;
         public IEnumerable<ITypeMember> Members => [];
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];

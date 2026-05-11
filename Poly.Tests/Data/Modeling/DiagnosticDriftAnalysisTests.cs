@@ -8,14 +8,17 @@ public class DiagnosticDriftAnalysisTests {
     [Test]
     public async Task DiagnosticCatalog_AllCodesRemainDocumentedInAnalyzerOrContracts() {
         var repositoryRoot = ResolveRepositoryRoot();
-        var explainerPath = Path.Combine(repositoryRoot, "Poly", "Data", "Modeling", "Analysis", "DomainInvalidityExplainer.cs");
+        var analysisDirectory = Path.Combine(repositoryRoot, "Poly", "Data", "Modeling", "Analysis");
         var contractPath = Path.Combine(repositoryRoot, "Poly.Tests", "Data", "Modeling", "DomainModelDiagnosticContractTests.cs");
         var qualityPath = Path.Combine(repositoryRoot, "Poly.Tests", "Data", "Modeling", "ActionEventConstraintAnalysisTests.cs");
 
-        var explainerSource = File.ReadAllText(explainerPath);
+        var analysisSource = string.Join(
+            "\n",
+            Directory.GetFiles(analysisDirectory, "*.cs", SearchOption.AllDirectories)
+                .Select(File.ReadAllText));
         var contractSource = File.ReadAllText(contractPath);
         var qualitySource = File.ReadAllText(qualityPath);
-        var combinedSource = $"{explainerSource}\n{contractSource}\n{qualitySource}";
+        var combinedSource = $"{analysisSource}\n{contractSource}\n{qualitySource}";
 
         var codeFields = typeof(DomainModelDiagnosticCodes)
             .GetFields(BindingFlags.Public | BindingFlags.Static)

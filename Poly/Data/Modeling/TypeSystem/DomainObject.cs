@@ -10,10 +10,12 @@ public abstract record DomainObject(Domain Domain) : Node {
     /// <summary>
     /// Appends a new comment/description to this domain object. Comments are append-only and preserve authoring history.
     /// </summary>
-    public void AddComment(string comment) {
+    internal void AddComment(string comment) {
         if (!string.IsNullOrWhiteSpace(comment))
             _comments.Add(comment);
     }
+
+    internal void RemoveCommentAt(int index) => _comments.RemoveAt(index);
 
     protected DomainObject() : this(default!) {
         if (this is Domain domain) {

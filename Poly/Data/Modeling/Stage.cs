@@ -20,6 +20,21 @@ public sealed partial record Stage : DomainMember {
 
     internal void AttachToEntity(Entity ownerEntity) {
         ArgumentNullException.ThrowIfNull(ownerEntity);
+        if (_ownerEntity is not null && !ReferenceEquals(_ownerEntity, ownerEntity)) {
+            throw new InvalidOperationException(
+                $"Stage '{Name}' is already attached to entity '{_ownerEntity.Name}' and cannot be attached to '{ownerEntity.Name}'.");
+        }
+
         _ownerEntity = ownerEntity;
+    }
+
+    internal void DetachFromEntity(Entity ownerEntity) {
+        ArgumentNullException.ThrowIfNull(ownerEntity);
+        if (!ReferenceEquals(_ownerEntity, ownerEntity)) {
+            throw new InvalidOperationException(
+                $"Stage '{Name}' is not attached to entity '{ownerEntity.Name}'.");
+        }
+
+        _ownerEntity = null;
     }
 }

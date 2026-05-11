@@ -24,22 +24,25 @@ internal sealed record DomainSessionState(
 internal static class DomainSessionStore {
     private const int MaxRevisionSnapshots = 64;
     private static readonly ConcurrentDictionary<string, DomainSessionState> Sessions = new(StringComparer.Ordinal);
+    private static readonly Lock StoreLock = new();
 
     public static (string SessionId, DomainSessionState State) Create(string domainName, string? preferredSessionId = null) {
-        var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)
-            ? Guid.NewGuid().ToString("N")
-            : preferredSessionId;
+        lock (StoreLock) {
+            var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)
+                ? Guid.NewGuid().ToString("N")
+                : preferredSessionId;
 
-        var domain = new Domain(domainName);
-        var bootstrap = domain.CreateMutation();
-        CanonicalBuiltInTypeCatalog.AddToMutation(bootstrap);
-        var initialAnalysis = bootstrap.Apply();
-        var snapshots = new Dictionary<long, DomainSnapshot> {
-            [0] = DomainDiffUtil.CaptureSnapshot(domain)
-        };
-        var state = new DomainSessionState(domain, LatestAnalysis: initialAnalysis, Revision: 0, RevisionSnapshots: snapshots);
-        Sessions[sessionId] = state;
-        return (sessionId, state);
+            var domain = new Domain(domainName);
+            var bootstrap = domain.CreateMutation();
+            CanonicalBuiltInTypeCatalog.AddToMutation(bootstrap);
+            var initialAnalysis = bootstrap.Apply();
+            var snapshots = new Dictionary<long, DomainSnapshot> {
+                [0] = DomainDiffUtil.CaptureSnapshot(domain)
+            };
+            var state = new DomainSessionState(domain, LatestAnalysis: initialAnalysis, Revision: 0, RevisionSnapshots: snapshots);
+            Sessions[sessionId] = state;
+            return (sessionId, state);
+        }
     }
 
     public static bool TryGet(string sessionId, out DomainSessionState session) {
@@ -60,24 +63,26 @@ internal static class DomainSessionStore {
             throw new InvalidOperationException("Cannot update session with invalid analysis result.");
         }
 
-        if (!Sessions.TryGetValue(sessionId, out var value)) {
-            throw new InvalidOperationException($"Session '{sessionId}' was not found.");
-        }
-
-        var nextRevision = value.Revision + 1;
-        var snapshots = new Dictionary<long, DomainSnapshot>(value.RevisionSnapshots) {
-            [nextRevision] = DomainDiffUtil.CaptureSnapshot(value.Domain)
-        };
-
-        if (snapshots.Count > MaxRevisionSnapshots) {
-            foreach (var revision in snapshots.Keys.OrderBy(static revision => revision).Take(snapshots.Count - MaxRevisionSnapshots).ToArray()) {
-                snapshots.Remove(revision);
+        lock (StoreLock) {
+            if (!Sessions.TryGetValue(sessionId, out var value)) {
+                throw new InvalidOperationException($"Session '{sessionId}' was not found.");
             }
-        }
 
-        var next = new DomainSessionState(value.Domain, analysis, nextRevision, snapshots);
-        Sessions[sessionId] = next;
-        return next.Revision;
+            var nextRevision = value.Revision + 1;
+            var snapshots = new Dictionary<long, DomainSnapshot>(value.RevisionSnapshots) {
+                [nextRevision] = DomainDiffUtil.CaptureSnapshot(value.Domain)
+            };
+
+            if (snapshots.Count > MaxRevisionSnapshots) {
+                foreach (var revision in snapshots.Keys.OrderBy(static revision => revision).Take(snapshots.Count - MaxRevisionSnapshots).ToArray()) {
+                    snapshots.Remove(revision);
+                }
+            }
+
+            var next = new DomainSessionState(value.Domain, analysis, nextRevision, snapshots);
+            Sessions[sessionId] = next;
+            return next.Revision;
+        }
     }
 
     public static bool TryGetRevisionSnapshot(string sessionId, long revision, out DomainSnapshot snapshot) {
@@ -272,18 +277,13 @@ public sealed record RelationshipDetailsDto(
     IReadOnlyCollection<string> Stages,
     IReadOnlyCollection<string> Policies);
 
-public sealed record DomainHealthDto(
+public sealed record DomainAnalysisDto(
     bool HasErrors,
     int ErrorCount,
     int WarningCount,
     TimeSpan TotalAnalysisTime,
     bool Incremental,
     IReadOnlyCollection<AnalyzerPassTelemetry> Passes);
-
-public sealed record DomainInvalidityDto(
-    int ErrorCount,
-    int WarningCount,
-    IReadOnlyCollection<NodeInvalidityNodeReport> Nodes);
 
 public sealed record DomainRevisionDiffDto(
     long FromRevision,
@@ -309,8 +309,7 @@ public sealed record MutationTraceDto(
 internal static class DomainAffordances {
     public static IReadOnlyCollection<DomainAffordance> SessionRoot() => [
         new("query:overview", nameof(DomainQueryTool.GetDomainOverview), new Dictionary<string, object?>(), "Get domain overview for the active session."),
-        new("query:health", nameof(DomainOperabilityTool.GetDomainHealth), new Dictionary<string, object?>(), "Get analyzer telemetry and diagnostic summary for the domain."),
-        new("query:invalidity", nameof(DomainOperabilityTool.ExplainInvalidDomain), new Dictionary<string, object?>(), "Get grouped invalidity reasons and hints by node."),
+        new("query:analysis", nameof(DomainOperabilityTool.GetDomainAnalysis), new Dictionary<string, object?>(), "Get analyzer telemetry and diagnostic summary for the committed domain."),
         new("query:revision-diff", nameof(DomainOperabilityTool.DiffDomainRevision), new Dictionary<string, object?>(), "Compare two stored domain revisions."),
         new("query:entities", nameof(DomainQueryTool.ListEntities), new Dictionary<string, object?>(), "List entities in the domain."),
         new("query:event-types", nameof(DomainQueryTool.ListEventTypes), new Dictionary<string, object?>(), "List event types in the domain."),
@@ -749,8 +748,8 @@ public static class DomainOperabilityTool {
     private const string CategoryInvalidArgument = "InvalidArgument";
     private const string CategoryAnalysis = "Analysis";
 
-    [McpServerTool, Description("Returns domain health including analyzer telemetry and diagnostic totals.")]
-    public static DomainQueryResponse<DomainHealthDto> GetDomainHealth(string sessionId) {
+    [McpServerTool, Description("Returns analyzer telemetry and diagnostic totals for the committed domain.")]
+    public static DomainQueryResponse<DomainAnalysisDto> GetDomainAnalysis(string sessionId) {
         try {
             var session = RequireSession(sessionId);
             var analyzer = new DomainModelAnalyzer();
@@ -761,7 +760,7 @@ public static class DomainOperabilityTool {
                 throw new InvalidOperationException($"Session '{sessionId}' was not found after analysis update.");
             }
 
-            var data = new DomainHealthDto(
+            var data = new DomainAnalysisDto(
                 HasErrors: run.HasErrors,
                 ErrorCount: run.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
                 WarningCount: run.Diagnostics.Count(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning),
@@ -769,9 +768,9 @@ public static class DomainOperabilityTool {
                 Incremental: run.Telemetry.Incremental,
                 Passes: run.Telemetry.Passes);
 
-            return new DomainQueryResponse<DomainHealthDto>(
+            return new DomainQueryResponse<DomainAnalysisDto>(
                 Success: true,
-                Message: "Domain health returned.",
+                Message: "Domain analysis returned.",
                 SessionId: sessionId,
                 Revision: updated.Revision,
                 Data: data,
@@ -779,35 +778,7 @@ public static class DomainOperabilityTool {
         }
         catch (Exception ex) {
             var (code, category) = ClassifyAnalysisFailure(ex);
-            return Fail<DomainHealthDto>(sessionId, ex, code, category);
-        }
-    }
-
-    [McpServerTool, Description("Explains invalid domain state by grouping diagnostics per node and attaching remediation hints.")]
-    public static DomainQueryResponse<DomainInvalidityDto> ExplainInvalidDomain(string sessionId) {
-        try {
-            var session = RequireSession(sessionId);
-            var analysis = session.LatestAnalysis ?? new DomainModelAnalyzer().Analyze(session.Domain);
-            _ = DomainSessionStore.UpdateAnalysis(sessionId, analysis);
-
-            if (!DomainSessionStore.TryGet(sessionId, out var updated)) {
-                throw new InvalidOperationException($"Session '{sessionId}' was not found after analysis update.");
-            }
-
-            var report = DomainInvalidityExplainer.Explain(analysis);
-            var data = new DomainInvalidityDto(report.ErrorCount, report.WarningCount, report.Nodes);
-
-            return new DomainQueryResponse<DomainInvalidityDto>(
-                Success: true,
-                Message: "Domain invalidity explanation returned.",
-                SessionId: sessionId,
-                Revision: updated.Revision,
-                Data: data,
-                Affordances: DomainAffordances.SessionScoped(sessionId));
-        }
-        catch (Exception ex) {
-            var (code, category) = ClassifyAnalysisFailure(ex);
-            return Fail<DomainInvalidityDto>(sessionId, ex, code, category);
+            return Fail<DomainAnalysisDto>(sessionId, ex, code, category);
         }
     }
 

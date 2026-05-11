@@ -53,6 +53,22 @@ public static class MutationApply {
 
     public static AnalysisResult AddEffect(Action action, Effect effect) => Apply(action.Domain, mutation => mutation.AddEffect(action, effect));
 
+    public static AnalysisResult AddEffect(Effects.Conditional conditional, Effect effect) => Apply(conditional.Domain, mutation => mutation.AddEffect(conditional, effect));
+
+    public static AnalysisResult AddEffect(Effects.Composite composite, Effect effect) => Apply(composite.Domain, mutation => mutation.AddEffect(composite, effect));
+
+    public static AnalysisResult SetEffectOutput(Effect effect, string outputName, DomainType type) =>
+        Apply(effect.Domain, mutation => mutation.SetEffectOutput(effect, outputName, type));
+
+    public static AnalysisResult BindOutputTo(Effect sourceEffect, string outputName, Effect targetEffect, string targetParamName) =>
+        Apply(sourceEffect.Domain, mutation => mutation.BindOutputTo(sourceEffect, outputName, targetEffect, targetParamName));
+
+    public static AnalysisResult BindParameter(InvokeAction effect, Property targetParameter, DomainValue value) =>
+        Apply(effect.Domain, mutation => mutation.BindParameter(effect, targetParameter, value));
+
+    public static AnalysisResult BindParameterFrom(InvokeAction effect, string targetParamName, Effect sourceEffect, string sourceOutputName) =>
+        Apply(effect.Domain, mutation => mutation.BindParameterFrom(effect, targetParamName, sourceEffect, sourceOutputName));
+
     public static AnalysisResult SetEventHandlerTrigger(Action action, Event eventType, string eventParameterName) =>
         Apply(action.Domain, mutation => mutation.SetEventHandlerTrigger(action, eventType, eventParameterName));
 

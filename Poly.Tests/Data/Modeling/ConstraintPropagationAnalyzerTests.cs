@@ -156,4 +156,32 @@ public class ConstraintPropagationAnalyzerTests {
         await Assert.That(result).IsNotNull();
         await Assert.That(result.Diagnostics).IsEmpty();
     }
+
+    [Test]
+    public async Task ExpressionConstraintPropagation_InvalidNumericConstants_DoNotThrow() {
+        var domain = CreateDomain();
+        var numberType = CreatePrimitive(domain, "Number", TypeCategory.Integer);
+        var entity = CreateEntity(domain, "Invoice");
+        var amount = new Property(domain, "Amount", numberType);
+        MutationApply.AddType(domain, numberType);
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddProperty(entity, amount);
+        MutationApply.AddConstraint(amount, new RangeConstraint(double.MinValue, double.MaxValue));
+
+        var action = new DomainAction(domain, "SetAmount", entity);
+        var parameter = new Property(domain, "amount", numberType);
+        MutationApply.AddAction(entity, action);
+        MutationApply.AddParameter(action, parameter);
+        MutationApply.AddEffect(action, new Assign(domain) {
+            Target = amount,
+            Value = new ExpressionValue(domain, "ComputedAmount", numberType) {
+                Expression = new Add(new Parameter(parameter.Name), new Constant(double.MaxValue))
+            }
+        });
+
+        var analyzer = new DomainModelAnalyzer();
+        var result = analyzer.Analyze(domain);
+
+        await Assert.That(result).IsNotNull();
+    }
 }

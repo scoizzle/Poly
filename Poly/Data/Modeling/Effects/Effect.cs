@@ -12,7 +12,7 @@ namespace Poly.Data.Modeling.Effects;
 /// Effects are designed to be extensible, allowing for a wide range of behaviors to be implemented.
 /// Effects declare what they produce via <see cref="Result"/> for downstream wiring.
 /// </remarks>
-public abstract record Effect(Domain Domain) : DomainObject(Domain) {
+public abstract partial record Effect(Domain Domain) : DomainObject(Domain) {
     private readonly EffectResult _result = new();
 
     protected Effect(Domain domain, Action<EffectResult> configureResults) : this(domain) {
@@ -28,13 +28,13 @@ public abstract record Effect(Domain Domain) : DomainObject(Domain) {
     /// <summary>
     /// Convenience: declare that this effect produces a named output of the given type.
     /// </summary>
-    public void Produces(string name, DomainType type) => _result.Produces(name, type);
+    internal void Produces(string name, DomainType type) => _result.SetOutput(name, type);
 
     /// <summary>
     /// Shortcut: bind an output from this effect to a parameter on a target effect.
     /// At code generation time, this becomes: target.BindParameter(param, this.Output[name]).
     /// </summary>
-    public void BindOutputTo(string outputName, Effect targetEffect, string targetParamName) {
+    internal void BindOutputTo(string outputName, Effect targetEffect, string targetParamName) {
         ArgumentNullException.ThrowIfNull(outputName);
         ArgumentNullException.ThrowIfNull(targetEffect);
         ArgumentNullException.ThrowIfNull(targetParamName);
@@ -56,4 +56,36 @@ public abstract record Effect(Domain Domain) : DomainObject(Domain) {
             : ImmutableDictionary<string, EffectValueRef>.Empty;
 
     private Dictionary<string, EffectValueRef>? _incomingBindings;
+
+    internal EffectValueRef? SetIncomingBinding(string targetParamName, EffectValueRef binding) {
+        ArgumentNullException.ThrowIfNull(targetParamName);
+        ArgumentNullException.ThrowIfNull(binding);
+
+        if (_incomingBindings is null) {
+            _incomingBindings = new Dictionary<string, EffectValueRef>(StringComparer.Ordinal);
+        }
+
+        _incomingBindings.TryGetValue(targetParamName, out var previous);
+        _incomingBindings[targetParamName] = binding;
+        return previous;
+    }
+
+    internal void RestoreIncomingBinding(string targetParamName, EffectValueRef? previousBinding) {
+        ArgumentNullException.ThrowIfNull(targetParamName);
+
+        if (previousBinding is null) {
+            _incomingBindings?.Remove(targetParamName);
+            if (_incomingBindings is { Count: 0 }) {
+                _incomingBindings = null;
+            }
+
+            return;
+        }
+
+        if (_incomingBindings is null) {
+            _incomingBindings = new Dictionary<string, EffectValueRef>(StringComparer.Ordinal);
+        }
+
+        _incomingBindings[targetParamName] = previousBinding;
+    }
 }

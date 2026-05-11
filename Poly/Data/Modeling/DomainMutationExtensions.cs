@@ -152,6 +152,24 @@ public static class DomainMutationExtensions {
     public static AnalysisResult RemoveEffect(this Action action, Effect effect) =>
         action.Domain.CreateMutation().RemoveEffect(action, effect).Apply();
 
+    public static AnalysisResult AddEffect(this Effects.Conditional conditional, Effect effect) =>
+        conditional.Domain.CreateMutation().AddEffect(conditional, effect).Apply();
+
+    public static AnalysisResult AddEffect(this Effects.Composite composite, Effect effect) =>
+        composite.Domain.CreateMutation().AddEffect(composite, effect).Apply();
+
+    public static AnalysisResult Produces(this Effect effect, string outputName, DomainType type) =>
+        effect.Domain.CreateMutation().SetEffectOutput(effect, outputName, type).Apply();
+
+    public static AnalysisResult BindOutputTo(this Effect sourceEffect, string outputName, Effect targetEffect, string targetParamName) =>
+        sourceEffect.Domain.CreateMutation().BindOutputTo(sourceEffect, outputName, targetEffect, targetParamName).Apply();
+
+    public static AnalysisResult BindParameter(this InvokeAction effect, Property targetParameter, DomainValue value) =>
+        effect.Domain.CreateMutation().BindParameter(effect, targetParameter, value).Apply();
+
+    public static AnalysisResult BindParameterFrom(this InvokeAction effect, string targetParamName, Effect sourceEffect, string sourceOutputName) =>
+        effect.Domain.CreateMutation().BindParameterFrom(effect, targetParamName, sourceEffect, sourceOutputName).Apply();
+
     public static AnalysisResult SetEventPropertyBinding(this Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) =>
         action.Domain.CreateMutation().SetEventPropertyBinding(action, effect, propertyName, source).Apply();
 

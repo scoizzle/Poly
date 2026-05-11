@@ -263,8 +263,7 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
 
     private static long? GetConstantValue(Node expr) {
         if (expr is Constant c && c.Value is not null) {
-            // Handle numeric constants (int, long, double, etc.)
-            return Convert.ToInt64(c.Value);
+            return TryConvertToInt64(c.Value);
         }
         return null;
     }
@@ -277,14 +276,38 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     private static RangeConstraint? AdjustRangeConstraint(RangeConstraint original, long offset) {
         if (offset == 0) return original;
 
-        object? newMin = original.MinValue is not null
-            ? Convert.ToDouble(original.MinValue) - offset
-            : null;
-        object? newMax = original.MaxValue is not null
-            ? Convert.ToDouble(original.MaxValue) - offset
-            : null;
+        var minValue = original.MinValue is null ? null : TryConvertToDouble(original.MinValue);
+        if (original.MinValue is not null && minValue is null) {
+            return null;
+        }
+
+        var maxValue = original.MaxValue is null ? null : TryConvertToDouble(original.MaxValue);
+        if (original.MaxValue is not null && maxValue is null) {
+            return null;
+        }
+
+        object? newMin = minValue is not null ? minValue.Value - offset : null;
+        object? newMax = maxValue is not null ? maxValue.Value - offset : null;
 
         return new RangeConstraint(newMin, newMax);
+    }
+
+    private static long? TryConvertToInt64(object value) {
+        try {
+            return Convert.ToInt64(value);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException) {
+            return null;
+        }
+    }
+
+    private static double? TryConvertToDouble(object value) {
+        try {
+            return Convert.ToDouble(value);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException) {
+            return null;
+        }
     }
 
     private static void CollectFromAction(

@@ -6,7 +6,10 @@ public partial record Entity {
             Stage.AttachToEntity(Entity);
             Entity._stages.Add(Stage);
         }
-        public override void Rollback() => Entity._stages.Remove(Stage);
+        public override void Rollback() {
+            _ = DomainMutationCollection.RemoveAt(Entity._stages, Stage);
+            Stage.DetachFromEntity(Entity);
+        }
         public override IEnumerable<Node> AffectedNodes {
             get {
                 yield return Entity;

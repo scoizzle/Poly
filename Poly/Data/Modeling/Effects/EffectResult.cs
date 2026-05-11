@@ -17,10 +17,24 @@ public sealed class EffectResult {
     /// <summary>
     /// Declare that this effect produces a named value of the given type.
     /// </summary>
-    public void Produces(string name, DomainType type) {
+    internal DomainType? SetOutput(string name, DomainType type) {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(type);
+
+        _produces.TryGetValue(name, out var previous);
         _produces[name] = type;
+        return previous;
+    }
+
+    internal void RestoreOutput(string name, DomainType? previous) {
+        ArgumentNullException.ThrowIfNull(name);
+
+        if (previous is null) {
+            _produces.Remove(name);
+            return;
+        }
+
+        _produces[name] = previous;
     }
 
     /// <summary>

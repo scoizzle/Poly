@@ -13,7 +13,7 @@ internal sealed record AddCommentCommand(DomainObject Target, string Comment) : 
     }
     public override void Rollback() {
         if (_index is int idx && idx < Target.Comments.Count)
-            ((List<string>)Target.Comments).RemoveAt(idx); // Only safe if Comments is List<string>
+            Target.RemoveCommentAt(idx);
     }
     public override IEnumerable<Node> AffectedNodes => [Target];
 }

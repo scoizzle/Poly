@@ -6,6 +6,32 @@ namespace Poly.Tests.Mcp;
 
 public class DomainMcpToolsTests {
     [Test]
+    public async Task DomainSessionStore_UpdateAnalysis_ConcurrentCallsAdvanceRevisionsAtomically() {
+        var sessionId = $"mcp-concurrency-{Guid.NewGuid():N}";
+        _ = DomainAuthoringTool.CreateDomain("Concurrent", sessionId);
+        const int workerCount = 24;
+        using var ready = new CountdownEvent(workerCount);
+        using var start = new ManualResetEventSlim(false);
+
+        var tasks = Enumerable.Range(0, workerCount)
+            .Select(_ => Task.Run(() => {
+                ready.Signal();
+                start.Wait();
+                return DomainOperabilityTool.GetDomainAnalysis(sessionId).Revision;
+            }))
+            .ToArray();
+
+        ready.Wait();
+        start.Set();
+
+        var revisions = await Task.WhenAll(tasks);
+
+        await Assert.That(revisions.Any(static revision => revision is null)).IsFalse();
+        await Assert.That(revisions.Distinct().Count()).IsEqualTo(workerCount);
+        await Assert.That(revisions.Max()).IsEqualTo(workerCount);
+    }
+
+    [Test]
     public async Task CreateDomain_ReturnsSessionAndAffordances() {
         var sessionId = $"mcp-test-{Guid.NewGuid():N}";
 
@@ -223,31 +249,16 @@ public class DomainMcpToolsTests {
     }
 
     [Test]
-    public async Task GetDomainHealth_ReturnsTelemetrySummary() {
+    public async Task GetDomainAnalysis_ReturnsTelemetrySummary() {
         var sessionId = $"mcp-test-{Guid.NewGuid():N}";
         _ = DomainAuthoringTool.CreateDomain("Health", sessionId);
         _ = DomainAuthoringTool.AddPrimitive(sessionId, "string", "Text");
 
-        var response = DomainOperabilityTool.GetDomainHealth(sessionId);
+        var response = DomainOperabilityTool.GetDomainAnalysis(sessionId);
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsNotNull();
         await Assert.That(response.Data!.Passes.Count).IsGreaterThan(0);
-    }
-
-    [Test]
-    public async Task ExplainInvalidDomain_ReturnsGroupedReasons() {
-        var sessionId = $"mcp-test-{Guid.NewGuid():N}";
-        _ = DomainAuthoringTool.CreateDomain("Invalidity", sessionId);
-        _ = DomainAuthoringTool.AddPrimitive(sessionId, "dup", "Text");
-        _ = DomainAuthoringTool.AddPrimitive(sessionId, "dup", "Text");
-
-        var response = DomainOperabilityTool.ExplainInvalidDomain(sessionId);
-
-        await Assert.That(response.Success).IsTrue();
-        await Assert.That(response.Data).IsNotNull();
-        await Assert.That(response.Data!.ErrorCount).IsGreaterThan(0);
-        await Assert.That(response.Data.Nodes.Count).IsGreaterThan(0);
     }
 
     [Test]
@@ -321,33 +332,29 @@ public class DomainMcpToolsTests {
     public async Task OperabilityEndpoints_MissingSession_ReturnStableNotFoundDiagnostics() {
         var missingSession = $"missing-{Guid.NewGuid():N}";
 
-        var health = DomainOperabilityTool.GetDomainHealth(missingSession);
-        var explain = DomainOperabilityTool.ExplainInvalidDomain(missingSession);
+        var analysis = DomainOperabilityTool.GetDomainAnalysis(missingSession);
         var diff = DomainOperabilityTool.DiffDomainRevision(missingSession, fromRevision: 0);
         var mutation = DomainOperabilityTool.ApplyMutationWithTrace(missingSession, "SetDomainName", "anything");
 
-        await Assert.That(health.Success).IsFalse();
-        await Assert.That(explain.Success).IsFalse();
+        await Assert.That(analysis.Success).IsFalse();
         await Assert.That(diff.Success).IsFalse();
         await Assert.That(mutation.Success).IsFalse();
 
-        await Assert.That(health.Diagnostics).IsNotNull();
-        await Assert.That(explain.Diagnostics).IsNotNull();
+        await Assert.That(analysis.Diagnostics).IsNotNull();
         await Assert.That(diff.Diagnostics).IsNotNull();
         await Assert.That(mutation.Diagnostics).IsNotNull();
 
-        await Assert.That(health.Diagnostics!.Any(static diagnostic => diagnostic.Contains("code=SESSION_NOT_FOUND", StringComparison.Ordinal))).IsTrue();
-        await Assert.That(explain.Diagnostics!.Any(static diagnostic => diagnostic.Contains("code=SESSION_NOT_FOUND", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(analysis.Diagnostics!.Any(static diagnostic => diagnostic.Contains("code=SESSION_NOT_FOUND", StringComparison.Ordinal))).IsTrue();
         await Assert.That(diff.Diagnostics!.Any(static diagnostic => diagnostic.Contains("code=SESSION_NOT_FOUND", StringComparison.Ordinal))).IsTrue();
         await Assert.That(mutation.Diagnostics!.Any(static diagnostic => diagnostic.Contains("code=SESSION_NOT_FOUND", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]
-    public async Task GetDomainHealth_SerializationContract_RemainsStable() {
+    public async Task GetDomainAnalysis_SerializationContract_RemainsStable() {
         var sessionId = $"mcp-test-{Guid.NewGuid():N}";
         _ = DomainAuthoringTool.CreateDomain("HealthContract", sessionId);
 
-        var response = DomainOperabilityTool.GetDomainHealth(sessionId);
+        var response = DomainOperabilityTool.GetDomainAnalysis(sessionId);
         var json = JsonSerializer.Serialize(response);
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -365,25 +372,6 @@ public class DomainMcpToolsTests {
         await Assert.That(HasProperty(data, "totalAnalysisTime")).IsTrue();
         await Assert.That(HasProperty(data, "incremental")).IsTrue();
         await Assert.That(HasProperty(data, "passes")).IsTrue();
-    }
-
-    [Test]
-    public async Task ExplainInvalidDomain_SerializationContract_RemainsStable() {
-        var sessionId = $"mcp-test-{Guid.NewGuid():N}";
-        _ = DomainAuthoringTool.CreateDomain("InvalidityContract", sessionId);
-        _ = DomainAuthoringTool.AddPrimitive(sessionId, "dup", "Text");
-        _ = DomainAuthoringTool.AddPrimitive(sessionId, "dup", "Text");
-
-        var response = DomainOperabilityTool.ExplainInvalidDomain(sessionId);
-        var json = JsonSerializer.Serialize(response);
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-
-        await Assert.That(HasProperty(root, "data")).IsTrue();
-        var data = root.GetProperty("Data");
-        await Assert.That(HasProperty(data, "errorCount")).IsTrue();
-        await Assert.That(HasProperty(data, "warningCount")).IsTrue();
-        await Assert.That(HasProperty(data, "nodes")).IsTrue();
     }
 
     [Test]

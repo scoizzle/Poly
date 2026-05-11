@@ -18,11 +18,12 @@ public class EffectWiringTests {
 
     [Test]
     public async Task EffectResult_Produces_AddsOutput() {
-        var result = new EffectResult();
         var domain = CreateDomain();
+        var effect = new TestEffect(domain);
+        var result = effect.Result;
         var primitive = CreatePrimitive(domain, "Text");
 
-        result.Produces("output1", primitive);
+        effect.Produces("output1", primitive);
 
         await Assert.That(result.Outputs.ContainsKey("output1")).IsTrue();
         await Assert.That(result.Outputs["output1"]).IsEqualTo(primitive);
@@ -30,13 +31,14 @@ public class EffectWiringTests {
 
     [Test]
     public async Task EffectResult_HasOutput_ReturnsCorrectValue() {
-        var result = new EffectResult();
         var domain = CreateDomain();
+        var effect = new TestEffect(domain);
+        var result = effect.Result;
         var primitive = CreatePrimitive(domain, "Text");
 
         await Assert.That(result.HasOutput("output1")).IsFalse();
 
-        result.Produces("output1", primitive);
+        effect.Produces("output1", primitive);
 
         await Assert.That(result.HasOutput("output1")).IsTrue();
         await Assert.That(result.HasOutput("nonexistent")).IsFalse();
@@ -44,13 +46,14 @@ public class EffectWiringTests {
 
     [Test]
     public async Task EffectResult_ProducesMultipleOutputs_StoresAll() {
-        var result = new EffectResult();
         var domain = CreateDomain();
+        var effect = new TestEffect(domain);
+        var result = effect.Result;
         var text = CreatePrimitive(domain, "Text");
         var entity = CreateEntity(domain, "Person");
 
-        result.Produces("name", text);
-        result.Produces("person", entity);
+        effect.Produces("name", text);
+        effect.Produces("person", entity);
 
         await Assert.That(result.Outputs.Count).IsEqualTo(2);
         await Assert.That(result.HasOutput("name")).IsTrue();
@@ -149,7 +152,7 @@ public class EffectWiringTests {
         var domainValue = new TestDomainValue(domain, "testValue", paramType);
 
         // Add parameter to action
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var effect = new InvokeAction(domain) { TargetAction = action };
         effect.BindParameter(parameter, domainValue);
@@ -169,7 +172,7 @@ public class EffectWiringTests {
         var domainValue = new TestDomainValue(domain, "testValue", differentType);
 
         // Add parameter to action
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var effect = new InvokeAction(domain) { TargetAction = action };
 
@@ -187,7 +190,7 @@ public class EffectWiringTests {
         var parameter = CreateParameter(domain, "input1", baseEntity);
         var domainValue = new TestDomainValue(domain, "testValue", derivedEntity);
 
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var effect = new InvokeAction(domain) { TargetAction = action };
         effect.BindParameter(parameter, domainValue);
@@ -206,7 +209,7 @@ public class EffectWiringTests {
         var parameter = CreateParameter(domain, "input1", derivedEntity);
         var domainValue = new TestDomainValue(domain, "testValue", baseEntity);
 
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var effect = new InvokeAction(domain) { TargetAction = action };
 
@@ -223,7 +226,7 @@ public class EffectWiringTests {
         var parameter = CreateParameter(domain, "input1", paramType);
 
         // Add parameter to action
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var sourceEffect = new TestEffect(domain);
         sourceEffect.Produces("output1", paramType);
@@ -244,7 +247,7 @@ public class EffectWiringTests {
         var action = CreateAction(domain, "DoSomething", owner);
         var parameter = CreateParameter(domain, "input1", baseEntity);
 
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var sourceEffect = new TestEffect(domain);
         sourceEffect.Produces("output1", derivedEntity);
@@ -265,7 +268,7 @@ public class EffectWiringTests {
         var action = CreateAction(domain, "DoSomething", owner);
         var parameter = CreateParameter(domain, "input1", derivedEntity);
 
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var sourceEffect = new TestEffect(domain);
         sourceEffect.Produces("output1", baseEntity);
@@ -285,7 +288,7 @@ public class EffectWiringTests {
         var parameter = CreateParameter(domain, "input1", paramType);
 
         // Add parameter to action
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var sourceEffect = new TestEffect(domain);
 
@@ -304,7 +307,7 @@ public class EffectWiringTests {
         var parameter = CreateParameter(domain, "input1", paramType);
 
         // Add parameter to action
-        action._parameters.Add(parameter);
+        action.AddParameter(parameter);
 
         var effectA = new TestEffect(domain);
         var effectB = new InvokeAction(domain) { TargetAction = action };

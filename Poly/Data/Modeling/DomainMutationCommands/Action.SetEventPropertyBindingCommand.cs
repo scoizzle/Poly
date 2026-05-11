@@ -7,16 +7,19 @@ public sealed partial record Action {
         Action Action,
         PublishEvent Effect,
         string EventPropertyName,
-        EventPropertyBindingSource Source,
-        EventPropertyBindingSource? PreviousSource) : DomainMutationCommand {
+        EventPropertyBindingSource Source) : DomainMutationCommand {
+        private EventPropertyBindingSource? _previousSource;
 
-        public override void Apply() => Effect._bindings[EventPropertyName] = Source;
+        public override void Apply() {
+            Effect._bindings.TryGetValue(EventPropertyName, out _previousSource);
+            Effect._bindings[EventPropertyName] = Source;
+        }
 
         public override void Rollback() {
-            if (PreviousSource is null)
+            if (_previousSource is null)
                 Effect._bindings.Remove(EventPropertyName);
             else
-                Effect._bindings[EventPropertyName] = PreviousSource;
+                Effect._bindings[EventPropertyName] = _previousSource;
         }
 
         public override IEnumerable<Node> AffectedNodes => [Action];

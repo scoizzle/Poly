@@ -12,7 +12,7 @@ namespace Poly.Tests.Data.Modeling;
 
 public class DomainOperabilityTests {
     [Test]
-    public async Task OperabilityFacade_Capture_ReturnsTelemetryAndInvalidity() {
+    public async Task OperabilityFacade_Capture_ReturnsTelemetryAndAnalysis() {
         var domain = new Domain("Support");
         domain.CreateMutation().AddType(new Primitive(domain, "string", TypeCategory.Text)).Apply();
 
@@ -20,11 +20,11 @@ public class DomainOperabilityTests {
 
         await Assert.That(snapshot.Analysis.HasErrors).IsFalse();
         await Assert.That(snapshot.Analysis.Telemetry.Passes.Count).IsGreaterThan(0);
-        await Assert.That(snapshot.Invalidity.ErrorCount).IsEqualTo(0);
+        await Assert.That(snapshot.Analysis.Diagnostics.Count).IsEqualTo(0);
     }
 
     [Test]
-    public async Task OperabilityFacade_AnalyzeExplainDiff_ReturnsAllArtifacts() {
+    public async Task OperabilityFacade_AnalyzeExplainDiff_ReturnsAnalysisAndDiff() {
         var before = new Domain("Support");
         var sharedTypeId = NodeId.NewId();
         var entityId = NodeId.NewId();
@@ -42,7 +42,7 @@ public class DomainOperabilityTests {
 
         await Assert.That(delta.Analysis.Telemetry.Passes.Count).IsGreaterThan(0);
         await Assert.That(delta.Diff.Changed.Any(change => change.NodeId == entityId)).IsTrue();
-        await Assert.That(delta.Invalidity.ErrorCount).IsEqualTo(0);
+        await Assert.That(delta.Analysis.Diagnostics.Count).IsEqualTo(0);
     }
 
     [Test]
@@ -84,6 +84,58 @@ public class DomainOperabilityTests {
     }
 
     [Test]
+    public async Task ApplyWithTrace_AddStageFailure_RollsBackOwnerAttachment() {
+        var domain = new Domain("Support");
+        var entity = new Entity(domain, "Ticket");
+
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddStage(entity, new Stage(domain, "Open"));
+
+        var duplicateStage = new Stage(domain, "Open");
+        var execution = domain.CreateMutation()
+            .AddStage(entity, duplicateStage)
+            .ApplyWithTrace();
+
+        await Assert.That(execution.Analysis.HasErrors).IsTrue();
+        await Assert.That(execution.Trace.RolledBack).IsTrue();
+        await Assert.That(entity.Stages.Contains(duplicateStage)).IsFalse();
+        await Assert.That(duplicateStage.OwnerEntity).IsNull();
+    }
+
+    [Test]
+    public async Task ApplyWithTrace_RemoveParameterFailure_PreservesParameterOrder() {
+        var domain = new Domain("Support");
+        var text = new Primitive(domain, "string", TypeCategory.Text);
+        var entity = new Entity(domain, "Ticket");
+        var action = new DomainAction(domain, "Escalate", entity);
+        var first = new Property(domain, "First", text);
+        var second = new Property(domain, "Second", text);
+        var third = new Property(domain, "Third", text);
+
+        MutationApply.AddType(domain, text);
+        MutationApply.AddType(domain, entity);
+        MutationApply.AddAction(entity, action);
+        MutationApply.AddParameter(action, first);
+        MutationApply.AddParameter(action, second);
+        MutationApply.AddParameter(action, third);
+
+        var duplicate = new Property(domain, "First", text);
+        var execution = domain.CreateMutation()
+            .RemoveParameter(action, second)
+            .AddParameter(action, duplicate)
+            .ApplyWithTrace();
+
+        var parameterNames = action.Parameters.Select(static parameter => parameter.Name).ToArray();
+
+        await Assert.That(execution.Analysis.HasErrors).IsTrue();
+        await Assert.That(execution.Trace.RolledBack).IsTrue();
+        await Assert.That(parameterNames.Length).IsEqualTo(3);
+        await Assert.That(parameterNames[0]).IsEqualTo("First");
+        await Assert.That(parameterNames[1]).IsEqualTo("Second");
+        await Assert.That(parameterNames[2]).IsEqualTo("Third");
+    }
+
+    [Test]
     public async Task Analyze_CapturesPipelinePasses() {
         var domain = new Domain("Support");
         domain.CreateMutation().AddType(new Primitive(domain, "string", TypeCategory.Text)).Apply();
@@ -121,18 +173,17 @@ public class DomainOperabilityTests {
     }
 
     [Test]
-    public async Task Explain_Invalidity_GroupsReasonsWithHints() {
+    public async Task Analyze_Invalidity_ExposesDiagnostics() {
         var domain = new Domain("Support");
         var mutation = domain.CreateMutation();
         mutation.AddType(new Primitive(domain, "string", TypeCategory.Text));
         mutation.AddType(new Primitive(domain, "string", TypeCategory.Text));
 
         var analysis = mutation.Apply();
-        var report = DomainInvalidityExplainer.Explain(analysis);
 
-        await Assert.That(report.ErrorCount).IsGreaterThan(0);
-        await Assert.That(report.Nodes.Count).IsGreaterThan(0);
-        await Assert.That(report.Nodes.SelectMany(node => node.Reasons).Any(reason => !string.IsNullOrWhiteSpace(reason.Hint))).IsTrue();
+        await Assert.That(analysis.HasErrors).IsTrue();
+        await Assert.That(analysis.Diagnostics.Count).IsGreaterThan(0);
+        await Assert.That(analysis.Diagnostics.Any(static diagnostic => diagnostic.Message.Contains("Duplicate", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]

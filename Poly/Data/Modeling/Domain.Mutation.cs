@@ -168,10 +168,26 @@ public sealed partial record Domain {
         public Mutation RemoveEffect(Action action, Effect effect) =>
             AddStep(new Action.RemoveEffectCommand(action, effect));
 
-        public Mutation SetEventPropertyBinding(Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) {
-            effect._bindings.TryGetValue(propertyName, out var previous);
-            return AddStep(new Action.SetEventPropertyBindingCommand(action, effect, propertyName, source, previous));
-        }
+        public Mutation AddEffect(Effects.Conditional conditional, Effect effect) =>
+            AddStep(new Effects.Conditional.AddEffectCommand(conditional, effect));
+
+        public Mutation AddEffect(Effects.Composite composite, Effect effect) =>
+            AddStep(new Effects.Composite.AddEffectCommand(composite, effect));
+
+        public Mutation SetEffectOutput(Effects.Effect effect, string outputName, DomainType type) =>
+            AddStep(new Effects.Effect.SetOutputCommand(effect, outputName, type));
+
+        public Mutation BindOutputTo(Effects.Effect sourceEffect, string outputName, Effects.Effect targetEffect, string targetParamName) =>
+            AddStep(new Effects.Effect.BindOutputToCommand(sourceEffect, outputName, targetEffect, targetParamName));
+
+        public Mutation BindParameter(Effects.InvokeAction effect, Property targetParameter, DomainValue value) =>
+            AddStep(new Effects.InvokeAction.BindParameterCommand(effect, targetParameter, value));
+
+        public Mutation BindParameterFrom(Effects.InvokeAction effect, string targetParamName, Effects.Effect sourceEffect, string sourceOutputName) =>
+            AddStep(new Effects.InvokeAction.BindParameterFromCommand(effect, targetParamName, sourceEffect, sourceOutputName));
+
+        public Mutation SetEventPropertyBinding(Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) =>
+            AddStep(new Action.SetEventPropertyBindingCommand(action, effect, propertyName, source));
 
         public Mutation AddEventSubscriptionCorrelation(EventSubscription subscription, EventCorrelationBinding binding) =>
             AddStep(new EventSubscription.AddCorrelationBindingCommand(subscription, binding));
@@ -288,7 +304,6 @@ public sealed partial record Domain {
                 }
                 catch {
                     Rollback(appliedSteps);
-                    _steps.Clear();
                     _completed = true;
                     throw;
                 }

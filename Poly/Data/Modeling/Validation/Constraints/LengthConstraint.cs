@@ -1,8 +1,8 @@
 namespace Poly.Data.Modeling.Validation.Constraints;
 
 public sealed class LengthConstraint(int? minLength = default, int? maxLength = default) : Constraint {
-    public int? MinLength { get; set; } = minLength;
-    public int? MaxLength { get; set; } = maxLength;
+    public int? MinLength { get; } = minLength;
+    public int? MaxLength { get; } = maxLength;
 
     /// <summary>
     /// Length constraints apply to Text and Binary types.

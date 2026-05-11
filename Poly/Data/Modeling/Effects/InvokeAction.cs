@@ -2,14 +2,14 @@ using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Effects;
 
-public sealed record InvokeAction(Domain Domain) : Effect(Domain) {
+public sealed partial record InvokeAction(Domain Domain) : Effect(Domain) {
     private readonly Dictionary<string, DomainValue> _parameterBindings = new(StringComparer.Ordinal);
 
     public required Action TargetAction { get; init; }
 
     public IReadOnlyDictionary<string, DomainValue> ParameterBindings => _parameterBindings;
 
-    public void BindParameter(Property targetParameter, DomainValue value) {
+    internal void BindParameter(Property targetParameter, DomainValue value) {
         ArgumentNullException.ThrowIfNull(targetParameter);
         ArgumentNullException.ThrowIfNull(value);
 
@@ -35,7 +35,7 @@ public sealed record InvokeAction(Domain Domain) : Effect(Domain) {
     /// Bind a parameter to a specific named output from a prior effect.
     /// At code generation, this becomes: BindParameter(param, priorEffect.Output[name]).
     /// </summary>
-    public void BindParameterFrom(string targetParamName, Effect sourceEffect, string sourceOutputName) {
+    internal void BindParameterFrom(string targetParamName, Effect sourceEffect, string sourceOutputName) {
         ArgumentNullException.ThrowIfNull(targetParamName);
         ArgumentNullException.ThrowIfNull(sourceEffect);
         ArgumentNullException.ThrowIfNull(sourceOutputName);

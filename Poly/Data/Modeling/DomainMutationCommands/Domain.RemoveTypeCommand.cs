@@ -4,11 +4,13 @@ namespace Poly.Data.Modeling;
 
 public sealed partial record Domain {
     internal sealed record RemoveTypeCommand(Domain Target, DomainType Type) : DomainMutationCommand {
+        private int _index = -1;
+
         public override void Apply() {
-            Target._objects.Remove(Type);
+            _index = DomainMutationCollection.RemoveAt(Target._objects, Type);
         }
         public override void Rollback() {
-            Target._objects.Add(Type);
+            DomainMutationCollection.Restore(Target._objects, Type, _index);
         }
         public override IEnumerable<Node> AffectedNodes {
             get {

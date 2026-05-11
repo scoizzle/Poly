@@ -9,12 +9,12 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
     /// <summary>
     /// The minimum allowable value.
     /// </summary>
-    public object? MinValue { get; set; } = minValue;
+    public object? MinValue { get; } = minValue;
 
     /// <summary>
     /// The maximum allowable value.
     /// </summary>
-    public object? MaxValue { get; set; } = maxValue;
+    public object? MaxValue { get; } = maxValue;
 
     /// <inheritdoc />
     public TypeCategory ApplicableCategories => TypeCategory.Numeric | TypeCategory.Temporal;

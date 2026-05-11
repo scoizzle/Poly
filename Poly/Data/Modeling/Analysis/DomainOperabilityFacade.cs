@@ -3,13 +3,11 @@ using Poly.Data.Modeling.Analysis;
 namespace Poly.Data.Modeling;
 
 public sealed record DomainOperabilitySnapshot(
-    AnalysisResult Analysis,
-    NodeInvalidityReport Invalidity
+    AnalysisResult Analysis
 );
 
 public sealed record DomainOperabilityDelta(
     AnalysisResult Analysis,
-    NodeInvalidityReport Invalidity,
     DomainDiffReport Diff
 );
 
@@ -19,9 +17,8 @@ public static class DomainOperabilityFacade {
 
         var subjectAnalyzer = analyzer ?? new DomainModelAnalyzer();
         var analysis = subjectAnalyzer.Analyze(domain);
-        var invalidity = DomainInvalidityExplainer.Explain(analysis);
 
-        return new DomainOperabilitySnapshot(analysis, invalidity);
+        return new DomainOperabilitySnapshot(analysis);
     }
 
     public static DomainOperabilityDelta AnalyzeExplainDiff(Domain before, Domain after, DomainModelAnalyzer? analyzer = null) {
@@ -30,9 +27,8 @@ public static class DomainOperabilityFacade {
 
         var subjectAnalyzer = analyzer ?? new DomainModelAnalyzer();
         var analysis = subjectAnalyzer.Analyze(after);
-        var invalidity = DomainInvalidityExplainer.Explain(analysis);
         var diff = DomainDiffUtil.Compare(before, after, analysis);
 
-        return new DomainOperabilityDelta(analysis, invalidity, diff);
+        return new DomainOperabilityDelta(analysis, diff);
     }
 }

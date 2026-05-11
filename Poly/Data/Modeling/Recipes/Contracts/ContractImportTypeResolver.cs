@@ -130,12 +130,13 @@ internal sealed class ContractImportTypeResolver {
 
         if (schema.TryGetProperty("properties", out var properties) && properties.ValueKind == JsonValueKind.Object) {
             foreach (var property in properties.EnumerateObject()) {
-                if (entity.FindProperty(property.Name) is not null) {
+                var propertyName = NormalizeMemberName(property.Name);
+                if (entity.FindProperty(propertyName) is not null) {
                     continue;
                 }
 
                 var propertyType = ResolveOpenApiSchema(root, property.Value, $"{typeName}{NormalizeName(property.Name)}");
-                _mutation.AddProperty(entity, new Property(_domain, property.Name, propertyType));
+                _mutation.AddProperty(entity, new Property(_domain, propertyName, propertyType));
             }
         }
 
@@ -197,6 +198,35 @@ internal sealed class ContractImportTypeResolver {
 
         if (!char.IsLetter(builder[0])) {
             builder.Insert(0, 'T');
+        }
+
+        return builder.ToString();
+    }
+
+    private static string NormalizeMemberName(string raw) {
+        ArgumentNullException.ThrowIfNull(raw);
+
+        var builder = new StringBuilder(raw.Length);
+        var capitalizeNext = true;
+
+        foreach (var character in raw) {
+            if (!char.IsLetterOrDigit(character)) {
+                capitalizeNext = true;
+                continue;
+            }
+
+            builder.Append(capitalizeNext
+                ? char.ToUpperInvariant(character)
+                : character);
+            capitalizeNext = false;
+        }
+
+        if (builder.Length == 0) {
+            return "Property";
+        }
+
+        if (!char.IsLetter(builder[0])) {
+            builder.Insert(0, 'P');
         }
 
         return builder.ToString();

@@ -222,7 +222,8 @@ public class ActorRuleTests {
         var actor = new Actor(domain, "AdminUser", null);
         var rule = new ActorTypeRule(domain, "MustBeAdmin", actor);
         var actorNode = new Variable("actor", null);
-        var ctx = new ActorEvaluationContext(actorNode);
+        var ctxNode = new Variable("context", null);
+        var ctx = new ActorEvaluationContext(actorNode, ctxNode);
 
         var lowered = DomainLoweringGenerator.LowerRule(rule, new Variable("subject", null), ctx);
 
@@ -236,7 +237,8 @@ public class ActorRuleTests {
         var domain = DomainTestFactory.CreateDomain();
         var rule = new ActorRoleRule(domain, "MustHaveEditorRole", "Editor");
         var actorNode = new Variable("actor", null);
-        var ctx = new ActorEvaluationContext(actorNode);
+        var ctxNode = new Variable("context", null);
+        var ctx = new ActorEvaluationContext(actorNode, ctxNode);
 
         var lowered = DomainLoweringGenerator.LowerRule(rule, new Variable("subject", null), ctx);
 
@@ -245,6 +247,7 @@ public class ActorRuleTests {
         await Assert.That(invoke.Delegate).IsTypeOf<Member>();
         var member = (Member)invoke.Delegate;
         await Assert.That(member.MemberName).IsEqualTo("IsInRole");
+        await Assert.That(member.Value).IsTypeOf<NullForgiving>();
         await Assert.That(invoke.Arguments[0]).IsTypeOf<Constant>();
         await Assert.That(((Constant)invoke.Arguments[0]).Value).IsEqualTo("Editor");
     }
@@ -254,14 +257,17 @@ public class ActorRuleTests {
         var domain = DomainTestFactory.CreateDomain();
         var actor = new Actor(domain, "Employee", null);
         var deptProperty = new Property(domain, "Department", DomainTestFactory.GetStringType(domain));
+        MutationApply.AddProperty(actor, deptProperty);
+        MutationApply.AddType(domain, actor);
         var constraint = new EqualityConstraint("Engineering");
         var rule = new ActorPropertyRule(domain, "InEngineeringDept", deptProperty, constraint);
         var actorNode = new Variable("actor", null);
-        var ctx = new ActorEvaluationContext(actorNode);
+        var ctxNode = new Variable("context", null);
+        var ctx = new ActorEvaluationContext(actorNode, ctxNode);
 
         var lowered = DomainLoweringGenerator.LowerRule(rule, new Variable("subject", null), ctx);
 
-        await Assert.That(lowered).IsTypeOf<Equal>();
+        await Assert.That(lowered).IsTypeOf<And>();
     }
 
     [Test]
@@ -281,7 +287,7 @@ public class ActorRuleTests {
         var right = new ActorRoleRule(domain, "HasEditorRole", "Editor");
         var composite = new CompositeRule(domain, "AdminAndEditor", left, right, LogicalOperator.And);
         var actorNode = new Variable("actor", null);
-        var ctx = new ActorEvaluationContext(actorNode);
+        var ctx = new ActorEvaluationContext(actorNode, new Variable("context", null));
 
         var lowered = DomainLoweringGenerator.LowerRule(composite, new Variable("subject", null), ctx);
 

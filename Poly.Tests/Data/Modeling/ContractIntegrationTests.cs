@@ -204,6 +204,28 @@ public class ContractIntegrationTests {
     }
 
     [Test]
+    public async Task OpenApiImport_ObjectPayloadProperties_AreNormalizedToPascalCase() {
+        var domain = new Domain("Support");
+        SeedCorePrimitiveTypes(domain);
+
+        var importer = new OpenApiContractImportRecipe();
+        _ = importer.ImportInto(
+            domain,
+            new ContractImportSource.OpenApiJson(FakeProviderOpenApi, "v1"),
+            new ContractImportOptions {
+                ContractName = "FakeShippingContract",
+                DefaultDirection = ContractEndpointDirection.Inbound
+            });
+
+        var payloadType = domain.RequireEntity("CreateShipmentRequest");
+
+        await Assert.That(payloadType.FindProperty("OrderId")).IsNotNull();
+        await Assert.That(payloadType.FindProperty("PostalCode")).IsNotNull();
+        await Assert.That(payloadType.FindProperty("orderId")).IsNull();
+        await Assert.That(payloadType.FindProperty("postalCode")).IsNull();
+    }
+
+    [Test]
     public async Task ContractBinding_FakeOpenApiProvider_EmptyFieldMapLocalName_ReportsError() {
         var domain = new Domain("Support");
         SeedCorePrimitiveTypes(domain);

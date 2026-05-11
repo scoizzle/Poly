@@ -17,6 +17,7 @@ namespace Poly.Syntax.Nodes;
 /// <param name="PrimaryConstructorParameters">Optional primary-constructor parameters for positional type declarations.</param>
 /// <param name="PrimitiveTypeId">Primitive type identifier if this is a primitive type.</param>
 /// <param name="TypeCategory">Category flags describing the type's nature.</param>
+/// <param name="IsInterface">Whether this definition should be emitted as an interface.</param>
 /// <param name="Semantics">The intended mutability and equality semantics for the type.</param>
 public sealed record TypeDefinitionNode(
     string Name,
@@ -31,6 +32,7 @@ public sealed record TypeDefinitionNode(
     IReadOnlyList<Parameter>? PrimaryConstructorParameters = null,
     PrimitiveType? PrimitiveTypeId = null,
     TypeCategory TypeCategory = TypeCategory.None,
+    bool IsInterface = false,
     AccessModifier AccessModifier = AccessModifier.Public,
     TypeDefinitionSemantics? Semantics = null
 ) : Node {

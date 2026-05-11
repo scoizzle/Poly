@@ -25,15 +25,14 @@ public sealed class CSharpGenerator {
     public string Generate(IReadOnlyList<TypeDefinitionNode> typeDefs, IReadOnlyList<Node>? testStatements) {
         ArgumentNullException.ThrowIfNull(typeDefs);
         var sb = new StringBuilder();
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
         if (testStatements is not null) {
             foreach (var stmt in testStatements) {
                 WriteStatement(sb, stmt, 0);
                 sb.AppendLine();
             }
             sb.AppendLine();
-        }
-        else {
-            WriteTestTopLevelStatement(sb, typeDefs);
         }
         foreach (var typeDef in typeDefs) {
             WriteStatement(sb, typeDef, 0);
@@ -363,6 +362,38 @@ public sealed class CSharpGenerator {
             return;
         }
 
+        if (typeDef.IsInterface) {
+            Indent(sb, indent);
+            WriteAccessModifier(sb, typeDef.AccessModifier);
+            sb.Append("interface ");
+            sb.Append(typeDef.Name);
+            if (typeDef.GenericParameters is { Count: > 0 }) {
+                sb.Append('<');
+                WriteCommaSeparated(sb, typeDef.GenericParameters.Select(static p => new NamedTypeReference(p.Name)));
+                sb.Append('>');
+            }
+            WriteTypeLineage(sb, typeDef);
+            sb.AppendLine();
+            Indent(sb, indent);
+            sb.AppendLine("{");
+
+            if (typeDef.Properties != null) {
+                foreach (var property in typeDef.Properties) {
+                    WriteInterfacePropertyDefinition(sb, property, indent + 1);
+                }
+            }
+
+            if (typeDef.Methods != null) {
+                foreach (var method in typeDef.Methods) {
+                    WriteInterfaceMethodDefinition(sb, method, indent + 1);
+                }
+            }
+
+            Indent(sb, indent);
+            sb.AppendLine("}");
+            return;
+        }
+
         Indent(sb, indent);
         WriteAccessModifier(sb, typeDef.AccessModifier);
         sb.Append(typeDef.EffectiveSemantics.HasValueEquality ? "record " : "class ");
@@ -410,6 +441,33 @@ public sealed class CSharpGenerator {
         }
 
         Indent(sb, indent);
+        sb.AppendLine("}");
+    }
+
+    private void WriteInterfaceMethodDefinition(StringBuilder sb, MethodDefinitionNode method, int indent) {
+        Indent(sb, indent);
+        WriteExpression(sb, method.ReturnType);
+        sb.Append(' ');
+        sb.Append(method.Name);
+        sb.Append('(');
+        if (method.Parameters != null) {
+            WriteParameterDeclarations(sb, method.Parameters);
+        }
+        sb.AppendLine(");");
+    }
+
+    private void WriteInterfacePropertyDefinition(StringBuilder sb, PropertyDefinitionNode prop, int indent) {
+        Indent(sb, indent);
+        WriteExpression(sb, prop.MemberType);
+        sb.Append(' ');
+        sb.Append(prop.Name);
+        sb.Append(" { ");
+        if (prop.Getter != null) {
+            sb.Append("get; ");
+        }
+        if (prop.Setter != null) {
+            sb.Append("set; ");
+        }
         sb.AppendLine("}");
     }
 
@@ -481,6 +539,29 @@ public sealed class CSharpGenerator {
         sb.Append(' ');
         sb.Append(prop.Name);
 
+        if (IsAutoProperty(prop)) {
+            sb.Append(" { ");
+            if (prop.Getter != null) {
+                sb.Append("get; ");
+            }
+            if (prop.Setter != null) {
+                if (prop.Setter.AccessModifier.HasValue) {
+                    WriteAccessModifier(sb, prop.Setter.AccessModifier.Value);
+                }
+                sb.Append("set; ");
+            }
+            sb.Append('}');
+            if (prop.Initializer != null) {
+                sb.Append(" = ");
+                WriteExpression(sb, prop.Initializer.Value);
+                sb.AppendLine(";");
+            }
+            else {
+                sb.AppendLine();
+            }
+            return;
+        }
+
         if (prop.Getter != null || prop.Setter != null) {
             sb.AppendLine();
             Indent(sb, indent);
@@ -511,7 +592,15 @@ public sealed class CSharpGenerator {
                 }
             }
             Indent(sb, indent);
-            sb.AppendLine("}");
+            sb.Append("}");
+            if (prop.Initializer != null) {
+                sb.Append(" = ");
+                WriteExpression(sb, prop.Initializer.Value);
+                sb.AppendLine(";");
+            }
+            else {
+                sb.AppendLine();
+            }
         }
         else if (prop.Initializer != null) {
             sb.Append(" = ");
@@ -521,6 +610,12 @@ public sealed class CSharpGenerator {
         else {
             sb.AppendLine(" { get; set; }");
         }
+    }
+
+    private static bool IsAutoProperty(PropertyDefinitionNode prop) {
+        return (prop.Getter is null || prop.Getter.Body is null)
+               && (prop.Setter is null || prop.Setter.Body is null)
+               && (prop.Getter is not null || prop.Setter is not null);
     }
 
     private void WriteFieldDefinition(StringBuilder sb, FieldDefinitionNode field, int indent) {
@@ -722,7 +817,10 @@ public sealed class CSharpGenerator {
                     sb.Append(member.MemberName);
                 }
                 else {
+                    var memberNeedsParens = member.Value is TypeCast or TypeAs or Conditional or Coalesce;
+                    if (memberNeedsParens) sb.Append('(');
                     WriteExpression(sb, member.Value);
+                    if (memberNeedsParens) sb.Append(')');
                     sb.Append('.');
                     sb.Append(member.MemberName);
                 }

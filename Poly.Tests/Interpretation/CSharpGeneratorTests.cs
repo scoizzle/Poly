@@ -205,6 +205,13 @@ public class CSharpGeneratorTests {
     }
 
     [Test]
+    public async Task Generate_MemberAccessOnCast_ParenthesizesCastExpression() {
+        var node = new Member(new TypeCast(new Variable("actor"), new TypeReference("AdminUser")), "Department");
+        var result = new CSharpGenerator().Generate(node);
+        await Assert.That(result).IsEqualTo("((AdminUser)actor).Department;");
+    }
+
+    [Test]
     public async Task Generate_Lambda_SingleParameter_ProducesLambdaExpression() {
         var param = new Parameter("x");
         var node = new Lambda([param], new Add(param, new Constant(1)));
@@ -517,6 +524,57 @@ public class CSharpGeneratorTests {
 
         await Assert.That(result).IsEqualTo(
             "public record WidgetCreated(String Name);");
+    }
+
+    [Test]
+    public async Task Generate_AutoPropertyWithProtectedSetter_WritesSingleLineProperty() {
+        var node = new TypeDefinitionNode(
+            Name: "Widget",
+            Properties: [
+                new PropertyDefinitionNode(
+                    "Name",
+                    new PrimitiveTypeReference(PrimitiveType.String),
+                    Getter: new PropertyGetterDefinitionNode(),
+                    Setter: new PropertySetterDefinitionNode(AccessModifier: AccessModifier.Protected))
+            ]);
+
+        var result = new CSharpGenerator().Generate(node);
+
+        await Assert.That(result).IsEqualTo(
+            "public class Widget" + Environment.NewLine +
+            "{" + Environment.NewLine +
+            "    public String Name { get; protected set; }" + Environment.NewLine +
+            "}");
+    }
+
+    [Test]
+    public async Task Generate_PrimaryConstructorInitializerReferences_WritesParameterBackedInitializers() {
+        var nameParameter = new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String));
+        var node = new TypeDefinitionNode(
+            Name: "Widget",
+            PrimaryConstructorParameters: [nameParameter],
+            Properties: [
+                new PropertyDefinitionNode(
+                    "DisplayName",
+                    new PrimitiveTypeReference(PrimitiveType.String),
+                    Getter: new PropertyGetterDefinitionNode(),
+                    Initializer: new PropertyInitializerDefinitionNode(new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String))))
+            ],
+            Fields: [
+                new FieldDefinitionNode(
+                    "_name",
+                    new PrimitiveTypeReference(PrimitiveType.String),
+                    new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
+                    IsReadOnly: true,
+                    AccessModifier: AccessModifier.Private)
+            ],
+            Semantics: TypeDefinitionSemantics.ImmutableValue);
+
+        var result = new CSharpGenerator().Generate(node);
+
+        await Assert.That(result).Contains("public record Widget(String name)");
+        await Assert.That(result).Contains("private readonly String _name = name;");
+        await Assert.That(result).Contains("public String DisplayName { get; } = name;");
     }
 
     [Test]

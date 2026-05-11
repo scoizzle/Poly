@@ -181,10 +181,10 @@ public class OpenApiPetstoreIntegrationTests {
         await Assert.That(categoryType).IsTypeOf<Entity>();
 
         var petEntity = (Entity)petType;
-        await Assert.That(petEntity.FindProperty("name")).IsNotNull();
-        await Assert.That(petEntity.FindProperty("category")).IsNotNull();
-        await Assert.That(petEntity.FindProperty("tags")).IsNotNull();
-        await Assert.That(petEntity.FindProperty("status")).IsNotNull();
+        await Assert.That(petEntity.FindProperty("Name")).IsNotNull();
+        await Assert.That(petEntity.FindProperty("Category")).IsNotNull();
+        await Assert.That(petEntity.FindProperty("Tags")).IsNotNull();
+        await Assert.That(petEntity.FindProperty("Status")).IsNotNull();
     }
 
     [Test]

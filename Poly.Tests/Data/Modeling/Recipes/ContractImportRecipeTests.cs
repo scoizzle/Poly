@@ -87,8 +87,8 @@ public class ContractImportRecipeTests {
         await Assert.That(ticketInputType).IsTypeOf<Entity>();
 
         var entity = (Entity)ticketInputType!;
-        await Assert.That(entity.FindProperty("title")).IsNotNull();
-        await Assert.That(entity.FindProperty("priority")).IsNotNull();
+        await Assert.That(entity.FindProperty("Title")).IsNotNull();
+        await Assert.That(entity.FindProperty("Priority")).IsNotNull();
     }
 
     [Test]

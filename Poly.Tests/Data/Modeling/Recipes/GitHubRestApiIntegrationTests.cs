@@ -178,12 +178,12 @@ public class GitHubRestApiIntegrationTests {
         await Assert.That(root).IsTypeOf<Entity>();
 
         var repositoryEntity = (Entity)repository;
-        await Assert.That(repositoryEntity.FindProperty("full_name")).IsNotNull();
-        await Assert.That(repositoryEntity.FindProperty("owner")).IsNotNull();
+        await Assert.That(repositoryEntity.FindProperty("FullName")).IsNotNull();
+        await Assert.That(repositoryEntity.FindProperty("Owner")).IsNotNull();
 
         var issueEntity = (Entity)issue;
-        await Assert.That(issueEntity.FindProperty("title")).IsNotNull();
-        await Assert.That(issueEntity.FindProperty("user")).IsNotNull();
+        await Assert.That(issueEntity.FindProperty("Title")).IsNotNull();
+        await Assert.That(issueEntity.FindProperty("User")).IsNotNull();
     }
 
     [Test]

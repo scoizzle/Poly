@@ -7,7 +7,8 @@ namespace Poly.Syntax.Nodes;
 /// <param name="Body">Optional constructor body as an AST node.</param>
 public sealed record ConstructorDefinitionNode(
     IReadOnlyList<Parameter>? Parameters = null,
-    Node? Body = null
+    Node? Body = null,
+    AccessModifier AccessModifier = AccessModifier.Public
 ) : Node {
 
     public override IEnumerable<Node?> Children {

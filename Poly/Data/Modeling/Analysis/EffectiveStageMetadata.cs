@@ -1,5 +1,3 @@
-using Poly.Syntax.Analysis;
-
 namespace Poly.Data.Modeling;
 
 public sealed record EffectiveStageMetadata : IAnalysisMetadata {

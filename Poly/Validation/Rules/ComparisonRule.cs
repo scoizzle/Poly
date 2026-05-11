@@ -1,5 +1,3 @@
-using Poly.Syntax;
-
 namespace Poly.Validation.Rules;
 
 public enum ComparisonOperator {

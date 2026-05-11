@@ -640,8 +640,16 @@ public sealed class LinqExpressionGenerator {
     }
 
     private ParameterExpression CreateVariableExpression(Variable variable) {
-        var clrType = (_analysisResult.GetResolvedType(variable) as ClrTypeDefinition)?.RuntimeType ?? typeof(object);
-        return Expression.Variable(clrType, variable.Name);
+        var resolvedType = _analysisResult.GetResolvedType(variable) as ClrTypeDefinition;
+        if (resolvedType?.RuntimeType is Type runtimeType) {
+            return Expression.Variable(runtimeType, variable.Name);
+        }
+
+        if (variable.Value is Constant { Value: not null } constant) {
+            return Expression.Variable(constant.Value.GetType(), variable.Name);
+        }
+
+        return Expression.Variable(typeof(object), variable.Name);
     }
 
     /// <summary>

@@ -27,7 +27,8 @@ public sealed record TypeDefinitionNode(
     IReadOnlyList<Node>? Interfaces = null,
     IReadOnlyList<Parameter>? GenericParameters = null,
     PrimitiveType? PrimitiveTypeId = null,
-    TypeCategory TypeCategory = TypeCategory.None
+    TypeCategory TypeCategory = TypeCategory.None,
+    AccessModifier AccessModifier = AccessModifier.Public
 ) : Node {
 
     /// <summary>

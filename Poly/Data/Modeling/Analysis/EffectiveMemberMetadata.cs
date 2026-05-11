@@ -1,7 +1,3 @@
-using System.Collections.Generic;
-
-using Poly.Syntax.Analysis;
-
 namespace Poly.Data.Modeling;
 
 /// <summary>

@@ -1,5 +1,4 @@
 using Poly.Data.Modeling.TypeSystem;
-using Poly.Syntax;
 
 namespace Poly.Data.Modeling;
 

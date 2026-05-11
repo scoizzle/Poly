@@ -18,5 +18,4 @@ public sealed class RangeConstraint(object? minValue, object? maxValue) : Constr
 
     /// <inheritdoc />
     public TypeCategory ApplicableCategories => TypeCategory.Numeric | TypeCategory.Temporal;
-
 }

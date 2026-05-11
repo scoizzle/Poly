@@ -1,5 +1,3 @@
-using Poly.Syntax.Nodes;
-
 namespace Poly.Syntax;
 
 /// <summary>

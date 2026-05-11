@@ -1,5 +1,4 @@
 using Poly.Data.Modeling.Analysis;
-using Poly.Syntax.Analysis;
 
 namespace Poly.Data.Modeling;
 

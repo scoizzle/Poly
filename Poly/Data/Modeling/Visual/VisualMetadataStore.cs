@@ -1,7 +1,5 @@
 using System.Collections.Immutable;
 
-using Poly.Syntax;
-
 namespace Poly.Data.Modeling.Visual;
 
 /// <summary>

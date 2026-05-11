@@ -13,8 +13,9 @@ public sealed record PropertyDefinitionNode : MemberDefinitionNode {
         PropertyInitializerDefinitionNode? Initializer = null,
         bool IsStatic = false,
         IReadOnlyList<Parameter>? IndexParameters = null,
-        IReadOnlyList<Node>? Constraints = null
-    ) : base(Name, PropertyType, IsStatic) {
+        IReadOnlyList<Node>? Constraints = null,
+        AccessModifier AccessModifier = AccessModifier.Public
+    ) : base(Name, PropertyType, IsStatic, AccessModifier) {
         this.Getter = Getter;
         this.Setter = Setter;
         this.Initializer = Initializer ?? (DefaultValue is null ? null : new PropertyInitializerDefinitionNode(DefaultValue));

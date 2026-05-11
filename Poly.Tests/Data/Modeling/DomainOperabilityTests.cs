@@ -4,7 +4,6 @@ using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.Effects.Mutations;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Introspection;
-using Poly.Syntax.Analysis;
 
 using DomainAction = Poly.Data.Modeling.Action;
 using EffectConditional = Poly.Data.Modeling.Effects.Conditional;

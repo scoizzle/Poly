@@ -154,10 +154,10 @@ public partial struct StringView {
             return true;
         }
         else
-        if (str.IsAt(idx, lastIndex, bool.FalseString, StringComparison.OrdinalIgnoreCase)) {
-            value = false;
-            return true;
-        }
+            if (str.IsAt(idx, lastIndex, bool.FalseString, StringComparison.OrdinalIgnoreCase)) {
+                value = false;
+                return true;
+            }
 
         value = default;
         return false;

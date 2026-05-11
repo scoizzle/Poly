@@ -1,5 +1,4 @@
 using Poly.Data.Modeling.TypeSystem;
-using Poly.Syntax.Analysis;
 
 namespace Poly.Data.Modeling.Recipes.Contracts;
 

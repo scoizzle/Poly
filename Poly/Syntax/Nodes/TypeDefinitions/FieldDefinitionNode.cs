@@ -13,8 +13,9 @@ public sealed record FieldDefinitionNode(
     Node FieldType,
     Node? DefaultValue = null,
     bool IsStatic = false,
-    bool IsReadOnly = false
-) : MemberDefinitionNode(Name, FieldType, IsStatic) {
+    bool IsReadOnly = false,
+    AccessModifier AccessModifier = AccessModifier.Public
+) : MemberDefinitionNode(Name, FieldType, IsStatic, AccessModifier) {
 
     public override IEnumerable<Node?> Children {
         get {

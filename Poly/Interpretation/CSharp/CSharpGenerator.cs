@@ -1,5 +1,3 @@
-using Poly.Introspection;
-
 namespace Poly.Interpretation.CSharp;
 
 public sealed class CSharpGenerator {

@@ -1,5 +1,3 @@
-using System.Linq;
-
 using Poly.Data.Modeling.TypeSystem;
 
 namespace Poly.Data.Modeling.Effects;

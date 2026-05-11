@@ -44,8 +44,8 @@ namespace Poly {
                 if (text[offset] == '-')
                     offset++;
                 else
-                if (text[offset] == '+')
-                    offset++;
+                    if (text[offset] == '+')
+                        offset++;
 
                 while (offset < lastIndex) {
                     if ((text[offset] ^ '0') > 9)

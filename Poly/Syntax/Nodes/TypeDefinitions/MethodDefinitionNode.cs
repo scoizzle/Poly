@@ -15,8 +15,9 @@ public sealed record MethodDefinitionNode(
     IReadOnlyList<Parameter>? Parameters = null,
     Node? Body = null,
     bool IsStatic = false,
-    IReadOnlyList<Parameter>? GenericParameters = null
-) : MemberDefinitionNode(Name, ReturnType, IsStatic) {
+    IReadOnlyList<Parameter>? GenericParameters = null,
+    AccessModifier AccessModifier = AccessModifier.Public
+) : MemberDefinitionNode(Name, ReturnType, IsStatic, AccessModifier) {
 
     public override IEnumerable<Node?> Children {
         get {

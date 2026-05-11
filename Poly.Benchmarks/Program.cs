@@ -1,8 +1,12 @@
 using System;
 using System.CommandLine;
+using System.IO;
 
 using Poly.Benchmarks.DomainModeling;
 using Poly.Benchmarks.DomainModeling.Demos;
+using Poly.Data.Modeling;
+using Poly.Data.Modeling.Analysis;
+using Poly.Interpretation.CSharp;
 
 var domainNameOption = new Option<string>("--name") {
     Description = "Name for the domain being modeled."
@@ -16,16 +20,51 @@ var ecommerceDomainOption = new Option<bool>("--ecommerce-domain") {
     Description = "Test the E-commerce domain with imported OpenAPI contract wiring."
 };
 
+var dumpCsharpOption = new Option<string>("--dump-csharp") {
+    Description = "Dump generated C# for a domain (library, ecommerce)."
+};
+
+var outputOption = new Option<string>("--output", "-o") {
+    Description = "Output file path for --dump-csharp. Writes to stdout if not specified."
+};
+
 var rootCommand = new RootCommand("Interactive domain modeling workbench") {
     domainNameOption,
     libraryDomainOption,
-    ecommerceDomainOption
+    ecommerceDomainOption,
+    dumpCsharpOption,
+    outputOption
 };
 
 rootCommand.SetAction(parseResult => {
     var domainName = parseResult.GetValue(domainNameOption) ?? "Interactive Domain";
     var testLibraryDomain = parseResult.GetValue(libraryDomainOption);
     var testECommerceDomain = parseResult.GetValue(ecommerceDomainOption);
+    var dumpCsharp = parseResult.GetValue(dumpCsharpOption);
+
+    if (dumpCsharp is not null) {
+        var domain = dumpCsharp switch {
+            "library" => LibraryDomain.Build(),
+            "ecommerce" => ECommerceDomain.BuildECommerceDomain(),
+            _ => throw new ArgumentException($"Unknown domain: {dumpCsharp}")
+        };
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var pass = new DomainImplementationLoweringPass();
+        var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
+        var testStmts = pass.GenerateTestStatements(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(typeDefs, testStmts);
+
+        var outputPath = parseResult.GetValue(outputOption);
+        if (outputPath is not null) {
+            File.WriteAllText(outputPath, csharp);
+            Console.Error.WriteLine($"Generated C# written to: {outputPath}");
+        }
+        else {
+            Console.Write(csharp);
+        }
+        return 0;
+    }
 
     if (testLibraryDomain) {
         TestLibraryDomain.Run();

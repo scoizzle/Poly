@@ -1,8 +1,6 @@
 using System;
 using System.Linq;
 
-using Poly.Benchmarks.DomainModeling;
-using Poly.Benchmarks.DomainModeling.Demos;
 using Poly.Data.Modeling;
 
 namespace Poly.Benchmarks.DomainModeling.Demos;

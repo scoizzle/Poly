@@ -2,7 +2,6 @@ using Poly.Data.Modeling;
 using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
-using Poly.Data.Modeling.Validation.Constraints;
 using Poly.Introspection;
 
 using DomainAction = Poly.Data.Modeling.Action;

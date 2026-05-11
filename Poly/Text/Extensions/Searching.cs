@@ -154,11 +154,11 @@ public static class StringSearching {
             if (character == '\\')
                 index++;
             else
-            if (character == close && --count == 0)
-                return index;
-            else
-            if (character == open)
-                count++;
+                if (character == close && --count == 0)
+                    return index;
+                else
+                    if (character == open)
+                        count++;
 
             index++;
         }

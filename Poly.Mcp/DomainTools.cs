@@ -56,6 +56,10 @@ internal static class DomainSessionStore {
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
         }
 
+        if (analysis.HasErrors) {
+            throw new InvalidOperationException("Cannot update session with invalid analysis result.");
+        }
+
         if (!Sessions.TryGetValue(sessionId, out var value)) {
             throw new InvalidOperationException($"Session '{sessionId}' was not found.");
         }
@@ -2421,12 +2425,13 @@ public static class DomainAuthoringTool {
     }
 
     private static DomainCommandResponse Commit(string sessionId, Domain domain, AnalysisResult analysis, string message) {
-        var revision = DomainSessionStore.UpdateAnalysis(sessionId, analysis);
         var diagnostics = analysis.Diagnostics
             .Select(static diagnostic => $"{diagnostic.Severity}: {diagnostic.Code} - {diagnostic.Message}")
             .ToArray();
 
         var hasErrors = analysis.Diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
+        var revision = hasErrors ? default(long?) : DomainSessionStore.UpdateAnalysis(sessionId, analysis);
 
         return new DomainCommandResponse(
             Success: !hasErrors,

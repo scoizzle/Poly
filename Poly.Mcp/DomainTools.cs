@@ -1238,8 +1238,10 @@ public static class DomainAuthoringTool {
 
             foreach (var entityDto in payload.Entities) {
                 var entity = entityByName[entityDto.Name];
+                var actionByHandlerName = new Dictionary<string, Data.Modeling.Action>(StringComparer.Ordinal);
                 foreach (var actionDto in entityDto.Actions ?? []) {
                     var action = new Data.Modeling.Action(state.Domain, actionDto.Name, entity);
+                    actionByHandlerName[action.Name] = action;
                     mutation.AddAction(entity, action);
 
                     foreach (var paramDto in actionDto.Parameters) {
@@ -1270,7 +1272,9 @@ public static class DomainAuthoringTool {
 
                 foreach (var subscriptionDto in entityDto.EventSubscriptions ?? []) {
                     var eventType = (Event)ResolveType(typeByName, subscriptionDto.EventTypeName, state.Domain.Name);
-                    var handlerAction = entity.RequireAction(subscriptionDto.HandlerActionName);
+                    if (!actionByHandlerName.TryGetValue(subscriptionDto.HandlerActionName, out var handlerAction)) {
+                        throw new InvalidOperationException($"Action '{subscriptionDto.HandlerActionName}' was not found on entity '{entity.Name}' in the import payload.");
+                    }
                     var eventParameterName = !string.IsNullOrWhiteSpace(subscriptionDto.EventParameterName)
                         ? subscriptionDto.EventParameterName
                         : ResolveLegacyEventParameter(entityDto, handlerAction, eventType);
@@ -2350,6 +2354,24 @@ public static class DomainAuthoringTool {
             var effect = new PublishEvent(state.Domain) { Event = eventType };
             var analysis = state.Domain.CreateMutation().AddEffect(action, effect).Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"PublishEvent '{eventTypeName}' added to action '{actionName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds a StageTransition effect to an action, transitioning the entity to the specified target stage when the action executes. Use AddStageToEntity first to create stages.")]
+    public static DomainCommandResponse AddStageTransitionEffect(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the target stage to transition to.")] string targetStageName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var targetStage = entity.RequireStage(targetStageName);
+            var effect = new StageTransition(state.Domain) { TargetStage = targetStage };
+            var analysis = state.Domain.CreateMutation().AddEffect(action, effect).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"StageTransition '{targetStageName}' added to action '{actionName}' on entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }

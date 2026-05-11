@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Reflection;
 
 using ModelContextProtocol.Server;
 
@@ -9,9 +11,11 @@ using Poly.Data.Modeling.Effects;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;
 using Poly.Data.Modeling.Validation.Constraints;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
+using Poly.Syntax.Nodes;
 
 namespace Poly.Mcp;
 
@@ -306,10 +310,38 @@ public sealed record MutationTraceDto(
     IReadOnlyCollection<DomainMutationStepTrace> Steps,
     IReadOnlyCollection<string> Diagnostics);
 
+public sealed record InterpretationAstChildDto(
+    string Relation,
+    int? Index,
+    InterpretationAstNodeDto Node);
+
+public sealed record InterpretationAstNodeDto(
+    string Kind,
+    string NodeId,
+    string Summary,
+    IReadOnlyDictionary<string, object?> Properties,
+    IReadOnlyCollection<InterpretationAstChildDto> Children);
+
+public sealed record LoweredInterpretationAstDto(
+    string SelectionKind,
+    string SourceNodeType,
+    string SourceNodeId,
+    string? SourceNodePath,
+    IReadOnlyCollection<InterpretationAstNodeDto> Roots);
+
+public sealed record LoweredCSharpDto(
+    string SelectionKind,
+    string SourceNodeType,
+    string SourceNodeId,
+    string? SourceNodePath,
+    string Code);
+
 internal static class DomainAffordances {
     public static IReadOnlyCollection<DomainAffordance> SessionRoot() => [
         new("query:overview", nameof(DomainQueryTool.GetDomainOverview), new Dictionary<string, object?>(), "Get domain overview for the active session."),
         new("query:analysis", nameof(DomainOperabilityTool.GetDomainAnalysis), new Dictionary<string, object?>(), "Get analyzer telemetry and diagnostic summary for the committed domain."),
+        new("query:lowered-interpretation-ast", nameof(DomainOperabilityTool.GetLoweredInterpretationAst), new Dictionary<string, object?>(), "Lower a selected domain node to interpretation AST and return a structured tree."),
+        new("query:lowered-csharp", nameof(DomainOperabilityTool.GenerateLoweredCSharp), new Dictionary<string, object?>(), "Generate C# from the lowered interpretation AST for a selected domain node."),
         new("query:revision-diff", nameof(DomainOperabilityTool.DiffDomainRevision), new Dictionary<string, object?>(), "Compare two stored domain revisions."),
         new("query:entities", nameof(DomainQueryTool.ListEntities), new Dictionary<string, object?>(), "List entities in the domain."),
         new("query:event-types", nameof(DomainQueryTool.ListEventTypes), new Dictionary<string, object?>(), "List event types in the domain."),
@@ -748,17 +780,23 @@ public static class DomainOperabilityTool {
     private const string CategoryInvalidArgument = "InvalidArgument";
     private const string CategoryAnalysis = "Analysis";
 
+    private static readonly HashSet<string> IgnoredAstProperties = new(StringComparer.Ordinal) {
+        nameof(Node.Children),
+        "Members",
+        "FullName",
+        "EffectiveSemantics",
+        "DefaultValue",
+        "IsReadOnly",
+        nameof(DomainObject.Domain),
+        nameof(DomainObject.ChildObjects),
+        nameof(DomainObject.Comments)
+    };
+
     [McpServerTool, Description("Returns analyzer telemetry and diagnostic totals for the committed domain.")]
     public static DomainQueryResponse<DomainAnalysisDto> GetDomainAnalysis(string sessionId) {
         try {
             var session = RequireSession(sessionId);
-            var analyzer = new DomainModelAnalyzer();
-            var run = analyzer.Analyze(session.Domain);
-            _ = DomainSessionStore.UpdateAnalysis(sessionId, run);
-
-            if (!DomainSessionStore.TryGet(sessionId, out var updated)) {
-                throw new InvalidOperationException($"Session '{sessionId}' was not found after analysis update.");
-            }
+            var (run, revision) = AnalyzeCommittedDomain(sessionId, session);
 
             var data = new DomainAnalysisDto(
                 HasErrors: run.HasErrors,
@@ -772,13 +810,79 @@ public static class DomainOperabilityTool {
                 Success: true,
                 Message: "Domain analysis returned.",
                 SessionId: sessionId,
-                Revision: updated.Revision,
+                Revision: revision,
                 Data: data,
                 Affordances: DomainAffordances.SessionScoped(sessionId));
         }
         catch (Exception ex) {
             var (code, category) = ClassifyAnalysisFailure(ex);
             return Fail<DomainAnalysisDto>(sessionId, ex, code, category);
+        }
+    }
+
+    [McpServerTool, Description("Lowers a selected domain node to interpretation AST and returns a structured tree. Pass nodePath for named domain members, nodeId for unnamed nodes, or neither for the full lowered domain.")]
+    public static DomainQueryResponse<LoweredInterpretationAstDto> GetLoweredInterpretationAst(
+        string sessionId,
+        string? nodePath = null,
+        string? nodeId = null) {
+        try {
+            var session = RequireSession(sessionId);
+            var (analysis, revision) = AnalyzeCommittedDomain(sessionId, session);
+            var (selectedNode, parents) = ResolveSelectedNode(session.Domain, nodePath, nodeId);
+            var selection = LowerSelectedNodeToInterpretationAst(session.Domain, analysis, selectedNode, parents);
+
+            var data = new LoweredInterpretationAstDto(
+                SelectionKind: selection.SelectionKind,
+                SourceNodeType: selectedNode.GetType().Name,
+                SourceNodeId: selectedNode.Id.Value,
+                SourceNodePath: string.IsNullOrWhiteSpace(nodePath) ? null : nodePath,
+                Roots: selection.Roots
+                    .Select(ToInterpretationAstNodeDto)
+                    .ToArray());
+
+            return new DomainQueryResponse<LoweredInterpretationAstDto>(
+                Success: true,
+                Message: $"Lowered interpretation AST returned for '{DescribeSelection(nodePath, nodeId, selectedNode)}'.",
+                SessionId: sessionId,
+                Revision: revision,
+                Data: data,
+                Affordances: DomainAffordances.SessionScoped(sessionId));
+        }
+        catch (Exception ex) {
+            var (code, category) = ClassifyAnalysisFailure(ex);
+            return Fail<LoweredInterpretationAstDto>(sessionId, ex, code, category);
+        }
+    }
+
+    [McpServerTool, Description("Generates C# from the lowered interpretation AST for a selected domain node. Pass nodePath for named domain members, nodeId for unnamed nodes, or neither for the full lowered domain.")]
+    public static DomainQueryResponse<LoweredCSharpDto> GenerateLoweredCSharp(
+        string sessionId,
+        string? nodePath = null,
+        string? nodeId = null) {
+        try {
+            var session = RequireSession(sessionId);
+            var (analysis, revision) = AnalyzeCommittedDomain(sessionId, session);
+            var (selectedNode, parents) = ResolveSelectedNode(session.Domain, nodePath, nodeId);
+            var selection = LowerSelectedNodeToInterpretationAst(session.Domain, analysis, selectedNode, parents);
+
+            var data = new LoweredCSharpDto(
+                SelectionKind: selection.SelectionKind,
+                SourceNodeType: selectedNode.GetType().Name,
+                SourceNodeId: selectedNode.Id.Value,
+                SourceNodePath: string.IsNullOrWhiteSpace(nodePath) ? null : nodePath,
+                Code: GenerateCSharpFromRoots(selection.Roots));
+
+            return new DomainQueryResponse<LoweredCSharpDto>(
+                Success: true,
+                Message: $"Generated C# returned for '{DescribeSelection(nodePath, nodeId, selectedNode)}'.",
+                SessionId: sessionId,
+                Revision: revision,
+                Data: data,
+                Affordances: DomainAffordances.SessionScoped(sessionId));
+        }
+        catch (Exception ex) {
+            var (code, category) = ClassifyAnalysisFailure(ex);
+            return Fail<LoweredCSharpDto>(sessionId, ex, code, category);
         }
     }
 
@@ -934,6 +1038,373 @@ public static class DomainOperabilityTool {
         }
     }
 
+    private static (AnalysisResult Analysis, long Revision) AnalyzeCommittedDomain(string sessionId, DomainSessionState session) {
+        var analyzer = new DomainModelAnalyzer();
+        var run = analyzer.Analyze(session.Domain);
+        var revision = DomainSessionStore.UpdateAnalysis(sessionId, run);
+        return (run, revision);
+    }
+
+    private static (Node SelectedNode, IReadOnlyDictionary<Node, Node?> Parents) ResolveSelectedNode(
+        Domain domain,
+        string? nodePath,
+        string? nodeId) {
+        var parents = new Dictionary<Node, Node?>(ReferenceEqualityComparer.Instance);
+        var nodesById = new Dictionary<string, Node>(StringComparer.Ordinal);
+        var stack = new Stack<(Node Node, Node? Parent)>();
+        stack.Push((domain, null));
+
+        while (stack.Count > 0) {
+            var (current, parent) = stack.Pop();
+            if (parents.ContainsKey(current)) {
+                continue;
+            }
+
+            parents[current] = parent;
+            nodesById[current.Id.Value] = current;
+
+            foreach (var child in current.Children.OfType<Node>().Reverse()) {
+                stack.Push((child, current));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(nodeId)) {
+            if (!nodesById.TryGetValue(NodeId.Parse(nodeId).Value, out var selectedById)) {
+                throw new InvalidOperationException($"Node '{nodeId}' was not found in domain '{domain.Name}'.");
+            }
+
+            return (selectedById, parents);
+        }
+
+        if (!string.IsNullOrWhiteSpace(nodePath)) {
+            var selectedByPath = ResolveNodeByPath(domain, nodePath);
+            return (selectedByPath, parents);
+        }
+
+        return (domain, parents);
+    }
+
+    private static LoweredAstSelection LowerSelectedNodeToInterpretationAst(
+        Domain domain,
+        AnalysisResult analysis,
+        Node selectedNode,
+        IReadOnlyDictionary<Node, Node?> parents) {
+        var loweringPass = new DomainImplementationLoweringPass();
+        IReadOnlyList<TypeDefinitionNode>? typeDefinitions = null;
+
+        IReadOnlyList<TypeDefinitionNode> GetTypeDefinitions() => typeDefinitions ??= loweringPass.LowerToTypeDefinitions(domain, analysis);
+
+        return selectedNode switch {
+            Domain => new LoweredAstSelection("DomainImplementation", GetTypeDefinitions().Cast<Node>().ToArray()),
+            Relationship relationship => new LoweredAstSelection("RelationshipTypeDefinition", GetLoweredTypeRoots(GetTypeDefinitions(), relationship.Name, $"{relationship.Name}Stage")),
+            Entity entity => new LoweredAstSelection("EntityTypeDefinition", GetLoweredTypeRoots(GetTypeDefinitions(), entity.Name, $"{entity.Name}Stage")),
+            Event @event => new LoweredAstSelection("EventTypeDefinition", [RequireTypeDefinition(GetTypeDefinitions(), @event.Name)]),
+            Primitive primitive => new LoweredAstSelection("PrimitiveTypeReference", [DomainLoweringGenerator.MapDomainTypeToNode(primitive)]),
+            Poly.Data.Modeling.Action action => new LoweredAstSelection("ActionMethodDefinition", [GetLoweredActionMethod(action, parents, GetTypeDefinitions())]),
+            EventSubscription subscription => new LoweredAstSelection("EventSubscriptionMethodDefinition", [GetLoweredSubscriptionMethod(subscription, parents, GetTypeDefinitions())]),
+            Stage stage => new LoweredAstSelection("StageLowering", GetLoweredStageRoots(stage, analysis, parents, GetTypeDefinitions())),
+            Property property => new LoweredAstSelection("PropertyLowering", GetLoweredPropertyRoots(property, analysis, parents, GetTypeDefinitions())),
+            Policy policy => new LoweredAstSelection("PolicyGuardAst", [DomainLoweringGenerator.LowerPolicy(policy, BuildPolicySubject(policy, parents), BuildActorEvaluationContext())]),
+            Rule rule => new LoweredAstSelection("RuleGuardAst", [DomainLoweringGenerator.LowerRule(rule, BuildPolicySubject(rule, parents), BuildActorEvaluationContext())]),
+            Effect effect => new LoweredAstSelection("EffectAst", [LowerEffectForSelection(effect, parents)]),
+            _ => throw new InvalidOperationException($"Node type '{selectedNode.GetType().Name}' is not currently supported for lowering.")
+        };
+    }
+
+    private static DomainMember ResolveNodeByPath(Domain domain, string nodePath) {
+        var segments = nodePath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length == 0) {
+            throw new InvalidOperationException("Node path cannot be empty.");
+        }
+
+        DomainMember current = domain;
+        foreach (var segment in segments) {
+            current = current.ChildObjects
+                .OfType<DomainMember>()
+                .FirstOrDefault(child => string.Equals(child.Name, segment, StringComparison.Ordinal))
+                ?? throw new InvalidOperationException($"Could not resolve path '{nodePath}' - segment '{segment}' not found under '{current.Name}'.");
+        }
+
+        return current;
+    }
+
+    private static IReadOnlyCollection<Node> GetLoweredTypeRoots(
+        IReadOnlyCollection<TypeDefinitionNode> typeDefinitions,
+        string typeName,
+        string stageEnumName) {
+        var roots = new List<Node> {
+            RequireTypeDefinition(typeDefinitions, typeName)
+        };
+
+        var stageEnum = typeDefinitions.FirstOrDefault(type => string.Equals(type.Name, stageEnumName, StringComparison.Ordinal));
+        if (stageEnum is not null) {
+            roots.Add(stageEnum);
+        }
+
+        return roots;
+    }
+
+    private static MethodDefinitionNode GetLoweredActionMethod(
+        Poly.Data.Modeling.Action action,
+        IReadOnlyDictionary<Node, Node?> parents,
+        IReadOnlyCollection<TypeDefinitionNode> typeDefinitions) {
+        var owner = FindNearestParent<Entity>(action, parents)
+            ?? throw new InvalidOperationException($"Could not resolve an owning entity for action '{action.Name}'.");
+        var typeDefinition = RequireTypeDefinition(typeDefinitions, owner.Name);
+        return RequireMethodDefinition(typeDefinition, action.Name);
+    }
+
+    private static MethodDefinitionNode GetLoweredSubscriptionMethod(
+        EventSubscription subscription,
+        IReadOnlyDictionary<Node, Node?> parents,
+        IReadOnlyCollection<TypeDefinitionNode> typeDefinitions) {
+        var owner = FindNearestParent<Entity>(subscription, parents)
+            ?? throw new InvalidOperationException($"Could not resolve an owning entity for subscription '{subscription.Name}'.");
+        var typeDefinition = RequireTypeDefinition(typeDefinitions, owner.Name);
+        return RequireMethodDefinition(typeDefinition, $"On{subscription.EventType.Name}");
+    }
+
+    private static IReadOnlyCollection<Node> GetLoweredStageRoots(
+        Stage stage,
+        AnalysisResult analysis,
+        IReadOnlyDictionary<Node, Node?> parents,
+        IReadOnlyCollection<TypeDefinitionNode> typeDefinitions) {
+        var roots = new List<Node>();
+        var owner = FindNearestParent<Entity>(stage, parents)
+            ?? throw new InvalidOperationException($"Could not resolve an owning entity for stage '{stage.Name}'.");
+        var stageEnum = typeDefinitions.FirstOrDefault(type => string.Equals(type.Name, $"{owner.Name}Stage", StringComparison.Ordinal));
+        var field = stageEnum?.Fields?.FirstOrDefault(candidate => string.Equals(candidate.Name, stage.Name, StringComparison.Ordinal));
+        if (field is not null) {
+            roots.Add(field);
+        }
+
+        var transitionGuard = analysis.GetTransitionValidationAst(stage);
+        if (transitionGuard is not null) {
+            roots.Add(transitionGuard);
+        }
+
+        if (roots.Count == 0) {
+            throw new InvalidOperationException($"No lowered interpretation AST was found for stage '{stage.Name}'.");
+        }
+
+        return roots;
+    }
+
+    private static IReadOnlyCollection<Node> GetLoweredPropertyRoots(
+        Property property,
+        AnalysisResult analysis,
+        IReadOnlyDictionary<Node, Node?> parents,
+        IReadOnlyCollection<TypeDefinitionNode> typeDefinitions) {
+        var roots = new List<Node>();
+        var structuralNode = TryGetLoweredPropertyStructuralNode(property, parents, typeDefinitions);
+        if (structuralNode is not null) {
+            roots.Add(structuralNode);
+        }
+
+        var validationAst = analysis.GetPropertyValidationAst(property);
+        if (validationAst is not null) {
+            roots.Add(validationAst);
+        }
+
+        if (roots.Count == 0) {
+            throw new InvalidOperationException($"No lowered interpretation AST was found for property '{property.Name}'.");
+        }
+
+        return roots;
+    }
+
+    private static Node? TryGetLoweredPropertyStructuralNode(
+        Property property,
+        IReadOnlyDictionary<Node, Node?> parents,
+        IReadOnlyCollection<TypeDefinitionNode> typeDefinitions) {
+        var owner = GetParent(property, parents);
+
+        return owner switch {
+            Entity entity => RequireTypeDefinition(typeDefinitions, entity.Name).Properties?.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, property.Name, StringComparison.Ordinal)),
+            Event @event => RequireTypeDefinition(typeDefinitions, @event.Name).PrimaryConstructorParameters?.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, DomainLoweringGenerator.ToSynthesizedParameterName(property.Name), StringComparison.Ordinal)),
+            Poly.Data.Modeling.Action action => GetLoweredActionMethod(action, parents, typeDefinitions).Parameters?.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, property.Name, StringComparison.Ordinal)),
+            _ => null
+        };
+    }
+
+    private static Node LowerEffectForSelection(Effect effect, IReadOnlyDictionary<Node, Node?> parents) {
+        var ownerAction = FindNearestParent<Poly.Data.Modeling.Action>(effect, parents)
+            ?? throw new InvalidOperationException($"Could not resolve an owning action for effect '{effect.GetType().Name}'.");
+        var ownerEntity = FindNearestParent<Entity>(effect, parents)
+            ?? throw new InvalidOperationException($"Could not resolve an owning entity for effect '{effect.GetType().Name}'.");
+        var executionContext = new Parameter("context", new NamedTypeReference("ActionExecutionContext"));
+        var parameterNames = ownerAction.Parameters
+            .OfType<Property>()
+            .Select(static parameter => parameter.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return DomainLoweringGenerator.LowerEffect(
+            effect,
+            new ThisReference(),
+            ownerEntity.EventSubscriptions,
+            ownerEntity.Name,
+            parameterNames,
+            executionContext);
+    }
+
+    private static Node BuildPolicySubject(Node node, IReadOnlyDictionary<Node, Node?> parents) {
+        if (FindNearestParent<Property>(node, parents) is Property property) {
+            var typeNode = DomainLoweringGenerator.MapDomainTypeToNode(property.Type);
+            return new Parameter(DomainLoweringGenerator.ToSynthesizedParameterName(property.Name), typeNode);
+        }
+
+        if (FindNearestParent<Poly.Data.Modeling.Action>(node, parents) is not null
+            || FindNearestParent<Stage>(node, parents) is not null) {
+            return new ThisReference();
+        }
+
+        return new ParameterReference();
+    }
+
+    private static ActorEvaluationContext BuildActorEvaluationContext() {
+        var executionContext = new Parameter("context", new NamedTypeReference("ActionExecutionContext"));
+        return new ActorEvaluationContext(new Member(executionContext, "Actor"), executionContext);
+    }
+
+    private static TypeDefinitionNode RequireTypeDefinition(IReadOnlyCollection<TypeDefinitionNode> typeDefinitions, string name) =>
+        typeDefinitions.FirstOrDefault(type => string.Equals(type.Name, name, StringComparison.Ordinal))
+        ?? throw new InvalidOperationException($"Lowered type definition '{name}' was not found.");
+
+    private static MethodDefinitionNode RequireMethodDefinition(TypeDefinitionNode typeDefinition, string name) =>
+        typeDefinition.Methods?.FirstOrDefault(method => string.Equals(method.Name, name, StringComparison.Ordinal))
+        ?? throw new InvalidOperationException($"Lowered method '{name}' was not found on type '{typeDefinition.Name}'.");
+
+    private static TNode? FindNearestParent<TNode>(Node node, IReadOnlyDictionary<Node, Node?> parents)
+        where TNode : Node {
+        var current = GetParent(node, parents);
+        while (current is not null) {
+            if (current is TNode typedNode) {
+                return typedNode;
+            }
+
+            current = GetParent(current, parents);
+        }
+
+        return null;
+    }
+
+    private static Node? GetParent(Node node, IReadOnlyDictionary<Node, Node?> parents) =>
+        parents.TryGetValue(node, out var parent) ? parent : null;
+
+    private static InterpretationAstNodeDto ToInterpretationAstNodeDto(Node node) {
+        var visited = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+        return ToInterpretationAstNodeDto(node, visited);
+    }
+
+    private static InterpretationAstNodeDto ToInterpretationAstNodeDto(Node node, ISet<Node> visited) {
+        if (!visited.Add(node)) {
+            return new InterpretationAstNodeDto(
+                Kind: node.GetType().Name,
+                NodeId: node.Id.Value,
+                Summary: node.ToString() ?? node.GetType().Name,
+                Properties: new Dictionary<string, object?> {
+                    ["ReferenceOnly"] = true
+                },
+                Children: []);
+        }
+
+        var properties = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var children = new List<InterpretationAstChildDto>();
+
+        foreach (var property in node.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public)) {
+            if (!property.CanRead || property.GetIndexParameters().Length > 0 || IgnoredAstProperties.Contains(property.Name)) {
+                continue;
+            }
+
+            var value = property.GetValue(node);
+            switch (value) {
+                case null:
+                    properties[property.Name] = null;
+                    break;
+                case Node childNode:
+                    children.Add(new InterpretationAstChildDto(property.Name, null, ToInterpretationAstNodeDto(childNode, visited)));
+                    break;
+                case IEnumerable enumerable when value is not string: {
+                        var scalarItems = new List<object?>();
+                        var childIndex = 0;
+                        var containsChildNodes = false;
+
+                        foreach (var item in enumerable) {
+                            if (item is Node child) {
+                                containsChildNodes = true;
+                                children.Add(new InterpretationAstChildDto(property.Name, childIndex++, ToInterpretationAstNodeDto(child, visited)));
+                                continue;
+                            }
+
+                            scalarItems.Add(ConvertAstScalarValue(item));
+                        }
+
+                        if (!containsChildNodes || scalarItems.Count > 0) {
+                            properties[property.Name] = scalarItems.ToArray();
+                        }
+
+                        break;
+                    }
+                default:
+                    properties[property.Name] = ConvertAstScalarValue(value);
+                    break;
+            }
+        }
+
+        return new InterpretationAstNodeDto(
+            Kind: node.GetType().Name,
+            NodeId: node.Id.Value,
+            Summary: node.ToString() ?? node.GetType().Name,
+            Properties: properties,
+            Children: children);
+    }
+
+    private static object? ConvertAstScalarValue(object? value) {
+        return value switch {
+            null => null,
+            string or bool or byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal => value,
+            NodeId id => id.Value,
+            TimeSpan span => span.ToString(),
+            Enum @enum => @enum.ToString(),
+            IEnumerable enumerable when value is not string => enumerable.Cast<object?>().Select(ConvertAstScalarValue).ToArray(),
+            _ => value.ToString()
+        };
+    }
+
+    private static string GenerateCSharpFromRoots(IReadOnlyCollection<Node> roots) {
+        if (roots.Count == 0) {
+            throw new InvalidOperationException("No lowered interpretation AST roots were produced.");
+        }
+
+        var generator = new CSharpGenerator();
+        if (roots.All(static root => root is TypeDefinitionNode)) {
+            return generator.Generate(roots.Cast<TypeDefinitionNode>().ToArray());
+        }
+
+        if (roots.Count == 1) {
+            return generator.Generate(roots.First());
+        }
+
+        return string.Join(
+            $"{Environment.NewLine}{Environment.NewLine}",
+            roots.Select(generator.Generate));
+    }
+
+    private static string DescribeSelection(string? nodePath, string? nodeId, Node selectedNode) {
+        if (!string.IsNullOrWhiteSpace(nodePath)) {
+            return nodePath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(nodeId)) {
+            return nodeId;
+        }
+
+        return selectedNode.GetType().Name;
+    }
+
     private static DomainSessionState RequireSession(string sessionId) {
         if (!DomainSessionStore.TryGet(sessionId, out var session)) {
             throw new InvalidOperationException($"Session '{sessionId}' was not found.");
@@ -1019,6 +1490,8 @@ public static class DomainOperabilityTool {
 
     private static bool IsUnsupportedMutation(Exception ex) =>
         ex is InvalidOperationException && ex.Message.Contains("Unsupported mutationType", StringComparison.Ordinal);
+
+    private sealed record LoweredAstSelection(string SelectionKind, IReadOnlyCollection<Node> Roots);
 }
 
 [McpServerToolType]

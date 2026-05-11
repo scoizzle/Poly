@@ -308,6 +308,59 @@ public class DomainMcpToolsTests {
     }
 
     [Test]
+    public async Task GetLoweredInterpretationAst_EntitySelection_ReturnsLoweredTypeTree() {
+        var sessionId = $"mcp-test-{Guid.NewGuid():N}";
+        _ = DomainAuthoringTool.CreateDomain("Lowering", sessionId);
+        _ = DomainAuthoringTool.AddEntity(sessionId, "Task");
+        _ = DomainAuthoringTool.AddPropertyToEntity(sessionId, "Task", "Name", "Text");
+        _ = DomainAuthoringTool.AddActionToEntity(sessionId, "Task", "Rename");
+        _ = DomainAuthoringTool.AddParameterToAction(sessionId, "Task", "Rename", "newName", "Text");
+
+        var response = DomainOperabilityTool.GetLoweredInterpretationAst(sessionId, nodePath: "Task");
+
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsNotNull();
+        await Assert.That(response.Data!.SelectionKind).IsEqualTo("EntityTypeDefinition");
+        await Assert.That(response.Data.SourceNodeType).IsEqualTo("Entity");
+        await Assert.That(response.Data.SourceNodePath).IsEqualTo("Task");
+        await Assert.That(response.Data.Roots.Select(static root => root.Kind)).Contains("TypeDefinitionNode");
+
+        var typeRoot = response.Data.Roots.First(static root => root.Kind == "TypeDefinitionNode");
+        await Assert.That(typeRoot.Properties["Name"]).IsEqualTo("Task");
+        await Assert.That(typeRoot.Children.Select(static child => child.Node.Kind)).Contains("MethodDefinitionNode");
+    }
+
+    [Test]
+    public async Task GenerateLoweredCSharp_ActionSelection_ReturnsMethodSource() {
+        var sessionId = $"mcp-test-{Guid.NewGuid():N}";
+        _ = DomainAuthoringTool.CreateDomain("Lowering", sessionId);
+        _ = DomainAuthoringTool.AddEntity(sessionId, "Task");
+        _ = DomainAuthoringTool.AddActionToEntity(sessionId, "Task", "Rename");
+        _ = DomainAuthoringTool.AddParameterToAction(sessionId, "Task", "Rename", "newName", "Text");
+
+        var response = DomainOperabilityTool.GenerateLoweredCSharp(sessionId, nodePath: "Task/Rename");
+
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsNotNull();
+        await Assert.That(response.Data!.SelectionKind).IsEqualTo("ActionMethodDefinition");
+        await Assert.That(response.Data.SourceNodeType).IsEqualTo("Action");
+        await Assert.That(response.Data.Code).Contains("Result Rename(ActionExecutionContext context, String newName)");
+        await Assert.That(response.Data.Code).Contains("return Result.Success();");
+    }
+
+    [Test]
+    public async Task GetLoweredInterpretationAst_MissingSession_ReturnsStableNotFoundDiagnostics() {
+        var missingSession = $"missing-{Guid.NewGuid():N}";
+
+        var response = DomainOperabilityTool.GetLoweredInterpretationAst(missingSession, nodePath: "Task");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Diagnostics).IsNotNull();
+        await Assert.That(response.Diagnostics!.Any(static diagnostic => diagnostic.Contains("code=SESSION_NOT_FOUND", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(response.Diagnostics!.Any(static diagnostic => diagnostic.Contains("category=NotFound", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
     public async Task DiffDomainRevision_WhenOldRevisionPruned_ReturnsFailure() {
         var sessionId = $"mcp-test-{Guid.NewGuid():N}";
         _ = DomainAuthoringTool.CreateDomain("Retention", sessionId);
@@ -418,6 +471,52 @@ public class DomainMcpToolsTests {
         await Assert.That(HasProperty(data, "affectedNodeIds")).IsTrue();
         await Assert.That(HasProperty(data, "steps")).IsTrue();
         await Assert.That(HasProperty(data, "diagnostics")).IsTrue();
+    }
+
+    [Test]
+    public async Task GetLoweredInterpretationAst_SerializationContract_RemainsStable() {
+        var sessionId = $"mcp-test-{Guid.NewGuid():N}";
+        _ = DomainAuthoringTool.CreateDomain("LoweredAstContract", sessionId);
+        _ = DomainAuthoringTool.AddEntity(sessionId, "Task");
+
+        var response = DomainOperabilityTool.GetLoweredInterpretationAst(sessionId, nodePath: "Task");
+        var json = JsonSerializer.Serialize(response);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        await Assert.That(HasProperty(root, "data")).IsTrue();
+        var data = root.GetProperty("Data");
+        await Assert.That(HasProperty(data, "selectionKind")).IsTrue();
+        await Assert.That(HasProperty(data, "sourceNodeType")).IsTrue();
+        await Assert.That(HasProperty(data, "sourceNodeId")).IsTrue();
+        await Assert.That(HasProperty(data, "sourceNodePath")).IsTrue();
+        await Assert.That(HasProperty(data, "roots")).IsTrue();
+
+        var astRoot = data.GetProperty("Roots")[0];
+        await Assert.That(HasProperty(astRoot, "kind")).IsTrue();
+        await Assert.That(HasProperty(astRoot, "nodeId")).IsTrue();
+        await Assert.That(HasProperty(astRoot, "summary")).IsTrue();
+        await Assert.That(HasProperty(astRoot, "properties")).IsTrue();
+        await Assert.That(HasProperty(astRoot, "children")).IsTrue();
+    }
+
+    [Test]
+    public async Task GenerateLoweredCSharp_SerializationContract_RemainsStable() {
+        var sessionId = $"mcp-test-{Guid.NewGuid():N}";
+        _ = DomainAuthoringTool.CreateDomain("LoweredCSharpContract", sessionId);
+
+        var response = DomainOperabilityTool.GenerateLoweredCSharp(sessionId);
+        var json = JsonSerializer.Serialize(response);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        await Assert.That(HasProperty(root, "data")).IsTrue();
+        var data = root.GetProperty("Data");
+        await Assert.That(HasProperty(data, "selectionKind")).IsTrue();
+        await Assert.That(HasProperty(data, "sourceNodeType")).IsTrue();
+        await Assert.That(HasProperty(data, "sourceNodeId")).IsTrue();
+        await Assert.That(HasProperty(data, "sourceNodePath")).IsTrue();
+        await Assert.That(HasProperty(data, "code")).IsTrue();
     }
 
     [Test]

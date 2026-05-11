@@ -505,6 +505,21 @@ public class CSharpGeneratorTests {
     }
 
     [Test]
+    public async Task Generate_RecordTypeDefinition_WritesRecordClassDeclaration() {
+        var node = new TypeDefinitionNode(
+            Name: "WidgetCreated",
+            PrimaryConstructorParameters: [
+                new Parameter("Name", new PrimitiveTypeReference(PrimitiveType.String))
+            ],
+            Semantics: TypeDefinitionSemantics.ImmutableValue);
+
+        var result = new CSharpGenerator().Generate(node);
+
+        await Assert.That(result).IsEqualTo(
+            "public record WidgetCreated(String Name);");
+    }
+
+    [Test]
     public async Task Generate_NestedInvocation_ProducesChainedMethodCall() {
         var node = new Invoke(
             new Member(new Invoke(

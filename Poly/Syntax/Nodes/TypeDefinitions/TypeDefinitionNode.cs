@@ -14,8 +14,10 @@ namespace Poly.Syntax.Nodes;
 /// <param name="BaseType">Optional base type reference.</param>
 /// <param name="Interfaces">Interface types this type implements.</param>
 /// <param name="GenericParameters">Generic type parameters for generic types.</param>
+/// <param name="PrimaryConstructorParameters">Optional primary-constructor parameters for positional type declarations.</param>
 /// <param name="PrimitiveTypeId">Primitive type identifier if this is a primitive type.</param>
 /// <param name="TypeCategory">Category flags describing the type's nature.</param>
+/// <param name="Semantics">The intended mutability and equality semantics for the type.</param>
 public sealed record TypeDefinitionNode(
     string Name,
     string? Namespace = null,
@@ -26,15 +28,19 @@ public sealed record TypeDefinitionNode(
     Node? BaseType = null,
     IReadOnlyList<Node>? Interfaces = null,
     IReadOnlyList<Parameter>? GenericParameters = null,
+    IReadOnlyList<Parameter>? PrimaryConstructorParameters = null,
     PrimitiveType? PrimitiveTypeId = null,
     TypeCategory TypeCategory = TypeCategory.None,
-    AccessModifier AccessModifier = AccessModifier.Public
+    AccessModifier AccessModifier = AccessModifier.Public,
+    TypeDefinitionSemantics? Semantics = null
 ) : Node {
 
     /// <summary>
     /// Gets the fully qualified name combining Namespace and Name.
     /// </summary>
     public string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
+
+    public TypeDefinitionSemantics EffectiveSemantics => Semantics ?? TypeDefinitionSemantics.MutableReference;
 
     /// <summary>
     /// Gets all member definition nodes.
@@ -56,6 +62,8 @@ public sealed record TypeDefinitionNode(
                 foreach (var i in Interfaces) yield return i;
             if (GenericParameters != null)
                 foreach (var g in GenericParameters) yield return g;
+            if (PrimaryConstructorParameters != null)
+                foreach (var p in PrimaryConstructorParameters) yield return p;
         }
     }
 

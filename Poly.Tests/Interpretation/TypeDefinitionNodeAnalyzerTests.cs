@@ -155,4 +155,29 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(resolvedType.Methods.WithName("SharedMethod").Single().DeclaringTypeDefinition.FullName).IsEqualTo("Sample.Widget");
         await Assert.That(resolvedType.Fields.WithName("SharedField").Single().DeclaringTypeDefinition.FullName).IsEqualTo("Sample.Widget");
     }
+
+    [Test]
+    public async Task Analyze_RecordWithPrimaryConstructor_SynthesizesConstructorAndProperties() {
+        var subjectType = new TypeDefinitionNode(
+            "WidgetCreated",
+            "Sample",
+            PrimaryConstructorParameters: [
+                new Parameter("Name", new PrimitiveTypeReference(PrimitiveType.String)),
+                new Parameter("Version", new PrimitiveTypeReference(PrimitiveType.Int32))
+            ],
+            Semantics: TypeDefinitionSemantics.ImmutableValue);
+
+        var analyzerPass = new TypeDefinitionNodeAnalyzer();
+        var analyzer = new AnalyzerBuilder(analyzerPass);
+        analyzer.AddAnalyzer(analyzerPass);
+
+        var analysis = analyzer.Build().Analyze(subjectType);
+        var resolvedType = analysis.GetMetadata<TypeDefinitionMetadata>(subjectType)?.TypeDefinition;
+
+        await Assert.That(resolvedType).IsNotNull();
+        await Assert.That(resolvedType!.Constructors.Single().Parameters.Select(static p => p.Name).ToArray())
+            .IsEquivalentTo(["Name", "Version"]);
+        await Assert.That(resolvedType.Properties.Select(static property => property.Name).ToArray())
+            .IsEquivalentTo(["Name", "Version"]);
+    }
 }

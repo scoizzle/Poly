@@ -132,7 +132,7 @@ public class DomainLoweringToCSharpIntegrationTests {
     }
 
     [Test]
-    public async Task EventType_LoweredToCSharp_ProducesEventClass() {
+    public async Task EventType_LoweredToCSharp_ProducesEventRecord() {
         var domain = new Domain("TestDomain");
         var textType = new Primitive(domain, "Text", TypeCategory.Text);
         MutationApply.AddType(domain, textType);
@@ -150,8 +150,7 @@ public class DomainLoweringToCSharpIntegrationTests {
 
         var csharp = new CSharpGenerator().Generate(typeDefs);
 
-        await Assert.That(csharp).Contains("class ItemCreated");
-        await Assert.That(csharp).Contains("String ItemName");
+        await Assert.That(csharp).Contains("record ItemCreated(String ItemName);");
     }
 
     [Test]

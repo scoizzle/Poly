@@ -117,15 +117,45 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     public TypeCategory TypeCategory => _node.TypeCategory;
 
     private IReadOnlyList<AstPropertyDefinition> BuildDeclaredProperties() {
-        return _node.Properties?
+        var properties = new List<PropertyDefinitionNode>();
+
+        if (_node.Properties is not null) {
+            properties.AddRange(_node.Properties);
+        }
+
+        if (_node.PrimaryConstructorParameters is not null) {
+            var explicitPropertyNames = new HashSet<string>(properties.Select(static property => property.Name), StringComparer.Ordinal);
+            foreach (var parameter in _node.PrimaryConstructorParameters) {
+                if (parameter.TypeReference is null || !explicitPropertyNames.Add(parameter.Name)) {
+                    continue;
+                }
+
+                properties.Add(new PropertyDefinitionNode(
+                    parameter.Name,
+                    parameter.TypeReference,
+                    Getter: new PropertyGetterDefinitionNode()));
+            }
+        }
+
+        return properties
             .Select(p => new AstPropertyDefinition(p, this, _provider))
-            .ToList() ?? [];
+            .ToList();
     }
 
     private IReadOnlyList<AstConstructorDefinition> BuildConstructors() {
-        return _node.Constructors?
+        var constructors = new List<ConstructorDefinitionNode>();
+
+        if (_node.PrimaryConstructorParameters is { Count: > 0 }) {
+            constructors.Add(new ConstructorDefinitionNode(_node.PrimaryConstructorParameters));
+        }
+
+        if (_node.Constructors is not null) {
+            constructors.AddRange(_node.Constructors);
+        }
+
+        return constructors
             .Select(constructor => new AstConstructorDefinition(constructor, this))
-            .ToList() ?? [];
+            .ToList();
     }
 
     private IReadOnlyList<AstMethodDefinition> BuildDeclaredMethods() {

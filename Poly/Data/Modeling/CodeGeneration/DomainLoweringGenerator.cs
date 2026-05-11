@@ -72,7 +72,7 @@ public sealed class DomainLoweringGenerator {
         ArgumentNullException.ThrowIfNull(subject);
 
         return rule switch {
-            PropertyRule propertyRule => LowerConstraint(propertyRule.Constraints, subject.GetMember(propertyRule.Value.Name)),
+            PropertyRule propertyRule => LowerConstraint(propertyRule.Constraints, subject.GetMember(propertyRule.Value.Name), MapDomainTypeToNode(propertyRule.Value.Type)),
             CrossPropertyRule crossRule => LowerCrossProperty(crossRule, subject),
             CompositeRule composite => composite.Operator switch {
                 LogicalOperator.And => new And(LowerRule(composite.Left, subject, actorContext), LowerRule(composite.Right, subject, actorContext)),
@@ -86,25 +86,29 @@ public sealed class DomainLoweringGenerator {
                 ? new Invoke(new Member(actorContext.ActorSubject, "IsInRole"), new Constant(actorRoleRule.Role))
                 : throw new NotSupportedException($"'{nameof(ActorRoleRule)}' requires an {nameof(ActorEvaluationContext)}."),
             ActorPropertyRule actorPropertyRule => actorContext is not null
-                ? LowerConstraint(actorPropertyRule.Constraints, new Member(actorContext.ActorSubject, actorPropertyRule.ActorProperty.Name))
+                ? LowerConstraint(actorPropertyRule.Constraints, new Member(actorContext.ActorSubject, actorPropertyRule.ActorProperty.Name), MapDomainTypeToNode(actorPropertyRule.ActorProperty.Type))
                 : throw new NotSupportedException($"'{nameof(ActorPropertyRule)}' requires an {nameof(ActorEvaluationContext)}."),
             _ => throw new NotSupportedException($"Unknown rule type '{rule.GetType().Name}'.")
         };
     }
 
-    public static Node LowerConstraint(Constraint constraint, Node value) {
+    public static Node LowerConstraint(Constraint constraint, Node value, Node? valueType = null) {
         ArgumentNullException.ThrowIfNull(constraint);
         ArgumentNullException.ThrowIfNull(value);
 
         return constraint switch {
-            RequiredConstraint => new NotEqual(value, Null),
+            RequiredConstraint => LowerRequiredConstraint(value, valueType),
             EqualityConstraint eq => new Equal(value, Wrap(eq.Value)),
             RangeConstraint range => LowerRange(range, value),
             LengthConstraint length => LowerLength(length, value),
             EnumConstraint @enum => LowerEnum(@enum, value),
-            ConstraintSet set => LowerConstraintSet(set, value),
+            ConstraintSet set => LowerConstraintSet(set, value, valueType),
             _ => throw new NotSupportedException($"Unknown constraint type '{constraint.GetType().Name}'.")
         };
+    }
+
+    private static Node LowerRequiredConstraint(Node value, Node? valueType) {
+        return CanTypeBeNull(valueType) ? new NotEqual(value, Null) : True;
     }
 
     private static Node LowerEnum(EnumConstraint @enum, Node value) {
@@ -142,12 +146,12 @@ public sealed class DomainLoweringGenerator {
         };
     }
 
-    private static Node LowerConstraintSet(ConstraintSet set, Node value) {
+    private static Node LowerConstraintSet(ConstraintSet set, Node value, Node? valueType) {
         if (set.Constraints.Count == 0) {
             return True;
         }
 
-        var nodes = set.Constraints.Select(c => LowerConstraint(c, value));
+        var nodes = set.Constraints.Select(c => LowerConstraint(c, value, valueType));
 
         return set.AggregationStrategy switch {
             ConstraintAggregationStrategy.All => nodes.Aggregate(static (acc, node) => new And(acc, node)),
@@ -183,7 +187,11 @@ public sealed class DomainLoweringGenerator {
             Assign assign => LowerAssignEffect(assign, entityInstance),
             PublishEvent publishEvent => LowerPublishEventEffect(publishEvent, entityInstance, availableSubscriptions),
             InvokeAction invokeAction => LowerInvokeActionEffect(invokeAction, entityInstance),
-            CreateEntityInstance createEntity => new New(MapDomainTypeToNode(createEntity.EntityType)),
+            CreateEntityInstance createEntity => new Invoke(
+                new Member(new NamedTypeReference(createEntity.EntityType.Name), "TryCreate"),
+                createEntity.EntityType.Properties
+                    .Select(static property => GetDefaultNodeForType(MapDomainTypeToNode(property.Type)))
+                    .ToArray()),
             DeleteEntityInstance deleteEntity => new Invoke(entityInstance.Invoke("Remove"), new Member(entityInstance, deleteEntity.EntityType.Name)),
             StageTransition stageTransition => LowerStageTransition(stageTransition, entityInstance, entityName),
             LinkRelationship linkRel => new Invoke(entityInstance.GetMember(linkRel.Relationship.Name + ".Add"), MapDomainValueToNode(linkRel.Target, entityInstance)),
@@ -358,10 +366,27 @@ public sealed class DomainLoweringGenerator {
                 PrimitiveType.Int32 => new Constant(0),
                 PrimitiveType.Decimal => new Constant(0m),
                 PrimitiveType.Float64 => new Constant(0.0),
+                PrimitiveType.ByteArray => new NullForgiving(new Default(typeNode)),
                 _ => new Default()
             },
+            OptionalTypeReference => new Default(typeNode),
+            NamedTypeReference or CollectionTypeReference or MapTypeReference => new NullForgiving(new Default(typeNode)),
             _ => new Default()
         };
+    }
+
+    private static bool CanTypeBeNull(Node? typeNode) {
+        return typeNode switch {
+            null => true,
+            OptionalTypeReference => true,
+            PrimitiveTypeReference { PrimitiveId: PrimitiveType.String or PrimitiveType.ByteArray } => true,
+            PrimitiveTypeReference => false,
+            _ => true
+        };
+    }
+
+    public static Node ApplyNullForgivingIfNeeded(Node expression, Node typeNode) {
+        return CanTypeBeNull(typeNode) ? new NullForgiving(expression) : expression;
     }
 
     private static Node MapDomainValueToNode(DomainValue value, Node entityInstance) {
@@ -555,12 +580,19 @@ public sealed class DomainImplementationLoweringPass {
             var tryCreateCall = new Invoke(
                 new Member(new NamedTypeReference(entityName), "TryCreate"),
                 ctorArgs);
-            statements.Add(new Variable(varName, new Member(tryCreateCall, "Value")));
+            var createResultName = $"{varName}Result";
+            var createResultVar = new Variable(createResultName);
+            var entityVar = new Variable(varName);
 
+            statements.Add(new Variable(createResultName, tryCreateCall));
             statements.Add(new Invoke(
                 new Member(new Variable("Console"), "WriteLine"),
                 new Constant($"Testing {entityName}...")
             ));
+
+            var successStatements = new List<Node> {
+                new Variable(varName, new NullForgiving(new Member(createResultVar, "Value")))
+            };
 
             foreach (var action in entity.EffectiveActions) {
                 varIndex++;
@@ -570,11 +602,11 @@ public sealed class DomainImplementationLoweringPass {
                     return DomainLoweringGenerator.GetDefaultNodeForType(paramTypeNode);
                 }).Cast<Node>().ToArray();
 
-                var actionCall = new Invoke(new Member(new Variable(varName), action.Name), actionArgs);
+                var actionCall = new Invoke(new Member(entityVar, action.Name), actionArgs);
                 var okVar = new Variable($"_ok{varIndex}", new Member(actionCall, "IsSuccess"));
-                statements.Add(okVar);
+                successStatements.Add(okVar);
 
-                statements.Add(new Invoke(
+                successStatements.Add(new Invoke(
                     new Member(new Variable("Console"), "WriteLine"),
                     new Add(new Constant($"  {action.Name}: "),
                         new Syntax.Nodes.Conditional(okVar, new Constant("OK"), new Constant("FAILED")))
@@ -582,15 +614,30 @@ public sealed class DomainImplementationLoweringPass {
             }
 
             if (hasStages) {
-                statements.Add(new Invoke(
+                successStatements.Add(new Invoke(
                     new Member(new Variable("Console"), "WriteLine"),
-                    new Add(new Constant($"  CurrentStage: "), new Member(new Variable(varName), "CurrentStage"))
+                    new Add(new Constant($"  CurrentStage: "), new Member(entityVar, "CurrentStage"))
                 ));
             }
 
-            statements.Add(new Invoke(
+            successStatements.Add(new Invoke(
                 new Member(new Variable("Console"), "WriteLine"),
                 new Constant("")
+            ));
+
+            statements.Add(new IfStatement(
+                new Not(new Member(createResultVar, "IsSuccess")),
+                new Block(
+                    new Invoke(
+                        new Member(new Variable("Console"), "WriteLine"),
+                        new Add(
+                            new Constant("  TryCreate: FAILED - "),
+                            new Coalesce(new Member(createResultVar, "Error"), new Constant("Unknown creation failure.")))),
+                    new Invoke(
+                        new Member(new Variable("Console"), "WriteLine"),
+                        new Constant(""))
+                ),
+                new Block(successStatements.ToArray())
             ));
         }
 
@@ -701,7 +748,7 @@ public sealed class DomainImplementationLoweringPass {
                 AccessModifier: AccessModifier.Private));
 
             synthProperties.Add(new PropertyDefinitionNode(propName,
-                new NamedTypeReference("IReadOnlyCollection<" + otherName + ">"),
+                new NamedTypeReference("IReadOnlyCollection", TypeArguments: [new NamedTypeReference(otherName)]),
                 Getter: new PropertyGetterDefinitionNode(Body: new Member(new ThisReference(), fieldName))));
 
             synthMethods.Add(new MethodDefinitionNode("Add" + otherName, VoidType,
@@ -771,25 +818,16 @@ public sealed class DomainImplementationLoweringPass {
     }
 
     private static TypeDefinitionNode LowerEventToTypeDefinition(Event @event) {
-        var properties = @event.Properties
-            .Select(LowerPropertyToPropertyDefinition)
+        var parameters = @event.Properties
+            .Select(static property => new Parameter(
+                property.Name,
+                DomainLoweringGenerator.MapDomainTypeToNode(property.Type)))
             .ToArray();
-
-        var constructor = new ConstructorDefinitionNode(
-            Parameters: properties
-                .Select(p => new Parameter(p.Name, p.MemberType))
-                .ToArray(),
-            Body: new Block(
-                properties.Select(p => (Node)new Assignment(
-                    new ThisReference().GetMember(p.Name),
-                    new Parameter(p.Name, p.MemberType)))
-                .Append<Node>(Return.Void)
-                .ToArray()));
 
         return new TypeDefinitionNode(
             @event.Name,
-            Constructors: [constructor],
-            Properties: properties.Length > 0 ? properties : null);
+            PrimaryConstructorParameters: parameters.Length > 0 ? parameters : null,
+            Semantics: TypeDefinitionSemantics.ImmutableValue);
     }
 
     private static TypeDefinitionNode LowerStageEnum(Entity entity, IReadOnlyCollection<StageImplementationModel> stages) {
@@ -920,7 +958,7 @@ public sealed class DomainImplementationLoweringPass {
             })
             .Where(x => x.Metadata?.Constraints.Count > 0)
             .SelectMany(x => x.Metadata!.Constraints
-                .Select(c => DomainLoweringGenerator.LowerConstraint(c, new Parameter(x.Param.Name))))
+                .Select(c => DomainLoweringGenerator.LowerConstraint(c, new Parameter(x.Param.Name), DomainLoweringGenerator.MapDomainTypeToNode(x.Param.Type))))
             .ToArray();
     }
 
@@ -975,7 +1013,7 @@ public sealed class DomainImplementationLoweringPass {
             Properties: [
                 new PropertyDefinitionNode("IsSuccess", new PrimitiveTypeReference(PrimitiveType.Boolean)),
                 new PropertyDefinitionNode("Value", new OptionalTypeReference(new NamedTypeReference("T"))),
-                new PropertyDefinitionNode("Error", new PrimitiveTypeReference(PrimitiveType.String)),
+                new PropertyDefinitionNode("Error", new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.String))),
             ],
             Constructors: [
                 new ConstructorDefinitionNode(
@@ -1012,7 +1050,7 @@ public sealed class DomainImplementationLoweringPass {
             "Result",
             Properties: [
                 new PropertyDefinitionNode("IsSuccess", new PrimitiveTypeReference(PrimitiveType.Boolean)),
-                new PropertyDefinitionNode("Error", new PrimitiveTypeReference(PrimitiveType.String)),
+                new PropertyDefinitionNode("Error", new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.String))),
             ],
             Constructors: [
                 new ConstructorDefinitionNode(
@@ -1045,19 +1083,26 @@ public sealed class DomainImplementationLoweringPass {
         var entity = entityModel.Entity;
         var domainProperties = entityModel.EffectiveProperties.ToArray();
         var returnType = new NamedTypeReference($"Result<{entity.Name}>");
+        var parameters = domainProperties
+            .Select(p => new Parameter(p.Name, DomainLoweringGenerator.MapDomainTypeToNode(p.Type)))
+            .ToArray();
+        var ctorArgs = domainProperties
+            .Select(p => {
+                var typeNode = DomainLoweringGenerator.MapDomainTypeToNode(p.Type);
+                return DomainLoweringGenerator.ApplyNullForgivingIfNeeded(new Parameter(p.Name, typeNode), typeNode);
+            })
+            .ToArray();
 
         if (policyChecks.Length == 0) {
             return new MethodDefinitionNode(
                 "TryCreate",
                 returnType,
-                Parameters: domainProperties
-                    .Select(p => new Parameter(p.Name, DomainLoweringGenerator.MapDomainTypeToNode(p.Type)))
-                    .ToArray(),
+                Parameters: parameters,
                 Body: new Block(
                     new Return(new Invoke(
                         new Member(returnType, "Success"),
                         new New(new NamedTypeReference(entity.Name),
-                            domainProperties.Select(p => (Node)new Parameter(p.Name, DomainLoweringGenerator.MapDomainTypeToNode(p.Type))).ToArray())))),
+                            ctorArgs)))),
                 IsStatic: true);
         }
 
@@ -1075,7 +1120,7 @@ public sealed class DomainImplementationLoweringPass {
             new Return(new Invoke(
                 new Member(returnType, "Success"),
                 new New(new NamedTypeReference(entity.Name),
-                    domainProperties.Select(p => (Node)new Parameter(p.Name, DomainLoweringGenerator.MapDomainTypeToNode(p.Type))).ToArray()))),
+                    ctorArgs))),
             new Return(new Invoke(
                 new Member(returnType, "Failure"),
                 new Invoke(new Member(new TypeReference("string"), "Join"), new Constant("; "), errors)))));
@@ -1083,9 +1128,7 @@ public sealed class DomainImplementationLoweringPass {
         return new MethodDefinitionNode(
             "TryCreate",
             returnType,
-            Parameters: domainProperties
-                .Select(p => new Parameter(p.Name, DomainLoweringGenerator.MapDomainTypeToNode(p.Type)))
-                .ToArray(),
+            Parameters: parameters,
             Body: new Block(bodyStatements, [errors]),
             IsStatic: true);
     }

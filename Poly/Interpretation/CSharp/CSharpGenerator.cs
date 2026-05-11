@@ -365,14 +365,24 @@ public sealed class CSharpGenerator {
 
         Indent(sb, indent);
         WriteAccessModifier(sb, typeDef.AccessModifier);
-        sb.Append("class ");
+        sb.Append(typeDef.EffectiveSemantics.HasValueEquality ? "record " : "class ");
         sb.Append(typeDef.Name);
         if (typeDef.GenericParameters is { Count: > 0 }) {
             sb.Append('<');
             WriteCommaSeparated(sb, typeDef.GenericParameters.Select(static p => new NamedTypeReference(p.Name)));
             sb.Append('>');
         }
+        if (typeDef.PrimaryConstructorParameters is { Count: > 0 }) {
+            sb.Append('(');
+            WriteParameterDeclarations(sb, typeDef.PrimaryConstructorParameters);
+            sb.Append(')');
+        }
         WriteTypeLineage(sb, typeDef);
+        if (typeDef.EffectiveSemantics.HasValueEquality && !TypeDefinitionHasBody(typeDef)) {
+            sb.AppendLine(";");
+            return;
+        }
+
         sb.AppendLine();
         Indent(sb, indent);
         sb.AppendLine("{");
@@ -389,10 +399,8 @@ public sealed class CSharpGenerator {
             }
         }
 
-        if (typeDef.Properties != null) {
-            foreach (var prop in typeDef.Properties) {
-                WriteStatement(sb, prop, indent + 1);
-            }
+        foreach (var prop in GetBodyProperties(typeDef)) {
+            WriteStatement(sb, prop, indent + 1);
         }
 
         if (typeDef.Methods != null) {
@@ -403,6 +411,28 @@ public sealed class CSharpGenerator {
 
         Indent(sb, indent);
         sb.AppendLine("}");
+    }
+
+    private static bool TypeDefinitionHasBody(TypeDefinitionNode typeDef) {
+        return (typeDef.Fields?.Count ?? 0) > 0
+               || (typeDef.Constructors?.Count ?? 0) > 0
+               || GetBodyProperties(typeDef).Count > 0
+               || (typeDef.Methods?.Count ?? 0) > 0;
+    }
+
+    private static IReadOnlyList<PropertyDefinitionNode> GetBodyProperties(TypeDefinitionNode typeDef) {
+        if (typeDef.Properties is null || !typeDef.EffectiveSemantics.HasValueEquality || typeDef.PrimaryConstructorParameters is not { Count: > 0 }) {
+            return typeDef.Properties ?? [];
+        }
+
+        var primaryParameterNames = typeDef.PrimaryConstructorParameters
+            .Where(static parameter => parameter.TypeReference is not null)
+            .Select(static parameter => parameter.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return typeDef.Properties
+            .Where(property => !primaryParameterNames.Contains(property.Name))
+            .ToArray();
     }
 
     private void WriteMethodDefinition(StringBuilder sb, MethodDefinitionNode method, int indent) {
@@ -810,9 +840,16 @@ public sealed class CSharpGenerator {
     }
 
     private void WriteBinary(StringBuilder sb, Node left, string op, Node right) {
-        WriteExpression(sb, left);
+        WriteBinaryOperand(sb, left);
         sb.Append(op);
-        WriteExpression(sb, right);
+        WriteBinaryOperand(sb, right);
+    }
+
+    private void WriteBinaryOperand(StringBuilder sb, Node node) {
+        var needsParens = node is Coalesce or Conditional;
+        if (needsParens) sb.Append('(');
+        WriteExpression(sb, node);
+        if (needsParens) sb.Append(')');
     }
 
     private void WriteLambda(StringBuilder sb, Lambda lambda) {

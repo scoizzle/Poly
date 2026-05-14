@@ -76,6 +76,7 @@ internal static class SnapshotBuilder {
     }
 
     private static ActionSnapshot BuildAction(Data.Modeling.Action action) {
+        // Action parameters are always Property instances in the domain model; OfType<Property> is correct here.
         var parameters = action.Parameters.OfType<Data.Modeling.Property>()
             .Select(static p => new PropertySnapshot(p.Name, p.Type.Name))
             .ToArray();

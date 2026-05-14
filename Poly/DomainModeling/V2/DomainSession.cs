@@ -13,7 +13,7 @@ namespace Poly.DomainModeling.V2;
 /// snapshot history, and a unified intent-based mutation API optimized for UI, API, and MCP consumers.
 /// </summary>
 public sealed class DomainSession {
-    private const int MaxSnapshotRevisions = 64;
+    private const int MaxSnapshotRevisions = 64; // retain the last 64 committed revisions for rollback/diff
 
     private readonly Lock _lock = new();
     private readonly DomainModelAnalyzer _analyzer;
@@ -128,10 +128,12 @@ public sealed class DomainSession {
     }
 
     private void TrimSnapshots() {
-        if (_snapshots.Count > MaxSnapshotRevisions) {
-            foreach (var key in _snapshots.Keys.OrderBy(static k => k).Take(_snapshots.Count - MaxSnapshotRevisions).ToArray()) {
-                _snapshots.Remove(key);
-            }
+        if (_snapshots.Count <= MaxSnapshotRevisions) return;
+
+        var excess = _snapshots.Count - MaxSnapshotRevisions;
+        var keysToRemove = _snapshots.Keys.OrderBy(static k => k).Take(excess).ToArray();
+        foreach (var key in keysToRemove) {
+            _snapshots.Remove(key);
         }
     }
 }

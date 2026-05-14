@@ -10,6 +10,8 @@ namespace Poly.DomainModeling.V2;
 /// </summary>
 public static class DomainRenderer {
     private const int BoxWidth = 74;
+    private const int BoxPadding = 4;   // 2 chars border each side: "| " ... " |"
+    private const int EllipsisLength = 3; // length of "..."
 
     /// <summary>Renders the full domain as an ASCII text report.</summary>
     public static string Render(Domain domain) {
@@ -215,8 +217,9 @@ public static class DomainRenderer {
         var horizontal = "+" + new string('-', BoxWidth - 2) + "+";
         sb.AppendLine(horizontal);
         foreach (var line in lines) {
-            var clipped = line.Length > BoxWidth - 4 ? line[..(BoxWidth - 7)] + "..." : line;
-            sb.AppendLine($"| {clipped.PadRight(BoxWidth - 4)} |");
+            var maxContent = BoxWidth - BoxPadding;
+            var clipped = line.Length > maxContent ? line[..(maxContent - EllipsisLength)] + "..." : line;
+            sb.AppendLine($"| {clipped.PadRight(maxContent)} |");
         }
         sb.AppendLine(horizontal);
     }

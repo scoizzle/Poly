@@ -64,7 +64,7 @@ public sealed class DomainMutationIntentEngine {
         return mutation.ApplyWithTrace(preMutationAnalysis);
     }
 
-    public void Populate(Domain domain, DomainMutationIntent intent, Domain.Mutation mutation) {
+    internal void Populate(Domain domain, DomainMutationIntent intent, Domain.Mutation mutation) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(intent);
         ArgumentNullException.ThrowIfNull(mutation);

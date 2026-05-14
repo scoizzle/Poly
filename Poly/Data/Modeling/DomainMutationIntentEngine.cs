@@ -39,13 +39,37 @@ public sealed class DomainMutationIntentEngine {
     public AnalysisResult Apply(Domain domain, IEnumerable<DomainMutationIntent> intents, DomainModelAnalyzer? analyzer = null, AnalysisResult? preMutationAnalysis = null) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(intents);
+        return PopulateAndApply(domain, intents, analyzer, preMutationAnalysis).Analysis;
+    }
 
+    public DomainMutationExecutionResult ApplyWithTrace(Domain domain, DomainMutationIntent intent, DomainModelAnalyzer? analyzer = null, AnalysisResult? preMutationAnalysis = null) {
+        ArgumentNullException.ThrowIfNull(intent);
+        return ApplyWithTrace(domain, [intent], analyzer, preMutationAnalysis);
+    }
+
+    public DomainMutationExecutionResult ApplyWithTrace(Domain domain, IEnumerable<DomainMutationIntent> intents, DomainModelAnalyzer? analyzer = null, AnalysisResult? preMutationAnalysis = null) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(intents);
+        return PopulateAndApply(domain, intents, analyzer, preMutationAnalysis);
+    }
+
+    private DomainMutationExecutionResult PopulateAndApply(Domain domain, IEnumerable<DomainMutationIntent> intents, DomainModelAnalyzer? analyzer, AnalysisResult? preMutationAnalysis) {
         var mutation = domain.CreateMutation(analyzer);
 
         foreach (var intent in intents) {
             ArgumentNullException.ThrowIfNull(intent);
+            Populate(domain, intent, mutation);
+        }
 
-            switch (intent) {
+        return mutation.ApplyWithTrace(preMutationAnalysis);
+    }
+
+    public void Populate(Domain domain, DomainMutationIntent intent, Domain.Mutation mutation) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(intent);
+        ArgumentNullException.ThrowIfNull(mutation);
+
+        switch (intent) {
                 case SetDomainNameIntent setDomainName:
                     _ = mutation.SetDomainName(setDomainName.Name);
                     break;
@@ -343,9 +367,6 @@ public sealed class DomainMutationIntentEngine {
                 default:
                     throw new NotSupportedException($"Unsupported domain mutation intent '{intent.GetType().Name}'.");
             }
-        }
-
-        return mutation.Apply(preMutationAnalysis);
     }
 
     private static DomainType RequireType(Domain domain, string typeName) {

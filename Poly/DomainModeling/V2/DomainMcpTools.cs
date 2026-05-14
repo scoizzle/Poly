@@ -34,7 +34,7 @@ public static class DomainMcpTools {
         session = sessions.Mutate(sessionId, DomainMutation.AddActionEffect(entityName, "Create", new CreateEntity(entityName)));
 
         session = sessions.Mutate(sessionId, DomainMutation.AddAction(entityName, "Read"));
-        session = sessions.Mutate(sessionId, DomainMutation.AddActionEffect(entityName, "Read", new InvokeAction(entityName, "Read")));
+        session = sessions.Mutate(sessionId, DomainMutation.AddActionEffect(entityName, "Read", new SetProperty("LastAccessedAt", "UtcNow")));
 
         session = sessions.Mutate(sessionId, DomainMutation.AddAction(entityName, "Update"));
         session = sessions.Mutate(sessionId, DomainMutation.AddActionEffect(entityName, "Update", new SetProperty("UpdatedAt", "UtcNow")));

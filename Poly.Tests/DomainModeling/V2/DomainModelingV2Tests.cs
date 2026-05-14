@@ -76,9 +76,9 @@ public class DomainModelingV2Tests {
         var sessions = new DomainSessionManager();
         var session = sessions.CreateSession("Commerce");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => {
             sessions.Mutate(session.SessionId, DomainMutation.AddProperty("Order", "Id", "Uuid", isRequired: true));
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         });
     }
 }

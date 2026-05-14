@@ -56,7 +56,7 @@ internal static class DomainMutationEngine {
     {
         var entityName = Required(mutation.EntityName, nameof(mutation.EntityName));
         var stageName = Required(mutation.Name, nameof(mutation.Name));
-        var isInitial = mutation.IsRequired;
+        var isInitial = mutation.IsInitialStage;
         EnsureEntityExists(domain, entityName);
 
         var entities = domain.Entities

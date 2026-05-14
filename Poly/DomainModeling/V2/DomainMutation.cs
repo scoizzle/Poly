@@ -16,6 +16,7 @@ public sealed record DomainMutation(
     string? TargetEntityName = null,
     string? Type = null,
     bool IsRequired = false,
+    bool IsInitialStage = false,
     string? DefaultValue = null,
     RelationshipKind? RelationshipKind = null,
     string? ActionName = null,
@@ -27,7 +28,7 @@ public sealed record DomainMutation(
         => new(DomainMutationKind.AddProperty, Name: propertyName, EntityName: entityName, Type: type, IsRequired: isRequired, DefaultValue: defaultValue);
 
     public static DomainMutation AddStage(string entityName, string stageName, bool isInitial = false)
-        => new(DomainMutationKind.AddStage, Name: stageName, EntityName: entityName, IsRequired: isInitial);
+        => new(DomainMutationKind.AddStage, Name: stageName, EntityName: entityName, IsInitialStage: isInitial);
 
     public static DomainMutation AddAction(string entityName, string actionName)
         => new(DomainMutationKind.AddAction, Name: actionName, EntityName: entityName);

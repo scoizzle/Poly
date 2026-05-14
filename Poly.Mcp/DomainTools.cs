@@ -2,12 +2,14 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Reflection;
+using System.Text.Json;
 
 using ModelContextProtocol.Server;
 
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Analysis;
 using Poly.Data.Modeling.Effects;
+using Poly.Data.Modeling.Effects.Mutations;
 using Poly.Data.Modeling.TypeSystem;
 using Poly.Data.Modeling.Validation;
 using Poly.Data.Modeling.Validation.Constraints;
@@ -382,9 +384,9 @@ internal static class DomainAffordances {
         new("command:remove-event-subscription", nameof(DomainAuthoringTool.RemoveEventSubscription), new Dictionary<string, object?>(), "Remove an event subscription from an entity."),
         new("command:add-relationship", nameof(DomainAuthoringTool.AddRelationship), new Dictionary<string, object?>(), "Create a relationship between two entities."),
         new("command:apply-mutation-with-trace", nameof(DomainOperabilityTool.ApplyMutationWithTrace), new Dictionary<string, object?>(), "Apply a basic mutation and return detailed mutation trace."),
-        new("command:add-comment", nameof(DomainAuthoringTool.AddComment), new Dictionary<string, object?>(), "Append a comment to a domain object.")
-        ,new("command:export-domain-session", nameof(DomainAuthoringTool.ExportDomainSession), new Dictionary<string, object?>(), "Export the current domain session as a portable payload.")
-        ,new("command:import-domain-session", nameof(DomainAuthoringTool.ImportDomainSession), new Dictionary<string, object?>(), "Import a domain session payload into a new or preferred session ID.")
+        new("command:add-comment", nameof(DomainAuthoringTool.AddComment), new Dictionary<string, object?>(), "Append a comment to a domain object."),
+        new("command:export-domain-session", nameof(DomainAuthoringTool.ExportDomainSession), new Dictionary<string, object?>(), "Export the current domain session as a portable payload."),
+        new("command:import-domain-session", nameof(DomainAuthoringTool.ImportDomainSession), new Dictionary<string, object?>(), "Import a domain session payload into a new or preferred session ID.")
     ];
 
     public static IReadOnlyCollection<DomainAffordance> SessionScoped(string sessionId, params DomainAffordance[] additional) {
@@ -2784,23 +2786,56 @@ public static class DomainAuthoringTool {
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
 
-    [McpServerTool, Description("Adds a PublishEvent effect to an action. After adding, use SetEventPropertyBinding to bind each event property.")]
+    [McpServerTool, Description("Adds a PublishEvent effect to an action with optional property bindings in a single mutation.")]
     public static DomainCommandResponse AddPublishEventEffect(
         [Description("The session ID.")] string sessionId,
         [Description("Name of the entity owning the action.")] string entityName,
         [Description("Name of the action.")] string actionName,
-        [Description("Name of the event type to publish.")] string eventTypeName) {
+        [Description("Name of the event type to publish.")] string eventTypeName,
+        [Description("Optional: event property name to pre-bind.")] string? eventPropertyName = null,
+        [Description("Optional: source kind ('ActionParameter' or 'EntityProperty'). Required with eventPropertyName.")] string? eventSourceKind = null,
+        [Description("Optional: source name (parameter or property name). Required with eventPropertyName.")] string? eventSourceName = null,
+        [Description("Optional JSON array of additional bindings: [{\"propertyName\":\"...\",\"sourceKind\":\"ActionParameter|EntityProperty\",\"sourceName\":\"...\"}]")] JsonElement? additionalBindings = null) {
         try {
             var state = RequireSession(sessionId);
             var entity = state.Domain.RequireEntity(entityName);
             var action = entity.RequireAction(actionName);
             var eventType = state.Domain.RequireEventType(eventTypeName);
             var effect = new PublishEvent(state.Domain) { Event = eventType };
-            var analysis = state.Domain.CreateMutation().AddEffect(action, effect).Apply(state.LatestAnalysis);
+
+            var mutation = state.Domain.CreateMutation().AddEffect(action, effect);
+
+            void ApplyBinding(string propName, string srcKind, string srcName) {
+                EventPropertyBindingSource source = srcKind switch {
+                    "ActionParameter" => new EventPropertyBindingSource.ActionParameter(srcName),
+                    "EntityProperty" => new EventPropertyBindingSource.EntityProperty(srcName),
+                    _ => throw new InvalidOperationException($"Unknown sourceKind '{srcKind}'. Must be 'ActionParameter' or 'EntityProperty'.")
+                };
+                mutation.SetEventPropertyBinding(action, effect, propName, source);
+            }
+
+            if (eventPropertyName != null) {
+                if (eventSourceKind == null || eventSourceName == null)
+                    throw new InvalidOperationException("eventSourceKind and eventSourceName are required when eventPropertyName is provided.");
+                ApplyBinding(eventPropertyName, eventSourceKind, eventSourceName);
+            }
+
+            if (additionalBindings.HasValue) {
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+                var bindings = JsonSerializer.Deserialize<List<EventBindingDef>>(additionalBindings.Value.GetRawText(), options);
+                if (bindings != null)
+                    foreach (var b in bindings)
+                        ApplyBinding(b.PropertyName, b.SourceKind, b.SourceName);
+            }
+
+            var analysis = mutation.Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"PublishEvent '{eventTypeName}' added to action '{actionName}' on entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
+
+    private sealed record EventBindingDef(string PropertyName, string SourceKind, string SourceName);
 
     [McpServerTool, Description("Adds a StageTransition effect to an action, transitioning the entity to the specified target stage when the action executes. Use AddStageToEntity first to create stages.")]
     public static DomainCommandResponse AddStageTransitionEffect(
@@ -2816,6 +2851,27 @@ public static class DomainAuthoringTool {
             var effect = new StageTransition(state.Domain) { TargetStage = targetStage };
             var analysis = state.Domain.CreateMutation().AddEffect(action, effect).Apply(state.LatestAnalysis);
             return Commit(sessionId, state.Domain, analysis, $"StageTransition '{targetStageName}' added to action '{actionName}' on entity '{entityName}'.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
+    }
+
+    [McpServerTool, Description("Adds an Assign effect to an action, setting an entity property from an action parameter when the action executes.")]
+    public static DomainCommandResponse AddAssignEffect(
+        [Description("The session ID.")] string sessionId,
+        [Description("Name of the entity owning the action.")] string entityName,
+        [Description("Name of the action.")] string actionName,
+        [Description("Name of the entity property to assign to.")] string targetPropertyName,
+        [Description("Name of the action parameter whose value to assign.")] string sourceParameterName) {
+        try {
+            var state = RequireSession(sessionId);
+            var entity = state.Domain.RequireEntity(entityName);
+            var action = entity.RequireAction(actionName);
+            var targetProperty = entity.RequireProperty(targetPropertyName);
+            var sourceParameter = action.Parameters.FirstOrDefault(p => p.Name == sourceParameterName)
+                ?? throw new InvalidOperationException($"Action '{actionName}' has no parameter named '{sourceParameterName}'.");
+            var effect = new Assign(state.Domain) { Target = targetProperty, Value = sourceParameter };
+            var analysis = state.Domain.CreateMutation().AddEffect(action, effect).Apply(state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"Assign '{targetPropertyName}' from parameter '{sourceParameterName}' added to action '{actionName}' on entity '{entityName}'.");
         }
         catch (Exception ex) { return Fail(sessionId, ex); }
     }
@@ -2880,6 +2936,24 @@ public static class DomainAuthoringTool {
         var analysis = engine.Apply(session.Domain, intent);
         DomainSessionStore.UpdateAnalysis(sessionId, analysis);
         return new(true, $"Comment added to '{nodePath}'.", sessionId, session.Domain.Name, session.Revision + 1, DomainAffordances.SessionScoped(sessionId), null);
+    }
+
+    [McpServerTool, Description("Applies a set of domain mutation intents as a single atomic transaction. All intents succeed together or all are rolled back. Each intent must include a 'Type' discriminator field (e.g. 'AddEntityType', 'AddPropertyToEntity', 'AddStageToEntity', 'AddActionToEntity').")]
+    public static DomainCommandResponse ApplyDomainIntents(
+        [Description("The session ID.")] string sessionId,
+        [Description("JSON array of domain mutation intents. Each intent requires a 'Type' discriminator matching a known intent type.")] JsonElement intentsJson) {
+        try {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+            var intents = JsonSerializer.Deserialize<List<DomainMutationIntent>>(intentsJson.GetRawText(), options)
+                ?? throw new InvalidOperationException("Failed to deserialize intents.");
+            var state = RequireSession(sessionId);
+            if (intents.Count == 0)
+                throw new InvalidOperationException("At least one intent is required.");
+            var analysis = new DomainMutationIntentEngine().Apply(state.Domain, intents, preMutationAnalysis: state.LatestAnalysis);
+            return Commit(sessionId, state.Domain, analysis, $"{intents.Count} intent(s) applied.");
+        }
+        catch (Exception ex) { return Fail(sessionId, ex); }
     }
 
     private static DomainSessionState RequireSession(string sessionId) {

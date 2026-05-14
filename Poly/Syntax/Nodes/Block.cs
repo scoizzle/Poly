@@ -26,7 +26,7 @@ public sealed record Block : Operator {
     /// <param name="expressions">The expressions to execute in sequence.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="expressions"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="expressions"/> is empty.</exception>
-    public Block(params Node[] expressions) : this(expressions, Array.Empty<Node>()) {
+    public Block(params IEnumerable<Node> expressions) : this(expressions, Array.Empty<Node>()) {
     }
 
     /// <summary>

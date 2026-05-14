@@ -497,6 +497,7 @@ public sealed class CSharpGenerator {
         Indent(sb, indent);
         WriteAccessModifier(sb, method.AccessModifier);
         if (method.IsStatic) sb.Append("static ");
+        if (method.IsAsync) sb.Append("async ");
         WriteExpression(sb, method.ReturnType);
         sb.Append(' ');
         sb.Append(method.Name);
@@ -832,6 +833,12 @@ public sealed class CSharpGenerator {
                 sb.Append('[');
                 WriteCommaSeparated(sb, index.Arguments);
                 sb.Append(']');
+                return;
+
+            // Await
+            case Await awaitNode:
+                sb.Append("await ");
+                WriteExpression(sb, awaitNode.Operand);
                 return;
 
             // Invocation

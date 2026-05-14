@@ -362,6 +362,7 @@ public sealed class DomainLoweringGenerator {
                 "Date" or "date" => new PrimitiveTypeReference(PrimitiveType.DateOnly),
                 "Time" or "time" => new PrimitiveTypeReference(PrimitiveType.TimeOnly),
                 "DateTime" or "datetime" or "instant" => new PrimitiveTypeReference(PrimitiveType.DateTime),
+                "Decimal" or "decimal" => new PrimitiveTypeReference(PrimitiveType.Decimal),
                 "Duration" or "duration" => new PrimitiveTypeReference(PrimitiveType.TimeSpan),
                 "Uuid" or "uuid" or "Guid" => new PrimitiveTypeReference(PrimitiveType.Guid),
                 "Binary" or "binary" => new PrimitiveTypeReference(PrimitiveType.ByteArray),
@@ -621,6 +622,83 @@ public sealed class DomainImplementationLoweringPass {
         }
 
         return types;
+    }
+
+    public IReadOnlyList<TypeDefinitionNode> LowerToContractInterfaces(Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
+
+        if (analysis.HasErrors) {
+            throw new InvalidOperationException("Cannot lower domain model with analysis errors.");
+        }
+
+        var types = new List<TypeDefinitionNode>();
+
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            var entityModel = LowerEntity(entity, analysis);
+            types.Add(BuildEntityContractInterface(entityModel));
+            types.AddRange(BuildStageContractInterfaces(entityModel));
+        }
+
+        return types;
+    }
+
+    private TypeDefinitionNode BuildEntityContractInterface(EntityImplementationModel entityModel) {
+        var entity = entityModel.Entity;
+        var properties = entityModel.EffectiveProperties
+            .Select(static p => new PropertyDefinitionNode(
+                p.Name,
+                DomainLoweringGenerator.MapDomainTypeToNode(p.Type),
+                Getter: new PropertyGetterDefinitionNode()))
+            .ToArray();
+
+        var interfaces = entity.ParentEntity is not null
+            ? new[] { (Node)new NamedTypeReference($"I{entity.ParentEntity.Name}") }
+            : null;
+
+        return new TypeDefinitionNode(
+            $"I{entity.Name}",
+            Properties: properties.Length > 0 ? properties : null,
+            Interfaces: interfaces,
+            IsInterface: true);
+    }
+
+    private IReadOnlyList<TypeDefinitionNode> BuildStageContractInterfaces(EntityImplementationModel entityModel) {
+        var interfaces = new List<TypeDefinitionNode>();
+        var entity = entityModel.Entity;
+
+        foreach (var stageImpl in entityModel.EffectiveStages) {
+            var stage = stageImpl.Stage;
+            var hasParentStage = stage.Parent is not null && entity.ParentEntity is not null;
+
+            // When the stage interface inherits from a parent stage interface,
+            // only declare actions directly on this stage (parent actions inherited).
+            var actions = hasParentStage ? stage.Actions : stageImpl.EffectiveActions;
+
+            var methods = actions
+                .Select(action => new MethodDefinitionNode(
+                    action.Name,
+                    new NamedTypeReference("Result"),
+                    Parameters: new[] { BuildExecutionContextParameter() }
+                        .Concat(action.Parameters.OfType<Property>().Select(p =>
+                            new Parameter(DomainLoweringGenerator.ToSynthesizedParameterName(p.Name),
+                                DomainLoweringGenerator.MapDomainTypeToNode(p.Type))))
+                        .ToArray()))
+                .ToArray();
+
+            var inheritedInterfaces = new List<Node> { new NamedTypeReference($"I{entity.Name}") };
+            if (hasParentStage && stage.Parent is not null && entity.ParentEntity is not null) {
+                inheritedInterfaces.Add(new NamedTypeReference($"I{stage.Parent.Name}{entity.ParentEntity.Name}"));
+            }
+
+            interfaces.Add(new TypeDefinitionNode(
+                $"I{stage.Name}{entity.Name}",
+                Methods: methods.Length > 0 ? methods : null,
+                Interfaces: inheritedInterfaces,
+                IsInterface: true));
+        }
+
+        return interfaces;
     }
 
     public IReadOnlyList<Node>? GenerateTestStatements(Domain domain, AnalysisResult analysis) {
@@ -1048,13 +1126,14 @@ public sealed class DomainImplementationLoweringPass {
             .ToArray();
 
         var paramGuards = CollectParameterConstraintGuards(action);
+        var stageGuards = CollectStageTransitionGuards(action, entityModel);
 
         var returnType = new NamedTypeReference("Result");
+        var returnSuccessNode = new Return(new Invoke(new Member(returnType, "Success")));
 
-        if (policyChecks.Length == 0 && paramGuards.Count == 0) {
-            Node body = effectBlock is null
-                ? new Block(new Return(new Invoke(new Member(returnType, "Success"))))
-                : new Block(new[] { effectBlock, new Return(new Invoke(new Member(returnType, "Success"))) });
+
+        if (policyChecks.Length == 0 && paramGuards.Count == 0 && stageGuards.Count == 0) {
+            Node body = new Block([.. activeEffects, returnSuccessNode]);
 
             return new MethodDefinitionNode(
                 action.Name, returnType,
@@ -1063,6 +1142,7 @@ public sealed class DomainImplementationLoweringPass {
         }
 
         var errors = new Variable("_errors", new New(new CollectionTypeReference(new NamedTypeReference("string"))));
+        var returnFailureNode = new Return(new Invoke(new Member(returnType, "Failure"), new Invoke(new Member(errors, "ToArray"))));
         var bodyStatements = new List<Node>();
 
         foreach (var (check, name) in policyChecks) {
@@ -1091,16 +1171,18 @@ public sealed class DomainImplementationLoweringPass {
                 new Invoke(new Member(errors, "Add"), new Constant(code))));
         }
 
-        var successReturn = effectBlock is null
-            ? new Return(new Invoke(new Member(returnType, "Success")))
-            : (Node)new Block([effectBlock, new Return(new Invoke(new Member(returnType, "Success")))]);
+        foreach (var (guard, code) in stageGuards) {
+            bodyStatements.Add(new IfStatement(
+                new Not(guard),
+                new Invoke(new Member(errors, "Add"), new Constant(code))));
+        }
 
         bodyStatements.Add(new IfStatement(
-            new Equal(new Member(errors, "Count"), new Constant(0)),
-            successReturn,
-            new Return(new Invoke(
-                new Member(returnType, "Failure"),
-                errors))));
+            new NotEqual(new Member(errors, "Count"), new Constant(0)),
+            returnFailureNode));
+
+        bodyStatements.AddRange(effectNodes);
+        bodyStatements.Add(returnSuccessNode);
 
         return new MethodDefinitionNode(
             action.Name, returnType,
@@ -1123,6 +1205,70 @@ public sealed class DomainImplementationLoweringPass {
                     Guard: DomainLoweringGenerator.LowerConstraint(c, new Parameter(x.Param.Name), DomainLoweringGenerator.MapDomainTypeToNode(x.Param.Type)),
                     Code: $"{x.Param.Name}ConstraintFailed")))
             .ToArray();
+    }
+
+    private IReadOnlyList<(Node Guard, string Code)> CollectStageTransitionGuards(Action action, EntityImplementationModel entityModel) {
+        var guards = new List<(Node Guard, string Code)>();
+        var effectiveStages = entityModel.EffectiveStages;
+        if (effectiveStages.Count == 0) return [];
+
+        var orderedStages = effectiveStages.Select(s => s.Stage).ToList();
+
+        foreach (var effect in action.Effects) {
+            if (effect is StageTransition stageTransition) {
+                var targetIndex = orderedStages.FindIndex(s => s.Name == stageTransition.TargetStage.Name);
+                if (targetIndex > 0) {
+                    var sourceStage = orderedStages[targetIndex - 1];
+                    var guard = BuildStageSourceGuard(entityModel, sourceStage);
+                    guards.Add((guard, $"{action.Name}Requires{sourceStage.Name}Stage"));
+                }
+            }
+        }
+
+        if (guards.Count == 0) {
+            var assignedStages = effectiveStages
+                .Where(s => s.EffectiveActions.Any(a => ReferenceEquals(a, action)))
+                .Select(s => s.Stage)
+                .ToArray();
+
+            if (assignedStages.Length > 0) {
+                var guardStage = assignedStages[0];
+                Node combinedGuard = BuildStageSourceGuard(entityModel, guardStage);
+                for (var i = 1; i < assignedStages.Length; i++) {
+                    combinedGuard = new Or(combinedGuard, BuildStageSourceGuard(entityModel, assignedStages[i]));
+                }
+                guards.Add((combinedGuard, $"{action.Name}Requires{guardStage.Name}Stage"));
+            }
+        }
+
+        return guards;
+    }
+
+    private Node BuildStageSourceGuard(EntityImplementationModel entityModel, Stage sourceStage) {
+        var currentStage = new Member(new ThisReference(), "CurrentStage");
+        var stageEnumType = new NamedTypeReference($"{entityModel.Entity.Name}Stage");
+        var sourceRef = new Member(stageEnumType, sourceStage.Name);
+
+        var descendants = new List<Stage>();
+        if (_analysis is not null) {
+            var sourceLineage = _analysis.GetMetadata<StageLineageMetadata>(sourceStage);
+            if (sourceLineage is not null) {
+                foreach (var stageImpl in entityModel.EffectiveStages) {
+                    var stage = stageImpl.Stage;
+                    if (ReferenceEquals(stage, sourceStage)) continue;
+                    var stageLineage = _analysis.GetMetadata<StageLineageMetadata>(stage);
+                    if (stageLineage?.Ancestors.Contains(sourceStage) == true) {
+                        descendants.Add(stage);
+                    }
+                }
+            }
+        }
+
+        Node guard = new Equal(currentStage, sourceRef);
+        foreach (var desc in descendants) {
+            guard = new Or(guard, new Equal(currentStage, new Member(stageEnumType, desc.Name)));
+        }
+        return guard;
     }
 
     private MethodDefinitionNode LowerEventSubscriptionToMethodDefinition(
@@ -1184,13 +1330,17 @@ public sealed class DomainImplementationLoweringPass {
     private static TypeDefinitionNode BuildActionExecutionContextTypeDefinition() {
         var stringType = new PrimitiveTypeReference(PrimitiveType.String);
         var objectType = new NamedTypeReference("object");
-        var eventPublisherType = new NamedTypeReference("Action", TypeArguments: [objectType]);
+        var eventPublisherType = new NamedTypeReference("List", TypeArguments: [objectType]);
 
         return new TypeDefinitionNode(
             "ActionExecutionContext",
+            Fields: [
+                new FieldDefinitionNode("_actor", new OptionalTypeReference(ActorInterfaceType), AccessModifier: AccessModifier.Private),
+                new FieldDefinitionNode("_events", eventPublisherType, AccessModifier: AccessModifier.Private, IsReadOnly: true)
+            ],
             Properties: [
-                new PropertyDefinitionNode("Actor", new OptionalTypeReference(ActorInterfaceType), Getter: new PropertyGetterDefinitionNode()),
-                new PropertyDefinitionNode("Events", eventPublisherType, Getter: new PropertyGetterDefinitionNode()),
+                new PropertyDefinitionNode("Actor", new OptionalTypeReference(ActorInterfaceType), Getter: new PropertyGetterDefinitionNode(Body: new Member(new ThisReference(), "_actor"))),
+                new PropertyDefinitionNode("Events", eventPublisherType, Getter: new PropertyGetterDefinitionNode(Body: new Member(new ThisReference(), "_events"))),
             ],
             Constructors: [
                 new ConstructorDefinitionNode(
@@ -1208,7 +1358,13 @@ public sealed class DomainImplementationLoweringPass {
                     VoidType,
                     Parameters: [new Parameter("@event", objectType)],
                     Body: new Block(Return.Void),
-                    IsStatic: true)
+                    IsStatic: true),
+                new MethodDefinitionNode(
+                    "PublishEvent",
+                    VoidType,
+                    Parameters: [new Parameter("@event", objectType)],
+                    Body: new Block(
+                        new Invoke(new Member(new Member(new ThisReference(), "_events"), "Add"), new Parameter("@event", objectType)))),
             ]);
     }
 

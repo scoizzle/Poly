@@ -77,6 +77,40 @@ public class DomainLoweringToCSharpIntegrationTests {
     }
 
     [Test]
+    public async Task InheritedActionWithStageTransition_LoweredToCSharp_UsesChildEntityStageEnum() {
+        var domain = new Domain("TestDomain");
+        var textType = new Primitive(domain, "Text", TypeCategory.Text);
+        MutationApply.AddType(domain, textType);
+
+        var user = new Entity(domain, "User");
+        MutationApply.AddType(domain, user);
+        var active = new Stage(domain, "Active");
+        var inactive = new Stage(domain, "Inactive");
+        MutationApply.AddStage(user, active);
+        MutationApply.AddStage(user, inactive);
+
+        var deactivate = new DomainAction(domain, "Deactivate", user);
+        MutationApply.AddAction(user, deactivate);
+        MutationApply.AddEffect(deactivate, new StageTransition(domain) { TargetStage = inactive });
+
+        var employee = new Entity(domain, "Employee", parentEntity: user);
+        MutationApply.AddType(domain, employee);
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var pass = new DomainImplementationLoweringPass();
+        var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
+
+        var csharp = new CSharpGenerator().Generate(typeDefs);
+
+        await Assert.That(csharp).Contains("class Employee");
+        await Assert.That(csharp).Contains("Result Deactivate(ActionExecutionContext context)");
+        await Assert.That(csharp).Contains("EmployeeStage.");
+        await Assert.That(csharp).Contains("enum EmployeeStage");
+        await Assert.That(csharp).Contains("enum UserStage");
+        await Assert.That(csharp).Contains("DeactivateRequiresActiveStage");
+    }
+
+    [Test]
     public async Task EntityWithAction_LoweredToCSharp_ProducesMethodWithBody() {
         var domain = new Domain("TestDomain");
         var textType = new Primitive(domain, "Text", TypeCategory.Text);
@@ -323,5 +357,183 @@ public class DomainLoweringToCSharpIntegrationTests {
         var csharp = new CSharpGenerator().Generate(typeDefs);
 
         await Assert.That(csharp).Contains("context.Events(new OrderShipped(this.Number!))");
+    }
+
+    // ── Contract interface tests ─────────────────────────────────────────────
+
+    [Test]
+    public async Task LowerToContractInterfaces_EntityWithoutStages_GeneratesBaseInterfaceOnly() {
+        var domain = new Domain("TestDomain");
+        var textType = new Primitive(domain, "Text", TypeCategory.Text);
+        MutationApply.AddType(domain, textType);
+
+        var entity = new Entity(domain, "User");
+        MutationApply.AddProperty(entity, new Property(domain, "Name", textType));
+        MutationApply.AddType(domain, entity);
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var pass = new DomainImplementationLoweringPass();
+        var contracts = pass.LowerToContractInterfaces(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(contracts);
+
+        await Assert.That(csharp).Contains("public interface IUser");
+        await Assert.That(csharp).Contains("String Name { get; }");
+        await Assert.That(csharp).DoesNotContain("IUserActive");
+        await Assert.That(csharp).DoesNotContain("IUserInactive");
+    }
+
+    [Test]
+    public async Task LowerToContractInterfaces_EntityWithStages_GeneratesStageInterfaces() {
+        var domain = new Domain("TestDomain");
+        var textType = new Primitive(domain, "Text", TypeCategory.Text);
+        MutationApply.AddType(domain, textType);
+
+        var user = new Entity(domain, "User");
+        MutationApply.AddType(domain, user);
+        MutationApply.AddStage(user, new Stage(domain, "Active"));
+        MutationApply.AddStage(user, new Stage(domain, "Inactive"));
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var pass = new DomainImplementationLoweringPass();
+        var contracts = pass.LowerToContractInterfaces(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(contracts);
+
+        await Assert.That(csharp).Contains("public interface IUser");
+        await Assert.That(csharp).Contains("public interface IActiveUser : IUser");
+        await Assert.That(csharp).Contains("public interface IInactiveUser : IUser");
+    }
+
+    [Test]
+    public async Task LowerToContractInterfaces_StageActions_AppearOnCorrectStageInterface() {
+        var domain = new Domain("TestDomain");
+        var textType = new Primitive(domain, "Text", TypeCategory.Text);
+        MutationApply.AddType(domain, textType);
+
+        var user = new Entity(domain, "User");
+        MutationApply.AddType(domain, user);
+        var active = new Stage(domain, "Active");
+        var inactive = new Stage(domain, "Inactive");
+        MutationApply.AddStage(user, active);
+        MutationApply.AddStage(user, inactive);
+
+        var deactivate = new DomainAction(domain, "Deactivate", user);
+        MutationApply.AddAction(active, deactivate);
+        var reason = new Property(domain, "reason", textType);
+        MutationApply.AddParameter(deactivate, reason);
+
+        var activate = new DomainAction(domain, "Activate", user);
+        MutationApply.AddAction(inactive, activate);
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var pass = new DomainImplementationLoweringPass();
+        var contracts = pass.LowerToContractInterfaces(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(contracts);
+
+        await Assert.That(csharp).Contains("interface IActiveUser");
+        await Assert.That(csharp).Contains("Result Deactivate(ActionExecutionContext context, String reason)");
+        await Assert.That(csharp).Contains("interface IInactiveUser");
+        await Assert.That(csharp).Contains("Result Activate(ActionExecutionContext context)");
+    }
+
+    [Test]
+    public async Task LowerToContractInterfaces_ChildEntity_InterfaceInheritsParent() {
+        var domain = new Domain("TestDomain");
+        var textType = new Primitive(domain, "Text", TypeCategory.Text);
+        MutationApply.AddType(domain, textType);
+
+        var user = new Entity(domain, "User");
+        MutationApply.AddType(domain, user);
+        MutationApply.AddStage(user, new Stage(domain, "Active"));
+        MutationApply.AddStage(user, new Stage(domain, "Inactive"));
+
+        var employee = new Entity(domain, "Employee", parentEntity: user);
+        MutationApply.AddProperty(employee, new Property(domain, "EmployeeId", textType));
+        MutationApply.AddType(domain, employee);
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var pass = new DomainImplementationLoweringPass();
+        var contracts = pass.LowerToContractInterfaces(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(contracts);
+
+        await Assert.That(csharp).Contains("interface IEmployee : IUser");
+        await Assert.That(csharp).Contains("String EmployeeId");
+        await Assert.That(csharp).Contains("interface IActiveEmployee");
+        await Assert.That(csharp).Contains("interface IInactiveEmployee");
+    }
+
+    [Test]
+    public async Task LowerToContractInterfaces_ChildStage_InheritsParentStageInterface() {
+        var domain = new Domain("TestDomain");
+        var textType = new Primitive(domain, "Text", TypeCategory.Text);
+        MutationApply.AddType(domain, textType);
+
+        var user = new Entity(domain, "User");
+        MutationApply.AddType(domain, user);
+        var active = new Stage(domain, "Active");
+        MutationApply.AddStage(user, active);
+
+        var deactivate = new DomainAction(domain, "Deactivate", user);
+        MutationApply.AddAction(active, deactivate);
+
+        var employee = new Entity(domain, "Employee", parentEntity: user);
+        MutationApply.AddType(domain, employee);
+        var activeChecking = new Stage(domain, "ActiveChecking") { Parent = active };
+        MutationApply.AddStage(employee, activeChecking);
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var pass = new DomainImplementationLoweringPass();
+        var contracts = pass.LowerToContractInterfaces(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(contracts);
+
+        await Assert.That(csharp).Contains("interface IActiveUser");
+        await Assert.That(csharp).Contains("interface IActiveCheckingEmployee : IEmployee, IActiveUser");
+        // Deactivate is declared on the parent stage interface and inherited
+        await Assert.That(csharp).Contains("Result Deactivate(ActionExecutionContext context)");
+    }
+
+    [Test]
+    public async Task ActionWithoutStageTransition_LoweredToCSharp_HasGuardFromStageAssignment() {
+        var domain = new Domain("TestDomain");
+        var textType = new Primitive(domain, "Text", TypeCategory.Text);
+        MutationApply.AddType(domain, textType);
+
+        var entity = new Entity(domain, "Order");
+        MutationApply.AddType(domain, entity);
+        var pending = new Stage(domain, "Pending");
+        var shipped = new Stage(domain, "Shipped");
+        var delivered = new Stage(domain, "Delivered");
+        MutationApply.AddStage(entity, pending);
+        MutationApply.AddStage(entity, shipped);
+        MutationApply.AddStage(entity, delivered);
+
+        // Actions WITHOUT StageTransition effects — guards should come from stage assignment
+        var cancel = new DomainAction(domain, "Cancel", entity);
+        MutationApply.AddAction(entity, cancel);
+        MutationApply.AddAction(pending, cancel);
+
+        var ship = new DomainAction(domain, "Ship", entity);
+        MutationApply.AddAction(entity, ship);
+        MutationApply.AddAction(pending, ship);
+
+        // Action WITH StageTransition effect — guards come from transition
+        var complete = new DomainAction(domain, "Complete", entity);
+        MutationApply.AddAction(entity, complete);
+        MutationApply.AddAction(shipped, complete);
+        MutationApply.AddEffect(complete, new StageTransition(domain) { TargetStage = delivered });
+
+        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var pass = new DomainImplementationLoweringPass();
+        var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(typeDefs);
+
+        // Cancel has guard from stage assignment (assigned to Pending)
+        await Assert.That(csharp).Contains("CancelRequiresPendingStage");
+        await Assert.That(csharp).Contains("Cancel(ActionExecutionContext context)");
+
+        // Ship has guard from stage assignment (assigned to Pending)
+        await Assert.That(csharp).Contains("ShipRequiresPendingStage");
+
+        // Complete has guard from StageTransition (Shipped -> Delivered)
+        await Assert.That(csharp).Contains("CompleteRequiresShippedStage");
     }
 }

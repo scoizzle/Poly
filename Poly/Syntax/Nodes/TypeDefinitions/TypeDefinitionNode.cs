@@ -51,21 +51,21 @@ public sealed record TypeDefinitionNode(
 
     public override IEnumerable<Node?> Children {
         get {
+            yield return BaseType;
+            if (GenericParameters != null)
+                foreach (var g in GenericParameters) yield return g;
+            if (Interfaces != null)
+                foreach (var i in Interfaces) yield return i;
+            if (PrimaryConstructorParameters != null)
+                foreach (var p in PrimaryConstructorParameters) yield return p;
+            if (Fields != null)
+                foreach (var f in Fields) yield return f;
             if (Constructors != null)
                 foreach (var constructor in Constructors) yield return constructor;
             if (Properties != null)
                 foreach (var p in Properties) yield return p;
             if (Methods != null)
                 foreach (var m in Methods) yield return m;
-            if (Fields != null)
-                foreach (var f in Fields) yield return f;
-            yield return BaseType;
-            if (Interfaces != null)
-                foreach (var i in Interfaces) yield return i;
-            if (GenericParameters != null)
-                foreach (var g in GenericParameters) yield return g;
-            if (PrimaryConstructorParameters != null)
-                foreach (var p in PrimaryConstructorParameters) yield return p;
         }
     }
 

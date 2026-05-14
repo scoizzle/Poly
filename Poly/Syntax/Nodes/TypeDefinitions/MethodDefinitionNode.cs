@@ -15,6 +15,7 @@ public sealed record MethodDefinitionNode(
     IReadOnlyList<Parameter>? Parameters = null,
     Node? Body = null,
     bool IsStatic = false,
+    bool IsAsync = false,
     IReadOnlyList<Parameter>? GenericParameters = null,
     AccessModifier AccessModifier = AccessModifier.Public
 ) : MemberDefinitionNode(Name, ReturnType, IsStatic, AccessModifier) {
@@ -32,7 +33,8 @@ public sealed record MethodDefinitionNode(
 
     public override string ToString() {
         var staticPrefix = IsStatic ? "static " : "";
+        var asyncPrefix = IsAsync ? "async " : "";
         var paramList = Parameters != null ? string.Join(", ", Parameters) : "";
-        return $"{staticPrefix}{ReturnType} {Name}({paramList})";
+        return $"{asyncPrefix}{staticPrefix}{ReturnType} {Name}({paramList})";
     }
 }

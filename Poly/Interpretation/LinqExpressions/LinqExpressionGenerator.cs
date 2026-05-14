@@ -349,6 +349,9 @@ public sealed class LinqExpressionGenerator {
             Member member => Expression.PropertyOrField(CompileNode(member.Value, context), member.MemberName),
             IndexAccess index => CompileIndexAccess(index, context),
 
+            // Await (synchronous extraction for simulation)
+            Await awaitNode => CompileAwait(awaitNode, context),
+
             // Method invocation
             Invoke method => CompileInvocation(method, context),
 
@@ -1009,6 +1012,12 @@ public sealed class LinqExpressionGenerator {
 
         var methodExpr = CompileNode(invoke.Delegate, context);
         return Expression.Invoke(methodExpr, argExprs);
+    }
+
+    private Expression CompileAwait(Await awaitNode, CompilationContext context) {
+        var operand = CompileNode(awaitNode.Operand, context);
+        var awaiter = Expression.Call(operand, "GetAwaiter", Type.EmptyTypes);
+        return Expression.Call(awaiter, "GetResult", Type.EmptyTypes);
     }
 
     /// <summary>

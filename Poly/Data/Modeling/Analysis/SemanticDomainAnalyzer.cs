@@ -73,16 +73,22 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         });
 
         foreach (var stage in entity.Stages) {
+            var stageLineage = EnumerateStageLineageRootToLeaf(stage).ToArray();
             var effectiveStageActions = MergeByName(
-                EnumerateStageLineageRootToLeaf(stage).SelectMany(static s => s.Actions),
+                stageLineage.SelectMany(static s => s.Actions),
                 static action => action.Name);
             var effectiveStagePolicies = MergeByName(
-                EnumerateStageLineageRootToLeaf(stage).SelectMany(static s => s.Policies),
+                stageLineage.SelectMany(static s => s.Policies),
                 static policy => policy.Name);
 
             context.Metadata.Set(stage, new EffectiveStageMetadata {
                 EffectiveActions = effectiveStageActions,
                 EffectivePolicies = effectiveStagePolicies
+            });
+
+            context.Metadata.Set(stage, new StageLineageMetadata {
+                Depth = stageLineage.Length - 1,
+                Ancestors = stageLineage.Take(stageLineage.Length - 1).ToArray()
             });
         }
     }

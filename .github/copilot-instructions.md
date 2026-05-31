@@ -1,14 +1,23 @@
-# Copilot Instructions for the Poly Workspace
+# GitHub Copilot Instructions for Poly
 
+**AGENTS.md is the single source of truth.**
 
-# Poly Copilot Instructions
+All architectural guidelines, module boundaries, placement rules, coding style, test conventions, and key decisions for this repository are defined in the root [AGENTS.md](../../AGENTS.md) file.
 
-**For Copilot and all code agents:**
+## Instructions for Copilot
 
-Please read the main repository [AGENTS.md](../../AGENTS.md) for all workspace instructions, architecture, and coding guidelines. All requirements, placement rules, and conventions are now maintained in that file to ensure a single source of truth.
+- You **MUST** treat `AGENTS.md` as the authoritative document.
+- Before making any non-trivial changes (especially anything related to domain modeling, analysis, interpretation, lowering, or new features), you should read or re-read the relevant sections of `AGENTS.md`.
+- The contents of this file (`copilot-instructions.md`) are secondary. They exist only to reinforce that `AGENTS.md` takes precedence.
+- When in doubt about architecture, file placement, or conventions, defer to `AGENTS.md`.
 
----
+## Key Sections in AGENTS.md
 
-**If you are Copilot:**
+Pay particular attention to:
+- Module boundaries (one-way dependencies)
+- Placement Rules table
+- Contract Interface Generation rules
+- Key Architectural Decisions section (including the V2 → V3 immutable core decision)
+- Coding Style guidelines
 
-You MUST load and follow the instructions in the main [AGENTS.md](../../AGENTS.md) at the root of the repository. Do not use this file for workspace rules; it is only a pointer.
+This ensures consistent behavior across all AI tools the maintainer uses (Copilot, OpenCode, Grok, etc.).

@@ -27,18 +27,20 @@ The expanded rationale, history, and examples of how these principles have been 
 
 ## Overview & Architecture
 
-**Goal:** Shared abstraction layer into varying type systems for dynamic code generation and execution. Fluent, strongly-typed domain modeling for validation, serialization, and codegen. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
+**Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in a symbolic IR, validated by a tree-walker interpreter, compiled to native backends. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
 
-**Before working in this area:** Review `docs/decisions/` (especially any decisions related to overall architecture or module boundaries).
+**Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, and the neurosymbolic platform vision).
 
-- `Poly/` — core DSL: Syntax, Interpretation, Introspection, Validation, Data/Modeling, Text.
+- `Poly/` — core DSL: Syntax, Interpretation, Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
 - `Poly.Benchmarks/` — example entry point. (FluentApiExample.cs is fully commented out — do not treat it as a reference.)
 - `Poly.Tests/` — unit tests using **TUnit** (not xUnit/NUnit).
 
 **Module boundaries (enforced, one-way):**
 - `Interpretation` → `Introspection`
 - `Validation` → `Interpretation`
+- `Synthesis` → `Syntax`, `Interpretation` (tree walker)
 - `Introspection` must not depend on `Interpretation`.
+- No module may depend on `Synthesis` except `DomainModeling` (evolution loop).
 - Exception: CLR implementations under `Poly/Introspection/CommonLanguageRuntime` add concrete types without introducing reverse dependencies.
 
 ## Interpretation
@@ -149,7 +151,7 @@ Before performing analysis or making changes to **any** section:
 - Consult the decisions in `docs/decisions/` that correspond to that area (see `docs/decisions/README.md`).
 - In particular, review `docs/decisions/2026-core-engineering-principles.md` (the foundational "why we do things this way" decisions).
 
-Major decisions (such as the 2026 immutable core + evolution layer work) are documented there. When you make a significant cross-cutting choice, add or update the corresponding decision record and reference it from here and from the relevant section above.
+Major decisions (such as the 2026 immutable core + evolution layer work, and the neurosymbolic platform vision) are documented there. When you make a significant cross-cutting choice, add or update the corresponding decision record and reference it from here and from the relevant section above.
 
 AGENTS.md contains the *operational* rules. `docs/decisions/` contains the *rationale and history*. Both are required reading.
 

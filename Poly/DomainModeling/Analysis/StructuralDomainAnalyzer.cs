@@ -97,7 +97,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         where TNode : DomainMember {
         foreach (var group in nodes.GroupBy(static node => node.Name, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
             foreach (var duplicate in group.Skip(1)) {
-                context.ReportError(
+                context.ReportStructuralFailure(
                     duplicate,
                     $"Duplicate member name '{duplicate.Name}' in {ownerType} '{ownerName}'.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
@@ -108,7 +108,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     private static void ReportDuplicateNames(AnalysisContext context, IEnumerable<InvocationResult.Member> nodes, string ownerType, string ownerName) {
         foreach (var group in nodes.GroupBy(static node => node.Name, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
             foreach (var duplicate in group.Skip(1)) {
-                context.ReportError(
+                context.ReportStructuralFailure(
                     duplicate,
                     $"Duplicate member name '{duplicate.Name}' in {ownerType} '{ownerName}'.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
@@ -123,7 +123,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         string ownerName) {
         foreach (var group in nodes.GroupBy(static node => node.TypeName, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
             foreach (var duplicate in group.Skip(1)) {
-                context.ReportError(
+                context.ReportStructuralFailure(
                     duplicate,
                     $"Duplicate reference name '{duplicate.TypeName}' in {ownerType} '{ownerName}'.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);

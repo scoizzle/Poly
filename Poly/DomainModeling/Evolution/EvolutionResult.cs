@@ -7,8 +7,10 @@ namespace Poly.DomainModeling.Evolution;
 /// Contains either a new successful root or the original root on analysis failure,
 /// plus the analysis diagnostics and a rich trace for agents / UI / debugging.
 /// 
-/// This shape preserves the "ApplyWithTrace + clear rollback on error" experience
-/// from V2 while taking advantage of immutable records (no compensating rollback logic needed).
+/// Because the model is immutable, there is no actual "rollback" operation.
+/// On failure the proposed root is simply discarded. The <c>WasRolledBack</c> flag
+/// and <c>RolledBack</c> factory are retained as an observable signal for agents and
+/// future UI so they can clearly distinguish accepted vs. rejected proposals.
 /// </summary>
 public sealed record EvolutionResult(
     Domain Root,
@@ -17,6 +19,12 @@ public sealed record EvolutionResult(
     bool Succeeded,
     bool WasRolledBack
 ) {
+    /// <summary>
+    /// True if analysis detected a structural or reference-level failure.
+    /// When true, the proposal is fundamentally invalid.
+    /// </summary>
+    public bool HasStructuralFailure => Analysis.HasStructuralFailure;
+
     public static EvolutionResult Success(
         Domain root,
         AnalysisResult analysis,

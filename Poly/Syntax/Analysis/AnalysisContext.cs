@@ -109,4 +109,57 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// </summary>
     /// <param name="nodeId">The node identifier for which to clear metadata.</param>
     public void ClearMetadata(NodeId nodeId) => Metadata.RemoveAll(nodeId);
+
+    // === Early exit / interruption support ===
+
+    /// <summary>
+    /// Gets whether a structural or reference-level failure has been reported.
+    /// Analyzers and the pipeline can use this to decide whether to continue with expensive passes.
+    /// </summary>
+    public bool HasStructuralFailure { get; private set; }
+
+    /// <summary>
+    /// Reports a structural or reference-level failure. This sets <see cref="HasStructuralFailure"/> to true.
+    /// Later analyzers (or the pipeline itself) may choose to skip work when this is set, depending on <see cref="AnalysisOptions"/>.
+    /// </summary>
+    public void ReportStructuralFailure(Node node, string message, string? code = null) {
+        HasStructuralFailure = true;
+        ReportDiagnostic(node, DiagnosticSeverity.Error, message, code);
+    }
+
+    /// <summary>
+    /// Requests that analysis should stop as soon as reasonably possible.
+    /// The pipeline may honor this request depending on the active <see cref="AnalysisOptions"/>.
+    /// </summary>
+    public void RequestEarlyExit() {
+        _earlyExitRequested = true;
+    }
+
+    internal bool ShouldContinueAnalysis(AnalysisOptions options) {
+        if (!_earlyExitRequested)
+            return true;
+
+        return options.Mode != AnalysisMode.FailFast;
+    }
+
+    // Helper for analyzers / pipeline
+    internal bool ShouldStopOnStructuralErrors(AnalysisOptions options) =>
+        options.ShouldStopOnStructuralErrors && HasStructuralFailure;
+
+    /// <summary>
+    /// Returns whether analysis should continue running additional passes,
+    /// based on the provided options and any structural failures reported so far.
+    /// Analyzers can call this to decide whether to do expensive work.
+    /// </summary>
+    public bool ShouldContinue(AnalysisOptions options) {
+        if (_earlyExitRequested)
+            return options.Mode != AnalysisMode.FailFast;
+
+        if (options.ShouldStopOnStructuralErrors && HasStructuralFailure)
+            return false;
+
+        return true;
+    }
+
+    private bool _earlyExitRequested;
 }

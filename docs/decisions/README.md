@@ -23,3 +23,4 @@ These documents exist so that:
 
 - [2026-05-31: Immutable Core for Domain Modeling (V2 → V3)](2026-05-31-immutable-core-domain-modeling.md) — Strategic shift to immutable records while preserving the transactional evolution/correctness guarantees required by LLM agents.
 - [2026: V2 → V3 Domain Modeling Port Plan](2026-v2-to-v3-domain-modeling-port.md) — Living plan for the port to the immutable core + thin evolution layer (includes integration with the documentation and agent instruction structure).
+- [2026-05-31: Neurosymbolic Platform Vision](2026-05-31-neurosymbolic-platform-vision.md) — Architectural vision for Poly as a neurosymbolic platform: models codify discovered algorithms as composable macros in a symbolic IR, validated by a tree-walker interpreter, compiled to native backends. Reframes domain modeling as compiler frontend for program synthesis.

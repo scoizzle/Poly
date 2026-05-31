@@ -5,7 +5,7 @@ public sealed record AnalysisResult : INodeMetadataProvider {
     private readonly Dictionary<NodeId, List<Diagnostic>> _diagnostics;
     private readonly Lazy<IReadOnlyList<Diagnostic>> _allDiagnostics;
 
-    public AnalysisResult(AnalysisContext context, AnalysisTelemetry telemetry) {
+    public AnalysisResult(AnalysisContext context, AnalysisTelemetry telemetry, AnalysisOptions? options = null) {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(telemetry);
         _metadata = context.Metadata;
@@ -16,7 +16,17 @@ public sealed record AnalysisResult : INodeMetadataProvider {
                 .DistinctBy(d => (d.Node.Id, d.Severity, d.Code, d.Message))
                 .ToList());
         Telemetry = telemetry;
+        HasStructuralFailure = context.HasStructuralFailure;
+
+        var effectiveOptions = options ?? AnalysisOptions.Default;
+        AnalysisWasTerminatedEarly = !context.ShouldContinue(effectiveOptions);
+        OptionsUsed = effectiveOptions;
     }
+
+    /// <summary>
+    /// The options that were active during this analysis run.
+    /// </summary>
+    public AnalysisOptions OptionsUsed { get; } = AnalysisOptions.Default;
 
     /// <summary>
     /// Gets the per-pass timing telemetry captured during analysis.
@@ -32,6 +42,19 @@ public sealed record AnalysisResult : INodeMetadataProvider {
     /// Returns true if any error-level diagnostics were produced.
     /// </summary>
     public bool HasErrors => Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
+
+    /// <summary>
+    /// Returns true if any structural or reference-level failures were detected during analysis.
+    /// When true, many semantic and higher-level analyses may be incomplete or invalid.
+    /// This is the primary signal for early termination and invalidation in incremental scenarios.
+    /// </summary>
+    public bool HasStructuralFailure { get; init; }
+
+    /// <summary>
+    /// Returns true if analysis was terminated early due to errors (structural or otherwise).
+    /// The result may be incomplete.
+    /// </summary>
+    public bool AnalysisWasTerminatedEarly { get; init; }
 
     /// <summary>
     /// Gets metadata of the specified type for the given node.

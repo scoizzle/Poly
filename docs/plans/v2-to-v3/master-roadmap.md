@@ -38,14 +38,15 @@
 
 These workstreams are structured to allow multiple agents to work concurrently with clear interfaces and minimal blocking.
 
+**Note (2026 ownership update):** WS1 + WS3 + WS2 have been consolidated into a single workstream ("WS1: Evolution Layer Applicator + MVP Operations + NodeId Continuity") per the code review notes in this document and the active ownership plan. WS1 is now the critical path. A new WS7 (V3 Expressiveness Audit) has been added for Phase 1 to make later phases predictable. See the consolidated `workstreams/ws1-evolution-applicator-mvp.md` and `ws7-v3-expressiveness-audit.md`.
+
 | Workstream | File | Owner | Status | Main Dependencies | Primary Deliverable |
 |------------|------|-------|--------|-------------------|---------------------|
-| **WS1** | `workstreams/ws1-evolution-layer-core.md` | TBD | Not Started | — | Core `DomainEvolution` / Transaction / Trace infrastructure + basic applicator |
-| **WS2** | `workstreams/ws2-nodeid-continuity.md` | TBD | Not Started | WS1 (interface) | NodeId preservation strategy + implementation |
-| **WS3** | `workstreams/ws3-mvp-operations.md` | TBD | Not Started | WS1 | First set of useful operations (MVP scope) |
-| **WS4** | `workstreams/ws4-trace-and-rollback-ux.md` | TBD | Not Started | WS1, WS3 | High-quality traces + rollback UX |
-| **WS5** | `workstreams/ws5-proof-on-examples.md` | TBD | Not Started | WS3, WS4 | PersonLifecycle + ≥1 roadblock proven on new layer |
-| **WS6** | `workstreams/ws6-documentation-hygiene.md` | TBD | Not Started | All | Decision records + AGENTS.md + roadmap hygiene |
+| **WS1 (merged)** | `workstreams/ws1-evolution-applicator-mvp.md` | Grok (orchestrator) | Claimed – In Progress | — | Working applicator + 6–8 concrete `DomainChange` subtypes + NodeId preservation + MVP operations (PersonLifecycle slice) |
+| **WS4** | `workstreams/ws4-trace-and-rollback-ux.md` | TBD | Not Started | WS1 (stable interfaces) | High-quality traces + rollback UX usable by agents + future UI |
+| **WS5** | `workstreams/ws5-proof-on-examples.md` | TBD | Not Started | WS1 (first operations) | PersonLifecycle + ≥1 roadblock fully working through the new layer |
+| **WS6** | `workstreams/ws6-documentation-hygiene.md` | TBD (light support) | In Progress (orchestrator-led) | All | Decision records, roadmap hygiene, AGENTS.md alignment |
+| **WS7 (new)** | `workstreams/ws7-v3-expressiveness-audit.md` | TBD | Not Started | — | Living catalog of V2 concepts vs V3 capability (prevents Phase 4 surprises) |
 
 See the individual files in `workstreams/` for detailed task lists, entry/exit criteria, open questions, and coordination guidance.
 
@@ -69,39 +70,40 @@ See:
 
 **Strategy**: Larger/orchestrator agents decompose work into these micro-tasks. Smaller agents execute the majority of the actual code changes.
 
-## Next Actions (Current Focus)
+## Next Actions (Current Focus – Under Active Ownership)
 
-1. Continue populating high-quality micro-tasks in `simple-agent-tasks/`.
-2. Flesh out the remaining workstream files with clear "decompose into micro-tasks" guidance.
-3. Decide on initial owners for the main workstreams.
-4. Create the first decision records needed by Phase 1.
+1. **WS1 owner (Grok)**: Immediately create the first 8–10 high-quality micro-tasks (starting with concrete `DomainChange` subtypes + applicator skeleton). Personally implement the first 1–2 end-to-end to validate format and unblock smaller agents.
+2. Create the consolidated `ws1-evolution-applicator-mvp.md` and `ws7-v3-expressiveness-audit.md`.
+3. Create the first 2–3 decision records for Phase 1 choices (Change Representation Strategy, NodeId approach).
+4. Exercise the full micro-task → agent-summary → review → plan-update loop at least once.
+5. Update remaining workstream files only as needed for interface coordination with the merged WS1.
 
 ---
 
 ## Readiness Checklist (Are We Actually Ready to Hand This to Multiple Agents?)
 
-**Current Overall Readiness**: Ready for initial parallel execution (with active orchestration)
+**Current Overall Readiness (under active ownership)**: Ignition in progress — WS1 claimed, first micro-tasks and plan corrections underway. Ready for controlled parallel execution on WS1 support work once the first 5–6 micro-tasks exist.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Master roadmap exists and is reasonably clear | ✅ | This file |
+| Master roadmap exists and is reasonably clear | ✅ | Updated with merged WS1 + WS7 (2026 ownership) |
 | Orchestration Guide exists and is detailed | ✅ | `orchestration-guide.md` |
 | Agent summary mechanism + template exists | ✅ | `agent-summaries/` |
-| Micro-task template + examples exist | ✅ Good progress | 8+ micro-tasks now exist (more still needed, especially for WS1) |
-| All Phase 1 workstream files exist | ⚠️ Partial | WS4 now exists; others are good |
-| First batch of concrete micro-tasks ready for small agents | ⚠️ Partial | Need ~8–12 more before many small agents can work |
-| Clear starting instructions for both orchestrators and executors | ✅ | Added in this file |
+| Micro-task template + examples exist | ✅ Good progress | 8+ micro-tasks exist; new batch being added by WS1 owner |
+| All Phase 1 workstream files exist | ✅ Now | Consolidated WS1 + new WS7 created under ownership |
+| First batch of concrete micro-tasks ready for small agents | ⚠️ In Progress | WS1 owner creating first 8–10 now (focus on applicator + changes) |
+| Clear starting instructions for both orchestrators and executors | ✅ | Updated in this file + ownership plan |
 | AGENTS.md + decisions properly reference this plan | ✅ | Strong links exist |
-| First Orchestrator has claimed a workstream | ❌ Not yet | This is the next real step |
+| First Orchestrator has claimed a workstream | ✅ | Grok claimed merged WS1 (Evolution Layer Applicator + MVP Ops) |
 
-**Bottom line**: The *system* is ready. The *content* (enough micro-tasks) is the main remaining gap before we can have many agents working simultaneously.
+**Bottom line**: The *system* is ready. Under current ownership we are closing the "content + ownership" gap immediately rather than waiting for organic progress. The merged WS1 structure reflects ground truth (skeleton exists; the real work is the applicator + concrete operations + NodeId).
 
 **What is solid right now:**
 - Clear overall strategy and 5 phases
-- Detailed Phase 1 workstreams with entry/exit criteria
 - Strong multi-agent orchestration model (see Orchestration Guide)
 - Good support for smaller agents via micro-tasks + agent-summaries mechanism
 - Core decisions documented and linked
+- Explicit ownership of the critical path (WS1)
 
 **Important new cross-cutting requirement** (June 2026):
 The Evolution layer must support a full real-time visual authoring experience where:
@@ -110,18 +112,17 @@ The Evolution layer must support a full real-time visual authoring experience wh
 - Changes from both LLM agents and human users go through the same transactional, analyzable, traceable mechanism.
 - The UI can apply changes optimistically with reconciliation against analysis results.
 
-**Critical for implementers**: See the "Anti-Patterns to Avoid in Phase 1 Implementation" section in the Evolution Layer design doc. These should be treated as hard constraints during early design of the change model and observation mechanisms.
+**Critical for implementers**: See the "Anti-Patterns to Avoid in Phase 1 Implementation" section in the Evolution Layer design doc. These are treated as hard constraints on the `DomainChange` model and applicator from the first subtypes.
 
-This requirement must be treated as a first-class driver starting in Phase 1 (see the Evolution Layer design doc for the full set of UI requirements).
+This requirement is a first-class driver starting in Phase 1.
 
-**What still needs work before full parallel execution:**
-- Still need more concrete micro-tasks (especially for WS1)
-- No agents have been assigned to specific workstreams yet (biggest practical blocker)
-- The very first micro-tasks / Week 0 tasks need to be explicitly defined and the first Orchestrator needs to start decomposing
+**What still needs work (being actively closed by WS1 owner):**
+- First 8–10 high-quality micro-tasks for the merged WS1 (in progress)
+- Consolidated workstream file + WS7 expressiveness audit (in progress)
+- First decision records for Change Representation and NodeId strategy
+- One full micro-task → summary → review → plan-update cycle exercised
 
-See `00-bootstrap-and-ignition-plan.md` for the current best view of the remaining ignition gaps.
-
-See `00-bootstrap-and-ignition-plan.md` for the concrete, short-term "ignition sequence" to close these gaps and move into real parallel execution.
+See `00-bootstrap-and-ignition-plan.md` for the ignition sequence. The ownership plan (session plan.md) now drives the first 2–3 weeks of execution.
 
 ## Immediate Starting Point (What an Agent Should Do Right Now)
 
@@ -144,9 +145,17 @@ Create the missing `ws4-trace-and-rollback-ux.md` workstream file + the first ba
 
 ---
 
-## Code Review Notes (Added 2026-05-30)
+## Code Review Notes (Added 2026-05-30) — Actioned Under Current Ownership
 
-These notes are based on examining the actual V2 and V3 code. They identify gaps between the plan's workstream structure and the code's reality. A follow-up orchestrator agent should review and decide which to apply.
+These notes (based on examining the actual V2 and V3 code) were reviewed during the 2026 ownership planning session. The recommendations below have been implemented (see ownership plan for details).
+
+**Summary of actions taken:**
+- WS1 + WS3 + WS2 merged into consolidated `ws1-evolution-applicator-mvp.md`.
+- WS7 (V3 Expressiveness Audit) created for Phase 1.
+- Master roadmap table, statuses, and "Immediate Starting Point" updated to reflect reality and active ownership.
+- WS1 claimed by Grok as orchestrator.
+
+Future notes should be added as new dated sections. The original detailed recommendations (merge, fold NodeId, add WS7, update statuses) are now historical and have been executed.
 
 ### 1. Merge WS1 and WS3 — the skeleton exists, the gap is the applicator
 

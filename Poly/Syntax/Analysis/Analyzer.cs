@@ -9,6 +9,11 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
     private readonly (INodeAnalyzer Analyzer, string PassName)[] _analyzers = analyzers.ToArray();
     private readonly List<Action<AnalysisContext>> _actions = [];
 
+    /// <summary>
+    /// Options that control analysis behavior (including early exit).
+    /// </summary>
+    public AnalysisOptions Options { get; init; } = AnalysisOptions.Default;
+
     public ITypeDefinitionProvider TypeDefinitions => typeDefinitions;
 
     /// <summary>
@@ -29,13 +34,20 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
         var totalStart = Stopwatch.GetTimestamp();
 
         foreach (var (analyzer, passName) in _analyzers) {
+            if (!context.ShouldContinue(Options))
+                break;
+
             var passStart = Stopwatch.GetTimestamp();
             analyzer.Analyze(context, root);
             collector.RecordPass(passName, Stopwatch.GetElapsedTime(passStart));
+
+            // Re-check after the pass in case it reported a structural failure.
+            if (!context.ShouldContinue(Options))
+                break;
         }
 
         var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(totalStart), incremental, invalidatedNodeCount);
-        return new AnalysisResult(context, telemetry);
+        return new AnalysisResult(context, telemetry, Options);
     }
 
     /// <summary>

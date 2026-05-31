@@ -31,8 +31,16 @@ public sealed class AnalyzerBuilder {
         return this;
     }
 
+    private AnalysisOptions _options = AnalysisOptions.Default;
+
+    public AnalyzerBuilder WithOptions(AnalysisOptions options) {
+        ArgumentNullException.ThrowIfNull(options);
+        _options = options;
+        return this;
+    }
+
     public Analyzer Build() {
         TypeDefinitionProviderCollection typeDefinitionProviders = [.. _typeDefinitions.Providers];
-        return new Analyzer(typeDefinitionProviders, _analyzers.ToArray());
+        return new Analyzer(typeDefinitionProviders, _analyzers.ToArray()) { Options = _options };
     }
 }

@@ -3,10 +3,15 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 public sealed class DomainModelAnalyzer {
-    private readonly Analyzer _analyzer = new AnalyzerBuilder()
-        .UseIncrementalAnalysis()
-        .UseV3DomainModelValidation()
-        .Build();
+    private readonly Analyzer _analyzer;
+
+    public DomainModelAnalyzer(AnalysisOptions? options = null) {
+        _analyzer = new AnalyzerBuilder()
+            .UseIncrementalAnalysis()
+            .UseV3DomainModelValidation()
+            .WithOptions(options ?? AnalysisOptions.Default)
+            .Build();
+    }
 
     public AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -26,6 +31,7 @@ public static class DomainModelAnalysisBuilderExtensions {
         public AnalyzerBuilder UseV3DomainModelAnalysisPipeline() {
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
+            builder.AddAnalyzer(new PolicyConstraintAnalyzer());
             return builder;
         }
 

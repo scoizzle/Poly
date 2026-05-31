@@ -91,7 +91,7 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         }
 
         if (!lookup.Types.TryGetValue(typeReference.TypeName, out var type)) {
-            context.ReportError(
+            context.ReportStructuralFailure(
                 reportNode,
                 $"{usage} references unknown type '{typeReference.TypeName}'.",
                 DomainModelDiagnosticCodes.SemanticReferenceResolution);
@@ -138,7 +138,7 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             }
 
             if (!stages.ContainsKey(stage.Parent.StageName)) {
-                context.ReportError(
+                context.ReportStructuralFailure(
                     stage,
                     $"Stage '{stage.Name}' on entity '{entity.Name}' references unknown parent stage '{stage.Parent.StageName}'.",
                     DomainModelDiagnosticCodes.SemanticReferenceResolution);
@@ -147,7 +147,7 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
 
         foreach (var stage in entity.Stages) {
             if (HasStageCycle(stage, stages)) {
-                context.ReportError(
+                context.ReportStructuralFailure(
                     stage,
                     $"Stage '{stage.Name}' on entity '{entity.Name}' has a parent cycle.",
                     DomainModelDiagnosticCodes.SemanticTypeCompatibility);

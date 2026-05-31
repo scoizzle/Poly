@@ -14,10 +14,8 @@ public abstract record Node {
     /// </summary>
     public NodeId Id { get; init; } = NodeId.NewId();
 
+    /// <summary>
+    /// Owned child nodes of this node.
+    /// </summary>
     public virtual IEnumerable<Node?> Children => [];
-
-    protected virtual bool PrintMembers(System.Text.StringBuilder builder) {
-        builder.Append($"Id = {Id}");
-        return true;
-    }
 }

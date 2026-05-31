@@ -44,7 +44,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         await Assert.That(csharp).Contains("private TestEntity(String name, Int64 age, Boolean isActive)");
         await Assert.That(csharp).Contains("public interface IActor");
         await Assert.That(csharp).Contains("class ActionExecutionContext");
-        await Assert.That(csharp).Contains("Action<object> Events");
+        await Assert.That(csharp).Contains("List<object> _events");
         await Assert.That(csharp).Contains("IActor? Actor");
         await Assert.That(csharp).Contains("TryCreate(ActionExecutionContext context, String name, Int64 age, Boolean isActive)");
         await Assert.That(csharp).Contains("protected set;");

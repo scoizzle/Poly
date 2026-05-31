@@ -257,3 +257,35 @@ Next concrete work (post this decision):
 - Prototype the fluent `Evolve()` surface in parallel and compare ergonomics against the dedicated builders.
 
 **New high-priority consideration for the above work**: Design the change model and observation points with real-time UI visualization + direct human editing in mind from the beginning. Avoid the anti-patterns listed above. The removal of the transaction wrapper makes the observation model and optimistic-update paths simpler to reason about.
+
+---
+
+## Code Review Notes (Added 2026-05-30)
+
+These notes are based on examining the actual codebases. A follow-up agent should review and decide which to apply.
+
+### 1. Section "Can the Evolution API Itself Be Made Ergonomic Enough to Obviate Separate Builders?" is premature
+
+This section (lines 117–173) treats builder deprioritization as a first-class Phase 1 goal. In the current code:
+
+- `Poly/DomainModeling/Builders/DomainBuilder.cs` — works, compiles, is used by `PersonLifecycleViaBuilders.cs`.
+- `Poly/DomainModeling/Evolution/DomainEvolution.ApplyChanges()` — no-op (`return current`, line 67).
+- `DomainChange` — abstract base only, zero concrete subtypes.
+- `EvolutionBuilder` — only has a generic `.Apply(DomainChange)` method, no `AddEntity`/`AddProperty`/etc.
+
+The question "can the evolution API replace builders" can only be answered once the evolution API exists. It doesn't yet. **Recommendation**: Replace the builder deprioritization language with a milestone: "revisit after the evolution layer proves ergonomic parity with builders on PersonLifecycle."
+
+### 2. The "anti-patterns to avoid" list (lines 236–248) creates UX constraints before the engine exists
+
+The anti-patterns are valid long-term concerns (opaque changes, weak NodeId, batch-only design, etc.), but listing them as Phase 1 guidance adds cognitive load before the first change handler works. The real risk is not that someone will design a bad observation model — it's that no one will build the applicator at all because the plan buries it under UI requirements. **Recommendation**: Move the anti-patterns to a forward-looking section clearly marked "for the observation layer, not the applicator," and add a note that the first iteration of `DomainChange` subtypes should be simple records without observation wiring.
+
+### 3. The "Next concrete work" section (lines 252–259) should lead with DomainChange subtypes, not the fluent builder
+
+The current list starts with "Implement the simplified `DomainEvolution` with `Apply(changes) + Evolve()` fluent builder entry points." Both already exist (the skeleton class and the `Evolve()` method are live code). The real first step is "Define the first 5-8 concrete `DomainChange` record types + the applicator that produces a new `Domain` from them." This is the blocking path for everything else.
+
+**Recommended revised order:**
+1. Define the first 5-8 concrete `DomainChange` subtypes (add/remove entity, property, stage, action — matching the PersonLifecycle surface).
+2. Implement the applicator (`DomainChange` list → new immutable `Domain`) with NodeId preservation.
+3. Extend `EvolutionBuilder` with fluent methods that produce these `DomainChange` subtypes.
+4. Prove end-to-end on PersonLifecycle.
+5. Revisit UI requirements and observation model after step 4 works.

@@ -141,3 +141,44 @@ Create the missing `ws4-trace-and-rollback-ux.md` workstream file + the first ba
 ---
 
 **This document + the workstream files + the Orchestration Guide are the live execution system.** Update them frequently via the proper channels.
+
+---
+
+## Code Review Notes (Added 2026-05-30)
+
+These notes are based on examining the actual V2 and V3 code. They identify gaps between the plan's workstream structure and the code's reality. A follow-up orchestrator agent should review and decide which to apply.
+
+### 1. Merge WS1 and WS3 — the skeleton exists, the gap is the applicator
+
+In the actual code (`Poly/DomainModeling/Evolution/`):
+- `DomainEvolution`, `EvolutionResult`, `EvolutionTrace`, `DomainChange` (abstract base), and `EvolutionBuilder` all already exist and compile.
+- The tombstoned `EvolutionTransaction` correctly documents the resolved decision.
+- `DomainEvolution.Apply(IReadOnlyList<DomainChange>)` works end-to-end with analysis gating and rollback semantics.
+
+**The only missing piece is**: concrete `DomainChange` subtypes + the applicator that interprets them.
+
+WS1's deliverable ("Core DomainEvolution / Transaction / Trace infrastructure + basic applicator") is 80% done. WS3's deliverable ("First set of useful operations") is the remaining 20%. They are not separable — the applicator IS the operations. Having them as separate workstreams with a dependency arrow between them creates a fake handoff that will slow execution.
+
+**Recommended action**: Merge WS1 and WS3 into a single workstream "Evolution Layer Applicator + MVP Operations." Reassign existing WS1 micro-tasks and WS3 micro-tasks under it. The WS2 workstream can be folded into this merge workstream as a sub-task (NodeId preservation is part of the applicator, not a separate research effort).
+
+### 2. WS2 (NodeId continuity) can be folded into the applicator workstream, not a standalone workstream
+
+NodeId preservation for immutable records is a mechanical `with { Id = node.Id }` copy — see `Poly/Syntax/Node.cs:15` where `NodeId` is a `{ get; init; }` property. This is straightforward to implement inline in the applicator and doesn't warrant a separate workstream with its own owner and dependencies. Fold it into the merged WS1/WS3.
+
+### 3. The workstream table should add a "V3 Expressiveness Gaps" workstream
+
+The plan has no workstream for cataloguing what V3 can't model that V2 can. Based on code analysis, known gaps include:
+
+| Concept | V2 Status | V3 Status |
+|---------|-----------|-----------|
+| Entity inheritance (`ParentEntity`) | ✅ Entity.cs:47 | ❌ Not present |
+| Event subscriptions + correlation | ✅ `EventSubscription.cs` | ❌ Not present |
+| Relationship-scoped policies/stages | ✅ `Relationship.cs` has `_policies`, `_stages` | ❌ Relationship.cs has neither |
+| Actor entity subtype | ✅ `Actor.cs` | ❌ Not present |
+| Rule-composed policies | ✅ `Policy._rules` with 6+ rule subtypes | ❌ Policy uses `DomainExpression` only |
+
+**Recommended action**: Add a WS7 "V3 Expressiveness Audit" workstream for Phase 1. Its deliverable is a catalog document listing every V2 concept and whether V3 can model it, with notes on whether the gap is intentional (simplification) or a missing feature. This prevents Phase 4 from being a reactive scramble when roadblocks surface.
+
+### 4. Update WS1/WS3 dependency and status in the table
+
+WS1's status should reflect reality: "~80% complete (skeleton exists; applicator is the gap)." The current "Not Started" label masks real progress and will confuse agents deciding what to pick up.

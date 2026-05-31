@@ -105,3 +105,37 @@ The goal is to design and implement a fluent, ergonomic public API for the evolu
 ---
 
 This is intended as a living task breakdown. It should be updated as we learn during actual implementation.
+
+---
+
+## Code Review Notes (Added 2026-05-30)
+
+These notes are based on examining both V2 (`Poly/Data/Modeling`) and V3 (`Poly/DomainModeling`) code. Each identifies a gap between the plan's assumptions and the actual code state. A follow-up agent should review and decide which to apply.
+
+### 1. The fluent evolution API cannot be designed in parallel with the change model — it's downstream of it
+
+The suggested sequencing (step 2: "Design the fluent evolution API shape in parallel") treats the fluent surface and the change model as independent. They are not. The fluent API's `AddEntity("Order").WithProperty("Id", stringType)` directly determines what `DomainChange` subtypes exist and what data they carry (e.g., an `AddEntityChange` with an `EntityName` and a list of property descriptors). Designing the fluent API before the change model means designing the change model twice.
+
+**Recommended new sequencing:**
+1. Define the first 5-8 `DomainChange` record subtypes (mirroring the most-used V2 `DomainMutationIntent` types: AddPrimitiveType, AddEntityType, AddPropertyToEntity, AddStageToEntity, AddActionToEntity, AddActionParameter).
+2. Implement the applicator that transforms `IReadOnlyList<DomainChange>` → new `Domain` (this IS the core infrastructure).
+3. Add NodeId preservation as part of the applicator (copy IDs from structurally corresponding nodes; generate new IDs for new nodes).
+4. **Then** design the fluent `EvolutionBuilder` surface on top — it wraps step 1 and 2 with syntactic sugar.
+5. Only after the above works end-to-end on PersonLifecycle, evaluate whether the fluent evolution API is ergonomic enough to reduce builder investment.
+
+### 2. The "Core Evolution Layer" workstream (item 1) and "Initial Operation Support" workstream (item 2) are the same workstream
+
+The plan treats "implement DomainEvolution skeleton" (WS1) as separate from "implement MVP operations" (WS3). In the actual code, `DomainEvolution`, `EvolutionResult`, `EvolutionTrace`, and `DomainChange` all already exist as skeletons (`Poly/DomainModeling/Evolution/`). The only significant gap is the applicator — which IS the operations. There is no "core infrastructure" separable from "what operations it supports." Merging these into one workstream eliminates a fake dependency.
+
+### 3. WS2 (NodeId continuity) should be a micro-task, not a workstream
+
+The plan treats NodeId continuity as a standalone workstream with research. For immutable records with `{ get; init; }` NodeIds, the strategy is a mechanical `with { Id = oldNode.Id }` pattern when copying structurally corresponding nodes. The current `Node.cs` base record already has a settable `Id` property. This should be a simple implementation decision documented as part of the applicator work, not a blocking research workstream.
+
+### 4. The fluent API downgrades builders prematurely
+
+Workstream #8 (Fluent Evolution API Surface) says: "potentially making heavy investment in the separate fluent builder API unnecessary." In the current codebase:
+- Builders work (`DomainBuilder`, `EntityBuilder`, etc. at `Poly/DomainModeling/Builders/`).
+- The evolution layer's `ApplyChanges()` is a no-op.
+- Zero `DomainChange` subtypes exist.
+
+**Recommendation**: Replace "so the dedicated fluent builders can be deprioritized" with "once the evolution layer matches builder ergonomics, evaluate whether builder investment can be reduced." The builders are the only working V3 construction path today.

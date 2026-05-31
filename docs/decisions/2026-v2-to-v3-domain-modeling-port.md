@@ -127,3 +127,41 @@ This plan and the planning artifacts under `docs/plans/v2-to-v3/` are living. Up
 ---
 
 **Status of this document**: Initial repo-resident version based on the approved internal plan + post-approval documentation work (May/June 2026).
+
+---
+
+## Code Review Notes (Added 2026-05-30)
+
+The following review was performed against the actual V2 (`Poly/Data/Modeling`) and V3 (`Poly/DomainModeling`) codebases. These notes identify gaps between the plan's assumptions and the code's reality. A follow-up agent should review and decide which to apply.
+
+### 1. V3 expressiveness gaps are not catalogued — this will block Phase 4
+
+The plan references "roadblocks" abstractly but doesn't enumerate what V3 cannot currently model that V2 can. Specific gaps found in the code:
+
+- **Entity inheritance**: V2 `Entity.ParentEntity` doesn't exist in V3.
+- **Event subscriptions with correlation**: V2 `EventSubscription` + `EventCorrelationBinding` has no V3 equivalent.
+- **Relationship-scoped stages/policies**: V2 `Relationship` carries stages, policies, and properties independently of entities. V3 `Relationship` has only properties and type references — no stages or policies.
+- **Rule-based policies**: V2 `Policy` has a `Rules` collection with subtypes (`CrossPropertyRule`, `ActorTypeRule`, etc.). V3 `Policy` uses `DomainExpression` only — cleaner but a breaking simplification.
+- **Actor subtype**: V2 has `Actor` as a first-class `Entity` subtype. V3 has no `Actor` type.
+
+**Recommendation**: Add a catalog of V3 expressiveness gaps (as a new decision record or appendix) before Phase 2, so Phase 4 scope is predictable rather than discovered during execution.
+
+### 2. Analysis parity is undercounted — Phase 2 is multiple sub-phases
+
+V2 has 10 specialized analyzers registered in `Poly/Data/Modeling/Analysis/DomainModelAnalyzer.cs:27-37`:
+`StructuralDomainAnalyzer`, `SemanticDomainAnalyzer`, `PolicyConstraintAnalyzer`, `EffectAnalyzer`, `CapabilityAnalyzer`, `ConstraintPropagationAnalyzer`, `EnumConstraintSubsetAnalyzer`, `ActionEventQualityAnalyzer`, `ConstraintQualityAnalyzer`, `ContractIntegrationAnalyzer`.
+
+V3 (`Poly/DomainModeling/Analysis/DomainModelAnalyzer.cs:7-9`) registers only the first two. Porting 8 analyzers while maintaining exact diagnostic parity is not a single phase. Split Phase 2 into 2a (structural + semantic + effect + policy — the core path for PersonLifecycle) and 2b (remaining 4 analyzers).
+
+### 3. Builders should not be deprioritized until the evolution layer matches their ergonomics
+
+The plan (Section "Recommended Approach" > Phase 1, bullet 2) says "the dedicated fluent builder API [can become] unnecessary." In the current codebase:
+- The V3 builders (`Poly/DomainModeling/Builders/`) work today. `PersonLifecycleViaBuilders.cs` builds a complete domain.
+- The evolution layer's `DomainEvolution.ApplyChanges()` (`Poly/DomainModeling/Evolution/DomainEvolution.cs:64`) is `return current` — a no-op.
+- There are zero concrete `DomainChange` subclasses.
+
+Deprioritizing builders before the evolution layer exists is putting the cart before the horse. **Recommendation**: Explicitly state that builders remain the supported V3 construction path through Phase 1, and the evolution layer targets parity by Phase 1 exit. The deprioritization question should be revisited only after the evolution layer is proven on PersonLifecycle.
+
+### 4. The "thin evolution layer" language undercounts the applicator scope
+
+The plan characterizes the evolution layer as "thin," but the applicator must still handle: node copying with preserved NodeIds, collection-level add/remove/replace semantics, nested structural updates, trace generation per change step, and analysis gating. While V3 removes the Apply/Rollback command pairs and lock, it replaces them with a functional transformation pipeline that still has meaningful surface area. The language should shift from "thin" to "no unnecessary ceremony" to set accurate expectations.

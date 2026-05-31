@@ -100,3 +100,15 @@ This is the classic "get the system working with one or two agents first, then p
 ---
 
 **Status of this document**: Created as a focused ignition plan to bridge from the excellent high-level planning to actual parallel implementation.
+
+---
+
+## Code Review Notes (Added 2026-05-30)
+
+### 1. Step 1 micro-task priority should lead with DomainChange subtypes, not the fluent API
+
+The ignition plan's Step 1 lists task 6 ("Sketch/propose the first cut of a fluent Evolution API surface") alongside defining the core EvolutionResult/EvolutionTrace records. The fluent API should come after — not alongside — the DomainChange subtypes. The first 8-10 micro-tasks should include "Define 5-8 concrete DomainChange record types" and "Implement the applicator that transforms DomainChange list → new Domain."
+
+### 2. The "Fluent Evolution API Surface" micro-tasks should not start until the change model is stable
+
+Sketching a fluent API before the DomainChange types exist means the API design will be speculative and need rework. The correct sequence: DomainChange records → applicator → fluent EvolutionBuilder surface → then evaluate ergonomics against builders.

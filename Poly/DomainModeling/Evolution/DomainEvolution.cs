@@ -151,6 +151,17 @@ public sealed class DomainEvolution {
                 case ChangePropertyTypeChange c: AddEntity(c.EntityName); break;
                 case SetRelationshipShapeChange c: break;
                 case SetPrimitiveTypeCategoryChange c: AddType(c.TypeName); break;
+                case AddEventSubscriptionChange c: AddEntity(c.EntityName); break;
+                case RemoveEventSubscriptionChange c: AddEntity(c.EntityName); break;
+                case AddEventSubscriptionCorrelationChange c: AddEntity(c.EntityName); break;
+                case RemoveEventSubscriptionCorrelationChange c: AddEntity(c.EntityName); break;
+                case SetEventSubscriptionRoutingModeChange c: AddEntity(c.EntityName); break;
+                case SetEventSubscriptionEventParameterChange c: AddEntity(c.EntityName); break;
+                case AddStageToRelationshipChange c: break;
+                case RemoveStageFromRelationshipChange c: break;
+                case AddPolicyToRelationshipChange c: break;
+                case RemovePolicyFromRelationshipChange c: break;
+                case SetEntityParentChange c: AddEntity(c.EntityName); break;
                 case SetDomainNameChange: nodes.Add(proposed); break;
             }
         }
@@ -525,6 +536,50 @@ public sealed class EvolutionBuilder {
 
     public EvolutionBuilder RemovePolicyFromAction(string entityName, string actionName, string policyName) =>
         Apply(new RemovePolicyFromActionChange(entityName, actionName, policyName));
+
+    // --- Entity inheritance builder methods ---
+
+    public EvolutionBuilder SetEntityParent(string entityName, string? parentEntityName) =>
+        Apply(new SetEntityParentChange(entityName, parentEntityName));
+
+    // --- Relationship stage/policy builder methods ---
+
+    public EvolutionBuilder AddStageToRelationship(string relationshipName, string stageName, string? parentStageName = null) {
+        var parent = parentStageName is not null ? new StageReference(parentStageName) : null;
+        return Apply(new AddStageToRelationshipChange(relationshipName, new Stage(stageName, parent, [], [], [], [])));
+    }
+
+    public EvolutionBuilder RemoveStageFromRelationship(string relationshipName, string stageName) =>
+        Apply(new RemoveStageFromRelationshipChange(relationshipName, stageName));
+
+    public EvolutionBuilder AddPolicyToRelationship(string relationshipName, Policy policy) =>
+        Apply(new AddPolicyToRelationshipChange(relationshipName, policy));
+
+    public EvolutionBuilder AddPolicyToRelationship(string relationshipName, string policyName, DomainExpression expression) =>
+        AddPolicyToRelationship(relationshipName, new Policy(policyName, expression));
+
+    public EvolutionBuilder RemovePolicyFromRelationship(string relationshipName, string policyName) =>
+        Apply(new RemovePolicyFromRelationshipChange(relationshipName, policyName));
+
+    // --- Event subscription builder methods ---
+
+    public EvolutionBuilder AddEventSubscription(string entityName, EventSubscription subscription) =>
+        Apply(new AddEventSubscriptionChange(entityName, subscription));
+
+    public EvolutionBuilder RemoveEventSubscription(string entityName, string eventTypeName, string handlerActionName) =>
+        Apply(new RemoveEventSubscriptionChange(entityName, eventTypeName, handlerActionName));
+
+    public EvolutionBuilder AddEventSubscriptionCorrelation(string entityName, string eventTypeName, string handlerActionName, EventCorrelationBinding binding) =>
+        Apply(new AddEventSubscriptionCorrelationChange(entityName, eventTypeName, handlerActionName, binding));
+
+    public EvolutionBuilder RemoveEventSubscriptionCorrelation(string entityName, string eventTypeName, string handlerActionName, string eventPropertyName) =>
+        Apply(new RemoveEventSubscriptionCorrelationChange(entityName, eventTypeName, handlerActionName, eventPropertyName));
+
+    public EvolutionBuilder SetEventSubscriptionRoutingMode(string entityName, string eventTypeName, string handlerActionName, EventSubscriptionRoutingMode routingMode) =>
+        Apply(new SetEventSubscriptionRoutingModeChange(entityName, eventTypeName, handlerActionName, routingMode));
+
+    public EvolutionBuilder SetEventSubscriptionEventParameter(string entityName, string eventTypeName, string handlerActionName, string eventParameterName) =>
+        Apply(new SetEventSubscriptionEventParameterChange(entityName, eventTypeName, handlerActionName, eventParameterName));
 
     /// <summary>
     /// Executes the accumulated changes through the analysis gate.

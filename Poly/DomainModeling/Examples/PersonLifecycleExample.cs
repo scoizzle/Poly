@@ -141,7 +141,7 @@ public static class PersonLifecycleExample {
         // --- Die Action (available in Alive) ---
         var dieAction = new Action(
             "Die",
-            Result: new InvocationResult([]),
+            Result: InvocationResult.Void,
             Parameters:
             [
                 new Property("TimeOfDeath", new DomainTypeReference("Timestamp"), []),

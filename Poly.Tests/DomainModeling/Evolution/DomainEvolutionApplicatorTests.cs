@@ -164,7 +164,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_RemoveActionChange_RemovesAction() {
-        var action = new Poly.DomainModeling.Action("Die", new InvocationResult([]), [], [], []);
+        var action = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
         var entity = new Entity("Person", [], [], [action], [], []);
         var start = new Domain("Test", [entity], []);
 
@@ -286,7 +286,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_AddEffectToActionChange_AttachesCreateEffect() {
         // Setup: Person entity with a Die action + the target ValueType (owned doc pattern)
-        var dieAction = new Poly.DomainModeling.Action("Die", new InvocationResult([]), [], [], []);
+        var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
         var person = new Entity("Person", [], [], [dieAction], [], []);
         var deathCert = new Poly.DomainModeling.ValueType("DeathCertificate", [], []);
         var start = new Domain("Test", [person, deathCert], []);
@@ -306,7 +306,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddEffectToActionChange_AttachesStageTransition() {
-        var dieAction = new Poly.DomainModeling.Action("Die", new InvocationResult([]), [], [], []);
+        var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
         var person = new Entity("Person", [], [], [dieAction], [], []);
         var start = new Domain("Test", [person], []);
 
@@ -491,7 +491,7 @@ public class DomainEvolutionApplicatorTests {
         var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var someDoc = new Poly.DomainModeling.ValueType("SomeDoc", [], []);
         var createEffect = new CreateEntityInstance(new DomainTypeReference("SomeDoc"));
-        var dieAction = new Poly.DomainModeling.Action("Die", new InvocationResult([]), [], [createEffect], []);
+        var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [createEffect], []);
         var aliveStage = new Stage("Alive", null, [], [], [], []);
         var person = new Entity("Person", [new Property("Name", new DomainTypeReference("Text"), [])], [], [dieAction], [], [aliveStage]);
         var start = new Domain("Test", [person, text, someDoc], []);
@@ -611,7 +611,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task RemoveActionFromStage_Works() {
-        var action = new Poly.DomainModeling.Action("Approve", new InvocationResult([]), [], [], []);
+        var action = new Poly.DomainModeling.Action("Approve", InvocationResult.Void, [], [], []);
         var stage = new Stage("Pending", null, [action], [], [], []);
         var entity = new Entity("Order", [], [], [], [], [stage]);
         var start = new Domain("Test", [entity], []);
@@ -1239,12 +1239,381 @@ public class DomainEvolutionApplicatorTests {
     }
 
     [Test]
+    public async Task Apply_AddEventSubscription_AddsToEntity() {
+        var entity = new Entity("Order", [], [], [], [], []);
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var sub = new EventSubscription(
+            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event");
+        var result = new DomainEvolution(start).Apply([new AddEventSubscriptionChange("Order", sub)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(updated.EventSubscriptions.Count).IsEqualTo(1);
+        await Assert.That(updated.EventSubscriptions[0].EventType.TypeName).IsEqualTo("OrderPlaced");
+        await Assert.That(updated.EventSubscriptions[0].HandlerActionName).IsEqualTo("HandleOrderPlaced");
+        await Assert.That(updated.EventSubscriptions[0].EventParameterName).IsEqualTo("event");
+        await Assert.That(updated.EventSubscriptions[0].RoutingMode).IsEqualTo(EventSubscriptionRoutingMode.Broadcast);
+    }
+
+    [Test]
+    public async Task Apply_RemoveEventSubscription_RemovesFromEntity() {
+        var sub = new EventSubscription(
+            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event");
+        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var result = new DomainEvolution(start).Apply([new RemoveEventSubscriptionChange("Order", "OrderPlaced", "HandleOrderPlaced")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(updated.EventSubscriptions).IsEmpty();
+    }
+
+    [Test]
+    public async Task Apply_AddEventSubscriptionCorrelation_AddsBinding() {
+        var sub = new EventSubscription(
+            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event");
+        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var binding = new EventCorrelationBinding("OrderId", "OrderId");
+        var result = new DomainEvolution(start).Apply([new AddEventSubscriptionCorrelationChange("Order", "OrderPlaced", "HandleOrderPlaced", binding)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        var updatedSub = updated.EventSubscriptions.Single();
+        await Assert.That(updatedSub.Correlations.Count).IsEqualTo(1);
+        await Assert.That(updatedSub.Correlations[0].EventPropertyName).IsEqualTo("OrderId");
+        await Assert.That(updatedSub.Correlations[0].ConsumerPropertyName).IsEqualTo("OrderId");
+    }
+
+    [Test]
+    public async Task Apply_RemoveEventSubscriptionCorrelation_RemovesBinding() {
+        var binding = new EventCorrelationBinding("OrderId", "OrderId");
+        var sub = new EventSubscription(
+            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event",
+            EventSubscriptionRoutingMode.Correlated, [binding]);
+        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var result = new DomainEvolution(start).Apply([new RemoveEventSubscriptionCorrelationChange("Order", "OrderPlaced", "HandleOrderPlaced", "OrderId")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(updated.EventSubscriptions.Single().Correlations).IsEmpty();
+    }
+
+    [Test]
+    public async Task Apply_SetEventSubscriptionRoutingMode_UpdatesMode() {
+        var sub = new EventSubscription(
+            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event");
+        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var result = new DomainEvolution(start).Apply([new SetEventSubscriptionRoutingModeChange("Order", "OrderPlaced", "HandleOrderPlaced", EventSubscriptionRoutingMode.Correlated)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(updated.EventSubscriptions.Single().RoutingMode).IsEqualTo(EventSubscriptionRoutingMode.Correlated);
+    }
+
+    [Test]
+    public async Task Apply_SetEventSubscriptionEventParameter_UpdatesParameter() {
+        var sub = new EventSubscription(
+            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "evt");
+        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var result = new DomainEvolution(start).Apply([new SetEventSubscriptionEventParameterChange("Order", "OrderPlaced", "HandleOrderPlaced", "orderEvent")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(updated.EventSubscriptions.Single().EventParameterName).IsEqualTo("orderEvent");
+    }
+
+    [Test]
+    public async Task EventSubscription_BuilderMethod_AddsToEntity() {
+        var entity = new Entity("Order", [], [], [], [], []);
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddEventSubscription("Order", new EventSubscription(
+                new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event"))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(updated.EventSubscriptions.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Apply_AddStageToRelationship_AddsStage() {
+        var entity = new Entity("Person", [], [], [], [], []);
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, []);
+        var start = new Domain("Test", [entity], [rel]);
+        var result = new DomainEvolution(start).Apply([new AddStageToRelationshipChange("Friends", new Stage("Active", null, [], [], [], []))]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Stages.Count).IsEqualTo(1);
+        await Assert.That(updatedRel.Stages[0].Name).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task Apply_RemoveStageFromRelationship_RemovesStage() {
+        var entity = new Entity("Person", [], [], [], [], []);
+        var stage = new Stage("Active", null, [], [], [], []);
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, []) { Stages = [stage] };
+        var start = new Domain("Test", [entity], [rel]);
+        var result = new DomainEvolution(start).Apply([new RemoveStageFromRelationshipChange("Friends", "Active")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Stages).IsEmpty();
+    }
+
+    [Test]
+    public async Task Apply_AddPolicyToRelationship_AddsPolicy() {
+        var entity = new Entity("Person", [], [], [], [], []);
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, []);
+        var start = new Domain("Test", [entity], [rel]);
+        var result = new DomainEvolution(start).Apply([new AddPolicyToRelationshipChange("Friends", new Policy("MaxFriends", DomainExpression.Literal(10)))]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Policies.Count).IsEqualTo(1);
+        await Assert.That(updatedRel.Policies[0].Name).IsEqualTo("MaxFriends");
+    }
+
+    [Test]
+    public async Task Apply_RemovePolicyFromRelationship_RemovesPolicy() {
+        var entity = new Entity("Person", [], [], [], [], []);
+        var policy = new Policy("MaxFriends", DomainExpression.Literal(10));
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, []) { Policies = [policy] };
+        var start = new Domain("Test", [entity], [rel]);
+        var result = new DomainEvolution(start).Apply([new RemovePolicyFromRelationshipChange("Friends", "MaxFriends")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Policies).IsEmpty();
+    }
+
+    [Test]
+    public async Task Apply_SetEntityParent_SetsParentName() {
+        var parent = new Entity("Person", [], [], [], [], []);
+        var child = new Entity("Member", [], [], [], [], []);
+        var start = new Domain("Test", [parent, child], []);
+        var result = new DomainEvolution(start).Apply([new SetEntityParentChange("Member", "Person")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedChild = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Member");
+        await Assert.That(updatedChild.ParentEntityName).IsEqualTo("Person");
+        // Parent unchanged
+        var updatedParent = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
+        await Assert.That(updatedParent.ParentEntityName).IsNull();
+    }
+
+    [Test]
+    public async Task Apply_SetEntityParent_ClearsParentName() {
+        var parent = new Entity("Person", [], [], [], [], []);
+        var child = new Entity("Member", [], [], [], [], []) { ParentEntityName = "Person" };
+        var start = new Domain("Test", [parent, child], []);
+        var result = new DomainEvolution(start).Apply([new SetEntityParentChange("Member", null)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedChild = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Member");
+        await Assert.That(updatedChild.ParentEntityName).IsNull();
+    }
+
+    [Test]
+    public async Task CompositeEffect_CanBeStoredInAction() {
+        var entity = new Entity("Workflow", [], [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Workflow", "Execute")
+            .AddEffectToAction("Workflow", "Execute",
+                new CompositeEffect([
+                    new StageTransitionEffect(new StageReference("Active")),
+                    new StageTransitionEffect(new StageReference("Completed"))
+                ]))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var wf = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Workflow");
+        var action = wf.Actions.Single(a => a.Name == "Execute");
+        await Assert.That(action.Effects.Count).IsEqualTo(1);
+        await Assert.That(action.Effects[0]).IsTypeOf<CompositeEffect>();
+        var composite = (CompositeEffect)action.Effects[0];
+        await Assert.That(composite.Effects.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task InvokeActionEffect_CanBeStoredInAction() {
+        var entity = new Entity("Orchestrator", [], [], [new Poly.DomainModeling.Action("Step1", InvocationResult.Void, [], [], [])], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Orchestrator", "RunAll")
+            .AddEffectToAction("Orchestrator", "RunAll",
+                new InvokeActionEffect("Step1", []))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var orch = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Orchestrator");
+        var action = orch.Actions.Single(a => a.Name == "RunAll");
+        await Assert.That(action.Effects.Count).IsEqualTo(1);
+        await Assert.That(action.Effects[0]).IsTypeOf<InvokeActionEffect>();
+        var invoke = (InvokeActionEffect)action.Effects[0];
+        await Assert.That(invoke.ActionName).IsEqualTo("Step1");
+    }
+
+    [Test]
+    public async Task ConditionalEffect_CanBeStoredInAction() {
+        var entity = new Entity("Task", [], [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Task", "Evaluate")
+            .AddEffectToAction("Task", "Evaluate",
+                new ConditionalEffect(
+                    DomainExpression.Literal(true),
+                    [new StageTransitionEffect(new StageReference("Approved"))],
+                    [new StageTransitionEffect(new StageReference("Rejected"))]))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
+        var action = task.Actions.Single(a => a.Name == "Evaluate");
+        await Assert.That(action.Effects.Count).IsEqualTo(1);
+        await Assert.That(action.Effects[0]).IsTypeOf<ConditionalEffect>();
+        var cond = (ConditionalEffect)action.Effects[0];
+        await Assert.That(cond.ThenEffects.Count).IsEqualTo(1);
+        await Assert.That(cond.ElseEffects?.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ConditionalEffect_WithoutElse_CanBeStored() {
+        var entity = new Entity("Task", [], [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Task", "TryComplete")
+            .AddEffectToAction("Task", "TryComplete",
+                new ConditionalEffect(
+                    DomainExpression.Property("IsReady"),
+                    [new StageTransitionEffect(new StageReference("Completed"))],
+                    null))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
+        var action = task.Actions.Single(a => a.Name == "TryComplete");
+        var cond = (ConditionalEffect)action.Effects.Single();
+        await Assert.That(cond.ElseEffects).IsNull();
+    }
+
+    [Test]
+    public async Task LinkRelationshipEffect_CanBeStoredInAction() {
+        var entity = new Entity("Order", [], [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Order", "AssignCustomer")
+            .AddEffectToAction("Order", "AssignCustomer",
+                new LinkRelationshipEffect("Customer", DomainExpression.Parameter("CustomerId")))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        var action = order.Actions.Single(a => a.Name == "AssignCustomer");
+        await Assert.That(action.Effects[0]).IsTypeOf<LinkRelationshipEffect>();
+        var link = (LinkRelationshipEffect)action.Effects[0];
+        await Assert.That(link.RelationshipName).IsEqualTo("Customer");
+    }
+
+    [Test]
+    public async Task UnlinkRelationshipEffect_CanBeStoredInAction() {
+        var entity = new Entity("Order", [], [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Order", "RemoveCustomer")
+            .AddEffectToAction("Order", "RemoveCustomer",
+                new UnlinkRelationshipEffect("Customer", DomainExpression.Parameter("CustomerId")))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        var action = order.Actions.Single(a => a.Name == "RemoveCustomer");
+        await Assert.That(action.Effects[0]).IsTypeOf<UnlinkRelationshipEffect>();
+    }
+
+    [Test]
+    public async Task TransitionRelationshipEffect_CanBeStoredInAction() {
+        var entity = new Entity("Project", [], [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Project", "AdvanceTask")
+            .AddEffectToAction("Project", "AdvanceTask",
+                new TransitionRelationshipEffect("Tasks", new StageReference("Completed")))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var project = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Project");
+        var action = project.Actions.Single(a => a.Name == "AdvanceTask");
+        await Assert.That(action.Effects[0]).IsTypeOf<TransitionRelationshipEffect>();
+        var tr = (TransitionRelationshipEffect)action.Effects[0];
+        await Assert.That(tr.RelationshipName).IsEqualTo("Tasks");
+        await Assert.That(tr.TargetStage.StageName).IsEqualTo("Completed");
+    }
+
+    [Test]
+    public async Task DeleteEntityInstance_CanBeStoredAsEffect() {
+        var entity = new Entity("Task", [], [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Task", "Remove")
+            .AddEffectToAction("Task", "Remove", new DeleteEntityInstance(new DomainTypeReference("Task")))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
+        var action = task.Actions.Single(a => a.Name == "Remove");
+        await Assert.That(action.Effects.Count).IsEqualTo(1);
+        await Assert.That(action.Effects[0]).IsTypeOf<DeleteEntityInstance>();
+    }
+
+    [Test]
+    public async Task EntityInheritance_BuilderMethod_SetsParent() {
+        var parent = new Entity("Person", [], [], [], [], []);
+        var child = new Entity("Member", [], [], [], [], []);
+        var start = new Domain("Test", [parent, child], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .SetEntityParent("Member", "Person")
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedChild = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Member");
+        await Assert.That(updatedChild.ParentEntityName).IsEqualTo("Person");
+    }
+
+    [Test]
+    public async Task RelationshipStage_BuilderMethods_Work() {
+        var entity = new Entity("Person", [], [], [], [], []);
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, []);
+        var start = new Domain("Test", [entity], [rel]);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddStageToRelationship("Friends", "Active")
+            .AddPolicyToRelationship("Friends", "Limit", DomainExpression.Literal(5))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Stages.Count).IsEqualTo(1);
+        await Assert.That(updatedRel.Policies.Count).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task Apply_SetDomainNameChange_UpdatesDomainName() {
         var start = new Domain("OriginalName", [], []);
         var result = new DomainEvolution(start).Apply([new SetDomainNameChange("Renamed")]);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Name).IsEqualTo("Renamed");
-        await Assert.That(start.Name).IsEqualTo("OriginalName"); // original unchanged
+        await Assert.That(start.Name).IsEqualTo("OriginalName");
     }
 
     [Test]

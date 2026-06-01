@@ -123,6 +123,42 @@ internal sealed class DomainMutationContext {
         return false;
     }
 
+    public bool UpdateRelationshipStage(string relationshipName, string stageName, Func<Stage, Stage> transform) {
+        var idx = Relationships.FindIndex(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
+        if (idx >= 0) {
+            var r = Relationships[idx];
+            var updatedStages = r.Stages.Select(s =>
+                string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s
+            ).ToList();
+            Relationships[idx] = r with { Stages = updatedStages };
+            ModifiedNodes.Add(Relationships[idx]);
+            return true;
+        }
+        return false;
+    }
+
+    public bool AddPolicyToRelationship(string name, Policy policy) {
+        var idx = Relationships.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));
+        if (idx >= 0) {
+            var r = Relationships[idx];
+            Relationships[idx] = r with { Policies = r.Policies.Append(policy).ToList() };
+            ModifiedNodes.Add(Relationships[idx]);
+            return true;
+        }
+        return false;
+    }
+
+    public bool RemovePolicyFromRelationship(string name, string policyName) {
+        var idx = Relationships.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));
+        if (idx >= 0) {
+            var r = Relationships[idx];
+            Relationships[idx] = r with { Policies = r.Policies.Where(p => !string.Equals(p.Name, policyName, StringComparison.Ordinal)).ToList() };
+            ModifiedNodes.Add(Relationships[idx]);
+            return true;
+        }
+        return false;
+    }
+
     public Entity? FindEntity(string name) {
         for (int i = 0; i < Types.Count; i++) {
             if (Types[i] is Entity e && string.Equals(e.Name, name, StringComparison.Ordinal))

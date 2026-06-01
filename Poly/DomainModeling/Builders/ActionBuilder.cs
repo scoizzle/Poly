@@ -80,7 +80,7 @@ public sealed class ActionBuilder {
     internal Action Build() {
         return new Action(
             _name,
-            _result ?? new InvocationResult([]),
+            _result ?? InvocationResult.Void,
             _parameters,
             _effects,
             _policies

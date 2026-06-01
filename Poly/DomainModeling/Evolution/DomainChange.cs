@@ -125,7 +125,7 @@ public sealed record AddActionChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.UpdateEntity(EntityName, e => e with {
-            Actions = e.Actions.Append(new Action(Name, new InvocationResult([]), [], [], [])).ToList()
+            Actions = e.Actions.Append(new Action(Name, InvocationResult.Void, [], [], [])).ToList()
         });
     }
 
@@ -486,7 +486,7 @@ public sealed record AddActionToStageChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.UpdateStage(EntityName, StageName, s => s with {
-            Actions = s.Actions.Append(new Action(Name, new InvocationResult([]), [], [], [])).ToList()
+            Actions = s.Actions.Append(new Action(Name, InvocationResult.Void, [], [], [])).ToList()
         });
     }
 
@@ -675,4 +675,186 @@ public sealed record SetPrimitiveTypeCategoryChange(
     }
 
     internal override string GetDescription() => $"Set primitive type '{TypeName}' category to {NewCategory}";
+}
+
+public sealed record AddEventSubscriptionChange(
+    string EntityName,
+    EventSubscription Subscription
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateEntity(EntityName, e => e with {
+            EventSubscriptions = e.EventSubscriptions.Append(Subscription).ToList()
+        });
+    }
+
+    internal override string GetDescription() =>
+        $"Add event subscription '{Subscription.HandlerActionName}<-{Subscription.EventType.TypeName}' to '{EntityName}'";
+}
+
+public sealed record RemoveEventSubscriptionChange(
+    string EntityName,
+    string EventTypeName,
+    string HandlerActionName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateEntity(EntityName, e => e with {
+            EventSubscriptions = e.EventSubscriptions.Where(s =>
+                !(string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                  && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal))
+            ).ToList()
+        });
+    }
+
+    internal override string GetDescription() =>
+        $"Remove event subscription '{HandlerActionName}<-{EventTypeName}' from '{EntityName}'";
+}
+
+public sealed record AddEventSubscriptionCorrelationChange(
+    string EntityName,
+    string EventTypeName,
+    string HandlerActionName,
+    EventCorrelationBinding Binding
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateEntity(EntityName, e => e with {
+            EventSubscriptions = e.EventSubscriptions.Select(s =>
+                string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
+                    ? s with { Correlations = s.Correlations.Append(Binding).ToList() }
+                    : s
+            ).ToList()
+        });
+    }
+
+    internal override string GetDescription() =>
+        $"Add correlation binding '{Binding.EventPropertyName}->{Binding.ConsumerPropertyName}' to subscription '{HandlerActionName}<-{EventTypeName}' on '{EntityName}'";
+}
+
+public sealed record RemoveEventSubscriptionCorrelationChange(
+    string EntityName,
+    string EventTypeName,
+    string HandlerActionName,
+    string EventPropertyName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateEntity(EntityName, e => e with {
+            EventSubscriptions = e.EventSubscriptions.Select(s =>
+                string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
+                    ? s with {
+                        Correlations = s.Correlations.Where(b =>
+                        !string.Equals(b.EventPropertyName, EventPropertyName, StringComparison.Ordinal)
+                    ).ToList()
+                    }
+                    : s
+            ).ToList()
+        });
+    }
+
+    internal override string GetDescription() =>
+        $"Remove correlation binding for event property '{EventPropertyName}' from subscription '{HandlerActionName}<-{EventTypeName}' on '{EntityName}'";
+}
+
+public sealed record SetEventSubscriptionRoutingModeChange(
+    string EntityName,
+    string EventTypeName,
+    string HandlerActionName,
+    EventSubscriptionRoutingMode RoutingMode
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateEntity(EntityName, e => e with {
+            EventSubscriptions = e.EventSubscriptions.Select(s =>
+                string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
+                    ? s with { RoutingMode = RoutingMode }
+                    : s
+            ).ToList()
+        });
+    }
+
+    internal override string GetDescription() =>
+        $"Set routing mode to {RoutingMode} for subscription '{HandlerActionName}<-{EventTypeName}' on '{EntityName}'";
+}
+
+public sealed record SetEventSubscriptionEventParameterChange(
+    string EntityName,
+    string EventTypeName,
+    string HandlerActionName,
+    string EventParameterName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateEntity(EntityName, e => e with {
+            EventSubscriptions = e.EventSubscriptions.Select(s =>
+                string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
+                    ? s with { EventParameterName = EventParameterName }
+                    : s
+            ).ToList()
+        });
+    }
+
+    internal override string GetDescription() =>
+        $"Set event parameter name to '{EventParameterName}' for subscription '{HandlerActionName}<-{EventTypeName}' on '{EntityName}'";
+}
+
+public sealed record AddStageToRelationshipChange(
+    string RelationshipName,
+    Stage Stage
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateRelationship(RelationshipName, r => r with {
+            Stages = r.Stages.Append(Stage).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Add stage '{Stage.Name}' to relationship '{RelationshipName}'";
+}
+
+public sealed record RemoveStageFromRelationshipChange(
+    string RelationshipName,
+    string StageName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateRelationship(RelationshipName, r => r with {
+            Stages = r.Stages.Where(s => !string.Equals(s.Name, StageName, StringComparison.Ordinal)).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Remove stage '{StageName}' from relationship '{RelationshipName}'";
+}
+
+public sealed record AddPolicyToRelationshipChange(
+    string RelationshipName,
+    Policy Policy
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.AddPolicyToRelationship(RelationshipName, Policy);
+    }
+
+    internal override string GetDescription() => $"Add policy '{Policy.Name}' to relationship '{RelationshipName}'";
+}
+
+public sealed record RemovePolicyFromRelationshipChange(
+    string RelationshipName,
+    string PolicyName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RemovePolicyFromRelationship(RelationshipName, PolicyName);
+    }
+
+    internal override string GetDescription() => $"Remove policy '{PolicyName}' from relationship '{RelationshipName}'";
+}
+
+public sealed record SetEntityParentChange(
+    string EntityName,
+    string? ParentEntityName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateEntity(EntityName, e => e with { ParentEntityName = ParentEntityName });
+    }
+
+    internal override string GetDescription() =>
+        ParentEntityName is not null
+            ? $"Set parent of '{EntityName}' to '{ParentEntityName}'"
+            : $"Clear parent of '{EntityName}'";
 }

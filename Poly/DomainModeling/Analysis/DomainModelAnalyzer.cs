@@ -32,6 +32,20 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
+            builder.AddAnalyzer(new EffectAnalyzer());
+            builder.AddAnalyzer(new ConstraintQualityAnalyzer());
+            builder.AddAnalyzer(new EffectOrderingAnalyzer());
+            builder.AddAnalyzer(new EventFlowAnalyzer());
+            builder.AddAnalyzer(new ReplaySafetyAnalyzer());
+            builder.AddAnalyzer(new CorrelationAnalyzer());
+            builder.AddAnalyzer(new CausalityAnalyzer());
+            builder.AddAnalyzer(new EnumConstraintSubsetAnalyzer());
+            builder.AddAnalyzer(new CapabilityAnalyzer());
+            builder.AddAnalyzer(new EventContractAnalyzer());
+            builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
+            builder.AddAnalyzer(new RuleCoverageAnalyzer());
+            builder.AddAnalyzer(new ContractIntegrationAnalyzer());
+            builder.AddAnalyzer(new ActionParameterUsageAnalyzer());
             return builder;
         }
 

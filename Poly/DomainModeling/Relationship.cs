@@ -23,6 +23,7 @@ public sealed record Relationship(
     RelationshipCardinality Cardinality,
     IReadOnlyList<Property> Properties
 ) : DomainMember(Name) {
+    public bool SourceOwnsTarget { get; init; }
     public IReadOnlyList<Stage> Stages { get; init; } = [];
     public IReadOnlyList<Policy> Policies { get; init; } = [];
     public sealed override IEnumerable<Node?> Children => [Source, Target, .. Properties, .. Stages, .. Policies];

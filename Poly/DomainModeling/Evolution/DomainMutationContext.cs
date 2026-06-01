@@ -9,6 +9,10 @@ internal sealed class DomainMutationContext {
 
     public List<Relationship> Relationships { get; }
 
+    public List<ImportedContract> ImportedContracts { get; }
+
+    public List<ContractBinding> ContractBindings { get; }
+
     /// <summary>
     /// Nodes that were modified during mutation (populated by Update* helpers and direct additions).
     /// Used by DomainEvolution.GetAffectedNodes instead of a post-hoc switch over DomainChange subtypes.
@@ -19,9 +23,14 @@ internal sealed class DomainMutationContext {
         DomainName = source.Name;
         Types = new List<DomainType>(source.Types);
         Relationships = new List<Relationship>(source.Relationships);
+        ImportedContracts = new List<ImportedContract>(source.ImportedContracts);
+        ContractBindings = new List<ContractBinding>(source.ContractBindings);
     }
 
-    public Domain ToDomain() => new Domain(DomainName, Types, Relationships);
+    public Domain ToDomain() => new Domain(DomainName, Types, Relationships) {
+        ImportedContracts = ImportedContracts,
+        ContractBindings = ContractBindings
+    };
 
     // --- Resolver helpers for ApplyTo methods ---
 
@@ -171,6 +180,39 @@ internal sealed class DomainMutationContext {
         for (int i = 0; i < Types.Count; i++) {
             if (string.Equals(Types[i].Name, name, StringComparison.Ordinal))
                 return Types[i];
+        }
+        return null;
+    }
+
+    public bool UpdateImportedContract(string name, Func<ImportedContract, ImportedContract> transform) {
+        var idx = ImportedContracts.FindIndex(c => string.Equals(c.Name, name, StringComparison.Ordinal));
+        if (idx >= 0) {
+            var result = transform(ImportedContracts[idx]);
+            ImportedContracts[idx] = result;
+            ModifiedNodes.Add(result);
+            return true;
+        }
+        return false;
+    }
+
+    public bool UpdateContractBinding(string name, Func<ContractBinding, ContractBinding> transform) {
+        var idx = ContractBindings.FindIndex(b => string.Equals(b.Name, name, StringComparison.Ordinal));
+        if (idx >= 0) {
+            var result = transform(ContractBindings[idx]);
+            ContractBindings[idx] = result;
+            ModifiedNodes.Add(result);
+            return true;
+        }
+        return false;
+    }
+
+    public Action? FindActionOnAnyEntity(string actionName) {
+        for (int i = 0; i < Types.Count; i++) {
+            if (Types[i] is Entity e) {
+                var action = e.Actions.FirstOrDefault(a =>
+                    string.Equals(a.Name, actionName, StringComparison.Ordinal));
+                if (action is not null) return action;
+            }
         }
         return null;
     }

@@ -446,13 +446,15 @@ public sealed class EvolutionBuilder {
         string name,
         string sourceEntityName,
         string targetEntityName,
-        RelationshipCardinality cardinality) =>
+        RelationshipCardinality cardinality,
+        bool sourceOwnsTarget = false) =>
         Apply(new AddRelationshipChange(
             name,
             new DomainTypeReference(sourceEntityName),
             new DomainTypeReference(targetEntityName),
             cardinality,
-            []));
+            [],
+            sourceOwnsTarget));
 
     public EvolutionBuilder RemoveRelationship(string name) =>
         Apply(new RemoveRelationshipChange(name));

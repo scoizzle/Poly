@@ -1,0 +1,187 @@
+using Poly.DomainModeling.Effects;
+using Poly.Syntax.Analysis;
+
+namespace Poly.DomainModeling.Analysis;
+
+public sealed record ActionCapabilityView(
+    string ActionName,
+    IReadOnlyList<Property> Parameters,
+    IReadOnlyList<Effect> Effects,
+    IReadOnlyList<Type> EffectTypes,
+    IReadOnlyList<Event> PublishedEvents,
+    IReadOnlyList<Stage> TransitionTargets);
+
+public sealed record StageCapabilityView(
+    string StageName,
+    IReadOnlyList<ActionCapabilityView> LocalActions,
+    IReadOnlyList<ActionCapabilityView> EffectiveActions,
+    IReadOnlyList<Policy> LocalPolicies,
+    IReadOnlyList<Policy> EffectivePolicies);
+
+public sealed record RelationshipCapabilityView(
+    string RelationshipName,
+    DomainTypeReference Source,
+    DomainTypeReference Target,
+    RelationshipCardinality Cardinality,
+    IReadOnlyList<Property> Properties,
+    IReadOnlyList<Stage> Stages,
+    IReadOnlyList<Policy> Policies);
+
+internal sealed record ActionCapabilityMetadata(ActionCapabilityView View) : IAnalysisMetadata;
+internal sealed record StageCapabilityMetadata(StageCapabilityView View) : IAnalysisMetadata;
+internal sealed record RelationshipCapabilityMetadata(RelationshipCapabilityView View) : IAnalysisMetadata;
+
+internal sealed class CapabilityAnalyzer : INodeAnalyzer {
+    public void Analyze(AnalysisContext context, Node node) {
+        if (!context.ShouldAnalyze(node)) {
+            return;
+        }
+
+        switch (node) {
+            case Domain domain:
+                AnalyzeDomain(context, domain);
+                return;
+            case Action action:
+                AnalyzeAction(context, action);
+                break;
+            case Stage stage:
+                AnalyzeStage(context, stage);
+                break;
+            case Relationship relationship:
+                AnalyzeRelationship(context, relationship);
+                break;
+        }
+
+        this.AnalyzeChildren(context, node);
+    }
+
+    private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
+        if (!context.TryBeginAnalyzerVisit<CapabilityAnalyzer>(domain)) {
+            return;
+        }
+
+        foreach (var type in domain.Types) {
+            if (type is Entity entity) {
+                foreach (var action in entity.Actions) {
+                    AnalyzeAction(context, action);
+                }
+                foreach (var stage in entity.Stages) {
+                    AnalyzeStage(context, stage);
+                }
+            }
+        }
+
+        foreach (var relationship in domain.Relationships) {
+            AnalyzeRelationship(context, relationship);
+        }
+    }
+
+    private static void AnalyzeAction(AnalysisContext context, Action action) {
+        if (!context.TryBeginAnalyzerVisit<CapabilityAnalyzer>(action)) {
+            return;
+        }
+
+        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+
+        var publishedEvents = new List<Event>();
+        foreach (var effect in FlattenEffects(action.Effects)) {
+            if (effect is PublishEventEffect pee && lookup is not null
+                && lookup.Types.TryGetValue(pee.EventType.TypeName, out var eventType)
+                && eventType is Event evt) {
+                publishedEvents.Add(evt);
+            }
+        }
+
+        var transitionTargetStages = new List<Stage>();
+        foreach (var effect in FlattenEffects(action.Effects)) {
+            if (effect is StageTransitionEffect ste) {
+                transitionTargetStages.Add(new Stage(ste.TargetStage.StageName, null, [], [], [], []));
+            }
+        }
+
+        var view = new ActionCapabilityView(
+            ActionName: action.Name,
+            Parameters: action.Parameters,
+            Effects: action.Effects,
+            EffectTypes: action.Effects.Select(static e => e.GetType()).Distinct().ToArray(),
+            PublishedEvents: publishedEvents,
+            TransitionTargets: transitionTargetStages);
+
+        context.SetMetadata(action, new ActionCapabilityMetadata(view));
+    }
+
+    private static void AnalyzeStage(AnalysisContext context, Stage stage) {
+        if (!context.TryBeginAnalyzerVisit<CapabilityAnalyzer>(stage)) {
+            return;
+        }
+
+        var localActionViews = stage.Actions
+            .Select(a => context.GetMetadata<ActionCapabilityMetadata>(a)?.View)
+            .OfType<ActionCapabilityView>()
+            .ToArray();
+
+        var effectivePolicies = context.GetMetadata<EffectivePoliciesMetadata>(stage)?.Policies ?? [];
+
+        var effectiveActionViews = new List<ActionCapabilityView>();
+        effectiveActionViews.AddRange(localActionViews);
+
+        var current = context.GetMetadata<ResolvedStageParentMetadata>(stage);
+        while (current is not null) {
+            var parentViews = current.ParentStage.Actions
+                .Select(a => context.GetMetadata<ActionCapabilityMetadata>(a)?.View)
+                .OfType<ActionCapabilityView>();
+            effectiveActionViews.AddRange(parentViews);
+
+            current = context.GetMetadata<ResolvedStageParentMetadata>(current.ParentStage);
+        }
+
+        var view = new StageCapabilityView(
+            StageName: stage.Name,
+            LocalActions: localActionViews,
+            EffectiveActions: effectiveActionViews,
+            LocalPolicies: stage.Policies,
+            EffectivePolicies: effectivePolicies);
+
+        context.SetMetadata(stage, new StageCapabilityMetadata(view));
+    }
+
+    private static void AnalyzeRelationship(AnalysisContext context, Relationship relationship) {
+        if (!context.TryBeginAnalyzerVisit<CapabilityAnalyzer>(relationship)) {
+            return;
+        }
+
+        var view = new RelationshipCapabilityView(
+            RelationshipName: relationship.Name,
+            Source: relationship.Source,
+            Target: relationship.Target,
+            Cardinality: relationship.Cardinality,
+            Properties: relationship.Properties,
+            Stages: relationship.Stages,
+            Policies: relationship.Policies);
+
+        context.SetMetadata(relationship, new RelationshipCapabilityMetadata(view));
+    }
+
+    private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) {
+        foreach (var effect in effects) {
+            yield return effect;
+            switch (effect) {
+                case ConditionalEffect ce:
+                    foreach (var nested in FlattenEffects(ce.ThenEffects)) {
+                        yield return nested;
+                    }
+                    if (ce.ElseEffects is not null) {
+                        foreach (var nested in FlattenEffects(ce.ElseEffects)) {
+                            yield return nested;
+                        }
+                    }
+                    break;
+                case CompositeEffect ce:
+                    foreach (var nested in FlattenEffects(ce.Effects)) {
+                        yield return nested;
+                    }
+                    break;
+            }
+        }
+    }
+}

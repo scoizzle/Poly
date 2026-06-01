@@ -307,7 +307,8 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_AddEffectToActionChange_AttachesStageTransition() {
         var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
-        var person = new Entity("Person", [], [], [dieAction], [], []);
+        var deadStage = new Stage("Dead", null, [], [], [], []);
+        var person = new Entity("Person", [], [], [dieAction], [], [deadStage]);
         var start = new Domain("Test", [person], []);
 
         var transition = new StageTransitionEffect(new StageReference("Dead"));
@@ -445,6 +446,8 @@ public class DomainEvolutionApplicatorTests {
             .Evolve()
             .AddPrimitiveType("Timestamp", Poly.Introspection.TypeCategory.DateTime)
             .AddEntity("Person")
+            .AddEventToEntity("Person", "Born", new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []))
+            .AddStage("Person", "Dead")
             .AddAction("Person", "Die")
             .AddParameterToAction("Person", "Die", new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []))
             .AddPublishEventEffect("Person", "Die", "Born",
@@ -493,7 +496,8 @@ public class DomainEvolutionApplicatorTests {
         var createEffect = new CreateEntityInstance(new DomainTypeReference("SomeDoc"));
         var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [createEffect], []);
         var aliveStage = new Stage("Alive", null, [], [], [], []);
-        var person = new Entity("Person", [new Property("Name", new DomainTypeReference("Text"), [])], [], [dieAction], [], [aliveStage]);
+        var deadStage = new Stage("Dead", null, [], [], [], []);
+        var person = new Entity("Person", [new Property("Name", new DomainTypeReference("Text"), [])], [], [dieAction], [], [aliveStage, deadStage]);
         var start = new Domain("Test", [person, text, someDoc], []);
 
         // Capture original Ids of nodes we will not touch
@@ -1428,6 +1432,8 @@ public class DomainEvolutionApplicatorTests {
         var start = new Domain("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
+            .AddStage("Workflow", "Active")
+            .AddStage("Workflow", "Completed")
             .AddAction("Workflow", "Execute")
             .AddEffectToAction("Workflow", "Execute",
                 new CompositeEffect([
@@ -1469,6 +1475,8 @@ public class DomainEvolutionApplicatorTests {
         var start = new Domain("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
+            .AddStage("Task", "Approved")
+            .AddStage("Task", "Rejected")
             .AddAction("Task", "Evaluate")
             .AddEffectToAction("Task", "Evaluate",
                 new ConditionalEffect(
@@ -1492,6 +1500,7 @@ public class DomainEvolutionApplicatorTests {
         var start = new Domain("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
+            .AddStage("Task", "Completed")
             .AddAction("Task", "TryComplete")
             .AddEffectToAction("Task", "TryComplete",
                 new ConditionalEffect(
@@ -1509,7 +1518,10 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task LinkRelationshipEffect_CanBeStoredInAction() {
         var entity = new Entity("Order", [], [], [], [], []);
-        var start = new Domain("Test", [entity], []);
+        var customerRel = new Relationship("Customer",
+            new DomainTypeReference("Order"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+        var start = new Domain("Test", [entity], [customerRel]);
         var result = new DomainEvolution(start)
             .Evolve()
             .AddAction("Order", "AssignCustomer")
@@ -1527,7 +1539,10 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task UnlinkRelationshipEffect_CanBeStoredInAction() {
         var entity = new Entity("Order", [], [], [], [], []);
-        var start = new Domain("Test", [entity], []);
+        var customerRel = new Relationship("Customer",
+            new DomainTypeReference("Order"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+        var start = new Domain("Test", [entity], [customerRel]);
         var result = new DomainEvolution(start)
             .Evolve()
             .AddAction("Order", "RemoveCustomer")
@@ -1543,7 +1558,10 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task TransitionRelationshipEffect_CanBeStoredInAction() {
         var entity = new Entity("Project", [], [], [], [], []);
-        var start = new Domain("Test", [entity], []);
+        var tasksRel = new Relationship("Tasks",
+            new DomainTypeReference("Project"), new DomainTypeReference("Project"),
+            RelationshipCardinality.OneToMany, []) { Stages = [new Stage("Completed", null, [], [], [], [])] };
+        var start = new Domain("Test", [entity], [tasksRel]);
         var result = new DomainEvolution(start)
             .Evolve()
             .AddAction("Project", "AdvanceTask")
@@ -1773,5 +1791,267 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.Types.OfType<PrimitiveType>().Single(t => t.Name == "MyText");
         await Assert.That(updated.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Numeric);
+    }
+
+    // --- Contract integration tests ---
+
+    [Test]
+    public async Task Apply_AddImportedContractChange_AddsContractToDomain() {
+        var start = new Domain("TestDomain", [], []);
+        var change = new AddImportedContractChange("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1");
+        var result = new DomainEvolution(start).Apply([change]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.ImportedContracts.Count).IsEqualTo(1);
+        await Assert.That(result.Root.ImportedContracts[0].Name).IsEqualTo("CrmContract");
+        await Assert.That(result.Root.ImportedContracts[0].SourceIdentifier).IsEqualTo("crm://api/ticket");
+    }
+
+    [Test]
+    public async Task Apply_RemoveImportedContractChange_RemovesContractAndBindings() {
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "param", []);
+        var start = new Domain("Test", [], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([new RemoveImportedContractChange("CrmContract")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.ImportedContracts).IsEmpty();
+        await Assert.That(result.Root.ContractBindings).IsEmpty();
+    }
+
+    [Test]
+    public async Task Apply_AddContractEndpointChange_AddsEndpoint() {
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", []);
+        var start = new Domain("Test", [], []) { ImportedContracts = [contract] };
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
+        var result = new DomainEvolution(start).Apply([new AddContractEndpointChange("CrmContract", endpoint)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
+        await Assert.That(updated.Endpoints.Count).IsEqualTo(1);
+        await Assert.That(updated.Endpoints[0].Name).IsEqualTo("GetTicket");
+    }
+
+    [Test]
+    public async Task Apply_RemoveContractEndpointChange_RemovesEndpoint() {
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
+        var start = new Domain("Test", [], []) { ImportedContracts = [contract] };
+        var result = new DomainEvolution(start).Apply([new RemoveContractEndpointChange("CrmContract", "GetTicket")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
+        await Assert.That(updated.Endpoints).IsEmpty();
+    }
+
+    [Test]
+    public async Task Apply_AddContractBindingChange_AddsBinding() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity",
+            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = []
+        };
+        var change = new AddContractBindingChange("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input");
+        var result = new DomainEvolution(start).Apply([change]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.ContractBindings.Count).IsEqualTo(1);
+        await Assert.That(result.Root.ContractBindings[0].ContractName).IsEqualTo("CrmContract");
+    }
+
+    [Test]
+    public async Task Apply_RemoveContractBindingChange_RemovesBinding() {
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
+        var start = new Domain("Test", [], []) { ContractBindings = [binding] };
+        var result = new DomainEvolution(start).Apply([new RemoveContractBindingChange("MyBinding")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.ContractBindings).IsEmpty();
+    }
+
+    [Test]
+    public async Task Apply_AddContractFieldMapChange_AddsFieldMap() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity",
+            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var fieldMap = new ContractFieldMap("remoteId", "localId");
+        var result = new DomainEvolution(start).Apply([new AddContractFieldMapChange("MyBinding", fieldMap)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.ContractBindings.Single(b => b.Name == "MyBinding");
+        await Assert.That(updated.FieldMaps.Count).IsEqualTo(1);
+        await Assert.That(updated.FieldMaps[0].RemoteFieldName).IsEqualTo("remoteId");
+    }
+
+    [Test]
+    public async Task Apply_RemoveContractFieldMapChange_RemovesFieldMap() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity",
+            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var fieldMap = new ContractFieldMap("remoteId", "localId");
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", [fieldMap]);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([new RemoveContractFieldMapChange("MyBinding", "remoteId")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.ContractBindings.Single(b => b.Name == "MyBinding");
+        await Assert.That(updated.FieldMaps).IsEmpty();
+    }
+
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingSourceIdentifier() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "", "v1", []);
+        var start = new Domain("Test", [textPrimitive], []) { ImportedContracts = [contract] };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("source identifier");
+    }
+
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingVersion() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "crm://api", "", []);
+        var start = new Domain("Test", [textPrimitive], []) { ImportedContracts = [contract] };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("missing a version");
+    }
+
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingContractForBinding() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var binding = new ContractBinding("MyBinding", "NonExistentContract", "GetTicket", "SomeAction", "input", []);
+        var start = new Domain("Test", [textPrimitive], []) { ContractBindings = [binding] };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not registered");
+    }
+
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingEndpointOnBinding() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "NonExistentEndpoint", "SomeAction", "input", []);
+        var start = new Domain("Test", [textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("does not belong");
+    }
+
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingAction() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "NonExistentAction", "input", []);
+        var start = new Domain("Test", [textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found");
+    }
+
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingParameter() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+            [new Property("something", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity",
+            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "missingParam", []);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("missingParam");
+    }
+
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsTypeMismatch() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var ticketDataPrimitive = new PrimitiveType("TicketData", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity",
+            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", []);
+        var start = new Domain("Test", [entity, textPrimitive, ticketDataPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("incompatible");
+    }
+
+    [Test]
+    public async Task ContractDomainObject_SupportsTreeWalk() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", [
+            new ContractFieldMap("remoteId", "localId")
+        ]);
+        var domain = new Domain("Test", [textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+
+        var children = domain.Children.ToArray();
+        await Assert.That(children).Contains(contract);
+        await Assert.That(children).Contains(binding);
+
+        var contractChildren = contract.Children.ToArray();
+        await Assert.That(contractChildren).Contains(endpoint);
+    }
+
+    [Test]
+    public async Task Apply_ValidContractIntegration_PassesAnalysis() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity",
+            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", [
+            new ContractFieldMap("remoteId", "localId")
+        ]);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsTrue();
     }
 }

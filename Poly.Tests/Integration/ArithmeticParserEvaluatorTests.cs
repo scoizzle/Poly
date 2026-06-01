@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 
+using Poly.Interpretation.TreeWalking;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Integration;
@@ -9,6 +10,13 @@ namespace Poly.Tests.Integration;
 /// Demonstrates the full flow: text -> tokens -> AST -> evaluation.
 /// </summary>
 public class ArithmeticParserEvaluatorTests {
+    private enum ExecutionEngine {
+        Linq,
+        TreeWalker
+    }
+
+    private readonly record struct EvaluationOutcome<T>(bool IsSuccess, T? Value, Exception? Exception);
+
     /// <summary>
     /// Simple token types for arithmetic expressions.
     /// </summary>
@@ -190,18 +198,73 @@ public class ArithmeticParserEvaluatorTests {
     /// Helper method to evaluate an arithmetic expression string.
     /// </summary>
     private static T Evaluate<T>(string expression) {
+        var ast = ParseAst(expression);
+
+        var linqOutcome = EvaluateWithEngine<T>(ast, ExecutionEngine.Linq);
+        var treeWalkerOutcome = EvaluateWithEngine<T>(ast, ExecutionEngine.TreeWalker);
+
+        if (linqOutcome.IsSuccess != treeWalkerOutcome.IsSuccess) {
+            throw new InvalidOperationException(
+                $"Execution mismatch for '{expression}': LINQ success={linqOutcome.IsSuccess}, TreeWalker success={treeWalkerOutcome.IsSuccess}",
+                linqOutcome.Exception ?? treeWalkerOutcome.Exception);
+        }
+
+        if (!linqOutcome.IsSuccess) {
+            if (linqOutcome.Exception?.GetType() != treeWalkerOutcome.Exception?.GetType()) {
+                throw new InvalidOperationException(
+                    $"Execution mismatch for '{expression}': LINQ threw {linqOutcome.Exception?.GetType().Name}, TreeWalker threw {treeWalkerOutcome.Exception?.GetType().Name}",
+                    linqOutcome.Exception);
+            }
+
+            throw linqOutcome.Exception!;
+        }
+
+        if (!EqualityComparer<T>.Default.Equals(linqOutcome.Value, treeWalkerOutcome.Value)) {
+            throw new InvalidOperationException(
+                $"Execution mismatch for '{expression}': LINQ returned {linqOutcome.Value}, TreeWalker returned {treeWalkerOutcome.Value}");
+        }
+
+        return linqOutcome.Value!;
+    }
+
+    private static Node ParseAst(string expression) {
         // Lex
         var lexer = new ArithmeticLexer(expression);
         var tokens = lexer.Tokenize();
 
         // Parse
         var parser = new ArithmeticParser(tokens);
-        var ast = parser.Parse();
+        return parser.Parse();
+    }
 
-        // Compile and evaluate
+    private static EvaluationOutcome<T> EvaluateWithEngine<T>(Node ast, ExecutionEngine engine) {
+        try {
+            return engine switch {
+                ExecutionEngine.Linq => new EvaluationOutcome<T>(true, EvaluateWithLinq<T>(ast), null),
+                ExecutionEngine.TreeWalker => new EvaluationOutcome<T>(true, EvaluateWithTreeWalker<T>(ast), null),
+                _ => throw new InvalidOperationException($"Unknown execution engine: {engine}")
+            };
+        }
+        catch (Exception ex) {
+            return new EvaluationOutcome<T>(false, default, ex);
+        }
+    }
+
+    private static T EvaluateWithLinq<T>(Node ast) {
         var expr = ast.BuildExpression();
         var lambda = Expression.Lambda<Func<T>>(expr);
         return lambda.Compile()();
+    }
+
+    private static T EvaluateWithTreeWalker<T>(Node ast) {
+        using var walker = new TreeWalker();
+        var result = walker.Evaluate(ast);
+
+        if (!result.HasValue) {
+            throw new InvalidOperationException("TreeWalker completed without producing a value.");
+        }
+
+        return (T)result.Value!;
     }
 
     [Test]

@@ -1,5 +1,9 @@
+using System.Linq.Expressions;
+using System.Reflection;
+
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Interpretation.TreeWalking;
 
 namespace Poly.Tests.Integration;
 
@@ -12,6 +16,7 @@ namespace Poly.Tests.Integration;
 /// member access, and assignments.
 /// </summary>
 public class C99ParserInterpreterTests {
+    private sealed record LocalBindingSpec(string Name, Type ClrType);
 
     // =========================================================================
     // Lexer
@@ -468,10 +473,10 @@ public class C99ParserInterpreterTests {
         // to just `expr` so it becomes the block's result value without using ReturnStatement.
         private Node ParseReturn() {
             Expect(C99TokenKind.KwReturn);
-            if (TryConsume(C99TokenKind.Semicolon)) return new Constant(null);
+            if (TryConsume(C99TokenKind.Semicolon)) return new Return(new Constant(null));
             var value = ParseExpr();
             Expect(C99TokenKind.Semicolon);
-            return value;
+            return new Return(value);
         }
 
         private Node ParseIf() {
@@ -724,6 +729,8 @@ public class C99ParserInterpreterTests {
     private static TDelegate CompileC99<TDelegate>(string source) where TDelegate : Delegate {
         var tokens = new C99Lexer(source).Tokenize();
         var fn = new C99Parser(tokens).ParseFunction();
+        var invokeMethod = typeof(TDelegate).GetMethod("Invoke")
+            ?? throw new InvalidOperationException($"Delegate type {typeof(TDelegate).Name} does not expose an Invoke method.");
 
         var analyzer = new AnalyzerBuilder()
             .UseTypeResolver()
@@ -744,12 +751,147 @@ public class C99ParserInterpreterTests {
 
         var generator = new LinqExpressionGenerator(analysisResult);
         var parameters = fn.Parameters.Select(p => p.Param).ToArray();
-        if (parameters.Length == 0) {
-            var body = generator.Compile(fn.Body).Expression;
-            return System.Linq.Expressions.Expression.Lambda<TDelegate>(body).Compile();
+        var linqDelegate = parameters.Length == 0
+            ? Expression.Lambda<TDelegate>(generator.Compile(fn.Body).Expression).Compile()
+            : generator.CompileAsDelegate<TDelegate>(fn.Body, parameters);
+
+        var treeWalkerDelegate = CompileTreeWalkerDelegate<TDelegate>(fn, invokeMethod);
+        return BuildParityDelegate(linqDelegate, treeWalkerDelegate, invokeMethod);
+    }
+
+    private static TDelegate CompileTreeWalkerDelegate<TDelegate>(C99ParsedFunction fn, MethodInfo invokeMethod)
+        where TDelegate : Delegate {
+        var delegateParameters = invokeMethod
+            .GetParameters()
+            .Select(p => Expression.Parameter(p.ParameterType, p.Name))
+            .ToArray();
+
+        var invocationArgs = Expression.NewArrayInit(
+            typeof(object),
+            delegateParameters.Select(p => Expression.Convert(p, typeof(object))));
+
+        var executeMethod = typeof(C99ParserInterpreterTests)
+            .GetMethod(nameof(ExecuteWithTreeWalker), BindingFlags.Static | BindingFlags.NonPublic)!
+            .MakeGenericMethod(invokeMethod.ReturnType);
+
+        var body = Expression.Call(
+            executeMethod,
+            Expression.Constant(fn.Body, typeof(Node)),
+            Expression.Constant(fn.Parameters.Select(p => p.Param.Name).ToArray(), typeof(string[])),
+            Expression.Constant(
+                fn.Locals.Select(l => new LocalBindingSpec(l.Param.Name, l.ClrType)).ToArray(),
+                typeof(LocalBindingSpec[])),
+            invocationArgs);
+
+        return Expression.Lambda<TDelegate>(body, delegateParameters).Compile();
+    }
+
+    private static TDelegate BuildParityDelegate<TDelegate>(
+        TDelegate linqDelegate,
+        TDelegate treeWalkerDelegate,
+        MethodInfo invokeMethod)
+        where TDelegate : Delegate {
+        var delegateParameters = invokeMethod
+            .GetParameters()
+            .Select(p => Expression.Parameter(p.ParameterType, p.Name))
+            .ToArray();
+
+        var invocationArgs = Expression.NewArrayInit(
+            typeof(object),
+            delegateParameters.Select(p => Expression.Convert(p, typeof(object))));
+
+        var invokeParityMethod = typeof(C99ParserInterpreterTests)
+            .GetMethod(nameof(InvokeWithParity), BindingFlags.Static | BindingFlags.NonPublic)!
+            .MakeGenericMethod(invokeMethod.ReturnType);
+
+        var body = Expression.Call(
+            invokeParityMethod,
+            Expression.Constant((Delegate)(object)linqDelegate),
+            Expression.Constant((Delegate)(object)treeWalkerDelegate),
+            invocationArgs);
+
+        return Expression.Lambda<TDelegate>(body, delegateParameters).Compile();
+    }
+
+    private readonly record struct InvocationOutcome(bool IsSuccess, object? Value, Exception? Exception);
+
+    private static TResult InvokeWithParity<TResult>(Delegate linqDelegate, Delegate treeWalkerDelegate, object?[] args) {
+        var linqOutcome = InvokeDelegate(linqDelegate, args);
+        var treeWalkerOutcome = InvokeDelegate(treeWalkerDelegate, args);
+
+        if (linqOutcome.IsSuccess != treeWalkerOutcome.IsSuccess) {
+            throw new InvalidOperationException(
+                $"Execution mismatch: LINQ success={linqOutcome.IsSuccess}, TreeWalker success={treeWalkerOutcome.IsSuccess}. " +
+                $"LINQ error={linqOutcome.Exception?.GetType().Name}:{linqOutcome.Exception?.Message}; " +
+                $"TreeWalker error={treeWalkerOutcome.Exception?.GetType().Name}:{treeWalkerOutcome.Exception?.Message}",
+                linqOutcome.Exception ?? treeWalkerOutcome.Exception);
         }
 
-        return generator.CompileAsDelegate<TDelegate>(fn.Body, parameters);
+        if (!linqOutcome.IsSuccess) {
+            if (linqOutcome.Exception?.GetType() != treeWalkerOutcome.Exception?.GetType()) {
+                throw new InvalidOperationException(
+                    $"Execution mismatch: LINQ threw {linqOutcome.Exception?.GetType().Name}, TreeWalker threw {treeWalkerOutcome.Exception?.GetType().Name}",
+                    linqOutcome.Exception);
+            }
+
+            throw linqOutcome.Exception!;
+        }
+
+        if (!Equals(linqOutcome.Value, treeWalkerOutcome.Value)) {
+            throw new InvalidOperationException(
+                $"Execution mismatch: LINQ returned {linqOutcome.Value}, TreeWalker returned {treeWalkerOutcome.Value}");
+        }
+
+        return (TResult)linqOutcome.Value!;
+    }
+
+    private static InvocationOutcome InvokeDelegate(Delegate del, object?[] args) {
+        try {
+            var invokeResult = del.DynamicInvoke(args);
+            return new InvocationOutcome(true, invokeResult, null);
+        }
+        catch (TargetInvocationException tie) when (tie.InnerException is not null) {
+            return new InvocationOutcome(false, null, tie.InnerException);
+        }
+        catch (Exception ex) {
+            return new InvocationOutcome(false, null, ex);
+        }
+    }
+
+    private static TResult ExecuteWithTreeWalker<TResult>(
+        Node body,
+        string[] parameterNames,
+        LocalBindingSpec[] locals,
+        object?[] args) {
+        if (parameterNames.Length != args.Length) {
+            throw new ArgumentException("Parameter names and arguments length must match.", nameof(args));
+        }
+
+        var variableBindings = new Dictionary<string, object?>();
+        for (int i = 0; i < parameterNames.Length; i++) {
+            variableBindings[parameterNames[i]] = args[i];
+        }
+
+        foreach (var local in locals) {
+            if (!variableBindings.ContainsKey(local.Name)) {
+                variableBindings[local.Name] = local.ClrType.IsValueType
+                    ? Activator.CreateInstance(local.ClrType)
+                    : null;
+            }
+        }
+
+        using var walker = new TreeWalker();
+        var result = walker.Evaluate(body, variableBindings);
+
+        if (result.IsSignal && result.Signal?.Kind == InterpreterSignal.SignalKind.Throw) {
+            throw (Exception)result.Signal.Value.Value!;
+        }
+
+        if (!result.HasValue) {
+            throw new InvalidOperationException("TreeWalker completed without producing a value.");
+        }
+
+        return (TResult)result.Value!;
     }
 
     // =========================================================================

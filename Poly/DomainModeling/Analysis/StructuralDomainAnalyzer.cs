@@ -91,6 +91,18 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         }
 
         ReportDuplicateNames(context, relationship.Properties, "relationship", relationship.Name);
+        ValidateOwnershipCardinality(context, relationship);
+    }
+
+    private static void ValidateOwnershipCardinality(AnalysisContext context, Relationship relationship) {
+        if (!relationship.SourceOwnsTarget) return;
+
+        if (relationship.Cardinality is RelationshipCardinality.ManyToOne or RelationshipCardinality.ManyToMany) {
+            context.ReportError(
+                relationship,
+                $"Ownership relationship '{relationship.Name}' must be one-to-one or one-to-many.",
+                DomainModelDiagnosticCodes.StructuralOwnership);
+        }
     }
 
     private static void ReportDuplicateNames<TNode>(AnalysisContext context, IEnumerable<TNode> nodes, string ownerType, string ownerName)

@@ -402,6 +402,14 @@ public sealed class LinqExpressionGenerator {
             // First-class functions
             Lambda lambda => CompileLambda(lambda, context),
 
+            // Leaf references
+            ThisReference thisRef => Expression.Default(GetClrType(thisRef)),
+            NullForgiving nf => CompileNode(nf.Operand, context),
+            Default d => d.TargetType != null
+                ? Expression.Default(GetClrType(d.TargetType))
+                : Expression.Default(GetClrType(d)),
+            ParameterReference => Expression.Default(typeof(object)),
+
             _ => throw new InvalidOperationException($"Unsupported node type: {node.GetType().Name}")
         };
     }
@@ -1002,7 +1010,21 @@ public sealed class LinqExpressionGenerator {
     /// </summary>
     private Expression CompileInvocation(Invoke invoke, CompilationContext context) {
         var argExprs = invoke.Arguments.Select(argument => CompileNode(argument, context)).ToArray();
+
         if (invoke.Delegate is Member memberAccess) {
+            // When the analysis has resolved the method, use its MethodInfo directly
+            // to correctly handle both static and instance calls.
+            if (_analysisResult.GetResolvedMember(invoke) is ClrMethod resolvedMethod) {
+                var methodInfo = resolvedMethod.MethodInfo;
+                if (resolvedMethod.LifetimeModifier == LifetimeModifier.Static) {
+                    return Expression.Call(methodInfo, argExprs);
+                }
+
+                var instance = CompileNode(memberAccess.Value, context);
+                return Expression.Call(instance, methodInfo, argExprs);
+            }
+
+            // Fallback when analysis didn't resolve the method
             return Expression.Call(
                 CompileNode(memberAccess.Value, context),
                 memberAccess.MemberName,

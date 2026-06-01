@@ -293,10 +293,13 @@ public sealed record AddRelationshipChange(
     DomainTypeReference Source,
     DomainTypeReference Target,
     RelationshipCardinality Cardinality,
-    IReadOnlyList<Property> Properties
+    IReadOnlyList<Property> Properties,
+    bool SourceOwnsTarget = false
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var newRel = new Relationship(Name, Source, Target, Cardinality, Properties);
+        var newRel = new Relationship(Name, Source, Target, Cardinality, Properties) {
+            SourceOwnsTarget = SourceOwnsTarget
+        };
         context.Relationships.Add(newRel);
         context.ModifiedNodes.Add(newRel);
     }
@@ -648,13 +651,15 @@ public sealed record SetRelationshipShapeChange(
     string RelationshipName,
     DomainTypeReference? NewSource = null,
     DomainTypeReference? NewTarget = null,
-    RelationshipCardinality? NewCardinality = null
+    RelationshipCardinality? NewCardinality = null,
+    bool? NewSourceOwnsTarget = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.UpdateRelationship(RelationshipName, r => r with {
             Source = NewSource ?? r.Source,
             Target = NewTarget ?? r.Target,
-            Cardinality = NewCardinality ?? r.Cardinality
+            Cardinality = NewCardinality ?? r.Cardinality,
+            SourceOwnsTarget = NewSourceOwnsTarget ?? r.SourceOwnsTarget
         });
     }
 
@@ -857,4 +862,137 @@ public sealed record SetEntityParentChange(
         ParentEntityName is not null
             ? $"Set parent of '{EntityName}' to '{ParentEntityName}'"
             : $"Clear parent of '{EntityName}'";
+}
+
+// --- Contract integration changes ---
+
+public sealed record AddImportedContractChange(
+    string Name,
+    ContractSourceKind SourceKind,
+    string SourceIdentifier,
+    string Version
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var contract = new ImportedContract(Name, SourceKind, SourceIdentifier, Version, []);
+        context.ImportedContracts.Add(contract);
+        context.ModifiedNodes.Add(contract);
+    }
+
+    internal override string GetDescription() => $"Add imported contract '{Name}' ({SourceKind}:{SourceIdentifier} v{Version})";
+}
+
+public sealed record RemoveImportedContractChange(
+    string Name
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.ImportedContracts.RemoveAll(c => string.Equals(c.Name, Name, StringComparison.Ordinal));
+        context.ContractBindings.RemoveAll(b => string.Equals(b.ContractName, Name, StringComparison.Ordinal));
+    }
+
+    internal override string GetDescription() => $"Remove imported contract '{Name}'";
+}
+
+public sealed record AddContractEndpointChange(
+    string ContractName,
+    ContractEndpoint Endpoint
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var idx = context.ImportedContracts.FindIndex(c =>
+            string.Equals(c.Name, ContractName, StringComparison.Ordinal));
+        if (idx < 0) return;
+        var updated = context.ImportedContracts[idx] with {
+            Endpoints = context.ImportedContracts[idx].Endpoints.Append(Endpoint).ToList()
+        };
+        context.ImportedContracts[idx] = updated;
+        context.ModifiedNodes.Add(updated);
+    }
+
+    internal override string GetDescription() => $"Add endpoint '{Endpoint.Name}' to contract '{ContractName}'";
+}
+
+public sealed record RemoveContractEndpointChange(
+    string ContractName,
+    string EndpointName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var idx = context.ImportedContracts.FindIndex(c =>
+            string.Equals(c.Name, ContractName, StringComparison.Ordinal));
+        if (idx < 0) return;
+        var updated = context.ImportedContracts[idx] with {
+            Endpoints = context.ImportedContracts[idx].Endpoints
+                .Where(e => !string.Equals(e.Name, EndpointName, StringComparison.Ordinal))
+                .ToList()
+        };
+        context.ImportedContracts[idx] = updated;
+        context.ModifiedNodes.Add(updated);
+    }
+
+    internal override string GetDescription() => $"Remove endpoint '{EndpointName}' from contract '{ContractName}'";
+}
+
+public sealed record AddContractBindingChange(
+    string Name,
+    string ContractName,
+    string EndpointName,
+    string ActionName,
+    string LocalParameterName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var binding = new ContractBinding(Name, ContractName, EndpointName, ActionName, LocalParameterName, []);
+        context.ContractBindings.Add(binding);
+        context.ModifiedNodes.Add(binding);
+    }
+
+    internal override string GetDescription() => $"Add contract binding '{Name}' ({ContractName}/{EndpointName} -> {ActionName}.{LocalParameterName})";
+}
+
+public sealed record RemoveContractBindingChange(
+    string Name
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.ContractBindings.RemoveAll(b =>
+            string.Equals(b.Name, Name, StringComparison.Ordinal));
+    }
+
+    internal override string GetDescription() => $"Remove contract binding '{Name}'";
+}
+
+public sealed record AddContractFieldMapChange(
+    string BindingName,
+    ContractFieldMap FieldMap
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var idx = context.ContractBindings.FindIndex(b =>
+            string.Equals(b.Name, BindingName, StringComparison.Ordinal));
+        if (idx < 0) return;
+        var updated = context.ContractBindings[idx] with {
+            FieldMaps = context.ContractBindings[idx].FieldMaps.Append(FieldMap).ToList()
+        };
+        context.ContractBindings[idx] = updated;
+        context.ModifiedNodes.Add(updated);
+    }
+
+    internal override string GetDescription() =>
+        $"Add field map '{FieldMap.RemoteFieldName}'->'{FieldMap.LocalFieldName}' to binding '{BindingName}'";
+}
+
+public sealed record RemoveContractFieldMapChange(
+    string BindingName,
+    string RemoteFieldName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var idx = context.ContractBindings.FindIndex(b =>
+            string.Equals(b.Name, BindingName, StringComparison.Ordinal));
+        if (idx < 0) return;
+        var updated = context.ContractBindings[idx] with {
+            FieldMaps = context.ContractBindings[idx].FieldMaps
+                .Where(fm => !string.Equals(fm.RemoteFieldName, RemoteFieldName, StringComparison.Ordinal))
+                .ToList()
+        };
+        context.ContractBindings[idx] = updated;
+        context.ModifiedNodes.Add(updated);
+    }
+
+    internal override string GetDescription() =>
+        $"Remove field map '{RemoteFieldName}' from binding '{BindingName}'";
 }

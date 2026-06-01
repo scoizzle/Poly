@@ -14,5 +14,7 @@ public sealed record Domain(
     IReadOnlyList<DomainType> Types,
     IReadOnlyList<Relationship> Relationships
 ) : DomainMember(Name) {
-    public sealed override IEnumerable<Node?> Children => [.. Types, .. Relationships];
+    public IReadOnlyList<ImportedContract> ImportedContracts { get; init; } = [];
+    public IReadOnlyList<ContractBinding> ContractBindings { get; init; } = [];
+    public sealed override IEnumerable<Node?> Children => [.. Types, .. Relationships, .. ImportedContracts, .. ContractBindings];
 }

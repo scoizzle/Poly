@@ -25,6 +25,24 @@ public sealed record EvolutionResult(
     /// </summary>
     public bool HasStructuralFailure => Analysis.HasStructuralFailure;
 
+    /// <summary>
+    /// Short, human-readable summary of the primary errors when the proposal was rejected.
+    /// Useful for agents and logs. Includes whether it was a structural failure.
+    /// </summary>
+    public string? FailureSummary {
+        get {
+            if (Succeeded) return null;
+
+            var prefix = HasStructuralFailure ? "[Structural Failure] " : "";
+            var errors = Analysis.Diagnostics
+                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .Take(3)
+                .Select(d => d.Message);
+
+            return prefix + string.Join("; ", errors);
+        }
+    }
+
     public static EvolutionResult Success(
         Domain root,
         AnalysisResult analysis,

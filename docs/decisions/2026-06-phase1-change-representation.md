@@ -1,7 +1,7 @@
 # Decision: Phase 1 Change Representation Strategy (Native DomainChange + Builder-backed Applicator)
 
 **Date:** 2026-06  
-**Status:** Draft (under WS1 ownership)  
+**Status:** Accepted  
 **Deciders:** Owner (Grok) + review
 
 ## Context
@@ -30,14 +30,18 @@ This matches the "evolution on top of builders" layering decision and the "build
 
 ## Consequences
 
-- Four initial change types implemented and working (Add/Remove Entity, Add/Remove Property on Entity).
-- More operation types will be added as narrow, testable records + applicator cases.
-- A follow-up decision (or update to this one) will be needed before Phase 3 if we decide to evolve the intent surface for agents.
+- Full set of MVP `DomainChange` subtypes implemented and working end-to-end: Add/Remove for Entity, PrimitiveType, Event, ValueType, Property on Entity, Stage (with simple parent), Action on Entity and Stage, Relationship, plus attachment of Policies, Parameters, Effects (Create with bindings, PublishEvent with bindings, StageTransition, OnEntry/OnExit), and result setting.
+- Applicator uses direct record `with` updates + context for efficient batch + NodeId preservation.
+- Traces now include overall and per-step AffectedNodeIds.
+- The first end-to-end PersonLifecycle-style slice is constructible purely via `DomainEvolution` + changes (see proof test in Poly.Tests).
+- Interfaces (DomainChange, EvolutionResult, EvolutionTrace, EvolutionBuilder) are stable enough to hand off to WS4 (traces/UX) and WS5 (full proofs).
 
 ## Next Steps
 
 - Keep the native `DomainChange` hierarchy as the source of truth for the applicator.
-- Document any adapter strategy in WS1 or a later decision when MCP integration work begins.
-- Revisit after WS5 (proof on real examples) whether the surface feels good enough for agents or needs ergonomic sugar.
+- WS1 complete; handoff to WS4/WS5 for richer trace UX and full roadblock examples.
+- Revisit adapter/MCP surface or fluent ergonomics in later phases only if real first consumers (agents) demonstrate need.
 
-This decision will be finalized once the first end-to-end proof (PersonLifecycle slice via evolution) is green.
+WS1 proof complete; this decision is now accepted.
+
+**Post-acceptance implementation refinement (WS4):** As part of aggressive simplification of the tracing model, the `AffectedNodeIds` (both overall and the earlier per-step variant) were removed from `EvolutionTrace`, `EvolutionStep`, `DomainMutationContext`, and all `DomainChange` implementations. The list provided no incremental-analysis value in the current MVP (GetAffectedNodes still returns empty) and duplicated work already questioned by "do we really need to examine what nodes are impacted?". The lean model (natural descriptions owned by changes + Information diagnostics for history + minimal structured trace) is the current truth. The core decision to use native `DomainChange` records remains unchanged.

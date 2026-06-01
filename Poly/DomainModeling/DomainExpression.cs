@@ -1,15 +1,5 @@
 namespace Poly.DomainModeling;
 
-/// <summary>
-/// Unified expression system for V3 domain modeling.
-/// 
-/// <see cref="DomainExpression"/> is the single expression model used across policies, stage guards,
-/// event property bindings, and effect initializers. It supports property access, parameter references,
-/// navigation into owned structures, existence checks, basic arithmetic, and logical composition.
-/// 
-/// The expression nodes themselves are intentionally lightweight. All resolution, type derivation,
-/// scope validation, data availability analysis, and lowering metadata are the responsibility of analyzers.
-/// </summary>
 public abstract record DomainExpression : DomainObject {
     // Factory helpers for ergonomic construction (builders and tests)
 
@@ -34,7 +24,21 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression Subtract(DomainExpression left, DomainExpression right) =>
         new Subtract(left, right);
 
-    // Logical composition (so policies and guards can be expressed directly with DomainExpression)
+    public static DomainExpression Add(DomainExpression left, DomainExpression right) =>
+        new Add(left, right);
+
+    public static DomainExpression Multiply(DomainExpression left, DomainExpression right) =>
+        new Multiply(left, right);
+
+    public static DomainExpression Divide(DomainExpression left, DomainExpression right) =>
+        new Divide(left, right);
+
+    public static DomainExpression DateOp(DomainExpression date, DomainExpression offset, DateOperationKind kind) =>
+        new DateOperation(date, offset, kind);
+
+    public static DomainExpression RelationshipNav(string relationshipName, DomainExpression targetProperty) =>
+        new RelationshipNavigation(Guard.ThrowIfNullOrEmpty(relationshipName), targetProperty);
+
     public static DomainExpression And(DomainExpression left, DomainExpression right) =>
         new And(left, right);
 
@@ -95,12 +99,49 @@ public sealed record NotExists(DomainExpression Target) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => [Target];
 }
 
-// Minimal operator set — expanded only when real modeling needs appear
 public sealed record Subtract(
     DomainExpression Left,
     DomainExpression Right
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => [Left, Right];
+}
+
+public sealed record Add(
+    DomainExpression Left,
+    DomainExpression Right
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Left, Right];
+}
+
+public sealed record Multiply(
+    DomainExpression Left,
+    DomainExpression Right
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Left, Right];
+}
+
+public sealed record Divide(
+    DomainExpression Left,
+    DomainExpression Right
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Left, Right];
+}
+
+public enum DateOperationKind { AddDays, AddMonths, DiffDays }
+
+public sealed record DateOperation(
+    DomainExpression Date,
+    DomainExpression Offset,
+    DateOperationKind Kind
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Date, Offset];
+}
+
+public sealed record RelationshipNavigation(
+    string RelationshipName,
+    DomainExpression TargetProperty
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [TargetProperty];
 }
 
 // Logical composition nodes

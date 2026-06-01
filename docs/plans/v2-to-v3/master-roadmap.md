@@ -26,7 +26,7 @@
 
 | Phase | Focus | Parallelism Level | Current Status |
 |-------|-------|-------------------|----------------|
-| **Phase 1** | Foundation + Minimal Viable Evolution Layer | High (see workstreams below) | Planning / Early Execution |
+| **Phase 1** | Foundation + Minimal Viable Evolution Layer + Quality & Audit | High (see workstreams below) | Foundation Complete (WS1 done); Now focusing on Trace Quality, Expressiveness Audit, and Real Proofs |
 | **Phase 2** | Analysis Unification + Lowering Parity | Medium-High | Not Started |
 | **Phase 3** | Consumer Migration (MCP + Demos + Tests) — MCP surface actively optimized for model interaction patterns (incremental + fundamental) | High | Not Started |
 | **Phase 4** | Full Expressiveness + Roadblock Resolution | Medium | Not Started |
@@ -42,11 +42,11 @@ These workstreams are structured to allow multiple agents to work concurrently w
 
 | Workstream | File | Owner | Status | Main Dependencies | Primary Deliverable |
 |------------|------|-------|--------|-------------------|---------------------|
-| **WS1 (merged)** | `workstreams/ws1-evolution-applicator-mvp.md` | Grok (orchestrator) | Claimed – In Progress | — | Working applicator + 6–8 concrete `DomainChange` subtypes + NodeId preservation + MVP operations (PersonLifecycle slice) |
-| **WS4** | `workstreams/ws4-trace-and-rollback-ux.md` | TBD | Not Started | WS1 (stable interfaces) | High-quality traces + rollback UX usable by agents + future UI |
-| **WS5** | `workstreams/ws5-proof-on-examples.md` | TBD | Not Started | WS1 (first operations) | PersonLifecycle + ≥1 roadblock fully working through the new layer |
+| **WS1 (merged)** | `workstreams/ws1-evolution-applicator-mvp.md` | Grok (orchestrator) | **Foundation Complete** | — | Working thin evolution layer + MVP operations + NodeId continuity + basic usable traces (see decision 2026-06-phase1-change-representation.md). Phase 1 foundation delivered. |
+| **WS7 (new)** | `workstreams/ws7-v3-expressiveness-audit.md` | Grok (orchestrator) | **Complete** | WS1 foundation | Comprehensive living audit complete (full table, roadblock mappings with Suggested Fixes, Phase 4 prioritization). Orchestrator sign-off issued June 2026. |
+| **WS4** | `workstreams/ws4-trace-and-rollback-ux.md` | Grok (initial kickoff) | **In Progress** | WS1 + WS7 complete | High-quality, agent-useful traces + rollback UX. Initial improvements started (basic timing added, richer descriptions and diagnostics in progress). |
+| **WS5** | `workstreams/ws5-proof-on-examples.md` | Grok | **Complete** | WS1 + WS7 + WS4 | PersonLifecycle + Library Loan Lifecycle both proven end-to-end via evolution layer. Exit criteria met. |
 | **WS6** | `workstreams/ws6-documentation-hygiene.md` | TBD (light support) | In Progress (orchestrator-led) | All | Decision records, roadmap hygiene, AGENTS.md alignment |
-| **WS7 (new)** | `workstreams/ws7-v3-expressiveness-audit.md` | TBD | Not Started | — | Living catalog of V2 concepts vs V3 capability (prevents Phase 4 surprises) |
 
 See the individual files in `workstreams/` for detailed task lists, entry/exit criteria, open questions, and coordination guidance.
 
@@ -70,13 +70,34 @@ See:
 
 **Strategy**: Larger/orchestrator agents decompose work into these micro-tasks. Smaller agents execute the majority of the actual code changes.
 
-## Next Actions (Current Focus – Under Active Ownership)
+## Next Actions (Current Focus – Post WS5 Completion)
 
-1. **WS1 owner (Grok)**: Immediately create the first 8–10 high-quality micro-tasks (starting with concrete `DomainChange` subtypes + applicator skeleton). Personally implement the first 1–2 end-to-end to validate format and unblock smaller agents.
-2. Create the consolidated `ws1-evolution-applicator-mvp.md` and `ws7-v3-expressiveness-audit.md`.
-3. Create the first 2–3 decision records for Phase 1 choices (Change Representation Strategy, NodeId approach).
-4. Exercise the full micro-task → agent-summary → review → plan-update loop at least once.
-5. Update remaining workstream files only as needed for interface coordination with the merged WS1.
+**Phase 1 is substantially complete. Remaining Phase 1 items are hygiene and polish.**
+
+Phase 1 achievements:
+- **WS1 Foundation**: Thin evolution layer on immutable core, NodeId continuity, MVP operations, basic traces ✅
+- **WS7 Expressiveness Audit**: Comprehensive V2↔V3 gap catalog, roadblock mappings, Phase 4 prioritization ✅
+- **WS5 Proofs**: PersonLifecycle + Library Loan Lifecycle both proven end-to-end (1031 tests) ✅
+- **Incremental Analysis Muscle**: `GetAffectedNodes` returns real nodes for all 40+ `DomainChange` subtypes, wired into `Apply(..., priorAnalysis)` ✅
+- **DomainChange Coverage Expansion**: 5 new subtypes (SetDomainName, Relationship property management, Property constraint management) + 6 tests ✅
+
+Remaining Phase 1 polish:
+1. **WS4 Trace Quality** — Serviceable per WS5 proofs. Remaining: ensure agents get excellent output from the unified diagnostic stream. Lower priority.
+2. **WS6 Roadmap Hygiene** — Keep statuses current, orchestrator → agent-summary → plan-update loop. (Active now.)
+3. **Decision Record Hygiene** — Keep change representation decision current.
+
+**Phase 2 (Analysis Unification + Lowering Parity) is the next major focus.**
+- Unify the V2 and V3 analysis surfaces on the shared Syntax.Analysis infrastructure.
+- Achieve lowering parity for the core DomainExpression → C# compilation path (LinqExpressions + CSharpGenerator).
+- Phase 2 workstream file now exists at `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`.
+
+**Phase 4 (Full Expressiveness) preparation now active.**
+- Dynamic calculation (arithmetic + DateOperation) and read-only RelationshipNavigation for policy rules — documented in `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`.
+- Cross-entity mutation deliberately excluded: event/subscription pattern preserves ownership boundaries.
+- The WS7 audit provides the comprehensive catalog.
+- Phase 4 can use the Library domain proof test as its primary acceptance test suite.
+- Design doc supersedes `docs/decisions/2026-06-phase4-cross-entity-mutation-and-dynamic-calculation.md`.
+- Implementation priority order: 4a (dynamic calc) → 4b (read-only RelationshipNavigation).
 
 ---
 
@@ -91,12 +112,12 @@ See:
 | Agent summary mechanism + template exists | ✅ | `agent-summaries/` |
 | Micro-task template + examples exist | ✅ Good progress | 8+ micro-tasks exist; new batch being added by WS1 owner |
 | All Phase 1 workstream files exist | ✅ Now | Consolidated WS1 + new WS7 created under ownership |
-| First batch of concrete micro-tasks ready for small agents | ⚠️ In Progress | WS1 owner creating first 8–10 now (focus on applicator + changes) |
+| First batch of concrete micro-tasks ready for small agents | ✅ Good progress (WS1 era) | New micro-tasks now being created for post-WS1 priorities (WS7 audit, trace quality, real proofs) |
 | Clear starting instructions for both orchestrators and executors | ✅ | Updated in this file + ownership plan |
 | AGENTS.md + decisions properly reference this plan | ✅ | Strong links exist |
 | First Orchestrator has claimed a workstream | ✅ | Grok claimed merged WS1 (Evolution Layer Applicator + MVP Ops) |
 
-**Bottom line**: The *system* is ready. Under current ownership we are closing the "content + ownership" gap immediately rather than waiting for organic progress. The merged WS1 structure reflects ground truth (skeleton exists; the real work is the applicator + concrete operations + NodeId).
+**Bottom line (June 2026)**: Phase 1 foundation complete. WS5 proofs pass (1031 tests). Incremental analysis and DomainChange coverage expansion delivered. Phase 2 (Analysis Unification + Lowering Parity) planning underway. Phase 4 (Full Expressiveness) design work started. Remaining Phase 1: WS4 trace polish + WS6 roadmap hygiene.
 
 **What is solid right now:**
 - Clear overall strategy and 5 phases
@@ -116,11 +137,13 @@ The Evolution layer must support a full real-time visual authoring experience wh
 
 This requirement is a first-class driver starting in Phase 1.
 
-**What still needs work (being actively closed by WS1 owner):**
-- First 8–10 high-quality micro-tasks for the merged WS1 (in progress)
-- Consolidated workstream file + WS7 expressiveness audit (in progress)
-- First decision records for Change Representation and NodeId strategy
-- One full micro-task → summary → review → plan-update cycle exercised
+**What still needs work (Phase 1 → Phase 2 transition):**
+- WS4 Trace Quality — Lean model done. Remaining: ensure agents get excellent output.
+- WS6 Roadmap Hygiene — Active now. Keep orchestrator → agent-summary → plan-update loop exercised.
+- WS8 Phase 2 (Analysis Unification + Lowering Parity) — Workstream file created, execution starts after Phase 1 wrap.
+- Phase 4 design — Dynamic calculation + read-only RelationshipNavigation design complete (decision record `2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`, supersedes `2026-06-phase4-cross-entity-mutation-and-dynamic-calculation.md`).
+- Decision records — New records needed for Phase 2/4 design decisions.
+- Further DomainChange coverage — Remaining gaps (DomainType constraints, Event properties, Relationship shape, Property type changes).
 
 See `00-bootstrap-and-ignition-plan.md` for the ignition sequence. The ownership plan (session plan.md) now drives the first 2–3 weeks of execution.
 
@@ -154,8 +177,20 @@ These notes (based on examining the actual V2 and V3 code) were reviewed during 
 - WS7 (V3 Expressiveness Audit) created for Phase 1.
 - Master roadmap table, statuses, and "Immediate Starting Point" updated to reflect reality and active ownership.
 - WS1 claimed by Grok as orchestrator.
+- **WS1 completed** (all exit criteria met, decision record finalized, traces with per-step affected NodeIds, strong PersonLifecycle proof via evolution layer).
 
 Future notes should be added as new dated sections. The original detailed recommendations (merge, fold NodeId, add WS7, update statuses) are now historical and have been executed.
+
+**Phase 1 Re-evaluation (June 2026)**: After WS1 delivered the thin evolution layer foundation, the plan was re-evaluated.
+
+**WS7 Complete (June 2026)**: The V3 Expressiveness Audit is now done (comprehensive table, roadblock mappings with Suggested Fixes, Phase 4 prioritization, orchestrator sign-off). This directly de-risks Phase 4 as intended per the immutable-core decision.
+
+Key shift post-WS1/WS7:
+- WS1 = Foundation Complete.
+- WS7 = Highest-leverage de-risking item — now Complete.
+- Remaining Phase 1: WS4 (Trace Quality for agents), WS5 (Real proofs on documented scenarios + roadblocks with excellent traces), incremental analysis, and hygiene.
+
+This re-prioritization serves the neurosymbolic platform vision and real-time UI requirements. WS4 and WS5 can now proceed with full information.
 
 ### 1. Merge WS1 and WS3 — the skeleton exists, the gap is the applicator
 

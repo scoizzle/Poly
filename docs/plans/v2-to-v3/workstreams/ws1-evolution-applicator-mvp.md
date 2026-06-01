@@ -3,7 +3,7 @@
 **Phase**: 1  
 **Priority**: Critical Path (highest leverage)  
 **Owner**: Grok (primary orchestrator)  
-**Status**: Claimed – In Progress  
+**Status**: Foundation Complete (MVP operations + core applicator + basic traces delivered). Phase 1 continues with quality/audit/proof focus per re-evaluated master roadmap (June 2026).  
 **Last Updated**: 2026-06 (under active ownership)
 
 ## Goal
@@ -137,3 +137,16 @@ Additions to this list require explicit justification against a real first consu
 ---
 
 **Status**: This consolidated workstream is now the single source of truth for Phase 1 critical path execution under active ownership. All prior separate WS1/WS3/WS2 files are superseded for execution purposes.
+
+**Re-evaluation Note (June 2026)**: WS1 delivered the critical foundation (thin evolution layer on immutable core, NodeId continuity, MVP operations, basic usable traces). It is treated as complete for handoff purposes, but Phase 1 priorities have been re-evaluated (see master-roadmap.md).
+
+Remaining Phase 1 work has shifted to:
+1. WS7 Expressiveness Audit (highest leverage)
+2. Trace quality for agents (WS4)
+3. Real proofs on documented scenarios + roadblocks (WS5)
+4. Incremental analysis support
+5. Roadmap hygiene
+
+The original WS1 exit criteria were met for the foundation layer. Downstream workstreams now drive the rest of Phase 1.
+
+Owner: Grok (orchestrator).

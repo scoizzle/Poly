@@ -46,14 +46,12 @@ public sealed record AddEntityChange(
     internal override void ApplyTo(DomainMutationContext context) {
         var newEntity = new Entity(Name, InitialProperties, [], [], [], []);
         context.Types.Add(newEntity);
+        context.ModifiedNodes.Add(newEntity);
     }
 
-    internal override string GetDescription() => $"AddEntity({Name})";
+    internal override string GetDescription() => $"Add Entity '{Name}'";
 }
 
-/// <summary>
-/// Removes an Entity by name (MVP scope uses name; stable NodeId resolution comes later).
-/// </summary>
 public sealed record RemoveEntityChange(
     string Name
 ) : DomainChange {
@@ -72,35 +70,20 @@ public sealed record AddPropertyToEntityChange(
     Property Property
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newProps = e.Properties.Append(Property).ToList();
-                context.Types[i] = e with { Properties = newProps };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with { Properties = e.Properties.Append(Property).ToList() });
     }
 
-    internal override string GetDescription() => $"AddProperty({EntityName}.{Property.Name})";
+    internal override string GetDescription() => $"Add property '{Property.Name}' ({Property.Type.TypeName}) to Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Removes a property from an Entity by name.
-/// </summary>
 public sealed record RemovePropertyFromEntityChange(
     string EntityName,
     string PropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newProps = e.Properties
-                    .Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal))
-                    .ToList();
-                context.Types[i] = e with { Properties = newProps };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with {
+            Properties = e.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
+        });
     }
 
     internal override string GetDescription() => $"RemoveProperty({EntityName}.{PropertyName})";
@@ -111,82 +94,52 @@ public sealed record RemovePropertyFromEntityChange(
 /// </summary>
 public sealed record AddStageChange(
     string EntityName,
-    string Name
+    string Name,
+    StageReference? Parent = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newStage = new Stage(Name, null, [], [], [], []);
-                var newStages = e.Stages.Append(newStage).ToList();
-                context.Types[i] = e with { Stages = newStages };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with {
+            Stages = e.Stages.Append(new Stage(Name, Parent, [], [], [], [])).ToList()
+        });
     }
 
-    internal override string GetDescription() => $"AddStage({EntityName}.{Name})";
+    internal override string GetDescription() => $"Add Stage '{Name}' to Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Removes a Stage from an Entity by name.
-/// </summary>
 public sealed record RemoveStageChange(
     string EntityName,
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newStages = e.Stages
-                    .Where(s => !string.Equals(s.Name, Name, StringComparison.Ordinal))
-                    .ToList();
-                context.Types[i] = e with { Stages = newStages };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with {
+            Stages = e.Stages.Where(s => !string.Equals(s.Name, Name, StringComparison.Ordinal)).ToList()
+        });
     }
 
     internal override string GetDescription() => $"RemoveStage({EntityName}.{Name})";
 }
 
-/// <summary>
-/// Adds a minimal Action to an Entity (MVP: empty parameters, effects, policies, result).
-/// </summary>
 public sealed record AddActionChange(
     string EntityName,
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newAction = new Action(Name, new InvocationResult([]), [], [], []);
-                var newActions = e.Actions.Append(newAction).ToList();
-                context.Types[i] = e with { Actions = newActions };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with {
+            Actions = e.Actions.Append(new Action(Name, new InvocationResult([]), [], [], [])).ToList()
+        });
     }
 
-    internal override string GetDescription() => $"AddAction({EntityName}.{Name})";
+    internal override string GetDescription() => $"Add Action '{Name}' to Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Removes an Action from an Entity by name.
-/// </summary>
 public sealed record RemoveActionChange(
     string EntityName,
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newActions = e.Actions
-                    .Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal))
-                    .ToList();
-                context.Types[i] = e with { Actions = newActions };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with {
+            Actions = e.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
+        });
     }
 
     internal override string GetDescription() => $"RemoveAction({EntityName}.{Name})";
@@ -201,40 +154,20 @@ public sealed record AddEffectToActionChange(
     Effect Effect
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedActions = e.Actions.Select(a => {
-                    if (string.Equals(a.Name, ActionName, StringComparison.Ordinal)) {
-                        var newEffects = a.Effects.Append(Effect).ToList();
-                        return a with { Effects = newEffects };
-                    }
-                    return a;
-                }).ToList();
-
-                context.Types[i] = e with { Actions = updatedActions };
-                break;
-            }
-        }
+        context.UpdateAction(EntityName, ActionName, a => a with {
+            Effects = a.Effects.Append(Effect).ToList()
+        }, searchStages: true);
     }
 
-    internal override string GetDescription() => $"AddEffectToAction({EntityName}.{ActionName})";
+    internal override string GetDescription() => $"Add effect to Action '{ActionName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Adds a Policy to an Entity.
-/// </summary>
 public sealed record AddPolicyToEntityChange(
     string EntityName,
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newPolicies = e.Policies.Append(Policy).ToList();
-                context.Types[i] = e with { Policies = newPolicies };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with { Policies = e.Policies.Append(Policy).ToList() });
     }
 
     internal override string GetDescription() => $"AddPolicyToEntity({EntityName}.{Policy.Name})";
@@ -249,70 +182,34 @@ public sealed record AddPolicyToStageChange(
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedStages = e.Stages.Select(s => {
-                    if (string.Equals(s.Name, StageName, StringComparison.Ordinal)) {
-                        var newPolicies = s.Policies.Append(Policy).ToList();
-                        return s with { Policies = newPolicies };
-                    }
-                    return s;
-                }).ToList();
-
-                context.Types[i] = e with { Stages = updatedStages };
-                break;
-            }
-        }
+        context.UpdateStage(EntityName, StageName, s => s with { Policies = s.Policies.Append(Policy).ToList() });
     }
 
-    internal override string GetDescription() => $"AddPolicyToStage({EntityName}.{StageName}.{Policy.Name})";
+    internal override string GetDescription() => $"Add Policy '{Policy.Name}' to Stage '{StageName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Adds a Policy to an Action on an Entity.
-/// </summary>
 public sealed record AddPolicyToActionChange(
     string EntityName,
     string ActionName,
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedActions = e.Actions.Select(a => {
-                    if (string.Equals(a.Name, ActionName, StringComparison.Ordinal)) {
-                        var newPolicies = a.Policies.Append(Policy).ToList();
-                        return a with { Policies = newPolicies };
-                    }
-                    return a;
-                }).ToList();
-
-                context.Types[i] = e with { Actions = updatedActions };
-                break;
-            }
-        }
+        context.UpdateAction(EntityName, ActionName, a => a with {
+            Policies = a.Policies.Append(Policy).ToList()
+        }, searchStages: true);
     }
 
-    internal override string GetDescription() => $"AddPolicyToAction({EntityName}.{ActionName}.{Policy.Name})";
+    internal override string GetDescription() => $"Add Policy '{Policy.Name}' to Action '{ActionName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Removes a Policy from an Entity by name.
-/// </summary>
 public sealed record RemovePolicyFromEntityChange(
     string EntityName,
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newPolicies = e.Policies
-                    .Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal))
-                    .ToList();
-                context.Types[i] = e with { Policies = newPolicies };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with {
+            Policies = e.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
+        });
     }
 
     internal override string GetDescription() => $"RemovePolicyFromEntity({EntityName}.{PolicyName})";
@@ -327,144 +224,70 @@ public sealed record RemovePolicyFromStageChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedStages = e.Stages.Select(s => {
-                    if (string.Equals(s.Name, StageName, StringComparison.Ordinal)) {
-                        var newPolicies = s.Policies
-                            .Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal))
-                            .ToList();
-                        return s with { Policies = newPolicies };
-                    }
-                    return s;
-                }).ToList();
-
-                context.Types[i] = e with { Stages = updatedStages };
-                break;
-            }
-        }
+        context.UpdateStage(EntityName, StageName, s => s with {
+            Policies = s.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
+        });
     }
 
     internal override string GetDescription() => $"RemovePolicyFromStage({EntityName}.{StageName}.{PolicyName})";
 }
 
-/// <summary>
-/// Removes a Policy from an Action on an Entity.
-/// </summary>
 public sealed record RemovePolicyFromActionChange(
     string EntityName,
     string ActionName,
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedActions = e.Actions.Select(a => {
-                    if (string.Equals(a.Name, ActionName, StringComparison.Ordinal)) {
-                        var newPolicies = a.Policies
-                            .Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal))
-                            .ToList();
-                        return a with { Policies = newPolicies };
-                    }
-                    return a;
-                }).ToList();
-
-                context.Types[i] = e with { Actions = updatedActions };
-                break;
-            }
-        }
+        context.UpdateAction(EntityName, ActionName, a => a with {
+            Policies = a.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
+        }, searchStages: true);
     }
 
-    internal override string GetDescription() => $"RemovePolicyFromAction({EntityName}.{ActionName}.{PolicyName})";
+    internal override string GetDescription() => $"Remove Policy '{PolicyName}' from Action '{ActionName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Adds a parameter to an Action.
-/// </summary>
 public sealed record AddParameterToActionChange(
     string EntityName,
     string ActionName,
     Property Parameter
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedActions = e.Actions.Select(a => {
-                    if (string.Equals(a.Name, ActionName, StringComparison.Ordinal)) {
-                        var newParams = a.Parameters.Append(Parameter).ToList();
-                        return a with { Parameters = newParams };
-                    }
-                    return a;
-                }).ToList();
-
-                context.Types[i] = e with { Actions = updatedActions };
-                break;
-            }
-        }
+        context.UpdateAction(EntityName, ActionName, a => a with {
+            Parameters = a.Parameters.Append(Parameter).ToList()
+        }, searchStages: true);
     }
 
-    internal override string GetDescription() => $"AddParameterToAction({EntityName}.{ActionName}.{Parameter.Name})";
+    internal override string GetDescription() => $"Add parameter '{Parameter.Name}' to Action '{ActionName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Adds an effect to be executed when entering a Stage.
-/// </summary>
 public sealed record AddOnEntryEffectToStageChange(
     string EntityName,
     string StageName,
     Effect Effect
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedStages = e.Stages.Select(s => {
-                    if (string.Equals(s.Name, StageName, StringComparison.Ordinal)) {
-                        var newEffects = s.OnEntryEffects.Append(Effect).ToList();
-                        return s with { OnEntryEffects = newEffects };
-                    }
-                    return s;
-                }).ToList();
-
-                context.Types[i] = e with { Stages = updatedStages };
-                break;
-            }
-        }
+        context.UpdateStage(EntityName, StageName, s => s with {
+            OnEntryEffects = s.OnEntryEffects.Append(Effect).ToList()
+        });
     }
 
-    internal override string GetDescription() => $"AddOnEntryEffectToStage({EntityName}.{StageName})";
+    internal override string GetDescription() => $"Add OnEntry effect to Stage '{StageName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Adds an effect to be executed when exiting a Stage.
-/// </summary>
 public sealed record AddOnExitEffectToStageChange(
     string EntityName,
     string StageName,
     Effect Effect
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedStages = e.Stages.Select(s => {
-                    if (string.Equals(s.Name, StageName, StringComparison.Ordinal)) {
-                        var newEffects = s.OnExitEffects.Append(Effect).ToList();
-                        return s with { OnExitEffects = newEffects };
-                    }
-                    return s;
-                }).ToList();
-
-                context.Types[i] = e with { Stages = updatedStages };
-                break;
-            }
-        }
+        context.UpdateStage(EntityName, StageName, s => s with {
+            OnExitEffects = s.OnExitEffects.Append(Effect).ToList()
+        });
     }
 
     internal override string GetDescription() => $"AddOnExitEffectToStage({EntityName}.{StageName})";
 }
 
-/// <summary>
-/// Adds a Relationship between two entities.
-/// </summary>
 public sealed record AddRelationshipChange(
     string Name,
     DomainTypeReference Source,
@@ -475,14 +298,12 @@ public sealed record AddRelationshipChange(
     internal override void ApplyTo(DomainMutationContext context) {
         var newRel = new Relationship(Name, Source, Target, Cardinality, Properties);
         context.Relationships.Add(newRel);
+        context.ModifiedNodes.Add(newRel);
     }
 
     internal override string GetDescription() => $"AddRelationship({Name})";
 }
 
-/// <summary>
-/// Removes a Relationship by name.
-/// </summary>
 public sealed record RemoveRelationshipChange(
     string Name
 ) : DomainChange {
@@ -493,156 +314,74 @@ public sealed record RemoveRelationshipChange(
     internal override string GetDescription() => $"RemoveRelationship({Name})";
 }
 
-/// <summary>
-/// Removes a parameter from an Action by name.
-/// </summary>
 public sealed record RemoveParameterFromActionChange(
     string EntityName,
     string ActionName,
     string ParameterName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedActions = e.Actions.Select(a => {
-                    if (string.Equals(a.Name, ActionName, StringComparison.Ordinal)) {
-                        var newParams = a.Parameters
-                            .Where(p => !string.Equals(p.Name, ParameterName, StringComparison.Ordinal))
-                            .ToList();
-                        return a with { Parameters = newParams };
-                    }
-                    return a;
-                }).ToList();
-
-                context.Types[i] = e with { Actions = updatedActions };
-                break;
-            }
-        }
+        context.UpdateAction(EntityName, ActionName, a => a with {
+            Parameters = a.Parameters.Where(p => !string.Equals(p.Name, ParameterName, StringComparison.Ordinal)).ToList()
+        }, searchStages: true);
     }
 
-    internal override string GetDescription() => $"RemoveParameterFromAction({EntityName}.{ActionName}.{ParameterName})";
+    internal override string GetDescription() => $"Remove parameter '{ParameterName}' from Action '{ActionName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Removes an effect from an Action (matches by reference or simple equality for MVP).
-/// </summary>
 public sealed record RemoveEffectFromActionChange(
     string EntityName,
     string ActionName,
     Effect EffectToRemove
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedActions = e.Actions.Select(a => {
-                    if (string.Equals(a.Name, ActionName, StringComparison.Ordinal)) {
-                        var newEffects = a.Effects
-                            .Where(eff => !ReferenceEquals(eff, EffectToRemove))
-                            .ToList();
-                        return a with { Effects = newEffects };
-                    }
-                    return a;
-                }).ToList();
-
-                context.Types[i] = e with { Actions = updatedActions };
-                break;
-            }
-        }
+        context.UpdateAction(EntityName, ActionName, a => a with {
+            Effects = a.Effects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
+        }, searchStages: true);
     }
 
-    internal override string GetDescription() => $"RemoveEffectFromAction({EntityName}.{ActionName})";
+    internal override string GetDescription() => $"Remove effect from Action '{ActionName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Removes an OnEntry effect from a Stage.
-/// </summary>
 public sealed record RemoveOnEntryEffectFromStageChange(
     string EntityName,
     string StageName,
     Effect EffectToRemove
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedStages = e.Stages.Select(s => {
-                    if (string.Equals(s.Name, StageName, StringComparison.Ordinal)) {
-                        var newEffects = s.OnEntryEffects
-                            .Where(eff => !ReferenceEquals(eff, EffectToRemove))
-                            .ToList();
-                        return s with { OnEntryEffects = newEffects };
-                    }
-                    return s;
-                }).ToList();
-
-                context.Types[i] = e with { Stages = updatedStages };
-                break;
-            }
-        }
+        context.UpdateStage(EntityName, StageName, s => s with {
+            OnEntryEffects = s.OnEntryEffects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
+        });
     }
 
     internal override string GetDescription() => $"RemoveOnEntryEffectFromStage({EntityName}.{StageName})";
 }
 
-/// <summary>
-/// Removes an OnExit effect from a Stage.
-/// </summary>
 public sealed record RemoveOnExitEffectFromStageChange(
     string EntityName,
     string StageName,
     Effect EffectToRemove
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedStages = e.Stages.Select(s => {
-                    if (string.Equals(s.Name, StageName, StringComparison.Ordinal)) {
-                        var newEffects = s.OnExitEffects
-                            .Where(eff => !ReferenceEquals(eff, EffectToRemove))
-                            .ToList();
-                        return s with { OnExitEffects = newEffects };
-                    }
-                    return s;
-                }).ToList();
-
-                context.Types[i] = e with { Stages = updatedStages };
-                break;
-            }
-        }
+        context.UpdateStage(EntityName, StageName, s => s with {
+            OnExitEffects = s.OnExitEffects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
+        });
     }
 
     internal override string GetDescription() => $"RemoveOnExitEffectFromStage({EntityName}.{StageName})";
 }
 
-/// <summary>
-/// Sets (or replaces) the InvocationResult for an Action.
-/// </summary>
 public sealed record SetActionResultChange(
     string EntityName,
     string ActionName,
     InvocationResult Result
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var updatedActions = e.Actions.Select(a => {
-                    if (string.Equals(a.Name, ActionName, StringComparison.Ordinal)) {
-                        return a with { Result = Result };
-                    }
-                    return a;
-                }).ToList();
-
-                context.Types[i] = e with { Actions = updatedActions };
-                break;
-            }
-        }
+        context.UpdateAction(EntityName, ActionName, a => a with { Result = Result }, searchStages: true);
     }
 
-    internal override string GetDescription() => $"SetActionResult({EntityName}.{ActionName})";
+    internal override string GetDescription() => $"Set result for Action '{ActionName}' on Entity '{EntityName}'";
 }
 
-/// <summary>
-/// Adds a ValueType (owned document / composite value) to the domain.
-/// </summary>
 public sealed record AddValueTypeChange(
     string Name,
     IReadOnlyList<Property> Properties
@@ -650,14 +389,12 @@ public sealed record AddValueTypeChange(
     internal override void ApplyTo(DomainMutationContext context) {
         var newValueType = new ValueType(Name, Properties, []);
         context.Types.Add(newValueType);
+        context.ModifiedNodes.Add(newValueType);
     }
 
     internal override string GetDescription() => $"AddValueType({Name})";
 }
 
-/// <summary>
-/// Removes a ValueType by name.
-/// </summary>
 public sealed record RemoveValueTypeChange(
     string Name
 ) : DomainChange {
@@ -668,9 +405,6 @@ public sealed record RemoveValueTypeChange(
     internal override string GetDescription() => $"RemoveValueType({Name})";
 }
 
-/// <summary>
-/// Adds an Event type to the domain.
-/// </summary>
 public sealed record AddEventChange(
     string Name,
     IReadOnlyList<Property> Properties
@@ -678,14 +412,12 @@ public sealed record AddEventChange(
     internal override void ApplyTo(DomainMutationContext context) {
         var newEvent = new Event(Name, Properties, []);
         context.Types.Add(newEvent);
+        context.ModifiedNodes.Add(newEvent);
     }
 
     internal override string GetDescription() => $"AddEvent({Name})";
 }
 
-/// <summary>
-/// Removes an Event by name.
-/// </summary>
 public sealed record RemoveEventChange(
     string Name
 ) : DomainChange {
@@ -696,44 +428,251 @@ public sealed record RemoveEventChange(
     internal override string GetDescription() => $"RemoveEvent({Name})";
 }
 
-/// <summary>
-/// Adds a reference to an Event on an Entity.
-/// </summary>
 public sealed record AddEventReferenceToEntityChange(
     string EntityName,
     DomainTypeReference EventReference
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newEvents = e.Events.Append(EventReference).ToList();
-                context.Types[i] = e with { Events = newEvents };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with { Events = e.Events.Append(EventReference).ToList() });
     }
 
     internal override string GetDescription() => $"AddEventReferenceToEntity({EntityName}.{EventReference.TypeName})";
 }
 
-/// <summary>
-/// Removes an Event reference from an Entity by name.
-/// </summary>
 public sealed record RemoveEventReferenceFromEntityChange(
     string EntityName,
     string EventName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        for (int i = 0; i < context.Types.Count; i++) {
-            if (context.Types[i] is Entity e && string.Equals(e.Name, EntityName, StringComparison.Ordinal)) {
-                var newEvents = e.Events
-                    .Where(er => !string.Equals(er.TypeName, EventName, StringComparison.Ordinal))
-                    .ToList();
-                context.Types[i] = e with { Events = newEvents };
-                break;
-            }
-        }
+        context.UpdateEntity(EntityName, e => e with {
+            Events = e.Events.Where(er => !string.Equals(er.TypeName, EventName, StringComparison.Ordinal)).ToList()
+        });
     }
 
     internal override string GetDescription() => $"RemoveEventReferenceFromEntity({EntityName}.{EventName})";
+}
+
+/// <summary>
+/// Adds a PrimitiveType to the domain.
+/// </summary>
+public sealed record AddPrimitiveTypeChange(
+    string Name,
+    TypeCategory TypeCategory,
+    IReadOnlyList<Constraint> Constraints
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var newPrimitive = new PrimitiveType(Name, TypeCategory, Constraints);
+        context.Types.Add(newPrimitive);
+        context.ModifiedNodes.Add(newPrimitive);
+    }
+
+    internal override string GetDescription() => $"Add PrimitiveType '{Name}' ({TypeCategory})";
+}
+
+public sealed record RemovePrimitiveTypeChange(
+    string Name
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.Types.RemoveAll(t => t is PrimitiveType p && string.Equals(p.Name, Name, StringComparison.Ordinal));
+    }
+
+    internal override string GetDescription() => $"Remove PrimitiveType '{Name}'";
+}
+
+public sealed record AddActionToStageChange(
+    string EntityName,
+    string StageName,
+    string Name
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateStage(EntityName, StageName, s => s with {
+            Actions = s.Actions.Append(new Action(Name, new InvocationResult([]), [], [], [])).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Add Action '{Name}' to Stage '{StageName}' on Entity '{EntityName}'";
+}
+
+public sealed record RemoveActionFromStageChange(
+    string EntityName,
+    string StageName,
+    string Name
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateStage(EntityName, StageName, s => s with {
+            Actions = s.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Remove Action '{Name}' from Stage '{StageName}' on Entity '{EntityName}'";
+}
+
+/// <summary>
+/// Sets the name of the Domain.
+/// </summary>
+public sealed record SetDomainNameChange(
+    string Name
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.DomainName = Name;
+        // Domain root itself is not in ModifiedNodes (the root is replaced by ToDomain)
+    }
+
+    internal override string GetDescription() => $"Set domain name to '{Name}'";
+}
+
+/// <summary>
+/// Adds a Property to a Relationship.
+/// </summary>
+public sealed record AddPropertyToRelationshipChange(
+    string RelationshipName,
+    Property Property
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateRelationship(RelationshipName, r => r with {
+            Properties = r.Properties.Append(Property).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Add property '{Property.Name}' to Relationship '{RelationshipName}'";
+}
+
+public sealed record RemovePropertyFromRelationshipChange(
+    string RelationshipName,
+    string PropertyName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateRelationship(RelationshipName, r => r with {
+            Properties = r.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Remove property '{PropertyName}' from Relationship '{RelationshipName}'";
+}
+
+/// <summary>
+/// Adds a Constraint to an Entity's Property by name.
+/// </summary>
+public sealed record AddConstraintToPropertyChange(
+    string EntityName,
+    string PropertyName,
+    Constraint Constraint
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateProperty(EntityName, PropertyName, p => p with {
+            Constraints = p.Constraints.Append(Constraint).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Add constraint {Constraint.GetType().Name} to property '{PropertyName}' on Entity '{EntityName}'";
+}
+
+public sealed record RemoveConstraintFromPropertyChange(
+    string EntityName,
+    string PropertyName,
+    Constraint Constraint
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateProperty(EntityName, PropertyName, p => p with {
+            Constraints = p.Constraints.Where(c => !ReferenceEquals(c, Constraint)).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Remove constraint from property '{PropertyName}' on Entity '{EntityName}'";
+}
+
+/// <summary>
+/// Adds a Constraint to a DomainType (Entity, ValueType, Event, PrimitiveType).
+/// </summary>
+public sealed record AddConstraintToDomainTypeChange(
+    string TypeName,
+    Constraint Constraint
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateType(TypeName, t => t with { Constraints = t.Constraints.Append(Constraint).ToList() });
+    }
+
+    internal override string GetDescription() => $"Add constraint {Constraint.GetType().Name} to type '{TypeName}'";
+}
+
+public sealed record RemoveConstraintFromDomainTypeChange(
+    string TypeName,
+    Constraint Constraint
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateType(TypeName, t => t with {
+            Constraints = t.Constraints.Where(c => !ReferenceEquals(c, Constraint)).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Remove constraint from type '{TypeName}'";
+}
+
+public sealed record AddPropertyToEventChange(
+    string EventName,
+    Property Property
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateType(EventName, t => t with { Properties = t.Properties.Append(Property).ToList() });
+    }
+
+    internal override string GetDescription() => $"Add property '{Property.Name}' to Event '{EventName}'";
+}
+
+public sealed record RemovePropertyFromEventChange(
+    string EventName,
+    string PropertyName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateType(EventName, t => t with {
+            Properties = t.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
+        });
+    }
+
+    internal override string GetDescription() => $"Remove property '{PropertyName}' from Event '{EventName}'";
+}
+
+public sealed record ChangePropertyTypeChange(
+    string EntityName,
+    string PropertyName,
+    DomainTypeReference NewType
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateProperty(EntityName, PropertyName, p => p with { Type = NewType });
+    }
+
+    internal override string GetDescription() => $"Change property '{PropertyName}' type on Entity '{EntityName}'";
+}
+
+public sealed record SetRelationshipShapeChange(
+    string RelationshipName,
+    DomainTypeReference? NewSource = null,
+    DomainTypeReference? NewTarget = null,
+    RelationshipCardinality? NewCardinality = null
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateRelationship(RelationshipName, r => r with {
+            Source = NewSource ?? r.Source,
+            Target = NewTarget ?? r.Target,
+            Cardinality = NewCardinality ?? r.Cardinality
+        });
+    }
+
+    internal override string GetDescription() => $"Update relationship shape for '{RelationshipName}'";
+}
+
+/// <summary>
+/// Changes the TypeCategory of a PrimitiveType.
+/// </summary>
+public sealed record SetPrimitiveTypeCategoryChange(
+    string TypeName,
+    TypeCategory NewCategory
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.UpdateType(TypeName, t => t is PrimitiveType pt
+            ? pt with { TypeCategory = NewCategory }
+            : t);
+    }
+
+    internal override string GetDescription() => $"Set primitive type '{TypeName}' category to {NewCategory}";
 }

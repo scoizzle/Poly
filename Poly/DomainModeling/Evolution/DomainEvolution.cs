@@ -30,15 +30,39 @@ public sealed class DomainEvolution {
     /// result with the new root or a rolled-back result containing the original root + diagnostics.
     /// </summary>
     public EvolutionResult Apply(IReadOnlyList<DomainChange> changes, AnalysisResult? priorAnalysis = null) {
-        Domain proposed = ApplyChanges(_current, changes);
+        var start = DateTime.UtcNow;
+
+        var proposed = ApplyChanges(_current, changes);
 
         var analysis = priorAnalysis is null
             ? Analyze(proposed)
-            : Analyze(proposed, priorAnalysis, GetAffectedNodes(changes));
+            : Analyze(proposed, priorAnalysis, GetAffectedNodes(proposed, changes));
+
+        // Integrate change history as first-class Information diagnostics *immediately*
+        // after analysis, before any access to .Diagnostics. This ensures the EVOLUTION_STEP
+        // infos are present in the materialized diagnostic list for both success and rejection paths.
+        // This is the unified model: step history lives in the standard diagnostic stream.
+        {
+            var diagnosticsDict = analysis.GetDiagnosticsDictionary();
+            foreach (var change in changes) {
+                var infoDiag = new Diagnostic(
+                    proposed,
+                    DiagnosticSeverity.Information,
+                    change.GetDescription(),
+                    "EVOLUTION_STEP");
+
+                if (!diagnosticsDict.TryGetValue(proposed.Id, out var bucket)) {
+                    bucket = new List<Diagnostic>();
+                    diagnosticsDict[proposed.Id] = bucket;
+                }
+                bucket.Add(infoDiag);
+            }
+        }
 
         var hasErrors = analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
         var hasStructuralFailure = analysis.HasStructuralFailure;
-        var trace = BuildTrace(changes, hasErrors || hasStructuralFailure, analysis);
+        var duration = DateTime.UtcNow - start;
+        var trace = BuildTrace(changes, hasErrors || hasStructuralFailure, analysis, duration);
 
         // A structural failure means the model is invalid at a fundamental level.
         // Per current design, this is treated as a hard rejection.
@@ -76,26 +100,89 @@ public sealed class DomainEvolution {
         return context.ToDomain();
     }
 
-    private IReadOnlyList<Node> GetAffectedNodes(IReadOnlyList<DomainChange> changes) {
-        // MVP: return empty for now. Full population (yielding the actual modified Node instances)
-        // can be added once we have richer change handling and need true incremental analysis.
-        // The analysis gate still runs correctly (full or prior+empty).
-        return Array.Empty<Node>();
+    private IReadOnlyList<Node> GetAffectedNodes(Domain proposed, IReadOnlyList<DomainChange> changes) {
+        var nodes = new List<Node>();
+
+        foreach (var change in changes) {
+            switch (change) {
+                case AddEntityChange c: AddType(c.Name); break;
+                case RemoveEntityChange c: break; // removed — not in proposed
+                case AddPropertyToEntityChange c: AddEntity(c.EntityName); break;
+                case RemovePropertyFromEntityChange c: AddEntity(c.EntityName); break;
+                case AddStageChange c: AddEntity(c.EntityName); break;
+                case RemoveStageChange c: AddEntity(c.EntityName); break;
+                case AddActionChange c: AddEntity(c.EntityName); break;
+                case RemoveActionChange c: AddEntity(c.EntityName); break;
+                case AddActionToStageChange c: AddEntity(c.EntityName); break;
+                case RemoveActionFromStageChange c: AddEntity(c.EntityName); break;
+                case AddEffectToActionChange c: AddEntity(c.EntityName); break;
+                case RemoveEffectFromActionChange c: AddEntity(c.EntityName); break;
+                case AddPolicyToEntityChange c: AddEntity(c.EntityName); break;
+                case RemovePolicyFromEntityChange c: AddEntity(c.EntityName); break;
+                case AddPolicyToStageChange c: AddEntity(c.EntityName); break;
+                case RemovePolicyFromStageChange c: AddEntity(c.EntityName); break;
+                case AddPolicyToActionChange c: AddEntity(c.EntityName); break;
+                case RemovePolicyFromActionChange c: AddEntity(c.EntityName); break;
+                case AddParameterToActionChange c: AddEntity(c.EntityName); break;
+                case RemoveParameterFromActionChange c: AddEntity(c.EntityName); break;
+                case SetActionResultChange c: AddEntity(c.EntityName); break;
+                case AddOnEntryEffectToStageChange c: AddEntity(c.EntityName); break;
+                case RemoveOnEntryEffectFromStageChange c: AddEntity(c.EntityName); break;
+                case AddOnExitEffectToStageChange c: AddEntity(c.EntityName); break;
+                case RemoveOnExitEffectFromStageChange c: AddEntity(c.EntityName); break;
+                case AddEventReferenceToEntityChange c: AddEntity(c.EntityName); break;
+                case RemoveEventReferenceFromEntityChange c: AddEntity(c.EntityName); break;
+                case AddPrimitiveTypeChange c: AddType(c.Name); break;
+                case RemovePrimitiveTypeChange c: break;
+                case AddValueTypeChange c: AddType(c.Name); break;
+                case RemoveValueTypeChange c: break;
+                case AddEventChange c: AddType(c.Name); break;
+                case RemoveEventChange c: break;
+                case AddRelationshipChange c: break; // not in type tree
+                case RemoveRelationshipChange c: break;
+                case AddPropertyToRelationshipChange c: break;
+                case RemovePropertyFromRelationshipChange c: break;
+                case AddConstraintToPropertyChange c: AddEntity(c.EntityName); break;
+                case RemoveConstraintFromPropertyChange c: AddEntity(c.EntityName); break;
+                case AddConstraintToDomainTypeChange c: AddType(c.TypeName); break;
+                case RemoveConstraintFromDomainTypeChange c: AddType(c.TypeName); break;
+                case AddPropertyToEventChange c: AddType(c.EventName); break;
+                case RemovePropertyFromEventChange c: AddType(c.EventName); break;
+                case ChangePropertyTypeChange c: AddEntity(c.EntityName); break;
+                case SetRelationshipShapeChange c: break;
+                case SetPrimitiveTypeCategoryChange c: AddType(c.TypeName); break;
+                case SetDomainNameChange: nodes.Add(proposed); break;
+            }
+        }
+
+        return nodes;
+
+        void AddEntity(string entityName) {
+            var e = proposed.Types.OfType<Entity>().FirstOrDefault(et =>
+                string.Equals(et.Name, entityName, StringComparison.Ordinal));
+            if (e is not null) nodes.Add(e);
+        }
+
+        void AddType(string typeName) {
+            var t = proposed.Types.FirstOrDefault(tp =>
+                string.Equals(tp.Name, typeName, StringComparison.Ordinal));
+            if (t is not null) nodes.Add(t);
+        }
     }
 
     private EvolutionTrace BuildTrace(
         IReadOnlyList<DomainChange> changes,
         bool proposalRejected,
-        AnalysisResult analysis) {
+        AnalysisResult analysis,
+        TimeSpan duration) {
         var steps = changes
-            .Select(c => new EvolutionStep(c.GetDescription(), Array.Empty<string>()))
+            .Select(c => new EvolutionStep(c.GetDescription()))
             .ToList();
 
         return new EvolutionTrace(
             steps,
-            AffectedNodeIds: Array.Empty<string>(),
             RolledBack: proposalRejected,
-            Duration: TimeSpan.Zero,
+            Duration: duration,
             ErrorCount: analysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error),
             WarningCount: analysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning));
     }
@@ -144,17 +231,34 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder RemoveEvent(string name) =>
         Apply(new RemoveEventChange(name));
 
+    /// <summary>
+    /// Common pattern: Define an event and immediately attach it to an entity.
+    /// </summary>
+    public EvolutionBuilder AddEventToEntity(string entityName, string eventName, params Property[] properties) {
+        var b = AddEvent(eventName, properties);
+        return b.AddEventReferenceToEntity(entityName, eventName);
+    }
+
     public EvolutionBuilder AddEventReferenceToEntity(string entityName, string eventName) =>
         Apply(new AddEventReferenceToEntityChange(entityName, new DomainTypeReference(eventName)));
 
     public EvolutionBuilder RemoveEventReferenceFromEntity(string entityName, string eventName) =>
         Apply(new RemoveEventReferenceFromEntityChange(entityName, eventName));
 
+    public EvolutionBuilder AddPrimitiveType(string name, TypeCategory typeCategory) =>
+        Apply(new AddPrimitiveTypeChange(name, typeCategory, []));
+
+    public EvolutionBuilder RemovePrimitiveType(string name) =>
+        Apply(new RemovePrimitiveTypeChange(name));
+
     public EvolutionBuilder AddPropertyToEntity(string entityName, Property property) =>
         Apply(new AddPropertyToEntityChange(entityName, property));
 
     public EvolutionBuilder AddStage(string entityName, string name) =>
         Apply(new AddStageChange(entityName, name));
+
+    public EvolutionBuilder AddStage(string entityName, string name, string parentName) =>
+        Apply(new AddStageChange(entityName, name, new StageReference(parentName)));
 
     public EvolutionBuilder AddStage(
         string entityName,
@@ -183,6 +287,9 @@ public sealed class EvolutionBuilder {
 
     public EvolutionBuilder AddAction(string entityName, string name) =>
         Apply(new AddActionChange(entityName, name));
+
+    public EvolutionBuilder AddActionToStage(string entityName, string stageName, string name) =>
+        Apply(new AddActionToStageChange(entityName, stageName, name));
 
     public EvolutionBuilder AddParameterToAction(string entityName, string actionName, Property parameter) =>
         Apply(new AddParameterToActionChange(entityName, actionName, parameter));
@@ -233,18 +340,7 @@ public sealed class EvolutionBuilder {
         return b;
     }
 
-    /// <summary>
-    /// Common pattern: Add an action that publishes an event (with optional parameters and result).
-    /// </summary>
-    public EvolutionBuilder AddActionThatPublishesEvent(
-        string entityName,
-        string actionName,
-        string eventName,
-        InvocationResult? result = null,
-        Property[]? parameters = null) {
-        var b = AddAction(entityName, actionName, result, parameters);
-        return b.AddPublishEventEffect(entityName, actionName, eventName);
-    }
+
 
     public EvolutionBuilder AddEffectToAction(string entityName, string actionName, Effect effect) =>
         Apply(new AddEffectToActionChange(entityName, actionName, effect));
@@ -272,7 +368,7 @@ public sealed class EvolutionBuilder {
         AddEffectToAction(entityName, actionName, new CreateEntityInstance(new DomainTypeReference(typeName)));
 
     /// <summary>
-    /// Adds a PublishEventEffect with optional property bindings.
+    /// Adds a PublishEventEffect with optional property bindings to an action.
     /// </summary>
     public EvolutionBuilder AddPublishEventEffect(
         string entityName,
@@ -286,6 +382,18 @@ public sealed class EvolutionBuilder {
         var effect = new PublishEventEffect(new DomainTypeReference(eventName), initializers);
         return AddEffectToAction(entityName, actionName, effect);
     }
+
+    /// <summary>
+    /// Adds a simple PublishEventEffect (no bindings) to an action.
+    /// </summary>
+    public EvolutionBuilder AddPublishEventEffect(string entityName, string actionName, string eventName) =>
+        AddEffectToAction(entityName, actionName, new PublishEventEffect(new DomainTypeReference(eventName), []));
+
+    /// <summary>
+    /// Adds a StageTransitionEffect to an action.
+    /// </summary>
+    public EvolutionBuilder AddStageTransitionEffect(string entityName, string actionName, string targetStageName) =>
+        AddEffectToAction(entityName, actionName, new StageTransitionEffect(new StageReference(targetStageName)));
 
     public EvolutionBuilder AddPolicyToEntity(string entityName, Policy policy) =>
         Apply(new AddPolicyToEntityChange(entityName, policy));
@@ -338,6 +446,45 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder RemoveRelationship(string name) =>
         Apply(new RemoveRelationshipChange(name));
 
+    public EvolutionBuilder AddPropertyToRelationship(string relationshipName, Property property) =>
+        Apply(new AddPropertyToRelationshipChange(relationshipName, property));
+
+    public EvolutionBuilder RemovePropertyFromRelationship(string relationshipName, string propertyName) =>
+        Apply(new RemovePropertyFromRelationshipChange(relationshipName, propertyName));
+
+    public EvolutionBuilder AddConstraintToProperty(string entityName, string propertyName, Constraint constraint) =>
+        Apply(new AddConstraintToPropertyChange(entityName, propertyName, constraint));
+
+    public EvolutionBuilder RemoveConstraintFromProperty(string entityName, string propertyName, Constraint constraint) =>
+        Apply(new RemoveConstraintFromPropertyChange(entityName, propertyName, constraint));
+
+    public EvolutionBuilder SetDomainName(string name) =>
+        Apply(new SetDomainNameChange(name));
+
+    public EvolutionBuilder AddConstraintToDomainType(string typeName, Constraint constraint) =>
+        Apply(new AddConstraintToDomainTypeChange(typeName, constraint));
+
+    public EvolutionBuilder RemoveConstraintFromDomainType(string typeName, Constraint constraint) =>
+        Apply(new RemoveConstraintFromDomainTypeChange(typeName, constraint));
+
+    public EvolutionBuilder AddPropertyToEvent(string eventName, Property property) =>
+        Apply(new AddPropertyToEventChange(eventName, property));
+
+    public EvolutionBuilder RemovePropertyFromEvent(string eventName, string propertyName) =>
+        Apply(new RemovePropertyFromEventChange(eventName, propertyName));
+
+    public EvolutionBuilder ChangePropertyType(string entityName, string propertyName, DomainTypeReference newType) =>
+        Apply(new ChangePropertyTypeChange(entityName, propertyName, newType));
+
+    public EvolutionBuilder SetRelationshipShape(string relationshipName,
+        DomainTypeReference? newSource = null,
+        DomainTypeReference? newTarget = null,
+        RelationshipCardinality? newCardinality = null) =>
+        Apply(new SetRelationshipShapeChange(relationshipName, newSource, newTarget, newCardinality));
+
+    public EvolutionBuilder SetPrimitiveTypeCategory(string typeName, TypeCategory category) =>
+        Apply(new SetPrimitiveTypeCategoryChange(typeName, category));
+
     public EvolutionBuilder RemoveParameterFromAction(string entityName, string actionName, string parameterName) =>
         Apply(new RemoveParameterFromActionChange(entityName, actionName, parameterName));
 
@@ -366,6 +513,9 @@ public sealed class EvolutionBuilder {
 
     public EvolutionBuilder RemoveAction(string entityName, string name) =>
         Apply(new RemoveActionChange(entityName, name));
+
+    public EvolutionBuilder RemoveActionFromStage(string entityName, string stageName, string name) =>
+        Apply(new RemoveActionFromStageChange(entityName, stageName, name));
 
     public EvolutionBuilder RemovePolicyFromEntity(string entityName, string policyName) =>
         Apply(new RemovePolicyFromEntityChange(entityName, policyName)); // Note: will need to add the change type if not present

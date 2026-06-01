@@ -263,13 +263,13 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (resolved.Type is Entity) {
+        if (resolved.Type is Entity or ValueType) {
             return;
         }
 
         context.ReportError(
             createEntityInstance,
-            $"CreateEntityInstance type '{createEntityInstance.Type.TypeName}' must resolve to an entity.",
+            $"CreateEntityInstance type '{createEntityInstance.Type.TypeName}' must resolve to an Entity or ValueType.",
             DomainModelDiagnosticCodes.SemanticTypeCompatibility);
     }
 }

@@ -9,7 +9,12 @@ This directory contains execution-oriented planning documents — roadmaps, phas
 
 ## Current Plans
 
-- [V2 → V3 Domain Modeling Port Roadmap & Task Tracker](v2-to-v3-domain-modeling-port-roadmap.md) — Main tracker for the immutable core + evolution layer migration.
+- [V2 → V3 Master Roadmap](v2-to-v3/master-roadmap.md) — Canonical coordination document for execution status and workstream ownership.
+- [V2 → V3 Workstreams](v2-to-v3/workstreams/) — Detailed, execution-facing task breakdowns by workstream.
+
+## Legacy / Redirects
+
+- [Legacy V2 → V3 Roadmap Redirect](v2-to-v3-domain-modeling-port-roadmap.md) — Superseded pointer maintained for compatibility.
 
 **Special support for smaller agents**:
 - `v2-to-v3/simple-agent-tasks/` contains micro-tasks deliberately sized for smaller/lower-capability models.

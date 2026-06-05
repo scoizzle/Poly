@@ -54,8 +54,15 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
     /// Analyzes the given AST node and produces an analysis result with per-pass telemetry.
     /// </summary>
     public AnalysisResult Analyze(Node root) {
+        return Analyze(root, null);
+    }
+
+    /// <summary>
+    /// Analyzes the given AST node with explicit run-level settings.
+    /// </summary>
+    public AnalysisResult Analyze(Node root, AnalysisSettings? settings) {
         ArgumentNullException.ThrowIfNull(root);
-        var context = new AnalysisContext(typeDefinitions);
+        var context = new AnalysisContext(typeDefinitions, settings);
         return RunPasses(context, root, incremental: false, invalidatedNodeCount: 0);
     }
 
@@ -63,16 +70,23 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
     /// Analyzes the given AST node incrementally and produces an analysis result with per-pass telemetry.
     /// </summary>
     public AnalysisResult Analyze(Node root, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
+        return Analyze(root, priorAnalysis, invalidatedNodes, null);
+    }
+
+    /// <summary>
+    /// Analyzes the given AST node incrementally with explicit run-level settings.
+    /// </summary>
+    public AnalysisResult Analyze(Node root, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes, AnalysisSettings? settings) {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(priorAnalysis);
         ArgumentNullException.ThrowIfNull(invalidatedNodes);
 
         if (!priorAnalysis.IsIncrementalAnalysisAvailable()) {
-            return Analyze(root);
+            return Analyze(root, settings);
         }
 
         var invalidated = invalidatedNodes.ToArray();
-        var context = new AnalysisContext(typeDefinitions, priorAnalysis);
+        var context = new AnalysisContext(typeDefinitions, priorAnalysis, settings);
         context.SetInvalidatedNodesForIncrementalAnalysis(invalidated);
         return RunPasses(context, root, incremental: true, invalidatedNodeCount: invalidated.Length);
     }

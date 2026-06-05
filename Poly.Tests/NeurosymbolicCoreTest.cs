@@ -17,7 +17,7 @@ public class NeurosymbolicCoreTest {
         Console.WriteLine("");
 
         // Test 1: Basic interpreter with simplest possible nodes
-        var walker = new TreeWalker();
+        var walker = new TreeWalkingInterpreter();
 
         var constantResult = walker.Evaluate(new Constant(42));
         bool constantWorks = constantResult.HasValue && (int)constantResult.Value! == 42;
@@ -64,7 +64,7 @@ public class NeurosymbolicCoreTest {
         Console.WriteLine($"Live Analysis (create operation flag): {(createFlagged ? "✓ PASS" : "✗ FAIL")}");
 
         // Test 4: TreeWalker wiring - suspension triggers live analysis
-        var treeWalker = new TreeWalker()
+        var treeWalker = new TreeWalkingInterpreter()
             .RegisterLiveStateAnalyzer(liveAnalyzer);
 
         var suspendCompiler = new SuspendCompiler();

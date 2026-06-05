@@ -2,15 +2,18 @@ namespace Poly.Interpretation.Analysis;
 
 internal record VariableScopeMetadata(
     Dictionary<Block, HashSet<Variable>> BlockScopes,
-    Dictionary<Variable, Variable?> VariableReferences, // Maps Variable uses → declarations
-    List<VariableScopeError> Errors
+    Dictionary<Variable, Variable?> VariableReferences // Maps Variable uses → declarations
 ) : IAnalysisMetadata;
 
 internal record VariableScopeError(Node Node, string Message);
 
 internal sealed class ScopeValidator : INodeAnalyzer {
     private readonly Stack<Block> _scopeStack = new();
-    private readonly Dictionary<string, Stack<Variable>> _variablesByName = new();
+    private readonly Dictionary<string, Stack<Variable>> _variablesByName = [];
+    private readonly VariableScopeMetadata _sharedScopeMeta = new(
+        BlockScopes: new Dictionary<Block, HashSet<Variable>>(),
+        VariableReferences: new Dictionary<Variable, Variable?>()
+    );
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ScopeValidator>(node)) {
@@ -33,8 +36,13 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 break;
 
             case Assignment assignment when assignment.Destination is Variable v:
-                // Variable assignment
-                ValidateVariableReference(context, v);
+                // Variable assignment: register if first use (declaration by assignment for simple blocks)
+                if (!_variablesByName.TryGetValue(v.Name, out var stack) || stack.Count == 0) {
+                    RegisterScopedVariable(context, v);
+                }
+                else {
+                    ValidateVariableReference(context, v);
+                }
                 this.AnalyzeChildren(context, node);
                 break;
 
@@ -55,17 +63,18 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     private void AnalyzeBlock(AnalysisContext context, Block block) {
         _scopeStack.Push(block);
 
-        // Register block-scoped variables
-        foreach (var variable in block.Variables.OfType<Variable>()) {
-            RegisterVariable(context, variable, block);
+        // Register block-scoped variables (direct indexed per SideEffect direct-Block + Aggregate lesson for wide blocks; avoids OfType enumerator).
+        var vars = block.Variables;
+        for (int i = 0; i < vars.Count; i++) {
+            if (vars[i] is Variable v) RegisterVariable(context, v, block);
         }
 
         // Analyze block contents
         this.AnalyzeChildren(context, block);
 
         // Pop scope and unregister variables
-        foreach (var variable in block.Variables.OfType<Variable>()) {
-            UnregisterVariable(variable);
+        for (int i = 0; i < vars.Count; i++) {
+            if (vars[i] is Variable v) UnregisterVariable(v);
         }
 
         _scopeStack.Pop();
@@ -77,7 +86,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         // Track which block owns this variable
         var metadata = GetOrCreateMetadata(context, variable);
         if (!metadata.BlockScopes.TryGetValue(scope, out var scopeVars)) {
-            scopeVars = new HashSet<Variable>();
+            scopeVars = [];
             metadata.BlockScopes[scope] = scopeVars;
         }
 
@@ -92,7 +101,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 
         // Check for shadowing (warning, not error)
         if (stack.Count > 0) {
-            AddWarning(context, variable, $"Variable '{variable.Name}' shadows outer scope variable");
+            context.ReportWarning(variable, $"Variable '{variable.Name}' shadows outer scope variable");
         }
 
         stack.Push(variable);
@@ -113,25 +122,13 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         }
         else {
             // Undeclared variable
-            AddError(context, variable, $"Variable '{variable.Name}' is not declared in this scope");
+            context.ReportError(variable, $"Variable '{variable.Name}' is not declared in this scope");
         }
     }
 
     private VariableScopeMetadata GetOrCreateMetadata(AnalysisContext context, Node node) {
-        return context.Metadata.GetOrAdd(node, () => new VariableScopeMetadata(
-            new Dictionary<Block, HashSet<Variable>>(),
-            new Dictionary<Variable, Variable?>(),
-            new List<VariableScopeError>()
-        ));
-    }
-
-    private void AddError(AnalysisContext context, Node node, string message) {
-        var metadata = GetOrCreateMetadata(context, node);
-        metadata.Errors.Add(new VariableScopeError(node, message));
-    }
-
-    private void AddWarning(AnalysisContext context, Node node, string message) {
-        // Could add a warnings list to metadata
+        // Shared single metadata instance (with one set of dicts) for all nodes -- applies sparse/single root metadata lesson; avoids per-var heavy allocs of separate dicts. All mutations go to the shared maps.
+        return context.Metadata.GetOrAdd(node, () => _sharedScopeMeta);
     }
 }
 

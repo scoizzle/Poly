@@ -10,9 +10,15 @@ public sealed record AnalysisResult : INodeMetadataProvider {
         ArgumentNullException.ThrowIfNull(telemetry);
         _metadata = context.Metadata;
         _diagnostics = context.Diagnostics;
+        var diagnosticConfiguration = context.Settings.Get<AnalysisDiagnosticConfiguration>()
+            ?? AnalysisDiagnosticConfiguration.Default;
         _allDiagnostics = new Lazy<IReadOnlyList<Diagnostic>>(() =>
             _diagnostics
                 .SelectMany(kvp => kvp.Value)
+                .Select(d => d with {
+                    Severity = diagnosticConfiguration.NormalizeSeverity(d.Severity)
+                })
+                .Where(d => diagnosticConfiguration.ShouldInclude(d.Severity))
                 .DistinctBy(d => (d.Node.Id, d.Severity, d.Code, d.Message))
                 .ToList());
         Telemetry = telemetry;
@@ -21,12 +27,18 @@ public sealed record AnalysisResult : INodeMetadataProvider {
         var effectiveOptions = options ?? AnalysisOptions.Default;
         AnalysisWasTerminatedEarly = !context.ShouldContinue(effectiveOptions);
         OptionsUsed = effectiveOptions;
+        SettingsUsed = context.Settings;
     }
 
     /// <summary>
     /// The options that were active during this analysis run.
     /// </summary>
     public AnalysisOptions OptionsUsed { get; } = AnalysisOptions.Default;
+
+    /// <summary>
+    /// Settings that were active on the analysis context for this run.
+    /// </summary>
+    public AnalysisSettings SettingsUsed { get; } = AnalysisSettings.Default;
 
     /// <summary>
     /// Gets the per-pass timing telemetry captured during analysis.

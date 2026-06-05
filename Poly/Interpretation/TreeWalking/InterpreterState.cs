@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 
 using Poly.Syntax;
@@ -6,15 +7,19 @@ using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.TreeWalking;
 
+public enum InterpreterStatus {
+    Running,
+    Suspended,
+    Completed
+}
+
 /// <summary>
-/// Represents a point where execution was suspended. This enables the neurosymbolic
-/// feedback loop where an LLM or authoring model can examine the live execution
-/// state of lowered code and provide insights.
+/// Represents a point where execution was suspended.
 /// </summary>
 public sealed record SuspendedExecution(
     InterpreterState State,
     string Reason,
-    Node? AtNode,
+    Node AtNode,
     int CallStackDepth,
     int EvaluationStackDepth);
 
@@ -28,36 +33,29 @@ public sealed record SuspendedExecution(
 /// 
 /// All domain-specific information comes through AnalysisResult metadata.
 /// </summary>
-public sealed class InterpreterState : IDisposable {
-    private readonly MemoryPool<object?> _memoryPool;
-    private bool _disposed;
-
-    public EvaluationStack ValueStack { get; }
+public sealed class InterpreterState(MemoryPool<object?>? pool = null) {
+    public InterpreterStatus Status { get; private set; } = InterpreterStatus.Running;
+    public EvaluationStack ValueStack { get; } = new EvaluationStack(pool, 64);
     public CallStack CallStack { get; } = new();
-
-    public bool IsComplete { get; private set; }
+    public AnalysisResult? AnalysisResult { get; internal set; }
+    public NodeId? BreakpointSkipNodeId { get; internal set; }
     public InterpreterResult? LastResult { get; private set; }
-
-    // Named variable storage (keyed by name, not node identity)
-    public Dictionary<string, object?> Variables => CurrentFrame.Locals;
-    // Suspension support - kept intentionally simple
-    public bool IsSuspended { get; private set; }
     public string? SuspensionReason { get; private set; }
     public Node? SuspendedAtNode { get; private set; }
 
-    public InterpreterState(MemoryPool<object?>? pool = null) {
-        _memoryPool = pool ?? MemoryPool<object?>.Shared;
-        ValueStack = new EvaluationStack(_memoryPool, 64);
-    }
+    public bool IsComplete => Status == InterpreterStatus.Completed;
+    public bool IsSuspended => Status == InterpreterStatus.Suspended;
+    public StackFrame CurrentFrame => CallStack.Peek();
+    public Dictionary<string, object?> Variables => CurrentFrame.Variables;
 
     /// <summary>
     /// Suspends execution at the current point. Returns a snapshot that can be
     /// introspected by insight analyzers or debugging tools.
     /// </summary>
     public SuspendedExecution Suspend(string reason, Node? atNode = null) {
-        IsSuspended = true;
+        Status = InterpreterStatus.Suspended;
         SuspensionReason = reason;
-        SuspendedAtNode = atNode ?? CallStack.Peek()?.CurrentNode;
+        SuspendedAtNode = atNode ?? CurrentFrame.CurrentNode;
 
         return new SuspendedExecution(
             this,
@@ -68,21 +66,17 @@ public sealed class InterpreterState : IDisposable {
     }
 
     public void Resume() {
-        IsSuspended = false;
+        Status = InterpreterStatus.Running;
         SuspensionReason = null;
         SuspendedAtNode = null;
     }
 
     public void Complete(InterpreterResult result) {
-        IsComplete = true;
+        Status = InterpreterStatus.Completed;
         LastResult = result;
     }
 
-    public StackFrame CurrentFrame => CallStack.Peek();
-
     public void Dispose() {
-        if (_disposed) return;
         ValueStack.Dispose();
-        _disposed = true;
     }
 }

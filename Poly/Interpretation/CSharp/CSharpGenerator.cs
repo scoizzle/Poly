@@ -1,3 +1,5 @@
+using Poly.Interpretation.Analysis.Semantics;
+
 namespace Poly.Interpretation.CSharp;
 
 public sealed class CSharpGenerator {
@@ -197,8 +199,12 @@ public sealed class CSharpGenerator {
             WriteStatement(sb, v, indent + 1);
         }
 
-        foreach (var node in block.Nodes) {
-            WriteStatement(sb, node, indent + 1);
+        // DCE: skip lowering elidable pure unused nodes (non-last in block).
+        for (int i = 0; i < block.Nodes.Count; i++) {
+            var node = block.Nodes[i];
+            if (i == block.Nodes.Count - 1 || _analysisResult == null || !_analysisResult.CanElide(node)) {
+                WriteStatement(sb, node, indent + 1);
+            }
         }
 
         Indent(sb, indent);
@@ -211,19 +217,28 @@ public sealed class CSharpGenerator {
         WriteExpression(sb, ifStmt.Condition);
         sb.AppendLine(")");
 
-        WriteStatement(sb, ifStmt.ThenBranch, ifStmt.ThenBranch is Block ? indent : indent + 1);
+        if (_analysisResult == null || !_analysisResult.CanElide(ifStmt.ThenBranch)) {
+            WriteStatement(sb, ifStmt.ThenBranch, ifStmt.ThenBranch is Block ? indent : indent + 1);
+        }
+        else {
+            Indent(sb, indent + 1);
+            sb.AppendLine("{}");
+        }
 
         if (ifStmt.ElseBranch != null) {
-            Indent(sb, indent);
-            sb.AppendLine("else");
-            WriteStatement(sb, ifStmt.ElseBranch, ifStmt.ElseBranch is Block ? indent : indent + 1);
+            if (_analysisResult == null || !_analysisResult.CanElide(ifStmt.ElseBranch)) {
+                Indent(sb, indent);
+                sb.AppendLine("else");
+                WriteStatement(sb, ifStmt.ElseBranch, ifStmt.ElseBranch is Block ? indent : indent + 1);
+            }
+            // else omit dead else entirely (or could emit else { } but minimal skip)
         }
     }
 
     private void WriteWhileLoop(StringBuilder sb, WhileLoop whileLoop, int indent) {
         Indent(sb, indent);
         sb.Append("while (");
-        WriteExpression(sb, whileLoop.Condition);
+        WriteExpression(sb, whileLoop.Condition);  // value used for control
         sb.AppendLine(")");
         WriteStatement(sb, whileLoop.Body, whileLoop.Body is Block ? indent : indent + 1);
     }
@@ -234,22 +249,23 @@ public sealed class CSharpGenerator {
         WriteStatement(sb, doWhile.Body, doWhile.Body is Block ? indent : indent + 1);
         Indent(sb, indent);
         sb.Append("while (");
-        WriteExpression(sb, doWhile.Condition);
+        WriteExpression(sb, doWhile.Condition);  // value used for control
         sb.AppendLine(");");
     }
 
     private void WriteForLoop(StringBuilder sb, ForLoop forLoop, int indent) {
         Indent(sb, indent);
         sb.Append("for (");
-        if (forLoop.Initializer != null) {
+        if (forLoop.Initializer != null && (_analysisResult == null || !_analysisResult.CanElide(forLoop.Initializer))) {
             WriteExpression(sb, forLoop.Initializer);
         }
         sb.Append("; ");
         if (forLoop.Condition != null) {
+            // Always emit condition: its value is used for loop control.
             WriteExpression(sb, forLoop.Condition);
         }
         sb.Append("; ");
-        if (forLoop.Increment != null) {
+        if (forLoop.Increment != null && (_analysisResult == null || !_analysisResult.CanElide(forLoop.Increment))) {
             WriteExpression(sb, forLoop.Increment);
         }
         sb.AppendLine(")");
@@ -261,7 +277,7 @@ public sealed class CSharpGenerator {
         sb.Append("foreach (var ");
         sb.Append(forEach.LoopVariable.Name);
         sb.Append(" in ");
-        WriteExpression(sb, forEach.Collection);
+        WriteExpression(sb, forEach.Collection);  // value used to drive iteration
         sb.AppendLine(")");
         WriteStatement(sb, forEach.Body, forEach.Body is Block ? indent : indent + 1);
     }
@@ -623,7 +639,10 @@ public sealed class CSharpGenerator {
         Indent(sb, indent);
         WriteAccessModifier(sb, field.AccessModifier);
         if (field.IsStatic) sb.Append("static ");
-        if (field.IsReadOnly) sb.Append("readonly ");
+        var mut = field.Mutability;
+        if (mut.HasFlag(Mutability.CompileTimeConst)) sb.Append("const ");
+        else if (mut.HasFlag(Mutability.ReadOnlyAfterInit)) sb.Append("readonly ");
+        if (mut.HasFlag(Mutability.VolatileAccess)) sb.Append("volatile ");
         WriteExpression(sb, field.FieldType);
         sb.Append(' ');
         sb.Append(field.Name);
@@ -885,8 +904,12 @@ public sealed class CSharpGenerator {
             case Block block:
                 sb.Append('{');
                 for (int i = 0; i < block.Nodes.Count; i++) {
-                    if (i > 0) sb.Append(' ');
-                    WriteExpression(sb, block.Nodes[i]);
+                    var n = block.Nodes[i];
+                    // DCE: skip elidable in inline blocks too (keep last)
+                    if (i == block.Nodes.Count - 1 || _analysisResult == null || !_analysisResult.CanElide(n)) {
+                        if (i > 0) sb.Append(' ');
+                        WriteExpression(sb, n);
+                    }
                 }
                 sb.Append('}');
                 return;

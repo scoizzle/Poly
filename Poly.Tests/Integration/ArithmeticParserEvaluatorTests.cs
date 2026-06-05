@@ -257,7 +257,7 @@ public class ArithmeticParserEvaluatorTests {
     }
 
     private static T EvaluateWithTreeWalker<T>(Node ast) {
-        using var walker = new TreeWalker();
+        using var walker = new TreeWalkingInterpreter();
         var result = walker.Evaluate(ast);
 
         if (!result.HasValue) {

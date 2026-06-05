@@ -880,7 +880,7 @@ public class C99ParserInterpreterTests {
             }
         }
 
-        using var walker = new TreeWalker();
+        using var walker = new TreeWalkingInterpreter();
         var result = walker.Evaluate(body, variableBindings);
 
         if (result.IsSignal && result.Signal?.Kind == InterpreterSignal.SignalKind.Throw) {

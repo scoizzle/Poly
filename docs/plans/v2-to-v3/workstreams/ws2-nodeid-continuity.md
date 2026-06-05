@@ -1,10 +1,16 @@
 # Workstream WS2: NodeId Continuity Strategy & Implementation
 
+> **Superseded (June 2026):** This workstream file is historical.
+>
+> NodeId continuity scope is tracked in `ws1-evolution-applicator-mvp.md`.
+
+> **Archive note:** Status/owner fields below reflect the original draft state and are not current execution truth.
+
 **Phase**: 1  
 **Priority**: High (enables good incremental analysis)  
-**Owner**: TBD  
-**Status**: Not Started  
-**Last Updated**: 2026-06-01
+**Owner**: Historical draft (superseded)  
+**Status**: Superseded  
+**Last Updated**: 2026-06 (superseded)
 
 ## Goal
 Define and implement a reliable strategy for preserving stable `Node.Id` values when producing new immutable `Domain` roots from previous ones. This is critical for incremental analysis performance and for analyzers that rely on stable identity across versions.

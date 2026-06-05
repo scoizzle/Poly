@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;
@@ -116,7 +117,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     public PrimitiveType? PrimitiveType => _node.PrimitiveTypeId;
     public TypeCategory TypeCategory => _node.TypeCategory;
 
-    private IReadOnlyList<AstPropertyDefinition> BuildDeclaredProperties() {
+    private List<AstPropertyDefinition> BuildDeclaredProperties() {
         var properties = new List<PropertyDefinitionNode>();
 
         if (_node.Properties is not null) {
@@ -137,12 +138,10 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
             }
         }
 
-        return properties
-            .Select(p => new AstPropertyDefinition(p, this, _provider))
-            .ToList();
+        return [.. properties.Select(p => new AstPropertyDefinition(p, this))];
     }
 
-    private IReadOnlyList<AstConstructorDefinition> BuildConstructors() {
+    private List<AstConstructorDefinition> BuildConstructors() {
         var constructors = new List<ConstructorDefinitionNode>();
 
         if (_node.PrimaryConstructorParameters is { Count: > 0 }) {
@@ -153,45 +152,43 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
             constructors.AddRange(_node.Constructors);
         }
 
-        return constructors
-            .Select(constructor => new AstConstructorDefinition(constructor, this))
-            .ToList();
+        return [.. constructors.Select(constructor => new AstConstructorDefinition(constructor, this))];
     }
 
-    private IReadOnlyList<AstMethodDefinition> BuildDeclaredMethods() {
+    private List<AstMethodDefinition> BuildDeclaredMethods() {
         return _node.Methods?
-            .Select(m => new AstMethodDefinition(m, this, _provider))
+            .Select(m => new AstMethodDefinition(m, this))
             .ToList() ?? [];
     }
 
-    private IReadOnlyList<AstFieldDefinition> BuildDeclaredFields() {
+    private List<AstFieldDefinition> BuildDeclaredFields() {
         return _node.Fields?
-            .Select(f => new AstFieldDefinition(f, this, _provider))
+            .Select(f => new AstFieldDefinition(f, this))
             .ToList() ?? [];
     }
 
-    private IReadOnlyList<ITypeProperty> BuildProperties() {
+    private List<ITypeProperty> BuildProperties() {
         return ComposeInheritedMembers(
             _declaredProperties.Value,
             static typeDefinition => typeDefinition.Properties,
             static property => $"{property.Name}|{property.LifetimeModifier}|{GetParameterSignature(property.Parameters)}");
     }
 
-    private IReadOnlyList<ITypeMethod> BuildMethods() {
+    private List<ITypeMethod> BuildMethods() {
         return ComposeInheritedMembers(
             _declaredMethods.Value,
             static typeDefinition => typeDefinition.Methods,
             static method => $"{method.Name}|{method.LifetimeModifier}|{GetParameterSignature(method.Parameters)}");
     }
 
-    private IReadOnlyList<ITypeField> BuildFields() {
+    private List<ITypeField> BuildFields() {
         return ComposeInheritedMembers(
             _declaredFields.Value,
             static typeDefinition => typeDefinition.Fields,
             static field => $"{field.Name}|{field.LifetimeModifier}");
     }
 
-    private IReadOnlyList<TMember> ComposeInheritedMembers<TMember>(
+    private List<TMember> ComposeInheritedMembers<TMember>(
         IEnumerable<TMember> declaredMembers,
         Func<ITypeDefinition, IEnumerable<TMember>> inheritedMemberSelector,
         Func<TMember, string> keySelector) {
@@ -257,7 +254,8 @@ internal sealed class AstConstructorDefinition : ITypeConstructor {
     IEnumerable<IParameter>? ITypeMember.Parameters => Parameters;
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
-    public bool IsStatic => false;
+
+    public Mutability Mutability => Mutability.Mutable;
 }
 
 internal sealed class AstParameterDefinition : IParameter {
@@ -286,39 +284,34 @@ internal sealed class AstParameterDefinition : IParameter {
 /// <summary>
 /// ITypeProperty implementation backed by a PropertyDefinitionNode AST.
 /// </summary>
-internal sealed class AstPropertyDefinition : ITypeProperty {
-    private readonly PropertyDefinitionNode _node;
-    private readonly AstTypeDefinition _declaring;
-    private readonly Lazy<ITypeDefinition> _memberType;
-
-    public AstPropertyDefinition(PropertyDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider) {
-        _node = node;
-        _declaring = declaring;
-        _memberType = new(() => declaring.ResolveType(node.MemberType));
-    }
+internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstTypeDefinition declaring) : ITypeProperty {
+    private readonly PropertyDefinitionNode _node = node;
+    private readonly AstTypeDefinition _declaring = declaring;
+    private readonly Lazy<ITypeDefinition> _memberType = new(() => declaring.ResolveType(node.MemberType));
 
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _memberType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
     public IEnumerable<IParameter>? Parameters => _node.IndexParameters is null ? null : _declaring.MapParameters(_node.IndexParameters);
+
+    public MemberReadDelegate? Read => null;
+    public MemberWriteDelegate? Write => null;
+    public MemberWriteDelegate? Initialize => null;
+
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => _node.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
     public bool IsStatic => _node.IsStatic;
+
+    public Mutability Mutability => _node.Mutability;
 }
 
 /// <summary>
 /// ITypeMethod implementation backed by a MethodDefinitionNode AST.
 /// </summary>
-internal sealed class AstMethodDefinition : ITypeMethod {
-    private readonly MethodDefinitionNode _node;
-    private readonly AstTypeDefinition _declaring;
-    private readonly Lazy<ITypeDefinition> _returnType;
-
-    public AstMethodDefinition(MethodDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider) {
-        _node = node;
-        _declaring = declaring;
-        _returnType = new(() => declaring.ResolveType(node.ReturnType));
-    }
+internal sealed class AstMethodDefinition(MethodDefinitionNode node, AstTypeDefinition declaring) : ITypeMethod {
+    private readonly MethodDefinitionNode _node = node;
+    private readonly AstTypeDefinition _declaring = declaring;
+    private readonly Lazy<ITypeDefinition> _returnType = new(() => declaring.ResolveType(node.ReturnType));
 
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _returnType.Value;
@@ -327,30 +320,35 @@ internal sealed class AstMethodDefinition : ITypeMethod {
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => _node.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
     public bool IsStatic => _node.IsStatic;
+
+    public Mutability Mutability => Mutability.Mutable;
 }
 
 /// <summary>
 /// ITypeField implementation backed by a FieldDefinitionNode AST.
 /// </summary>
-internal sealed class AstFieldDefinition : ITypeField {
-    private readonly FieldDefinitionNode _node;
-    private readonly AstTypeDefinition _declaring;
-    private readonly Lazy<ITypeDefinition> _fieldType;
-
-    public AstFieldDefinition(FieldDefinitionNode node, AstTypeDefinition declaring, ITypeDefinitionProvider provider) {
-        _node = node;
-        _declaring = declaring;
-        _fieldType = new(() => declaring.ResolveType(node.FieldType));
-    }
+internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefinition declaring) : ITypeField {
+    private readonly FieldDefinitionNode _node = node;
+    private readonly AstTypeDefinition _declaring = declaring;
+    private readonly Lazy<ITypeDefinition> _fieldType = new(() => declaring.ResolveType(node.FieldType));
 
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _fieldType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
     public IEnumerable<IParameter>? Parameters => null;
+
+    public MemberReadDelegate? Read => null;
+    public MemberWriteDelegate? Write => null;
+    public MemberWriteDelegate? Initialize => null;
+
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => _node.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
     public bool IsStatic => _node.IsStatic;
+
+    public Mutability Mutability => _node.Mutability;
 }
+
+
 
 /// <summary>
 /// Utility class to resolve AST type reference nodes to ITypeDefinition.
@@ -371,7 +369,7 @@ internal static class AstTypeReferenceResolver {
         };
     }
 
-    private static ITypeDefinition ResolvePrimitive(PrimitiveType id, bool isNullable, ClrTypeDefinitionRegistry clr) {
+    private static ClrTypeDefinition ResolvePrimitive(PrimitiveType id, bool isNullable, ClrTypeDefinitionRegistry clr) {
         var baseType = id switch {
             PrimitiveType.Boolean => clr.GetTypeDefinition<bool>(),
             PrimitiveType.Int8 => clr.GetTypeDefinition<sbyte>(),
@@ -416,7 +414,7 @@ internal static class AstTypeReferenceResolver {
         return clr.GetTypeDefinition(nullableType);
     }
 
-    private static ITypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
+    private static ClrTypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var elementType = Resolve(col.ElementType, provider);
         var elementClrType = elementType.GetRuntimeTypeOrThrow();
 
@@ -430,7 +428,7 @@ internal static class AstTypeReferenceResolver {
         return clr.GetTypeDefinition(collectionClrType);
     }
 
-    private static ITypeDefinition ResolveMap(MapTypeReference map, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
+    private static ClrTypeDefinition ResolveMap(MapTypeReference map, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         var keyType = Resolve(map.KeyType, provider);
         var valueType = Resolve(map.ValueType, provider);
 

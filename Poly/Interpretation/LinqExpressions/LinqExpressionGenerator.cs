@@ -431,7 +431,15 @@ public sealed class LinqExpressionGenerator {
             })
             .ToArray();
 
-        var compiledNodes = block.Nodes.Select(n => CompileNode(n, blockContext)).ToList();
+        // DCE: avoid lowering elidable (pure unused) nodes. Always keep the last (block result).
+        var nodesToCompile = new List<Node>();
+        for (int i = 0; i < block.Nodes.Count; i++) {
+            var n = block.Nodes[i];
+            if (i == block.Nodes.Count - 1 || (_analysisResult != null && !_analysisResult.CanElide(n))) {
+                nodesToCompile.Add(n);
+            }
+        }
+        var compiledNodes = nodesToCompile.Select(n => CompileNode(n, blockContext)).ToList();
 
         // The outermost block that introduced a "return" label closes it here so that
         // Return nodes nested anywhere inside (including in ForEachLoop bodies) have a
@@ -747,22 +755,31 @@ public sealed class LinqExpressionGenerator {
     /// </summary>
     private Expression CompileIfStatement(IfStatement ifStmt, CompilationContext context) {
         var condition = CompileNode(ifStmt.Condition, context);
-        var thenBranch = CompileNode(ifStmt.ThenBranch, context);
+        Expression thenBranch;
+        if (_analysisResult != null && _analysisResult.CanElide(ifStmt.ThenBranch)) {
+            thenBranch = Expression.Empty();
+        }
+        else {
+            thenBranch = CompileNode(ifStmt.ThenBranch, context);
+        }
 
         if (ifStmt.ElseBranch != null) {
-            var elseBranch = CompileNode(ifStmt.ElseBranch, context);
-            // For IfThenElse, both branches should have compatible types
+            Expression elseBranch;
+            if (_analysisResult != null && _analysisResult.CanElide(ifStmt.ElseBranch)) {
+                elseBranch = Expression.Empty();
+            }
+            else {
+                elseBranch = CompileNode(ifStmt.ElseBranch, context);
+            }
             if (thenBranch.Type == elseBranch.Type) {
                 return Expression.IfThenElse(condition, thenBranch, elseBranch);
             }
-            // If types differ, try to convert to common type
             if (thenBranch.Type == typeof(void))
                 return Expression.IfThenElse(condition, thenBranch, elseBranch);
             else if (elseBranch.Type == typeof(void))
                 return Expression.IfThenElse(condition, thenBranch, elseBranch);
         }
 
-        // No else branch - use IfThen (returns void)
         return Expression.IfThen(condition, thenBranch);
     }
 
@@ -799,7 +816,7 @@ public sealed class LinqExpressionGenerator {
         var continueLabel = Expression.Label("continue");
         var loopContext = context.CreateLoopScope(breakLabel, continueLabel);
 
-        var condition = CompileNode(whileLoop.Condition, context);
+        var condition = CompileNode(whileLoop.Condition, context);  // value used for control
         var body = CompileNode(whileLoop.Body, loopContext);
 
         var loopBody = Expression.Block(
@@ -824,7 +841,7 @@ public sealed class LinqExpressionGenerator {
         var loopContext = context.CreateLoopScope(breakLabel, continueLabel);
 
         var body = CompileNode(doWhileLoop.Body, loopContext);
-        var condition = CompileNode(doWhileLoop.Condition, context);
+        var condition = CompileNode(doWhileLoop.Condition, context);  // value used for control
 
         var loopBody = Expression.Block(
             body,
@@ -846,9 +863,20 @@ public sealed class LinqExpressionGenerator {
         var continueLabel = Expression.Label("continue");
         var loopContext = context.CreateLoopScope(breakLabel, continueLabel);
 
-        var initializer = forLoop.Initializer != null ? CompileNode(forLoop.Initializer, context) : null;
-        var condition = forLoop.Condition != null ? CompileNode(forLoop.Condition, context) : null;
-        var increment = forLoop.Increment != null ? CompileNode(forLoop.Increment, context) : null;
+        Expression? initializer = null;
+        if (forLoop.Initializer != null && (_analysisResult == null || !_analysisResult.CanElide(forLoop.Initializer))) {
+            initializer = CompileNode(forLoop.Initializer, context);
+        }
+        Expression? condition = null;
+        if (forLoop.Condition != null) {
+            // Always compile condition: its value is used for loop control flow.
+            // Analysis should never mark the condition sub-expression as CanElide.
+            condition = CompileNode(forLoop.Condition, context);
+        }
+        Expression? increment = null;
+        if (forLoop.Increment != null && (_analysisResult == null || !_analysisResult.CanElide(forLoop.Increment))) {
+            increment = CompileNode(forLoop.Increment, context);
+        }
         var body = CompileNode(forLoop.Body, loopContext);
 
         var loopBody = Expression.Block(
@@ -879,7 +907,7 @@ public sealed class LinqExpressionGenerator {
         var continueLabel = Expression.Label("continue");
         var loopContext = context.CreateLoopScope(breakLabel, continueLabel);
 
-        var collection = CompileNode(foreachLoop.Collection, context);
+        var collection = CompileNode(foreachLoop.Collection, context);  // value used to drive iteration
         var enumeratorVar = Expression.Variable(typeof(IEnumerator), "enumerator");
         var getEnumeratorCall = Expression.Call(
             Expression.Convert(collection, typeof(IEnumerable)),

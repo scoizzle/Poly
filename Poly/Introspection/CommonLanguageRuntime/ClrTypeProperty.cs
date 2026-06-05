@@ -1,4 +1,7 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
+
+using Poly.Introspection;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
@@ -16,6 +19,11 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     private readonly LifetimeModifier _lifetimeModifier;
     private readonly AccessModifier _accessModifier;
 
+    private readonly MemberReadDelegate? _read;
+    private readonly MemberWriteDelegate? _write;
+    private readonly MemberWriteDelegate? _initialize;
+    private readonly bool _isReadOnly;
+
     public ClrTypeProperty(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter>? parameters, PropertyInfo propertyInfo) {
         ArgumentNullException.ThrowIfNull(memberType);
         ArgumentNullException.ThrowIfNull(declaringType);
@@ -31,6 +39,39 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
             ? LifetimeModifier.Static
             : LifetimeModifier.Instance;
         _accessModifier = ClrAccessModifierResolver.Resolve(propertyInfo);
+
+        var getter = propertyInfo.GetGetMethod(nonPublic: true);
+        if (getter is not null) {
+            _read = (owner, arguments) => {
+                var args = arguments is { Length: > 0 } ? arguments : null;
+                var target = getter.IsStatic ? null : owner;
+                return propertyInfo.GetValue(target, args);
+            };
+        }
+
+        var setter = propertyInfo.GetSetMethod(nonPublic: true);
+        if (setter is not null) {
+            if (IsInitOnlySetter(setter)) {
+                _initialize = (owner, value, arguments) => {
+                    var args = arguments is { Length: > 0 } ? arguments : null;
+                    var target = setter.IsStatic ? null : owner;
+                    propertyInfo.SetValue(target, value, args);
+                    return owner;
+                };
+                _write = null;
+            }
+            else {
+                _write = (owner, value, arguments) => {
+                    var args = arguments is { Length: > 0 } ? arguments : null;
+                    var target = setter.IsStatic ? null : owner;
+                    propertyInfo.SetValue(target, value, args);
+                    return owner;
+                };
+                _initialize = null;
+            }
+        }
+
+        _isReadOnly = setter is null || (setter != null && IsInitOnlySetter(setter));
     }
 
     /// <summary>
@@ -58,6 +99,10 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     /// </summary>
     public PropertyInfo PropertyInfo => _propertyInfo;
 
+    public override MemberReadDelegate? Read => _read;
+    public override MemberWriteDelegate? Write => _write;
+    public override MemberWriteDelegate? Initialize => _initialize;
+
     /// <summary>
     /// Gets the property visibility.
     /// </summary>
@@ -68,5 +113,20 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     /// </summary>
     public override LifetimeModifier LifetimeModifier => _lifetimeModifier;
 
+    public override Mutability Mutability {
+        get {
+            var m = Mutability.Mutable;
+            if (_isReadOnly) m |= Mutability.ReadOnlyAfterInit;
+            // IsConst remains false (safe fallback for properties)
+            // VolatileAccess: not easily detectable for properties; default Mutable
+            return m;
+        }
+    }
+
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}{(_parameters is null ? string.Empty : $"[{string.Join(", ", _parameters)}]")}";
+
+    private static bool IsInitOnlySetter(MethodInfo setter) {
+        var requiredModifiers = setter.ReturnParameter.GetRequiredCustomModifiers();
+        return requiredModifiers.Contains(typeof(IsExternalInit));
+    }
 }

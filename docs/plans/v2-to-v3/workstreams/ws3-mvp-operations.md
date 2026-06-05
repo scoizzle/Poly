@@ -1,10 +1,16 @@
 # Workstream WS3: MVP Operation Support
 
+> **Superseded (June 2026):** This workstream file is historical.
+>
+> MVP operation scope is tracked in `ws1-evolution-applicator-mvp.md`.
+
+> **Archive note:** Status/owner fields below reflect the original draft state and are not current execution truth.
+
 **Phase**: 1  
 **Priority**: High  
-**Owner**: TBD  
-**Status**: Not Started  
-**Last Updated**: 2026-06-01
+**Owner**: Historical draft (superseded)  
+**Status**: Superseded  
+**Last Updated**: 2026-06 (superseded)
 
 ## Goal
 Implement a useful initial set of operations that can be performed through the evolution layer. This is what will actually make the layer valuable to agents and demos in the short term.

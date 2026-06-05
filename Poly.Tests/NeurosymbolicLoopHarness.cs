@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.TreeWalking;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
@@ -24,10 +25,62 @@ internal sealed class CallbackLiveStateAnalyzer(Action<AnalysisContext, Suspende
     }
 }
 
+internal sealed class ReplaceAddWithConstantAnalyzer(object? value) : INodeAnalyzer {
+    public void Analyze(AnalysisContext context, Node node) {
+        if (node is Add) {
+            context.SetNodeReplacement(node, new Constant(value));
+        }
+
+        this.AnalyzeChildren(context, node);
+    }
+}
+
+internal sealed class ReplaceNodeTypeWithConstantAnalyzer(Type targetNodeType, object? value) : INodeAnalyzer {
+    public void Analyze(AnalysisContext context, Node node) {
+        if (targetNodeType.IsInstanceOfType(node)) {
+            context.SetNodeReplacement(node, new Constant(value));
+        }
+
+        this.AnalyzeChildren(context, node);
+    }
+}
+
+internal sealed class CountingNoOpCompiler(Node targetNode) : ITreeWalkerCompiler {
+    public int Hits { get; private set; }
+
+    public bool TryEvaluate(
+        Node node,
+        Func<Node, InterpreterState, InterpreterResult> evaluateChild,
+        InterpreterState state,
+        out InterpreterResult result) {
+        if (ReferenceEquals(node, targetNode)) {
+            Hits++;
+        }
+
+        result = default;
+        return false;
+    }
+}
+
+internal sealed class WarningAnalyzer(string message) : INodeAnalyzer {
+    public void Analyze(AnalysisContext context, Node node) {
+        context.ReportWarning(node, message, "TEST_WARNING");
+    }
+}
+
+internal sealed class MixedDiagnosticAnalyzer : INodeAnalyzer {
+    public void Analyze(AnalysisContext context, Node node) {
+        context.ReportHint(node, "hint", "TEST_HINT");
+        context.ReportInformation(node, "info", "TEST_INFO");
+        context.ReportWarning(node, "warn", "TEST_WARN");
+        context.ReportError(node, "error", "TEST_ERROR");
+    }
+}
+
 public class NeurosymbolicLoopHarness {
     [Test]
     public async Task SimpleSuspendAndResume_DemonstratesBasicLoop() {
-        var walker = new TreeWalker();
+        var walker = new TreeWalkingInterpreter();
 
         var x = new Variable("x");
         var ast = new Block([
@@ -54,7 +107,7 @@ public class NeurosymbolicLoopHarness {
 
     [Test]
     public async Task InsightAnalysisOnSuspend_ProducesDiagnostics() {
-        var walker = new TreeWalker();
+        var walker = new TreeWalkingInterpreter();
 
         var analyzerRan = false;
         var insightMessages = new List<string>();
@@ -62,7 +115,7 @@ public class NeurosymbolicLoopHarness {
         walker.RegisterLiveStateAnalyzer(new CallbackLiveStateAnalyzer((ctx, suspended) => {
             analyzerRan = true;
             ctx.ReportDiagnostic(
-                suspended.AtNode ?? suspended.State.CurrentFrame.CurrentNode,
+                suspended.AtNode ?? suspended.State.CurrentFrame.CurrentNode!,
                 DiagnosticSeverity.Information,
                 $"Inspected state: {suspended.Reason}, stack depth={suspended.CallStackDepth}",
                 "LIVE_STATE_INSPECT");
@@ -93,7 +146,7 @@ public class NeurosymbolicLoopHarness {
 
     [Test]
     public async Task NeurosymbolicFeedback_SimulatesModelImprovementLoop() {
-        var walker = new TreeWalker();
+        var walker = new TreeWalkingInterpreter();
         var feedbackLog = new List<string>();
 
         walker.RegisterLiveStateAnalyzer(new CallbackLiveStateAnalyzer((ctx, suspended) => {
@@ -134,7 +187,7 @@ public class NeurosymbolicLoopHarness {
 
     [Test]
     public async Task ComprehensivePolicyEvaluation_MultiPointSuspension() {
-        var walker = new TreeWalker();
+        var walker = new TreeWalkingInterpreter();
         var suspensionPoints = new List<string>();
 
         walker.RegisterLiveStateAnalyzer(new CallbackLiveStateAnalyzer((ctx, suspended) => {
@@ -178,5 +231,189 @@ public class NeurosymbolicLoopHarness {
         await Assert.That(suspensionPoints.Count).IsEqualTo(2);
         await Assert.That(suspensionPoints[0]).IsEqualTo("InitCheck");
         await Assert.That(suspensionPoints[1]).IsEqualTo("PolicyEval");
+    }
+
+    [Test]
+    public async Task AnalysisMetadata_RewritesExecutionBeforeEvaluation() {
+        var ast = new Add(new Constant(1), new Constant(2));
+
+        var baselineAnalysis = new AnalyzerBuilder()
+            .Build()
+            .Analyze(ast);
+
+        var baselineWalker = new TreeWalkingInterpreter(baselineAnalysis);
+        var baselineResult = baselineWalker.Evaluate(ast);
+
+        await Assert.That(baselineResult.HasValue).IsTrue();
+        await Assert.That(baselineResult.Value).IsEqualTo(3);
+
+        var evolvedAnalysis = new AnalyzerBuilder()
+            .AddAnalyzer(new ReplaceAddWithConstantAnalyzer(99))
+            .Build()
+            .Analyze(ast);
+
+        var evolvedWalker = new TreeWalkingInterpreter(evolvedAnalysis);
+        var evolvedResult = evolvedWalker.Evaluate(ast);
+
+        await Assert.That(evolvedResult.HasValue).IsTrue();
+        await Assert.That(evolvedResult.Value).IsEqualTo(99);
+        await Assert.That(ast.LeftHandValue).IsTypeOf<Constant>();
+        await Assert.That(((Constant)ast.LeftHandValue).Value).IsEqualTo(1);
+        await Assert.That(ast.RightHandValue).IsTypeOf<Constant>();
+        await Assert.That(((Constant)ast.RightHandValue).Value).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task AnalysisMetadata_ReanalyzesSharedSubtreeAfterStructuralEdit() {
+        var sharedLeft = new Constant(1);
+        var baselineAst = new Add(sharedLeft, new Constant(2));
+
+        var baselineAnalysis = new AnalyzerBuilder()
+            .AddAnalyzer(new ReplaceNodeTypeWithConstantAnalyzer(typeof(Add), 3))
+            .Build()
+            .Analyze(baselineAst);
+
+        var baselineWalker = new TreeWalkingInterpreter(baselineAnalysis);
+        var baselineResult = baselineWalker.Evaluate(baselineAst);
+
+        await Assert.That(baselineResult.HasValue).IsTrue();
+        await Assert.That(baselineResult.Value).IsEqualTo(3);
+
+        var evolvedAst = new Multiply(sharedLeft, new Constant(4));
+
+        var evolvedAnalysis = new AnalyzerBuilder()
+            .AddAnalyzer(new ReplaceNodeTypeWithConstantAnalyzer(typeof(Multiply), 7))
+            .Build()
+            .Analyze(evolvedAst, baselineAnalysis, [baselineAst]);
+
+        var evolvedWalker = new TreeWalkingInterpreter(evolvedAnalysis);
+        var evolvedResult = evolvedWalker.Evaluate(evolvedAst);
+
+        await Assert.That(evolvedResult.HasValue).IsTrue();
+        await Assert.That(evolvedResult.Value).IsEqualTo(7);
+        await Assert.That(ReferenceEquals(baselineAst.LeftHandValue, evolvedAst.LeftHandValue)).IsTrue();
+        await Assert.That(((Constant)evolvedAst.LeftHandValue).Value).IsEqualTo(1);
+        await Assert.That(((Constant)baselineAst.RightHandValue).Value).IsEqualTo(2);
+        await Assert.That(((Constant)evolvedAst.RightHandValue).Value).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task SuspendedExecution_CanResumeWithRefinedAnalysisSnapshot() {
+        var ast = new Block([
+            new SuspendNode(new Constant("checkpoint"), "RefineHere"),
+            new Add(new Constant(1), new Constant(2))
+        ]);
+
+        var walker = new TreeWalkingInterpreter();
+
+        var firstResult = walker.Evaluate(ast);
+        await Assert.That(firstResult.HasValue).IsTrue();
+        var suspended = firstResult.Value as SuspendedExecution;
+        await Assert.That(suspended).IsNotNull();
+        await Assert.That(suspended!.Reason).IsEqualTo("RefineHere");
+
+        var refinedAnalysis = new AnalyzerBuilder()
+            .AddAnalyzer(new ReplaceAddWithConstantAnalyzer(77))
+            .Build()
+            .Analyze(ast);
+
+        var resumed = walker.Resume(refinedAnalysis);
+        await Assert.That(resumed.HasValue).IsTrue();
+        await Assert.That(resumed.Value).IsEqualTo(77);
+    }
+
+    [Test]
+    public async Task BreakpointApi_SuspendsBeforeNodeExecution_ByReferenceAndId() {
+        var sharedAdd = new Add(new Constant(2), new Constant(3));
+        var ast = new Block([
+            new Assignment(new Variable("prefix"), new Constant("ready")),
+            new Add(new Constant(1), new Constant(2)),
+            sharedAdd
+        ]);
+
+        var referenceWalker = new TreeWalkingInterpreter()
+            .BreakOn(sharedAdd);
+
+        var firstResult = referenceWalker.Evaluate(ast);
+        await Assert.That(firstResult.HasValue).IsTrue();
+        var firstSuspended = firstResult.Value as SuspendedExecution;
+        await Assert.That(firstSuspended).IsNotNull();
+        await Assert.That(firstSuspended!.AtNode).IsSameReferenceAs(sharedAdd);
+        await Assert.That(firstSuspended.Reason).Contains("Breakpoint hit");
+
+        var firstResumed = referenceWalker.Resume();
+        await Assert.That(firstResumed.HasValue).IsTrue();
+        await Assert.That(firstResumed.Value).IsEqualTo(5);
+
+        var idWalker = new TreeWalkingInterpreter()
+            .BreakOn(sharedAdd.Id);
+
+        var secondResult = idWalker.Evaluate(ast);
+        await Assert.That(secondResult.HasValue).IsTrue();
+        var secondSuspended = secondResult.Value as SuspendedExecution;
+        await Assert.That(secondSuspended).IsNotNull();
+        await Assert.That(secondSuspended!.AtNode).IsSameReferenceAs(sharedAdd);
+
+        var secondResumed = idWalker.Resume();
+        await Assert.That(secondResumed.HasValue).IsTrue();
+        await Assert.That(secondResumed.Value).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task SideEffectAnalysis_SkipsPureIntermediateBlockNode() {
+        var skippedCandidate = new Add(new Constant(1), new Constant(2));
+        var ast = new Block([
+            skippedCandidate,
+            new Add(new Constant(10), new Constant(5))
+        ]);
+
+        var countingCompiler = new CountingNoOpCompiler(skippedCandidate);
+        var walker = new TreeWalkingInterpreter()
+            .RegisterCompiler(countingCompiler);
+
+        var result = walker.Evaluate(ast);
+
+        await Assert.That(result.HasValue).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(15);
+        await Assert.That(countingCompiler.Hits).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task InterpretationAnalysisSettings_StrictMode_TreatsWarningsAsBlocking() {
+        var ast = new Add(new Constant(1), new Constant(2));
+
+        var warningAnalysis = new AnalyzerBuilder()
+            .AddAnalyzer(new WarningAnalyzer("warning for strict mode"))
+            .Build()
+            .Analyze(ast);
+
+        var strictSettings = InterpretationAnalysisSettings.ForMode(InterpretationAnalysisMode.Strict);
+        var walker = new TreeWalkingInterpreter(warningAnalysis, null, strictSettings);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => Task.FromResult(walker.Evaluate(ast)));
+        await Assert.That(exception).IsNotNull();
+        await Assert.That(exception!.Message).Contains("Analysis failed before interpretation could start");
+    }
+
+    [Test]
+    public async Task AnalysisDiagnosticConfiguration_CanFilterVerbosityAndPromoteWarnings() {
+        var ast = new Constant(1);
+
+        var settings = AnalysisSettings.Default
+            .With(new AnalysisDiagnosticConfiguration {
+                TreatWarningsAsErrors = true,
+                Verbosity = AnalysisDiagnosticVerbosity.WarningAndAbove
+            });
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new MixedDiagnosticAnalyzer())
+            .Build()
+            .Analyze(ast, settings);
+
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "TEST_HINT")).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "TEST_INFO")).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "TEST_WARN")).IsTrue();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "TEST_WARN" && d.Severity == DiagnosticSeverity.Error)).IsTrue();
+        await Assert.That(analysis.HasErrors).IsTrue();
     }
 }

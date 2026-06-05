@@ -1,10 +1,16 @@
 # V2 → V3 Port — Bootstrap & Ignition Plan (First 1–2 Weeks)
 
+> **Historical note (June 2026):** This document describes the initial ignition sequence and is retained for provenance.
+>
+> For current status and active priorities, use:
+> - `docs/plans/v2-to-v3/master-roadmap.md`
+> - `docs/plans/v2-to-v3/workstreams/`
+
 **Purpose**: This is the practical "ignition sequence" to move from planning into real parallel implementation with multiple agents (including smaller ones).
 
 It assumes the overall plan, workstreams, orchestration model, and documentation guardrails are already in place.
 
-## Current State Assessment (as of June 2026)
+## Historical State Assessment (at Draft Time)
 
 **Strengths**:
 - Excellent high-level plan and supporting structure (`master-roadmap.md`, workstreams, orchestration guide, agent-summaries mechanism, micro-task templates).
@@ -18,7 +24,7 @@ It assumes the overall plan, workstreams, orchestration model, and documentation
 - There is no defined "Week 0 / First Sprint" with named first tasks and sequencing.
 - The critical path (WS1) still needs further decomposition into the first 5–8 micro-tasks.
 
-## Recommended Ignition Sequence
+## Historical Ignition Sequence
 
 ### Step 0: Designate Initial Orchestrator(s) (Blocking)
 

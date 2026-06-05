@@ -52,6 +52,13 @@ public sealed class ExecutionInsightAnalyzer : ILiveStateAnalyzer {
             return;
 
         var target = suspended.AtNode ?? suspended.State.CurrentFrame.CurrentNode;
+        if (target is null) {
+            context.ReportError(NodeExtensions.Null,
+                "Evaluation stack contains mixed types, but no current node is available for diagnostic targeting.",
+                "MIXED_EVALUATION_STACK_NO_TARGET");
+            return;
+        }
+
         context.ReportWarning(
             target,
             $"Evaluation stack contains values of mixed types ({string.Join(", ", GetDistinctTypeNames(span))}), which may indicate a semantic coherence issue.",
@@ -73,12 +80,13 @@ public sealed class ExecutionInsightAnalyzer : ILiveStateAnalyzer {
         }
     }
 
-    private static string[] GetDistinctTypeNames(Span<object?> values) {
-        return values
-            .ToArray()
-            .Where(v => v is not null)
-            .Select(v => v!.GetType().Name)
-            .Distinct()
-            .ToArray();
+    private static HashSet<string> GetDistinctTypeNames(Span<object?> values) {
+        HashSet<string> typeNames = [];
+
+        for (var i = 0; i < values.Length; i++) {
+            typeNames.Add(values[i]?.GetType().Name ?? "null");
+        }
+
+        return typeNames;
     }
 }

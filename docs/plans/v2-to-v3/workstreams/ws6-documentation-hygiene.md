@@ -2,9 +2,9 @@
 
 **Phase**: 1  
 **Priority**: Medium-High (enables safe parallelism)  
-**Owner**: TBD  
-**Status**: Not Started  
-**Last Updated**: 2026-06-01
+**Owner**: Orchestrator-led (shared)  
+**Status**: In Progress  
+**Last Updated**: 2026-06
 
 ## Goal
 Ensure that as technical work happens in parallel across other workstreams, the documentation, decisions, and agent instructions stay consistent and up to date.
@@ -30,6 +30,13 @@ Ensure that as technical work happens in parallel across other workstreams, the 
   - Trace format decisions (coordinate with WS4)
 - Keep `docs/decisions/2026-v2-to-v3-domain-modeling-port.md` and the plans tracker in sync.
 - Periodically audit that AGENTS.md still correctly reflects the current state of the port.
+
+## Current Focus (Late Phase 1)
+
+- Reconcile stale planning entry points so agents land on `master-roadmap.md` and active workstreams by default.
+- Keep WS statuses synchronized with accepted summaries and implementation reality.
+- Prepare clean handoff framing for WS8 (Phase 2) without losing provenance of completed WS1/WS5/WS7 work.
+- Ensure superseded workstream files are clearly marked as historical to prevent accidental claiming.
 
 ## Exit Criteria for Phase 1
 - All significant Phase 1 design decisions have corresponding records in `docs/decisions/`.

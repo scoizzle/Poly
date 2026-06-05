@@ -9,7 +9,6 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 [DebuggerDisplay("{ToString(),nq}")]
 internal sealed class ClrConstructor : ClrTypeMember, ITypeConstructor {
     private readonly ClrTypeDefinition _declaringType;
-    private readonly ConstructorInfo _constructorInfo;
     private readonly IReadOnlyList<ClrParameter> _parameters;
 
     public ClrConstructor(ClrTypeDefinition declaringType, IEnumerable<ClrParameter> parameters, ConstructorInfo constructorInfo) {
@@ -18,8 +17,8 @@ internal sealed class ClrConstructor : ClrTypeMember, ITypeConstructor {
         ArgumentNullException.ThrowIfNull(constructorInfo);
 
         _declaringType = declaringType;
-        _parameters = parameters.ToArray();
-        _constructorInfo = constructorInfo;
+        _parameters = [.. parameters];
+        ConstructorInfo = constructorInfo;
     }
 
     /// <summary>
@@ -47,17 +46,17 @@ internal sealed class ClrConstructor : ClrTypeMember, ITypeConstructor {
     /// <summary>
     /// Gets the underlying reflection <see cref="ConstructorInfo"/>.
     /// </summary>
-    public ConstructorInfo ConstructorInfo => _constructorInfo;
+    public ConstructorInfo ConstructorInfo { get; }
 
     /// <summary>
     /// Gets the constructor visibility.
     /// </summary>
-    public override AccessModifier AccessModifier => ClrAccessModifierResolver.Resolve(_constructorInfo);
+    public override AccessModifier AccessModifier => ClrAccessModifierResolver.Resolve(ConstructorInfo);
 
     /// <summary>
     /// Gets whether this constructor is static.
     /// </summary>
-    public override LifetimeModifier LifetimeModifier => _constructorInfo.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
+    public override LifetimeModifier LifetimeModifier => ConstructorInfo.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
 
     public override string ToString() => $"{DeclaringTypeDefinition}({string.Join(", ", _parameters)})";
 }

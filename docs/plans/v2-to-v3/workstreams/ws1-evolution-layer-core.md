@@ -1,10 +1,16 @@
 # Workstream WS1: Evolution Layer Core Infrastructure
 
+> **Superseded (June 2026):** This workstream file is historical.
+>
+> Use `ws1-evolution-applicator-mvp.md` as the canonical WS1 execution document.
+
+> **Archive note:** Status/owner fields below reflect the original draft state and are not current execution truth.
+
 **Phase**: 1  
 **Priority**: Critical Path  
-**Owner**: TBD  
-**Status**: Not Started  
-**Last Updated**: 2026-06-01
+**Owner**: Historical draft (superseded)  
+**Status**: Superseded  
+**Last Updated**: 2026-06 (superseded)
 
 ## Goal
 

@@ -7,18 +7,20 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// <summary>
     /// Initializes a new instance with type definitions.
     /// </summary>
-    public AnalysisContext(ITypeDefinitionProvider typeDefinitions) {
+    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisSettings? settings = null) {
         TypeDefinitions = typeDefinitions;
         Metadata = new NodeMetadataStore();
         Diagnostics = new Dictionary<NodeId, List<Diagnostic>>();
+        Settings = settings ?? AnalysisSettings.Default;
     }
 
-    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisResult priorAnalysis) {
+    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisResult priorAnalysis, AnalysisSettings? settings = null) {
         ArgumentNullException.ThrowIfNull(priorAnalysis);
 
         TypeDefinitions = typeDefinitions;
         Metadata = new NodeMetadataStore(priorAnalysis.GetMetadataStore());
         Diagnostics = priorAnalysis.GetDiagnosticsDictionary();
+        Settings = settings ?? priorAnalysis.SettingsUsed;
     }
 
     /// <summary>
@@ -30,6 +32,11 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// Gets the diagnostics collected during analysis, keyed by node identifier.
     /// </summary>
     public Dictionary<NodeId, List<Diagnostic>> Diagnostics { get; }
+
+    /// <summary>
+    /// Gets run-level settings for this analysis execution.
+    /// </summary>
+    public AnalysisSettings Settings { get; }
 
     /// <summary>
     /// Gets the type definition provider used for resolving type information.

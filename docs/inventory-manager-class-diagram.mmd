@@ -1,0 +1,69 @@
+classDiagram
+    class Product {
+        +String Name
+        +String Description
+        +Sku Sku
+        +MonetaryAmount UnitPrice
+        +StockQuantity ReorderThreshold
+        +ProductStage CurrentStage
+        +CreateProduct()
+        +DiscontinueProduct()
+    }
+    class ProductStage {
+        <<enumeration>>
+        Active
+        Discontinued
+    }
+    class Warehouse {
+        +String Name
+        +String Location
+        +StockQuantity Capacity
+    }
+    class Supplier {
+        +String Name
+        +Email ContactEmail
+        +String Phone
+    }
+    class InventoryItem {
+        +StockQuantity QuantityOnHand
+        +StockQuantity ReorderQuantity
+        +AdjustStock()
+        +TransferStock()
+    }
+    class StockOrder {
+        +DateTime OrderDate
+        +StockQuantity Quantity
+        +String Status
+        +PlaceOrder()
+        +ReceiveOrder()
+        +CancelOrder()
+    }
+    class StockOrderStatus {
+        <<enumeration>>
+        Pending
+        Shipped
+        Received
+        Cancelled
+    }
+    class InventoryManager {
+        <<actor>>
+    }
+    class ProductInventory {
+        <<relationship>>
+    }
+    class WarehouseStock {
+        <<relationship>>
+    }
+    class SupplierProduct {
+        <<relationship>>
+    }
+    class SupplierOrder {
+        <<relationship>>
+    }
+
+    Product "1" --> "*" InventoryItem : ProductInventory (owns)
+    Warehouse "1" --> "*" InventoryItem : WarehouseStock (owns)
+    Supplier "1" --> "*" Product : SupplierProduct
+    Supplier "1" --> "*" StockOrder : SupplierOrder
+    Product --> ProductStage : current stage
+    StockOrder --> StockOrderStatus : status

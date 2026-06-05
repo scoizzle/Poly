@@ -4,6 +4,10 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Tests.Introspection;
 
 public class ClrTypePropertyTests {
+    private sealed class InitOnlyPropertyHolder {
+        public int Value { get; init; }
+    }
+
     [Test]
     public async Task LengthProperty_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
@@ -40,5 +44,29 @@ public class ClrTypePropertyTests {
         await Assert.That(nowProperty).IsTypeOf<ClrTypeProperty>();
         await Assert.That(nowProperty!.Name).IsEqualTo("Now");
         await Assert.That(((ITypeMember)nowProperty).MemberTypeDefinition.FullName).IsEqualTo("System.DateTime");
+    }
+
+    [Test]
+    public async Task LengthProperty_ExposesReadAccessorOnly() {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var stringType = registry.GetTypeDefinition<string>();
+        var lengthProperty = stringType.Properties.WithName("Length").SingleOrDefault() as ClrTypeProperty;
+
+        await Assert.That(lengthProperty).IsNotNull();
+        await Assert.That(lengthProperty!.CanRead).IsTrue();
+        await Assert.That(lengthProperty.CanWrite).IsFalse();
+        await Assert.That(lengthProperty.CanInitialize).IsFalse();
+    }
+
+    [Test]
+    public async Task InitOnlyProperty_ExposesInitializeCapability() {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var type = registry.GetTypeDefinition<InitOnlyPropertyHolder>();
+        var valueProperty = type.Properties.WithName("Value").SingleOrDefault() as ClrTypeProperty;
+
+        await Assert.That(valueProperty).IsNotNull();
+        await Assert.That(valueProperty!.CanRead).IsTrue();
+        await Assert.That(valueProperty.CanWrite).IsFalse();
+        await Assert.That(valueProperty.CanInitialize).IsTrue();
     }
 }

@@ -101,6 +101,7 @@ internal sealed class ActionParameterUsageAnalyzer : INodeAnalyzer {
             referenced.Add(pa.Name);
         }
 
+        // Use ToArray for indexed if needed; kept simple foreach for IEnumerable Children (AggregateChildren handles the framework walk when used in analyzer context).
         foreach (var child in expr.Children.OfType<DomainExpression>()) {
             CollectFromExpression(child, referenced);
         }

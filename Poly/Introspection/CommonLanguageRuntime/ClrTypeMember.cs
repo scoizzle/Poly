@@ -9,6 +9,8 @@ internal abstract class ClrTypeMember : ITypeMember {
     public abstract LifetimeModifier LifetimeModifier { get; }
     public bool IsStatic => LifetimeModifier == LifetimeModifier.Static;
 
+    public virtual Mutability Mutability => Mutability.Mutable;
+
     ITypeDefinition ITypeMember.MemberTypeDefinition => MemberTypeDefinition;
     ITypeDefinition ITypeMember.DeclaringTypeDefinition => DeclaringTypeDefinition;
     IEnumerable<IParameter>? ITypeMember.Parameters => Parameters;

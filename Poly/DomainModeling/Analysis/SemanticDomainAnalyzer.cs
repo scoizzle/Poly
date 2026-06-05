@@ -217,10 +217,15 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
 
     private static void PublishEffectivePolicies(AnalysisContext context, Entity entity) {
         var entityPolicies = entity.Policies.ToArray();
-        context.SetMetadata(entity, new EffectivePoliciesMetadata(entityPolicies));
+        if (entityPolicies.Length > 0) {
+            context.SetMetadata(entity, new EffectivePoliciesMetadata(entityPolicies));
+        }
 
         foreach (var action in entity.Actions) {
-            context.SetMetadata(action, new EffectivePoliciesMetadata([.. entityPolicies, .. action.Policies]));
+            var actionPolicies = entityPolicies.Concat(action.Policies).ToArray();
+            if (actionPolicies.Length > 0) {
+                context.SetMetadata(action, new EffectivePoliciesMetadata(actionPolicies));
+            }
         }
 
         var stages = entity.Stages
@@ -229,10 +234,15 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
 
         foreach (var stage in entity.Stages) {
             var stagePolicies = GetEffectiveStagePolicies(entityPolicies, stage, stages);
-            context.SetMetadata(stage, new EffectivePoliciesMetadata(stagePolicies));
+            if (stagePolicies.Count > 0) {
+                context.SetMetadata(stage, new EffectivePoliciesMetadata(stagePolicies));
+            }
 
             foreach (var action in stage.Actions) {
-                context.SetMetadata(action, new EffectivePoliciesMetadata([.. stagePolicies, .. action.Policies]));
+                var actionPolicies = stagePolicies.Concat(action.Policies).ToArray();
+                if (actionPolicies.Length > 0) {
+                    context.SetMetadata(action, new EffectivePoliciesMetadata(actionPolicies));
+                }
             }
         }
     }
@@ -268,7 +278,9 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         IReadOnlyDictionary<string, Stage> stages) {
         foreach (var stage in entity.Stages) {
             var ancestors = CollectStageAncestors(stage, stages);
-            context.SetMetadata(stage, new StageLineageMetadata(ancestors.Count, ancestors));
+            if (ancestors.Count > 0) {
+                context.SetMetadata(stage, new StageLineageMetadata(ancestors.Count, ancestors));
+            }
         }
     }
 

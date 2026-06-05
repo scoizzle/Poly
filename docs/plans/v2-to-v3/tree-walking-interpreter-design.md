@@ -6,6 +6,8 @@ It is not merely an execution engine. It is an **executable symbolic medium** th
 
 Suspendability, introspection, and re-analyzability are not features. They are **non-negotiable foundational requirements** of the neurosymbolic platform.
 
+Recent work and test observations have reinforced that analysis policy must be explicit: a bare `TreeWalkingInterpreter().Evaluate(node)` auto-runs the full `AnalyzeForEvaluation` pipeline (ConstantFolding → SideEffectAnalysis → ControlFlowAnalysis + basics) internally. Some integration tests use lighter analysis for the Linq path (`BuildExpression` only runs basic semantic passes). Plans, tests, and usage should make the chosen policy (full vs minimal vs pre-supplied `AnalysisResult`) visible and intentional. This directly supports elision, insight, and the "executable symbolic medium" vision.
+
 This document has been revised to make this principle the primary driver of the architecture from the very first design decision. See decision record `2026-06-post-lowering-insight-analysis.md` for full rationale.
 
 **Critical Module Boundary (Non-Negotiable):**

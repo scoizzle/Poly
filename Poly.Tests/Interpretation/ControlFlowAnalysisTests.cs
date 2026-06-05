@@ -1,4 +1,7 @@
+using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Syntax.Nodes;
 
 namespace Poly.Tests.Interpretation;
 
@@ -381,5 +384,105 @@ public class ControlFlowAnalysisTests {
         // Should detect dead code after throw
         var deadCodeWarnings = result.Diagnostics.Where(d => d.Code == "CF0002").ToList();
         await Assert.That(deadCodeWarnings.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task While_ConstTruePureNoMutation_IsInfinite_AndPostCodeElidable() {
+        // pure infinite while(true) with no mutation => CF detects, sets Infinite metadata, marks post code elidable + specific diag
+        var cond = new Constant(true);
+        var body = new Block(new Constant(42)); // pure
+        var post = new Constant(99);
+        var ast = new Block(
+            new WhileLoop(cond, body),
+            post
+        );
+
+        var analyzer = new AnalyzerBuilder()
+            .UseConstantFolding()
+            .UseSideEffectAnalysis()
+            .UseControlFlowAnalysis()
+            .Build();
+
+        var result = analyzer.Analyze(ast);
+
+        await Assert.That(result.IsInfiniteLoop(ast.Nodes[0])).IsTrue();
+
+        var infDiags = result.Diagnostics.Where(d => d.Code == "CF0003").ToList();
+        await Assert.That(infDiags.Count).IsGreaterThan(0);
+
+        // post code should be tagged elidable by CF dead code
+        await Assert.That(result.CanElide(post)).IsTrue();
+
+        var deads = result.Diagnostics.Where(d => d.Code == "CF0002").ToList();
+        await Assert.That(deads.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task If_ConstFalse_ElidesElseBranch() {
+        var cond = new Constant(false);
+        var thenB = new Block(new Constant(1));
+        var elseB = new Block(new Constant(2));
+        var ast = new IfStatement(cond, thenB, elseB);
+
+        var analyzer = new AnalyzerBuilder()
+            .UseConstantFolding()
+            .UseSideEffectAnalysis()
+            .UseControlFlowAnalysis()
+            .Build();
+
+        var result = analyzer.Analyze(ast);
+
+        // then branch is dead for const false; else is live
+        await Assert.That(result.CanElide(thenB)).IsTrue();
+        await Assert.That(result.CanElide(elseB)).IsFalse(); // live
+
+        var specific = result.Diagnostics.Where(d => d.Code == "CF0005" || d.Code == "CF0004").ToList();
+        await Assert.That(specific.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Switch_ConstValue_DeadCaseMarked() {
+        var val = new Constant(1);
+        var case0 = new SwitchCase(new Constant(0), new Block(new Constant("zero")));
+        var case1 = new SwitchCase(new Constant(1), new Block(new Constant("one")));
+        var def = new Block(new Constant("def"));
+        var ast = new SwitchStatement(val, new[] { case0, case1 }, def);
+
+        var analyzer = new AnalyzerBuilder()
+            .UseConstantFolding()
+            .UseSideEffectAnalysis()
+            .UseControlFlowAnalysis()
+            .Build();
+
+        var result = analyzer.Analyze(ast);
+
+        // case0 body should be elidable (const 1 doesn't match 0)
+        await Assert.That(result.CanElide(case0.Body)).IsTrue();
+
+        var deadCaseDiags = result.Diagnostics.Where(d => d.Code == "CF0011" || d.Code == "CF0012").ToList();
+        await Assert.That(deadCaseDiags.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task MustExecute_BasicEntryStmts() {
+        var ast = new Block(
+            new Constant(1),
+            new Constant(2)
+        );
+
+        var analyzer = new AnalyzerBuilder()
+            .UseConstantFolding()
+            .UseSideEffectAnalysis()
+            .UseControlFlowAnalysis()
+            .Build();
+
+        var result = analyzer.Analyze(ast);
+
+        // first stmts in entry often marked must-execute by our simple heuristic
+        if (ast.Nodes.Count > 0) {
+            // not strict assert (heuristic), just exercise no crash + api
+            _ = result.IsMustExecute(ast.Nodes[0]);
+        }
+        await Assert.That(result.GetControlFlowGraph(ast)).IsNotNull();
     }
 }

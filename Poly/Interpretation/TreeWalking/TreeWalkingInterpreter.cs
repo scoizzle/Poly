@@ -5,8 +5,8 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 
 using Poly.Interpretation.Analysis;
-using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Syntax;
@@ -190,9 +190,9 @@ public sealed class TreeWalkingInterpreter(AnalysisResult? analysisResult = null
             .UseTypeResolver()
             .UseMemberResolver()
             .UseVariableScopeValidator()
+            .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseControlFlowAnalysis()
-            .UseConstantFolding()
             .Build()
             .With(context => BindIncomingParameterTypes(context, node, initialVariables));
 

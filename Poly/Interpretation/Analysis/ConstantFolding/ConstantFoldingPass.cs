@@ -15,6 +15,10 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             return;
         }
 
+        if (node is Constant) {
+            return;
+        }
+
         // Post-order traversal: analyze children first, then fold parent
         this.AnalyzeChildren(context, node);
 
@@ -74,7 +78,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         };
     }
 
-    private FoldResult FoldParameter(Parameter parameter, IReadOnlyDictionary<NodeId, object?>? parameterValues) {
+    private static FoldResult FoldParameter(Parameter parameter, IReadOnlyDictionary<NodeId, object?>? parameterValues) {
         if (parameterValues != null && parameterValues.TryGetValue(parameter.Id, out var value)) {
             return FoldResult.Success(value);
         }

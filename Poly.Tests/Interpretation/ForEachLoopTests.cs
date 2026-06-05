@@ -7,10 +7,12 @@ using Expr = System.Linq.Expressions.Expression;
 namespace Poly.Tests.Interpretation;
 
 public class ForEachLoopTests {
+    private static readonly int[] Value = [1, 2, 3];
+
     [Test]
     public async Task AnalyzeNode_ForEachLoop_ResolvesLoopVariableTypeFromArrayElementType() {
         var loopVariable = new Variable("item");
-        var node = new ForEachLoop(loopVariable, new Constant(new[] { 1, 2, 3 }), loopVariable);
+        var node = new ForEachLoop(loopVariable, new Constant(Value), loopVariable);
 
         var analysis = node.AnalyzeNode();
         var resolvedType = analysis.GetResolvedType(loopVariable);

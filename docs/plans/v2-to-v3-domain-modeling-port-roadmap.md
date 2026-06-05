@@ -7,7 +7,7 @@
 > - `docs/plans/v2-to-v3/workstreams/` — Individual workstream task files (designed for parallel agent work)
 
 **Status**: Superseded (content migrated)  
-**Last Updated**: 2026-06-01  
+**Last Updated**: 2026-06 (analysis unification + member mutability progress captured in new master + WS8)  
 
 **Related Decisions**:
 - `docs/decisions/2026-core-engineering-principles.md`

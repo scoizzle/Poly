@@ -194,26 +194,28 @@ internal sealed class TypeResolver : INodeAnalyzer {
     private static ITypeDefinition? ResolveBlockType(
         AnalysisContext context,
         Block block) {
-        foreach (var variable in block.Variables.OfType<Variable>()) {
-            var firstAssignment = block.Nodes.OfType<Assignment>().FirstOrDefault(a => ReferenceEquals(a.Destination, variable));
-
-            if (firstAssignment != null) {
-                var resolved = ResolveNodeType(context, firstAssignment.Value);
-                if (resolved != null) {
-                    context.SetResolvedType(variable, resolved);
+        // Direct indexed access over block.Nodes and Variables (per AggregateChildren/direct precedent from SideEffect for position-dependent/wide fanout like blocks; avoids LINQ allocs/enumerators).
+        var nodes = block.Nodes;
+        int n = nodes.Count;
+        foreach (var variable in block.Variables) {
+            if (variable is not Variable v) continue;
+            ITypeDefinition? resolved = null;
+            for (int i = 0; i < n; i++) {
+                if (nodes[i] is Assignment a && ReferenceEquals(a.Destination, v)) {
+                    resolved = ResolveNodeType(context, a.Value);
+                    break;
                 }
             }
-            else if (variable.Value is not null) {
-                var resolved = ResolveNodeType(context, variable.Value);
-                if (resolved != null) {
-                    context.SetResolvedType(variable, resolved);
-                }
+            if (resolved == null && v.Value is not null) {
+                resolved = ResolveNodeType(context, v.Value);
+            }
+            if (resolved != null) {
+                context.SetResolvedType(v, resolved);
             }
         }
 
-        return block.Nodes.Any()
-            ? ResolveNodeType(context, block.Nodes.Last())
-            : null;
+        if (n == 0) return null;
+        return ResolveNodeType(context, nodes[n - 1]);
     }
 
     private static ITypeDefinition? ResolveParameterType(AnalysisContext context, Parameter parameter) {

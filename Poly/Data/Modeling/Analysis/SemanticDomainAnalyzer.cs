@@ -86,10 +86,13 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
                 EffectivePolicies = effectiveStagePolicies
             });
 
-            context.Metadata.Set(stage, new StageLineageMetadata {
-                Depth = stageLineage.Length - 1,
-                Ancestors = stageLineage.Take(stageLineage.Length - 1).ToArray()
-            });
+            var ancestors = stageLineage.Take(stageLineage.Length - 1).ToArray();
+            if (ancestors.Length > 0) {
+                context.Metadata.Set(stage, new StageLineageMetadata {
+                    Depth = ancestors.Length,
+                    Ancestors = ancestors
+                });
+            }
         }
     }
 

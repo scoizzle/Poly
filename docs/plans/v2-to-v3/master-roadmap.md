@@ -27,7 +27,7 @@
 | Phase | Focus | Parallelism Level | Current Status |
 |-------|-------|-------------------|----------------|
 | **Phase 1** | Foundation + Minimal Viable Evolution Layer + Quality & Audit | High (see workstreams below) | Foundation Complete (WS1 done); Now focusing on Trace Quality, Expressiveness Audit, and Real Proofs |
-| **Phase 2** | Analysis Unification + Lowering Parity | Medium-High | Not Started |
+| **Phase 2** | Analysis Unification + Lowering Parity | Medium-High | In Progress (core IR analysis surface significantly strengthened; see WS8) |
 | **Phase 3** | Consumer Migration (MCP + Demos + Tests) — MCP surface actively optimized for model interaction patterns (incremental + fundamental) | High | Not Started |
 | **Phase 4** | Full Expressiveness + Roadblock Resolution | Medium | Not Started |
 | **Phase 5** | Cutover & Legacy Removal | Low | Not Started |
@@ -83,13 +83,24 @@ Phase 1 achievements:
 
 Remaining Phase 1 polish:
 1. **WS4 Trace Quality** — Serviceable per WS5 proofs. Remaining: ensure agents get excellent output from the unified diagnostic stream. Lower priority.
-2. **WS6 Roadmap Hygiene** — Keep statuses current, orchestrator → agent-summary → plan-update loop. (Active now.)
+2. **WS6 Roadmap Hygiene** — Keep statuses current, orchestrator → agent-summary → plan-update loop. (Active now; this update is part of it.)
 3. **Decision Record Hygiene** — Keep change representation decision current.
+
+**Phase 2 momentum note**: Core analysis unification work (SideEffect DCE + CF reachability/mutation ownership + `Mutability` enum on ITypeMember) has advanced substantially outside the original WS8 task list. This de-risks and accelerates the "unify V2/V3 analysis surfaces" goal. WS8 owner should treat the strengthened `Syntax/Analysis` + introspection as available foundation.
 
 **Phase 2 (Analysis Unification + Lowering Parity) is the next major focus.**
 - Unify the V2 and V3 analysis surfaces on the shared Syntax.Analysis infrastructure.
 - Achieve lowering parity for the core DomainExpression → C# compilation path (LinqExpressions + CSharpGenerator).
 - Phase 2 workstream file now exists at `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`.
+
+**Significant progress achieved on core analysis unification (orchestrator-led session):**
+- SideEffectAnalysisPass refactored as efficient DCE precursor: `AggregateChildren<T>` fusion (one-pass visitation + aggregation), flyweight singletons for metadata, sparse `SideEffectMetadata` (only emitted for pures; default "has effects"), direct indexed handling for high-fanout `Block`s, options hoisted, elision of unused pure intermediates + loop controls (initializer/increment), `CanElide` / `HasSideEffects` extensions.
+- ControlFlowAnalysisPass now owns advanced reachability: full migration of infinite loop detection (purity + no-mutation to cond vars), constant/pure condition pruning for If/Loops/Switch (edge pruning + specific diags + Elidable tagging), switch exhaustiveness + dead cases, exception/throw reachability in TryCatch (dead catch pruning), must-execute/post-dominance facts, labeled gotos + dead label detection, pure-vs-effectful infinite distinction via richer `InfiniteLoopMetadata`, deeper elision integration.
+- First-class `Mutability` [Flags] enum promoted to `ITypeMember` (replacing three separate booleans on ITypeField/ITypeProperty): `Mutable`, `ReadOnlyAfterInit`, `CompileTimeConst` (automatically implies ReadOnlyAfterInit), `VolatileAccess`. Clr impls make reflection-based assumptions (`IsLiteral` → CompileTimeConst, `IsInitOnly` → ReadOnlyAfterInit) with safe `Mutable` fallbacks for unknowable cases (properties, external types). Used in SideEffect (volatile forces side effects), CF mutation detection (consts don't count as runtime mutations; volatiles count as impact), emission, etc. Directly supports "is this mutable or does it cause mutations?" for elision, CF, and neurosymbolic insight.
+- Improved analysis-before-interpret discipline surfaced (e.g., `TreeWalkingInterpreter.Evaluate` auto-runs full `AnalyzeForEvaluation` (incl. CF + SideEffect + Folding) when no pre-result provided; contrast with lighter `BuildExpression` in some integration tests such as the arithmetic parser/evaluator). Full pipeline now consistently includes ConstantFolding → SideEffect → ControlFlow. Integration tests should make their chosen analysis policy explicit.
+- Soundness improvements to mutation detection (`HasMutationToVars`): now accounts for non-pure `Invoke`s, `SuspendNode`, member/index assigns, external parameters/references that can alias state.
+
+These directly advance the "re-analyzable lowered code", "analysis-driven execution (elision)", and "post-lowering insight" tenets from the neurosymbolic vision and tree-walking design. WS8 execution can now build on a much stronger shared `Syntax/Analysis` + introspection foundation. DomainExpression lowering and V3-specific passes remain as primary deliverables.
 
 **Phase 4 (Full Expressiveness) preparation now active.**
 - Dynamic calculation (arithmetic + DateOperation) and read-only RelationshipNavigation for policy rules — documented in `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`.
@@ -117,7 +128,7 @@ Remaining Phase 1 polish:
 | AGENTS.md + decisions properly reference this plan | ✅ | Strong links exist |
 | First Orchestrator has claimed a workstream | ✅ | Grok claimed merged WS1 (Evolution Layer Applicator + MVP Ops) |
 
-**Bottom line (June 2026)**: Phase 1 foundation complete. WS5 proofs pass (1031 tests). Incremental analysis and DomainChange coverage expansion delivered. Phase 2 (Analysis Unification + Lowering Parity) planning underway. Phase 4 (Full Expressiveness) design work started. Remaining Phase 1: WS4 trace polish + WS6 roadmap hygiene.
+**Bottom line (June 2026)**: Phase 1 foundation complete. WS5 proofs pass (1031 tests). Incremental analysis and DomainChange coverage expansion delivered. **Phase 2 core analysis unification significantly advanced** (SideEffect DCE refactoring + full CF ownership of reachability/mutation/volatile+const modeling via first-class `Mutability` enum on `ITypeMember`; see detailed note above). Phase 4 (Full Expressiveness) design work started. Remaining Phase 1: WS4 trace polish + WS6 roadmap hygiene. WS8 now has a much stronger foundation to execute against.
 
 **What is solid right now:**
 - Clear overall strategy and 5 phases
@@ -140,7 +151,7 @@ This requirement is a first-class driver starting in Phase 1.
 **What still needs work (Phase 1 → Phase 2 transition):**
 - WS4 Trace Quality — Lean model done. Remaining: ensure agents get excellent output.
 - WS6 Roadmap Hygiene — Active now. Keep orchestrator → agent-summary → plan-update loop exercised.
-- WS8 Phase 2 (Analysis Unification + Lowering Parity) — Workstream file created, execution starts after Phase 1 wrap.
+- WS8 Phase 2 (Analysis Unification + Lowering Parity) — Workstream file created and updated with core analysis + mutability progress; execution ready to leverage the stronger foundation for DomainExpression lowering and V3 parity.
 - Phase 4 design — Dynamic calculation + read-only RelationshipNavigation design complete (decision record `2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`, supersedes `2026-06-phase4-cross-entity-mutation-and-dynamic-calculation.md`).
 - Decision records — New records needed for Phase 2/4 design decisions.
 - Further DomainChange coverage — Remaining gaps (DomainType constraints, Event properties, Relationship shape, Property type changes).

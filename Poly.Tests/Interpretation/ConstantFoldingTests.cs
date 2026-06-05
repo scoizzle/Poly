@@ -18,6 +18,11 @@ public class ConstantFoldingTests {
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
         await Assert.That(result.GetConstantValue(ast)).IsEqualTo(3);
+
+        var add = (Add)ast;
+        await Assert.That(result.GetMetadata<ConstantValueMetadata>(add.LeftHandValue)).IsNull();
+        await Assert.That(result.GetMetadata<ConstantValueMetadata>(add.RightHandValue)).IsNull();
+        await Assert.That(result.GetMetadata<ConstantValueMetadata>(ast)).IsNotNull();
     }
 
     [Test]

@@ -6,7 +6,7 @@ namespace Poly.Syntax.Analysis;
 /// <param name="typeDefinitions">The provider for type definitions used during analysis.</param>
 /// <param name="analyzers">The named analyzers to apply in order.</param>
 public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerable<(INodeAnalyzer Analyzer, string PassName)> analyzers) {
-    private readonly (INodeAnalyzer Analyzer, string PassName)[] _analyzers = analyzers.ToArray();
+    private readonly (INodeAnalyzer Analyzer, string PassName)[] _analyzers = [.. analyzers];
     private readonly List<Action<AnalysisContext>> _actions = [];
 
     /// <summary>
@@ -81,7 +81,7 @@ public sealed class Analyzer(ITypeDefinitionProvider typeDefinitions, IEnumerabl
         ArgumentNullException.ThrowIfNull(priorAnalysis);
         ArgumentNullException.ThrowIfNull(invalidatedNodes);
 
-        if (!priorAnalysis.IsIncrementalAnalysisAvailable()) {
+        if (!priorAnalysis.IsIncrementalAnalysisAvailable() || invalidatedNodes.Contains(root)) {
             return Analyze(root, settings);
         }
 

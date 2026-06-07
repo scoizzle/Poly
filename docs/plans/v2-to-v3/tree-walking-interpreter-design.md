@@ -10,6 +10,8 @@ Recent work and test observations have reinforced that analysis policy must be e
 
 This document has been revised to make this principle the primary driver of the architecture from the very first design decision. See decision record `2026-06-post-lowering-insight-analysis.md` for full rationale.
 
+**Execution engine evolution (RISC IR + stack VM):** The tree-walker remains the reference implementation during transition. A new simpler explicit stack-based VM executing a minimal bespoke RISC IR (lowered after full analysis) is being built under `Poly/Interpretation/VirtualMachine/`. See the dedicated implementation plan `docs/plans/risc-ir-stack-vm-implementation-plan.md` (Phases 0+). The RISC path must deliver identical observables (1200-cycle soak, cross-engine fuzz, suspend/insight/re-analysis, breakpoints, CLR interop, stack-ref + heap-ref-cell mutation scenarios, etc.) before cutover. Analysis unification (this design + WS8) is the prerequisite frontend for the lowering.
+
 **Critical Module Boundary (Non-Negotiable):**
 
 `Poly.Interpretation` **must not** directly reference `Poly.DomainModeling`. The dependency must be one-way:

@@ -30,4 +30,10 @@ public sealed record InterpreterOptions {
     /// (stage transitions, event boundaries, etc.) to allow insight analysis.
     /// </summary>
     public bool AutoSuspendForAnalysis { get; init; } = true;
+
+    /// <summary>
+    /// (Internal) Route execution through the RISC IR + stack VM in Poly.Interpretation.VirtualMachine
+    /// instead of the tree-walker. Off by default during development and transition.
+    /// </summary>
+    internal bool UseRiscVirtualMachine { get; init; } = false;
 }

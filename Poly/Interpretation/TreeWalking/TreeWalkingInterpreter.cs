@@ -20,10 +20,10 @@ public sealed class TreeWalkingInterpreter(AnalysisResult? analysisResult = null
     private readonly AnalysisResult? _configuredAnalysisResult = analysisResult;
     private readonly InterpreterOptions _options = options ?? InterpreterOptions.Default;
     private readonly InterpretationAnalysisSettings _analysisSettings = InterpretationAnalysisSettings.Default;
-    private readonly List<ITreeWalkerCompiler> _compilers = new();
-    private readonly List<INodeAnalyzer> _insightAnalyzers = new();
-    private readonly List<ILiveStateAnalyzer> _liveStateAnalyzers = new();
-    private readonly HashSet<NodeId> _breakpoints = new();
+    private readonly List<ITreeWalkerCompiler> _compilers = [];
+    private readonly List<INodeAnalyzer> _insightAnalyzers = [];
+    private readonly List<ILiveStateAnalyzer> _liveStateAnalyzers = [];
+    private readonly HashSet<NodeId> _breakpoints = [];
     private InterpreterState? _currentState;
     private AnalysisResult? _lastComputedAnalysisResult;
     private Node? _lastAnalyzedRoot;

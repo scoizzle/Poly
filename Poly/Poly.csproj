@@ -26,4 +26,10 @@
         <PackageVersion>1.0.1</PackageVersion>
         <Version>1.0</Version>
     </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Enables smoke / integration tests in Poly.Tests to reach internal RISC VM types during development and transition.
+             No effect on public API surface or packaged consumers. -->
+        <InternalsVisibleTo Include="Poly.Tests" />
+    </ItemGroup>
 </Project>

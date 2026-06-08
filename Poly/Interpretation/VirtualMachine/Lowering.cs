@@ -45,8 +45,7 @@ internal static class Lowering {
     }
 
     private static readonly CallSiteDelegate IsNotNullDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
+        var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int raw = state.Stack.AsSpan()[baseOff];
         bool isNotNull;
@@ -60,9 +59,26 @@ internal static class Lowering {
         if (hasRet != 0) state.Stack.Push(isNotNull ? 1 : 0);
     };
 
+    private static CallSiteDelegate CreateTypeIsDelegate(Type targetType) {
+        return state => {
+            var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
+            int baseOff = state.Stack.SP - argSlots;
+            int raw = state.Stack.AsSpan()[baseOff];
+            bool result;
+            if (raw >= 0 && raw < state.Heap.Count) {
+                var val = state.Heap.Get(raw);
+                result = val is not null && targetType.IsInstanceOfType(val);
+            }
+            else {
+                result = raw != 0;
+            }
+            if (argSlots > 0) state.Stack.Drop(argSlots);
+            if (hasRet != 0) state.Stack.Push(result ? 1 : 0);
+        };
+    }
+
     private static readonly CallSiteDelegate AwaitResultDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
+        var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int handle = state.Stack.AsSpan()[baseOff];
         object? awaitable = handle >= 0 && handle < state.Heap.Count ? state.Heap.Get(handle) : (object?)handle;
@@ -76,8 +92,7 @@ internal static class Lowering {
     };
 
     private static readonly CallSiteDelegate InitEnumeratorDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
+        var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
         int collectionHandle = state.Stack.AsSpan()[baseOff + 1];
@@ -90,33 +105,8 @@ internal static class Lowering {
         if (argSlots > 0) state.Stack.Drop(argSlots);
     };
 
-    private static readonly CallSiteDelegate MoveNextDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
-        int baseOff = state.Stack.SP - argSlots;
-        int holderHandle = state.Stack.AsSpan()[baseOff];
-        var enumerator = holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] h1 ? h1[0] as IEnumerator : null;
-        bool moved = enumerator?.MoveNext() ?? false;
-        if (argSlots > 0) state.Stack.Drop(argSlots);
-        if (hasRet != 0) state.Stack.Push(moved ? 1 : 0);
-    };
-
-    private static readonly CallSiteDelegate StringConcatDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
-        int baseOff = state.Stack.SP - argSlots;
-        int leftHandle = state.Stack.AsSpan()[baseOff];
-        int rightHandle = state.Stack.AsSpan()[baseOff + 1];
-        object? left = leftHandle >= 0 && leftHandle < state.Heap.Count ? state.Heap.Get(leftHandle) : (object?)leftHandle;
-        object? right = rightHandle >= 0 && rightHandle < state.Heap.Count ? state.Heap.Get(rightHandle) : (object?)rightHandle;
-        var result = string.Concat(left, right);
-        if (argSlots > 0) state.Stack.Drop(argSlots);
-        if (hasRet != 0) state.Stack.Push(state.Heap.Allocate(result));
-    };
-
     private static readonly CallSiteDelegate GetCurrentDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
+        var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
         var enumerator = holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] h2 ? h2[0] as IEnumerator : null;
@@ -129,8 +119,7 @@ internal static class Lowering {
     };
 
     private static readonly CallSiteDelegate DisposeEnumeratorDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
+        var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
         if (holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] h3 && h3[0] is IDisposable d)
@@ -139,8 +128,7 @@ internal static class Lowering {
     };
 
     private static readonly CallSiteDelegate SaveResourceDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
+        var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
         int resourceHandle = state.Stack.AsSpan()[baseOff + 1];
@@ -152,8 +140,7 @@ internal static class Lowering {
     };
 
     private static readonly CallSiteDelegate DisposeResourceDelegate = state => {
-        int hasRet = state.Stack.PopInt();
-        int argSlots = state.Stack.PopInt();
+        var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
         if (holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] h4 && h4[0] is IDisposable d)
@@ -174,16 +161,7 @@ internal static class Lowering {
             Labels = new LabelContext(),
             LambdaFuncMap = new Dictionary<Lambda, int>(ReferenceEqualityComparer.Instance),
             LambdaCaptureMap = new Dictionary<Lambda, List<string>>(ReferenceEqualityComparer.Instance),
-        }; var code = ctx.Code;
-        var sourceMap = ctx.SourceMap;
-        var functions = ctx.Functions;
-        var functionIndexMap = ctx.FunctionIndexMap;
-        var constants = ctx.Constants;
-        var callSites = ctx.CallSites;
-        var relocations = ctx.Relocations;
-        var labels = ctx.Labels;
-
-
+        };
 
         var referencedMethods = new List<MethodDefinitionNode>();
         DiscoverFunctions(root, analysis, referencedMethods);
@@ -195,7 +173,7 @@ internal static class Lowering {
 
         foreach (var method in referencedMethods) {
             int entryPc = ctx.Code.Count;
-            ctx.FunctionIndexMap[method] = ctx.Functions.Count;
+            ctx.FunctionIndexMap![method] = ctx.Functions.Count;
             int paramCount = method.Parameters?.Count ?? 0;
             var paramIndexMap = new Dictionary<string, int>();
             if (method.Parameters is not null) {
@@ -213,7 +191,7 @@ internal static class Lowering {
             if (method.Body is not null) {
                 ctx.ParamIndexMap = paramIndexMap;
                 ctx.LocalIndexMap = localIndexMap;
-                Emit(method.Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(method.Body, ref ctx);
             }
             ctx.Code.Add((byte)OpCode.Return);
         }
@@ -221,7 +199,7 @@ internal static class Lowering {
         // Pre-scan: allocate function indices for all lambdas before emitting any bodies
         foreach (var lambda in referencedLambdas) {
             int funcIdx = ctx.Functions.Count;
-            ctx.LambdaFuncMap[lambda] = funcIdx;
+            ctx.LambdaFuncMap![lambda] = funcIdx;
             ctx.Functions.Add(new FunctionEntry(0, 0, 0, 0)); // placeholder
         }
 
@@ -246,7 +224,7 @@ internal static class Lowering {
             var upvalueMap = new Dictionary<string, int>();
             for (int j = 0; j < captures.Count; j++)
                 upvalueMap[captures[j]] = j;
-            ctx.LambdaCaptureMap[lambda] = captures;
+            ctx.LambdaCaptureMap![lambda] = captures;
 
             int retBytes = (lambda.Body is not null && EmitsValue(lambda.Body)) ? 1 : 0;
             ctx.Functions[i] = new FunctionEntry(entryPc, paramCount + 1, retBytes, localIndexMap.Count);
@@ -256,7 +234,7 @@ internal static class Lowering {
             ctx.UpvalueMap = upvalueMap;
             if (lambda.Body is not null) {
                 var bodyLambdaState = new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, upvalueMap);
-                Emit(lambda.Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, bodyLambdaState);
+                Emit(lambda.Body, ref ctx, bodyLambdaState);
             }
             ctx.Code.Add((byte)OpCode.Return);
         }
@@ -268,9 +246,9 @@ internal static class Lowering {
         int mainEntry = ctx.Code.Count;
         PatchJump(ctx.Code, jumpOverMainPc, mainEntry);
         var rootLambdaState = new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, null);
-        Emit(root, code, sourceMap, analysis, functions, functionIndexMap, null, null, constants, callSites, relocations, labels, rootLambdaState);
+        Emit(root, ref ctx, rootLambdaState);
 
-        foreach (var (codeOff, targetPc) in ctx.Relocations)
+        foreach (var (codeOff, targetPc) in ctx.Relocations!)
             PatchJump(ctx.Code, codeOff, targetPc);
 
         ResolveAllJumps(ctx.Code, ctx.Labels!);
@@ -423,281 +401,267 @@ internal static class Lowering {
         };
     }
 
-    private static void Emit(Node node, List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis,
-        List<FunctionEntry>? functions = null, Dictionary<MethodDefinitionNode, int>? functionIndexMap = null,
-        IReadOnlyDictionary<string, int>? paramIndexMap = null, IReadOnlyDictionary<string, int>? localIndexMap = null,
-        List<object?>? constants = null, List<CallSiteDelegate>? callSites = null,
-        List<(int CodeOffset, int TargetPc)>? relocations = null, LabelContext? labels = null, LambdaEmitState? lambdaState = null) {
+    private static void Emit(Node node, ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
         if (node is null) return;
 
-        var replacement = analysis?.GetNodeReplacement(node);
+        var replacement = ctx.Analysis?.GetNodeReplacement(node);
         if (replacement is not null && !ReferenceEquals(replacement, node)) {
-            Emit(replacement, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+            Emit(replacement, ref ctx, lambdaState);
             return;
         }
 
         if (node is Constant constant) {
-            int pc = code.Count;
-            sourceMap[pc] = node.Id;
+            int pc = ctx.Code.Count;
+            ctx.SourceMap[pc] = node.Id;
             if (TryInlinableInt(constant.Value, out int intVal)) {
-                code.Add((byte)OpCode.PushInt);
-                EmitInt32(code, intVal);
+                ctx.Code.Add((byte)OpCode.PushInt);
+                EmitInt32(ctx.Code, intVal);
             }
             else if (TryInlinableLong(constant.Value, out long longVal)) {
-                code.Add((byte)OpCode.PushLong);
-                EmitInt64(code, longVal);
+                ctx.Code.Add((byte)OpCode.PushLong);
+                EmitInt64(ctx.Code, longVal);
             }
             else if (TryInlinableDouble(constant.Value, out double doubleVal)) {
-                code.Add((byte)OpCode.PushDouble);
-                EmitDouble(code, doubleVal);
+                ctx.Code.Add((byte)OpCode.PushDouble);
+                EmitDouble(ctx.Code, doubleVal);
             }
             else {
-                int idx = constants?.Count ?? 0;
-                constants?.Add(constant.Value);
-                code.Add((byte)OpCode.LoadConst);
-                EmitInt32(code, idx);
+                int idx = ctx.Constants?.Count ?? 0;
+                ctx.Constants?.Add(constant.Value);
+                ctx.Code.Add((byte)OpCode.LoadConst);
+                EmitInt32(ctx.Code, idx);
             }
             return;
         }
 
-        int emitPc = code.Count;
-        sourceMap[emitPc] = node.Id;
+        int emitPc = ctx.Code.Count;
+        ctx.SourceMap[emitPc] = node.Id;
 
         switch (node) {
             case Add add:
-                if (analysis?.GetResolvedType(add)?.GetRuntimeType() == typeof(string)) {
-                    Emit(add.LeftHandValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                    Emit(add.RightHandValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                    int concatIdx = callSites?.Count ?? 0;
-                    callSites?.Add(StringConcatDelegate);
-                    code.Add((byte)OpCode.PushInt); EmitInt32(code, 2);
-                    code.Add((byte)OpCode.PushInt); EmitInt32(code, 1);
-                    code.Add((byte)OpCode.CallExternal); EmitInt32(code, concatIdx);
+                if (ctx.Analysis?.GetResolvedType(add)?.GetRuntimeType() == typeof(string)) {
+                    Emit(add.LeftHandValue, ref ctx, lambdaState);
+                    Emit(add.RightHandValue, ref ctx, lambdaState);
+                    int concatIdx = ctx.CallSites?.Count ?? 0;
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 2);
+                    ctx.Code.Add((byte)OpCode.StrConcat);
                 }
                 else {
-                    EmitBinary(add.LeftHandValue, add.RightHandValue, ResolveBinaryOp(add, OpCode.Add, OpCode.Add, OpCode.DAdd, analysis),
-                              code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                    EmitBinary(add.LeftHandValue, add.RightHandValue, ResolveBinaryOp(add, OpCode.Add, OpCode.Add, OpCode.DAdd, ctx.Analysis),
+                              ref ctx, lambdaState);
                 }
                 return;
 
             case Subtract sub:
-                EmitBinary(sub.LeftHandValue, sub.RightHandValue, ResolveBinaryOp(sub, OpCode.Sub, OpCode.Sub, OpCode.DSub, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(sub.LeftHandValue, sub.RightHandValue, ResolveBinaryOp(sub, OpCode.Sub, OpCode.Sub, OpCode.DSub, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case Multiply mul:
-                EmitBinary(mul.LeftHandValue, mul.RightHandValue, ResolveBinaryOp(mul, OpCode.Mul, OpCode.Mul, OpCode.DMul, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(mul.LeftHandValue, mul.RightHandValue, ResolveBinaryOp(mul, OpCode.Mul, OpCode.Mul, OpCode.DMul, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case Divide div:
-                EmitBinary(div.LeftHandValue, div.RightHandValue, ResolveBinaryOp(div, OpCode.Div, OpCode.UDiv, OpCode.DDiv, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(div.LeftHandValue, div.RightHandValue, ResolveBinaryOp(div, OpCode.Div, OpCode.UDiv, OpCode.DDiv, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case Modulo mod:
-                EmitBinary(mod.LeftHandValue, mod.RightHandValue, ResolveBinaryOp(mod, OpCode.Mod, OpCode.UMod, OpCode.Mod, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(mod.LeftHandValue, mod.RightHandValue, ResolveBinaryOp(mod, OpCode.Mod, OpCode.UMod, OpCode.Mod, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case UnaryMinus un:
-                Emit(un.Operand, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels); {
-                    var typeDef = analysis?.GetResolvedType(un);
+                Emit(un.Operand, ref ctx, lambdaState); {
+                    var typeDef = ctx.Analysis?.GetResolvedType(un);
                     var clrType = typeDef?.GetRuntimeType();
                     if (clrType == typeof(double) || clrType == typeof(float)) {
-                        code.Add((byte)OpCode.DNeg);
+                        ctx.Code.Add((byte)OpCode.DNeg);
                         return;
                     }
                 }
-                code.Add((byte)OpCode.Neg);
+                ctx.Code.Add((byte)OpCode.Neg);
                 return;
 
             case Equal eq:
-                EmitBinary(eq.LeftHandValue, eq.RightHandValue, ResolveComparisonOp(eq.LeftHandValue, eq.RightHandValue, OpCode.Eq, OpCode.Eq, OpCode.DEq, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(eq.LeftHandValue, eq.RightHandValue, ResolveComparisonOp(eq.LeftHandValue, eq.RightHandValue, OpCode.Eq, OpCode.Eq, OpCode.DEq, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case NotEqual ne:
-                EmitBinary(ne.LeftHandValue, ne.RightHandValue, ResolveComparisonOp(ne.LeftHandValue, ne.RightHandValue, OpCode.Ne, OpCode.Ne, OpCode.DNe, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(ne.LeftHandValue, ne.RightHandValue, ResolveComparisonOp(ne.LeftHandValue, ne.RightHandValue, OpCode.Ne, OpCode.Ne, OpCode.DNe, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case LessThan lt:
-                EmitBinary(lt.LeftHandValue, lt.RightHandValue, ResolveComparisonOp(lt.LeftHandValue, lt.RightHandValue, OpCode.Lt, OpCode.ULt, OpCode.DLt, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(lt.LeftHandValue, lt.RightHandValue, ResolveComparisonOp(lt.LeftHandValue, lt.RightHandValue, OpCode.Lt, OpCode.ULt, OpCode.DLt, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case LessThanOrEqual le:
-                EmitBinary(le.LeftHandValue, le.RightHandValue, ResolveComparisonOp(le.LeftHandValue, le.RightHandValue, OpCode.Le, OpCode.ULe, OpCode.DLe, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(le.LeftHandValue, le.RightHandValue, ResolveComparisonOp(le.LeftHandValue, le.RightHandValue, OpCode.Le, OpCode.ULe, OpCode.DLe, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case GreaterThan gt:
-                EmitBinary(gt.LeftHandValue, gt.RightHandValue, ResolveComparisonOp(gt.LeftHandValue, gt.RightHandValue, OpCode.Gt, OpCode.UGt, OpCode.DGt, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(gt.LeftHandValue, gt.RightHandValue, ResolveComparisonOp(gt.LeftHandValue, gt.RightHandValue, OpCode.Gt, OpCode.UGt, OpCode.DGt, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case GreaterThanOrEqual ge:
-                EmitBinary(ge.LeftHandValue, ge.RightHandValue, ResolveComparisonOp(ge.LeftHandValue, ge.RightHandValue, OpCode.Ge, OpCode.UGe, OpCode.DGe, analysis),
-                          code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitBinary(ge.LeftHandValue, ge.RightHandValue, ResolveComparisonOp(ge.LeftHandValue, ge.RightHandValue, OpCode.Ge, OpCode.UGe, OpCode.DGe, ctx.Analysis),
+                          ref ctx, lambdaState);
                 return;
 
             case And andNode:
-                EmitShortCircuitAnd(andNode,
-code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitShortCircuitAnd(andNode, ref ctx, lambdaState);
                 return;
 
             case Or orNode:
-                EmitShortCircuitOr(orNode,
-code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitShortCircuitOr(orNode, ref ctx, lambdaState);
                 return;
 
             case Not notNode:
-                Emit(notNode.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                code.Add((byte)OpCode.Not);
+                Emit(notNode.Value, ref ctx, lambdaState);
+                ctx.Code.Add((byte)OpCode.Not);
                 return;
 
             case Conditional cond:
-                EmitConditional(cond,
-code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitConditional(cond, ref ctx, lambdaState);
                 return;
 
             case IfStatement ifStmt:
-                EmitIf(ifStmt,
-code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitIf(ifStmt, ref ctx, lambdaState);
                 return;
 
             case WhileLoop wl:
-                EmitWhileLoop(wl,
-code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitWhileLoop(wl, ref ctx, lambdaState);
                 return;
 
             case DoWhileLoop dwl:
-                EmitDoWhileLoop(dwl,
-code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitDoWhileLoop(dwl, ref ctx, lambdaState);
                 return;
 
             case ForLoop fl:
-                EmitForLoop(fl,
-                code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitForLoop(fl, ref ctx, lambdaState);
                 return;
 
             case BreakStatement brk:
-                if (labels?.LoopLabels.Count > 0) {
+                if (ctx.Labels?.LoopLabels.Count > 0) {
                     if (brk.Label is not null) {
-                        foreach (var entry in labels.LoopLabels)
-                            if (entry.Name == brk.Label) { labels.JumpTo(entry.Break, code, relocations); break; }
+                        foreach (var entry in ctx.Labels.LoopLabels)
+                            if (entry.Name == brk.Label) { ctx.Labels.JumpTo(entry.Break, ctx.Code, ctx.Relocations); break; }
                     }
                     else {
-                        labels.JumpTo(labels.LoopLabels.Peek().Break, code, relocations);
+                        ctx.Labels.JumpTo(ctx.Labels.LoopLabels.Peek().Break, ctx.Code, ctx.Relocations);
                     }
                 }
                 return;
 
             case ContinueStatement cont:
-                if (labels?.LoopLabels.Count > 0) {
+                if (ctx.Labels?.LoopLabels.Count > 0) {
                     if (cont.Label is not null) {
-                        foreach (var entry in labels.LoopLabels)
-                            if (entry.Name == cont.Label) { labels.JumpTo(entry.Continue, code, relocations); break; }
+                        foreach (var entry in ctx.Labels.LoopLabels)
+                            if (entry.Name == cont.Label) { ctx.Labels.JumpTo(entry.Continue, ctx.Code, ctx.Relocations); break; }
                     }
                     else {
-                        labels.JumpTo(labels.LoopLabels.Peek().Continue, code, relocations);
+                        ctx.Labels.JumpTo(ctx.Labels.LoopLabels.Peek().Continue, ctx.Code, ctx.Relocations);
                     }
                 }
                 return;
 
             case GotoStatement got:
-                labels?.JumpTo(got.Target, code, relocations);
+                ctx.Labels?.JumpTo(got.Target, ctx.Code, ctx.Relocations);
                 return;
 
             case LabelDeclaration lbl:
-                labels?.Mark(lbl.Name, code);
-                if (labels is not null) labels.PendingLoopLabel = lbl.Name;
-                Emit(lbl.Statement, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                if (labels is not null) labels.PendingLoopLabel = null;
+                ctx.Labels?.Mark(lbl.Name, ctx.Code);
+                if (ctx.Labels is not null) ctx.Labels.PendingLoopLabel = lbl.Name;
+                Emit(lbl.Statement, ref ctx, lambdaState);
+                if (ctx.Labels is not null) ctx.Labels.PendingLoopLabel = null;
                 return;
 
             case SwitchStatement swt:
-                EmitSwitch(swt,
-                code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                EmitSwitch(swt, ref ctx, lambdaState);
                 return;
 
             case ThrowStatement thr:
-                Emit(thr.Exception, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                code.Add((byte)OpCode.Throw);
+                Emit(thr.Exception, ref ctx, lambdaState);
+                ctx.Code.Add((byte)OpCode.Throw);
                 return;
 
             case Default def:
-                code.Add((byte)OpCode.PushInt);
-                EmitInt32(code, 0);
+                ctx.Code.Add((byte)OpCode.PushInt);
+                EmitInt32(ctx.Code, 0);
                 return;
 
             case NullForgiving nf:
-                Emit(nf.Operand, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(nf.Operand, ref ctx, lambdaState);
                 return;
 
             case Assignment assign:
-                Emit(assign.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(assign.Value, ref ctx, lambdaState);
                 string? destName = assign.Destination switch {
                     Variable v => v.Name,
                     Parameter p => p.Name,
                     _ => null
                 };
                 if (destName is not null) {
-                    if (paramIndexMap is not null && paramIndexMap.TryGetValue(destName, out int storeIdx)) {
-                        code.Add((byte)OpCode.Dup);
-                        code.Add((byte)OpCode.StoreArg);
-                        EmitInt32(code, storeIdx);
+                    if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(destName, out int storeIdx)) {
+                        ctx.Code.Add((byte)OpCode.Dup);
+                        ctx.Code.Add((byte)OpCode.StoreArg);
+                        EmitInt32(ctx.Code, storeIdx);
                     }
-                    else if (localIndexMap is not null && localIndexMap.TryGetValue(destName, out int localStoreIdx)) {
-                        code.Add((byte)OpCode.Dup);
-                        code.Add((byte)OpCode.StoreLocal);
-                        EmitInt32(code, localStoreIdx);
+                    else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(destName, out int localStoreIdx)) {
+                        ctx.Code.Add((byte)OpCode.Dup);
+                        ctx.Code.Add((byte)OpCode.StoreLocal);
+                        EmitInt32(ctx.Code, localStoreIdx);
                     }
                     else if (lambdaState?.UpvalueMap is not null && lambdaState.UpvalueMap.TryGetValue(destName, out int upStoreIdx)) {
-                        code.Add((byte)OpCode.Dup);
-                        code.Add((byte)OpCode.StoreUpvalue);
-                        EmitInt32(code, upStoreIdx);
+                        ctx.Code.Add((byte)OpCode.Dup);
+                        ctx.Code.Add((byte)OpCode.StoreUpvalue);
+                        EmitInt32(ctx.Code, upStoreIdx);
                     }
                 }
                 else if (assign.Destination is Member memberDest) {
-                    EmitAssignmentMember(memberDest, assign.Value, code, sourceMap, analysis,
-                        functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                    EmitAssignmentMember(memberDest, assign.Value, ref ctx, lambdaState);
                 }
                 else if (assign.Destination is IndexAccess idxDest) {
-                    EmitAssignmentIndexAccess(idxDest, assign.Value, code, sourceMap, analysis,
-                        functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                    EmitAssignmentIndexAccess(idxDest, assign.Value, ref ctx, lambdaState);
                 }
                 return;
 
             case Coalesce coalesce:
-                EmitCoalesce(coalesce, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, null);
+                EmitCoalesce(coalesce, ref ctx, lambdaState);
                 return;
 
             case Member member:
-                EmitMember(member, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, null);
+                EmitMember(member, ref ctx);
                 return;
 
             case IndexAccess idxAccess:
-                EmitIndexAccess(idxAccess, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, null);
+                EmitIndexAccess(idxAccess, ref ctx);
                 return;
 
             case New newExpr:
-                EmitNew(newExpr, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, null);
+                EmitNew(newExpr, ref ctx);
                 return;
 
             case TypeCast tc:
-                Emit(tc.Operand, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(tc.Operand, ref ctx, lambdaState);
                 return;
 
             case TypeIs ti:
-                Emit(ti.Operand, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                int isNotNullIdx = callSites?.Count ?? 0;
-                callSites?.Add(IsNotNullDelegate);
-                code.Add((byte)OpCode.PushInt); EmitInt32(code, 1);
-                code.Add((byte)OpCode.PushInt); EmitInt32(code, 1);
-                code.Add((byte)OpCode.CallExternal); EmitInt32(code, isNotNullIdx);
+                Emit(ti.Operand, ref ctx, lambdaState); {
+                    Type? targetType = ctx.Analysis?.GetResolvedType(ti.TargetTypeReference)?.GetRuntimeType();
+                    int typeCheckIdx = ctx.CallSites?.Count ?? 0;
+                    ctx.CallSites?.Add(targetType is not null ? CreateTypeIsDelegate(targetType) : IsNotNullDelegate);
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                    ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, typeCheckIdx);
+                }
                 return;
 
             case TypeAs:
@@ -707,61 +671,61 @@ code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localInde
 
             case Parameter param:
                 if (param.Name is not null) {
-                    if (paramIndexMap is not null && paramIndexMap.TryGetValue(param.Name, out int pIdx)) {
-                        code.Add((byte)OpCode.LoadArg);
-                        EmitInt32(code, pIdx);
+                    if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(param.Name, out int pIdx)) {
+                        ctx.Code.Add((byte)OpCode.LoadArg);
+                        EmitInt32(ctx.Code, pIdx);
                         return;
                     }
-                    if (localIndexMap is not null && localIndexMap.TryGetValue(param.Name, out int lIdx)) {
-                        code.Add((byte)OpCode.LoadLocal);
-                        EmitInt32(code, lIdx);
+                    if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(param.Name, out int lIdx)) {
+                        ctx.Code.Add((byte)OpCode.LoadLocal);
+                        EmitInt32(ctx.Code, lIdx);
                         return;
                     }
                     if (param.DefaultValue is not null) {
-                        Emit(param.DefaultValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                        Emit(param.DefaultValue, ref ctx, lambdaState);
                         return;
                     }
                 }
                 return;
 
             case Invoke invoke:
-                EmitInvoke(invoke, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, lambdaState);
+                EmitInvoke(invoke, ref ctx, lambdaState);
                 return;
 
             case Block block:
                 for (int i = 0; i < block.Nodes.Count; i++) {
-                    Emit(block.Nodes[i], code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                    Emit(block.Nodes[i], ref ctx, lambdaState);
                     if (i < block.Nodes.Count - 1 && EmitsValue(block.Nodes[i]))
-                        code.Add((byte)OpCode.Pop);
+                        ctx.Code.Add((byte)OpCode.Pop);
                 }
                 return;
 
             case Return retNode:
                 if (retNode.Value is not null)
-                    Emit(retNode.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                    Emit(retNode.Value, ref ctx, lambdaState);
                 return;
 
             case Variable variable:
                 if (variable.Name is null) return;
-                if (paramIndexMap is not null && paramIndexMap.TryGetValue(variable.Name, out int paramIdx)) {
-                    code.Add((byte)OpCode.LoadArg);
-                    EmitInt32(code, paramIdx);
+                if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(variable.Name, out int paramIdx)) {
+                    ctx.Code.Add((byte)OpCode.LoadArg);
+                    EmitInt32(ctx.Code, paramIdx);
                 }
-                else if (localIndexMap is not null && localIndexMap.TryGetValue(variable.Name, out int localIdx)) {
-                    code.Add((byte)OpCode.LoadLocal);
-                    EmitInt32(code, localIdx);
+                else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(variable.Name, out int localIdx)) {
+                    ctx.Code.Add((byte)OpCode.LoadLocal);
+                    EmitInt32(ctx.Code, localIdx);
                 }
                 else if (lambdaState?.UpvalueMap is not null && lambdaState.UpvalueMap.TryGetValue(variable.Name, out int upIdx)) {
-                    code.Add((byte)OpCode.LoadUpvalue);
-                    EmitInt32(code, upIdx);
+                    ctx.Code.Add((byte)OpCode.LoadUpvalue);
+                    EmitInt32(ctx.Code, upIdx);
                 }
                 return;
 
             case SuspendNode sn:
-                Emit(sn.Inner, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                code.Add((byte)OpCode.Pop);
-                code.Add((byte)OpCode.Int);
-                EmitInt32(code, 0);
+                Emit(sn.Inner, ref ctx, lambdaState);
+                ctx.Code.Add((byte)OpCode.Pop);
+                ctx.Code.Add((byte)OpCode.Int);
+                EmitInt32(ctx.Code, 0);
                 return;
 
             case Lambda lambda:
@@ -769,98 +733,99 @@ code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localInde
                     var captures = lambdaState?.CaptureMap is not null && lambdaState.CaptureMap.TryGetValue(lambda, out var caps)
                         ? caps : [];
                     for (int i = 0; i < captures.Count; i++) {
-                        if (paramIndexMap is not null && paramIndexMap.TryGetValue(captures[i], out int pIdx)) {
-                            code.Add((byte)OpCode.LoadArg);
-                            EmitInt32(code, pIdx);
+                        if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(captures[i], out int pIdx)) {
+                            ctx.Code.Add((byte)OpCode.LoadArg);
+                            EmitInt32(ctx.Code, pIdx);
                         }
-                        else if (localIndexMap is not null && localIndexMap.TryGetValue(captures[i], out int localIdx)) {
-                            code.Add((byte)OpCode.LoadLocal);
-                            EmitInt32(code, localIdx);
+                        else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(captures[i], out int localIdx)) {
+                            ctx.Code.Add((byte)OpCode.LoadLocal);
+                            EmitInt32(ctx.Code, localIdx);
                         }
                         else {
-                            code.Add((byte)OpCode.PushInt);
-                            EmitInt32(code, 0);
+                            ctx.Code.Add((byte)OpCode.PushInt);
+                            EmitInt32(ctx.Code, 0);
                         }
                     }
-                    code.Add((byte)OpCode.AllocateClosure);
-                    EmitInt32(code, lambdaFuncIdx);
-                    EmitInt32(code, captures.Count);
+                    ctx.Code.Add((byte)OpCode.AllocateClosure);
+                    EmitInt32(ctx.Code, lambdaFuncIdx);
+                    EmitInt32(ctx.Code, captures.Count);
                 }
                 return;
 
             case Await awaitNode:
-                Emit(awaitNode.Operand, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                int awaitSiteIdx = callSites?.Count ?? 0;
-                callSites?.Add(AwaitResultDelegate);
-                code.Add((byte)OpCode.PushInt);
-                EmitInt32(code, 1);
-                code.Add((byte)OpCode.PushInt);
-                EmitInt32(code, 1);
-                code.Add((byte)OpCode.CallExternal);
-                EmitInt32(code, awaitSiteIdx);
+                Emit(awaitNode.Operand, ref ctx, lambdaState);
+                int awaitSiteIdx = ctx.CallSites?.Count ?? 0;
+                ctx.CallSites?.Add(AwaitResultDelegate);
+                ctx.Code.Add((byte)OpCode.PushInt);
+                EmitInt32(ctx.Code, 1);
+                ctx.Code.Add((byte)OpCode.PushInt);
+                EmitInt32(ctx.Code, 1);
+                ctx.Code.Add((byte)OpCode.CallExternal);
+                EmitInt32(ctx.Code, awaitSiteIdx);
                 return;
 
             case TypeDefinitionNode:
                 return;
 
             case ForEachLoop fe:
-                EmitForEachLoop(fe, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, null);
+                EmitForEachLoop(fe, ref ctx);
                 return;
 
             case UsingStatement us:
-                EmitUsingStatement(us, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, null);
+                EmitUsingStatement(us, ref ctx);
                 return;
 
             case TryCatchFinally tcf: {
-                    int tryStart = code.Count;
-                    Emit(tcf.TryBlock, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                    int tryEnd = code.Count;
+                    int tryStart = ctx.Code.Count;
+                    Emit(tcf.TryBlock, ref ctx, lambdaState);
+                    int tryEnd = ctx.Code.Count;
 
-                    string endLabel = labels!.Next();
+                    var labels = ctx.Labels!;
+                    string endLabel = labels.Next();
                     string? finallyEntry = tcf.FinallyBlock is not null ? labels.Next() : null;
 
                     // Normal path: run finally (if any), then end
                     if (finallyEntry is not null)
-                        labels.JumpTo(finallyEntry, code, relocations);
+                        labels.JumpTo(finallyEntry, ctx.Code, ctx.Relocations);
                     else
-                        labels.JumpTo(endLabel, code, relocations);
+                        labels.JumpTo(endLabel, ctx.Code, ctx.Relocations);
 
                     int? finallyStart = null;
                     int catchStart = -1;
 
                     if (tcf.CatchClauses is not null && tcf.CatchClauses.Count > 0) {
-                        catchStart = code.Count;
+                        catchStart = ctx.Code.Count;
                         foreach (var cc in tcf.CatchClauses) {
                             if (cc.VariableName is not null
-                                && paramIndexMap is not null
-                                && paramIndexMap.TryGetValue(cc.VariableName, out int varIdx)) {
-                                code.Add((byte)OpCode.StoreArg);
-                                EmitInt32(code, varIdx);
+                                && ctx.ParamIndexMap is not null
+                                && ctx.ParamIndexMap.TryGetValue(cc.VariableName, out int varIdx)) {
+                                ctx.Code.Add((byte)OpCode.StoreArg);
+                                EmitInt32(ctx.Code, varIdx);
                             }
                             else {
-                                code.Add((byte)OpCode.Pop);
+                                ctx.Code.Add((byte)OpCode.Pop);
                             }
-                            Emit(cc.Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                            Emit(cc.Body, ref ctx, lambdaState);
                             if (finallyEntry is not null) {
                                 // fall through to finally
                             }
                             else {
-                                labels.JumpTo(endLabel, code, relocations);
+                                labels.JumpTo(endLabel, ctx.Code, ctx.Relocations);
                             }
                         }
                     }
 
                     if (tcf.FinallyBlock is not null) {
                         if (finallyEntry is not null)
-                            labels.Mark(finallyEntry, code);
-                        finallyStart = code.Count;
-                        Emit(tcf.FinallyBlock, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-                        code.Add((byte)OpCode.EndFinally);
+                            labels.Mark(finallyEntry, ctx.Code);
+                        finallyStart = ctx.Code.Count;
+                        Emit(tcf.FinallyBlock, ref ctx, lambdaState);
+                        ctx.Code.Add((byte)OpCode.EndFinally);
                         if (EmitsValue(tcf.FinallyBlock))
-                            code.Add((byte)OpCode.Pop);
+                            ctx.Code.Add((byte)OpCode.Pop);
                     }
 
-                    labels.Mark(endLabel, code);
+                    labels.Mark(endLabel, ctx.Code);
                     labels.ExceptionRegions.Add(new ExceptionRegion(tryStart, tryEnd, catchStart, finallyStart));
                     return;
                 }
@@ -896,429 +861,371 @@ code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localInde
 
     private static void EmitBinary(
         Node left, Node right, OpCode op,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels, LambdaEmitState? lambdaState = null) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        Emit(left, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, lambdaState);
-        Emit(right, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, lambdaState);
-        code.Add((byte)op);
+        Emit(left, ref ctx, lambdaState);
+        Emit(right, ref ctx, lambdaState);
+        ctx.Code.Add((byte)op);
     }
 
     private static void EmitShortCircuitAnd(
         And andNode,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        labels ??= new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string end = labels.Next();
-        Emit(andNode.LeftHandValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        code.Add((byte)OpCode.Dup);
-        labels.JumpIfFalseTo(end, code, relocations);
-        code.Add((byte)OpCode.Pop);
-        Emit(andNode.RightHandValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.Mark(end, code);
+        Emit(andNode.LeftHandValue, ref ctx, lambdaState);
+        ctx.Code.Add((byte)OpCode.Dup);
+        labels.JumpIfFalseTo(end, ctx.Code, ctx.Relocations);
+        ctx.Code.Add((byte)OpCode.Pop);
+        Emit(andNode.RightHandValue, ref ctx, lambdaState);
+        labels.Mark(end, ctx.Code);
     }
 
     private static void EmitShortCircuitOr(
         Or orNode,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        labels ??= new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string evalRight = labels.Next();
         string after = labels.Next();
-        Emit(orNode.LeftHandValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        code.Add((byte)OpCode.Dup);
-        labels.JumpIfFalseTo(evalRight, code, relocations);
-        labels.JumpTo(after, code, relocations);
-        labels.Mark(evalRight, code);
-        code.Add((byte)OpCode.Pop);
-        Emit(orNode.RightHandValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.Mark(after, code);
+        Emit(orNode.LeftHandValue, ref ctx, lambdaState);
+        ctx.Code.Add((byte)OpCode.Dup);
+        labels.JumpIfFalseTo(evalRight, ctx.Code, ctx.Relocations);
+        labels.JumpTo(after, ctx.Code, ctx.Relocations);
+        labels.Mark(evalRight, ctx.Code);
+        ctx.Code.Add((byte)OpCode.Pop);
+        Emit(orNode.RightHandValue, ref ctx, lambdaState);
+        labels.Mark(after, ctx.Code);
     }
 
     private static void EmitConditional(
         Conditional cond,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        labels ??= new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string elseL = labels.Next();
         string endL = labels.Next();
-        Emit(cond.Condition, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.JumpIfFalseTo(elseL, code, relocations);
-        Emit(cond.IfTrue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.JumpTo(endL, code, relocations);
-        labels.Mark(elseL, code);
-        Emit(cond.IfFalse, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.Mark(endL, code);
+        Emit(cond.Condition, ref ctx, lambdaState);
+        labels.JumpIfFalseTo(elseL, ctx.Code, ctx.Relocations);
+        Emit(cond.IfTrue, ref ctx, lambdaState);
+        labels.JumpTo(endL, ctx.Code, ctx.Relocations);
+        labels.Mark(elseL, ctx.Code);
+        Emit(cond.IfFalse, ref ctx, lambdaState);
+        labels.Mark(endL, ctx.Code);
     }
 
     private static void EmitIf(
         IfStatement ifStmt,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        labels ??= new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string elseL = labels.Next();
         string endL = labels.Next();
-        Emit(ifStmt.Condition, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.JumpIfFalseTo(elseL, code, relocations);
-        Emit(ifStmt.ThenBranch, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.JumpTo(endL, code, relocations);
-        labels.Mark(elseL, code);
+        Emit(ifStmt.Condition, ref ctx, lambdaState);
+        labels.JumpIfFalseTo(elseL, ctx.Code, ctx.Relocations);
+        Emit(ifStmt.ThenBranch, ref ctx, lambdaState);
+        labels.JumpTo(endL, ctx.Code, ctx.Relocations);
+        labels.Mark(elseL, ctx.Code);
         if (ifStmt.ElseBranch is not null)
-            Emit(ifStmt.ElseBranch, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.Mark(endL, code);
+            Emit(ifStmt.ElseBranch, ref ctx, lambdaState);
+        labels.Mark(endL, ctx.Code);
     }
 
     private static void EmitWhileLoop(
         WhileLoop wl,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        labels ??= new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string breakL = labels.Next();
         string contL = labels.Next();
-        string loopLabel = labels?.PendingLoopLabel ?? "";
-        if (labels is not null) labels.PendingLoopLabel = null;
-        labels!.LoopLabels.Push((loopLabel, breakL, contL));
-        labels!.Mark(contL, code);
-        Emit(wl.Condition, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.JumpIfFalseTo(breakL, code, relocations);
-        Emit(wl.Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.JumpTo(contL, code, relocations);
-        labels.Mark(breakL, code);
+        string loopLabel = labels.PendingLoopLabel ?? "";
+        labels.PendingLoopLabel = null;
+        labels.LoopLabels.Push((loopLabel, breakL, contL));
+        labels.Mark(contL, ctx.Code);
+        Emit(wl.Condition, ref ctx, lambdaState);
+        labels.JumpIfFalseTo(breakL, ctx.Code, ctx.Relocations);
+        Emit(wl.Body, ref ctx, lambdaState);
+        labels.JumpTo(contL, ctx.Code, ctx.Relocations);
+        labels.Mark(breakL, ctx.Code);
         labels.LoopLabels.Pop();
     }
 
     private static void EmitDoWhileLoop(
         DoWhileLoop dwl,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        labels ??= new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string breakL = labels.Next();
         string contL = labels.Next();
-        string loopLabel = labels?.PendingLoopLabel ?? "";
-        if (labels is not null) labels.PendingLoopLabel = null;
-        labels!.LoopLabels.Push((loopLabel, breakL, contL));
-        labels!.Mark(contL, code);
-        Emit(dwl.Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        Emit(dwl.Condition, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.JumpIfFalseTo(breakL, code, relocations);
-        labels.JumpTo(contL, code, relocations);
-        labels.Mark(breakL, code);
+        string loopLabel = labels.PendingLoopLabel ?? "";
+        labels.PendingLoopLabel = null;
+        labels.LoopLabels.Push((loopLabel, breakL, contL));
+        labels.Mark(contL, ctx.Code);
+        Emit(dwl.Body, ref ctx, lambdaState);
+        Emit(dwl.Condition, ref ctx, lambdaState);
+        labels.JumpIfFalseTo(breakL, ctx.Code, ctx.Relocations);
+        labels.JumpTo(contL, ctx.Code, ctx.Relocations);
+        labels.Mark(breakL, ctx.Code);
         labels.LoopLabels.Pop();
     }
 
     private static void EmitForLoop(
         ForLoop fl,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        labels ??= new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string breakL = labels.Next();
         string contL = labels.Next();
-        string loopLabel = labels?.PendingLoopLabel ?? "";
-        if (labels is not null) labels.PendingLoopLabel = null;
-        labels!.LoopLabels.Push((loopLabel, breakL, contL));
+        string loopLabel = labels.PendingLoopLabel ?? "";
+        labels.PendingLoopLabel = null;
+        labels.LoopLabels.Push((loopLabel, breakL, contL));
 
         if (fl.Initializer is not null)
-            Emit(fl.Initializer, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+            Emit(fl.Initializer, ref ctx, lambdaState);
 
-        labels!.Mark(contL, code);
+        labels.Mark(contL, ctx.Code);
 
         if (fl.Condition is not null) {
-            Emit(fl.Condition, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            labels.JumpIfFalseTo(breakL, code, relocations);
+            Emit(fl.Condition, ref ctx, lambdaState);
+            labels.JumpIfFalseTo(breakL, ctx.Code, ctx.Relocations);
         }
 
-        Emit(fl.Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+        Emit(fl.Body, ref ctx, lambdaState);
 
         if (fl.Increment is not null)
-            Emit(fl.Increment, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+            Emit(fl.Increment, ref ctx, lambdaState);
 
-        labels.JumpTo(contL, code, relocations);
-        labels.Mark(breakL, code);
+        labels.JumpTo(contL, ctx.Code, ctx.Relocations);
+        labels.Mark(breakL, ctx.Code);
         labels.LoopLabels.Pop();
     }
 
     private static void EmitForEachLoop(
         ForEachLoop fe,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels,
-        LambdaEmitState? lambdaState) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
         var enumHolder = new object[1];
-        int holderIdx = constants?.Count ?? 0;
-        constants?.Add(enumHolder);
+        int holderIdx = ctx.Constants?.Count ?? 0;
+        ctx.Constants?.Add(enumHolder);
 
-        labels ??= new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string breakL = labels.Next();
         string contL = labels.Next();
-        string loopLabel = labels?.PendingLoopLabel ?? "";
-        if (labels is not null) labels.PendingLoopLabel = null;
-        labels!.LoopLabels.Push((loopLabel, breakL, contL));
+        string loopLabel = labels.PendingLoopLabel ?? "";
+        labels.PendingLoopLabel = null;
+        labels.LoopLabels.Push((loopLabel, breakL, contL));
 
-        code.Add((byte)OpCode.LoadConst);
-        EmitInt32(code, holderIdx);
-        Emit(fe.Collection, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        int initEnumIdx = callSites?.Count ?? 0;
-        callSites?.Add(InitEnumeratorDelegate);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 2);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 0);
-        code.Add((byte)OpCode.CallExternal);
-        EmitInt32(code, initEnumIdx);
+        ctx.Code.Add((byte)OpCode.LoadConst);
+        EmitInt32(ctx.Code, holderIdx);
+        Emit(fe.Collection, ref ctx, lambdaState);
+        int initEnumIdx = ctx.CallSites?.Count ?? 0;
+        ctx.CallSites?.Add(InitEnumeratorDelegate);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 2);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 0);
+        ctx.Code.Add((byte)OpCode.CallExternal);
+        EmitInt32(ctx.Code, initEnumIdx);
 
-        labels!.Mark(contL, code);
+        labels.Mark(contL, ctx.Code);
 
-        code.Add((byte)OpCode.LoadConst);
-        EmitInt32(code, holderIdx);
-        int moveNextIdx = callSites?.Count ?? 0;
-        callSites?.Add(MoveNextDelegate);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 1);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 1);
-        code.Add((byte)OpCode.CallExternal);
-        EmitInt32(code, moveNextIdx);
-        labels.JumpIfFalseTo(breakL, code, relocations);
+        ctx.Code.Add((byte)OpCode.LoadConst);
+        EmitInt32(ctx.Code, holderIdx);
+        ctx.Code.Add((byte)OpCode.EnumeratorMoveNext);
+        labels.JumpIfFalseTo(breakL, ctx.Code, ctx.Relocations);
 
-        code.Add((byte)OpCode.LoadConst);
-        EmitInt32(code, holderIdx);
-        int getCurrIdx = callSites?.Count ?? 0;
-        callSites?.Add(GetCurrentDelegate);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 1);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 1);
-        code.Add((byte)OpCode.CallExternal);
-        EmitInt32(code, getCurrIdx);
+        ctx.Code.Add((byte)OpCode.LoadConst);
+        EmitInt32(ctx.Code, holderIdx);
+        int getCurrIdx = ctx.CallSites?.Count ?? 0;
+        ctx.CallSites?.Add(GetCurrentDelegate);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 1);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 1);
+        ctx.Code.Add((byte)OpCode.CallExternal);
+        EmitInt32(ctx.Code, getCurrIdx);
 
         if (fe.LoopVariable is { Name: not null } lv) {
-            if (paramIndexMap is not null && paramIndexMap.TryGetValue(lv.Name, out int paramIdx)) {
-                code.Add((byte)OpCode.StoreArg);
-                EmitInt32(code, paramIdx);
+            if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(lv.Name, out int paramIdx)) {
+                ctx.Code.Add((byte)OpCode.StoreArg);
+                EmitInt32(ctx.Code, paramIdx);
             }
-            else if (localIndexMap is not null && localIndexMap.TryGetValue(lv.Name, out int localIdx)) {
-                code.Add((byte)OpCode.StoreLocal);
-                EmitInt32(code, localIdx);
+            else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(lv.Name, out int localIdx)) {
+                ctx.Code.Add((byte)OpCode.StoreLocal);
+                EmitInt32(ctx.Code, localIdx);
             }
             else {
-                code.Add((byte)OpCode.Pop);
+                ctx.Code.Add((byte)OpCode.Pop);
             }
         }
         else {
-            code.Add((byte)OpCode.Pop);
+            ctx.Code.Add((byte)OpCode.Pop);
         }
 
-        Emit(fe.Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+        Emit(fe.Body, ref ctx, lambdaState);
         if (EmitsValue(fe.Body))
-            code.Add((byte)OpCode.Pop);
+            ctx.Code.Add((byte)OpCode.Pop);
 
-        labels.JumpTo(contL, code, relocations);
+        labels.JumpTo(contL, ctx.Code, ctx.Relocations);
 
-        labels.Mark(breakL, code);
+        labels.Mark(breakL, ctx.Code);
 
-        code.Add((byte)OpCode.LoadConst);
-        EmitInt32(code, holderIdx);
-        int disposeEnumIdx = callSites?.Count ?? 0;
-        callSites?.Add(DisposeEnumeratorDelegate);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 1);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 0);
-        code.Add((byte)OpCode.CallExternal);
-        EmitInt32(code, disposeEnumIdx);
+        ctx.Code.Add((byte)OpCode.LoadConst);
+        EmitInt32(ctx.Code, holderIdx);
+        int disposeEnumIdx = ctx.CallSites?.Count ?? 0;
+        ctx.CallSites?.Add(DisposeEnumeratorDelegate);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 1);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 0);
+        ctx.Code.Add((byte)OpCode.CallExternal);
+        EmitInt32(ctx.Code, disposeEnumIdx);
 
         labels.LoopLabels.Pop();
     }
 
     private static void EmitUsingStatement(
         UsingStatement us,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels,
-        LambdaEmitState? lambdaState) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
         var resourceHolder = new object[1];
-        int holderIdx = constants?.Count ?? 0;
-        constants?.Add(resourceHolder);
+        int holderIdx = ctx.Constants?.Count ?? 0;
+        ctx.Constants?.Add(resourceHolder);
 
-        labels ??= new LabelContext();
-        int tryStart = code.Count;
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
+        int tryStart = ctx.Code.Count;
 
-        code.Add((byte)OpCode.LoadConst);
-        EmitInt32(code, holderIdx);
-        Emit(us.Resource, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        int saveIdx = callSites?.Count ?? 0;
-        callSites?.Add(SaveResourceDelegate);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 2);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 0);
-        code.Add((byte)OpCode.CallExternal);
-        EmitInt32(code, saveIdx);
+        ctx.Code.Add((byte)OpCode.LoadConst);
+        EmitInt32(ctx.Code, holderIdx);
+        Emit(us.Resource, ref ctx, lambdaState);
+        int saveIdx = ctx.CallSites?.Count ?? 0;
+        ctx.CallSites?.Add(SaveResourceDelegate);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 2);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 0);
+        ctx.Code.Add((byte)OpCode.CallExternal);
+        EmitInt32(ctx.Code, saveIdx);
 
-        Emit(us.Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+        Emit(us.Body, ref ctx, lambdaState);
         if (EmitsValue(us.Body))
-            code.Add((byte)OpCode.Pop);
+            ctx.Code.Add((byte)OpCode.Pop);
 
-        int tryEnd = code.Count;
+        int tryEnd = ctx.Code.Count;
 
-        int finallyStart = code.Count;
-        code.Add((byte)OpCode.LoadConst);
-        EmitInt32(code, holderIdx);
-        int disposeIdx = callSites?.Count ?? 0;
-        callSites?.Add(DisposeResourceDelegate);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 1);
-        code.Add((byte)OpCode.PushInt);
-        EmitInt32(code, 0);
-        code.Add((byte)OpCode.CallExternal);
-        EmitInt32(code, disposeIdx);
+        int finallyStart = ctx.Code.Count;
+        ctx.Code.Add((byte)OpCode.LoadConst);
+        EmitInt32(ctx.Code, holderIdx);
+        int disposeIdx = ctx.CallSites?.Count ?? 0;
+        ctx.CallSites?.Add(DisposeResourceDelegate);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 1);
+        ctx.Code.Add((byte)OpCode.PushInt);
+        EmitInt32(ctx.Code, 0);
+        ctx.Code.Add((byte)OpCode.CallExternal);
+        EmitInt32(ctx.Code, disposeIdx);
 
-        code.Add((byte)OpCode.EndFinally);
+        ctx.Code.Add((byte)OpCode.EndFinally);
 
         labels.ExceptionRegions.Add(new ExceptionRegion(tryStart, tryEnd, -1, finallyStart));
     }
 
     private static void EmitSwitch(
         SwitchStatement swt,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        labels ??= new LabelContext();
-        string endL = labels.Next();
-        var caseLabels = swt.Cases.Select(_ => labels.Next()).ToList();
-        string defaultL = labels.Next();
+        ctx.Labels ??= new LabelContext();
+        var lb = ctx.Labels;
+        string endL = lb.Next();
+        var caseLabels = swt.Cases.Select(_ => lb.Next()).ToList();
 
-        Emit(swt.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+        Emit(swt.Value, ref ctx, lambdaState);
 
         for (int i = 0; i < swt.Cases.Count; i++) {
-            code.Add((byte)OpCode.Dup);
-            Emit(swt.Cases[i].Pattern, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            code.Add((byte)OpCode.Eq);
-            labels.JumpIfFalseTo(caseLabels[i], code, relocations);
-            code.Add((byte)OpCode.Pop);
-            Emit(swt.Cases[i].Body, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            labels.JumpTo(endL, code, relocations);
-            labels.Mark(caseLabels[i], code);
+            ctx.Code.Add((byte)OpCode.Dup);
+            Emit(swt.Cases[i].Pattern, ref ctx, lambdaState);
+            ctx.Code.Add((byte)OpCode.Eq);
+            lb.JumpIfFalseTo(caseLabels[i], ctx.Code, ctx.Relocations);
+            ctx.Code.Add((byte)OpCode.Pop);
+            Emit(swt.Cases[i].Body, ref ctx, lambdaState);
+            lb.JumpTo(endL, ctx.Code, ctx.Relocations);
+            lb.Mark(caseLabels[i], ctx.Code);
         }
 
-        code.Add((byte)OpCode.Pop);
+        ctx.Code.Add((byte)OpCode.Pop);
         if (swt.DefaultCase is not null)
-            Emit(swt.DefaultCase, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.Mark(endL, code);
+            Emit(swt.DefaultCase, ref ctx, lambdaState);
+        lb.Mark(endL, ctx.Code);
     }
 
     private static void EmitCoalesce(
         Coalesce coalesce,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis, List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LambdaEmitState? lambdaState) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        var labels = new LabelContext();
+        ctx.Labels ??= new LabelContext();
+        var labels = ctx.Labels;
         string after = labels.Next();
-        Emit(coalesce.LeftHandValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        code.Add((byte)OpCode.Dup);
-        code.Add((byte)OpCode.IsNull);
-        labels.JumpIfFalseTo(after, code, relocations);
-        code.Add((byte)OpCode.Pop);
-        Emit(coalesce.RightHandValue, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-        labels.Mark(after, code);
+        Emit(coalesce.LeftHandValue, ref ctx, lambdaState);
+        ctx.Code.Add((byte)OpCode.Dup);
+        ctx.Code.Add((byte)OpCode.IsNull);
+        labels.JumpIfFalseTo(after, ctx.Code, ctx.Relocations);
+        ctx.Code.Add((byte)OpCode.Pop);
+        Emit(coalesce.RightHandValue, ref ctx, lambdaState);
+        labels.Mark(after, ctx.Code);
     }
 
     private static void EmitInvoke(
         Invoke invoke,
-        List<byte> code,
-        Dictionary<int, NodeId> sourceMap,
-        AnalysisResult? analysis,
-        List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap,
-        IReadOnlyDictionary<string, int>? localIndexMap,
-        List<object?>? constants,
-        List<CallSiteDelegate>? callSites,
-        List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels,
-        LambdaEmitState? lambdaState = null) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        if (analysis?.GetResolvedMember(invoke) is AstMethodDefinition astMethod) {
+        if (ctx.Analysis?.GetResolvedMember(invoke) is AstMethodDefinition astMethod) {
             var methodDef = astMethod.DefinitionNode;
-            if (functionIndexMap is not null && functionIndexMap.TryGetValue(methodDef, out int funcIndex)) {
+            if (ctx.FunctionIndexMap is not null && ctx.FunctionIndexMap.TryGetValue(methodDef, out int funcIndex)) {
                 foreach (var arg in invoke.Arguments) {
-                    Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                    Emit(arg, ref ctx, lambdaState);
                 }
                 int paramCount = methodDef.Parameters?.Count ?? 0;
-                code.Add((byte)OpCode.PushInt);
-                EmitInt32(code, paramCount);
-                code.Add((byte)OpCode.Call);
-                EmitInt32(code, funcIndex);
-                sourceMap[code.Count - 5] = invoke.Id;
+                ctx.Code.Add((byte)OpCode.PushInt);
+                EmitInt32(ctx.Code, paramCount);
+                ctx.Code.Add((byte)OpCode.Call);
+                EmitInt32(ctx.Code, funcIndex);
+                ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
                 return;
             }
         }
 
-        if (analysis?.GetResolvedMember(invoke) is ClrMethod clrMethod) {
+        if (ctx.Analysis?.GetResolvedMember(invoke) is ClrMethod clrMethod) {
             var methodInfo = clrMethod.MethodInfo;
             bool isStatic = clrMethod.LifetimeModifier == LifetimeModifier.Static;
 
-            int siteIndex = callSites?.Count ?? 0;
-            callSites?.Add(CallSiteCompiler.Compile(methodInfo, isStatic));
+            int siteIndex = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CallSiteCompiler.Compile(methodInfo, isStatic));
 
             if (!isStatic && invoke.Delegate is Member memberAccess) {
-                Emit(memberAccess.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(memberAccess.Value, ref ctx, lambdaState);
             }
 
             foreach (var arg in invoke.Arguments) {
-                Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(arg, ref ctx, lambdaState);
             }
 
             int argCount = invoke.Arguments.Length + (isStatic ? 0 : 1);
-            code.Add((byte)OpCode.PushInt);
-            EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt);
-            EmitInt32(code, methodInfo.ReturnType != typeof(void) ? 1 : 0);
-            code.Add((byte)OpCode.CallExternal);
-            EmitInt32(code, siteIndex);
+            ctx.Code.Add((byte)OpCode.PushInt);
+            EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt);
+            EmitInt32(ctx.Code, methodInfo.ReturnType != typeof(void) ? 1 : 0);
+            ctx.Code.Add((byte)OpCode.CallExternal);
+            EmitInt32(ctx.Code, siteIndex);
             return;
         }
 
@@ -1334,217 +1241,192 @@ code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localInde
         }
 
         if (lambdaTarget is not null && lFuncIdx >= 0) {
-            Emit(lambdaTarget, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, lambdaState);
+            Emit(lambdaTarget, ref ctx, lambdaState);
             foreach (var arg in invoke.Arguments) {
-                Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, lambdaState);
+                Emit(arg, ref ctx, lambdaState);
             }
             int totalArgs = (lambdaTarget.Parameters?.Count ?? 0) + 1;
-            code.Add((byte)OpCode.PushInt);
-            EmitInt32(code, totalArgs);
-            code.Add((byte)OpCode.Call);
-            EmitInt32(code, lFuncIdx);
-            sourceMap[code.Count - 5] = invoke.Id;
+            ctx.Code.Add((byte)OpCode.PushInt);
+            EmitInt32(ctx.Code, totalArgs);
+            ctx.Code.Add((byte)OpCode.Call);
+            EmitInt32(ctx.Code, lFuncIdx);
+            ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
             return;
         }
 
         // Generic delegate path
         if (invoke.Delegate is not null) {
-            Emit(invoke.Delegate, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels, lambdaState);
+            Emit(invoke.Delegate, ref ctx, lambdaState);
             foreach (var arg in invoke.Arguments) {
-                Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(arg, ref ctx, lambdaState);
             }
             int totalArgs = invoke.Arguments.Length + 1;
-            code.Add((byte)OpCode.PushInt);
-            EmitInt32(code, totalArgs);
-            code.Add((byte)OpCode.CallClosure);
-            sourceMap[code.Count - 5] = invoke.Id;
+            ctx.Code.Add((byte)OpCode.PushInt);
+            EmitInt32(ctx.Code, totalArgs);
+            ctx.Code.Add((byte)OpCode.CallClosure);
+            ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
         }
     }
 
     private static void EmitMember(
         Member member,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis,
-        List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        var resolved = analysis?.GetResolvedMember(member);
+        var resolved = ctx.Analysis?.GetResolvedMember(member);
         if (resolved is ClrTypeProperty { PropertyInfo: var pi, LifetimeModifier: var lm }) {
             bool isStatic = lm == LifetimeModifier.Static;
             var getter = pi.GetGetMethod(nonPublic: true);
             if (getter is null) return;
             if (!isStatic)
-                Emit(member.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CallSiteCompiler.Compile(getter, isStatic));
+                Emit(member.Value, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CallSiteCompiler.Compile(getter, isStatic));
             int argCount = isStatic ? 0 : 1;
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 1);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
         if (resolved is ClrTypeField { FieldInfo: var fi, LifetimeModifier: var lm2 }) {
             bool isStatic = lm2 == LifetimeModifier.Static;
             if (!isStatic)
-                Emit(member.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CallSiteCompiler.CompileFieldGetter(fi, isStatic));
+                Emit(member.Value, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CallSiteCompiler.CompileFieldGetter(fi, isStatic));
             int argCount = isStatic ? 0 : 1;
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 1);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
     }
 
     private static void EmitIndexAccess(
         IndexAccess idx,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis,
-        List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        var resolved = analysis?.GetResolvedMember(idx);
+        var resolved = ctx.Analysis?.GetResolvedMember(idx);
         if (resolved is ClrTypeProperty { PropertyInfo: var pi, LifetimeModifier: var lm }) {
             bool isStatic = lm == LifetimeModifier.Static;
             var getter = pi.GetGetMethod(nonPublic: true);
             if (getter is null) return;
             if (!isStatic)
-                Emit(idx.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(idx.Value, ref ctx, lambdaState);
             foreach (var arg in idx.Arguments)
-                Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CallSiteCompiler.Compile(getter, isStatic));
+                Emit(arg, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CallSiteCompiler.Compile(getter, isStatic));
             int argCount = (isStatic ? 0 : 1) + idx.Arguments.Length;
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 1);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
         if (resolved is ClrTypeSyntheticProperty { Read: not null, LifetimeModifier: var lm2 }) {
             var synReader = ((ClrTypeSyntheticProperty)resolved).Read!;
             bool isStatic = lm2 == LifetimeModifier.Static;
             if (!isStatic)
-                Emit(idx.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(idx.Value, ref ctx, lambdaState);
             foreach (var arg in idx.Arguments)
-                Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CompileSyntheticGetter(synReader, isStatic, idx.Arguments.Length));
+                Emit(arg, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CompileSyntheticGetter(synReader, isStatic, idx.Arguments.Length));
             int argCount = (isStatic ? 0 : 1) + idx.Arguments.Length;
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 1);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
     }
 
     private static void EmitAssignmentMember(
         Member member, Node value,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis,
-        List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap,
-        List<object?>? constants, List<CallSiteDelegate>? callSites,
-        List<(int CodeOffset, int TargetPc)>? relocations, LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        var resolved = analysis?.GetResolvedMember(member);
+        var resolved = ctx.Analysis?.GetResolvedMember(member);
         if (resolved is ClrTypeProperty { PropertyInfo: var pi, LifetimeModifier: var lm }) {
             bool isStatic = lm == LifetimeModifier.Static;
             var setter = pi.GetSetMethod(nonPublic: true);
             if (setter is null) return;
             if (!isStatic)
-                Emit(member.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            Emit(value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CallSiteCompiler.Compile(setter, isStatic));
+                Emit(member.Value, ref ctx, lambdaState);
+            Emit(value, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CallSiteCompiler.Compile(setter, isStatic));
             int argCount = (isStatic ? 0 : 1) + 1;
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 0);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
         if (resolved is ClrTypeField { FieldInfo: var fi, LifetimeModifier: var lm2 }) {
             bool isStatic = lm2 == LifetimeModifier.Static;
             if (!isStatic)
-                Emit(member.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            Emit(value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CallSiteCompiler.CompileFieldSetter(fi, isStatic));
+                Emit(member.Value, ref ctx, lambdaState);
+            Emit(value, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CallSiteCompiler.CompileFieldSetter(fi, isStatic));
             int argCount = (isStatic ? 0 : 1) + 1;
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 0);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
     }
 
     private static void EmitAssignmentIndexAccess(
         IndexAccess idx, Node value,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis,
-        List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap,
-        List<object?>? constants, List<CallSiteDelegate>? callSites,
-        List<(int CodeOffset, int TargetPc)>? relocations, LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        var resolved = analysis?.GetResolvedMember(idx);
+        var resolved = ctx.Analysis?.GetResolvedMember(idx);
         if (resolved is ClrTypeProperty { PropertyInfo: var pi, LifetimeModifier: var lm }) {
             bool isStatic = lm == LifetimeModifier.Static;
             var setter = pi.GetSetMethod(nonPublic: true);
             if (setter is null) return;
             if (!isStatic)
-                Emit(idx.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(idx.Value, ref ctx, lambdaState);
             foreach (var arg in idx.Arguments)
-                Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            Emit(value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CallSiteCompiler.Compile(setter, isStatic));
+                Emit(arg, ref ctx, lambdaState);
+            Emit(value, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CallSiteCompiler.Compile(setter, isStatic));
             int argCount = (isStatic ? 0 : 1) + idx.Arguments.Length + 1;
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 0);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
         if (resolved is ClrTypeSyntheticProperty { Write: not null, LifetimeModifier: var lm2 }) {
             var synWriter = ((ClrTypeSyntheticProperty)resolved).Write!;
             bool isStatic = lm2 == LifetimeModifier.Static;
             if (!isStatic)
-                Emit(idx.Value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
+                Emit(idx.Value, ref ctx, lambdaState);
             foreach (var arg in idx.Arguments)
-                Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            Emit(value, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CompileSyntheticSetter(synWriter, isStatic, idx.Arguments.Length + 1));
+                Emit(arg, ref ctx, lambdaState);
+            Emit(value, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CompileSyntheticSetter(synWriter, isStatic, idx.Arguments.Length + 1));
             int argCount = (isStatic ? 0 : 1) + idx.Arguments.Length + 1;
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, argCount);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 0);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
     }
 
     private static void EmitNew(
         New newExpr,
-        List<byte> code, Dictionary<int, NodeId> sourceMap, AnalysisResult? analysis,
-        List<FunctionEntry>? functions,
-        Dictionary<MethodDefinitionNode, int>? functionIndexMap,
-        IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, List<object?>? constants,
-        List<CallSiteDelegate>? callSites, List<(int CodeOffset, int TargetPc)>? relocations,
-        LabelContext? labels) {
+        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
 
-        var resolved = analysis?.GetResolvedMember(newExpr);
+        var resolved = ctx.Analysis?.GetResolvedMember(newExpr);
         if (resolved is ClrConstructor { ConstructorInfo: var ci }) {
             foreach (var arg in newExpr.Arguments)
-                Emit(arg, code, sourceMap, analysis, functions, functionIndexMap, paramIndexMap, localIndexMap, constants, callSites, relocations, labels);
-            int siteIdx = callSites?.Count ?? 0;
-            callSites?.Add(CallSiteCompiler.CompileConstructor(ci));
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, newExpr.Arguments.Length);
-            code.Add((byte)OpCode.PushInt); EmitInt32(code, 1);
-            code.Add((byte)OpCode.CallExternal); EmitInt32(code, siteIdx);
+                Emit(arg, ref ctx, lambdaState);
+            int siteIdx = ctx.CallSites?.Count ?? 0;
+            ctx.CallSites?.Add(CallSiteCompiler.CompileConstructor(ci));
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, newExpr.Arguments.Length);
+            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
             return;
         }
     }

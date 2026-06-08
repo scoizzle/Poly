@@ -27,21 +27,22 @@ The expanded rationale, history, and examples of how these principles have been 
 
 ## Overview & Architecture
 
-**Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in a symbolic IR, validated by a tree-walker interpreter, compiled to native backends. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
+**Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in a symbolic IR, validated by the VM (canonical semantics), compiled to native backends. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` and `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
 
-**Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, and the neurosymbolic platform vision).
+**Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, VM design, and the neurosymbolic platform vision).
 
-- `Poly/` — core DSL: Syntax, Interpretation, Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
+- `Poly/` — core DSL: Syntax, Interpretation (VM), Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
 - `Poly.Benchmarks/` — example entry point. (FluentApiExample.cs is fully commented out — do not treat it as a reference.)
 - `Poly.Tests/` — unit tests using **TUnit** (not xUnit/NUnit).
 
 **Module boundaries (enforced, one-way):**
 - `Interpretation` → `Introspection`
 - `Validation` → `Interpretation`
-- `Synthesis` → `Syntax`, `Interpretation` (tree walker)
+- `Synthesis` → `Syntax`, `Interpretation` (VM for macro validation)
 - `Introspection` must not depend on `Interpretation`.
 - No module may depend on `Synthesis` except `DomainModeling` (evolution loop).
 - Exception: CLR implementations under `Poly/Introspection/CommonLanguageRuntime` add concrete types without introducing reverse dependencies.
+- **Domain concepts lower to generic VM opcodes** (no domain-specific opcodes). See `docs/decisions/2026-06-08-domain-lowering-boundary.md`.
 
 ## Interpretation
 
@@ -56,16 +57,21 @@ The expanded rationale, history, and examples of how these principles have been 
   - `Analysis/` — semantic passes (Semantics, ConstantFolding, ControlFlow)
   - `LinqExpressions/` — `LinqExpressionGenerator`, `INodeCompiler`
   - `Mermaid/` — AST visualization
+  - `VirtualMachine/` — VM bytecode lowering (`Lowering.cs`), execution (`Vm.cs`), opcodes (`OpCode.cs`), state (`VmState.cs`), heap (`Heap.cs`), closures (`Closure.cs`)
 
-### Typical Pipeline
+### Typical VM Pipeline
 ```csharp
 var analyzer = new AnalyzerBuilder()
     .UseTypeResolver().UseMemberResolver().UseVariableScopeValidator()
     .Build();
 
 var result = analyzer.Analyze(node);
-var expr = new LinqExpressionGenerator(result).Compile(node);
+var program = Lowering.Lower(node, result);
+using var state = new VmState { Program = program };
+var output = Vm.Execute(state);
 ```
+
+The VM is the canonical semantics for lowered IR. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
 
 `AnalysisContext` holds type definitions, node metadata, and diagnostics. There is no `Operators/` directory.
 
@@ -108,6 +114,8 @@ Async support is **minimal by design**. `Task<T>` is merely the return type of t
 
 For simulation purposes, `Await` nodes extract results synchronously via `GetAwaiter().GetResult()`.
 
+**Breakpoints** reuse the `Int`/`Iret` interrupt mechanism (vector=1). See `docs/decisions/2026-06-08-breakpoint-architecture.md`.
+
 **Key artifacts:**
 - `Await(Node Operand)` — `Syntax/Nodes/Await.cs`
 - `IsAsync` flag — `Syntax/Nodes/TypeDefinitions/MethodDefinitionNode.cs`
@@ -138,7 +146,8 @@ The full rationale for these exact rules lives in (or should be added to) `docs/
 | Shared abstractions         | `Introspection` |
 | Analysis passes             | `Interpretation/Analysis/` |
 | AST node types              | `Syntax/Nodes/` |
-| Contract interface generation | `Data/Modeling/CodeGeneration/DomainLoweringGenerator.cs` (`BuildEntityContractInterface`, `BuildStageContractInterfaces`) |
+| VM bytecode lowering        | `Interpretation/VirtualMachine/Lowering.cs` |
+| VM execution engine         | `Interpretation/VirtualMachine/Vm.cs` |
 | Validation rules            | `Validation/Rules/` (register in `Validation/Rule.cs`) |
 | Data-model constraints      | `Data/Modeling/Validation/` |
 | Shared helpers              | `Extensions/` |

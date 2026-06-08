@@ -1,13 +1,16 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Poly.Interpretation.VirtualMachine;
 
-internal sealed class ValueStack {
+internal sealed class ValueStack : IDisposable {
     private int[] _slots;
+    private readonly int _initialSize;
 
     public ValueStack(int initialSlots = 256) {
-        _slots = new int[initialSlots];
+        _initialSize = initialSlots;
+        _slots = ArrayPool<int>.Shared.Rent(initialSlots);
         SP = 0;
     }
 
@@ -49,6 +52,14 @@ internal sealed class ValueStack {
         SP = targetSp;
     }
 
+    public Span<int> Reserve(int slots) {
+        if (SP + slots > _slots.Length)
+            Grow();
+        var span = _slots.AsSpan(SP, slots);
+        SP += slots;
+        return span;
+    }
+
     public int PeekInt(int offset = 0) {
         var idx = SP - 1 - offset;
         if (idx < 0)
@@ -62,14 +73,22 @@ internal sealed class ValueStack {
         Array.Copy(_slots, srcSlot, _slots, destSlot, count);
     }
 
+    public void Dispose() {
+        if (_slots is not null) {
+            ArrayPool<int>.Shared.Return(_slots);
+            _slots = null!;
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int SlotCountOf<T>() where T : unmanaged =>
         (Unsafe.SizeOf<T>() + 3) / 4;
 
     private void Grow() {
         var newSize = _slots.Length * 2;
-        var newSlots = new int[newSize];
+        var newSlots = ArrayPool<int>.Shared.Rent(newSize);
         Array.Copy(_slots, newSlots, SP);
+        ArrayPool<int>.Shared.Return(_slots);
         _slots = newSlots;
     }
 }

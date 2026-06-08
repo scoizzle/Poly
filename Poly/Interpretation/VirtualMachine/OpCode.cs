@@ -35,4 +35,6 @@ internal enum OpCode : byte {
     CallClosure,
     LoadUpvalue,
     StoreUpvalue,
+    StrConcat,
+    EnumeratorMoveNext,
 }

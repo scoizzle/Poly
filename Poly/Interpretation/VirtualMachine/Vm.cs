@@ -60,6 +60,12 @@ internal static class Vm {
                 }
 #endif
 
+                if (state.BreakpointPCs is not null && state.BreakpointPCs.Contains(instrPc)) {
+                    state.SavedPC = pc;
+                    state.Status = InterpreterStatus.Suspended;
+                    return InterpreterResult.Suspend();
+                }
+
                 switch (op) {
                     case OpCode.Nop:
                         break;
@@ -368,10 +374,8 @@ internal static class Vm {
                             int retPC = pc;
                             int prevBase = state.FrameBase < 0 ? 0 : state.FrameBase;
                             int newBase = state.Stack.SP;
-                            state.Stack.Push(0); state.Stack.Push(0);
-                            state.Stack.Push(0); state.Stack.Push(0);
-                            for (int i = 0; i < entry.LocalCount; i++)
-                                state.Stack.Push(0);
+                            int totalSlots = FrameHeader.SlotCount + entry.LocalCount;
+                            state.Stack.Reserve(totalSlots);
                             FrameHeader.Write(state.Stack.AsSpan(), newBase,
                                 retPC, prevBase, argSlots, entry.RetBytes);
                             state.FrameBase = newBase;
@@ -470,7 +474,7 @@ internal static class Vm {
                     case OpCode.Int: {
                             int vector = ReadInt32(code, ref pc);
                             state.SavedPC = pc;
-                            if (vector == 0) {
+                            if (vector == 0 || vector == 1) {
                                 state.Status = InterpreterStatus.Suspended;
                             }
                             break;
@@ -508,10 +512,8 @@ internal static class Vm {
                             int retPC = pc;
                             int prevBase = state.FrameBase < 0 ? 0 : state.FrameBase;
                             int newBase = state.Stack.SP;
-                            state.Stack.Push(0); state.Stack.Push(0);
-                            state.Stack.Push(0); state.Stack.Push(0);
-                            for (int i = 0; i < entry.LocalCount; i++)
-                                state.Stack.Push(0);
+                            int totalSlots2 = FrameHeader.SlotCount + entry.LocalCount;
+                            state.Stack.Reserve(totalSlots2);
                             FrameHeader.Write(state.Stack.AsSpan(), newBase,
                                 retPC, prevBase, argSlots, entry.RetBytes);
                             state.FrameBase = newBase;
@@ -545,6 +547,26 @@ internal static class Vm {
                             if (closure.Captures is null || upvalueIndex >= closure.Captures.Length)
                                 throw new InvalidOperationException($"StoreUpvalue: upvalue index {upvalueIndex} out of range");
                             closure.Captures[upvalueIndex] = value;
+                            break;
+                        }
+
+                    case OpCode.StrConcat: {
+                            int count = state.Stack.PopInt();
+                            var parts = new string?[count];
+                            for (int i = count - 1; i >= 0; i--) {
+                                int handle = state.Stack.PopInt();
+                                var val = handle >= 0 && handle < state.Heap.Count ? state.Heap.Get(handle) : (object?)handle;
+                                parts[i] = val?.ToString();
+                            }
+                            state.Stack.Push(state.Heap.Allocate(string.Concat(parts)));
+                            break;
+                        }
+
+                    case OpCode.EnumeratorMoveNext: {
+                            int handle = state.Stack.PopInt();
+                            var enumerator = handle >= 0 && handle < state.Heap.Count
+                                && state.Heap.Get(handle) is object[] h ? h[0] as IEnumerator : null;
+                            state.Stack.Push(enumerator?.MoveNext() ?? false ? 1 : 0);
                             break;
                         }
 

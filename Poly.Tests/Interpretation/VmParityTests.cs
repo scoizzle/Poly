@@ -54,10 +54,10 @@ public class VmParityTests {
     }
 
     [Test]
-    public async Task TypeIs_NonNull_ReturnsTrue_VmOnly() {
+    public async Task TypeIs_String_Is_Int_ReturnsFalse_VmOnly() {
         var vm = EvaluateVm(new TypeIs(new Constant("text"), TypeReference.To<int>()));
         await Assert.That(vm.HasValue).IsTrue();
-        await Assert.That(Normalize(vm.Value)).IsEqualTo(1);
+        await Assert.That(Normalize(vm.Value)).IsEqualTo(0);
     }
 
     [Test]
@@ -359,6 +359,13 @@ public class VmParityTests {
         await Assert.That(vm.Value).IsEqualTo(3);
     }
 
+    private static byte Op(OpCode op) => (byte)op;
+
+    private static byte[] Int32(int value) =>
+        [(byte)(value & 0xFF), (byte)((value >> 8) & 0xFF), (byte)((value >> 16) & 0xFF), (byte)((value >> 24) & 0xFF)];
+
+    private static byte[] J(OpCode op, int data) => [Op(op), .. Int32(data)];
+
     private static InterpreterResult EvaluateVmOnly(Node node,
         Dictionary<string, object?>? initialVariables = null) {
         var analysis = new AnalyzerBuilder()
@@ -382,6 +389,86 @@ public class VmParityTests {
     }
 
 #if DEBUG
+    [Test]
+    public async Task Optimizer_IdentityFold_RemovesPushInt0Add() {
+        var prog = new Bytecode([
+            .. J(OpCode.PushInt, 0),
+            Op(OpCode.Add),
+            .. J(OpCode.PushInt, 42),
+        ], []);
+        var optimized = Optimizer.Optimize(prog);
+        using var state = new VmState { Program = optimized };
+        var result = Vm.Execute(state);
+        await Assert.That(result.HasValue).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task Optimizer_IdentityFold_RemovesPushInt1Mul() {
+        var prog = new Bytecode([
+            .. J(OpCode.PushInt, 1),
+            Op(OpCode.Mul),
+            .. J(OpCode.PushInt, 99),
+        ], []);
+        var optimized = Optimizer.Optimize(prog);
+        using var state = new VmState { Program = optimized };
+        var result = Vm.Execute(state);
+        await Assert.That(result.HasValue).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(99);
+    }
+
+    [Test]
+    public async Task Optimizer_ZeroSub_RemovesIdentity() {
+        var prog = new Bytecode([
+            .. J(OpCode.PushInt, 7),
+            .. J(OpCode.PushInt, 0),
+            Op(OpCode.Sub),
+        ], []);
+        var optimized = Optimizer.Optimize(prog);
+        using var state = new VmState { Program = optimized };
+        var result = Vm.Execute(state);
+        await Assert.That(result.HasValue).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(7);
+    }
+
+    [Test]
+    public async Task Optimizer_DupPop_Eliminated() {
+        var prog = new Bytecode([
+            .. J(OpCode.PushInt, 7),
+            Op(OpCode.Dup),
+            Op(OpCode.Pop),
+            Op(OpCode.Dup),
+            Op(OpCode.Pop),
+        ], []);
+        var optimized = Optimizer.Optimize(prog);
+        using var state = new VmState { Program = optimized };
+        var result = Vm.Execute(state);
+        await Assert.That(result.HasValue).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(7);
+    }
+
+    [Test]
+    public async Task Optimizer_PreservesSemantics_OnComplexArithmetic() {
+        // (10 * 3) * 1 + 0 + 7 = 37, with identity folds and Dup/Pop
+        var prog = new Bytecode([
+            .. J(OpCode.PushInt, 10),
+            .. J(OpCode.PushInt, 3),
+            Op(OpCode.Mul),
+            .. J(OpCode.PushInt, 1), Op(OpCode.Mul),
+            .. J(OpCode.PushInt, 0), Op(OpCode.Add),
+            .. J(OpCode.PushInt, 7),
+            Op(OpCode.Add),
+            Op(OpCode.Dup), Op(OpCode.Pop),
+        ], []);
+        var optimized = Optimizer.Optimize(prog);
+        using var expected = new VmState { Program = prog };
+        var eResult = Vm.Execute(expected);
+        using var state = new VmState { Program = optimized };
+        var result = Vm.Execute(state);
+        await Assert.That(result.HasValue).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(eResult.Value);
+    }
+
     [Test]
     public async Task Vm_Tracing_ProducesOutput() {
         var sw = new StringWriter();

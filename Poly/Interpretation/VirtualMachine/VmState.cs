@@ -13,7 +13,7 @@ internal sealed class VmState : IDisposable {
     public int FrameBase { get; set; } = -1;
 
     public AnalysisResult? AnalysisResult { get; internal set; }
-    public NodeId? BreakpointSkipNodeId { get; internal set; }
+    public HashSet<int>? BreakpointPCs { get; set; }
 
     public InterpreterStatus Status { get; internal set; } = InterpreterStatus.Running;
     public InterpreterResult? LastResult { get; private set; }
@@ -58,7 +58,9 @@ internal sealed class VmState : IDisposable {
         LastResult = result;
     }
 
-    public void Dispose() { }
+    public void Dispose() {
+        Stack.Dispose();
+    }
 
     internal string? FormatStack(int maxItems = 6) {
         if (Stack.SP <= 0) return "[]";

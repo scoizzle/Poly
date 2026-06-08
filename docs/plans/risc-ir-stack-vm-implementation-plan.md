@@ -1,6 +1,6 @@
-# Implementation Plan: RISC IR + Stack VM for the Reference Interpreter
+# Implementation Plan: Bytecode VM for the Reference Interpreter
 
-**Status**: Draft (as of this plan creation)  
+**Status**: Active implementation — Phases 0–4 complete, Phase 5 in progress  
 **Owner**: [To be assigned]  
 **Related**: 
 - `docs/plans/v2-to-v3/tree-walking-interpreter-design.md`
@@ -8,6 +8,54 @@
 - `docs/decisions/2026-06-post-lowering-insight-analysis.md`
 - `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`
 - AGENTS.md (core principles, placement rules, build/test discipline)
+
+## Current Implementation Status
+
+The original 8-phase plan has been partially executed. The current codebase has diverged from the plan's naming conventions and architecture in several ways:
+
+| Plan name | Actual name | Status |
+|-----------|-------------|--------|
+| `RiscInstruction` (enum + record) | `OpCode` (enum) — raw byte opcodes with immediate operands | Complete |
+| `RiscProgram` | `Bytecode` — `byte[] Code` + source map + constants + call sites + regions | Complete |
+| `RiscValueStack` (byte-backed pool) | `ValueStack` (`int[]` — 4-byte slots with generic `Push<T>`/`Pop<T>`) | Complete |
+| `RiscHeap` | `Heap` (`List<object?>`) | Complete |
+| `RiscFrameHeader` | `FrameHeader` (4-int struct, `MemoryMarshal` blit) | Complete |
+| `RiscState` | `VmState` | Complete |
+| `RiscVm` | `Vm` (dispatch loop) | Complete |
+| `RiscLowering` | `Lowering` | Complete |
+| `RiscOp` (8-byte aligned) | `OpCode` (1-byte) + byte immediates | Complete |
+| Signed handles (pos=heap, neg=stack) | `LoadValue`/`StoreValue` (int handle + int size) | Partial |
+| 8-byte byte stack | 4-byte `int[]` stack | Diverged |
+
+### What's Implemented (40+ AST node types)
+- Arithmetic: Add, Sub, Mul, Div, Mod, Neg (int, signed/unsigned); DAdd–DGe (double) via `ResolveBinaryOp`
+- Comparisons: Eq–Ge, ULt–UGe, DEq–DGe (type-aware via `ResolveBinaryOp`)
+- Boolean: And/Or (short-circuit via Dup+JumpIfFalse), Not
+- Flow control: Conditional, If/Else, While/DoWhile/For, Break/Continue, Goto/Label, Switch
+- Variables: LoadArg/StoreArg (params), LoadLocal/StoreLocal (locals), `DiscoverLocals` pre-scan
+- Data: Assignment (param/local dest), Coalesce, Default, NullForgiving
+- Member access: property getter, field getter, array indexer (via `CallSiteCompiler`)
+- Object allocation: `New` lowered to constructor call (via `CallSiteCompiler.CompileConstructor`)
+- Exception: TryCatchFinally with region table, Throw, EndFinally
+- Interrupts: Int vector, Iret
+- Calls: Call (internal Poly functions), CallExternal (CLR via `CallSiteDelegate`)
+- CLR interop: `CallSiteCompiler` generates typed `CallSiteDelegate` for any `MethodInfo`, `ConstructorInfo`, or `FieldInfo`
+- Type-aware lowering: `ResolveBinaryOp` checks `analysis.GetResolvedType(node)?.GetRuntimeType()` to emit correct op for double/uint paths
+
+### Phase 4 Complete
+The 5 priority items from Phase 4 are now fully implemented:
+
+1. **LoadConst type preservation** — heap preload restored, `LoadConst` pushes heap handle, `PushDouble` opcode with `TryInlinableDouble`
+2. **Member/IndexAccess/New lowering** — property get, field get, indexer get, constructor call via `CallSiteCompiler`
+3. **Non-param Variable support** — `DiscoverLocals`, `LoadLocal`/`StoreLocal` opcodes, `FunctionEntry.LocalCount`, local frame slots
+4. **Type-aware lowering** — `ResolveBinaryOp` emits DAdd/DSub/DDiv/DNeg/DLt/etc. for double, UDiv/UMod/ULt–UGe for uint
+5. **Cross-path parity test harness** — 25 tests in `VmTreeWalkingParityTests.cs` that run AST through both tree-walker and VM, asserting identical results (with `bool`→`int` normalization)
+
+### Known Gaps (Phase 5 items)
+1. **Block intermediate values not popped** — lowering emits consecutive expressions without popping intermediate results, causing stack buildup (surface for ints, breaks doubles/longs)
+2. **Result extraction uses PopInt only** — `Vm.Execute` calls `PopInt()` for final result; doubles/longs (2-slot values) produce garbage; heap handles for strings/objects are returned as raw ints
+3. **Lambda/closures** — closure environment allocation + captured-variable storage (upvalues)
+4. **Await** — async state machine frames
 
 ## Context & Motivation
 
@@ -94,6 +142,161 @@ This directly addresses the original complaint ("the tree walking interpreter is
 - New public API surface until the RISC path has demonstrated value via tests and the scenarios we discussed.
 
 ## Phased Approach (Incremental, "Make Working Before Perfect")
+
+### Phase 4 (Current): Type-Aware Lowering + Object Model — The 5 Priority Items
+
+**Goal**: Close the gap between the tree-walker and the VM for all core expression types, enabling cross-path parity tests.
+
+**Tasks** (implemented in priority order):
+
+**4a. LoadConst type preservation** (highest impact per effort)
+- Restore constants heap preload so all non-inlineable constants reside on the heap at startup
+- Change `LoadConst` to push the heap handle (constant index) as the stack value instead of `val is int iv ? iv : 0`
+- Add `TryInlinableDouble` + `PushDouble` opcode so `Constant(3.14)` emits inline 2-slot push
+- Add `TryInlinableString` — strings that are heap objects get a heap handle pushed via `LoadConst`
+- Fix `LoadConst` handler to push doubles via `Push<double>()` when the constant is double
+
+**4b. Member / IndexAccess / New lowering**
+- Lower `Member` (property/field read) to `CallExternal` via compiler-generated accessor sites
+- Lower `IndexAccess` to `CallExternal` indexer getter
+- Lower `New` to `CallExternal` constructor call + heap allocation
+- Requires completed 4a (so object references can flow as heap handles)
+
+**4c. Non-param Variable support**
+- Add local variable area to the frame header (local slot count)
+- Lower `Variable` nodes not in `paramIndexMap` to `LoadArg`/`StoreArg` into the local area
+- Lower `Assignment` to non-param destinations similarly
+
+**4d. Type-aware lowering**
+- Thread expression type information through the lowering pass
+- Emit `DAdd`/`DSub`/`DMul`/`DDiv`/`DEq`–`DGe` when operands are double
+- Emit `UDiv`/`UMod`/`ULt`–`UGe` when operands are unsigned
+- Emit `Add`/`Sub`/`Mul`/`Div`/`Eq`–`Ge` for signed int (default / remainder)
+
+**4e. Cross-path parity test harness**
+- New helper `AssertAllEnginesMatch(Node ast)` that runs tree-walker, LINQ path, and VM bytecode on the same AST and asserts identical results
+- Start with arithmetic/comparison/control-flow subset
+- Expand as each of 4a–4d extends VM coverage
+- Add regression tests for every gap discovered
+
+**Verification gate**: Full test suite (1220 passing). Each of 4a–4d has dedicated tests. Parity harness covers all newly working scenarios.
+
+### Phase 5 (Next): Block Cleanup, Multi-Slot Results, Lambda/Closures, Await
+
+**Goal**: Fix remaining correctness issues and support the full interpretable AST surface.
+
+**Tasks** (implemented in priority order):
+
+**5a. Block intermediate value popping** (small, high impact)
+
+Problem: Lowering's `case Block` emits each expression sequentially without popping non-last results. After `Block([PushInt 1, PushInt 2])`, SP=2 with both values on the stack. The last PopInt reads `2` but leaves `1` below. This means:
+- `Pop<double>()` would read both slots as a double (wrong for two separate ints)
+- Stack has stale data that interferes with subsequent operations
+- Prevents us from using SP-count to infer multi-slot results
+
+Fix: In `Emit(Block)`, emit `Pop` after each expression except the last.
+
+Risk: Some expressions are void (e.g., `IfStatement` without else, `ThrowStatement`). After a void expression, `Pop` would consume the previous result. Mitigation: skip `Pop` when the expression's resolved type is void or the expression belongs to a category of non-value-producing nodes.
+
+Implementation:
+```csharp
+case Block block:
+    for (int i = 0; i < block.Nodes.Count; i++) {
+        Emit(block.Nodes[i], ...);
+        if (i < block.Nodes.Count - 1 && EmitsValue(block.Nodes[i], analysis))
+            code.Add((byte)OpCode.Pop);
+    }
+    return;
+```
+
+Add `EmitsValue(Node, AnalysisResult?)` helper that returns false for: `IfStatement` without else, `ThrowStatement`, `WhileLoop`/`DoWhileLoop`/`ForLoop` (as statements), `TypeDefinitionNode`, `LabelDeclaration` (no value), `TypeCast`/`TypeIs`/`TypeAs`/`Parameter`/`ParameterReference` (no-ops).
+
+**5b. Multi-slot result extraction** (medium)
+
+Problem: `Vm.Execute` always calls `PopInt()` for the final value. Multi-slot types (double = 2 slots, long = 2 slots) produce garbage because only 4 of 8 bytes are read. Heap handles for objects/strings are returned as raw `int` instead of the heap object.
+
+Fix: Store the expression result type in `Bytecode` metadata, or change the approach to always box the result via heap allocation.
+
+Option A (preferred): Add `ResultType` field to `Bytecode` (or a `FunctionEntry` refinement). At lowering time, record the resolved CLR type of the root expression. At result extraction, use this type to determine the pop strategy:
+- `null`/`typeof(void)` → `Void`
+- `typeof(int)`/`typeof(bool)` etc. → `PopInt()`
+- `typeof(double)`/`typeof(float)` → `Pop<double>()`
+- `typeof(long)`/`typeof(ulong)` → `Pop<long>()`
+- Other reference types → `PopInt()` (handle), then `heap.Get(handle)` to get the actual object
+
+Option B: Always box non-int results via heap allocation at the end of lowering. Emit a "Box result" sequence that stores the top-of-stack onto the heap and pushes the handle. Then `PopInt()` always returns a heap handle, and the extraction resolves it.
+
+Implementation (Option A):
+1. Change `Bytecode` to carry `Type? ResultType`
+2. In `Lower()`, set `resultType = analysis.GetResolvedType(root)?.GetRuntimeType()`
+3. In `Vm.Execute`, extract final value using result type:
+   ```csharp
+   var resultType = prog.ResultType;
+   if (state.Stack.IsEmpty || resultType == typeof(void))
+       finalResult = InterpreterResult.Void;
+   else if (resultType == typeof(double) || resultType == typeof(float))
+       finalResult = FromValue(state.Stack.Pop<double>());
+   else if (resultType == typeof(long) || resultType == typeof(ulong))
+       finalResult = FromValue(state.Stack.Pop<long>());
+   else if (resultType is not null && !resultType.IsPrimitive)
+       finalResult = FromValue(state.Heap.Get(state.Stack.PopInt()));
+   else
+       finalResult = FromValue(state.Stack.PopInt());
+   ```
+
+**5c. Lambda/closures** (larger feature)
+
+Problem: Lambda expressions capture local variables ("upvalues"). When a lambda escapes its declaring scope, captured variables must be hoisted to a heap-allocated closure environment.
+
+Approach:
+1. Analysis phase: `LambdaCaptureAnalysis` identifies captured variables per lambda + their lifetime (also use existing analysis metadata like `Mutability`).
+2. Lowering phase: For each lambda that captures variables:
+   a. Create a closure environment type (struct or class-like layout) with slots for each captured variable.
+   b. Rewrite captured variable references to access the closure environment instead of the local frame slot.
+   c. Allocate the closure environment when the lambda is created (at the point of the `Lambda` node evaluation).
+   d. Compile lambda body as a separate FunctionEntry that receives the environment as an implicit parameter.
+3. The closure's MethodDefinitionNode is handled by the existing `DiscoverFunctions` + `Call` path (already emits `LoadArg` for implicit first arg = environment reference).
+
+Defer: Non-escaping lambdas (inlined directly without environment) — can be optimized later.
+
+Implementation order:
+- Add closure environment type generation in lowering
+- Add `ClosureEnvironment` opcode or reuse `New` to allocate
+- Rewrite captured Variable/Assignment to access environment
+- Wire lambda body via `DiscoverFunctions` with env param
+- Add `LoadUpvalue`/`StoreUpvalue` opcodes for fast env slot access
+
+**5d. Await** (largest, deferred until cross-entity policy tests demand it)
+
+Problem: `Await` requires an async state machine. The expression `await task` needs to save the current continuation, yield, and resume when the task completes.
+
+Approach (matches existing tree-walker behavior):
+1. Lower `Await` to a `Int` + suspend + resume sequence, extracting the result synchronously via `GetAwaiter().GetResult()`.
+2. When cross-entity policy tests require real async, introduce state machine frames with saved PC + local slots + eval stack snapshot.
+
+This is already partially implemented: the tree-walker's `EvaluateAwait` extracts results via `GetAwaiter().GetResult()`. The VM's current `Await` handling emits `Int 0` (suspend). Wire this to the actual `InterpreterResult.Suspended` flow for initial parity.
+
+Full async state machine implementation:
+- New opcodes: `SaveState`, `ResumeState` (saves/restores PC + local slots)
+- Frame header extension: `AsyncFlag`, `SavedStatePC`
+- The host (evaluator) checks for `SuspendedExecution` after `Int` and resumes later
+- On resume, jumps to saved PC with restored locals
+
+### Phase 6: Suspend/Resume Integration + Tag Removal
+
+Same as original Phase 6 — full neurosymbolic features, wire VM into `SuspendedExecution`.
+
+### Phase 7: Test Parity, Fuzz, Cutover
+
+Same as original Phase 7 — VM as primary path, tree-walker as fallback.
+
+### Phase 8: Polish, Documentation, Cleanup
+
+Same as original Phase 8.
+
+## Original Phase Plan (kept for reference)
+
+Phases 0–3 are complete. See below for the original plan details.
 
 We follow the project's established pattern (see `docs/plans/v2-to-v3/` workstreams and `master-roadmap.md`): small verifiable increments, working code + green tests at each step, "tags for now then remove", explicit verification of suspend/insight/stack-ref/CLR-ref scenarios, and the 1200-cycle soak as a gate.
 

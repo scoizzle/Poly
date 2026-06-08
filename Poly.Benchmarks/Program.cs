@@ -2,11 +2,17 @@ using System;
 using System.CommandLine;
 using System.IO;
 
+using Poly.Benchmarks;
 using Poly.Benchmarks.DomainModeling;
 using Poly.Benchmarks.DomainModeling.Demos;
 using Poly.Data.Modeling;
 using Poly.Data.Modeling.Analysis;
 using Poly.Interpretation.CSharp;
+
+if (args.Length > 0 && args[0] == "--interp-bench") {
+    BenchmarkDotNet.Running.BenchmarkRunner.Run<InterpreterBenchmarks>();
+    return 0;
+}
 
 var domainNameOption = new Option<string>("--name") {
     Description = "Name for the domain being modeled."

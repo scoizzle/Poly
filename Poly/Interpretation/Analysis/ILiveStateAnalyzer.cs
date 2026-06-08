@@ -1,4 +1,4 @@
-using Poly.Interpretation.TreeWalking;
+using Poly.Interpretation;
 using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.Analysis;

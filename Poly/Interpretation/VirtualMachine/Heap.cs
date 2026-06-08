@@ -1,18 +1,16 @@
-using System.Collections.Generic;
-
 namespace Poly.Interpretation.VirtualMachine;
 
-internal sealed class RiscHeap {
-    private readonly List<object?> _objects = new();
+internal sealed class Heap {
+    private readonly List<object?> _objects = [];
+
+    public Action<int, object?>? OnAllocate { get; set; }
 
     public int Count => _objects.Count;
 
-    /// <summary>
-    /// Allocates a slot and returns the positive heap handle (index).
-    /// </summary>
     public int Allocate(object? value) {
         var handle = _objects.Count;
         _objects.Add(value);
+        OnAllocate?.Invoke(handle, value);
         return handle;
     }
 
@@ -28,6 +26,5 @@ internal sealed class RiscHeap {
         _objects[handle] = value;
     }
 
-    // For suspend/resume fidelity we may expose raw list later or snapshot.
     internal IReadOnlyList<object?> DebugView => _objects;
 }

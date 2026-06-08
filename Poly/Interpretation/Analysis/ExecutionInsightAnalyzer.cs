@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-using Poly.Interpretation.TreeWalking;
+using Poly.Interpretation;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 
@@ -19,10 +19,11 @@ public sealed class ExecutionInsightAnalyzer : ILiveStateAnalyzer {
             return;
 
         var target = suspended.AtNode ?? suspended.State.CurrentFrame.CurrentNode;
-        context.ReportHint(
-            target,
-            $"Call stack depth is {suspended.CallStackDepth}. Consider refactoring into smaller methods to improve maintainability.",
-            "DEEP_CALL_STACK");
+        if (target is not null)
+            context.ReportHint(
+                target,
+                $"Call stack depth is {suspended.CallStackDepth}. Consider refactoring into smaller methods to improve maintainability.",
+                "DEEP_CALL_STACK");
     }
 
     private static void AnalyzeEvaluationStackTypes(AnalysisContext context, SuspendedExecution suspended) {
@@ -69,12 +70,13 @@ public sealed class ExecutionInsightAnalyzer : ILiveStateAnalyzer {
         var target = suspended.AtNode ?? suspended.State.CurrentFrame.CurrentNode;
 
         foreach (var frame in suspended.State.CallStack.Frames) {
-            var nodeStr = frame.CurrentNode.ToString();
+            var nodeStr = frame.CurrentNode?.ToString();
             if (nodeStr is not null && nodeStr.Contains("Create", StringComparison.OrdinalIgnoreCase)) {
-                context.ReportHint(
-                    target,
-                    "Execution suspended at a node related to a Create operation. Ensure idempotency guarantees are in place.",
-                    "CREATE_OPERATION_FLAG");
+                if (target is not null)
+                    context.ReportHint(
+                        target,
+                        "Execution suspended at a node related to a Create operation. Ensure idempotency guarantees are in place.",
+                        "CREATE_OPERATION_FLAG");
                 return;
             }
         }

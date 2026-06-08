@@ -18,4 +18,10 @@ public abstract record Node {
     /// Owned child nodes of this node.
     /// </summary>
     public virtual IEnumerable<Node?> Children => [];
+
+    /// <summary>
+    /// Compact representation for VM trace output.
+    /// Override to provide a shorter description than <see cref="object.ToString"/>.
+    /// </summary>
+    public virtual string ToTraceString() => ToString() ?? GetType().Name;
 }

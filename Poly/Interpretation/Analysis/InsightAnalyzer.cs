@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-using Poly.Interpretation.TreeWalking;
+using Poly.Interpretation;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;

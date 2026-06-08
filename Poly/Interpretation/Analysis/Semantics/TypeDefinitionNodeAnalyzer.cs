@@ -313,6 +313,7 @@ internal sealed class AstMethodDefinition(MethodDefinitionNode node, AstTypeDefi
     private readonly AstTypeDefinition _declaring = declaring;
     private readonly Lazy<ITypeDefinition> _returnType = new(() => declaring.ResolveType(node.ReturnType));
 
+    public MethodDefinitionNode DefinitionNode => _node;
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _returnType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;

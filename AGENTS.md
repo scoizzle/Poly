@@ -93,6 +93,7 @@ var ruleSet = new RuleSet<Person>(rules);
 - **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj`
 - Work is **not complete** while the build is failing. Iterate until green (or explicitly blocked by the user).
 - Add tests alongside feature changes.
+- For **isolated prototyping** (e.g. testing a snippet in total isolation from Poly projects), see `docs/file-based-csharp-apps.md` — the file-based apps technique lets you run single `.cs` files with `dotnet <file>.cs` without creating a project.
 
 **Test style:** `async [Test]` methods using `await Assert.That(result).IsEqualTo(expected)`.  
 Naming convention: `Method_Condition_ExpectedResult`.

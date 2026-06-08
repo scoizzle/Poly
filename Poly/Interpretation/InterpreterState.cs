@@ -1,21 +1,11 @@
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 
-namespace Poly.Interpretation.TreeWalking;
+namespace Poly.Interpretation;
 
-public enum InterpreterStatus {
-    Running,
-    Suspended,
-    Completed
-}
-
-/// <summary>
-/// Represents a point where execution was suspended.
-/// </summary>
 public sealed record SuspendedExecution(
     InterpreterState State,
     string Reason,
@@ -23,19 +13,9 @@ public sealed record SuspendedExecution(
     int CallStackDepth,
     int EvaluationStackDepth);
 
-/// <summary>
-/// Central execution state for the stack-based tree-walking virtual machine.
-/// 
-/// This class is designed to be:
-/// - Suspendable at semantically meaningful points
-/// - Fully introspectable (call stack, evaluation stack, current node)
-/// - Agnostic to DomainModeling (only knows about Syntax.Node and AnalysisResult)
-/// 
-/// All domain-specific information comes through AnalysisResult metadata.
-/// </summary>
-public sealed class InterpreterState(MemoryPool<object?>? pool = null) {
+public sealed class InterpreterState(MemoryPool<object?>? pool = null) : IDisposable {
     public InterpreterStatus Status { get; private set; } = InterpreterStatus.Running;
-    public EvaluationStack ValueStack { get; } = new EvaluationStack(pool, 64);
+    public EvaluationStack ValueStack { get; } = new(pool, 64);
     public CallStack CallStack { get; } = new();
     public AnalysisResult? AnalysisResult { get; internal set; }
     public NodeId? BreakpointSkipNodeId { get; internal set; }
@@ -48,21 +28,11 @@ public sealed class InterpreterState(MemoryPool<object?>? pool = null) {
     public StackFrame CurrentFrame => CallStack.Peek();
     public Dictionary<string, object?> Variables => CurrentFrame.Variables;
 
-    /// <summary>
-    /// Suspends execution at the current point. Returns a snapshot that can be
-    /// introspected by insight analyzers or debugging tools.
-    /// </summary>
     public SuspendedExecution Suspend(string reason, Node? atNode = null) {
         Status = InterpreterStatus.Suspended;
         SuspensionReason = reason;
         SuspendedAtNode = atNode ?? CurrentFrame.CurrentNode;
-
-        return new SuspendedExecution(
-            this,
-            reason,
-            SuspendedAtNode,
-            CallStack.Count,
-            ValueStack.Count);
+        return new SuspendedExecution(this, reason, SuspendedAtNode!, CallStack.Count, ValueStack.Count);
     }
 
     public void Resume() {

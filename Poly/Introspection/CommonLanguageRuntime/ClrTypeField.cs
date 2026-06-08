@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Reflection;
 
 using Poly.Introspection;
@@ -13,10 +14,6 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     private readonly Lazy<ClrTypeDefinition> _memberType;
     private readonly ClrTypeDefinition _declaringType;
-
-    private readonly MemberReadDelegate? _read;
-    private readonly MemberWriteDelegate? _write;
-    private readonly MemberWriteDelegate? _initialize;
     private readonly bool _isVolatile;
 
     public ClrTypeField(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, FieldInfo fieldInfo) {
@@ -28,25 +25,17 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
         _declaringType = declaringType;
         FieldInfo = fieldInfo;
 
-        // Detect volatile via required custom modifiers (common for interop/ modeling of C/C++ volatile or explicit).
         _isVolatile = fieldInfo.GetRequiredCustomModifiers().Any(t => t == typeof(System.Runtime.CompilerServices.IsVolatile));
 
-        // Fields are always readable via reflection
-        _read = (owner, _) => FieldInfo.GetValue(FieldInfo.IsStatic ? null : owner);
+        Read = BuildFieldGetter(fieldInfo);
 
         if (fieldInfo.IsInitOnly || fieldInfo.IsLiteral) {
-            _initialize = (owner, value, _) => {
-                FieldInfo.SetValue(FieldInfo.IsStatic ? null : owner, value);
-                return owner;
-            };
-            _write = null;
+            Initialize = BuildFieldSetter(fieldInfo);
+            Write = null;
         }
         else {
-            _write = (owner, value, _) => {
-                FieldInfo.SetValue(FieldInfo.IsStatic ? null : owner, value);
-                return owner;
-            };
-            _initialize = null;
+            Write = BuildFieldSetter(fieldInfo);
+            Initialize = null;
         }
     }
 
@@ -75,9 +64,9 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     /// </summary>
     public FieldInfo FieldInfo { get; }
 
-    public MemberReadDelegate? Read => _read;
-    public MemberWriteDelegate? Write => _write;
-    public MemberWriteDelegate? Initialize => _initialize;
+    public MemberReadDelegate? Read { get; }
+    public MemberWriteDelegate? Write { get; }
+    public MemberWriteDelegate? Initialize { get; }
 
     public override Mutability Mutability {
         get {
@@ -100,4 +89,65 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     public override LifetimeModifier LifetimeModifier => FieldInfo.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
+
+    private static MemberReadDelegate BuildFieldGetter(FieldInfo field) {
+        // Open generic declaring types or pointer/by-ref field types cannot
+        // be used with expression trees. Fall back to FieldInfo.GetValue.
+        if (field.DeclaringType?.ContainsGenericParameters == true
+            || field.FieldType.IsPointer
+            || field.FieldType.IsByRef)
+            return (owner, _) => field.GetValue(field.IsStatic ? null : owner);
+
+        var target = Expression.Parameter(typeof(object), "target");
+        var args = Expression.Parameter(typeof(object?[]), "_");
+
+        Expression fieldAccess = field.IsStatic
+            ? Expression.Field(null, field)
+            : Expression.Field(Expression.Convert(target, field.DeclaringType!), field);
+
+        if (fieldAccess.Type.IsValueType)
+            fieldAccess = Expression.Convert(fieldAccess, typeof(object));
+
+        return Expression.Lambda<MemberReadDelegate>(fieldAccess, target, args).Compile();
+    }
+
+    private static MemberWriteDelegate BuildFieldSetter(FieldInfo field) {
+        var target = Expression.Parameter(typeof(object), "target");
+        var value = Expression.Parameter(typeof(object), "value");
+        var args = Expression.Parameter(typeof(object?[]), "_");
+
+        if (field.DeclaringType?.ContainsGenericParameters == true
+            || field.FieldType.IsPointer
+            || field.FieldType.IsByRef)
+            return (owner, val, _) => {
+                field.SetValue(field.IsStatic ? null : owner, val);
+                return owner;
+            };
+
+        // Expression.Assign cannot write to readonly/const fields.
+        // Fall back to FieldInfo.SetValue which bypasses the check.
+        if (field.IsInitOnly || field.IsLiteral) {
+            return (owner, val, _) => {
+                field.SetValue(field.IsStatic ? null : owner, val);
+                return owner;
+            };
+        }
+
+        if (!field.IsStatic && field.DeclaringType!.IsValueType) {
+            var unboxed = Expression.Variable(field.DeclaringType, "unboxed");
+            var loadExpr = Expression.Assign(unboxed, Expression.Convert(target, field.DeclaringType));
+            var fieldAssign = Expression.Assign(Expression.Field(unboxed, field), Expression.Convert(value, field.FieldType));
+            return Expression.Lambda<MemberWriteDelegate>(
+                Expression.Block([unboxed], loadExpr, fieldAssign, Expression.Convert(unboxed, typeof(object))),
+                target, value, args).Compile();
+        }
+
+        Expression fieldAccess = Expression.Field(
+            field.IsStatic ? null : Expression.Convert(target, field.DeclaringType!),
+            field);
+
+        return Expression.Lambda<MemberWriteDelegate>(
+            Expression.Block(Expression.Assign(fieldAccess, Expression.Convert(value, field.FieldType)), target),
+            target, value, args).Compile();
+    }
 }

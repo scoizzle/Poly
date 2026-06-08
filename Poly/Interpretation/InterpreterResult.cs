@@ -1,15 +1,7 @@
-using System;
+namespace Poly.Interpretation;
 
-using Poly.Syntax.Analysis;
-
-namespace Poly.Interpretation.TreeWalking;
-
-/// <summary>
-/// Result of evaluating a Syntax.Node in the tree-walking VM.
-/// Uses a simple discriminated union pattern for clarity and performance.
-/// </summary>
 public readonly record struct InterpreterResult {
-    public enum ResultKind { Void, Return, Break, Continue, Throw, Value }
+    public enum ResultKind { Void, Return, Break, Continue, Throw, Value, Suspend }
 
     public ResultKind Kind { get; }
     public object? Value { get; }
@@ -17,7 +9,7 @@ public readonly record struct InterpreterResult {
 
     public bool IsVoid => Kind == ResultKind.Void;
     public bool HasValue => Kind == ResultKind.Value;
-    public bool IsSignal => Kind is ResultKind.Return or ResultKind.Break or ResultKind.Continue or ResultKind.Throw;
+    public bool IsSignal => Kind is ResultKind.Return or ResultKind.Break or ResultKind.Continue or ResultKind.Throw or ResultKind.Suspend;
     public string? Label => Signal?.Label;
 
     private InterpreterResult(ResultKind kind, object? value, InterpreterSignal? signal = null) {
@@ -32,6 +24,7 @@ public readonly record struct InterpreterResult {
     public static InterpreterResult Break(string? label = null) => FromSignal(InterpreterSignal.Break(label));
     public static InterpreterResult Continue(string? label = null) => FromSignal(InterpreterSignal.Continue(label));
     public static InterpreterResult Throw(Exception exception) => FromSignal(InterpreterSignal.Throw(exception));
+    public static InterpreterResult Suspend(string? reason = null) => FromSignal(InterpreterSignal.Suspend(reason));
     public static InterpreterResult FromValue(object? value) => new(ResultKind.Value, value);
     public static InterpreterResult FromSignal(InterpreterSignal signal) => new(
         signal.Kind switch {
@@ -39,18 +32,15 @@ public readonly record struct InterpreterResult {
             InterpreterSignal.SignalKind.Break => ResultKind.Break,
             InterpreterSignal.SignalKind.Continue => ResultKind.Continue,
             InterpreterSignal.SignalKind.Throw => ResultKind.Throw,
+            InterpreterSignal.SignalKind.Suspend => ResultKind.Suspend,
             _ => ResultKind.Void
         },
         signal.Value,
         signal);
 }
 
-/// <summary>
-/// Represents non-local control flow within the interpreter.
-/// Used instead of exceptions for structured control flow (return, break, continue).
-/// </summary>
 public readonly record struct InterpreterSignal {
-    public enum SignalKind { Return, Break, Continue, Throw }
+    public enum SignalKind { Return, Break, Continue, Throw, Suspend }
 
     public SignalKind Kind { get; }
     public object? Value { get; }
@@ -67,6 +57,9 @@ public readonly record struct InterpreterSignal {
 
     public static InterpreterSignal Throw(Exception exception) =>
         new(SignalKind.Throw, exception);
+
+    public static InterpreterSignal Suspend(string? reason = null) =>
+        new(SignalKind.Suspend, reason);
 
     private InterpreterSignal(SignalKind kind, object? value = null, string? label = null) {
         Kind = kind;

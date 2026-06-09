@@ -56,7 +56,7 @@ internal static class Lowering {
         int baseOff = state.Stack.SP - argSlots;
         int raw = state.Stack.AsSpan()[baseOff];
         bool isNotNull;
-        if (raw >= 0 && raw < state.Heap.Count) {
+        if (Vm.IsValidHeapHandle(state, raw)) {
             isNotNull = state.Heap.Get(raw) is not null;
         }
         else {
@@ -72,7 +72,7 @@ internal static class Lowering {
             int baseOff = state.Stack.SP - argSlots;
             int raw = state.Stack.AsSpan()[baseOff];
             bool result;
-            if (raw >= 0 && raw < state.Heap.Count) {
+            if (Vm.IsValidHeapHandle(state, raw)) {
                 var val = state.Heap.Get(raw);
                 result = val is not null && targetType.IsInstanceOfType(val);
             }
@@ -88,7 +88,7 @@ internal static class Lowering {
         var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int handle = state.Stack.AsSpan()[baseOff];
-        object? awaitable = handle >= 0 && handle < state.Heap.Count ? state.Heap.Get(handle) : (object?)handle;
+        object? awaitable = Vm.ResolveHeapValue(state, handle);
         var awaiter = awaitable?.GetType().GetMethod("GetAwaiter", Type.EmptyTypes)?.Invoke(awaitable, null);
         var result = awaiter?.GetType().GetMethod("GetResult", Type.EmptyTypes)?.Invoke(awaiter, null);
         if (argSlots > 0) state.Stack.Drop(argSlots);
@@ -103,10 +103,10 @@ internal static class Lowering {
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
         int collectionHandle = state.Stack.AsSpan()[baseOff + 1];
-        object? collection = collectionHandle >= 0 && collectionHandle < state.Heap.Count ? state.Heap.Get(collectionHandle) : (object?)collectionHandle;
+        object? collection = Vm.IsValidHeapHandle(state, collectionHandle) ? state.Heap.Get(collectionHandle) : (object?)collectionHandle;
         if (collection is IEnumerable enumerable) {
             var enumerator = enumerable.GetEnumerator();
-            if (holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] holder)
+            if (Vm.IsValidHeapHandle(state, holderHandle) && state.Heap.Get(holderHandle) is object[] holder)
                 holder[0] = enumerator;
         }
         if (argSlots > 0) state.Stack.Drop(argSlots);
@@ -116,7 +116,7 @@ internal static class Lowering {
         var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
-        var enumerator = holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] h2 ? h2[0] as IEnumerator : null;
+        var enumerator = Vm.IsValidHeapHandle(state, holderHandle) && state.Heap.Get(holderHandle) is object[] h2 ? h2[0] as IEnumerator : null;
         object? current = enumerator?.Current;
         if (argSlots > 0) state.Stack.Drop(argSlots);
         if (hasRet != 0) {
@@ -129,7 +129,7 @@ internal static class Lowering {
         var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
-        if (holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] h3 && h3[0] is IDisposable d)
+        if (Vm.IsValidHeapHandle(state, holderHandle) && state.Heap.Get(holderHandle) is object[] h3 && h3[0] is IDisposable d)
             d.Dispose();
         if (argSlots > 0) state.Stack.Drop(argSlots);
     };
@@ -139,8 +139,8 @@ internal static class Lowering {
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
         int resourceHandle = state.Stack.AsSpan()[baseOff + 1];
-        if (holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] holder) {
-            object? resource = resourceHandle >= 0 && resourceHandle < state.Heap.Count ? state.Heap.Get(resourceHandle) : (object?)resourceHandle;
+        if (Vm.IsValidHeapHandle(state, holderHandle) && state.Heap.Get(holderHandle) is object[] holder) {
+            object? resource = Vm.IsValidHeapHandle(state, resourceHandle) ? state.Heap.Get(resourceHandle) : (object?)resourceHandle;
             holder[0] = resource!;
         }
         if (argSlots > 0) state.Stack.Drop(argSlots);
@@ -150,7 +150,7 @@ internal static class Lowering {
         var (argSlots, hasRet) = state.Stack.Pop<(int, int)>();
         int baseOff = state.Stack.SP - argSlots;
         int holderHandle = state.Stack.AsSpan()[baseOff];
-        if (holderHandle >= 0 && holderHandle < state.Heap.Count && state.Heap.Get(holderHandle) is object[] h4 && h4[0] is IDisposable d)
+        if (Vm.IsValidHeapHandle(state, holderHandle) && state.Heap.Get(holderHandle) is object[] h4 && h4[0] is IDisposable d)
             d.Dispose();
         if (argSlots > 0) state.Stack.Drop(argSlots);
     };
@@ -409,6 +409,12 @@ internal static class Lowering {
             if (child is not null)
                 DiscoverLocals(child, paramIndexMap, localIndexMap, captures);
         }
+    }
+
+    private static int EmitSourceMap(ref EmitContext ctx, Node node) {
+        int pc = ctx.Code.Count;
+        ctx.SourceMap[pc] = node.Id;
+        return pc;
     }
 
     private static bool EmitsValue(Node node) {
@@ -1602,13 +1608,13 @@ internal static class Lowering {
             int off = 0;
             if (!isStatic) {
                 int handle = state.Stack.AsSpan()[baseOff + off];
-                owner = handle >= 0 && handle < state.Heap.Count ? state.Heap.Get(handle) : (object?)handle;
+                owner = Vm.ResolveHeapValue(state, handle);
                 off++;
             }
             var args = new object?[argCount];
             for (int i = 0; i < argCount; i++) {
                 int handle = state.Stack.AsSpan()[baseOff + off + i];
-                args[i] = handle >= 0 && handle < state.Heap.Count ? state.Heap.Get(handle) : (object?)handle;
+                args[i] = Vm.ResolveHeapValue(state, handle);
             }
             var result = reader(owner!, args);
             if (argSlots > 0) state.Stack.Drop(argSlots);
@@ -1627,17 +1633,17 @@ internal static class Lowering {
             int off = 0;
             if (!isStatic) {
                 int handle = state.Stack.AsSpan()[baseOff + off];
-                owner = handle >= 0 && handle < state.Heap.Count ? state.Heap.Get(handle) : (object?)handle;
+                owner = Vm.ResolveHeapValue(state, handle);
                 off++;
             }
             int indexArgCount = argCount - 1;
             var args = new object?[indexArgCount];
             for (int i = 0; i < indexArgCount; i++) {
                 int handle = state.Stack.AsSpan()[baseOff + off + i];
-                args[i] = handle >= 0 && handle < state.Heap.Count ? state.Heap.Get(handle) : (object?)handle;
+                args[i] = Vm.ResolveHeapValue(state, handle);
             }
             int valueHandle = state.Stack.AsSpan()[baseOff + off + indexArgCount];
-            object? value = valueHandle >= 0 && valueHandle < state.Heap.Count ? state.Heap.Get(valueHandle) : (object?)valueHandle;
+            object? value = Vm.IsValidHeapHandle(state, valueHandle) ? state.Heap.Get(valueHandle) : (object?)valueHandle;
             writer(owner!, value, args);
             if (argSlots > 0) state.Stack.Drop(argSlots);
             if (hasRet != 0) {

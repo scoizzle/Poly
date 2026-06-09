@@ -431,7 +431,7 @@ internal static class Vm {
 
                     case OpCode.IsNull: {
                             int val = state.Stack.PopInt();
-                            bool isNull = val >= 0 && val < state.Heap.Count && state.Heap.Get(val) is null;
+                            bool isNull = IsValidHeapHandle(state, val) && state.Heap.Get(val) is null;
                             state.Stack.Push(isNull ? 1 : 0);
                             break;
                         }
@@ -567,8 +567,7 @@ internal static class Vm {
                             var parts = new string?[count];
                             for (int i = count - 1; i >= 0; i--) {
                                 int handle = state.Stack.PopInt();
-                                var val = handle >= 0 && handle < state.Heap.Count ? state.Heap.Get(handle) : (object?)handle;
-                                parts[i] = val?.ToString();
+                                parts[i] = ResolveHeapValue(state, handle)?.ToString();
                             }
                             state.Stack.Push(state.Heap.Allocate(string.Concat(parts)));
                             break;
@@ -576,7 +575,7 @@ internal static class Vm {
 
                     case OpCode.EnumeratorMoveNext: {
                             int handle = state.Stack.PopInt();
-                            var enumerator = handle >= 0 && handle < state.Heap.Count
+                            var enumerator = IsValidHeapHandle(state, handle)
                                 && state.Heap.Get(handle) is object[] h ? h[0] as IEnumerator : null;
                             state.Stack.Push(enumerator?.MoveNext() ?? false ? 1 : 0);
                             break;
@@ -629,7 +628,7 @@ internal static class Vm {
 
         if (!resultType.IsPrimitive && !resultType.IsValueType) {
             int handle = state.Stack.PopInt();
-            return handle >= 0 && handle < state.Heap.Count
+            return IsValidHeapHandle(state, handle)
                 ? InterpreterResult.FromValue(state.Heap.Get(handle))
                 : InterpreterResult.FromValue(handle);
         }
@@ -637,10 +636,10 @@ internal static class Vm {
         return InterpreterResult.FromValue(state.Stack.PopInt());
     }
 
-    private static object? ResolveHeapValue(VmState state, int raw) =>
+    internal static object? ResolveHeapValue(VmState state, int raw) =>
         raw >= 0 && raw < state.Heap.Count ? state.Heap.Get(raw) : (object?)raw;
 
-    private static bool IsValidHeapHandle(VmState state, int handle) =>
+    internal static bool IsValidHeapHandle(VmState state, int handle) =>
         handle >= 0 && handle < state.Heap.Count;
 
     private static ExceptionRegion? FindRegion(IReadOnlyList<ExceptionRegion> regions, int pc) {

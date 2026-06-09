@@ -9,21 +9,27 @@ namespace Poly.Tests.TestHelpers;
 /// <summary>
 /// Helper methods for testing Node-based expressions using the analyzer and code generation pattern.
 /// </summary>
-public static class NodeTestHelpers {
-    /// <summary>
-    /// Creates a standard analyzer for testing that performs semantic analysis passes.
-    /// </summary>
-    public static Analyzer CreateTestAnalyzer() {
-        return new AnalyzerBuilder()
+public static class AnalyzerBuilderExtensions {
+    extension(AnalyzerBuilder builder) {
+        public AnalyzerBuilder UseAllAnalyzers() => builder
             .UseTypeResolver()
             .UseMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseLambdaReturnTypeResolution()
             .UseStackDepthAnalysis()
-            .UseDefiniteAssignmentAnalysis()
-            .Build();
+            .UseDefiniteAssignmentAnalysis();
     }
+}
+
+public static class NodeTestHelpers {
+    /// <summary>
+    /// Creates a standard analyzer for testing that performs semantic analysis passes.
+    /// </summary>
+    public static Analyzer CreateTestAnalyzer() {
+        return new AnalyzerBuilder().UseAllAnalyzers().Build();
+    }
+
 
     /// <summary>
     /// Builds a LINQ Expression Tree from a node using the standard analyzer and generator pipeline.

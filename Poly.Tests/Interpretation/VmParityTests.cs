@@ -17,13 +17,7 @@ public class VmParityTests {
 
     private static InterpreterResult EvaluateVm(Node node) {
         var analysis = new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseMemberResolver()
-            .UseVariableScopeValidator()
-            .UseSideEffectAnalysis()
-            .UseLambdaReturnTypeResolution()
-            .UseStackDepthAnalysis()
-            .UseDefiniteAssignmentAnalysis()
+            .UseAllAnalyzers()
             .Build()
             .Analyze(node);
         var program = Lowering.Lower(node, analysis);
@@ -374,11 +368,7 @@ public class VmParityTests {
     private static InterpreterResult EvaluateVmOnly(Node node,
         Dictionary<string, object?>? initialVariables = null) {
         var analysis = new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseVariableScopeValidator()
-            .UseSideEffectAnalysis()
-            .UseStackDepthAnalysis()
-            .UseDefiniteAssignmentAnalysis()
+            .UseAllAnalyzers()
             .Build()
             .Analyze(node);
         var program = Lowering.Lower(node, analysis);

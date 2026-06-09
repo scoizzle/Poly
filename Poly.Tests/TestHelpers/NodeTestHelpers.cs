@@ -18,6 +18,8 @@ public static class NodeTestHelpers {
             .UseTypeResolver()
             .UseMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseLambdaReturnTypeResolution()
             .Build();
     }
 

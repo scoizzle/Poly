@@ -56,6 +56,13 @@ internal sealed class TypeResolver : INodeAnalyzer {
             Assignment assign => ResolveAssignmentType(context, assign),
             ForEachLoop foreachLoop => ResolveForEachLoopType(context, foreachLoop),
             Lambda lambda => ResolveBlockType(context, lambda.Body is Block b ? b : new Block(lambda.Body)),
+            NullForgiving nf => ResolveNodeType(context, nf.Operand),
+            IfStatement ifStmt => ResolveNodeType(context, ifStmt.ThenBranch),
+            UsingStatement us => ResolveNodeType(context, us.Body),
+            SwitchStatement swt => swt.Cases.Count > 0
+                ? ResolveNodeType(context, swt.Cases[0].Body)
+                : swt.DefaultCase is not null ? ResolveNodeType(context, swt.DefaultCase) : null,
+            Await aw => ResolveNodeType(context, aw.Operand),
             _ => null
         };
     }

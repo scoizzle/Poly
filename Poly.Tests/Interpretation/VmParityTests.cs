@@ -21,6 +21,7 @@ public class VmParityTests {
             .UseMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
+            .UseLambdaReturnTypeResolution()
             .Build()
             .Analyze(node);
         var program = Lowering.Lower(node, analysis);
@@ -372,6 +373,7 @@ public class VmParityTests {
         Dictionary<string, object?>? initialVariables = null) {
         var analysis = new AnalyzerBuilder()
             .UseTypeResolver()
+            .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .Build()
             .Analyze(node);

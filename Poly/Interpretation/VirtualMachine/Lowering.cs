@@ -38,7 +38,7 @@ internal static class Lowering {
     private ref struct EmitContext {
         public List<byte> Code;
         public Dictionary<int, NodeId> SourceMap;
-        public AnalysisResult? Analysis;
+        public AnalysisResult Analysis;
         public List<FunctionEntry> Functions;
         public Dictionary<MethodDefinitionNode, int>? FunctionIndexMap;
         public IReadOnlyDictionary<string, int>? ParamIndexMap;
@@ -191,7 +191,7 @@ internal static class Lowering {
 
             var localIndexMap = new Dictionary<string, int>();
             if (method.Body is not null)
-                DiscoverLocals(method.Body, paramIndexMap, localIndexMap);
+                DiscoverLocalsFromAnalysis(method.Body, paramIndexMap, localIndexMap, analysis);
 
             int methodRetBytes = (method.Body is not null && EmitsValue(method.Body, analysis)) ? 1 : 0;
             ctx.Functions.Add(new FunctionEntry(entryPc, paramCount, methodRetBytes, localIndexMap.Count));
@@ -372,62 +372,32 @@ internal static class Lowering {
         }
     }
 
-    private static void DiscoverCapturesWalk(
-        Node node,
-        IReadOnlyDictionary<string, int>? paramIndexMap,
-        IReadOnlyDictionary<string, int>? localIndexMap,
-        List<string> captures) {
-        if (node is null) return;
-        if (node is Variable v && v.Name is not null) {
-            bool isParam = paramIndexMap is not null && paramIndexMap.ContainsKey(v.Name);
-            bool isLocal = localIndexMap is not null && localIndexMap.ContainsKey(v.Name);
-            if (!isParam && !isLocal && !captures.Contains(v.Name))
-                captures.Add(v.Name);
-        }
-        if (node is Assignment a && a.Destination is Variable dv && dv.Name is not null) {
-            bool isParam = paramIndexMap is not null && paramIndexMap.ContainsKey(dv.Name);
-            bool isLocal = localIndexMap is not null && localIndexMap.ContainsKey(dv.Name);
-            if (!isParam && !isLocal && !captures.Contains(dv.Name))
-                captures.Add(dv.Name);
-        }
-        foreach (var child in node.Children) {
-            if (child is not null)
-                DiscoverCapturesWalk(child, paramIndexMap, localIndexMap, captures);
-        }
+    private static VariableScopeMetadata? GetVariableScopeMeta(Node body, AnalysisResult analysis) {
+        var meta = analysis.GetMetadata<VariableScopeMetadata>(body);
+        if (meta is not null) return meta;
+        // Metadata is stored keyed by Variable nodes, not the body Block. Find any Variable.
+        Variable? anyVar = null;
+        FindAnyVariable(body, ref anyVar);
+        if (anyVar is not null)
+            return analysis.GetMetadata<VariableScopeMetadata>(anyVar);
+        // No variables in this scope — metadata isn't stored, which is fine (empty scope).
+        return null;
     }
 
-    private static void DiscoverLocals(Node node, IReadOnlyDictionary<string, int> paramIndexMap, Dictionary<string, int> localIndexMap, HashSet<string>? captures = null) {
-        if (node is Assignment a && a.Destination is Variable dv && dv.Name is not null && !paramIndexMap.ContainsKey(dv.Name) && !localIndexMap.ContainsKey(dv.Name) && (captures is null || !captures.Contains(dv.Name)))
-            localIndexMap[dv.Name] = localIndexMap.Count;
-        if (node is ForEachLoop fl && fl.LoopVariable.Name is not null && !paramIndexMap.ContainsKey(fl.LoopVariable.Name) && !localIndexMap.ContainsKey(fl.LoopVariable.Name) && (captures is null || !captures.Contains(fl.LoopVariable.Name)))
-            localIndexMap[fl.LoopVariable.Name] = localIndexMap.Count;
-        if (node is Block block) {
-            foreach (var bv2 in block.Variables)
-                if (bv2 is Variable bv && bv.Name is not null && !paramIndexMap.ContainsKey(bv.Name) && !localIndexMap.ContainsKey(bv.Name) && (captures is null || !captures.Contains(bv.Name)))
-                    localIndexMap[bv.Name] = localIndexMap.Count;
-        }
-        foreach (var child in node.Children) {
-            if (child is not null)
-                DiscoverLocals(child, paramIndexMap, localIndexMap, captures);
-        }
-    }
-
-    private static int EmitSourceMap(ref EmitContext ctx, Node node) {
-        int pc = ctx.Code.Count;
-        ctx.SourceMap[pc] = node.Id;
-        return pc;
+    private static void FindAnyVariable(Node node, ref Variable? result) {
+        if (result is not null) return;
+        if (node is Variable v) { result = v; return; }
+        foreach (var child in node.Children)
+            if (child is not null) FindAnyVariable(child, ref result);
     }
 
     private static void DiscoverLocalsFromAnalysis(
         Node body, IReadOnlyDictionary<string, int> paramIndexMap,
-        Dictionary<string, int> localIndexMap, AnalysisResult? analysis) {
-        if (analysis is null) { DiscoverLocals(body, paramIndexMap, localIndexMap); return; }
-        var meta = analysis.GetMetadata<VariableScopeMetadata>(body);
-        if (meta is null) { DiscoverLocals(body, paramIndexMap, localIndexMap); return; }
-        // Collect Blocks within this lambda body
+        Dictionary<string, int> localIndexMap, AnalysisResult analysis) {
+        var meta = GetVariableScopeMeta(body, analysis);
+        if (meta is null) return;
         var bodyBlocks = new HashSet<Block>();
         CollectBlocks(body, bodyBlocks);
-        // Use metadata to register each variable declared in those Blocks
         foreach (var (block, vars) in meta.BlockScopes) {
             if (!bodyBlocks.Contains(block)) continue;
             foreach (var v in vars)
@@ -445,10 +415,9 @@ internal static class Lowering {
     private static void DiscoverCapturesFromAnalysis(
         Node body, IReadOnlyDictionary<string, int> paramIndexMap,
         Dictionary<string, int> localIndexMap, List<string> captures,
-        AnalysisResult? analysis) {
-        if (analysis is null) { DiscoverCapturesWalk(body, paramIndexMap, localIndexMap, captures); return; }
-        var meta = analysis.GetMetadata<VariableScopeMetadata>(body);
-        if (meta is null) { DiscoverCapturesWalk(body, paramIndexMap, localIndexMap, captures); return; }
+        AnalysisResult analysis) {
+        var meta = GetVariableScopeMeta(body, analysis);
+        if (meta is null) return;
         var bodyBlocks = new HashSet<Block>();
         CollectBlocks(body, bodyBlocks);
         var captureNames = new HashSet<string>();
@@ -463,10 +432,6 @@ internal static class Lowering {
     }
 
     private static bool IsDescendantOf(Node node, Node ancestor) {
-        var current = node;
-        // Walk up through parents — but we don't have parent pointers.
-        // Instead, walk the ancestor's children recursively.
-        // Use the metadata: if the node is reachable from ancestor via Children.
         if (ReferenceEquals(node, ancestor)) return true;
         foreach (var child in ancestor.Children)
             if (child is not null && IsDescendantOf(node, child))
@@ -474,37 +439,24 @@ internal static class Lowering {
         return false;
     }
 
-    private static bool EmitsValue(Node node, AnalysisResult? analysis = null) {
+    private static bool EmitsValue(Node node, AnalysisResult analysis) {
         if (node is null) return false;
-        // When analysis is available, use the resolved type (more accurate, auto-maintained)
-        if (analysis is not null) {
-            var type = analysis.GetResolvedType(node);
-            if (type is not null) {
-                var rt = type.GetRuntimeType();
-                if (rt is not null && rt != typeof(void))
-                    return true;
-                if (rt == typeof(void))
-                    return false;
-                // null runtime type: fall through to the switch
-            }
+        var type = analysis.GetResolvedType(node);
+        if (type is not null) {
+            var rt = type.GetRuntimeType();
+            if (rt is not null && rt != typeof(void))
+                return true;
+            if (rt == typeof(void))
+                return false;
         }
-        return node switch {
-            Constant => true,
-            Add or Subtract or Multiply or Divide or Modulo or UnaryMinus => true,
-            Equal or NotEqual or LessThan or LessThanOrEqual or GreaterThan or GreaterThanOrEqual => true,
-            And or Or or Not => true,
-            Conditional => true,
-            Variable or Coalesce or NullForgiving => true,
-            Member or IndexAccess or New => true,
-            Invoke or Default or Await => true,
-            Parameter or TypeCast or TypeIs => true,
-            Assignment or Lambda => true,
-            SuspendNode => false,
-            UsingStatement us => us.Body is not null && EmitsValue(us.Body, analysis),
-            ForEachLoop fe => fe.Body is not null && EmitsValue(fe.Body, analysis),
-            Block block => block.Nodes.Count > 0 && EmitsValue(block.Nodes[^1], analysis),
-            _ => false,
-        };
+        // Type not resolved — check structure for composite nodes
+        if (node is UsingStatement us && us.Body is not null)
+            return EmitsValue(us.Body, analysis);
+        if (node is ForEachLoop fe && fe.Body is not null)
+            return EmitsValue(fe.Body, analysis);
+        if (node is Block block && block.Nodes.Count > 0)
+            return EmitsValue(block.Nodes[^1], analysis);
+        return false;
     }
 
     private static void RunWorklist(Stack<EmitWork> worklist, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -977,7 +929,7 @@ internal static class Lowering {
                 for (int i = block.Nodes.Count - 1; i >= 0; i--) {
                     if (i < block.Nodes.Count - 1 && ctx.Analysis is not null && ctx.Analysis.CanElide(block.Nodes[i]))
                         continue; // pure expression with unused result — skip entirely
-                    if (i < block.Nodes.Count - 1 && EmitsValue(block.Nodes[i], ctx.Analysis))
+                    if (i < block.Nodes.Count - 1 && EmitsValue(block.Nodes[i], ctx.Analysis!))
                         worklist.Push(new EmitWork(null, EmitPhase.Pop));
                     worklist.Push(new EmitWork(block.Nodes[i], EmitPhase.Enter));
                 }
@@ -1053,7 +1005,7 @@ internal static class Lowering {
                     worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: endL));
                     if (tcf.FinallyBlock is not null) {
                         worklist.Push(new EmitWork(null, EmitPhase.EndFinally));
-                        if (EmitsValue(tcf.FinallyBlock, ctx.Analysis))
+                        if (EmitsValue(tcf.FinallyBlock, ctx.Analysis!))
                             worklist.Push(new EmitWork(null, EmitPhase.Pop));
                         worklist.Push(new EmitWork(tcf.FinallyBlock, EmitPhase.Enter));
                         worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: finallyEntryL!));

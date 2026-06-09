@@ -28,7 +28,9 @@ public class VmParityTests {
     private static async Task AssertParityInt(Node node, int expected) {
         var vm = EvaluateVm(node);
         await Assert.That(vm.HasValue).IsTrue();
-        await Assert.That((int)Normalize(vm.Value)!).IsEqualTo(expected);
+        var val = Normalize(vm.Value);
+        if (val is long l) val = (int)l;
+        await Assert.That((int)val!).IsEqualTo(expected);
     }
 
     [Test]
@@ -593,6 +595,50 @@ public class VmParityTests {
     private sealed class DisposableResource(Action onDispose) : IDisposable {
         public void Dispose() => onDispose();
     }
+
+    // ─── Bitwise operations ──────────────────────────────────────
+
+    [Test]
+    public async Task BitwiseAnd_3_5_Returns1() {
+        await AssertParityInt(new BitwiseAnd(new Constant(3), new Constant(5)), 1);
+    }
+
+    [Test]
+    public async Task BitwiseOr_3_5_Returns7() {
+        await AssertParityInt(new BitwiseOr(new Constant(3), new Constant(5)), 7);
+    }
+
+    [Test]
+    public async Task BitwiseXor_3_5_Returns6() {
+        await AssertParityInt(new BitwiseXor(new Constant(3), new Constant(5)), 6);
+    }
+
+    [Test]
+    public async Task BitwiseNot_0_ReturnsNeg1() {
+        await AssertParityInt(new BitwiseNot(new Constant(0)), -1);
+    }
+
+    [Test]
+    public async Task ShiftLeft_1_3_Returns8() {
+        await AssertParityInt(new ShiftLeft(new Constant(1), new Constant(3)), 8);
+    }
+
+    [Test]
+    public async Task ShiftRight_16_2_Returns4() {
+        await AssertParityInt(new ShiftRight(new Constant(16), new Constant(2)), 4);
+    }
+
+    [Test]
+    public async Task BitwiseAnd_Long_3_5_Returns1() {
+        await AssertParityInt(new BitwiseAnd(new Constant(3L), new Constant(5L)), 1);
+    }
+
+    [Test]
+    public async Task ShiftLeft_Long_1_3_Returns8() {
+        await AssertParityInt(new ShiftLeft(new Constant(1L), new Constant(3)), 8);
+    }
+
+    // ─── Optimizer tests ─────────────────────────────────────────
 
 #if DEBUG
     [Test]

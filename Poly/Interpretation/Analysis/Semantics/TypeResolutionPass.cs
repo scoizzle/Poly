@@ -58,6 +58,12 @@ internal sealed class TypeResolver : INodeAnalyzer {
             Lambda lambda => ResolveBlockType(context, lambda.Body is Block b ? b : new Block(lambda.Body)),
             NullForgiving nf => ResolveNodeType(context, nf.Operand),
             IfStatement ifStmt => ResolveNodeType(context, ifStmt.ThenBranch),
+            BitwiseAnd ba => ResolveArithmeticType(context, ba.LeftHandValue, ba.RightHandValue),
+            BitwiseOr bor => ResolveArithmeticType(context, bor.LeftHandValue, bor.RightHandValue),
+            BitwiseXor bx => ResolveArithmeticType(context, bx.LeftHandValue, bx.RightHandValue),
+            ShiftLeft sl => ResolveArithmeticType(context, sl.LeftHandValue, sl.RightHandValue),
+            ShiftRight sr => ResolveArithmeticType(context, sr.LeftHandValue, sr.RightHandValue),
+            BitwiseNot bn => ResolveNodeType(context, bn.Operand),
             UsingStatement us => ResolveNodeType(context, us.Body),
             SwitchStatement swt => swt.Cases.Count > 0
                 ? ResolveNodeType(context, swt.Cases[0].Body)

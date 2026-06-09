@@ -37,4 +37,8 @@ internal enum OpCode : byte {
     StoreUpvalue,
     StrConcat,
     EnumeratorMoveNext,
+    BitAnd, BitOr, BitXor, BitNot,
+    ShiftLeft, ShiftRight,
+    LBitAnd, LBitOr, LBitXor, LBitNot,
+    LShiftLeft, LShiftRight,
 }

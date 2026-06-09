@@ -740,6 +740,53 @@ internal static class Lowering {
                 worklist.Push(new EmitWork(notNode.Value, EmitPhase.Enter));
                 return;
 
+            case BitwiseAnd ba: {
+                    int op = (int)ResolveBitwiseOp(ba, OpCode.BitAnd, OpCode.LBitAnd, ctx.Analysis!);
+                    worklist.Push(new EmitWork(ba, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(ba.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(ba.LeftHandValue, EmitPhase.Enter));
+                }
+                return;
+
+            case BitwiseOr bo: {
+                    int op = (int)ResolveBitwiseOp(bo, OpCode.BitOr, OpCode.LBitOr, ctx.Analysis!);
+                    worklist.Push(new EmitWork(bo, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(bo.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(bo.LeftHandValue, EmitPhase.Enter));
+                }
+                return;
+
+            case BitwiseXor bx: {
+                    int op = (int)ResolveBitwiseOp(bx, OpCode.BitXor, OpCode.LBitXor, ctx.Analysis!);
+                    worklist.Push(new EmitWork(bx, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(bx.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(bx.LeftHandValue, EmitPhase.Enter));
+                }
+                return;
+
+            case ShiftLeft sl: {
+                    int op = (int)ResolveBitwiseOp(sl, OpCode.ShiftLeft, OpCode.LShiftLeft, ctx.Analysis!);
+                    worklist.Push(new EmitWork(sl, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(sl.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(sl.LeftHandValue, EmitPhase.Enter));
+                }
+                return;
+
+            case ShiftRight sr: {
+                    int op = (int)ResolveBitwiseOp(sr, OpCode.ShiftRight, OpCode.LShiftRight, ctx.Analysis!);
+                    worklist.Push(new EmitWork(sr, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(sr.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(sr.LeftHandValue, EmitPhase.Enter));
+                }
+                return;
+
+            case BitwiseNot bn: {
+                    int notOp = (int)(ctx.Analysis?.GetResolvedType(bn)?.GetRuntimeType() == typeof(long) ? OpCode.LBitNot : OpCode.BitNot);
+                    worklist.Push(new EmitWork(bn, EmitPhase.AfterChildren, Data: notOp));
+                    worklist.Push(new EmitWork(bn.Operand, EmitPhase.Enter));
+                }
+                return;
+
             case Conditional cond:
                 ctx.Labels ??= new LabelContext(); {
                     string elseL = ctx.Labels.Next(), endL = ctx.Labels.Next();
@@ -1148,6 +1195,15 @@ internal static class Lowering {
                 ctx.Code.Add((byte)OpCode.Not);
                 return;
 
+            case BitwiseNot _:
+            case BitwiseAnd _:
+            case BitwiseOr _:
+            case BitwiseXor _:
+            case ShiftLeft _:
+            case ShiftRight _:
+                ctx.Code.Add((byte)(OpCode)work.Data);
+                return;
+
             case WhileLoop _:
             case DoWhileLoop _:
             case ForLoop _:
@@ -1325,6 +1381,13 @@ internal static class Lowering {
                 }
                 return;
         }
+    }
+
+    private static OpCode ResolveBitwiseOp(Node node, OpCode intOp, OpCode longOp, AnalysisResult analysis) {
+        var typeDef = analysis.GetResolvedType(node);
+        var rt = typeDef?.GetRuntimeType();
+        if (rt == typeof(long) || rt == typeof(ulong)) return longOp;
+        return intOp;
     }
 
     private static OpCode ResolveBinaryOp(Node node, OpCode signedOp, OpCode unsignedOp, OpCode doubleOp, AnalysisResult? analysis) {

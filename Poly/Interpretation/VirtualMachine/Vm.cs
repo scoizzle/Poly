@@ -581,6 +581,19 @@ internal static class Vm {
                             break;
                         }
 
+                    case OpCode.BitAnd: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l & r); break; }
+                    case OpCode.BitOr: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l | r); break; }
+                    case OpCode.BitXor: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l ^ r); break; }
+                    case OpCode.BitNot: { int v = state.Stack.PopInt(); state.Stack.Push(~v); break; }
+                    case OpCode.ShiftLeft: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l << r); break; }
+                    case OpCode.ShiftRight: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l >> r); break; }
+                    case OpCode.LBitAnd: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l & r); break; }
+                    case OpCode.LBitOr: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l | r); break; }
+                    case OpCode.LBitXor: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l ^ r); break; }
+                    case OpCode.LBitNot: { long v = state.Stack.Pop<long>(); state.Stack.Push(~v); break; }
+                    case OpCode.LShiftLeft: { int r = state.Stack.PopInt(); long l = state.Stack.Pop<long>(); state.Stack.Push(l << r); break; }
+                    case OpCode.LShiftRight: { int r = state.Stack.PopInt(); long l = state.Stack.Pop<long>(); state.Stack.Push(l >> r); break; }
+
                     default:
                         throw new InvalidOperationException($"Unimplemented op: {op}");
                 }

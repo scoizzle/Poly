@@ -698,7 +698,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
     private static bool IsPure(AnalysisContext ctx, Node? n) {
         if (n == null) return true;
-        return !(ctx.GetMetadata<SideEffectMetadata>(n)?.HasSideEffects ?? true);
+        return ctx.GetMetadata<SideEffectMetadata>(n)?.Kind == SideEffectKind.Pure;
     }
 
     private static bool TryGetConstBool(AnalysisContext ctx, Node? n, out bool value) {

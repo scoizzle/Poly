@@ -11,11 +11,7 @@ public sealed record SideEffectAnalysisOptions {
 }
 
 internal sealed class SideEffectAnalyzer : INodeAnalyzer {
-    // Flyweight singletons for the only metadata values we ever emit.
-    // Pure nodes (no side effects) and elidable nodes share these instances.
-    // This eliminates per-node allocations for this analyzer's metadata.
-    // Other analyzers can adopt the same pattern for small immutable metadata.
-    private static readonly SideEffectMetadata NoSideEffects = new(false);
+    private static readonly SideEffectMetadata PureMeta = new(SideEffectKind.Pure);
     private static readonly ElisionMetadata Elidable = new(true);
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<SideEffectAnalyzer>(node)) {
@@ -36,7 +32,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 }
             }
 
-            bool blockHasSideEffects = false;
+            SideEffectKind blockKind = SideEffectKind.Pure;
             var opts = context.Settings.Get<SideEffectAnalysisOptions>() ?? SideEffectAnalysisOptions.Default;
             bool emitDiags = opts.EmitElisionDiagnostics;
 
@@ -47,11 +43,12 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 var child = nodes[i];
                 if (child is null || !context.ShouldAnalyze(child)) continue;
 
-                this.Analyze(context, child);           // recurse exactly once for this child subtree
-                bool childHas = GetHasSideEffects(context, child);
-                blockHasSideEffects |= childHas;
+                this.Analyze(context, child);
+                var childMeta = context.GetMetadata<SideEffectMetadata>(child);
+                var childKind = childMeta?.Kind ?? SideEffectKind.External;
+                blockKind = ClassifyWorst(blockKind, childKind);
 
-                if (i < n - 1 && !childHas) {
+                if (i < n - 1 && (childKind == SideEffectKind.Pure || childKind == SideEffectKind.Read)) {
                     context.SetMetadata(child, Elidable);
                     if (emitDiags) {
                         context.ReportInformation(
@@ -62,34 +59,31 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 }
             }
 
-            if (!blockHasSideEffects) {
-                context.SetMetadata(node, NoSideEffects);
-            }
+            context.SetMetadata(node, new SideEffectMetadata(blockKind));
         }
         else {
-            // For all other nodes: use AggregateChildren for a single fused pass that
-            // dispatches Analyze to children *and* aggregates the "has side effects" value
-            // on the way. No separate AnalyzeChildren + re-walk.
-            bool childrenHave = this.AggregateChildren(
-                context,
-                node,
-                (ctx, ch) => {
-                    this.Analyze(ctx, ch); // ensure full processing + metadata on the child
-                    return GetHasSideEffects(ctx, ch);
-                },
-                (a, b) => a || b,
-                false);
+            // For all other nodes: aggregate children's side effect kinds.
+            SideEffectKind kind = ClassifyIntrinsic(node);
+            this.AnalyzeChildren(context, node);
+            foreach (var child in node.Children) {
+                if (child is null) continue;
+                var childMeta = context.GetMetadata<SideEffectMetadata>(child);
+                if (childMeta is not null)
+                    kind = ClassifyWorst(kind, childMeta.Kind);
+            }
 
-            bool hasSideEffects = childrenHave || IsIntrinsicallySideEffecting(node);
-            if (!hasSideEffects && node is Member memberAccess) {
+            if (kind == SideEffectKind.Pure && node is Member memberAccess) {
                 var resolved = context.GetResolvedMember(memberAccess);
                 if (resolved?.Mutability.HasFlag(Mutability.VolatileAccess) == true) {
-                    hasSideEffects = true;
+                    kind = SideEffectKind.Read;
                 }
             }
-            if (!hasSideEffects) {
-                context.SetMetadata(node, NoSideEffects);
-            }
+            context.SetMetadata(node, new SideEffectMetadata(kind));
+
+            if (!context.ShouldAnalyze(node)) return;
+
+            var opts2 = context.Settings.Get<SideEffectAnalysisOptions>() ?? SideEffectAnalysisOptions.Default;
+            bool emitDiags2 = opts2.EmitElisionDiagnostics;
 
             // Mark loop control subexpressions (initializer, increment for ForLoop) as elidable
             // if they are pure and their value is unused in the loop context.
@@ -100,18 +94,20 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
             bool emitDiags = opts.EmitElisionDiagnostics;
 
             if (node is ForLoop forLoop) {
-                if (forLoop.Initializer != null && !GetHasSideEffects(context, forLoop.Initializer)) {
+                var initMeta = forLoop.Initializer is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Initializer) : null;
+                if (initMeta is not null && (initMeta.Kind == SideEffectKind.Pure || initMeta.Kind == SideEffectKind.Read)) {
                     context.SetMetadata(forLoop.Initializer, Elidable);
-                    if (emitDiags) {
+                    if (emitDiags2 && forLoop.Initializer is not null) {
                         context.ReportInformation(
                             forLoop.Initializer,
                             "Pure initializer with unused result can be elided (dead code).",
                             "DEAD_CODE_ELIDABLE");
                     }
                 }
-                if (forLoop.Increment != null && !GetHasSideEffects(context, forLoop.Increment)) {
+                var incMeta = forLoop.Increment is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Increment) : null;
+                if (incMeta is not null && (incMeta.Kind == SideEffectKind.Pure || incMeta.Kind == SideEffectKind.Read)) {
                     context.SetMetadata(forLoop.Increment, Elidable);
-                    if (emitDiags) {
+                    if (emitDiags2 && forLoop.Increment is not null) {
                         context.ReportInformation(
                             forLoop.Increment,
                             "Pure increment with unused result can be elided (dead code).",
@@ -132,24 +128,38 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
 
     private static bool GetHasSideEffects(AnalysisContext context, Node? node) {
         if (node is null) return false;
-        return context.GetMetadata<SideEffectMetadata>(node)?.HasSideEffects ?? true;
+        var meta = context.GetMetadata<SideEffectMetadata>(node);
+        return meta is null || meta.Kind != SideEffectKind.Pure;
     }
 
-    private static bool IsIntrinsicallySideEffecting(Node node) => node switch {
-        Assignment => true,
-        SuspendNode => true,
-        Return => true,
-        IndexAccess => true,
-        New => true,
-        WhileLoop or DoWhileLoop or ForLoop or ForEachLoop => true,
-        IfStatement or SwitchStatement or ThrowStatement or Invoke or Await => true,
-        TryCatchFinally or UsingStatement => true,
-        BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration => true,
-        _ => false
+    private static SideEffectKind ClassifyWorst(SideEffectKind a, SideEffectKind b) =>
+        (SideEffectKind)int.Max((int)a, (int)b);
+
+    private static SideEffectKind ClassifyIntrinsic(Node node) => node switch {
+        Assignment => SideEffectKind.Write,
+        SuspendNode => SideEffectKind.External,
+        Return => SideEffectKind.Write,
+        IndexAccess => SideEffectKind.Read,
+        New => SideEffectKind.Allocate,
+        WhileLoop or DoWhileLoop or ForLoop or ForEachLoop => SideEffectKind.Write,
+        IfStatement or SwitchStatement or ThrowStatement => SideEffectKind.External,
+        Invoke => SideEffectKind.External,
+        Await => SideEffectKind.External,
+        TryCatchFinally or UsingStatement => SideEffectKind.External,
+        BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration => SideEffectKind.Write,
+        _ => SideEffectKind.Pure
     };
 }
 
-public sealed record SideEffectMetadata(bool HasSideEffects) : IAnalysisMetadata;
+public enum SideEffectKind {
+    Pure,
+    Read,
+    Write,
+    Allocate,
+    External,
+}
+
+public sealed record SideEffectMetadata(SideEffectKind Kind) : IAnalysisMetadata;
 
 /// <summary>
 /// Metadata indicating that a node's execution (and subtree) can be safely elided
@@ -167,12 +177,9 @@ public static class SideEffectAnalysisExtensions {
 
     extension(INodeMetadataProvider provider) {
         public bool HasSideEffects(Node? node) {
-            if (node is null) {
-                return false;
-            }
-            // Only pure nodes get explicit SideEffectMetadata(false).
-            // Default true = has side effects.
-            return provider.GetMetadata<SideEffectMetadata>(node)?.HasSideEffects ?? true;
+            if (node is null) return false;
+            var meta = provider.GetMetadata<SideEffectMetadata>(node);
+            return meta is null || meta.Kind != SideEffectKind.Pure;
         }
 
         /// <summary>

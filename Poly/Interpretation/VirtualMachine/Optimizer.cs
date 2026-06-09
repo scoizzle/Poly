@@ -88,80 +88,17 @@ internal static class Optimizer {
 
     private static int InstructionLength(byte[] code, int pc) {
         var op = (OpCode)code[pc];
-        switch (op) {
+        return op switch {
             // 1-byte opcodes
-            case OpCode.Nop:
-            case OpCode.Dup:
-            case OpCode.Pop:
-            case OpCode.Not:
-            case OpCode.Return:
-            case OpCode.EndFinally:
-            case OpCode.Throw:
-            case OpCode.IsNull:
-            case OpCode.CallClosure:
-            case OpCode.LoadValue:
-            case OpCode.StoreValue:
-            case OpCode.Add:
-            case OpCode.Sub:
-            case OpCode.Mul:
-            case OpCode.Div:
-            case OpCode.Mod:
-            case OpCode.Neg:
-            case OpCode.UDiv:
-            case OpCode.UMod:
-            case OpCode.Eq:
-            case OpCode.Ne:
-            case OpCode.Lt:
-            case OpCode.Le:
-            case OpCode.Gt:
-            case OpCode.Ge:
-            case OpCode.ULt:
-            case OpCode.ULe:
-            case OpCode.UGt:
-            case OpCode.UGe:
-            case OpCode.DAdd:
-            case OpCode.DSub:
-            case OpCode.DMul:
-            case OpCode.DDiv:
-            case OpCode.DNeg:
-            case OpCode.DEq:
-            case OpCode.DNe:
-            case OpCode.DLt:
-            case OpCode.DLe:
-            case OpCode.DGt:
-            case OpCode.DGe:
-                return 1;
-
+            OpCode.Nop or OpCode.Dup or OpCode.Pop or OpCode.Not or OpCode.Return or OpCode.EndFinally or OpCode.Throw or OpCode.IsNull or OpCode.CallClosure or OpCode.LoadValue or OpCode.StoreValue or OpCode.Add or OpCode.Sub or OpCode.Mul or OpCode.Div or OpCode.Mod or OpCode.Neg or OpCode.UDiv or OpCode.UMod or OpCode.Eq or OpCode.Ne or OpCode.Lt or OpCode.Le or OpCode.Gt or OpCode.Ge or OpCode.ULt or OpCode.ULe or OpCode.UGt or OpCode.UGe or OpCode.DAdd or OpCode.DSub or OpCode.DMul or OpCode.DDiv or OpCode.DNeg or OpCode.DEq or OpCode.DNe or OpCode.DLt or OpCode.DLe or OpCode.DGt or OpCode.DGe => 1,
             // 5-byte opcodes (1 + int32)
-            case OpCode.PushInt:
-            case OpCode.Narrow:
-            case OpCode.Jump:
-            case OpCode.JumpIfFalse:
-            case OpCode.Call:
-            case OpCode.CallExternal:
-            case OpCode.StoreArg:
-            case OpCode.LoadArg:
-            case OpCode.LoadLocal:
-            case OpCode.StoreLocal:
-            case OpCode.LoadConst:
-            case OpCode.Int:
-            case OpCode.Iret:
-            case OpCode.LoadUpvalue:
-            case OpCode.StoreUpvalue:
-                return 5;
-
+            OpCode.PushInt or OpCode.Narrow or OpCode.Jump or OpCode.JumpIfFalse or OpCode.Call or OpCode.CallExternal or OpCode.StoreArg or OpCode.LoadArg or OpCode.LoadLocal or OpCode.StoreLocal or OpCode.LoadConst or OpCode.Int or OpCode.Iret or OpCode.LoadUpvalue or OpCode.StoreUpvalue => 5,
             // 9-byte opcodes (1 + int64)
-            case OpCode.PushLong:
-            case OpCode.PushDouble:
-                return 9;
-
+            OpCode.PushLong or OpCode.PushDouble => 9,
             // 9-byte opcode (1 + int32 + int32)
-            case OpCode.AllocateClosure:
-                return 9;
-
-            default:
-                return 1;
-        }
+            OpCode.AllocateClosure => 9,
+            _ => 1,
+        };
     }
 
     private static int ReadInt32(byte[] code, int pc) =>

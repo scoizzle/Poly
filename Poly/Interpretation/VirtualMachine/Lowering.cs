@@ -13,18 +13,25 @@ internal static class Lowering {
         IReadOnlyDictionary<Lambda, List<string>>? CaptureMap,
         IReadOnlyDictionary<string, int>? UpvalueMap);
 
-    private readonly record struct EmitWork(Node? Node, EmitPhase Phase, int Data = 0, int Data2 = 0);
+    private readonly record struct EmitWork(
+        Node? Node,
+        EmitPhase Phase,
+        int Data = 0,
+        string? Label = null,
+        string? Label2 = null
+    );
 
     private enum EmitPhase : byte {
         Enter,
         AfterChildren,
-        EmitPop,
         MarkLabel,
         Jump,
         JumpIfFalse,
-        PushInt,
-        AllocateClosure,
-        Call,
+        Pop,
+        Dup,
+        Eq,
+        IsNull,
+        EndFinally,
     }
 
     private ref struct EmitContext {
@@ -191,7 +198,9 @@ internal static class Lowering {
             if (method.Body is not null) {
                 ctx.ParamIndexMap = paramIndexMap;
                 ctx.LocalIndexMap = localIndexMap;
-                Emit(method.Body, ref ctx);
+                var methodWorklist = new Stack<EmitWork>();
+                methodWorklist.Push(new EmitWork(method.Body, EmitPhase.Enter));
+                RunWorklist(methodWorklist, ref ctx, null);
             }
             ctx.Code.Add((byte)OpCode.Return);
         }
@@ -203,7 +212,26 @@ internal static class Lowering {
             ctx.Functions.Add(new FunctionEntry(0, 0, 0, 0)); // placeholder
         }
 
-        // Emit lambda bodies with full LambdaFuncMap available
+        // Pre-scan: populate capture maps for all lambdas (before any body emission)
+        for (int i = 0; i < referencedLambdas.Count; i++) {
+            var lambda = referencedLambdas[i];
+            int paramCount = lambda.Parameters.Count;
+            var paramIndexMap = new Dictionary<string, int>();
+            for (int j = 0; j < lambda.Parameters.Count; j++)
+                paramIndexMap[lambda.Parameters[j].Name ?? ""] = j + 1;
+
+            var localIndexMap = new Dictionary<string, int>();
+            if (lambda.Body is not null)
+                DiscoverLocals(lambda.Body, paramIndexMap, localIndexMap);
+
+            var captures = new List<string>();
+            if (lambda.Body is not null)
+                DiscoverCapturesWalk(lambda.Body, paramIndexMap, localIndexMap, captures);
+
+            ctx.LambdaCaptureMap![lambda] = captures;
+        }
+
+        // Emit lambda bodies with full LambdaFuncMap + LambdaCaptureMap available
         for (int i = 0; i < referencedLambdas.Count; i++) {
             var lambda = referencedLambdas[i];
             int entryPc = ctx.Code.Count;
@@ -217,9 +245,7 @@ internal static class Lowering {
             if (lambda.Body is not null)
                 DiscoverLocals(lambda.Body, paramIndexMap, localIndexMap);
 
-            var captures = new List<string>();
-            if (lambda.Body is not null)
-                DiscoverCapturesWalk(lambda.Body, paramIndexMap, localIndexMap, captures);
+            var captures = ctx.LambdaCaptureMap![lambda];
 
             var upvalueMap = new Dictionary<string, int>();
             for (int j = 0; j < captures.Count; j++)
@@ -234,7 +260,9 @@ internal static class Lowering {
             ctx.UpvalueMap = upvalueMap;
             if (lambda.Body is not null) {
                 var bodyLambdaState = new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, upvalueMap);
-                Emit(lambda.Body, ref ctx, bodyLambdaState);
+                var lambdaWorklist = new Stack<EmitWork>();
+                lambdaWorklist.Push(new EmitWork(lambda.Body, EmitPhase.Enter));
+                RunWorklist(lambdaWorklist, ref ctx, bodyLambdaState);
             }
             ctx.Code.Add((byte)OpCode.Return);
         }
@@ -246,7 +274,9 @@ internal static class Lowering {
         int mainEntry = ctx.Code.Count;
         PatchJump(ctx.Code, jumpOverMainPc, mainEntry);
         var rootLambdaState = new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, null);
-        Emit(root, ref ctx, rootLambdaState);
+        var worklist = new Stack<EmitWork>();
+        worklist.Push(new EmitWork(root, EmitPhase.Enter));
+        RunWorklist(worklist, ref ctx, rootLambdaState);
 
         foreach (var (codeOff, targetPc) in ctx.Relocations!)
             PatchJump(ctx.Code, codeOff, targetPc);
@@ -254,6 +284,7 @@ internal static class Lowering {
         ResolveAllJumps(ctx.Code, ctx.Labels!);
 
         Type? resultType = analysis?.GetResolvedType(root)?.GetRuntimeType();
+        if (resultType == typeof(object)) resultType = null;
         return new Bytecode([.. ctx.Code], ctx.SourceMap, ctx.Functions, ctx.Constants, ctx.CallSites, ctx.Labels!.ExceptionRegions, resultType);
     }
 
@@ -364,21 +395,19 @@ internal static class Lowering {
         }
     }
 
-    private static void DiscoverLocals(Node node, IReadOnlyDictionary<string, int> paramIndexMap, Dictionary<string, int> localIndexMap) {
-        if (node is Variable v && v.Name is not null && !paramIndexMap.ContainsKey(v.Name) && !localIndexMap.ContainsKey(v.Name))
-            localIndexMap[v.Name] = localIndexMap.Count;
-        if (node is Assignment a && a.Destination is Variable dv && dv.Name is not null && !paramIndexMap.ContainsKey(dv.Name) && !localIndexMap.ContainsKey(dv.Name))
+    private static void DiscoverLocals(Node node, IReadOnlyDictionary<string, int> paramIndexMap, Dictionary<string, int> localIndexMap, HashSet<string>? captures = null) {
+        if (node is Assignment a && a.Destination is Variable dv && dv.Name is not null && !paramIndexMap.ContainsKey(dv.Name) && !localIndexMap.ContainsKey(dv.Name) && (captures is null || !captures.Contains(dv.Name)))
             localIndexMap[dv.Name] = localIndexMap.Count;
-        if (node is ForEachLoop fl && fl.LoopVariable.Name is not null && !paramIndexMap.ContainsKey(fl.LoopVariable.Name) && !localIndexMap.ContainsKey(fl.LoopVariable.Name))
+        if (node is ForEachLoop fl && fl.LoopVariable.Name is not null && !paramIndexMap.ContainsKey(fl.LoopVariable.Name) && !localIndexMap.ContainsKey(fl.LoopVariable.Name) && (captures is null || !captures.Contains(fl.LoopVariable.Name)))
             localIndexMap[fl.LoopVariable.Name] = localIndexMap.Count;
         if (node is Block block) {
             foreach (var bv2 in block.Variables)
-                if (bv2 is Variable bv && bv.Name is not null && !paramIndexMap.ContainsKey(bv.Name) && !localIndexMap.ContainsKey(bv.Name))
+                if (bv2 is Variable bv && bv.Name is not null && !paramIndexMap.ContainsKey(bv.Name) && !localIndexMap.ContainsKey(bv.Name) && (captures is null || !captures.Contains(bv.Name)))
                     localIndexMap[bv.Name] = localIndexMap.Count;
         }
         foreach (var child in node.Children) {
             if (child is not null)
-                DiscoverLocals(child, paramIndexMap, localIndexMap);
+                DiscoverLocals(child, paramIndexMap, localIndexMap, captures);
         }
     }
 
@@ -396,18 +425,62 @@ internal static class Lowering {
             Parameter or TypeCast or TypeIs => true,
             Assignment or Lambda => true,
             SuspendNode => false,
+            UsingStatement us => us.Body is not null && EmitsValue(us.Body),
             Block block => block.Nodes.Count > 0 && EmitsValue(block.Nodes[^1]),
             _ => false,
         };
     }
 
-    private static void Emit(Node node, ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
+    private static void RunWorklist(Stack<EmitWork> worklist, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+        int wc = 0;
+        while (worklist.TryPop(out var work)) {
+            if (++wc > 5000) throw new InvalidOperationException("Worklist exceeded 5000 items (possible infinite work generation)");
+            switch (work.Phase) {
+                case EmitPhase.Enter:
+                    EnterNode(work.Node!, worklist, ref ctx, lambdaState);
+                    break;
+                case EmitPhase.AfterChildren:
+                    AfterChildren(work.Node!, work, worklist, ref ctx, lambdaState);
+                    break;
+                case EmitPhase.MarkLabel:
+                    ctx.Labels!.Mark(work.Label!, ctx.Code);
+                    break;
+                case EmitPhase.Jump:
+                    ctx.Labels!.JumpTo(work.Label!, ctx.Code, ctx.Relocations);
+                    break;
+                case EmitPhase.JumpIfFalse:
+                    ctx.Labels!.JumpIfFalseTo(work.Label!, ctx.Code, ctx.Relocations);
+                    break;
+                case EmitPhase.Pop:
+                    if (work.Data > 0) {
+                        ctx.Code.Add((byte)OpCode.StoreArg);
+                        EmitInt32(ctx.Code, work.Data);
+                    }
+                    else {
+                        ctx.Code.Add((byte)OpCode.Pop);
+                    }
+                    break;
+                case EmitPhase.Dup:
+                    ctx.Code.Add((byte)OpCode.Dup);
+                    break;
+                case EmitPhase.Eq:
+                    ctx.Code.Add((byte)OpCode.Eq);
+                    break;
+                case EmitPhase.IsNull:
+                    ctx.Code.Add((byte)OpCode.IsNull);
+                    break;
+                case EmitPhase.EndFinally:
+                    ctx.Code.Add((byte)OpCode.EndFinally);
+                    break;
+            }
+        }
+    }
 
-        if (node is null) return;
+    private static void EnterNode(Node node, Stack<EmitWork> worklist, ref EmitContext ctx, LambdaEmitState? lambdaState) {
 
         var replacement = ctx.Analysis?.GetNodeReplacement(node);
         if (replacement is not null && !ReferenceEquals(replacement, node)) {
-            Emit(replacement, ref ctx, lambdaState);
+            worklist.Push(new EmitWork(replacement, EmitPhase.Enter));
             return;
         }
 
@@ -415,22 +488,18 @@ internal static class Lowering {
             int pc = ctx.Code.Count;
             ctx.SourceMap[pc] = node.Id;
             if (TryInlinableInt(constant.Value, out int intVal)) {
-                ctx.Code.Add((byte)OpCode.PushInt);
-                EmitInt32(ctx.Code, intVal);
+                ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, intVal);
             }
             else if (TryInlinableLong(constant.Value, out long longVal)) {
-                ctx.Code.Add((byte)OpCode.PushLong);
-                EmitInt64(ctx.Code, longVal);
+                ctx.Code.Add((byte)OpCode.PushLong); EmitInt64(ctx.Code, longVal);
             }
             else if (TryInlinableDouble(constant.Value, out double doubleVal)) {
-                ctx.Code.Add((byte)OpCode.PushDouble);
-                EmitDouble(ctx.Code, doubleVal);
+                ctx.Code.Add((byte)OpCode.PushDouble); EmitDouble(ctx.Code, doubleVal);
             }
             else {
                 int idx = ctx.Constants?.Count ?? 0;
                 ctx.Constants?.Add(constant.Value);
-                ctx.Code.Add((byte)OpCode.LoadConst);
-                EmitInt32(ctx.Code, idx);
+                ctx.Code.Add((byte)OpCode.LoadConst); EmitInt32(ctx.Code, idx);
             }
             return;
         }
@@ -441,111 +510,219 @@ internal static class Lowering {
         switch (node) {
             case Add add:
                 if (ctx.Analysis?.GetResolvedType(add)?.GetRuntimeType() == typeof(string)) {
-                    Emit(add.LeftHandValue, ref ctx, lambdaState);
-                    Emit(add.RightHandValue, ref ctx, lambdaState);
-                    int concatIdx = ctx.CallSites?.Count ?? 0;
-                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 2);
-                    ctx.Code.Add((byte)OpCode.StrConcat);
+                    worklist.Push(new EmitWork(add, EmitPhase.AfterChildren, Data: -1));
+                    worklist.Push(new EmitWork(add.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(add.LeftHandValue, EmitPhase.Enter));
                 }
                 else {
-                    EmitBinary(add.LeftHandValue, add.RightHandValue, ResolveBinaryOp(add, OpCode.Add, OpCode.Add, OpCode.DAdd, ctx.Analysis),
-                              ref ctx, lambdaState);
+                    int op = (int)ResolveBinaryOp(add, OpCode.Add, OpCode.Add, OpCode.DAdd, ctx.Analysis);
+                    worklist.Push(new EmitWork(add, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(add.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(add.LeftHandValue, EmitPhase.Enter));
                 }
                 return;
 
-            case Subtract sub:
-                EmitBinary(sub.LeftHandValue, sub.RightHandValue, ResolveBinaryOp(sub, OpCode.Sub, OpCode.Sub, OpCode.DSub, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case Subtract sub: {
+                    int op = (int)ResolveBinaryOp(sub, OpCode.Sub, OpCode.Sub, OpCode.DSub, ctx.Analysis);
+                    worklist.Push(new EmitWork(sub, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(sub.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(sub.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
-            case Multiply mul:
-                EmitBinary(mul.LeftHandValue, mul.RightHandValue, ResolveBinaryOp(mul, OpCode.Mul, OpCode.Mul, OpCode.DMul, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case Multiply mul: {
+                    int op = (int)ResolveBinaryOp(mul, OpCode.Mul, OpCode.Mul, OpCode.DMul, ctx.Analysis);
+                    worklist.Push(new EmitWork(mul, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(mul.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(mul.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
-            case Divide div:
-                EmitBinary(div.LeftHandValue, div.RightHandValue, ResolveBinaryOp(div, OpCode.Div, OpCode.UDiv, OpCode.DDiv, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case Divide div: {
+                    int op = (int)ResolveBinaryOp(div, OpCode.Div, OpCode.UDiv, OpCode.DDiv, ctx.Analysis);
+                    worklist.Push(new EmitWork(div, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(div.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(div.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
-            case Modulo mod:
-                EmitBinary(mod.LeftHandValue, mod.RightHandValue, ResolveBinaryOp(mod, OpCode.Mod, OpCode.UMod, OpCode.Mod, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case Modulo mod: {
+                    int op = (int)ResolveBinaryOp(mod, OpCode.Mod, OpCode.UMod, OpCode.Mod, ctx.Analysis);
+                    worklist.Push(new EmitWork(mod, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(mod.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(mod.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
             case UnaryMinus un:
-                Emit(un.Operand, ref ctx, lambdaState); {
-                    var typeDef = ctx.Analysis?.GetResolvedType(un);
-                    var clrType = typeDef?.GetRuntimeType();
-                    if (clrType == typeof(double) || clrType == typeof(float)) {
-                        ctx.Code.Add((byte)OpCode.DNeg);
-                        return;
-                    }
+                worklist.Push(new EmitWork(un, EmitPhase.AfterChildren));
+                worklist.Push(new EmitWork(un.Operand, EmitPhase.Enter));
+                return;
+
+            case Equal eq: {
+                    int op = (int)ResolveComparisonOp(eq.LeftHandValue, eq.RightHandValue, OpCode.Eq, OpCode.Eq, OpCode.DEq, ctx.Analysis);
+                    worklist.Push(new EmitWork(eq, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(eq.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(eq.LeftHandValue, EmitPhase.Enter));
+                    return;
                 }
-                ctx.Code.Add((byte)OpCode.Neg);
-                return;
 
-            case Equal eq:
-                EmitBinary(eq.LeftHandValue, eq.RightHandValue, ResolveComparisonOp(eq.LeftHandValue, eq.RightHandValue, OpCode.Eq, OpCode.Eq, OpCode.DEq, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case NotEqual ne: {
+                    int op = (int)ResolveComparisonOp(ne.LeftHandValue, ne.RightHandValue, OpCode.Ne, OpCode.Ne, OpCode.DNe, ctx.Analysis);
+                    worklist.Push(new EmitWork(ne, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(ne.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(ne.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
-            case NotEqual ne:
-                EmitBinary(ne.LeftHandValue, ne.RightHandValue, ResolveComparisonOp(ne.LeftHandValue, ne.RightHandValue, OpCode.Ne, OpCode.Ne, OpCode.DNe, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case LessThan lt: {
+                    int op = (int)ResolveComparisonOp(lt.LeftHandValue, lt.RightHandValue, OpCode.Lt, OpCode.ULt, OpCode.DLt, ctx.Analysis);
+                    worklist.Push(new EmitWork(lt, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(lt.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(lt.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
-            case LessThan lt:
-                EmitBinary(lt.LeftHandValue, lt.RightHandValue, ResolveComparisonOp(lt.LeftHandValue, lt.RightHandValue, OpCode.Lt, OpCode.ULt, OpCode.DLt, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case LessThanOrEqual le: {
+                    int op = (int)ResolveComparisonOp(le.LeftHandValue, le.RightHandValue, OpCode.Le, OpCode.ULe, OpCode.DLe, ctx.Analysis);
+                    worklist.Push(new EmitWork(le, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(le.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(le.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
-            case LessThanOrEqual le:
-                EmitBinary(le.LeftHandValue, le.RightHandValue, ResolveComparisonOp(le.LeftHandValue, le.RightHandValue, OpCode.Le, OpCode.ULe, OpCode.DLe, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case GreaterThan gt: {
+                    int op = (int)ResolveComparisonOp(gt.LeftHandValue, gt.RightHandValue, OpCode.Gt, OpCode.UGt, OpCode.DGt, ctx.Analysis);
+                    worklist.Push(new EmitWork(gt, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(gt.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(gt.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
-            case GreaterThan gt:
-                EmitBinary(gt.LeftHandValue, gt.RightHandValue, ResolveComparisonOp(gt.LeftHandValue, gt.RightHandValue, OpCode.Gt, OpCode.UGt, OpCode.DGt, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
-
-            case GreaterThanOrEqual ge:
-                EmitBinary(ge.LeftHandValue, ge.RightHandValue, ResolveComparisonOp(ge.LeftHandValue, ge.RightHandValue, OpCode.Ge, OpCode.UGe, OpCode.DGe, ctx.Analysis),
-                          ref ctx, lambdaState);
-                return;
+            case GreaterThanOrEqual ge: {
+                    int op = (int)ResolveComparisonOp(ge.LeftHandValue, ge.RightHandValue, OpCode.Ge, OpCode.UGe, OpCode.DGe, ctx.Analysis);
+                    worklist.Push(new EmitWork(ge, EmitPhase.AfterChildren, Data: op));
+                    worklist.Push(new EmitWork(ge.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(ge.LeftHandValue, EmitPhase.Enter));
+                    return;
+                }
 
             case And andNode:
-                EmitShortCircuitAnd(andNode, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string end = ctx.Labels.Next();
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: end));
+                    worklist.Push(new EmitWork(andNode.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.Pop));
+                    worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: end));
+                    worklist.Push(new EmitWork(null, EmitPhase.Dup));
+                    worklist.Push(new EmitWork(andNode.LeftHandValue, EmitPhase.Enter));
+                }
                 return;
 
             case Or orNode:
-                EmitShortCircuitOr(orNode, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string evalRight = ctx.Labels.Next(), after = ctx.Labels.Next();
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: after));
+                    worklist.Push(new EmitWork(orNode.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.Pop));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: evalRight));
+                    worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: after));
+                    worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: evalRight));
+                    worklist.Push(new EmitWork(null, EmitPhase.Dup));
+                    worklist.Push(new EmitWork(orNode.LeftHandValue, EmitPhase.Enter));
+                }
                 return;
 
             case Not notNode:
-                Emit(notNode.Value, ref ctx, lambdaState);
-                ctx.Code.Add((byte)OpCode.Not);
+                worklist.Push(new EmitWork(notNode, EmitPhase.AfterChildren));
+                worklist.Push(new EmitWork(notNode.Value, EmitPhase.Enter));
                 return;
 
             case Conditional cond:
-                EmitConditional(cond, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string elseL = ctx.Labels.Next(), endL = ctx.Labels.Next();
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: endL));
+                    worklist.Push(new EmitWork(cond.IfFalse, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: elseL));
+                    worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: endL));
+                    worklist.Push(new EmitWork(cond.IfTrue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: elseL));
+                    worklist.Push(new EmitWork(cond.Condition, EmitPhase.Enter));
+                }
                 return;
 
             case IfStatement ifStmt:
-                EmitIf(ifStmt, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string elseL, endL;
+                    if (ifStmt.ElseBranch is not null) {
+                        elseL = ctx.Labels.Next(); endL = ctx.Labels.Next();
+                        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: endL));
+                        worklist.Push(new EmitWork(ifStmt.ElseBranch, EmitPhase.Enter));
+                        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: elseL));
+                        worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: endL));
+                        worklist.Push(new EmitWork(ifStmt.ThenBranch, EmitPhase.Enter));
+                        worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: elseL));
+                    }
+                    else {
+                        endL = ctx.Labels.Next();
+                        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: endL));
+                        worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: endL));
+                        worklist.Push(new EmitWork(ifStmt.ThenBranch, EmitPhase.Enter));
+                        worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: endL));
+                    }
+                    worklist.Push(new EmitWork(ifStmt.Condition, EmitPhase.Enter));
+                }
                 return;
 
             case WhileLoop wl:
-                EmitWhileLoop(wl, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string breakL = ctx.Labels.Next(), contL = ctx.Labels.Next();
+                    string loopLabel = ctx.Labels.PendingLoopLabel ?? ""; ctx.Labels.PendingLoopLabel = null;
+                    ctx.Labels.LoopLabels.Push((loopLabel, breakL, contL));
+                    worklist.Push(new EmitWork(wl, EmitPhase.AfterChildren));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: breakL));
+                    worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: contL));
+                    worklist.Push(new EmitWork(wl.Body, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: breakL));
+                    worklist.Push(new EmitWork(wl.Condition, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: contL));
+                }
                 return;
 
             case DoWhileLoop dwl:
-                EmitDoWhileLoop(dwl, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string breakL = ctx.Labels.Next(), contL = ctx.Labels.Next();
+                    string loopLabel = ctx.Labels.PendingLoopLabel ?? ""; ctx.Labels.PendingLoopLabel = null;
+                    ctx.Labels.LoopLabels.Push((loopLabel, breakL, contL));
+                    worklist.Push(new EmitWork(dwl, EmitPhase.AfterChildren));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: breakL));
+                    worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: contL));
+                    worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: breakL));
+                    worklist.Push(new EmitWork(dwl.Condition, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(dwl.Body, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: contL));
+                }
                 return;
 
             case ForLoop fl:
-                EmitForLoop(fl, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string breakL = ctx.Labels.Next(), contL = ctx.Labels.Next();
+                    string loopLabel = ctx.Labels.PendingLoopLabel ?? ""; ctx.Labels.PendingLoopLabel = null;
+                    ctx.Labels.LoopLabels.Push((loopLabel, breakL, contL));
+                    worklist.Push(new EmitWork(fl, EmitPhase.AfterChildren));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: breakL));
+                    worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: contL));
+                    if (fl.Increment is not null)
+                        worklist.Push(new EmitWork(fl.Increment, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(fl.Body, EmitPhase.Enter));
+                    if (fl.Condition is not null) {
+                        worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: breakL));
+                        worklist.Push(new EmitWork(fl.Condition, EmitPhase.Enter));
+                    }
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: contL));
+                    if (fl.Initializer is not null)
+                        worklist.Push(new EmitWork(fl.Initializer, EmitPhase.Enter));
+                }
                 return;
 
             case BreakStatement brk:
@@ -567,8 +744,12 @@ internal static class Lowering {
                             if (entry.Name == cont.Label) { ctx.Labels.JumpTo(entry.Continue, ctx.Code, ctx.Relocations); break; }
                     }
                     else {
+                        Console.Error.WriteLine($"CONT: loopLabels={ctx.Labels.LoopLabels.Count} target={ctx.Labels.LoopLabels.Peek().Continue}");
                         ctx.Labels.JumpTo(ctx.Labels.LoopLabels.Peek().Continue, ctx.Code, ctx.Relocations);
                     }
+                }
+                else {
+                    Console.Error.WriteLine("CONT: NO LOOP LABELS");
                 }
                 return;
 
@@ -579,89 +760,115 @@ internal static class Lowering {
             case LabelDeclaration lbl:
                 ctx.Labels?.Mark(lbl.Name, ctx.Code);
                 if (ctx.Labels is not null) ctx.Labels.PendingLoopLabel = lbl.Name;
-                Emit(lbl.Statement, ref ctx, lambdaState);
-                if (ctx.Labels is not null) ctx.Labels.PendingLoopLabel = null;
+                worklist.Push(new EmitWork(lbl, EmitPhase.AfterChildren));
+                worklist.Push(new EmitWork(lbl.Statement, EmitPhase.Enter));
                 return;
 
             case SwitchStatement swt:
-                EmitSwitch(swt, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string endL = ctx.Labels.Next();
+                    var lb = ctx.Labels;
+                    var caseLabels = swt.Cases.Select(_ => lb.Next()).ToList();
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: endL));
+                    if (swt.DefaultCase is not null)
+                        worklist.Push(new EmitWork(swt.DefaultCase, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.Pop));
+                    for (int i = swt.Cases.Count - 1; i >= 0; i--) {
+                        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: caseLabels[i]));
+                        worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: endL));
+                        worklist.Push(new EmitWork(swt.Cases[i].Body, EmitPhase.Enter));
+                        worklist.Push(new EmitWork(null, EmitPhase.Pop));
+                        worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: caseLabels[i]));
+                        worklist.Push(new EmitWork(null, EmitPhase.Eq));
+                        worklist.Push(new EmitWork(swt.Cases[i].Pattern, EmitPhase.Enter));
+                        worklist.Push(new EmitWork(null, EmitPhase.Dup));
+                    }
+                    worklist.Push(new EmitWork(swt.Value, EmitPhase.Enter));
+                }
                 return;
 
             case ThrowStatement thr:
-                Emit(thr.Exception, ref ctx, lambdaState);
-                ctx.Code.Add((byte)OpCode.Throw);
+                worklist.Push(new EmitWork(thr, EmitPhase.AfterChildren));
+                worklist.Push(new EmitWork(thr.Exception, EmitPhase.Enter));
                 return;
 
             case Default def:
-                ctx.Code.Add((byte)OpCode.PushInt);
-                EmitInt32(ctx.Code, 0);
+                ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
                 return;
 
             case NullForgiving nf:
-                Emit(nf.Operand, ref ctx, lambdaState);
+                worklist.Push(new EmitWork(nf.Operand, EmitPhase.Enter));
                 return;
 
             case Assignment assign:
-                Emit(assign.Value, ref ctx, lambdaState);
                 string? destName = assign.Destination switch {
                     Variable v => v.Name,
                     Parameter p => p.Name,
                     _ => null
                 };
                 if (destName is not null) {
-                    if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(destName, out int storeIdx)) {
-                        ctx.Code.Add((byte)OpCode.Dup);
-                        ctx.Code.Add((byte)OpCode.StoreArg);
-                        EmitInt32(ctx.Code, storeIdx);
+                    int storeIdx;
+                    int storeType;
+                    if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(destName, out int pIdx)) {
+                        storeIdx = pIdx; storeType = 0;
                     }
-                    else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(destName, out int localStoreIdx)) {
-                        ctx.Code.Add((byte)OpCode.Dup);
-                        ctx.Code.Add((byte)OpCode.StoreLocal);
-                        EmitInt32(ctx.Code, localStoreIdx);
+                    else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(destName, out int lIdx)) {
+                        storeIdx = lIdx; storeType = 1;
                     }
-                    else if (lambdaState?.UpvalueMap is not null && lambdaState.UpvalueMap.TryGetValue(destName, out int upStoreIdx)) {
-                        ctx.Code.Add((byte)OpCode.Dup);
-                        ctx.Code.Add((byte)OpCode.StoreUpvalue);
-                        EmitInt32(ctx.Code, upStoreIdx);
+                    else if (lambdaState?.UpvalueMap is not null && lambdaState.UpvalueMap.TryGetValue(destName, out int uIdx)) {
+                        storeIdx = uIdx; storeType = 2;
+                    }
+                    else {
+                        storeIdx = -1; storeType = -1;
+                    }
+                    if (storeIdx >= 0) {
+                        worklist.Push(new EmitWork(assign, EmitPhase.AfterChildren, Data: storeIdx | (storeType << 16)));
+                        worklist.Push(new EmitWork(assign.Value, EmitPhase.Enter));
+                        return;
                     }
                 }
-                else if (assign.Destination is Member memberDest) {
-                    EmitAssignmentMember(memberDest, assign.Value, ref ctx, lambdaState);
+                if (assign.Destination is Member memberDest) {
+                    EmitAssignmentMember(memberDest, assign.Value, worklist, ref ctx, lambdaState);
+                    return;
                 }
-                else if (assign.Destination is IndexAccess idxDest) {
-                    EmitAssignmentIndexAccess(idxDest, assign.Value, ref ctx, lambdaState);
+                if (assign.Destination is IndexAccess idxDest) {
+                    EmitAssignmentIndexAccess(idxDest, assign.Value, worklist, ref ctx, lambdaState);
+                    return;
                 }
                 return;
 
             case Coalesce coalesce:
-                EmitCoalesce(coalesce, ref ctx, lambdaState);
+                ctx.Labels ??= new LabelContext(); {
+                    string after = ctx.Labels.Next();
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: after));
+                    worklist.Push(new EmitWork(coalesce.RightHandValue, EmitPhase.Enter));
+                    worklist.Push(new EmitWork(null, EmitPhase.Pop));
+                    worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: after));
+                    worklist.Push(new EmitWork(null, EmitPhase.IsNull));
+                    worklist.Push(new EmitWork(null, EmitPhase.Dup));
+                    worklist.Push(new EmitWork(coalesce.LeftHandValue, EmitPhase.Enter));
+                }
                 return;
 
             case Member member:
-                EmitMember(member, ref ctx);
+                EmitMember(member, worklist, ref ctx);
                 return;
 
             case IndexAccess idxAccess:
-                EmitIndexAccess(idxAccess, ref ctx);
+                EmitIndexAccess(idxAccess, worklist, ref ctx);
                 return;
 
             case New newExpr:
-                EmitNew(newExpr, ref ctx);
+                EmitNew(newExpr, worklist, ref ctx);
                 return;
 
             case TypeCast tc:
-                Emit(tc.Operand, ref ctx, lambdaState);
+                worklist.Push(new EmitWork(tc.Operand, EmitPhase.Enter));
                 return;
 
             case TypeIs ti:
-                Emit(ti.Operand, ref ctx, lambdaState); {
-                    Type? targetType = ctx.Analysis?.GetResolvedType(ti.TargetTypeReference)?.GetRuntimeType();
-                    int typeCheckIdx = ctx.CallSites?.Count ?? 0;
-                    ctx.CallSites?.Add(targetType is not null ? CreateTypeIsDelegate(targetType) : IsNotNullDelegate);
-                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
-                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
-                    ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, typeCheckIdx);
-                }
+                worklist.Push(new EmitWork(ti, EmitPhase.AfterChildren));
+                worklist.Push(new EmitWork(ti.Operand, EmitPhase.Enter));
                 return;
 
             case TypeAs:
@@ -672,165 +879,346 @@ internal static class Lowering {
             case Parameter param:
                 if (param.Name is not null) {
                     if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(param.Name, out int pIdx)) {
-                        ctx.Code.Add((byte)OpCode.LoadArg);
-                        EmitInt32(ctx.Code, pIdx);
+                        ctx.Code.Add((byte)OpCode.LoadArg); EmitInt32(ctx.Code, pIdx);
                         return;
                     }
                     if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(param.Name, out int lIdx)) {
-                        ctx.Code.Add((byte)OpCode.LoadLocal);
-                        EmitInt32(ctx.Code, lIdx);
+                        ctx.Code.Add((byte)OpCode.LoadLocal); EmitInt32(ctx.Code, lIdx);
                         return;
                     }
                     if (param.DefaultValue is not null) {
-                        Emit(param.DefaultValue, ref ctx, lambdaState);
+                        worklist.Push(new EmitWork(param.DefaultValue, EmitPhase.Enter));
                         return;
                     }
                 }
                 return;
 
             case Invoke invoke:
-                EmitInvoke(invoke, ref ctx, lambdaState);
+                EmitInvoke(invoke, worklist, ref ctx, lambdaState);
                 return;
 
             case Block block:
-                for (int i = 0; i < block.Nodes.Count; i++) {
-                    Emit(block.Nodes[i], ref ctx, lambdaState);
+                for (int i = block.Nodes.Count - 1; i >= 0; i--) {
                     if (i < block.Nodes.Count - 1 && EmitsValue(block.Nodes[i]))
-                        ctx.Code.Add((byte)OpCode.Pop);
+                        worklist.Push(new EmitWork(null, EmitPhase.Pop));
+                    worklist.Push(new EmitWork(block.Nodes[i], EmitPhase.Enter));
                 }
                 return;
 
             case Return retNode:
                 if (retNode.Value is not null)
-                    Emit(retNode.Value, ref ctx, lambdaState);
+                    worklist.Push(new EmitWork(retNode.Value, EmitPhase.Enter));
                 return;
 
             case Variable variable:
                 if (variable.Name is null) return;
                 if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(variable.Name, out int paramIdx)) {
-                    ctx.Code.Add((byte)OpCode.LoadArg);
-                    EmitInt32(ctx.Code, paramIdx);
+                    ctx.Code.Add((byte)OpCode.LoadArg); EmitInt32(ctx.Code, paramIdx);
                 }
                 else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(variable.Name, out int localIdx)) {
-                    ctx.Code.Add((byte)OpCode.LoadLocal);
-                    EmitInt32(ctx.Code, localIdx);
+                    ctx.Code.Add((byte)OpCode.LoadLocal); EmitInt32(ctx.Code, localIdx);
                 }
                 else if (lambdaState?.UpvalueMap is not null && lambdaState.UpvalueMap.TryGetValue(variable.Name, out int upIdx)) {
-                    ctx.Code.Add((byte)OpCode.LoadUpvalue);
-                    EmitInt32(ctx.Code, upIdx);
+                    ctx.Code.Add((byte)OpCode.LoadUpvalue); EmitInt32(ctx.Code, upIdx);
                 }
                 return;
 
             case SuspendNode sn:
-                Emit(sn.Inner, ref ctx, lambdaState);
-                ctx.Code.Add((byte)OpCode.Pop);
-                ctx.Code.Add((byte)OpCode.Int);
-                EmitInt32(ctx.Code, 0);
+                worklist.Push(new EmitWork(sn, EmitPhase.AfterChildren));
+                worklist.Push(new EmitWork(sn.Inner, EmitPhase.Enter));
                 return;
 
             case Lambda lambda:
                 if (lambdaState?.FuncMap is not null && lambdaState.FuncMap.TryGetValue(lambda, out int lambdaFuncIdx)) {
-                    var captures = lambdaState?.CaptureMap is not null && lambdaState.CaptureMap.TryGetValue(lambda, out var caps)
-                        ? caps : [];
-                    for (int i = 0; i < captures.Count; i++) {
+                    List<string>? caps = null;
+                    bool found = lambdaState.CaptureMap is not null && lambdaState.CaptureMap.TryGetValue(lambda, out caps);
+                    var captures = found && caps is not null ? caps : [];
+                    for (int i = captures.Count - 1; i >= 0; i--) {
                         if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(captures[i], out int pIdx)) {
-                            ctx.Code.Add((byte)OpCode.LoadArg);
-                            EmitInt32(ctx.Code, pIdx);
+                            ctx.Code.Add((byte)OpCode.LoadArg); EmitInt32(ctx.Code, pIdx);
                         }
                         else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(captures[i], out int localIdx)) {
-                            ctx.Code.Add((byte)OpCode.LoadLocal);
-                            EmitInt32(ctx.Code, localIdx);
+                            ctx.Code.Add((byte)OpCode.LoadLocal); EmitInt32(ctx.Code, localIdx);
                         }
                         else {
-                            ctx.Code.Add((byte)OpCode.PushInt);
-                            EmitInt32(ctx.Code, 0);
+                            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
                         }
                     }
-                    ctx.Code.Add((byte)OpCode.AllocateClosure);
-                    EmitInt32(ctx.Code, lambdaFuncIdx);
-                    EmitInt32(ctx.Code, captures.Count);
+                    ctx.Code.Add((byte)OpCode.AllocateClosure); EmitInt32(ctx.Code, lambdaFuncIdx); EmitInt32(ctx.Code, captures.Count);
                 }
                 return;
 
             case Await awaitNode:
-                Emit(awaitNode.Operand, ref ctx, lambdaState);
-                int awaitSiteIdx = ctx.CallSites?.Count ?? 0;
-                ctx.CallSites?.Add(AwaitResultDelegate);
-                ctx.Code.Add((byte)OpCode.PushInt);
-                EmitInt32(ctx.Code, 1);
-                ctx.Code.Add((byte)OpCode.PushInt);
-                EmitInt32(ctx.Code, 1);
-                ctx.Code.Add((byte)OpCode.CallExternal);
-                EmitInt32(ctx.Code, awaitSiteIdx);
+                worklist.Push(new EmitWork(awaitNode, EmitPhase.AfterChildren));
+                worklist.Push(new EmitWork(awaitNode.Operand, EmitPhase.Enter));
                 return;
 
             case TypeDefinitionNode:
                 return;
 
             case ForEachLoop fe:
-                EmitForEachLoop(fe, ref ctx);
+                EmitForEachLoop(fe, worklist, ref ctx);
                 return;
 
             case UsingStatement us:
-                EmitUsingStatement(us, ref ctx);
+                EmitUsingStatement(us, worklist, ref ctx);
                 return;
 
             case TryCatchFinally tcf: {
+                    ctx.Labels ??= new LabelContext();
                     int tryStart = ctx.Code.Count;
-                    Emit(tcf.TryBlock, ref ctx, lambdaState);
-                    int tryEnd = ctx.Code.Count;
-
-                    var labels = ctx.Labels!;
-                    string endLabel = labels.Next();
-                    string? finallyEntry = tcf.FinallyBlock is not null ? labels.Next() : null;
-
-                    // Normal path: run finally (if any), then end
-                    if (finallyEntry is not null)
-                        labels.JumpTo(finallyEntry, ctx.Code, ctx.Relocations);
-                    else
-                        labels.JumpTo(endLabel, ctx.Code, ctx.Relocations);
-
-                    int? finallyStart = null;
-                    int catchStart = -1;
-
-                    if (tcf.CatchClauses is not null && tcf.CatchClauses.Count > 0) {
-                        catchStart = ctx.Code.Count;
-                        foreach (var cc in tcf.CatchClauses) {
+                    string catchStartL = ctx.Labels.Next();
+                    string? finallyEntryL = tcf.FinallyBlock is not null ? ctx.Labels.Next() : null;
+                    string endL = ctx.Labels.Next();
+                    worklist.Push(new EmitWork(tcf, EmitPhase.AfterChildren,
+                        Data: tryStart, Label: catchStartL, Label2: finallyEntryL ?? endL));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: endL));
+                    if (tcf.FinallyBlock is not null) {
+                        worklist.Push(new EmitWork(null, EmitPhase.EndFinally));
+                        if (EmitsValue(tcf.FinallyBlock))
+                            worklist.Push(new EmitWork(null, EmitPhase.Pop));
+                        worklist.Push(new EmitWork(tcf.FinallyBlock, EmitPhase.Enter));
+                        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: finallyEntryL!));
+                    }
+                    if (tcf.CatchClauses is not null) {
+                        for (int i = tcf.CatchClauses.Count - 1; i >= 0; i--) {
+                            var cc = tcf.CatchClauses[i];
+                            if (tcf.FinallyBlock is null)
+                                worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: endL));
+                            worklist.Push(new EmitWork(cc.Body, EmitPhase.Enter));
                             if (cc.VariableName is not null
                                 && ctx.ParamIndexMap is not null
-                                && ctx.ParamIndexMap.TryGetValue(cc.VariableName, out int varIdx)) {
-                                ctx.Code.Add((byte)OpCode.StoreArg);
-                                EmitInt32(ctx.Code, varIdx);
-                            }
-                            else {
-                                ctx.Code.Add((byte)OpCode.Pop);
-                            }
-                            Emit(cc.Body, ref ctx, lambdaState);
-                            if (finallyEntry is not null) {
-                                // fall through to finally
-                            }
-                            else {
-                                labels.JumpTo(endLabel, ctx.Code, ctx.Relocations);
-                            }
+                                && ctx.ParamIndexMap.TryGetValue(cc.VariableName, out int varIdx))
+                                worklist.Push(new EmitWork(null, EmitPhase.Pop, Data: varIdx));
+                            else
+                                worklist.Push(new EmitWork(null, EmitPhase.Pop, Data: -1));
                         }
                     }
-
-                    if (tcf.FinallyBlock is not null) {
-                        if (finallyEntry is not null)
-                            labels.Mark(finallyEntry, ctx.Code);
-                        finallyStart = ctx.Code.Count;
-                        Emit(tcf.FinallyBlock, ref ctx, lambdaState);
-                        ctx.Code.Add((byte)OpCode.EndFinally);
-                        if (EmitsValue(tcf.FinallyBlock))
-                            ctx.Code.Add((byte)OpCode.Pop);
-                    }
-
-                    labels.Mark(endLabel, ctx.Code);
-                    labels.ExceptionRegions.Add(new ExceptionRegion(tryStart, tryEnd, catchStart, finallyStart));
+                    worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: catchStartL));
+                    worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: finallyEntryL ?? endL));
+                    worklist.Push(new EmitWork(tcf.TryBlock, EmitPhase.Enter));
                     return;
                 }
 
             default:
+                return;
+        }
+    }
+
+    private static void AfterChildren(Node node, EmitWork work, Stack<EmitWork> worklist, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+        switch (node) {
+            case Add add:
+                if (work.Data == -1) {
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 2);
+                    ctx.Code.Add((byte)OpCode.StrConcat);
+                }
+                else {
+                    ctx.Code.Add((byte)(OpCode)work.Data);
+                }
+                return;
+
+            case Subtract _:
+            case Multiply _:
+            case Divide _:
+            case Modulo _:
+            case Equal _:
+            case NotEqual _:
+            case LessThan _:
+            case LessThanOrEqual _:
+            case GreaterThan _:
+            case GreaterThanOrEqual _:
+                ctx.Code.Add((byte)(OpCode)work.Data);
+                return;
+
+            case UnaryMinus un: {
+                    var typeDef = ctx.Analysis?.GetResolvedType(un);
+                    var clrType = typeDef?.GetRuntimeType();
+                    if (clrType == typeof(double) || clrType == typeof(float))
+                        ctx.Code.Add((byte)OpCode.DNeg);
+                    else
+                        ctx.Code.Add((byte)OpCode.Neg);
+                }
+                return;
+
+            case Not _:
+                ctx.Code.Add((byte)OpCode.Not);
+                return;
+
+            case WhileLoop _:
+            case DoWhileLoop _:
+            case ForLoop _:
+                ctx.Labels!.LoopLabels.Pop();
+                return;
+
+            case Assignment assign:
+                int storeIdx = work.Data & 0xFFFF;
+                int storeType = (work.Data >> 16) & 0xFFFF;
+                ctx.Code.Add((byte)OpCode.Dup);
+                switch (storeType) {
+                    case 0: ctx.Code.Add((byte)OpCode.StoreArg); break;
+                    case 1: ctx.Code.Add((byte)OpCode.StoreLocal); break;
+                    case 2: ctx.Code.Add((byte)OpCode.StoreUpvalue); break;
+                }
+                EmitInt32(ctx.Code, storeIdx);
+                return;
+
+            case LabelDeclaration _:
+                if (ctx.Labels is not null) ctx.Labels.PendingLoopLabel = null;
+                return;
+
+            case SuspendNode _:
+                ctx.Code.Add((byte)OpCode.Pop);
+                ctx.Code.Add((byte)OpCode.Int);
+                EmitInt32(ctx.Code, 0);
+                return;
+
+            case Await _: {
+                    int awaitSiteIdx = ctx.CallSites?.Count ?? 0;
+                    ctx.CallSites?.Add(AwaitResultDelegate);
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                    ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, awaitSiteIdx);
+                }
+                return;
+
+            case ThrowStatement _:
+                ctx.Code.Add((byte)OpCode.Throw);
+                return;
+
+            case TypeIs ti: {
+                    Type? targetType = ctx.Analysis?.GetResolvedType(ti.TargetTypeReference)?.GetRuntimeType();
+                    int typeCheckIdx = ctx.CallSites?.Count ?? 0;
+                    ctx.CallSites?.Add(targetType is not null ? CreateTypeIsDelegate(targetType) : IsNotNullDelegate);
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                    ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, typeCheckIdx);
+                }
+                return;
+
+            case Lambda lambda:
+                if (lambdaState?.FuncMap is not null && lambdaState.FuncMap.TryGetValue(lambda, out int lambdaFuncIdx)) {
+                    var captures = lambdaState.CaptureMap is not null && lambdaState.CaptureMap.TryGetValue(lambda, out var caps) ? caps : [];
+                    ctx.Code.Add((byte)OpCode.AllocateClosure); EmitInt32(ctx.Code, lambdaFuncIdx); EmitInt32(ctx.Code, captures.Count);
+                }
+                return;
+
+            case TryCatchFinally tcf: {
+                    int tryStart = work.Data;
+                    int tryEnd;
+                    int catchStart = -1;
+                    if (ctx.Labels!.Targets.TryGetValue(work.Label!, out int csPos)) {
+                        tryEnd = csPos - 5;
+                        if (tcf.CatchClauses is { Count: > 0 })
+                            catchStart = csPos;
+                    }
+                    else {
+                        tryEnd = ctx.Code.Count;
+                    }
+                    int? finallyStart = tcf.FinallyBlock is not null && work.Label2 is not null
+                        && ctx.Labels.Targets.TryGetValue(work.Label2, out int fs) ? fs : null;
+                    ctx.Labels.ExceptionRegions.Add(new ExceptionRegion(tryStart, tryEnd, catchStart, finallyStart));
+                }
+                return;
+
+            case Member member:
+                EmitCallSiteAfterChildren(member, work, ref ctx);
+                return;
+
+            case IndexAccess idx:
+                EmitCallSiteAfterChildren(idx, work, ref ctx);
+                return;
+
+            case New newExpr:
+                EmitCallSiteAfterChildren(newExpr, work, ref ctx);
+                return;
+
+            case Invoke invoke:
+                EmitInvokeAfterChildren(invoke, work, ref ctx);
+                return;
+
+            case ForEachLoop _: {
+                    int bt = work.Data & 0xF;
+                    if (bt is >= 0 and <= 6) {
+                        switch (bt) {
+                            case 0:
+                                ctx.Code.Add((byte)OpCode.LoadConst); EmitInt32(ctx.Code, (work.Data >> 4) & 0x3FF);
+                                break;
+                            case 1:
+                                ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 2);
+                                ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+                                ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, (work.Data >> 4) & 0x3FF);
+                                break;
+                            case 2:
+                                ctx.Code.Add((byte)OpCode.LoadConst); EmitInt32(ctx.Code, (work.Data >> 4) & 0x3FF);
+                                ctx.Code.Add((byte)OpCode.EnumeratorMoveNext);
+                                break;
+                            case 3:
+                                ctx.Code.Add((byte)OpCode.LoadConst); EmitInt32(ctx.Code, (work.Data >> 4) & 0x3FF);
+                                ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                                ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                                ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, (work.Data >> 14) & 0x3FF);
+                                break;
+                            case 4:
+                                if (((work.Data >> 30) & 1) == 1) {
+                                    ctx.Code.Add((byte)OpCode.Pop);
+                                }
+                                else {
+                                    int storeIdxFe = (work.Data >> 4) & 0xFFFF;
+                                    int storeTypeFe = (work.Data >> 20) & 3;
+                                    switch (storeTypeFe) {
+                                        case 0: ctx.Code.Add((byte)OpCode.StoreArg); break;
+                                        case 1: ctx.Code.Add((byte)OpCode.StoreLocal); break;
+                                        default: ctx.Code.Add((byte)OpCode.Pop); break;
+                                    }
+                                    if (storeTypeFe is 0 or 1)
+                                        EmitInt32(ctx.Code, storeIdxFe);
+                                }
+                                break;
+                            case 5:
+                                ctx.Code.Add((byte)OpCode.LoadConst); EmitInt32(ctx.Code, (work.Data >> 4) & 0x3FF);
+                                ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                                ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+                                ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, (work.Data >> 14) & 0x3FF);
+                                break;
+                            case 6:
+                                ctx.Labels!.LoopLabels.Pop();
+                                break;
+                        }
+                    }
+                }
+                return;
+
+            case UsingStatement us:
+                if (work.Label is not null) {
+                    int tryStartUs = work.Data;
+                    int tryEndUs = ctx.Labels!.Targets[work.Label];
+                    int? finallyStartUs = work.Label2 is not null ? ctx.Labels.Targets[work.Label2] : null;
+                    ctx.Labels.ExceptionRegions.Add(new ExceptionRegion(tryStartUs, tryEndUs, -1, finallyStartUs));
+                }
+                else {
+                    int val = work.Data;
+                    if ((val & 0x10000) != 0) {
+                        ctx.Code.Add((byte)OpCode.LoadConst); EmitInt32(ctx.Code, (val >> 4) & 0x3FF);
+                        ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
+                        ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+                        ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, (val >> 20) & 0x3FF);
+                        ctx.Code.Add((byte)OpCode.EndFinally);
+                    }
+                    else if ((val & 0x20000) != 0) {
+                        ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 2);
+                        ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+                        ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, (val >> 4) & 0x3FF);
+                    }
+                    else if ((val & 0x40000) != 0) {
+                        ctx.Code.Add((byte)OpCode.LoadConst); EmitInt32(ctx.Code, (val >> 4) & 0x3FF);
+                    }
+                }
+                return;
+
+            default:
+                if (work.Data == 1) {
+                    ctx.Code.Add((byte)OpCode.EndFinally);
+                }
                 return;
         }
     }
@@ -859,159 +1247,7 @@ internal static class Lowering {
         return signedOp;
     }
 
-    private static void EmitBinary(
-        Node left, Node right, OpCode op,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        Emit(left, ref ctx, lambdaState);
-        Emit(right, ref ctx, lambdaState);
-        ctx.Code.Add((byte)op);
-    }
-
-    private static void EmitShortCircuitAnd(
-        And andNode,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        ctx.Labels ??= new LabelContext();
-        var labels = ctx.Labels;
-        string end = labels.Next();
-        Emit(andNode.LeftHandValue, ref ctx, lambdaState);
-        ctx.Code.Add((byte)OpCode.Dup);
-        labels.JumpIfFalseTo(end, ctx.Code, ctx.Relocations);
-        ctx.Code.Add((byte)OpCode.Pop);
-        Emit(andNode.RightHandValue, ref ctx, lambdaState);
-        labels.Mark(end, ctx.Code);
-    }
-
-    private static void EmitShortCircuitOr(
-        Or orNode,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        ctx.Labels ??= new LabelContext();
-        var labels = ctx.Labels;
-        string evalRight = labels.Next();
-        string after = labels.Next();
-        Emit(orNode.LeftHandValue, ref ctx, lambdaState);
-        ctx.Code.Add((byte)OpCode.Dup);
-        labels.JumpIfFalseTo(evalRight, ctx.Code, ctx.Relocations);
-        labels.JumpTo(after, ctx.Code, ctx.Relocations);
-        labels.Mark(evalRight, ctx.Code);
-        ctx.Code.Add((byte)OpCode.Pop);
-        Emit(orNode.RightHandValue, ref ctx, lambdaState);
-        labels.Mark(after, ctx.Code);
-    }
-
-    private static void EmitConditional(
-        Conditional cond,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        ctx.Labels ??= new LabelContext();
-        var labels = ctx.Labels;
-        string elseL = labels.Next();
-        string endL = labels.Next();
-        Emit(cond.Condition, ref ctx, lambdaState);
-        labels.JumpIfFalseTo(elseL, ctx.Code, ctx.Relocations);
-        Emit(cond.IfTrue, ref ctx, lambdaState);
-        labels.JumpTo(endL, ctx.Code, ctx.Relocations);
-        labels.Mark(elseL, ctx.Code);
-        Emit(cond.IfFalse, ref ctx, lambdaState);
-        labels.Mark(endL, ctx.Code);
-    }
-
-    private static void EmitIf(
-        IfStatement ifStmt,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        ctx.Labels ??= new LabelContext();
-        var labels = ctx.Labels;
-        string elseL = labels.Next();
-        string endL = labels.Next();
-        Emit(ifStmt.Condition, ref ctx, lambdaState);
-        labels.JumpIfFalseTo(elseL, ctx.Code, ctx.Relocations);
-        Emit(ifStmt.ThenBranch, ref ctx, lambdaState);
-        labels.JumpTo(endL, ctx.Code, ctx.Relocations);
-        labels.Mark(elseL, ctx.Code);
-        if (ifStmt.ElseBranch is not null)
-            Emit(ifStmt.ElseBranch, ref ctx, lambdaState);
-        labels.Mark(endL, ctx.Code);
-    }
-
-    private static void EmitWhileLoop(
-        WhileLoop wl,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        ctx.Labels ??= new LabelContext();
-        var labels = ctx.Labels;
-        string breakL = labels.Next();
-        string contL = labels.Next();
-        string loopLabel = labels.PendingLoopLabel ?? "";
-        labels.PendingLoopLabel = null;
-        labels.LoopLabels.Push((loopLabel, breakL, contL));
-        labels.Mark(contL, ctx.Code);
-        Emit(wl.Condition, ref ctx, lambdaState);
-        labels.JumpIfFalseTo(breakL, ctx.Code, ctx.Relocations);
-        Emit(wl.Body, ref ctx, lambdaState);
-        labels.JumpTo(contL, ctx.Code, ctx.Relocations);
-        labels.Mark(breakL, ctx.Code);
-        labels.LoopLabels.Pop();
-    }
-
-    private static void EmitDoWhileLoop(
-        DoWhileLoop dwl,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        ctx.Labels ??= new LabelContext();
-        var labels = ctx.Labels;
-        string breakL = labels.Next();
-        string contL = labels.Next();
-        string loopLabel = labels.PendingLoopLabel ?? "";
-        labels.PendingLoopLabel = null;
-        labels.LoopLabels.Push((loopLabel, breakL, contL));
-        labels.Mark(contL, ctx.Code);
-        Emit(dwl.Body, ref ctx, lambdaState);
-        Emit(dwl.Condition, ref ctx, lambdaState);
-        labels.JumpIfFalseTo(breakL, ctx.Code, ctx.Relocations);
-        labels.JumpTo(contL, ctx.Code, ctx.Relocations);
-        labels.Mark(breakL, ctx.Code);
-        labels.LoopLabels.Pop();
-    }
-
-    private static void EmitForLoop(
-        ForLoop fl,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        ctx.Labels ??= new LabelContext();
-        var labels = ctx.Labels;
-        string breakL = labels.Next();
-        string contL = labels.Next();
-        string loopLabel = labels.PendingLoopLabel ?? "";
-        labels.PendingLoopLabel = null;
-        labels.LoopLabels.Push((loopLabel, breakL, contL));
-
-        if (fl.Initializer is not null)
-            Emit(fl.Initializer, ref ctx, lambdaState);
-
-        labels.Mark(contL, ctx.Code);
-
-        if (fl.Condition is not null) {
-            Emit(fl.Condition, ref ctx, lambdaState);
-            labels.JumpIfFalseTo(breakL, ctx.Code, ctx.Relocations);
-        }
-
-        Emit(fl.Body, ref ctx, lambdaState);
-
-        if (fl.Increment is not null)
-            Emit(fl.Increment, ref ctx, lambdaState);
-
-        labels.JumpTo(contL, ctx.Code, ctx.Relocations);
-        labels.Mark(breakL, ctx.Code);
-        labels.LoopLabels.Pop();
-    }
-
-    private static void EmitForEachLoop(
-        ForEachLoop fe,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
+    private static void EmitForEachLoop(ForEachLoop fe, Stack<EmitWork> worklist, ref EmitContext ctx) {
         var enumHolder = new object[1];
         int holderIdx = ctx.Constants?.Count ?? 0;
         ctx.Constants?.Add(enumHolder);
@@ -1024,79 +1260,62 @@ internal static class Lowering {
         labels.PendingLoopLabel = null;
         labels.LoopLabels.Push((loopLabel, breakL, contL));
 
-        ctx.Code.Add((byte)OpCode.LoadConst);
-        EmitInt32(ctx.Code, holderIdx);
-        Emit(fe.Collection, ref ctx, lambdaState);
         int initEnumIdx = ctx.CallSites?.Count ?? 0;
         ctx.CallSites?.Add(InitEnumeratorDelegate);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 2);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 0);
-        ctx.Code.Add((byte)OpCode.CallExternal);
-        EmitInt32(ctx.Code, initEnumIdx);
-
-        labels.Mark(contL, ctx.Code);
-
-        ctx.Code.Add((byte)OpCode.LoadConst);
-        EmitInt32(ctx.Code, holderIdx);
-        ctx.Code.Add((byte)OpCode.EnumeratorMoveNext);
-        labels.JumpIfFalseTo(breakL, ctx.Code, ctx.Relocations);
-
-        ctx.Code.Add((byte)OpCode.LoadConst);
-        EmitInt32(ctx.Code, holderIdx);
         int getCurrIdx = ctx.CallSites?.Count ?? 0;
         ctx.CallSites?.Add(GetCurrentDelegate);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 1);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 1);
-        ctx.Code.Add((byte)OpCode.CallExternal);
-        EmitInt32(ctx.Code, getCurrIdx);
+        int disposeEnumIdx = ctx.CallSites?.Count ?? 0;
+        ctx.CallSites?.Add(DisposeEnumeratorDelegate);
 
+        // Encode loop variable store info
+        int storeIdx = 0, storeType = 0;
         if (fe.LoopVariable is { Name: not null } lv) {
-            if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(lv.Name, out int paramIdx)) {
-                ctx.Code.Add((byte)OpCode.StoreArg);
-                EmitInt32(ctx.Code, paramIdx);
+            if (ctx.ParamIndexMap is not null && ctx.ParamIndexMap.TryGetValue(lv.Name, out int pi)) {
+                storeIdx = pi; storeType = 0;
             }
-            else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(lv.Name, out int localIdx)) {
-                ctx.Code.Add((byte)OpCode.StoreLocal);
-                EmitInt32(ctx.Code, localIdx);
+            else if (ctx.LocalIndexMap is not null && ctx.LocalIndexMap.TryGetValue(lv.Name, out int li)) {
+                storeIdx = li; storeType = 1;
             }
             else {
-                ctx.Code.Add((byte)OpCode.Pop);
+                storeIdx = 0; storeType = -1;
             }
         }
         else {
-            ctx.Code.Add((byte)OpCode.Pop);
+            storeType = -1;
         }
 
-        Emit(fe.Body, ref ctx, lambdaState);
+        worklist.Push(new EmitWork(fe, EmitPhase.AfterChildren, Data: 6)); // pop labels
+        // dispose
+        worklist.Push(new EmitWork(fe, EmitPhase.AfterChildren,
+            Data: 5 | (holderIdx << 4) | (disposeEnumIdx << 14)));
+        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: breakL));
+        worklist.Push(new EmitWork(null, EmitPhase.Jump, Label: contL));
         if (EmitsValue(fe.Body))
-            ctx.Code.Add((byte)OpCode.Pop);
-
-        labels.JumpTo(contL, ctx.Code, ctx.Relocations);
-
-        labels.Mark(breakL, ctx.Code);
-
-        ctx.Code.Add((byte)OpCode.LoadConst);
-        EmitInt32(ctx.Code, holderIdx);
-        int disposeEnumIdx = ctx.CallSites?.Count ?? 0;
-        ctx.CallSites?.Add(DisposeEnumeratorDelegate);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 1);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 0);
-        ctx.Code.Add((byte)OpCode.CallExternal);
-        EmitInt32(ctx.Code, disposeEnumIdx);
-
-        labels.LoopLabels.Pop();
+            worklist.Push(new EmitWork(null, EmitPhase.Pop));
+        worklist.Push(new EmitWork(fe.Body, EmitPhase.Enter));
+        // store loop var
+        if (storeType == -1) {
+            worklist.Push(new EmitWork(fe, EmitPhase.AfterChildren, Data: 4 | (1 << 30))); // Pop only
+        }
+        else {
+            worklist.Push(new EmitWork(fe, EmitPhase.AfterChildren,
+                Data: 4 | (storeIdx << 4) | (storeType << 20)));
+        }
+        // getCurrent
+        worklist.Push(new EmitWork(fe, EmitPhase.AfterChildren,
+            Data: 3 | (holderIdx << 4) | (getCurrIdx << 14)));
+        worklist.Push(new EmitWork(null, EmitPhase.JumpIfFalse, Label: breakL));
+        // moveNext
+        worklist.Push(new EmitWork(fe, EmitPhase.AfterChildren, Data: 2 | (holderIdx << 4)));
+        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: contL));
+        // initAfter
+        worklist.Push(new EmitWork(fe, EmitPhase.AfterChildren, Data: 1 | (initEnumIdx << 4)));
+        worklist.Push(new EmitWork(fe.Collection, EmitPhase.Enter));
+        // initBefore
+        worklist.Push(new EmitWork(fe, EmitPhase.AfterChildren, Data: 0 | (holderIdx << 4)));
     }
 
-    private static void EmitUsingStatement(
-        UsingStatement us,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
+    private static void EmitUsingStatement(UsingStatement us, Stack<EmitWork> worklist, ref EmitContext ctx) {
         var resourceHolder = new object[1];
         int holderIdx = ctx.Constants?.Count ?? 0;
         ctx.Constants?.Add(resourceHolder);
@@ -1104,132 +1323,108 @@ internal static class Lowering {
         ctx.Labels ??= new LabelContext();
         var labels = ctx.Labels;
         int tryStart = ctx.Code.Count;
+        string tryEndL = labels.Next();
+        string finallyStartL = labels.Next();
 
-        ctx.Code.Add((byte)OpCode.LoadConst);
-        EmitInt32(ctx.Code, holderIdx);
-        Emit(us.Resource, ref ctx, lambdaState);
         int saveIdx = ctx.CallSites?.Count ?? 0;
         ctx.CallSites?.Add(SaveResourceDelegate);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 2);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 0);
-        ctx.Code.Add((byte)OpCode.CallExternal);
-        EmitInt32(ctx.Code, saveIdx);
-
-        Emit(us.Body, ref ctx, lambdaState);
-        if (EmitsValue(us.Body))
-            ctx.Code.Add((byte)OpCode.Pop);
-
-        int tryEnd = ctx.Code.Count;
-
-        int finallyStart = ctx.Code.Count;
-        ctx.Code.Add((byte)OpCode.LoadConst);
-        EmitInt32(ctx.Code, holderIdx);
         int disposeIdx = ctx.CallSites?.Count ?? 0;
         ctx.CallSites?.Add(DisposeResourceDelegate);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 1);
-        ctx.Code.Add((byte)OpCode.PushInt);
-        EmitInt32(ctx.Code, 0);
-        ctx.Code.Add((byte)OpCode.CallExternal);
-        EmitInt32(ctx.Code, disposeIdx);
 
-        ctx.Code.Add((byte)OpCode.EndFinally);
-
-        labels.ExceptionRegions.Add(new ExceptionRegion(tryStart, tryEnd, -1, finallyStart));
+        worklist.Push(new EmitWork(us, EmitPhase.AfterChildren,
+            Data: tryStart, Label: tryEndL, Label2: finallyStartL));
+        // dispose + EndFinally
+        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: finallyStartL));
+        worklist.Push(new EmitWork(us, EmitPhase.AfterChildren,
+            Data: 0x10000 | (holderIdx << 4) | (disposeIdx << 20)));
+        worklist.Push(new EmitWork(null, EmitPhase.MarkLabel, Label: tryEndL));
+        worklist.Push(new EmitWork(us.Body, EmitPhase.Enter));
+        // call save
+        worklist.Push(new EmitWork(us, EmitPhase.AfterChildren, Data: 0x20000 | (saveIdx << 4)));
+        worklist.Push(new EmitWork(us.Resource, EmitPhase.Enter));
+        // loadConst holderIdx
+        worklist.Push(new EmitWork(us, EmitPhase.AfterChildren, Data: 0x40000 | (holderIdx << 4)));
     }
 
-    private static void EmitSwitch(
-        SwitchStatement swt,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
+    private static void EmitCallSiteAfterChildren(Node node, EmitWork work, ref EmitContext ctx) {
+        int siteIdx = work.Data & 0xFFFFF;
+        int argCount = (work.Data >> 20) & 0xFF;
+        int hasRet = (work.Data >> 28) & 1;
+        ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+        ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, hasRet);
+        ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+    }
 
-        ctx.Labels ??= new LabelContext();
-        var lb = ctx.Labels;
-        string endL = lb.Next();
-        var caseLabels = swt.Cases.Select(_ => lb.Next()).ToList();
-
-        Emit(swt.Value, ref ctx, lambdaState);
-
-        for (int i = 0; i < swt.Cases.Count; i++) {
-            ctx.Code.Add((byte)OpCode.Dup);
-            Emit(swt.Cases[i].Pattern, ref ctx, lambdaState);
-            ctx.Code.Add((byte)OpCode.Eq);
-            lb.JumpIfFalseTo(caseLabels[i], ctx.Code, ctx.Relocations);
-            ctx.Code.Add((byte)OpCode.Pop);
-            Emit(swt.Cases[i].Body, ref ctx, lambdaState);
-            lb.JumpTo(endL, ctx.Code, ctx.Relocations);
-            lb.Mark(caseLabels[i], ctx.Code);
+    private static void EmitInvokeAfterChildren(Invoke invoke, EmitWork work, ref EmitContext ctx) {
+        int path = (work.Data >> 28) & 3;
+        switch (path) {
+            case 0: { // AstMethod
+                    int funcIndex = work.Data & 0xFFFFF;
+                    int paramCount = (work.Data >> 20) & 0xFF;
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, paramCount);
+                    ctx.Code.Add((byte)OpCode.Call); EmitInt32(ctx.Code, funcIndex);
+                    ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
+                    break;
+                }
+            case 1: { // ClrMethod
+                    int siteIndex = work.Data & 0xFFFFF;
+                    int argCount = (work.Data >> 20) & 0xFF;
+                    int hasRet = (work.Data >> 30) & 1;
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, hasRet);
+                    ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIndex);
+                    break;
+                }
+            case 2: { // Lambda
+                    int lFuncIdx = work.Data & 0xFFFFF;
+                    int totalArgs = (work.Data >> 20) & 0xFF;
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, totalArgs);
+                    ctx.Code.Add((byte)OpCode.Call); EmitInt32(ctx.Code, lFuncIdx);
+                    ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
+                    break;
+                }
+            case 3: { // Generic delegate
+                    int totalArgs = work.Data & 0xFFFFF;
+                    ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, totalArgs);
+                    ctx.Code.Add((byte)OpCode.CallClosure);
+                    ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
+                    break;
+                }
         }
-
-        ctx.Code.Add((byte)OpCode.Pop);
-        if (swt.DefaultCase is not null)
-            Emit(swt.DefaultCase, ref ctx, lambdaState);
-        lb.Mark(endL, ctx.Code);
     }
 
-    private static void EmitCoalesce(
-        Coalesce coalesce,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
-        ctx.Labels ??= new LabelContext();
-        var labels = ctx.Labels;
-        string after = labels.Next();
-        Emit(coalesce.LeftHandValue, ref ctx, lambdaState);
-        ctx.Code.Add((byte)OpCode.Dup);
-        ctx.Code.Add((byte)OpCode.IsNull);
-        labels.JumpIfFalseTo(after, ctx.Code, ctx.Relocations);
-        ctx.Code.Add((byte)OpCode.Pop);
-        Emit(coalesce.RightHandValue, ref ctx, lambdaState);
-        labels.Mark(after, ctx.Code);
-    }
-
-    private static void EmitInvoke(
-        Invoke invoke,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
+    private static void EmitInvoke(Invoke invoke, Stack<EmitWork> worklist, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+        // AstMethod path
         if (ctx.Analysis?.GetResolvedMember(invoke) is AstMethodDefinition astMethod) {
             var methodDef = astMethod.DefinitionNode;
             if (ctx.FunctionIndexMap is not null && ctx.FunctionIndexMap.TryGetValue(methodDef, out int funcIndex)) {
-                foreach (var arg in invoke.Arguments) {
-                    Emit(arg, ref ctx, lambdaState);
-                }
                 int paramCount = methodDef.Parameters?.Count ?? 0;
-                ctx.Code.Add((byte)OpCode.PushInt);
-                EmitInt32(ctx.Code, paramCount);
-                ctx.Code.Add((byte)OpCode.Call);
-                EmitInt32(ctx.Code, funcIndex);
-                ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
+                worklist.Push(new EmitWork(invoke, EmitPhase.AfterChildren,
+                    Data: funcIndex | (paramCount << 20) | (0 << 28)));
+                for (int i = invoke.Arguments.Length - 1; i >= 0; i--)
+                    worklist.Push(new EmitWork(invoke.Arguments[i], EmitPhase.Enter));
                 return;
             }
         }
 
+        // ClrMethod path
         if (ctx.Analysis?.GetResolvedMember(invoke) is ClrMethod clrMethod) {
             var methodInfo = clrMethod.MethodInfo;
             bool isStatic = clrMethod.LifetimeModifier == LifetimeModifier.Static;
-
             int siteIndex = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CallSiteCompiler.Compile(methodInfo, isStatic));
-
-            if (!isStatic && invoke.Delegate is Member memberAccess) {
-                Emit(memberAccess.Value, ref ctx, lambdaState);
-            }
-
-            foreach (var arg in invoke.Arguments) {
-                Emit(arg, ref ctx, lambdaState);
-            }
-
             int argCount = invoke.Arguments.Length + (isStatic ? 0 : 1);
-            ctx.Code.Add((byte)OpCode.PushInt);
-            EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt);
-            EmitInt32(ctx.Code, methodInfo.ReturnType != typeof(void) ? 1 : 0);
-            ctx.Code.Add((byte)OpCode.CallExternal);
-            EmitInt32(ctx.Code, siteIndex);
+            int hasRet = methodInfo.ReturnType != typeof(void) ? 1 : 0;
+            worklist.Push(new EmitWork(invoke, EmitPhase.AfterChildren,
+                Data: siteIndex | (argCount << 20) | (hasRet << 30) | (1 << 28)));
+            for (int i = invoke.Arguments.Length - 1; i >= 0; i--)
+                worklist.Push(new EmitWork(invoke.Arguments[i], EmitPhase.Enter));
+            if (!isStatic && invoke.Delegate is Member memberAccess)
+                worklist.Push(new EmitWork(memberAccess.Value, EmitPhase.Enter));
             return;
         }
 
-        // Lambda path: direct call when Delegate is a known Lambda in FuncMap
+        // Lambda path
         Lambda? lambdaTarget = invoke.Delegate as Lambda;
         int lFuncIdx = -1;
         if (lambdaTarget is not null && lambdaState?.FuncMap is not null) {
@@ -1239,194 +1434,162 @@ internal static class Lowering {
                 }
             }
         }
-
         if (lambdaTarget is not null && lFuncIdx >= 0) {
-            Emit(lambdaTarget, ref ctx, lambdaState);
-            foreach (var arg in invoke.Arguments) {
-                Emit(arg, ref ctx, lambdaState);
-            }
             int totalArgs = (lambdaTarget.Parameters?.Count ?? 0) + 1;
-            ctx.Code.Add((byte)OpCode.PushInt);
-            EmitInt32(ctx.Code, totalArgs);
-            ctx.Code.Add((byte)OpCode.Call);
-            EmitInt32(ctx.Code, lFuncIdx);
-            ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
+            worklist.Push(new EmitWork(invoke, EmitPhase.AfterChildren,
+                Data: lFuncIdx | (totalArgs << 20) | (2 << 28)));
+            for (int i = invoke.Arguments.Length - 1; i >= 0; i--)
+                worklist.Push(new EmitWork(invoke.Arguments[i], EmitPhase.Enter));
+            worklist.Push(new EmitWork(lambdaTarget, EmitPhase.Enter));
             return;
         }
 
         // Generic delegate path
         if (invoke.Delegate is not null) {
-            Emit(invoke.Delegate, ref ctx, lambdaState);
-            foreach (var arg in invoke.Arguments) {
-                Emit(arg, ref ctx, lambdaState);
-            }
             int totalArgs = invoke.Arguments.Length + 1;
-            ctx.Code.Add((byte)OpCode.PushInt);
-            EmitInt32(ctx.Code, totalArgs);
-            ctx.Code.Add((byte)OpCode.CallClosure);
-            ctx.SourceMap[ctx.Code.Count - 5] = invoke.Id;
+            worklist.Push(new EmitWork(invoke, EmitPhase.AfterChildren,
+                Data: totalArgs | (3 << 28)));
+            for (int i = invoke.Arguments.Length - 1; i >= 0; i--)
+                worklist.Push(new EmitWork(invoke.Arguments[i], EmitPhase.Enter));
+            worklist.Push(new EmitWork(invoke.Delegate, EmitPhase.Enter));
         }
     }
 
-    private static void EmitMember(
-        Member member,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
+    private static void EmitMember(Member member, Stack<EmitWork> worklist, ref EmitContext ctx) {
         var resolved = ctx.Analysis?.GetResolvedMember(member);
         if (resolved is ClrTypeProperty { PropertyInfo: var pi, LifetimeModifier: var lm }) {
             bool isStatic = lm == LifetimeModifier.Static;
             var getter = pi.GetGetMethod(nonPublic: true);
             if (getter is null) return;
-            if (!isStatic)
-                Emit(member.Value, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CallSiteCompiler.Compile(getter, isStatic));
             int argCount = isStatic ? 0 : 1;
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(member, EmitPhase.AfterChildren,
+                Data: siteIdx | (argCount << 20) | (1 << 28)));
+            if (!isStatic)
+                worklist.Push(new EmitWork(member.Value, EmitPhase.Enter));
             return;
         }
         if (resolved is ClrTypeField { FieldInfo: var fi, LifetimeModifier: var lm2 }) {
             bool isStatic = lm2 == LifetimeModifier.Static;
-            if (!isStatic)
-                Emit(member.Value, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CallSiteCompiler.CompileFieldGetter(fi, isStatic));
             int argCount = isStatic ? 0 : 1;
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(member, EmitPhase.AfterChildren,
+                Data: siteIdx | (argCount << 20) | (1 << 28)));
+            if (!isStatic)
+                worklist.Push(new EmitWork(member.Value, EmitPhase.Enter));
             return;
         }
     }
 
-    private static void EmitIndexAccess(
-        IndexAccess idx,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
+    private static void EmitIndexAccess(IndexAccess idx, Stack<EmitWork> worklist, ref EmitContext ctx) {
         var resolved = ctx.Analysis?.GetResolvedMember(idx);
         if (resolved is ClrTypeProperty { PropertyInfo: var pi, LifetimeModifier: var lm }) {
             bool isStatic = lm == LifetimeModifier.Static;
             var getter = pi.GetGetMethod(nonPublic: true);
             if (getter is null) return;
-            if (!isStatic)
-                Emit(idx.Value, ref ctx, lambdaState);
-            foreach (var arg in idx.Arguments)
-                Emit(arg, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CallSiteCompiler.Compile(getter, isStatic));
             int argCount = (isStatic ? 0 : 1) + idx.Arguments.Length;
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(idx, EmitPhase.AfterChildren,
+                Data: siteIdx | (argCount << 20) | (1 << 28)));
+            for (int i = idx.Arguments.Length - 1; i >= 0; i--)
+                worklist.Push(new EmitWork(idx.Arguments[i], EmitPhase.Enter));
+            if (!isStatic)
+                worklist.Push(new EmitWork(idx.Value, EmitPhase.Enter));
             return;
         }
         if (resolved is ClrTypeSyntheticProperty { Read: not null, LifetimeModifier: var lm2 }) {
             var synReader = ((ClrTypeSyntheticProperty)resolved).Read!;
             bool isStatic = lm2 == LifetimeModifier.Static;
-            if (!isStatic)
-                Emit(idx.Value, ref ctx, lambdaState);
-            foreach (var arg in idx.Arguments)
-                Emit(arg, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CompileSyntheticGetter(synReader, isStatic, idx.Arguments.Length));
             int argCount = (isStatic ? 0 : 1) + idx.Arguments.Length;
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(idx, EmitPhase.AfterChildren,
+                Data: siteIdx | (argCount << 20) | (1 << 28)));
+            for (int i = idx.Arguments.Length - 1; i >= 0; i--)
+                worklist.Push(new EmitWork(idx.Arguments[i], EmitPhase.Enter));
+            if (!isStatic)
+                worklist.Push(new EmitWork(idx.Value, EmitPhase.Enter));
             return;
         }
     }
 
-    private static void EmitAssignmentMember(
-        Member member, Node value,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
+    private static void EmitAssignmentMember(Member member, Node value, Stack<EmitWork> worklist, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         var resolved = ctx.Analysis?.GetResolvedMember(member);
         if (resolved is ClrTypeProperty { PropertyInfo: var pi, LifetimeModifier: var lm }) {
             bool isStatic = lm == LifetimeModifier.Static;
             var setter = pi.GetSetMethod(nonPublic: true);
             if (setter is null) return;
-            if (!isStatic)
-                Emit(member.Value, ref ctx, lambdaState);
-            Emit(value, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CallSiteCompiler.Compile(setter, isStatic));
             int argCount = (isStatic ? 0 : 1) + 1;
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(member, EmitPhase.AfterChildren,
+                Data: siteIdx | (argCount << 20) | (0 << 28)));
+            worklist.Push(new EmitWork(value, EmitPhase.Enter));
+            if (!isStatic)
+                worklist.Push(new EmitWork(member.Value, EmitPhase.Enter));
             return;
         }
         if (resolved is ClrTypeField { FieldInfo: var fi, LifetimeModifier: var lm2 }) {
             bool isStatic = lm2 == LifetimeModifier.Static;
-            if (!isStatic)
-                Emit(member.Value, ref ctx, lambdaState);
-            Emit(value, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CallSiteCompiler.CompileFieldSetter(fi, isStatic));
             int argCount = (isStatic ? 0 : 1) + 1;
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(member, EmitPhase.AfterChildren,
+                Data: siteIdx | (argCount << 20) | (0 << 28)));
+            worklist.Push(new EmitWork(value, EmitPhase.Enter));
+            if (!isStatic)
+                worklist.Push(new EmitWork(member.Value, EmitPhase.Enter));
             return;
         }
     }
 
-    private static void EmitAssignmentIndexAccess(
-        IndexAccess idx, Node value,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
+    private static void EmitAssignmentIndexAccess(IndexAccess idx, Node value, Stack<EmitWork> worklist, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         var resolved = ctx.Analysis?.GetResolvedMember(idx);
         if (resolved is ClrTypeProperty { PropertyInfo: var pi, LifetimeModifier: var lm }) {
             bool isStatic = lm == LifetimeModifier.Static;
             var setter = pi.GetSetMethod(nonPublic: true);
             if (setter is null) return;
-            if (!isStatic)
-                Emit(idx.Value, ref ctx, lambdaState);
-            foreach (var arg in idx.Arguments)
-                Emit(arg, ref ctx, lambdaState);
-            Emit(value, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CallSiteCompiler.Compile(setter, isStatic));
             int argCount = (isStatic ? 0 : 1) + idx.Arguments.Length + 1;
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(idx, EmitPhase.AfterChildren,
+                Data: siteIdx | (argCount << 20) | (0 << 28)));
+            worklist.Push(new EmitWork(value, EmitPhase.Enter));
+            for (int i = idx.Arguments.Length - 1; i >= 0; i--)
+                worklist.Push(new EmitWork(idx.Arguments[i], EmitPhase.Enter));
+            if (!isStatic)
+                worklist.Push(new EmitWork(idx.Value, EmitPhase.Enter));
             return;
         }
         if (resolved is ClrTypeSyntheticProperty { Write: not null, LifetimeModifier: var lm2 }) {
             var synWriter = ((ClrTypeSyntheticProperty)resolved).Write!;
             bool isStatic = lm2 == LifetimeModifier.Static;
-            if (!isStatic)
-                Emit(idx.Value, ref ctx, lambdaState);
-            foreach (var arg in idx.Arguments)
-                Emit(arg, ref ctx, lambdaState);
-            Emit(value, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CompileSyntheticSetter(synWriter, isStatic, idx.Arguments.Length + 1));
             int argCount = (isStatic ? 0 : 1) + idx.Arguments.Length + 1;
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, argCount);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(idx, EmitPhase.AfterChildren,
+                Data: siteIdx | (argCount << 20) | (0 << 28)));
+            worklist.Push(new EmitWork(value, EmitPhase.Enter));
+            for (int i = idx.Arguments.Length - 1; i >= 0; i--)
+                worklist.Push(new EmitWork(idx.Arguments[i], EmitPhase.Enter));
+            if (!isStatic)
+                worklist.Push(new EmitWork(idx.Value, EmitPhase.Enter));
             return;
         }
     }
 
-    private static void EmitNew(
-        New newExpr,
-        ref EmitContext ctx, LambdaEmitState? lambdaState = null) {
-
+    private static void EmitNew(New newExpr, Stack<EmitWork> worklist, ref EmitContext ctx) {
         var resolved = ctx.Analysis?.GetResolvedMember(newExpr);
         if (resolved is ClrConstructor { ConstructorInfo: var ci }) {
-            foreach (var arg in newExpr.Arguments)
-                Emit(arg, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites?.Count ?? 0;
             ctx.CallSites?.Add(CallSiteCompiler.CompileConstructor(ci));
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, newExpr.Arguments.Length);
-            ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 1);
-            ctx.Code.Add((byte)OpCode.CallExternal); EmitInt32(ctx.Code, siteIdx);
+            worklist.Push(new EmitWork(newExpr, EmitPhase.AfterChildren,
+                Data: siteIdx | (newExpr.Arguments.Length << 20) | (1 << 28)));
+            for (int i = newExpr.Arguments.Length - 1; i >= 0; i--)
+                worklist.Push(new EmitWork(newExpr.Arguments[i], EmitPhase.Enter));
             return;
         }
     }

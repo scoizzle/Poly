@@ -182,14 +182,26 @@ internal static class Vm {
 
                     case OpCode.Div: {
                             var (left, right) = state.Stack.Pop<(int left, int right)>();
-                            if (right == 0) throw new DivideByZeroException("Division by zero");
+                            if (right == 0) {
+                                if (FindRegion(prog.ExceptionRegions, instrPc) is not null) {
+                                    state.Stack.Push(-1);
+                                    goto case OpCode.Throw;
+                                }
+                                throw new DivideByZeroException("Division by zero");
+                            }
                             state.Stack.Push(left / right);
                             break;
                         }
 
                     case OpCode.Mod: {
                             var (left, right) = state.Stack.Pop<(int left, int right)>();
-                            if (right == 0) throw new DivideByZeroException("Division by zero");
+                            if (right == 0) {
+                                if (FindRegion(prog.ExceptionRegions, instrPc) is not null) {
+                                    state.Stack.Push(-1);
+                                    goto case OpCode.Throw;
+                                }
+                                throw new DivideByZeroException("Division by zero");
+                            }
                             state.Stack.Push(left % right);
                             break;
                         }
@@ -604,7 +616,7 @@ internal static class Vm {
         var resultType = prog.ResultType;
         if (resultType is null || resultType == typeof(void)) {
             int val = state.Stack.PopInt();
-            if (val >= 0 && val < state.Heap.Count && state.Heap.Get(val) is not int)
+            if (val > 0 && val < state.Heap.Count && state.Heap.Get(val) is not int)
                 return InterpreterResult.FromValue(state.Heap.Get(val));
             return InterpreterResult.FromValue(val);
         }
@@ -625,8 +637,14 @@ internal static class Vm {
         return InterpreterResult.FromValue(state.Stack.PopInt());
     }
 
+    private static object? ResolveHeapValue(VmState state, int raw) =>
+        raw >= 0 && raw < state.Heap.Count ? state.Heap.Get(raw) : (object?)raw;
+
+    private static bool IsValidHeapHandle(VmState state, int handle) =>
+        handle >= 0 && handle < state.Heap.Count;
+
     private static ExceptionRegion? FindRegion(IReadOnlyList<ExceptionRegion> regions, int pc) {
-        for (int i = regions.Count - 1; i >= 0; i--) {
+        for (int i = 0; i < regions.Count; i++) {
             var r = regions[i];
             if (pc >= r.TryStart && pc < r.TryEnd)
                 return r;

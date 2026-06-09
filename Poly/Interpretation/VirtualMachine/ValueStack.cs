@@ -4,17 +4,10 @@ using System.Runtime.InteropServices;
 
 namespace Poly.Interpretation.VirtualMachine;
 
-internal sealed class ValueStack : IDisposable {
-    private int[] _slots;
-    private readonly int _initialSize;
+internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
+    private int[] _slots = ArrayPool<int>.Shared.Rent(initialSlots);
 
-    public ValueStack(int initialSlots = 256) {
-        _initialSize = initialSlots;
-        _slots = ArrayPool<int>.Shared.Rent(initialSlots);
-        SP = 0;
-    }
-
-    public int SP { get; private set; }
+    public int SP { get; private set; } = 0;
     public bool IsEmpty => SP == 0;
 
     public Span<int> AsSpan() => _slots.AsSpan(0, SP);

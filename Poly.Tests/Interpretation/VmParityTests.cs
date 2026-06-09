@@ -19,6 +19,7 @@ public class VmParityTests {
         var analysis = new AnalyzerBuilder()
             .UseTypeResolver()
             .UseMemberResolver()
+            .UseVariableScopeValidator()
             .Build()
             .Analyze(node);
         var program = Lowering.Lower(node, analysis);
@@ -386,6 +387,213 @@ public class VmParityTests {
         }
         state.Dispose();
         return result;
+    }
+
+    // ─── Tier 1: Gap closure tests ─────────────────────────────────
+
+    [Test]
+    public async Task NotEqual_True_Parity() {
+        await AssertParityInt(new NotEqual(new Constant(1), new Constant(2)), 1);
+    }
+
+    [Test]
+    public async Task NotEqual_False_Parity() {
+        await AssertParityInt(new NotEqual(new Constant(1), new Constant(1)), 0);
+    }
+
+    [Test]
+    public async Task LessThanOrEqual_True_Parity() {
+        await AssertParityInt(new LessThanOrEqual(new Constant(2), new Constant(2)), 1);
+    }
+
+    [Test]
+    public async Task LessThanOrEqual_False_Parity() {
+        await AssertParityInt(new LessThanOrEqual(new Constant(3), new Constant(2)), 0);
+    }
+
+    [Test]
+    public async Task GreaterThanOrEqual_True_Parity() {
+        await AssertParityInt(new GreaterThanOrEqual(new Constant(5), new Constant(5)), 1);
+    }
+
+    [Test]
+    public async Task GreaterThanOrEqual_False_Parity() {
+        await AssertParityInt(new GreaterThanOrEqual(new Constant(2), new Constant(5)), 0);
+    }
+
+    [Test]
+    public async Task GotoStatement_JumpsForward_Parity() {
+        var result = new Variable("result");
+        var body = new Block([
+            new Assignment(result, new Constant(0)),
+            new GotoStatement("skip"),
+            new Assignment(result, new Constant(99)),
+            new LabelDeclaration("skip", new Constant(0)),
+            new Variable("result")
+        ], [result]);
+        var vm = EvaluateVm(new Invoke(new Lambda([], body), []));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ContinueStatement_InWhileLoop_Parity() {
+        var i = new Variable("i");
+        var sum = new Variable("sum");
+        var body = new Block([
+            new Assignment(i, new Constant(0)),
+            new Assignment(sum, new Constant(0)),
+            new WhileLoop(
+                new LessThan(new Variable("i"), new Constant(5)),
+                new Block([
+                    new Assignment(i, new Add(new Variable("i"), new Constant(1))),
+                    new IfStatement(new Equal(new Variable("i"), new Constant(3)), new ContinueStatement()),
+                    new Assignment(sum, new Add(new Variable("sum"), new Constant(1)))
+                ])),
+            new Variable("sum")
+        ], [i, sum]);
+        var vm = EvaluateVm(new Invoke(new Lambda([], body), []));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task LabeledBreak_ExitsNamedLoop_Parity() {
+        var i = new Variable("i");
+        var body = new Block([
+            new Assignment(i, new Constant(0)),
+            new LabelDeclaration("outer",
+                new WhileLoop(new Constant(1),
+                    new Block([
+                        new Assignment(i, new Add(new Variable("i"), new Constant(1))),
+                        new IfStatement(new Equal(new Variable("i"), new Constant(3)),
+                            new BreakStatement("outer"))
+                    ]))),
+            new Variable("i")
+        ], [i]);
+        var vm = EvaluateVm(new Invoke(new Lambda([], body), []));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task TryCatchFinally_TryBlock_NoThrow_Parity() {
+        var vm = EvaluateVm(new TryCatchFinally(
+            new Add(new Constant(3), new Constant(4)),
+            [new CatchClause(null, "ex", new Constant(99))]));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(7);
+    }
+
+    [Test]
+    public async Task TryCatchFinally_FinallyBlock_RunsOnThrow_Parity() {
+        var flag = new Variable("flag");
+        var body = new Block([
+            new Assignment(flag, new Constant(0)),
+            new TryCatchFinally(
+                new ThrowStatement(new Constant(-1)),
+                null,
+                new Assignment(flag, new Constant(1))),
+            new Variable("flag")
+        ], [flag]);
+        var exResult = EvaluateVm(new Invoke(new Lambda([], body), []));
+        await Assert.That(exResult.IsSignal).IsTrue();
+        await Assert.That(exResult.Signal?.Kind).IsEqualTo(InterpreterSignal.SignalKind.Throw);
+    }
+
+    [Test]
+    public async Task ForEachLoop_OverList_IteratesAll_Parity() {
+        var x = new Variable("x");
+        var body = new Block([
+            new Assignment(x, new Constant(0)),
+            new ForEachLoop(x, new Constant(new List<int> { 10, 20, 30 }), new Variable("x")),
+            new Variable("x")
+        ], [x]);
+        var vm = EvaluateVm(new Invoke(new Lambda([], body), []));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(30);
+    }
+
+    [Test]
+    public async Task UsingStatement_DisposesResource_Parity() {
+        var disposed = false;
+        var resource = new DisposableResource(() => disposed = true);
+        var body = new Block([
+            new UsingStatement(new Constant(resource), new Constant(42))
+        ]);
+        var vm = EvaluateVm(new Invoke(new Lambda([], body), []));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(42);
+        await Assert.That(disposed).IsTrue();
+    }
+
+    [Test]
+    public async Task ThrowStatement_DirectThrow_Signals_Parity() {
+        var vm = EvaluateVm(new ThrowStatement(new Constant(-1)));
+        await Assert.That(vm.IsSignal).IsTrue();
+        await Assert.That(vm.Signal?.Kind).IsEqualTo(InterpreterSignal.SignalKind.Throw);
+    }
+
+    [Test]
+    public async Task SwitchStatement_MatchesCorrectCase_Parity() {
+        var vm = EvaluateVm(new SwitchStatement(
+            new Constant(2),
+            [
+                new SwitchCase(new Constant(1), new Constant(10)),
+                new SwitchCase(new Constant(2), new Constant(20)),
+                new SwitchCase(new Constant(3), new Constant(30)),
+            ]));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(20);
+    }
+
+    [Test]
+    public async Task SwitchStatement_DefaultCase_Parity() {
+        var vm = EvaluateVm(new SwitchStatement(
+            new Constant(99),
+            [
+                new SwitchCase(new Constant(1), new Constant(10)),
+                new SwitchCase(new Constant(2), new Constant(20)),
+            ],
+            new Constant(99)));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(99);
+    }
+
+    [Test]
+    public async Task SwitchStatement_NoMatchNoDefault_ReturnsVoid_Parity() {
+        var vm = EvaluateVm(new SwitchStatement(
+            new Constant(99),
+            [
+                new SwitchCase(new Constant(1), new Constant(10)),
+            ]));
+        await Assert.That(vm.HasValue).IsFalse();
+    }
+
+    [Test]
+    public async Task Lambda_ClosureCapture_ReadsUpvalue_Parity() {
+        var outer = new Variable("outer");
+        var body = new Block([
+            new Assignment(outer, new Constant(42)),
+            new Invoke(new Lambda([], new Variable("outer")), [])
+        ], [outer]);
+        var vm = EvaluateVm(new Invoke(new Lambda([], body), []));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task New_ConstructsObject_Parity() {
+        var sb = new System.Text.StringBuilder("hello");
+        var vm = EvaluateVm(new Member(new Constant(sb), "Length"));
+        await Assert.That(vm.HasValue).IsTrue();
+        await Assert.That(vm.Value).IsEqualTo(5);
+    }
+
+    // ─── Optimizer tests ──────────────────────────────────────────
+
+    private sealed class DisposableResource(Action onDispose) : IDisposable {
+        public void Dispose() => onDispose();
     }
 
 #if DEBUG

@@ -1,11 +1,6 @@
 namespace Poly.Interpretation.VirtualMachine;
 
-internal sealed class Closure {
-    public int FuncIndex { get; }
-    public object?[] Captures { get; }
-
-    public Closure(int funcIndex, int captureCount) {
-        FuncIndex = funcIndex;
-        Captures = new object?[captureCount];
-    }
+internal sealed class Closure(int funcIndex, int captureCount) {
+    public int FuncIndex { get; } = funcIndex;
+    public object?[] Captures { get; } = new object?[captureCount];
 }

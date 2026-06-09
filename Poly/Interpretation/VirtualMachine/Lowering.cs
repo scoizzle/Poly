@@ -284,10 +284,70 @@ internal static class Lowering {
 
         ResolveAllJumps(ctx.Code, ctx.Labels!);
 
+#if DEBUG
+        ValidateStackDepth([.. ctx.Code], ctx.Functions, ctx.SourceMap, analysis);
+#endif
+
         Type? resultType = analysis?.GetResolvedType(root)?.GetRuntimeType();
         if (resultType == typeof(object)) resultType = null;
         return new Bytecode([.. ctx.Code], ctx.SourceMap, ctx.Functions, ctx.Constants, ctx.CallSites, ctx.Labels!.ExceptionRegions, resultType);
     }
+
+#if DEBUG
+    private static void ValidateStackDepth(byte[] code, IReadOnlyList<FunctionEntry> functions,
+        Dictionary<int, NodeId> sourceMap, AnalysisResult analysis) {
+        // Walk each function's bytecode and track expected stack depth.
+        for (int f = 0; f < functions.Count; f++) {
+            var entry = functions[f];
+            int pc = entry.PC;
+            int endPc = f + 1 < functions.Count ? functions[f + 1].PC : code.Length - 1;
+            // Skip past the trailing Return
+            if (endPc > pc && code[endPc] == (byte)OpCode.Return) endPc--;
+
+            int depth = 0;
+            bool seenIssue = false;
+            while (pc < endPc && !seenIssue) {
+                // Check stack depth for this instruction
+                if (depth < 0) {
+                    Console.Error.WriteLine($"Stack underflow at PC={pc} in function {f}");
+                    seenIssue = true;
+                    break;
+                }
+
+                var op = (OpCode)code[pc];
+                (int push, int pop) = op switch {
+                    OpCode.Nop or OpCode.Dup or OpCode.Pop or OpCode.Not
+                        or OpCode.Return or OpCode.EndFinally or OpCode.Throw => (0, 0),
+                    OpCode.PushInt or OpCode.PushLong or OpCode.PushDouble or OpCode.LoadConst
+                        or OpCode.LoadArg or OpCode.LoadLocal or OpCode.LoadUpvalue => (1, 0),
+                    OpCode.StoreArg or OpCode.StoreLocal or OpCode.StoreUpvalue => (0, 1),
+                    OpCode.Add or OpCode.Sub or OpCode.Mul or OpCode.Div or OpCode.Mod
+                        or OpCode.Eq or OpCode.Ne or OpCode.Lt or OpCode.Le or OpCode.Gt or OpCode.Ge
+                        or OpCode.UDiv or OpCode.UMod
+                        or OpCode.ULt or OpCode.ULe or OpCode.UGt or OpCode.UGe
+                        or OpCode.DAdd or OpCode.DSub or OpCode.DMul or OpCode.DDiv
+                        or OpCode.DEq or OpCode.DNe or OpCode.DLt or OpCode.DLe or OpCode.DGt or OpCode.DGe
+                        or OpCode.IsNull or OpCode.JumpIfFalse => (0, 1), // pop condition, no direct push
+                    OpCode.Jump or OpCode.Iret => (0, 0),
+                    OpCode.Call => (1, 1), // simplified: pop 1 (arg count), push 1 (result)
+                    OpCode.AllocateClosure => (1, 1), // pops captures, pushes handle
+                    OpCode.CallClosure => (0, 1), // pops closure + args, pushes result
+                    OpCode.StrConcat => (1, 1), // pops count, pops strings, pushes result
+                    OpCode.EnumeratorMoveNext => (0, 1), // pops handle, pushes bool
+                    OpCode.Int => (0, 0),
+                    OpCode.Narrow or OpCode.Neg or OpCode.DNeg => (0, 0),
+                    OpCode.LoadValue or OpCode.StoreValue or OpCode.CallExternal => (0, 0),
+                    _ => (0, 0),
+                };
+                depth += push - pop;
+                pc += InstructionLength(code, pc);
+            }
+            if (!seenIssue && depth != entry.RetBytes && entry.PC >= 0) {
+                Console.Error.WriteLine($"Function {f}: final stack depth {depth} != RetBytes {entry.RetBytes}");
+            }
+        }
+    }
+#endif
 
     private sealed class LabelContext {
         public Dictionary<string, int> Targets = new();
@@ -1674,6 +1734,29 @@ internal static class Lowering {
                 if (value is int iv) state.Stack.Push(iv);
                 else state.Stack.Push(state.Heap.Allocate(value));
             }
+        };
+    }
+
+    private static int InstructionLength(byte[] code, int pc) {
+        var op = (OpCode)code[pc];
+        return op switch {
+            OpCode.Nop or OpCode.Dup or OpCode.Pop or OpCode.Not or OpCode.Return
+                or OpCode.EndFinally or OpCode.Throw or OpCode.IsNull or OpCode.CallClosure
+                or OpCode.LoadValue or OpCode.StoreValue
+                or OpCode.Add or OpCode.Sub or OpCode.Mul or OpCode.Div or OpCode.Mod or OpCode.Neg
+                or OpCode.UDiv or OpCode.UMod
+                or OpCode.Eq or OpCode.Ne or OpCode.Lt or OpCode.Le or OpCode.Gt or OpCode.Ge
+                or OpCode.ULt or OpCode.ULe or OpCode.UGt or OpCode.UGe
+                or OpCode.DAdd or OpCode.DSub or OpCode.DMul or OpCode.DDiv or OpCode.DNeg
+                or OpCode.DEq or OpCode.DNe or OpCode.DLt or OpCode.DLe or OpCode.DGt or OpCode.DGe
+                or OpCode.StrConcat or OpCode.EnumeratorMoveNext => 1,
+            OpCode.PushInt or OpCode.Narrow or OpCode.Jump or OpCode.JumpIfFalse
+                or OpCode.Call or OpCode.CallExternal or OpCode.StoreArg
+                or OpCode.LoadArg or OpCode.LoadLocal or OpCode.StoreLocal
+                or OpCode.LoadConst or OpCode.Int or OpCode.Iret
+                or OpCode.LoadUpvalue or OpCode.StoreUpvalue => 5,
+            OpCode.PushLong or OpCode.PushDouble or OpCode.AllocateClosure => 9,
+            _ => 1,
         };
     }
 

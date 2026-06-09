@@ -20,6 +20,7 @@ public static class NodeTestHelpers {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseLambdaReturnTypeResolution()
+            .UseStackDepthAnalysis()
             .Build();
     }
 

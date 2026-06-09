@@ -141,6 +141,10 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
         Return => true,
         IndexAccess => true,
         New => true,
+        WhileLoop or DoWhileLoop or ForLoop or ForEachLoop => true,
+        IfStatement or SwitchStatement or ThrowStatement or Invoke or Await => true,
+        TryCatchFinally or UsingStatement => true,
+        BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration => true,
         _ => false
     };
 }

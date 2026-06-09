@@ -259,6 +259,20 @@ internal static class Lowering {
             ctx.ParamIndexMap = paramIndexMap;
             ctx.LocalIndexMap = localIndexMap;
             ctx.UpvalueMap = upvalueMap;
+
+            // Zero-init locals that aren't definitely assigned
+            var daMeta = ctx.Analysis.GetMetadata<DefiniteAssignmentMetadata>(lambda.Body);
+            if (daMeta is not null) {
+                var definitelyAssigned = daMeta.DefinitelyAssigned;
+                for (int zi = 0; zi < localIndexMap.Count; zi++) {
+                    string? name = localIndexMap.FirstOrDefault(kv => kv.Value == zi).Key;
+                    if (name is not null && !definitelyAssigned.Contains(name)) {
+                        ctx.Code.Add((byte)OpCode.PushInt); EmitInt32(ctx.Code, 0);
+                        ctx.Code.Add((byte)OpCode.StoreLocal); EmitInt32(ctx.Code, zi);
+                    }
+                }
+            }
+
             if (lambda.Body is not null) {
                 var bodyLambdaState = new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, upvalueMap);
                 var lambdaWorklist = new Stack<EmitWork>();

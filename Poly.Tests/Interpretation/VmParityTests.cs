@@ -23,6 +23,7 @@ public class VmParityTests {
             .UseSideEffectAnalysis()
             .UseLambdaReturnTypeResolution()
             .UseStackDepthAnalysis()
+            .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);
         var program = Lowering.Lower(node, analysis);
@@ -377,6 +378,7 @@ public class VmParityTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseStackDepthAnalysis()
+            .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);
         var program = Lowering.Lower(node, analysis);

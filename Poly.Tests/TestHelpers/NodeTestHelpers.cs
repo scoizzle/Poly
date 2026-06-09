@@ -21,6 +21,7 @@ public static class NodeTestHelpers {
             .UseSideEffectAnalysis()
             .UseLambdaReturnTypeResolution()
             .UseStackDepthAnalysis()
+            .UseDefiniteAssignmentAnalysis()
             .Build();
     }
 

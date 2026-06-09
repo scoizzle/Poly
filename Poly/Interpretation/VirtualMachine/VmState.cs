@@ -13,7 +13,6 @@ internal sealed class VmState : IDisposable {
     public int FrameBase { get; set; } = -1;
 
     public AnalysisResult? AnalysisResult { get; internal set; }
-    public HashSet<int>? BreakpointPCs { get; set; }
 
     public InterpreterStatus Status { get; internal set; } = InterpreterStatus.Running;
     public InterpreterResult? LastResult { get; private set; }
@@ -48,6 +47,7 @@ internal sealed class VmState : IDisposable {
 
     public bool IsComplete => Status == InterpreterStatus.Completed;
     public bool IsSuspended => Status == InterpreterStatus.Suspended;
+    public bool ShouldStop => Status != InterpreterStatus.Running;
 
     public void Complete(InterpreterResult result) {
         Status = InterpreterStatus.Completed;

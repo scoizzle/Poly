@@ -4,8 +4,12 @@ using Poly.Interpretation;
 
 namespace Poly.Interpretation.VirtualMachine;
 
+// Define VM_TRACE to enable per-instruction execution trace output.
+// Enable via <DefineConstants>VM_TRACE</DefineConstants> in the .csproj.
 internal static class Vm {
+#if VM_TRACE
     private static readonly string[] OpcodeNames = Enum.GetNames<OpCode>();
+#endif
 
     public static InterpreterResult Execute(VmState state) {
         if (state.Program is null) {
@@ -17,7 +21,7 @@ internal static class Vm {
         var code = prog.Code;
         state.Status = InterpreterStatus.Running;
 
-#if DEBUG
+#if VM_TRACE
         var trace = state.Trace;
         if (trace is not null)
             state.Heap.OnAllocate = (handle, value) => {
@@ -37,17 +41,18 @@ internal static class Vm {
 
         int pc = state.PC;
         const int MaxSteps = 100_000;
+        const int StepCheckInterval = 256;
         int steps = 0;
 
         try {
-            while (pc < code.Length && !state.IsSuspended && !state.IsComplete) {
-                if (++steps > MaxSteps)
+            while (pc < code.Length && !state.ShouldStop) {
+                if ((steps++ & (StepCheckInterval - 1)) == 0 && steps > MaxSteps)
                     throw new InvalidOperationException("Max instruction steps exceeded (possible infinite loop in IR)");
 
-                int instrPc = pc;
                 var op = (OpCode)code[pc++];
 
-#if DEBUG
+#if VM_TRACE
+                int instrPc = pc - 1;
                 if (trace is not null) {
                     string opName = (int)op < OpcodeNames.Length ? OpcodeNames[(int)op] : $"0x{(int)op:X2}";
                     string nodeInfo = "";
@@ -59,12 +64,6 @@ internal static class Vm {
                     trace.WriteLine($"PC:{instrPc:D4}{nodeInfo} {opName,-14} {state.FormatStack()}");
                 }
 #endif
-
-                if (state.BreakpointPCs is not null && state.BreakpointPCs.Contains(instrPc)) {
-                    state.SavedPC = pc;
-                    state.Status = InterpreterStatus.Suspended;
-                    return InterpreterResult.Suspend();
-                }
 
                 switch (op) {
                     case OpCode.Nop:
@@ -163,27 +162,27 @@ internal static class Vm {
                         }
 
                     case OpCode.Add: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left + right);
                             break;
                         }
 
                     case OpCode.Sub: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left - right);
                             break;
                         }
 
                     case OpCode.Mul: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left * right);
                             break;
                         }
 
                     case OpCode.Div: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             if (right == 0) {
-                                if (FindRegion(prog.ExceptionRegions, instrPc) is not null) {
+                                if (prog.ExceptionRegions.Count > 0 && FindRegion(prog.ExceptionRegions, pc - 1) is not null) {
                                     state.Stack.Push(-1);
                                     goto case OpCode.Throw;
                                 }
@@ -194,9 +193,9 @@ internal static class Vm {
                         }
 
                     case OpCode.Mod: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             if (right == 0) {
-                                if (FindRegion(prog.ExceptionRegions, instrPc) is not null) {
+                                if (prog.ExceptionRegions.Count > 0 && FindRegion(prog.ExceptionRegions, pc - 1) is not null) {
                                     state.Stack.Push(-1);
                                     goto case OpCode.Throw;
                                 }
@@ -227,37 +226,37 @@ internal static class Vm {
                         }
 
                     case OpCode.Eq: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left == right ? 1 : 0);
                             break;
                         }
 
                     case OpCode.Ne: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left != right ? 1 : 0);
                             break;
                         }
 
                     case OpCode.Lt: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left < right ? 1 : 0);
                             break;
                         }
 
                     case OpCode.Le: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left <= right ? 1 : 0);
                             break;
                         }
 
                     case OpCode.Gt: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left > right ? 1 : 0);
                             break;
                         }
 
                     case OpCode.Ge: {
-                            var (left, right) = state.Stack.Pop<(int left, int right)>();
+                            var (left, right) = state.Stack.PopTwo();
                             state.Stack.Push(left >= right ? 1 : 0);
                             break;
                         }
@@ -508,7 +507,7 @@ internal static class Vm {
                                 closure.Captures[i] = state.Stack.PopInt();
                             int handle = state.Heap.Allocate(closure);
                             state.Stack.Push(handle);
-#if DEBUG
+#if VM_TRACE
                             if (trace is not null)
                                 trace.WriteLine($"  → alloc Closure[#{handle}] func={funcIndex} captures={captureCount}");
 #endif
@@ -581,12 +580,12 @@ internal static class Vm {
                             break;
                         }
 
-                    case OpCode.BitAnd: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l & r); break; }
-                    case OpCode.BitOr: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l | r); break; }
-                    case OpCode.BitXor: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l ^ r); break; }
                     case OpCode.BitNot: { int v = state.Stack.PopInt(); state.Stack.Push(~v); break; }
-                    case OpCode.ShiftLeft: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l << r); break; }
-                    case OpCode.ShiftRight: { var (l, r) = state.Stack.Pop<(int, int)>(); state.Stack.Push(l >> r); break; }
+                    case OpCode.BitAnd: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l & r); break; }
+                    case OpCode.BitOr: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l | r); break; }
+                    case OpCode.BitXor: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l ^ r); break; }
+                    case OpCode.ShiftLeft: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l << r); break; }
+                    case OpCode.ShiftRight: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l >> r); break; }
                     case OpCode.LBitAnd: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l & r); break; }
                     case OpCode.LBitOr: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l | r); break; }
                     case OpCode.LBitXor: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l ^ r); break; }
@@ -664,8 +663,10 @@ internal static class Vm {
         return null;
     }
 
+#if VM_TRACE
     private static string TruncateTrace(string s, int maxLen = 50) =>
         s.Length <= maxLen ? s : s[..(maxLen - 3)] + "...";
+#endif
 
     private static int ReadInt32(byte[] code, ref int pc) {
         int val = code[pc] | (code[pc + 1] << 8) | (code[pc + 2] << 16) | (code[pc + 3] << 24);

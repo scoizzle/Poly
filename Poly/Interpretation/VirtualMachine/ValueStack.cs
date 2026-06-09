@@ -28,10 +28,42 @@ internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
         return MemoryMarshal.Read<T>(MemoryMarshal.AsBytes(_slots.AsSpan(SP, slots)));
     }
 
-    public void Push(int value) => Push<int>(value);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Push(int value) {
+        if (SP < _slots.Length) { _slots[SP++] = value; return; }
+        GrowNoInline(value);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void GrowNoInline(int value) { Grow(); _slots[SP++] = value; }
+
     public void Push(long value) => Push<long>(value);
-    public int PopInt() => Pop<int>();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int PopInt() {
+        if (SP > 0) return _slots[--SP];
+        return ThrowUnderflow<int>();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private T ThrowUnderflow<T>() => throw new InvalidOperationException("Stack underflow");
+
     public long PopLong() => Pop<long>();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void PushTwo(int low, int high) {
+        if (SP + 1 < _slots.Length) { _slots[SP++] = low; _slots[SP++] = high; return; }
+        GrowNoInline(low, high);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void GrowNoInline(int low, int high) { Grow(); _slots[SP++] = low; _slots[SP++] = high; }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public (int low, int high) PopTwo() {
+        if (SP >= 2) { int h = _slots[--SP]; int l = _slots[--SP]; return (l, h); }
+        return ThrowUnderflow<(int, int)>();
+    }
 
     public void Drop(int slots) {
         if (slots < 0 || SP < slots)
@@ -45,12 +77,10 @@ internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
         SP = targetSp;
     }
 
-    public Span<int> Reserve(int slots) {
+    public void Reserve(int slots) {
         if (SP + slots > _slots.Length)
             Grow();
-        var span = _slots.AsSpan(SP, slots);
         SP += slots;
-        return span;
     }
 
     public int PeekInt(int offset = 0) {

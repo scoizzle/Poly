@@ -1,8 +1,10 @@
 using System.Linq.Expressions;
 
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Jobs;
 
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
@@ -16,15 +18,40 @@ namespace Poly.Benchmarks;
 
 [MemoryDiagnoser]
 public class InterpreterBenchmarks {
-    private Node? _poly, _polyParam, _clrChain, _clrSimple, _nested100;
+    // ─── Polynomial: 3*5*5*5 + 2*5*5 + 5 + 5 = 435 ───
+
+    private Node? _poly;
+    private Bytecode? _progPoly;
+    private Func<object?>? _linqPolyJit, _linqPolyInterp;
+
+    // ─── Parameterized: 3*x*x*x + 2*x*x + x + 5, x=5 ───
+
     private Parameter? _polyX;
-    private Bytecode? _progPoly, _progClrChain, _progClrSimple, _progNested;
-    private Func<object?>? _linqPoly, _linqInterpPoly;
-    private Func<int, int>? _linqPolyJit, _linqPolyInterp;
+    private Node? _polyParam;
+    private Func<int, int>? _linqPolyJitParam, _linqPolyInterpParam;
+
+    // ─── Parameterized via VM lambda ───
+
+    private Node? _polyParamLambda;
+    private Bytecode? _progPolyParam;
+
+    // ─── CLR: Math.Max(Math.Min(100, 200), 50) = 100 ───
+
+    private Node? _clrSimple;
+    private Bytecode? _progClrSimple;
+
+    // ─── CLR chain: Math.Pow(Max(Min(100,200),50), 2) = 10000 ───
+
+    private Node? _clrChain;
+    private Bytecode? _progClrChain;
+
+    // ─── Nested add: 1+...+100 = 5050 ───
+
+    private Node? _nested100;
+    private Bytecode? _progNested;
 
     [GlobalSetup]
     public void Setup() {
-        // Constant polynomial for RISC VM: 3*5*5*5 + 2*5*5 + 5 + 5 = 435
         _poly = new Add(
             new Add(
                 new Add(
@@ -37,7 +64,6 @@ public class InterpreterBenchmarks {
             new Constant(5)
         );
 
-        // Parameterized polynomial: 3*x*x*x + 2*x*x + x + 5, x=5 => 435
         _polyX = new Parameter("x", new TypeReference(typeof(int).FullName!));
         _polyParam = new Add(
             new Add(
@@ -51,7 +77,6 @@ public class InterpreterBenchmarks {
             new Constant(5)
         );
 
-        // CLR chain: Math.Max(Math.Min(100, 200), 50)  (nested CLR calls)
         _clrSimple = new Invoke(
             new Member(new TypeReference(typeof(Math).FullName!), nameof(Math.Max)),
             new Invoke(
@@ -61,105 +86,122 @@ public class InterpreterBenchmarks {
             new Constant(50)
         );
 
-        // CLR chain: Math.Pow(Math.Max(Math.Min(100,200), 50), 2) = 10000
         _clrChain = new Invoke(
             new Member(new TypeReference(typeof(Math).FullName!), nameof(Math.Pow)),
             _clrSimple, new Constant(2)
         );
 
-        // 1+2+...+100 = 5050  (deep arithmetic)
         _nested100 = NestedAdd(100);
 
-        // Pre-lower RISC programs
+        // Parameterized VM: wrap in a lambda so the VM can pass the argument
+        _polyParamLambda = new Invoke(new Lambda([_polyX!], _polyParam!), new Constant(5));
+
+        // Pre-lower VM programs
         _progPoly = Lower(_poly);
+        _progPolyParam = Lower(_polyParamLambda);
         _progClrChain = Lower(_clrChain);
         _progClrSimple = Lower(_clrSimple);
         _progNested = Lower(_nested100);
 
-        // Pre-compile LINQ delegates (pure arithmetic only)
-        _linqPoly = CompileToFunc(_poly, false);
-        _linqInterpPoly = CompileToFunc(_poly, true);
+        // Pre-compile LINQ delegates
+        _linqPolyJit = CompileToFunc(_poly, preferInterpretation: false);
+        _linqPolyInterp = CompileToFunc(_poly, preferInterpretation: true);
 
-        // Parameterized LINQ delegates
         var paramAnalysis = Analyze(_polyParam!);
         var gen = new LinqExpressionGenerator(paramAnalysis);
-        _linqPolyJit = gen.CompileAsDelegate<Func<int, int>>(_polyParam!, _polyX!);
-        _linqPolyInterp = (Func<int, int>)gen
+        _linqPolyJitParam = gen.CompileAsDelegate<Func<int, int>>(_polyParam!, _polyX!);
+        _linqPolyInterpParam = (Func<int, int>)gen
             .CompileAsLambda(_polyParam!, _polyX!)
             .Compile(preferInterpretation: true);
     }
 
-    // ───────── Polynomial (constant): 3*5*5*5 + 2*5*5 + 5 + 5 = 435 ─────────
+    // ═══════════════════════════════════════════════════════════
+    // 1. Constant polynomial: compute 435
+    // ═══════════════════════════════════════════════════════════
+
+    [Benchmark(Baseline = true)]
+    public int Baseline_Poly() => 3 * 5 * 5 * 5 + 2 * 5 * 5 + 5 + 5;
 
     [Benchmark]
     public object? Vm_Poly() {
-        using var state = new VmState();
-        state.Program = _progPoly;
+        using var state = new VmState { Program = _progPoly };
         return Vm.Execute(state).Value;
     }
 
     [Benchmark]
-    public object? TreeWalk_PolyParam() {
-        using var state = new VmState();
-        state.Program = _progPoly;
+    public object? LinqJit_Poly() => _linqPolyJit!();
+
+    [Benchmark]
+    public object? LinqInterp_Poly() => _linqPolyInterp!();
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. Parameterized polynomial: compute 3*5^3 + 2*5^2 + 5 + 5 = 435
+    // ═══════════════════════════════════════════════════════════
+
+    [Benchmark]
+    public int Baseline_PolyParam() {
+        int x = 5;
+        return 3 * x * x * x + 2 * x * x + x + 5;
+    }
+
+    [Benchmark]
+    public object? Vm_PolyParam() {
+        using var state = new VmState { Program = _progPolyParam };
         return Vm.Execute(state).Value;
     }
 
     [Benchmark]
-    public object? LinqJit_PolyParam() => _linqPolyJit!(5);
+    public int LinqJit_PolyParam() => _linqPolyJitParam!(5);
 
     [Benchmark]
-    public object? LinqInterp_PolyParam() => _linqPolyInterp!(5);
+    public int LinqInterp_PolyParam() => _linqPolyInterpParam!(5);
 
-    // ───────── CLR: Math.Max(Math.Min(100, 200), 50) = 100 ─────────
+    // ═══════════════════════════════════════════════════════════
+    // 3. CLR simple: Math.Max(Math.Min(100, 200), 50) = 100
+    // ═══════════════════════════════════════════════════════════
 
     [Benchmark]
-    public object? TreeWalk_ClrSimple() {
-        using var state = new VmState();
-        state.Program = _progClrSimple;
-        return Vm.Execute(state).Value;
-    }
+    public int Baseline_ClrSimple() => Math.Max(Math.Min(100, 200), 50);
 
     [Benchmark]
     public object? Vm_ClrSimple() {
-        using var state = new VmState();
-        state.Program = _progClrSimple;
+        using var state = new VmState { Program = _progClrSimple };
         return Vm.Execute(state).Value;
     }
 
-    // ───────── CLR chain: Math.Pow(Max(Min(100,200),50), 2) = 10000 ─────────
+    // ═══════════════════════════════════════════════════════════
+    // 4. CLR chain: Math.Pow(max(min(100,200),50), 2) = 10000
+    // ═══════════════════════════════════════════════════════════
 
     [Benchmark]
-    public object? TreeWalk_ClrChain() {
-        using var state = new VmState();
-        state.Program = _progClrChain;
-        return Vm.Execute(state).Value;
-    }
+    public double Baseline_ClrChain() => Math.Pow(Math.Max(Math.Min(100, 200), 50), 2);
 
     [Benchmark]
     public object? Vm_ClrChain() {
-        using var state = new VmState();
-        state.Program = _progClrChain;
+        using var state = new VmState { Program = _progClrChain };
         return Vm.Execute(state).Value;
     }
 
-    // ───────── Nested add: 1+...+100 = 5050 ─────────
+    // ═══════════════════════════════════════════════════════════
+    // 5. Nested add: 1+2+...+100 = 5050
+    // ═══════════════════════════════════════════════════════════
 
     [Benchmark]
-    public object? TreeWalk_Nested100() {
-        using var state = new VmState();
-        state.Program = _progNested;
-        return Vm.Execute(state).Value;
+    public int Baseline_Nested100() {
+        int s = 0;
+        for (int i = 1; i <= 100; i++) s += i;
+        return s;
     }
 
     [Benchmark]
     public object? Vm_Nested100() {
-        using var state = new VmState();
-        state.Program = _progNested;
+        using var state = new VmState { Program = _progNested };
         return Vm.Execute(state).Value;
     }
 
-    // ───────── Helpers ─────────
+    // ═══════════════════════════════════════════════════════════
+    // Helpers
+    // ═══════════════════════════════════════════════════════════
 
     private static AnalysisResult Analyze(Node node) {
         return new AnalyzerBuilder()

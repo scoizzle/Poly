@@ -721,6 +721,7 @@ public class VmParityTests {
         await Assert.That(result.Value).IsEqualTo(eResult.Value);
     }
 
+#if VM_TRACE
     [Test]
     public async Task Vm_Tracing_ProducesOutput() {
         var sw = new StringWriter();
@@ -742,5 +743,6 @@ public class VmParityTests {
             throw;
         }
     }
-#endif
+#endif // VM_TRACE
+#endif // DEBUG
 }

@@ -9,23 +9,21 @@ internal static class CallSiteCompiler {
     public static CallSiteDelegate Compile(MethodInfo method, bool isStatic) {
         var paramInfos = method.GetParameters();
         var returnType = method.ReturnType;
-        bool hasReturn = returnType != typeof(void);
+        int argSlots = paramInfos.Length + (isStatic ? 0 : 1);
+        int hasRet = returnType != typeof(void) ? 1 : 0;
 
         var s = Expression.Parameter(typeof(VmState), "s");
         var stack = Expression.Property(s, "Stack");
-        var popInt = typeof(ValueStack).GetMethod("PopInt")!;
         var pushInt = typeof(ValueStack).GetMethod("Push", [typeof(int)])!;
 
-        var argSlotsV = Expression.Variable(typeof(int), "argSlots");
-        var hasRetV = Expression.Variable(typeof(int), "hasRet");
         var baseOffV = Expression.Variable(typeof(int), "baseOff");
 
-        var body = new List<Expression>();
-
-        body.Add(Expression.Assign(hasRetV, Expression.Call(stack, popInt)));
-        body.Add(Expression.Assign(argSlotsV, Expression.Call(stack, popInt)));
-        body.Add(Expression.Assign(baseOffV,
-            Expression.Subtract(Expression.Property(stack, "SP"), argSlotsV)));
+        var body = new List<Expression>
+        {
+            Expression.Assign(baseOffV,
+            Expression.Subtract(Expression.Property(stack, "SP"),
+                Expression.Constant(argSlots)))
+        };
 
         int paramCount = paramInfos.Length + (isStatic ? 0 : 1);
         var rawArgs = new Expression[paramCount];
@@ -55,50 +53,43 @@ internal static class CallSiteCompiler {
             ? Expression.Call(method, typedArgs)
             : Expression.Call(typedArgs[0], method, typedArgs.Skip(1));
 
-        if (hasReturn) {
+        if (returnType != typeof(void)) {
             var resultV = Expression.Variable(returnType, "result");
             body.Add(Expression.Assign(resultV, callExpr));
 
-            body.Add(Expression.IfThen(
-                Expression.GreaterThan(argSlotsV, Expression.Constant(0)),
-                Expression.Call(stack, "Drop", Type.EmptyTypes, argSlotsV)));
+            if (argSlots > 0)
+                body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
 
-            body.Add(Expression.IfThen(
-                Expression.NotEqual(hasRetV, Expression.Constant(0)),
-                Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s))));
+            if (hasRet != 0)
+                body.Add(Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s)));
 
-            var vars = new[] { hasRetV, argSlotsV, baseOffV, resultV };
-            return Expression.Lambda<CallSiteDelegate>(Expression.Block(vars, body), s).Compile();
+            return Expression.Lambda<CallSiteDelegate>(
+                Expression.Block([baseOffV, resultV], body), s).Compile();
         }
 
         body.Add(callExpr);
-        body.Add(Expression.IfThen(
-            Expression.GreaterThan(argSlotsV, Expression.Constant(0)),
-            Expression.Call(stack, "Drop", Type.EmptyTypes, argSlotsV)));
+        if (argSlots > 0)
+            body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
 
-        var svars = new[] { hasRetV, argSlotsV, baseOffV };
-        return Expression.Lambda<CallSiteDelegate>(Expression.Block(svars, body), s).Compile();
+        return Expression.Lambda<CallSiteDelegate>(
+            Expression.Block([baseOffV], body), s).Compile();
     }
 
     public static CallSiteDelegate CompileConstructor(ConstructorInfo ctor) {
         var paramInfos = ctor.GetParameters();
         var returnType = ctor.DeclaringType ?? typeof(object);
+        int argSlots = paramInfos.Length;
 
         var s = Expression.Parameter(typeof(VmState), "s");
         var stack = Expression.Property(s, "Stack");
-        var popInt = typeof(ValueStack).GetMethod("PopInt")!;
         var pushInt = typeof(ValueStack).GetMethod("Push", [typeof(int)])!;
 
-        var argSlotsV = Expression.Variable(typeof(int), "argSlots");
-        var hasRetV = Expression.Variable(typeof(int), "hasRet");
         var baseOffV = Expression.Variable(typeof(int), "baseOff");
 
         var body = new List<Expression>();
-
-        body.Add(Expression.Assign(hasRetV, Expression.Call(stack, popInt)));
-        body.Add(Expression.Assign(argSlotsV, Expression.Call(stack, popInt)));
         body.Add(Expression.Assign(baseOffV,
-            Expression.Subtract(Expression.Property(stack, "SP"), argSlotsV)));
+            Expression.Subtract(Expression.Property(stack, "SP"),
+                Expression.Constant(argSlots))));
 
         var rawArgs = new Expression[paramInfos.Length];
         for (int i = 0; i < paramInfos.Length; i++) {
@@ -114,36 +105,30 @@ internal static class CallSiteCompiler {
         var resultV = Expression.Variable(returnType, "result");
         body.Add(Expression.Assign(resultV, callExpr));
 
-        body.Add(Expression.IfThen(
-            Expression.GreaterThan(argSlotsV, Expression.Constant(0)),
-            Expression.Call(stack, "Drop", Type.EmptyTypes, argSlotsV)));
+        if (argSlots > 0)
+            body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
 
-        body.Add(Expression.IfThen(
-            Expression.NotEqual(hasRetV, Expression.Constant(0)),
-            Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s))));
+        body.Add(Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s)));
 
-        var vars = new[] { hasRetV, argSlotsV, baseOffV, resultV };
-        return Expression.Lambda<CallSiteDelegate>(Expression.Block(vars, body), s).Compile();
+        return Expression.Lambda<CallSiteDelegate>(
+            Expression.Block([baseOffV, resultV], body), s).Compile();
     }
 
     public static CallSiteDelegate CompileFieldGetter(FieldInfo field, bool isStatic) {
         var returnType = field.FieldType;
+        int argSlots = isStatic ? 0 : 1;
 
         var s = Expression.Parameter(typeof(VmState), "s");
         var stack = Expression.Property(s, "Stack");
-        var popInt = typeof(ValueStack).GetMethod("PopInt")!;
         var pushInt = typeof(ValueStack).GetMethod("Push", [typeof(int)])!;
 
-        var argSlotsV = Expression.Variable(typeof(int), "argSlots");
-        var hasRetV = Expression.Variable(typeof(int), "hasRet");
         var baseOffV = Expression.Variable(typeof(int), "baseOff");
 
         var body = new List<Expression>();
 
-        body.Add(Expression.Assign(hasRetV, Expression.Call(stack, popInt)));
-        body.Add(Expression.Assign(argSlotsV, Expression.Call(stack, popInt)));
         body.Add(Expression.Assign(baseOffV,
-            Expression.Subtract(Expression.Property(stack, "SP"), argSlotsV)));
+            Expression.Subtract(Expression.Property(stack, "SP"),
+                Expression.Constant(argSlots))));
 
         Expression resultExpr;
         if (isStatic) {
@@ -158,16 +143,13 @@ internal static class CallSiteCompiler {
         var resultV = Expression.Variable(returnType, "result");
         body.Add(Expression.Assign(resultV, resultExpr));
 
-        body.Add(Expression.IfThen(
-            Expression.GreaterThan(argSlotsV, Expression.Constant(0)),
-            Expression.Call(stack, "Drop", Type.EmptyTypes, argSlotsV)));
+        if (argSlots > 0)
+            body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
 
-        body.Add(Expression.IfThen(
-            Expression.NotEqual(hasRetV, Expression.Constant(0)),
-            Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s))));
+        body.Add(Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s)));
 
-        var vars = new[] { hasRetV, argSlotsV, baseOffV, resultV };
-        return Expression.Lambda<CallSiteDelegate>(Expression.Block(vars, body), s).Compile();
+        return Expression.Lambda<CallSiteDelegate>(
+            Expression.Block([baseOffV, resultV], body), s).Compile();
     }
 
     private static Expression ReadSpanInt(Expression stack, Expression baseOff, int slotOffset) {
@@ -200,20 +182,16 @@ internal static class CallSiteCompiler {
     }
 
     public static CallSiteDelegate CompileFieldSetter(FieldInfo field, bool isStatic) {
+        int argSlots = isStatic ? 1 : 2;
         var s = Expression.Parameter(typeof(VmState), "s");
         var stack = Expression.Property(s, "Stack");
-        var popInt = typeof(ValueStack).GetMethod("PopInt")!;
-
-        var argSlotsV = Expression.Variable(typeof(int), "argSlots");
-        var hasRetV = Expression.Variable(typeof(int), "hasRet");
         var baseOffV = Expression.Variable(typeof(int), "baseOff");
 
         var body = new List<Expression>();
 
-        body.Add(Expression.Assign(hasRetV, Expression.Call(stack, popInt)));
-        body.Add(Expression.Assign(argSlotsV, Expression.Call(stack, popInt)));
         body.Add(Expression.Assign(baseOffV,
-            Expression.Subtract(Expression.Property(stack, "SP"), argSlotsV)));
+            Expression.Subtract(Expression.Property(stack, "SP"),
+                Expression.Constant(argSlots))));
 
         var setValueMethod = typeof(FieldInfo).GetMethod("SetValue", [typeof(object), typeof(object)])!;
 
@@ -238,12 +216,10 @@ internal static class CallSiteCompiler {
                 Expression.Convert(typedValue, typeof(object))));
         }
 
-        body.Add(Expression.IfThen(
-            Expression.GreaterThan(argSlotsV, Expression.Constant(0)),
-            Expression.Call(stack, "Drop", Type.EmptyTypes, argSlotsV)));
+        if (argSlots > 0)
+            body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
 
-        var svars = new[] { hasRetV, argSlotsV, baseOffV };
-        return Expression.Lambda<CallSiteDelegate>(Expression.Block(svars, body), s).Compile();
+        return Expression.Lambda<CallSiteDelegate>(Expression.Block([baseOffV], body), s).Compile();
     }
 
     private static Expression ConvertToStackInt(Expression value, Type returnType, Expression s) {

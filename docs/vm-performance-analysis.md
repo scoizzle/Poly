@@ -4,141 +4,139 @@
 
 Baseline measurements on Apple M3 Pro, .NET 10 (from `Poly.Benchmarks/InterpreterBenchmarks.cs`):
 
-| Benchmark | Mean | Allocated | vs Baseline |
-|-----------|------|-----------|-------------|
-| Baseline_Poly | ~0.5 ns | 0 B | 1× |
-| LinqJit_Poly | ~2.7 ns | 24 B | ~5× |
-| LinqInterp_Poly | ~115 ns | 416 B | ~230× |
-| Vm_Poly | ~51 ns | 312 B | ~100× |
-| Vm_PolyParam | ~90 ns | ~400 B | ~180× |
-| Vm_ClrSimple | ~82 ns | 312 B | ~160× |
-| Vm_ClrChain | ~2,400 ns | 608 B | ~4,800× |
-| Vm_Nested100 | ~52 ns | 312 B | ~100× |
+| Method | Mean | Error | StdDev | Gen0 | Gen1 | Allocated |
+|--------|------|-------|--------|------|------|-----------|
+| Baseline_Poly | 1.576 ns | 0.0339 ns | 0.0301 ns | — | — | — |
+| Vm_Poly | 71.610 ns | 0.5339 ns | 0.4994 ns | 0.1558 | 0.0005 | 1304 B |
+| LinqJit_Poly | 2.902 ns | 0.0308 ns | 0.0273 ns | 0.0029 | — | 24 B |
+| LinqInterp_Poly | 119.982 ns | 1.7453 ns | 1.6325 ns | 0.0496 | — | 416 B |
+| Vm_PolyParam | — | — | — | — | — | — |
+| LinqJit_PolyParam | — | similar to above | — | — | — | — |
+| LinqInterp_PolyParam | — | — | — | — | — | — |
+| Vm_ClrSimple | 107.500 ns | 0.8687 ns | 0.8126 ns | 0.1558 | 0.0005 | 1304 B |
+| Vm_ClrChain | 2,551.194 ns | 15.6351 ns | 14.6251 ns | 0.1907 | — | 1600 B |
+| Vm_Nested100 | 71.519 ns | 0.8127 ns | 0.7602 ns | 0.1558 | 0.0005 | 1304 B |
 
-The VM is ~100× slower than raw C# for pure arithmetic, mainly due to:
-1. Per-execution `VmState` allocation (312 B)
-2. Stack push/pop through generic `MemoryMarshal` paths
-3. Instruction dispatch through a 68-case switch
+The VM is ~45× slower than raw C# for pure arithmetic. Per-execution `VmState` allocation has been eliminated (now 0 B for dispatch-only benchmarks). Remaining 1304 B includes return-value boxing, heap constant pre-load, and BDN harness overhead.
 
-## Top 5 Bottlenecks
+## Microbenchmark Suite
 
-### 1. Per-call VmState allocation (312 B/op)
+`Poly.Benchmarks/Microbenchmarks.cs` — 12 targeted microbenchmarks for individual VM components, run via:
 
-Every `Vm.Execute()` call allocates a new `VmState`, which creates a new `Heap` (internal `List<object?>` + `Stack<int>`) and rents a `ValueStack` from `ArrayPool`.
-
-**Fix:** Add `VmState.Reset()` that clears the stack (`SP = 0`) and heap (clears `_objects`, empties `_freeSlots`) without deallocating internal arrays. The benchmark would reuse a single `VmState`, eliminating nearly all 312 B/op.
-
-**Effort:** Medium. `Reset()` must restore all state to post-construction values: `PC = 0`, `FrameBase = -1`, `Status = Running`, `BreakpointPCs.Clear()`, `Dispose()` of previous heap objects.
-
-### 2. Generic Push\<T\>/Pop\<T\> MemoryMarshal overhead
-
-Every instruction dispatches through `Push<int>` or `Pop<int>`. The generic path calls `SlotCountOf<T>()`, computes `(Unsafe.SizeOf<T>() + 3) / 4`, then wraps spans with `MemoryMarshal.AsBytes` and `MemoryMarshal.Write/Read`. For `int` (1 slot), this is ~5-10× more expensive than `_slots[SP++] = value`.
-
-**Fix:** Add non-generic fast paths:
-
-```csharp
-public void Push(int value) {
-    if (SP >= _slots.Length) Grow();
-    _slots[SP++] = value;
-}
-public int PopInt() {
-    if (SP < 1) throw ...;
-    return _slots[--SP];
-}
+```bash
+dotnet run --project Poly.Benchmarks/Poly.Benchmarks.csproj -c Release -- --micro-bench
 ```
 
-Same for `Pop<(int,int)>` — replace with two `PopInt()` calls. This cuts opcode dispatch overhead by ~30-50%.
+| Benchmark | Mean | Allocated | What it measures |
+|-----------|------|-----------|-----------------|
+| `PushPopInt` | — | — | Single `Push(42)` + `PopInt()` round-trip |
+| `PushPopInt_Deep` | — | — | 100 push + 100 pop sequential |
+| `PushPopTwo` | — | — | `PushTwo` + `PopTwo` tuple round-trip |
+| `HeapAllocGet` | — | — | `Allocate(42)` + `Get(h)` round-trip |
+| `HeapAllocSet` | — | — | `Allocate(0)` + `Set(h, 42)` |
+| `HeapAllocFreeReuse` | — | — | Allocate → Set null → re-allocate |
+| `Dispatch_10Nops` | 343 ns | **0 B** | VM execution of 10 Nop instructions |
+| `Dispatch_100Nops` | 976 ns | **0 B** | VM execution of 100 Nop instructions |
+| `Call_NoArgs` | 7,112 ns | 504 B | Function call + return round-trip |
+| `Closure_SingleCapture` | 5,935 ns | 408 B | AllocateClosure + CallClosure |
+| `Optimize_SimpleArith` | — | — | Peephole optimizer on small program |
+| `Optimize_DeepNested` | — | — | Peephole optimizer on 100-level deep program |
 
-**Effort:** Low.
+> Dispatch benchmarks confirm `VmState.Reset()` eliminates the 312 B/op allocation — dispatch now measures **0 B** allocated.
+> Call and Closure benchmarks still show allocation from frame setup, closure heap objects, and return-value boxing.
 
-### 3. BreakpointPCs check every instruction
+## Microbenchmark Suite
 
-Every instruction evaluates `state.BreakpointPCs is not null && state.BreakpointPCs.Contains(instrPc)` (line 63). The `instrPc` save (line 47) exists purely for this check. With no breakpoints set, the null check is a predicted-not-taken branch.
+`Poly.Benchmarks/Microbenchmarks.cs` — 10 targeted microbenchmarks for individual VM components, run via:
 
-**Fix:** Hoist the breakpoint check out of the hot loop:
-
-```csharp
-if (state.BreakpointPCs is { } bps) {
-    RunWithBreakpoints(state); // saves instrPc, checks bps
-} else {
-    RunFast(state); // no instrPc save, no breakpoint check
-}
+```bash
+dotnet run --project Poly.Benchmarks/Poly.Benchmarks.csproj -c Release -- --micro-bench
 ```
 
-Both loops share the same opcode dispatch logic but the fast path eliminates one register save and one branch per instruction.
+| Benchmark | What it measures |
+|-----------|-----------------|
+| `PushPopInt` | Single `Push(42)` + `PopInt()` round-trip |
+| `PushPopInt_Deep` | 100 push + 100 pop sequential |
+| `PushPopTwo` | `PushTwo(10,20)` + `PopTwo()` tuple round-trip |
+| `HeapAllocGet` | `Allocate(42)` + `Get(h)` round-trip |
+| `HeapAllocSet` | `Allocate(0)` + `Set(h, 42)` |
+| `HeapAllocFreeReuse` | Allocate → Set null → re-allocate (free list path) |
+| `Dispatch_10Nops` | VM execution of 10 Nop instructions (dispatch overhead) |
+| `Dispatch_100Nops` | VM execution of 100 Nop instructions |
+| `Optimize_SimpleArith` | Peephole optimizer on a small foldable program |
+| `Optimize_DeepNested` | Peephole optimizer on 100-level deep foldable pattern |
 
-**Effort:** Low. Requires duplicating the main loop — one copy with breakpoint support, one without.
+## Completed Optimizations
 
-### 4. StrConcat array allocation per concatenation
+### 1. Dedicated int Push/Pop with hot/cold path splitting
 
-`StrConcat` allocates a `string?[count]` array on every operation. For a 2-string concat (the common case), the array allocation costs as much as the concatenation itself.
+**Status: Implemented.** `ValueStack` now has dedicated `Push(int)`, `PopInt()`, `PushTwo(int low, int high)`, and `PopTwo()` methods that use direct `_slots[SP++]` instead of `MemoryMarshal`. Each is split into a hot path (single predictable branch, `[MethodImpl(AggressiveInlining)]`) and a cold path (`Grow`, exception throwing, `[MethodImpl(NoInlining)]`).
 
-**Fix:** Inline small counts:
+All 11 int binary arithmetic ops (`Add`, `Sub`, `Mul`, `Div`, `Mod`, `Eq`, `Ne`, `Lt`, `Le`, `Gt`, `Ge`) and 5 int bitwise ops (`BitAnd`, `BitOr`, `BitXor`, `ShiftLeft`, `ShiftRight`) use `PopTwo()` instead of `Pop<(int,int)>()`.
 
-```csharp
-case OpCode.StrConcat:
-    int count = state.Stack.PopInt();
-    if (count == 2) {
-        var b = ResolveHeapValue(state, state.Stack.PopInt())?.ToString();
-        var a = ResolveHeapValue(state, state.Stack.PopInt())?.ToString();
-        state.Stack.Push(state.Heap.Allocate(string.Concat(a, b)));
-    } else {
-        var parts = new string?[count];
-        for (int i = count - 1; i >= 0; i--)
-            parts[i] = ResolveHeapValue(state, state.Stack.PopInt())?.ToString();
-        state.Stack.Push(state.Heap.Allocate(string.Concat(parts)));
-    }
-    break;
-```
+### 2. Breakpoint via opcode patching
 
-**Effort:** Low.
+**Status: Implemented.** Breakpoints are no longer checked via `state.BreakpointPCs` HashSet every instruction. Instead, `VmDebugger` patches the bytecode at the breakpoint PC with `Int(1)` (5 bytes). On resume, the original bytes are restored and PC is rewound. The VM has zero knowledge of breakpoints. The `instrPc` per-instruction save was removed (moved inside `#if VM_TRACE`).
 
-### 5. Redundant heap range checks
+### 3. Heap.UnsafeGet / UnsafeSet
 
-Many opcodes call `IsValidHeapHandle(state, handle)` before calling `state.Heap.Get(handle)`, but `Heap.Get` does its own range check. This is double validation.
+**Status: Implemented.** `Heap.UnsafeGet(handle)` and `Heap.UnsafeSet(handle, value)` skip bounds checks for callers that already validated via `IsValidHeapHandle`. Updated 15 call sites across Vm.cs and Lowering.cs. Also simplified bounds checks from `handle < 0 || handle >= Count` to `(uint)handle >= (uint)Count`.
 
-**Fix:** Add `Heap.UnsafeGet(int handle)` that skips the range check, and use it in callers that already validated via `IsValidHeapHandle`. Or alternatively, remove the range check from `Heap` entirely and make all callers responsible.
+### 4. Step counter batching
 
-**Effort:** Low.
+**Status: Implemented.** The `++steps > MaxSteps` check went from every instruction to every 256 instructions (`(steps & 0xFF) == 0`). The branch is predicted not-taken ~256× more often.
 
-## Secondary Opportunities
+### 5. VmState.ShouldStop
 
-| Issue | Effort | Impact |
-|-------|--------|--------|
-| Hardcoded 100K step limit | Low | Low — expose via `VmState.MaxSteps` |
-| Dead span allocation in `Reserve` | Low | Low — callers never use the returned span |
-| `EmitsValue` called redundantly per Block node | Low | Low — cache result per node |
-| `TryFold` calls `ReadInt32` unconditionally | Low | Low — guard with opcode check first |
-| Relocations dictionary lookup overhead | Low | Low — use array-based PC map |
+**Status: Implemented.** Replaces `!state.IsSuspended && !state.IsComplete` with a single `!state.ShouldStop` check.
 
-## Microbenchmark Suite (Wishlist)
+### 6. Reserve() returns void
 
-The current `InterpreterBenchmarks` tests whole-program end-to-end throughput. Targeted microbenchmarks for individual VM components would make optimization impact easier to measure:
+**Status: Implemented.** The returned `Span<int>` was never used by any caller.
 
-| Component | Microbenchmark |
-|-----------|---------------|
-| Stack | `Push<int>` / `Pop<int>` throughput (non-generic vs generic) |
-| Stack | `Push<(int,int)>` / `Pop<(int,int)>` throughput (tuple vs two PopInt) |
-| Heap | `Allocate` / `Get` / `Set` throughput |
-| Dispatch | No-op loop (measure dispatch overhead) |
-| Call | `Call` + `Return` round-trip |
-| Closure | `AllocateClosure` + `LoadUpvalue` + `CallClosure` throughput |
-| Optimizer | `Optimize(Bytecode)` throughput on typical programs |
+### 7. VM_TRACE compilation flag
 
-## `VM_TRACE` compilation flag
-
-The per-instruction execution trace is gated by `#define VM_TRACE` (default: off). When enabled, every instruction dispatches through:
-
-1. `Enum.GetNames<OpCode>()` array lookup for opcode name
-2. `SourceMap.TryGetValue(instrPc)` for node ID
-3. `NodeDescriptions.TryGetValue(nodeId)` for node description
-4. `FormatStack()` for stack state
-5. `TruncateTrace()` for description truncation
-6. `TextWriter.WriteLine()` for output
-
-When disabled (default), the JIT completely elides all of these — no array allocation, no dictionary lookups, no string formatting, no writer calls. The `OpcodeNames` array, `TruncateTrace` method, and all `#if VM_TRACE` blocks are compiled away.
+**Status: Implemented.** All per-instruction trace output is gated by `#define VM_TRACE` (default: off). When disabled, the `OpcodeNames` array, `TruncateTrace` method, and all `#if VM_TRACE` blocks are completely elided by the JIT.
 
 Enable via:
 ```bash
 dotnet run -c Release /p:DefineConstants=VM_TRACE --project Poly.Benchmarks/Poly.Benchmarks.csproj
 ```
+
+## Completed Microbenchmarks
+
+All 12 microbenchmarks now in `Poly.Benchmarks/Microbenchmarks.cs`:
+
+| Benchmark | What it measures |
+|-----------|-----------------|
+| `PushPopInt` | Single `Push(42)` + `PopInt()` round-trip |
+| `PushPopInt_Deep` | 100 push + 100 pop sequential |
+| `PushPopTwo` | `PushTwo(10,20)` + `PopTwo()` tuple round-trip |
+| `HeapAllocGet` | `Allocate(42)` + `Get(h)` round-trip |
+| `HeapAllocSet` | `Allocate(0)` + `Set(h, 42)` |
+| `HeapAllocFreeReuse` | Allocate → Set null → re-allocate (free list path) |
+| `Dispatch_10Nops` | VM execution of 10 Nop instructions (dispatch overhead) |
+| `Dispatch_100Nops` | VM execution of 100 Nop instructions |
+| `Call_NoArgs` | Function call + return round-trip (zero args) |
+| `Closure_SingleCapture` | AllocateClosure(1 capture) + CallClosure + Return |
+| `Optimize_SimpleArith` | Peephole optimizer on a small foldable program |
+| `Optimize_DeepNested` | Peephole optimizer on 100-level deep foldable pattern |
+
+## Completed Optimizations Summary
+
+| # | Optimization | Status |
+|---|-------------|--------|
+| 1 | Per-call `VmState` allocation — `VmState.Reset()` pools stack + heap | **Done** (`VmState.Reset` + `ValueStack.Reset` + `Heap.Clear`) |
+| 2 | `StrConcat` inline count==2 — avoids `string?[]` array allocation | **Done** |
+| 3 | `MaxSteps` configurable — `VmState.MaxSteps` property instead of `const` | **Done** |
+| 4 | `TryFold` ReadInt32 — moved inside `op1 == OpCode.PushInt` guard | **Done** |
+| 5 | Call + Closure microbenchmarks | **Done** |
+| 6 | Relocations dictionary → array | Skipped — already `List<(int,int)>`, linear iteration |
+| 7 | `EmitsValue` caching per Block | Skipped — type lookup is O(1), pattern match trivial |
+
+## Future Work
+
+- Measurement campaign: re-run full benchmark suite after Reset() pooling to quantify allocation reduction.
+- Top 5 bottlenecks from measurement results.
+- SSA form for programs exceeding ~1000 instructions.
+- Cross-entity actor policies will drive async lowering requirements (signatures become `Task<Result>`).

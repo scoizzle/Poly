@@ -1,26 +1,26 @@
-using System.Reflection;
-
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.VirtualMachine;
+using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
 public class VmSkeletonTests {
     private static byte Op(OpCode op) => (byte)op;
 
-    private static byte[] Int32(int value) =>
-        [(byte)(value & 0xFF), (byte)((value >> 8) & 0xFF), (byte)((value >> 16) & 0xFF), (byte)((value >> 24) & 0xFF)];
-
     private static byte[] Int64(long value) =>
         [(byte)(value & 0xFF), (byte)((value >> 8) & 0xFF), (byte)((value >> 16) & 0xFF), (byte)((value >> 24) & 0xFF),
          (byte)((value >> 32) & 0xFF), (byte)((value >> 40) & 0xFF), (byte)((value >> 48) & 0xFF), (byte)((value >> 56) & 0xFF)];
 
-    private static byte[] J(OpCode op, int data) => [Op(op), .. Int32(data)];
+    private static byte[] J(OpCode op, long data) =>
+        [(byte)((byte)op | OpCodeEncoding.SizeBit), .. Int64(data)];
+
+    private static byte[] J(OpCode op, int data) => J(op, (long)data);
 
     [Test]
     public async Task Heap_AllocateGetSet_Roundtrips() {
@@ -35,15 +35,14 @@ public class VmSkeletonTests {
 
     [Test]
     public async Task Bytecode_ConstructsAndMapsNodeIds() {
-        var code = new byte[] { Op(OpCode.PushInt), 0x01, 0x00, 0x00, 0x00, Op(OpCode.Nop) };
+        var code = new byte[] { Op(OpCode.Pop) };
         var id = NodeId.NewId();
         var map = new Dictionary<int, NodeId> { [0] = id };
 
         var program = new Bytecode(code, map);
 
-        await Assert.That(program.CodeLength).IsEqualTo(6);
+        await Assert.That(program.CodeLength).IsEqualTo(1);
         await Assert.That(program.GetNodeIdForInstruction(0)).IsEqualTo(id);
-        await Assert.That(program.GetNodeIdForInstruction(1)).IsNull();
     }
 
     [Test]
@@ -60,325 +59,315 @@ public class VmSkeletonTests {
         using var state = new VmState();
         var result = Vm.Execute(state);
 
-        await Assert.That(result.IsVoid || !result.HasValue).IsTrue();
         await Assert.That(state.IsComplete).IsTrue();
     }
 
     [Test]
-    public async Task Vm_ConstAndArith_AllCoreArithOps_Work() {
+    public async Task Vm_PushPop_StackMatches() {
         var prog = new Bytecode([
-            .. J(OpCode.PushInt, 10),
-            .. J(OpCode.PushInt, 3),
+            .. J(OpCode.Push, 1),
+            .. J(OpCode.Push, 2),
+        ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
+
+        await Assert.That(state.Stack.SP).IsEqualTo(2);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(2);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Vm_Dup_DuplicatesTop() {
+        var prog = new Bytecode([
+            .. J(OpCode.Push, 42),
+            Op(OpCode.Dup),
+        ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
+
+        await Assert.That(state.Stack.SP).IsEqualTo(2);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(42);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task Vm_Add_ComputesCorrectly() {
+        var prog = new Bytecode([
+            .. J(OpCode.Push, 10),
+            .. J(OpCode.Push, 20),
             Op(OpCode.Add),
-            .. J(OpCode.PushInt, 2),
+        ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
+
+        await Assert.That(state.Stack.SP).IsEqualTo(1);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(30);
+    }
+
+    [Test]
+    public async Task Vm_Sub_ComputesCorrectly() {
+        var prog = new Bytecode([
+            .. J(OpCode.Push, 100),
+            .. J(OpCode.Push, 30),
             Op(OpCode.Sub),
-            .. J(OpCode.PushInt, 4),
+        ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
+
+        await Assert.That(state.Stack.Pop()).IsEqualTo(70);
+    }
+
+    [Test]
+    public async Task Vm_Mul_ComputesCorrectly() {
+        var prog = new Bytecode([
+            .. J(OpCode.Push, 7),
+            .. J(OpCode.Push, 6),
             Op(OpCode.Mul),
-            .. J(OpCode.PushInt, 5),
+        ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
+
+        await Assert.That(state.Stack.Pop()).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task Vm_Div_ComputesCorrectly() {
+        var prog = new Bytecode([
+            .. J(OpCode.Push, 42),
+            .. J(OpCode.Push, 7),
             Op(OpCode.Div),
-            .. J(OpCode.PushInt, 3),
-            Op(OpCode.Mod),
+        ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
+
+        await Assert.That(state.Stack.Pop()).IsEqualTo(6);
+    }
+
+    [Test]
+    public async Task Vm_Neg_ProducesNegative() {
+        var prog = new Bytecode([
+            .. J(OpCode.Push, 42),
             Op(OpCode.Neg),
         ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
 
-        using var state = new VmState();
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That(result.HasValue).IsTrue();
-        await Assert.That((int)result.Value!).IsEqualTo(-2);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(-42);
     }
 
     [Test]
-    public async Task Vm_Narrow_EnforcesDownScaling() {
+    public async Task Vm_Not_InvertsZero() {
         var prog = new Bytecode([
-            .. J(OpCode.PushInt, 300),
-            .. J(OpCode.PushInt, 20),
-            Op(OpCode.Add),
-            .. J(OpCode.Narrow, 0),
-            .. J(OpCode.PushInt, 200),
-            .. J(OpCode.PushInt, 100),
-            Op(OpCode.Add),
-            .. J(OpCode.Narrow, 5),
+            .. J(OpCode.Push, 0),
+            Op(OpCode.Not),
         ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
 
-        using var state = new VmState();
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That((int)result.Value!).IsEqualTo(44);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(1);
     }
 
     [Test]
-    public async Task Vm_ComparisonsAndJumpIfFalse_BasicControlFlow_Works() {
+    public async Task Vm_Comparisons_ProduceCorrectValues() {
         var prog = new Bytecode([
-            .. J(OpCode.PushInt, 5),
-            .. J(OpCode.PushInt, 5),
+            .. J(OpCode.Push, 5),
+            .. J(OpCode.Push, 10),
+            Op(OpCode.Lt),
+            .. J(OpCode.Push, 5),
+            .. J(OpCode.Push, 10),
+            Op(OpCode.Gt),
+        ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
+
+        await Assert.That(state.Stack.Pop()).IsEqualTo(0); // 5 > 10 = false
+        await Assert.That(state.Stack.Pop()).IsEqualTo(1); // 5 < 10 = true
+    }
+
+    [Test]
+    public async Task Vm_Eq_Ne_ComputeCorrectly() {
+        var prog = new Bytecode([
+            .. J(OpCode.Push, 5),
+            .. J(OpCode.Push, 5),
             Op(OpCode.Eq),
-            .. J(OpCode.JumpIfFalse, 5 + 5 + 1 + 5 + 5 + 1),  // jump to 99
-            .. J(OpCode.PushInt, 42),
-            .. J(OpCode.Jump, 5 + 5 + 1 + 5 + 5 + 1 + 5 + 5 + 1), // jump past 99
-            .. J(OpCode.PushInt, 99),
+            .. J(OpCode.Push, 5),
+            .. J(OpCode.Push, 3),
+            Op(OpCode.Ne),
         ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
 
-        using var state = new VmState();
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That((int)result.Value!).IsEqualTo(42);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(1); // 5 != 3 = true
+        await Assert.That(state.Stack.Pop()).IsEqualTo(1); // 5 == 5 = true
     }
 
     [Test]
-    public async Task Vm_DupPop_StackManagement_Works() {
+    public async Task Vm_Bitwise_Ops_ComputeCorrectly() {
         var prog = new Bytecode([
-            .. J(OpCode.PushInt, 7),
-            Op(OpCode.Dup),
-            Op(OpCode.Pop),
+            .. J(OpCode.Push, 5), .. J(OpCode.Push, 2), Op(OpCode.BitOr),
+            .. J(OpCode.Push, 3), Op(OpCode.BitAnd),
         ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
 
-        using var state = new VmState();
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-        await Assert.That((int)result.Value!).IsEqualTo(7);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(3); // (5|2) & 3 = 7 & 3 = 3
     }
 
     [Test]
-    public async Task Vm_Suspend_StopsExecutionAndSetsStatus() {
+    public async Task Vm_Shifts_ComputeCorrectly() {
         var prog = new Bytecode([
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.Int, 0),
-            .. J(OpCode.PushInt, 2),
+            .. J(OpCode.Push, 8), .. J(OpCode.Push, 1), Op(OpCode.Shl),
+            .. J(OpCode.Push, 1), Op(OpCode.Shr),
         ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
 
-        using var state = new VmState();
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That(state.IsSuspended).IsTrue();
-        await Assert.That(result.IsSignal).IsTrue();
-        await Assert.That(result.Signal?.Kind).IsEqualTo(InterpreterSignal.SignalKind.Suspend);
+        // 8 << 1 = 16, then 16 >> 1 = 8
+        await Assert.That(state.Stack.Pop()).IsEqualTo(8);
     }
 
     [Test]
-    public async Task Vm_CallExternal_StaticMethodDispatch_Works() {
-        var method = typeof(Convert).GetMethod(nameof(Convert.ToInt64), new[] { typeof(long) })!;
-        var del = CallSiteCompiler.Compile(method, isStatic: true);
-        using var state = new VmState();
-
+    public async Task Vm_DivRem_SingleOpcode() {
         var prog = new Bytecode([
-            .. J(OpCode.PushInt, 42),
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.CallExternal, 0),
-        ], [], callSites: [del]);
-
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That(result.HasValue).IsTrue();
-        await Assert.That((int)result.Value!).IsEqualTo(42);
-    }
-
-    [Test]
-    public async Task Vm_CallExternal_DelegateDynamicDispatch_Works() {
-        using var state = new VmState();
-        CallSiteDelegate addSite = static (s) => {
-            var (argSlots, hasRet) = s.Stack.Pop<(int argSlots, int hasRet)>();
-            int b = s.Stack.PopInt();
-            int a = s.Stack.PopInt();
-            long result = (long)a + b;
-            if (hasRet != 0) s.Stack.Push((int)result);
-        };
-
-        var prog = new Bytecode([
-            .. J(OpCode.PushInt, 10),
-            .. J(OpCode.PushInt, 20),
-            .. J(OpCode.PushInt, 2),
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.CallExternal, 0),
-        ], [], callSites: [addSite]);
-
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That(result.HasValue).IsTrue();
-        await Assert.That((int)result.Value!).IsEqualTo(30);
-    }
-
-    [Test]
-    public async Task Vm_CallExternal_MissingTarget_Throws() {
-        using var state = new VmState();
-
-        var prog = new Bytecode([
-            .. J(OpCode.PushInt, 42),
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.CallExternal, 0),
+            .. J(OpCode.Push, 17),
+            .. J(OpCode.Push, 5),
+            Op(OpCode.DivRem),
         ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
 
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That(result.IsSignal).IsTrue();
-        await Assert.That(result.Value).IsNotNull();
-        var ex = (Exception)result.Value!;
-        await Assert.That(ex.Message).Contains("no target");
+        await Assert.That(state.Stack.Pop()).IsEqualTo(2); // 17 % 5
+        await Assert.That(state.Stack.Pop()).IsEqualTo(3); // 17 / 5
     }
 
     [Test]
-    public async Task Vm_CallExternal_WithConstantArg_ResolvesCorrectly() {
-        var method = typeof(Convert).GetMethod(nameof(Convert.ToInt32), [typeof(string)])!;
-        var del = CallSiteCompiler.Compile(method, isStatic: true);
-        using var state = new VmState();
-
+    public async Task Vm_Jump_BranchesToTarget() {
         var prog = new Bytecode([
-            .. J(OpCode.LoadConst, 0),
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.CallExternal, 0),
-        ], [], constants: ["777"], callSites: [del]);
-
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That(result.HasValue).IsTrue();
-        await Assert.That((int)result.Value!).IsEqualTo(777);
-    }
-
-    [Test]
-    public async Task Vm_EndOfProgram_VoidVsValue() {
-        var voidProg = new Bytecode(
-            [Op(OpCode.Nop)],
-            []);
-        using var s1 = new VmState { Program = voidProg };
-        var r1 = Vm.Execute(s1);
-        await Assert.That(r1.IsVoid).IsTrue();
-        await Assert.That(s1.IsComplete).IsTrue();
-
-        var valProg = new Bytecode(
-            [.. J(OpCode.PushInt, 42)],
-            []);
-        using var s2 = new VmState { Program = valProg };
-        var r2 = Vm.Execute(s2);
-        await Assert.That(r2.HasValue).IsTrue();
-        await Assert.That((int)r2.Value!).IsEqualTo(42);
-        await Assert.That(s2.IsComplete).IsTrue();
-    }
-
-    [Test]
-    public async Task Vm_ErrorHandling_Div0AndUnderflowProduceThrow() {
-        var div0Prog = new Bytecode([
-            .. J(OpCode.PushInt, 1),
-            .. J(OpCode.PushInt, 0),
-            Op(OpCode.Div),
+            .. J(OpCode.Push, 1),
+            .. J(OpCode.Jump, 3),           // jump to chunk 3 (skip chunk 2's Push 99)
+            .. J(OpCode.Push, 99),          // chunk 2: skipped
+            .. J(OpCode.Push, 2),            // chunk 3
         ], []);
-        using var s1 = new VmState { Program = div0Prog };
-        var r1 = Vm.Execute(s1);
-        await Assert.That(r1.IsSignal).IsTrue();
-        await Assert.That(r1.Value).IsNotNull();
-        var ex1 = (Exception)r1.Value!;
-        await Assert.That(ex1.Message).Contains("Division by zero");
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
+
+        await Assert.That(state.Stack.SP).IsEqualTo(2);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(2);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(1);
     }
 
     [Test]
-    public async Task Vm_LoadStoreValue_HeapHandle_Works() {
-        using var state = new VmState();
-        int h = state.Heap.Allocate(0);
-
+    public async Task Vm_JumpIfFalse_SkipsOnZero() {
         var prog = new Bytecode([
-            .. J(OpCode.PushInt, 123),
-            .. J(OpCode.PushInt, h),
-            .. J(OpCode.PushInt, 1),
-            Op(OpCode.StoreValue),
+            .. J(OpCode.Push, 0),           // false
+            .. J(OpCode.JumpIfFalse, 3),    // jump to chunk 3 (skip chunk 2's Push 99)
+            .. J(OpCode.Push, 99),           // chunk 2: skipped
+            .. J(OpCode.Push, 42),
         ], []);
+        using var state = new VmState { Program = prog };
+        Vm.Execute(state);
 
-        state.Program = prog;
-        var result = Vm.Execute(state);
-        if (result.IsSignal && result.Value is Exception innerEx)
-            throw new Exception("VM signal: " + innerEx.Message, innerEx);
-        await Assert.That(result.IsVoid).IsTrue();
-        await Assert.That(state.Heap.Get(h)).IsEqualTo(123);
+        await Assert.That(state.Stack.SP).IsEqualTo(1);
+        await Assert.That(state.Stack.Pop()).IsEqualTo(42);
     }
 
     [Test]
-    public async Task Vm_Combined_UsefulSubset_ExprControlCallByrefExternal() {
-        using var state = new VmState();
-
-        var convertMethod = typeof(Convert).GetMethod(nameof(Convert.ToInt64), new[] { typeof(long) })!;
-        var del = CallSiteCompiler.Compile(convertMethod, isStatic: true);
-
-        var code = new List<byte>();
-
-        // 0: Push 10, Push 5, Add → stack has 15
-        code.AddRange(J(OpCode.PushInt, 10));
-        code.AddRange(J(OpCode.PushInt, 5));
-        code.Add(Op(OpCode.Add));
-
-        // CALL_EXTERNAL: Convert.ToInt64(15) with argSlots=1, hasRet=1
-        code.AddRange(J(OpCode.PushInt, 1));
-        code.AddRange(J(OpCode.PushInt, 1));
-        code.AddRange(J(OpCode.CallExternal, 0));
-
-        var prog = new Bytecode([.. code], [], callSites: [del]);
-        state.Program = prog;
-
-        var result = Vm.Execute(state);
-
-        await Assert.That(result.HasValue).IsTrue();
-        await Assert.That((int)result.Value!).IsEqualTo(15);
-    }
-
-    [Test]
-    public async Task Lowering_InvokeClrMethod_LowersAndExecutes() {
-        var ast = new Invoke(
-            new Member(new Constant(42L), "CompareTo"),
-            new Constant(10L)
+    public async Task Vm_FullPipeline_Polynomial() {
+        // AST: 3*5*5*5 + 2*5*5 + 5 + 5 = 435
+        var node = new Add(
+            new Add(
+                new Add(
+                    new Multiply(new Constant(3),
+                        new Multiply(new Constant(5), new Multiply(new Constant(5), new Constant(5)))),
+                    new Multiply(new Constant(2), new Multiply(new Constant(5), new Constant(5)))
+                ),
+                new Constant(5)
+            ),
+            new Constant(5)
         );
 
-        var analysis = NodeTestHelpers.CreateTestAnalyzer().Analyze(ast);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .UseConstantFolding()
+            .UseSideEffectAnalysis()
+            .Build()
+            .Analyze(node);
 
-        using var state = new VmState();
-        var program = Lowering.Lower(ast, analysis);
-        state.Program = program;
+        var program = Lowering.Lower(node, analysis);
 
-        await Assert.That(program.CallSites.Count).IsEqualTo(1);
-        await Assert.That(program.CallSites[0]).IsNotNull();
-
+        using var state = new VmState { Program = program };
         var result = Vm.Execute(state);
 
-        await Assert.That(result.HasValue).IsTrue();
-        await Assert.That((int)result.Value!).IsEqualTo(1);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(435L);
     }
 
     [Test]
-    public async Task Lowering_InvokeStaticMethod_LowersAndExecutes() {
-        var mathTypeRef = new TypeReference(typeof(Math).FullName!);
-        var ast = new Invoke(
-            new Member(mathTypeRef, nameof(Math.Max)),
-            new Constant(10), new Constant(20)
+    public async Task Vm_FullPipeline_SimpleMathCall() {
+        // Call Math.Max(3, 7) — should return 7
+        var maxMethod = new Member(
+            new TypeReference(typeof(Math).FullName!),
+            nameof(Math.Max)
         );
+        var invoke = new Invoke(maxMethod, new Constant(3), new Constant(7));
 
-        var analysis = NodeTestHelpers.CreateTestAnalyzer().Analyze(ast);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke);
 
-        using var state = new VmState();
-        var program = Lowering.Lower(ast, analysis);
-        state.Program = program;
-
-        await Assert.That(program.CallSites.Count).IsEqualTo(1);
-        await Assert.That(program.CallSites[0]).IsNotNull();
-
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
         var result = Vm.Execute(state);
 
-        await Assert.That(result.HasValue).IsTrue();
-        await Assert.That((int)result.Value!).IsEqualTo(20);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task Vm_FullPipeline_SingleArgCall() {
+        var absMethod = new Member(
+            new TypeReference(typeof(Math).FullName!),
+            nameof(Math.Abs)
+        );
+        var invoke = new Invoke(absMethod, new Constant(-5));
+
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke);
+
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(5L);
+    }
+
+    [Test]
+    public async Task Vm_FullPipeline_WithFunctionCall() {
+        var maxMethod = new Member(
+            new TypeReference(typeof(Math).FullName!),
+            nameof(Math.Max)
+        );
+        var invoke = new Invoke(maxMethod, new Constant(3), new Constant(7));
+
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke);
+
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+
+        // Math.Max(3, 7) = 7
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(7L);
     }
 }

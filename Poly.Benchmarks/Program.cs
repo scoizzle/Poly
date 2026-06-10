@@ -14,6 +14,11 @@ if (args.Length > 0 && args[0] == "--interp-bench") {
     return 0;
 }
 
+if (args.Length > 0 && args[0] == "--micro-bench") {
+    BenchmarkDotNet.Running.BenchmarkRunner.Run<Microbenchmarks>();
+    return 0;
+}
+
 var domainNameOption = new Option<string>("--name") {
     Description = "Name for the domain being modeled."
 };

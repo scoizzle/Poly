@@ -1,660 +1,480 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-
-using Poly.Interpretation;
 
 namespace Poly.Interpretation.VirtualMachine;
 
-// Define VM_TRACE to enable per-instruction execution trace output.
-// Enable via <DefineConstants>VM_TRACE</DefineConstants> in the .csproj.
 internal static class Vm {
-#if VM_TRACE
-    private static readonly string[] OpcodeNames = Enum.GetNames<OpCode>();
-#endif
+    internal const int FrameHeaderSlots = 4;
 
     public static InterpreterResult Execute(VmState state) {
-        if (state.Program is null) {
+        var prog = state.Program;
+        if (prog is null) {
             state.Complete(InterpreterResult.Void);
             return InterpreterResult.Void;
         }
 
-        var prog = state.Program;
-        var code = prog.Code;
         state.Status = InterpreterStatus.Running;
 
-#if VM_TRACE
-        var trace = state.Trace;
-        if (trace is not null)
-            state.Heap.OnAllocate = (handle, value) => {
-                string desc = value switch {
-                    null => "null",
-                    string s => $"\"{s}\"",
-                    int iv => iv.ToString(),
-                    Closure c => $"Closure[func={c.FuncIndex} cap={c.Captures?.Length}]",
-                    _ => value.GetType().Name
-                };
-                trace.WriteLine($"  → alloc H[{handle}] {desc}");
-            };
-#endif
-
+        // Pre-load constants into heap
         for (int i = 0; i < prog.Constants.Count; i++)
             state.Heap.Allocate(prog.Constants[i]);
 
-        int pc = state.PC;
-        const int MaxSteps = 100_000;
-        const int StepCheckInterval = 256;
-        int steps = 0;
+        var rawCode = prog.Code;
+        var code = rawCode.AsSpan();
+        int codeOff = state.PC;
+        int codeLength = code.Length;
+        ref byte codeRef = ref MemoryMarshal.GetReference(code);
+
+        ref long baseSlot = ref MemoryMarshal.GetReference(
+            state.Stack.RawSlots.AsSpan());
+        int spOff = state.Stack.SP;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static ref long Slot(ref long b, int o) => ref Unsafe.Add(ref b, o);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static long Code64(ref byte b, int o) =>
+            Unsafe.ReadUnaligned<long>(ref Unsafe.Add(ref b, o));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static (int retPC, int savedBase, int argSlots, int retSlots)
+            ReadFrame(ref long b, int off) => (
+            (int)Unsafe.Add(ref b, off),
+            (int)Unsafe.Add(ref b, off + 1),
+            (int)Unsafe.Add(ref b, off + 2),
+            (int)Unsafe.Add(ref b, off + 3));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static void WriteFrame(ref long b, int off,
+            int retPC, int savedBase, int argSlots, int retSlots) {
+            Unsafe.Add(ref b, off) = retPC;
+            Unsafe.Add(ref b, off + 1) = savedBase;
+            Unsafe.Add(ref b, off + 2) = argSlots;
+            Unsafe.Add(ref b, off + 3) = retSlots;
+        }
 
         try {
-            while (pc < code.Length && !state.ShouldStop) {
-                if ((steps++ & (StepCheckInterval - 1)) == 0 && steps > MaxSteps)
-                    throw new InvalidOperationException("Max instruction steps exceeded (possible infinite loop in IR)");
+            while (codeOff < codeLength && !state.ShouldStop) {
+                byte rawOp = Unsafe.Add(ref codeRef, codeOff);
 
-                var op = (OpCode)code[pc++];
-
-#if VM_TRACE
-                int instrPc = pc - 1;
-                if (trace is not null) {
-                    string opName = (int)op < OpcodeNames.Length ? OpcodeNames[(int)op] : $"0x{(int)op:X2}";
-                    string nodeInfo = "";
-                    if (prog.SourceMap is not null && prog.SourceMap.TryGetValue(instrPc, out var nodeId)) {
-                        string desc = state.NodeDescriptions is not null && state.NodeDescriptions.TryGetValue(nodeId, out var d)
-                            ? TruncateTrace(d) : $"#{nodeId}";
-                        nodeInfo = $" {desc}";
-                    }
-                    trace.WriteLine($"PC:{instrPc:D4}{nodeInfo} {opName,-14} {state.FormatStack()}");
+                if ((rawOp & OpCodeEncoding.InterruptBit) != 0) {
+                    state.Status = InterpreterStatus.Suspended;
+                    break;
                 }
-#endif
 
-                switch (op) {
-                    case OpCode.Nop:
-                        break;
-
-                    case OpCode.Dup: {
-                            var val = state.Stack.PeekInt();
-                            state.Stack.Push(val);
+                if ((rawOp & OpCodeEncoding.SizeBit) != 0) {
+                    // ── 9-byte operand-bearing ──
+                    switch ((OpCode)(rawOp & OpCodeEncoding.OpcodeMask)) {
+                        case OpCode.Push:
+                            Slot(ref baseSlot, spOff++) = Code64(ref codeRef, codeOff + 1);
                             break;
-                        }
 
-                    case OpCode.Pop:
-                        state.Stack.PopInt();
-                        break;
+                        case OpCode.Jump: {
+                                long target = Code64(ref codeRef, codeOff + 1);
+                                codeOff = (int)target * 9;
+                                continue;
+                            }
 
-                    case OpCode.PushInt:
-                        state.Stack.Push(ReadInt32(code, ref pc));
-                        break;
-
-                    case OpCode.PushLong:
-                        state.Stack.Push(ReadInt64(code, ref pc));
-                        break;
-
-                    case OpCode.LoadConst: {
-                            int idx = ReadInt32(code, ref pc);
-                            state.Stack.Push(idx);
-                            break;
-                        }
-
-                    case OpCode.PushDouble:
-                        state.Stack.Push(ReadDouble(code, ref pc));
-                        break;
-
-                    case OpCode.LoadArg: {
-                            int paramIndex = ReadInt32(code, ref pc);
-                            if (state.FrameBase < 0)
-                                throw new InvalidOperationException("LoadArg outside of function frame");
-                            var hdr = FrameHeader.Read(state.Stack.AsSpan(), state.FrameBase);
-                            int argStart = state.FrameBase - hdr.ArgSlots;
-                            int val = state.Stack.AsSpan()[argStart + paramIndex];
-                            state.Stack.Push(val);
-                            break;
-                        }
-
-                    case OpCode.LoadLocal: {
-                            int localIndex = ReadInt32(code, ref pc);
-                            if (state.FrameBase < 0)
-                                throw new InvalidOperationException("LoadLocal outside of function frame");
-                            int localOff = state.FrameBase + FrameHeader.SlotCount + localIndex;
-                            int val = state.Stack.AsSpan()[localOff];
-                            state.Stack.Push(val);
-                            break;
-                        }
-
-                    case OpCode.StoreLocal: {
-                            int localIndex = ReadInt32(code, ref pc);
-                            int value = state.Stack.PopInt();
-                            if (state.FrameBase < 0)
-                                throw new InvalidOperationException("StoreLocal outside of function frame");
-                            int localOff = state.FrameBase + FrameHeader.SlotCount + localIndex;
-                            state.Stack.AsSpan()[localOff] = value;
-                            break;
-                        }
-
-                    case OpCode.LoadValue: {
-                            var (handle, size) = state.Stack.Pop<(int handle, int size)>();
-                            if (handle >= 0) {
-                                var obj = state.Heap.Get(handle);
-                                state.Stack.Push(obj is int iv ? iv : 0);
+                        case OpCode.JumpIfFalse:
+                            if (Slot(ref baseSlot, --spOff) == 0) {
+                                long target = Code64(ref codeRef, codeOff + 1);
+                                codeOff = (int)target * 9;
                             }
                             else {
-                                int src = -handle;
-                                var srcSpan = state.Stack.AsSpan().Slice(src, size);
-                                int val = srcSpan[0];
-                                state.Stack.Push(val);
+                                codeOff += 9;
                             }
-                            break;
-                        }
+                            continue;
 
-                    case OpCode.StoreValue: {
-                            var (handle, size) = state.Stack.Pop<(int handle, int size)>();
-                            int curSp = state.Stack.SP;
-                            int srcOff = curSp - size;
-                            if (srcOff < 0)
-                                throw new InvalidOperationException("Not enough values for StoreValue source");
-                            var srcVal = state.Stack.AsSpan()[srcOff];
-                            if (handle >= 0) {
-                                state.Heap.Set(handle, srcVal);
+                        case OpCode.Call: {
+                                int funcIndex = (int)Code64(ref codeRef, codeOff + 1);
+                                int argSlots = (int)Slot(ref baseSlot, --spOff);
+                                var entry = prog.Functions[funcIndex];
+                                int retPC = codeOff + 9;
+                                int prevBase = state.FrameBase < 0 ? 0 : state.FrameBase;
+                                int newBase = spOff;
+                                int totalSlots = FrameHeaderSlots + entry.LocalCount;
+                                spOff += totalSlots;
+                                WriteFrame(ref baseSlot, newBase,
+                                    retPC, prevBase, argSlots, entry.RetBytes);
+                                state.FrameBase = newBase;
+                                state.CachedArgSlots = argSlots;
+                                codeOff = entry.PC;
+                                continue;
                             }
-                            else {
-                                int dest = -handle;
-                                state.Stack.AsSpan()[dest] = srcVal;
+
+                        case OpCode.CallExternal: {
+                                long packed = Code64(ref codeRef, codeOff + 1);
+                                int siteIndex = (int)(packed & 0xFFFFFFFF);
+                                int argSlots = (int)((packed >> 32) & 0xFFFF);
+                                bool hasRet = ((packed >> 48) & 1) != 0;
+                                if ((uint)siteIndex >= (uint)prog.CallSites.Count ||
+                                    prog.CallSites[siteIndex] is null)
+                                    throw new InvalidOperationException(
+                                        $"CallExternal: no target at site {siteIndex}");
+                                state.CachedArgSlots = argSlots;
+                                state.Stack.SetSP(spOff);
+                                state.PC = codeOff + 9;
+                                prog.CallSites[siteIndex](state);
+                                spOff = state.Stack.SP;
+                                codeOff = state.PC;
+                                continue;
                             }
-                            state.Stack.Drop(size);
-                            break;
-                        }
 
-                    case OpCode.Add: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left + right);
-                            break;
-                        }
-
-                    case OpCode.Sub: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left - right);
-                            break;
-                        }
-
-                    case OpCode.Mul: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left * right);
-                            break;
-                        }
-
-                    case OpCode.Div: {
-                            var (left, right) = state.Stack.PopTwo();
-                            if (right == 0) {
-                                if (prog.ExceptionRegions.Count > 0 && FindRegion(prog.ExceptionRegions, pc - 1) is not null) {
-                                    state.Stack.Push(-1);
-                                    goto case OpCode.Throw;
-                                }
-                                throw new DivideByZeroException("Division by zero");
-                            }
-                            state.Stack.Push(left / right);
-                            break;
-                        }
-
-                    case OpCode.Mod: {
-                            var (left, right) = state.Stack.PopTwo();
-                            if (right == 0) {
-                                if (prog.ExceptionRegions.Count > 0 && FindRegion(prog.ExceptionRegions, pc - 1) is not null) {
-                                    state.Stack.Push(-1);
-                                    goto case OpCode.Throw;
-                                }
-                                throw new DivideByZeroException("Division by zero");
-                            }
-                            state.Stack.Push(left % right);
-                            break;
-                        }
-
-                    case OpCode.Neg: {
-                            var a = state.Stack.PopInt();
-                            state.Stack.Push(-a);
-                            break;
-                        }
-
-                    case OpCode.UDiv: {
-                            var (left, right) = state.Stack.Pop<(uint left, uint right)>();
-                            if (right == 0) throw new DivideByZeroException("Division by zero");
-                            state.Stack.Push((int)(left / right));
-                            break;
-                        }
-
-                    case OpCode.UMod: {
-                            var (left, right) = state.Stack.Pop<(uint left, uint right)>();
-                            if (right == 0) throw new DivideByZeroException("Division by zero");
-                            state.Stack.Push((int)(left % right));
-                            break;
-                        }
-
-                    case OpCode.Eq: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left == right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.Ne: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left != right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.Lt: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left < right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.Le: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left <= right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.Gt: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left > right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.Ge: {
-                            var (left, right) = state.Stack.PopTwo();
-                            state.Stack.Push(left >= right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.ULt: {
-                            var (left, right) = state.Stack.Pop<(uint left, uint right)>();
-                            state.Stack.Push(left < right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.ULe: {
-                            var (left, right) = state.Stack.Pop<(uint left, uint right)>();
-                            state.Stack.Push(left <= right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.UGt: {
-                            var (left, right) = state.Stack.Pop<(uint left, uint right)>();
-                            state.Stack.Push(left > right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.UGe: {
-                            var (left, right) = state.Stack.Pop<(uint left, uint right)>();
-                            state.Stack.Push(left >= right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.DAdd: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left + right);
-                            break;
-                        }
-
-                    case OpCode.DSub: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left - right);
-                            break;
-                        }
-
-                    case OpCode.DMul: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left * right);
-                            break;
-                        }
-
-                    case OpCode.DDiv: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left / right);
-                            break;
-                        }
-
-                    case OpCode.DNeg: {
-                            var a = state.Stack.Pop<double>();
-                            state.Stack.Push(-a);
-                            break;
-                        }
-
-                    case OpCode.DEq: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left == right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.DNe: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left != right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.DLt: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left < right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.DLe: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left <= right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.DGt: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left > right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.DGe: {
-                            var (left, right) = state.Stack.Pop<(double left, double right)>();
-                            state.Stack.Push(left >= right ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.Narrow: {
-                            int mode = ReadInt32(code, ref pc);
-                            int v = state.Stack.PopInt();
-                            state.Stack.Push(mode switch {
-                                0 => v,
-                                1 => (int)(uint)v,
-                                2 => (int)(short)v,
-                                3 => (int)(ushort)v,
-                                4 => (int)(sbyte)v,
-                                5 => (int)(byte)v,
-                                _ => v,
-                            });
-                            break;
-                        }
-
-                    case OpCode.Jump:
-                        pc = ReadInt32(code, ref pc);
-                        break;
-
-                    case OpCode.JumpIfFalse: {
-                            int target = ReadInt32(code, ref pc);
-                            int cond = state.Stack.PopInt();
-                            if (cond == 0)
-                                pc = target;
-                            break;
-                        }
-
-                    case OpCode.Call: {
-                            int funcIndex = ReadInt32(code, ref pc);
-                            int argSlots = state.Stack.PopInt();
-                            var entry = prog.Functions[funcIndex];
-                            int retPC = pc;
-                            int prevBase = state.FrameBase < 0 ? 0 : state.FrameBase;
-                            int newBase = state.Stack.SP;
-                            int totalSlots = FrameHeader.SlotCount + entry.LocalCount;
-                            state.Stack.Reserve(totalSlots);
-                            FrameHeader.Write(state.Stack.AsSpan(), newBase,
-                                retPC, prevBase, argSlots, entry.RetBytes);
-                            state.FrameBase = newBase;
-                            pc = entry.PC;
-                            break;
-                        }
-
-                    case OpCode.Return: {
-                            if (state.FrameBase < 0)
+                        case OpCode.AllocClosure: {
+                                long packed = Code64(ref codeRef, codeOff + 1);
+                                int funcIndex = (int)(packed & 0xFFFFFFFF);
+                                int captureCount = (int)(packed >> 32);
+                                var closure = new Closure(funcIndex, captureCount);
+                                for (int i = captureCount - 1; i >= 0; i--)
+                                    closure.Captures[i] = Slot(ref baseSlot, --spOff);
+                                int handle = state.Heap.Allocate(closure);
+                                Slot(ref baseSlot, spOff++) = handle;
                                 break;
-                            var hdr = FrameHeader.Read(state.Stack.AsSpan(), state.FrameBase);
-                            int preArg = state.FrameBase - hdr.ArgSlots;
-                            if (hdr.RetSlots > 0 && preArg >= 0) {
-                                int retSrc = state.Stack.SP - hdr.RetSlots;
-                                if (retSrc >= preArg) {
-                                    state.Stack.CopyFrom(retSrc, preArg, hdr.RetSlots);
-                                }
                             }
-                            int finalSp = preArg + hdr.RetSlots;
-                            if (finalSp >= 0 && finalSp <= state.Stack.SP)
-                                state.Stack.TruncateTo(finalSp);
-                            state.FrameBase = hdr.SavedPrevBase >= 0 ? hdr.SavedPrevBase : -1;
-                            pc = hdr.RetPC;
-                            break;
-                        }
 
-                    case OpCode.CallExternal: {
-                            int siteIndex = ReadInt32(code, ref pc);
-                            if ((uint)siteIndex >= (uint)prog.CallSites.Count || prog.CallSites[siteIndex] is null)
-                                throw new InvalidOperationException(
-                                    $"CALL_EXTERNAL: no target at site {siteIndex}");
-                            prog.CallSites[siteIndex](state);
-                            break;
-                        }
-
-                    case OpCode.Not: {
-                            int val = state.Stack.PopInt();
-                            state.Stack.Push(val == 0 ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.IsNull: {
-                            int val = state.Stack.PopInt();
-                            bool isNull = IsValidHeapHandle(state, val) && state.Heap.Get(val) is null;
-                            state.Stack.Push(isNull ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.StoreArg: {
-                            int paramIndex = ReadInt32(code, ref pc);
-                            int value = state.Stack.PopInt();
-                            if (state.FrameBase < 0)
-                                throw new InvalidOperationException("StoreArg outside of function frame");
-                            var hdr = FrameHeader.Read(state.Stack.AsSpan(), state.FrameBase);
-                            int argStart = state.FrameBase - hdr.ArgSlots;
-                            state.Stack.AsSpan()[argStart + paramIndex] = value;
-                            break;
-                        }
-
-                    case OpCode.Throw: {
-                            int exVal = state.Stack.PopInt();
-                            var region = FindRegion(prog.ExceptionRegions, pc - 1);
-                            if (region is not null) {
-                                if (region.CatchStart >= 0) {
-                                    state.Stack.Push(exVal);
-                                    state.PendingExceptionValue = null;
-                                    pc = region.CatchStart;
-                                }
-                                else if (region.FinallyStart is not null) {
-                                    state.PendingExceptionValue = exVal;
-                                    pc = region.FinallyStart.Value;
-                                }
+                        case OpCode.LoadArg: {
+                                int index = (int)Code64(ref codeRef, codeOff + 1);
+                                if (state.FrameBase < 0)
+                                    throw new InvalidOperationException("LoadArg outside of function frame");
+                                int argStart = state.FrameBase - state.CachedArgSlots;
+                                Slot(ref baseSlot, spOff++) = Slot(ref baseSlot, argStart + index);
+                                break;
                             }
-                            else {
-                                throw new InvalidOperationException("Unhandled VM exception: " + exVal);
-                            }
-                            break;
-                        }
 
-                    case OpCode.EndFinally: {
-                            if (state.PendingExceptionValue is not null) {
-                                int exVal = state.PendingExceptionValue.Value;
-                                state.PendingExceptionValue = null;
-                                var region = FindRegion(prog.ExceptionRegions, pc - 1);
-                                if (region is not null && region.CatchStart >= 0) {
-                                    state.Stack.Push(exVal);
-                                    pc = region.CatchStart;
+                        case OpCode.StoreArg: {
+                                int index = (int)Code64(ref codeRef, codeOff + 1);
+                                if (state.FrameBase < 0)
+                                    throw new InvalidOperationException("StoreArg outside of function frame");
+                                int argStart = state.FrameBase - state.CachedArgSlots;
+                                Slot(ref baseSlot, argStart + index) = Slot(ref baseSlot, --spOff);
+                                break;
+                            }
+
+                        case OpCode.LoadLocal: {
+                                int index = (int)Code64(ref codeRef, codeOff + 1);
+                                if (state.FrameBase < 0)
+                                    throw new InvalidOperationException("LoadLocal outside of function frame");
+                                int localOff = state.FrameBase + FrameHeaderSlots + index;
+                                Slot(ref baseSlot, spOff++) = Slot(ref baseSlot, localOff);
+                                break;
+                            }
+
+                        case OpCode.StoreLocal: {
+                                int index = (int)Code64(ref codeRef, codeOff + 1);
+                                if (state.FrameBase < 0)
+                                    throw new InvalidOperationException("StoreLocal outside of function frame");
+                                int localOff = state.FrameBase + FrameHeaderSlots + index;
+                                Slot(ref baseSlot, localOff) = Slot(ref baseSlot, --spOff);
+                                break;
+                            }
+
+                        case OpCode.LoadUpvalue: {
+                                int upvalueIndex = (int)Code64(ref codeRef, codeOff + 1);
+                                if (state.FrameBase < 0)
+                                    throw new InvalidOperationException("LoadUpvalue outside of function frame");
+                                int closureHandle = (int)Slot(ref baseSlot,
+                                    state.FrameBase - state.CachedArgSlots);
+                                var closure = state.Heap.Get(closureHandle) as Closure
+                                    ?? throw new InvalidOperationException("LoadUpvalue: no closure at arg 0");
+                                long val = closure.Captures is not null &&
+                                    upvalueIndex < closure.Captures.Length &&
+                                    closure.Captures[upvalueIndex] is long lv
+                                    ? lv : 0;
+                                Slot(ref baseSlot, spOff++) = val;
+                                break;
+                            }
+
+                        case OpCode.StoreUpvalue: {
+                                int upvalueIndex = (int)Code64(ref codeRef, codeOff + 1);
+                                if (state.FrameBase < 0)
+                                    throw new InvalidOperationException("StoreUpvalue outside of function frame");
+                                int closureHandle = (int)Slot(ref baseSlot,
+                                    state.FrameBase - state.CachedArgSlots);
+                                var closure = state.Heap.Get(closureHandle) as Closure
+                                    ?? throw new InvalidOperationException("StoreUpvalue: no closure at arg 0");
+                                if (closure.Captures is null || upvalueIndex >= closure.Captures.Length)
+                                    throw new InvalidOperationException(
+                                        $"StoreUpvalue: index {upvalueIndex} out of range");
+                                closure.Captures[upvalueIndex] = Slot(ref baseSlot, --spOff);
+                                break;
+                            }
+
+                        default:
+                            throw new InvalidOperationException(
+                                $"Unsupported operand-bearing opcode: 0x{rawOp & OpCodeEncoding.OpcodeMask:X2}");
+                    }
+                    codeOff += 9;
+                }
+                else {
+                    // ── 1-byte nullary ──
+                    switch ((OpCode)(rawOp & OpCodeEncoding.OpcodeMask)) {
+                        case OpCode.Pop:
+                            spOff--;
+                            break;
+
+                        case OpCode.Dup: {
+                                long v = Slot(ref baseSlot, spOff - 1);
+                                Slot(ref baseSlot, spOff++) = v;
+                                break;
+                            }
+
+                        case OpCode.Neg:
+                            Slot(ref baseSlot, spOff - 1) = -Slot(ref baseSlot, spOff - 1);
+                            break;
+
+                        case OpCode.Not:
+                            Slot(ref baseSlot, spOff - 1) =
+                                Slot(ref baseSlot, spOff - 1) == 0 ? 1 : 0;
+                            break;
+
+                        case OpCode.Add:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) + Slot(ref baseSlot, spOff - 1);
+                            spOff--;
+                            break;
+
+                        case OpCode.Sub:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) - Slot(ref baseSlot, spOff - 1);
+                            spOff--;
+                            break;
+
+                        case OpCode.Mul:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) * Slot(ref baseSlot, spOff - 1);
+                            spOff--;
+                            break;
+
+                        case OpCode.Div: {
+                                long right = Slot(ref baseSlot, spOff - 1);
+                                if (right == 0)
+                                    throw new DivideByZeroException("Division by zero");
+                                Slot(ref baseSlot, spOff - 2) =
+                                    Slot(ref baseSlot, spOff - 2) / right;
+                                spOff--;
+                                break;
+                            }
+
+                        case OpCode.DivRem: {
+                                long right = Slot(ref baseSlot, spOff - 1);
+                                if (right == 0)
+                                    throw new DivideByZeroException("Division by zero");
+                                long left = Slot(ref baseSlot, spOff - 2);
+                                Slot(ref baseSlot, spOff - 2) = left / right;
+                                Slot(ref baseSlot, spOff - 1) = left % right;
+                                break;
+                            }
+
+                        case OpCode.Eq:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) == Slot(ref baseSlot, spOff - 1) ? 1 : 0;
+                            spOff--;
+                            break;
+
+                        case OpCode.Ne:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) != Slot(ref baseSlot, spOff - 1) ? 1 : 0;
+                            spOff--;
+                            break;
+
+                        case OpCode.Lt:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) < Slot(ref baseSlot, spOff - 1) ? 1 : 0;
+                            spOff--;
+                            break;
+
+                        case OpCode.Le:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) <= Slot(ref baseSlot, spOff - 1) ? 1 : 0;
+                            spOff--;
+                            break;
+
+                        case OpCode.Gt:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) > Slot(ref baseSlot, spOff - 1) ? 1 : 0;
+                            spOff--;
+                            break;
+
+                        case OpCode.Ge:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) >= Slot(ref baseSlot, spOff - 1) ? 1 : 0;
+                            spOff--;
+                            break;
+
+                        case OpCode.BitNot:
+                            Slot(ref baseSlot, spOff - 1) = ~Slot(ref baseSlot, spOff - 1);
+                            break;
+
+                        case OpCode.BitAnd:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) & Slot(ref baseSlot, spOff - 1);
+                            spOff--;
+                            break;
+
+                        case OpCode.BitOr:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) | Slot(ref baseSlot, spOff - 1);
+                            spOff--;
+                            break;
+
+                        case OpCode.BitXor:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) ^ Slot(ref baseSlot, spOff - 1);
+                            spOff--;
+                            break;
+
+                        case OpCode.Shl:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) << (int)Slot(ref baseSlot, spOff - 1);
+                            spOff--;
+                            break;
+
+                        case OpCode.Shr:
+                            Slot(ref baseSlot, spOff - 2) =
+                                Slot(ref baseSlot, spOff - 2) >> (int)Slot(ref baseSlot, spOff - 1);
+                            spOff--;
+                            break;
+
+                        // ── Frames ──
+
+                        case OpCode.Return: {
+                                if (state.FrameBase < 0)
+                                    break;
+                                var (retPC, savedBase, argSlots, retSlots) =
+                                    ReadFrame(ref baseSlot, state.FrameBase);
+                                int preArg = state.FrameBase - argSlots;
+                                if (retSlots > 0 && preArg >= 0) {
+                                    int retSrc = spOff - retSlots;
+                                    if (retSrc >= preArg) {
+                                        long[] raw = state.Stack.RawSlots;
+                                        Array.Copy(raw, retSrc, raw, preArg, retSlots);
+                                    }
+                                }
+                                int finalSp = preArg + retSlots;
+                                if (finalSp >= 0 && finalSp <= spOff)
+                                    spOff = finalSp;
+                                state.CachedArgSlots = argSlots;
+                                state.FrameBase = savedBase >= 0 ? savedBase : -1;
+                                codeOff = retPC;
+                                continue;
+                            }
+
+                        // ── Heap indirection ──
+
+                        case OpCode.LoadValue: {
+                                int handle = (int)Slot(ref baseSlot, --spOff);
+                                if (handle >= 0) {
+                                    var obj = state.Heap.Get(handle);
+                                    Slot(ref baseSlot, spOff++) = obj is long lv ? lv : 0;
+                                }
+                                else {
+                                    Slot(ref baseSlot, spOff++) = Slot(ref baseSlot, -handle);
+                                }
+                                break;
+                            }
+
+                        case OpCode.StoreValue: {
+                                int handle = (int)Slot(ref baseSlot, --spOff);
+                                long value = Slot(ref baseSlot, --spOff);
+                                if (handle >= 0)
+                                    state.Heap.Set(handle, value);
+                                else
+                                    Slot(ref baseSlot, -handle) = value;
+                                break;
+                            }
+
+                        // ── Closures ──
+
+                        case OpCode.CallClosure: {
+                                int argSlots = (int)Slot(ref baseSlot, --spOff);
+                                int closureHandle = (int)Slot(ref baseSlot, spOff - argSlots);
+                                var closure = state.Heap.Get(closureHandle) as Closure
+                                    ?? throw new InvalidOperationException("CallClosure target is not a Closure");
+                                var entry = prog.Functions[closure.FuncIndex];
+                                int retPC = codeOff + 1;
+                                int prevBase = state.FrameBase < 0 ? 0 : state.FrameBase;
+                                int newBase = spOff;
+                                spOff += FrameHeaderSlots + entry.LocalCount;
+                                WriteFrame(ref baseSlot, newBase,
+                                    retPC, prevBase, argSlots, entry.RetBytes);
+                                state.FrameBase = newBase;
+                                state.CachedArgSlots = argSlots;
+                                codeOff = entry.PC;
+                                continue;
+                            }
+
+                        // ── Exceptions ──
+
+                        case OpCode.Throw: {
+                                int exVal = (int)Slot(ref baseSlot, --spOff);
+                                var region = FindRegion(prog.ExceptionRegions, codeOff);
+                                if (region is not null) {
+                                    if (region.CatchStart >= 0) {
+                                        Slot(ref baseSlot, spOff++) = exVal;
+                                        state.PendingExceptionValue = null;
+                                        codeOff = region.CatchStart;
+                                    }
+                                    else if (region.FinallyStart is not null) {
+                                        state.PendingExceptionValue = exVal;
+                                        codeOff = region.FinallyStart.Value;
+                                    }
                                 }
                                 else {
                                     throw new InvalidOperationException("Unhandled VM exception: " + exVal);
                                 }
+                                continue;
                             }
-                            break;
-                        }
 
-                    case OpCode.Int: {
-                            int vector = ReadInt32(code, ref pc);
-                            state.SavedPC = pc;
-                            if (vector == 0 || vector == 1) {
-                                state.Status = InterpreterStatus.Suspended;
+                        case OpCode.EndFinally: {
+                                if (state.PendingExceptionValue is not null) {
+                                    int exVal = state.PendingExceptionValue.Value;
+                                    state.PendingExceptionValue = null;
+                                    var region = FindRegion(prog.ExceptionRegions, codeOff);
+                                    if (region is not null && region.CatchStart >= 0) {
+                                        Slot(ref baseSlot, spOff++) = exVal;
+                                        codeOff = region.CatchStart;
+                                    }
+                                    else {
+                                        throw new InvalidOperationException(
+                                            "Unhandled VM exception: " + exVal);
+                                    }
+                                }
+                                continue;
                             }
-                            break;
-                        }
 
-                    case OpCode.Iret: {
-                            if (state.SavedPC >= 0) {
-                                pc = state.SavedPC;
-                                state.SavedPC = -1;
-                            }
-                            break;
-                        }
-
-                    case OpCode.AllocateClosure: {
-                            int funcIndex = ReadInt32(code, ref pc);
-                            int captureCount = ReadInt32(code, ref pc);
-                            var closure = new Closure(funcIndex, captureCount);
-                            for (int i = captureCount - 1; i >= 0; i--)
-                                closure.Captures[i] = state.Stack.PopInt();
-                            int handle = state.Heap.Allocate(closure);
-                            state.Stack.Push(handle);
-#if VM_TRACE
-                            if (trace is not null)
-                                trace.WriteLine($"  → alloc Closure[#{handle}] func={funcIndex} captures={captureCount}");
-#endif
-                            break;
-                        }
-
-                    case OpCode.CallClosure: {
-                            int argSlots = state.Stack.PopInt();
-                            int closureHandle = state.Stack.AsSpan()[state.Stack.SP - argSlots];
-                            var closure = state.Heap.Get(closureHandle) as Closure
-                                ?? throw new InvalidOperationException("CallClosure target is not a Closure");
-                            var entry = prog.Functions[closure.FuncIndex];
-                            int retPC = pc;
-                            int prevBase = state.FrameBase < 0 ? 0 : state.FrameBase;
-                            int newBase = state.Stack.SP;
-                            int totalSlots2 = FrameHeader.SlotCount + entry.LocalCount;
-                            state.Stack.Reserve(totalSlots2);
-                            FrameHeader.Write(state.Stack.AsSpan(), newBase,
-                                retPC, prevBase, argSlots, entry.RetBytes);
-                            state.FrameBase = newBase;
-                            pc = entry.PC;
-                            break;
-                        }
-
-                    case OpCode.LoadUpvalue: {
-                            int upvalueIndex = ReadInt32(code, ref pc);
-                            if (state.FrameBase < 0)
-                                throw new InvalidOperationException("LoadUpvalue outside of function frame");
-                            var hdr = FrameHeader.Read(state.Stack.AsSpan(), state.FrameBase);
-                            int closureHandle = state.Stack.AsSpan()[state.FrameBase - hdr.ArgSlots];
-                            var closure = state.Heap.Get(closureHandle) as Closure
-                                ?? throw new InvalidOperationException("LoadUpvalue: no closure at arg 0");
-                            int val = closure.Captures is not null && upvalueIndex < closure.Captures.Length && closure.Captures[upvalueIndex] is int iv
-                                ? iv : 0;
-                            state.Stack.Push(val);
-                            break;
-                        }
-
-                    case OpCode.StoreUpvalue: {
-                            int upvalueIndex = ReadInt32(code, ref pc);
-                            int value = state.Stack.PopInt();
-                            if (state.FrameBase < 0)
-                                throw new InvalidOperationException("StoreUpvalue outside of function frame");
-                            var hdr = FrameHeader.Read(state.Stack.AsSpan(), state.FrameBase);
-                            int closureHandle = state.Stack.AsSpan()[state.FrameBase - hdr.ArgSlots];
-                            var closure = state.Heap.Get(closureHandle) as Closure
-                                ?? throw new InvalidOperationException("StoreUpvalue: no closure at arg 0");
-                            if (closure.Captures is null || upvalueIndex >= closure.Captures.Length)
-                                throw new InvalidOperationException($"StoreUpvalue: upvalue index {upvalueIndex} out of range");
-                            closure.Captures[upvalueIndex] = value;
-                            break;
-                        }
-
-                    case OpCode.StrConcat: {
-                            int count = state.Stack.PopInt();
-                            var parts = new string?[count];
-                            for (int i = count - 1; i >= 0; i--) {
-                                int handle = state.Stack.PopInt();
-                                parts[i] = ResolveHeapValue(state, handle)?.ToString();
-                            }
-                            state.Stack.Push(state.Heap.Allocate(string.Concat(parts)));
-                            break;
-                        }
-
-                    case OpCode.EnumeratorMoveNext: {
-                            int handle = state.Stack.PopInt();
-                            var enumerator = IsValidHeapHandle(state, handle)
-                                && state.Heap.Get(handle) is object[] h ? h[0] as IEnumerator : null;
-                            state.Stack.Push(enumerator?.MoveNext() ?? false ? 1 : 0);
-                            break;
-                        }
-
-                    case OpCode.BitNot: { int v = state.Stack.PopInt(); state.Stack.Push(~v); break; }
-                    case OpCode.BitAnd: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l & r); break; }
-                    case OpCode.BitOr: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l | r); break; }
-                    case OpCode.BitXor: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l ^ r); break; }
-                    case OpCode.ShiftLeft: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l << r); break; }
-                    case OpCode.ShiftRight: { var (l, r) = state.Stack.PopTwo(); state.Stack.Push(l >> r); break; }
-                    case OpCode.LBitAnd: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l & r); break; }
-                    case OpCode.LBitOr: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l | r); break; }
-                    case OpCode.LBitXor: { long r = state.Stack.Pop<long>(); long l = state.Stack.Pop<long>(); state.Stack.Push(l ^ r); break; }
-                    case OpCode.LBitNot: { long v = state.Stack.Pop<long>(); state.Stack.Push(~v); break; }
-                    case OpCode.LShiftLeft: { int r = state.Stack.PopInt(); long l = state.Stack.Pop<long>(); state.Stack.Push(l << r); break; }
-                    case OpCode.LShiftRight: { int r = state.Stack.PopInt(); long l = state.Stack.Pop<long>(); state.Stack.Push(l >> r); break; }
-
-                    default:
-                        throw new InvalidOperationException($"Unimplemented op: {op}");
+                        default:
+                            throw new InvalidOperationException(
+                                $"Unsupported nullary opcode: 0x{rawOp & OpCodeEncoding.OpcodeMask:X2}");
+                    }
+                    codeOff++;
                 }
             }
 
-            state.PC = pc;
+            state.Stack.SetSP(spOff);
+            state.PC = codeOff;
 
             if (state.IsSuspended) {
-                var result = InterpreterResult.Suspend();
-                state.SetLastResultWithoutChangingStatus(result);
-                return result;
+                var suspendResult = InterpreterResult.Suspend();
+                state.SetLastResultWithoutChangingStatus(suspendResult);
+                return suspendResult;
             }
 
-            var finalResult = ExtractResult(state, prog);
-
+            var finalResult = ExtractResult(state, prog, ref baseSlot, ref spOff);
             if (!state.IsComplete && !state.IsSuspended)
                 state.Complete(finalResult);
             return finalResult;
         }
         catch (Exception ex) {
-            state.PC = pc;
+            state.Stack.SetSP(spOff);
+            state.PC = codeOff;
             var err = InterpreterResult.Throw(ex);
             state.Complete(err);
             return err;
         }
     }
 
-    private static InterpreterResult ExtractResult(VmState state, Bytecode prog) {
-        if (state.Stack.IsEmpty)
-            return InterpreterResult.Void;
-
-        var resultType = prog.ResultType;
-        if (resultType is null || resultType == typeof(void)) {
-            int val = state.Stack.PopInt();
-            if (val > 0 && val < state.Heap.Count && state.Heap.Get(val) is not int)
-                return InterpreterResult.FromValue(state.Heap.Get(val));
-            return InterpreterResult.FromValue(val);
-        }
-
-        if (resultType == typeof(double) || resultType == typeof(float))
-            return InterpreterResult.FromValue(state.Stack.Pop<double>());
-
-        if (resultType == typeof(long) || resultType == typeof(ulong))
-            return InterpreterResult.FromValue(state.Stack.Pop<long>());
-
-        if (!resultType.IsPrimitive && !resultType.IsValueType) {
-            int handle = state.Stack.PopInt();
-            return IsValidHeapHandle(state, handle)
-                ? InterpreterResult.FromValue(state.Heap.Get(handle))
-                : InterpreterResult.FromValue(handle);
-        }
-
-        return InterpreterResult.FromValue(state.Stack.PopInt());
-    }
-
-    internal static object? ResolveHeapValue(VmState state, int raw) =>
-        raw >= 0 && raw < state.Heap.Count ? state.Heap.Get(raw) : (object?)raw;
-
-    internal static bool IsValidHeapHandle(VmState state, int handle) =>
-        handle >= 0 && handle < state.Heap.Count;
-
-    private static ExceptionRegion? FindRegion(IReadOnlyList<ExceptionRegion> regions, int pc) {
+    private static ExceptionRegion? FindRegion(
+        IReadOnlyList<ExceptionRegion> regions, int pc) {
         for (int i = 0; i < regions.Count; i++) {
             var r = regions[i];
             if (pc >= r.TryStart && pc < r.TryEnd)
@@ -663,29 +483,35 @@ internal static class Vm {
         return null;
     }
 
-#if VM_TRACE
-    private static string TruncateTrace(string s, int maxLen = 50) =>
-        s.Length <= maxLen ? s : s[..(maxLen - 3)] + "...";
-#endif
+    private static InterpreterResult ExtractResult(
+        VmState state, Bytecode prog,
+        ref long baseSlot, ref int spOff) {
+        if (spOff == 0)
+            return InterpreterResult.Void;
 
-    private static int ReadInt32(byte[] code, ref int pc) {
-        int val = code[pc] | (code[pc + 1] << 8) | (code[pc + 2] << 16) | (code[pc + 3] << 24);
-        pc += 4;
-        return val;
+        var resultType = prog.ResultType;
+        long raw = Unsafe.Add(ref baseSlot, --spOff);
+
+        if (resultType is null || resultType == typeof(void))
+            return InterpreterResult.FromValue(raw);
+
+        if (resultType == typeof(int) || resultType == typeof(long)
+            || resultType == typeof(uint) || resultType == typeof(ulong))
+            return InterpreterResult.FromValue(raw);
+
+        if (resultType == typeof(double) || resultType == typeof(float))
+            return InterpreterResult.FromValue(
+                BitConverter.Int64BitsToDouble(raw));
+
+        if (resultType == typeof(bool))
+            return InterpreterResult.FromValue(raw != 0);
+
+        return InterpreterResult.FromValue(raw);
     }
 
-    private static long ReadInt64(byte[] code, ref int pc) {
-        long val = (long)code[pc] | ((long)code[pc + 1] << 8) | ((long)code[pc + 2] << 16) | ((long)code[pc + 3] << 24)
-                 | ((long)code[pc + 4] << 32) | ((long)code[pc + 5] << 40) | ((long)code[pc + 6] << 48) | ((long)code[pc + 7] << 56);
-        pc += 8;
-        return val;
-    }
+    internal static object? ResolveHeapValue(VmState state, int raw) =>
+        raw >= 0 && raw < state.Heap.Count ? state.Heap.UnsafeGet(raw) : (object?)raw;
 
-    private static double ReadDouble(byte[] code, ref int pc) {
-        long raw = (long)code[pc] | ((long)code[pc + 1] << 8) | ((long)code[pc + 2] << 16) | ((long)code[pc + 3] << 24)
-                 | ((long)code[pc + 4] << 32) | ((long)code[pc + 5] << 40) | ((long)code[pc + 6] << 48) | ((long)code[pc + 7] << 56);
-        pc += 8;
-        return BitConverter.Int64BitsToDouble(raw);
-    }
-
+    internal static bool IsValidHeapHandle(VmState state, int handle) =>
+        handle >= 0 && handle < state.Heap.Count;
 }

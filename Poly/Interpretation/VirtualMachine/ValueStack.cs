@@ -1,117 +1,72 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace Poly.Interpretation.VirtualMachine;
 
 internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
-    private int[] _slots = ArrayPool<int>.Shared.Rent(initialSlots);
+    private long[] _slots = ArrayPool<long>.Shared.Rent(initialSlots);
 
-    public int SP { get; private set; } = 0;
+    public int SP { get; private set; }
     public bool IsEmpty => SP == 0;
-
-    public Span<int> AsSpan() => _slots.AsSpan(0, SP);
-
-    public void Push<T>(T value) where T : unmanaged {
-        int slots = SlotCountOf<T>();
-        if (SP + slots > _slots.Length)
-            Grow();
-        MemoryMarshal.Write(MemoryMarshal.AsBytes(_slots.AsSpan(SP, slots)), in value);
-        SP += slots;
-    }
-
-    public T Pop<T>() where T : unmanaged {
-        int slots = SlotCountOf<T>();
-        if (SP < slots)
-            throw new InvalidOperationException("Stack underflow");
-        SP -= slots;
-        return MemoryMarshal.Read<T>(MemoryMarshal.AsBytes(_slots.AsSpan(SP, slots)));
-    }
+    public Span<long> AsSpan() => _slots.AsSpan(0, SP);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Push(int value) {
+    public void Push(long value) {
         if (SP < _slots.Length) { _slots[SP++] = value; return; }
         GrowNoInline(value);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void GrowNoInline(int value) { Grow(); _slots[SP++] = value; }
+    private void GrowNoInline(long value) { Grow(); _slots[SP++] = value; }
 
-    public void Push(long value) => Push<long>(value);
+    public void Push(int value) => Push((long)value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int PopInt() {
+    public long Pop() {
         if (SP > 0) return _slots[--SP];
-        return ThrowUnderflow<int>();
+        return ThrowUnderflow();
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private T ThrowUnderflow<T>() => throw new InvalidOperationException("Stack underflow");
+    private static long ThrowUnderflow() =>
+        throw new InvalidOperationException("Stack underflow");
 
-    public long PopLong() => Pop<long>();
+    public int PopInt() => (int)Pop();
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void PushTwo(int low, int high) {
-        if (SP + 1 < _slots.Length) { _slots[SP++] = low; _slots[SP++] = high; return; }
-        GrowNoInline(low, high);
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void GrowNoInline(int low, int high) { Grow(); _slots[SP++] = low; _slots[SP++] = high; }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public (int low, int high) PopTwo() {
-        if (SP >= 2) { int h = _slots[--SP]; int l = _slots[--SP]; return (l, h); }
-        return ThrowUnderflow<(int, int)>();
-    }
-
-    public void Drop(int slots) {
-        if (slots < 0 || SP < slots)
+    public void Drop(int count) {
+        if (count < 0 || SP < count)
             throw new InvalidOperationException("Stack underflow");
-        SP -= slots;
+        SP -= count;
     }
 
-    public void TruncateTo(int targetSp) {
-        if (targetSp < 0 || targetSp > SP)
-            throw new ArgumentOutOfRangeException(nameof(targetSp));
-        SP = targetSp;
-    }
-
-    public void Reserve(int slots) {
-        if (SP + slots > _slots.Length)
+    public void Reserve(int count) {
+        if (SP + count > _slots.Length)
             Grow();
-        SP += slots;
+        SP += count;
     }
 
-    public int PeekInt(int offset = 0) {
-        var idx = SP - 1 - offset;
-        if (idx < 0)
-            throw new InvalidOperationException("Peek out of range");
-        return _slots[idx];
-    }
+    internal long[] RawSlots => _slots;
 
-    public int ReadSlot(int index) => _slots[index];
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal int ReadSlot(int index) =>
+        index >= 0 && index < _slots.Length ? (int)_slots[index] : 0;
 
-    public void CopyFrom(int srcSlot, int destSlot, int count) {
-        Array.Copy(_slots, srcSlot, _slots, destSlot, count);
-    }
+    internal void SetSP(int value) => SP = value;
+
+    public void Reset() => SP = 0;
 
     public void Dispose() {
         if (_slots is not null) {
-            ArrayPool<int>.Shared.Return(_slots);
+            ArrayPool<long>.Shared.Return(_slots);
             _slots = null!;
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int SlotCountOf<T>() where T : unmanaged =>
-        (Unsafe.SizeOf<T>() + 3) / 4;
-
     private void Grow() {
         var newSize = _slots.Length * 2;
-        var newSlots = ArrayPool<int>.Shared.Rent(newSize);
+        var newSlots = ArrayPool<long>.Shared.Rent(newSize);
         Array.Copy(_slots, newSlots, SP);
-        ArrayPool<int>.Shared.Return(_slots);
+        ArrayPool<long>.Shared.Return(_slots);
         _slots = newSlots;
     }
 }

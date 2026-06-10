@@ -25,18 +25,31 @@ internal sealed class Heap {
     }
 
     public object? Get(int handle) {
-        if (handle < 0 || handle >= _objects.Count)
+        if ((uint)handle >= (uint)_objects.Count)
             throw new ArgumentOutOfRangeException(nameof(handle), "Invalid heap handle");
         return _objects[handle];
     }
 
     public void Set(int handle, object? value) {
-        if (handle < 0 || handle >= _objects.Count)
+        if ((uint)handle >= (uint)_objects.Count)
             throw new ArgumentOutOfRangeException(nameof(handle), "Invalid heap handle");
         _objects[handle] = value;
         if (value is null)
             _freeSlots.Push(handle);
     }
 
+    public object? UnsafeGet(int handle) => _objects[handle];
+
+    public void UnsafeSet(int handle, object? value) {
+        _objects[handle] = value;
+        if (value is null)
+            _freeSlots.Push(handle);
+    }
+
     internal IReadOnlyList<object?> DebugView => _objects;
+
+    public void Clear() {
+        _objects.Clear();
+        _freeSlots.Clear();
+    }
 }

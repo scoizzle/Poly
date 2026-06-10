@@ -436,12 +436,8 @@ internal static class Lowering {
         if (resolved is ClrMethod clrMethod) {
             int siteIdx = ctx.CallSites!.Count;
             bool isStatic = clrMethod.LifetimeModifier == LifetimeModifier.Static;
-            var resolvedMethod = clrMethod.MethodInfo;
-            ctx.CallSites!.Add(CallSiteCompiler.Compile(resolvedMethod, isStatic));
-            bool hasReturn = resolvedMethod.ReturnType != typeof(void);
-            // Pack: lower 32 = siteIdx, 32-47 = argSlots, bit 48 = hasRet
-            long packed = (long)siteIdx | ((long)args.Length << 32) | ((hasReturn ? 1L : 0L) << 48);
-            ctx.Code.Emit(OpCode.CallExternal, packed);
+            ctx.CallSites!.Add(CallSiteCompiler.Compile(clrMethod.MethodInfo, isStatic));
+            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
 
@@ -563,19 +559,14 @@ internal static class Lowering {
             ctx.Code.Emit(OpCode.Pop);
     }
 
-    private static long PackExternal(int siteIndex, int argSlots, bool hasRet) =>
-        (long)siteIndex | ((long)argSlots << 32) | ((hasRet ? 1L : 0L) << 48);
-
     private static void EmitMember(Member m, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         var resolved = ctx.Analysis.GetResolvedMember(m);
         if (resolved is ClrMethod getter) {
             EmitNode(m.Value, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites!.Count;
             bool isStatic = getter.LifetimeModifier == LifetimeModifier.Static;
-            var resolvedMethod = getter.MethodInfo;
-            ctx.CallSites!.Add(CallSiteCompiler.Compile(resolvedMethod, isStatic));
-            ctx.Code.Emit(OpCode.CallExternal,
-                PackExternal(siteIdx, getter.Parameters.Count(), resolvedMethod.ReturnType != typeof(void)));
+            ctx.CallSites!.Add(CallSiteCompiler.Compile(getter.MethodInfo, isStatic));
+            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
         throw new InvalidOperationException($"Member access not resolved: {m.MemberName}");
@@ -589,10 +580,8 @@ internal static class Lowering {
                 EmitNode(arg, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites!.Count;
             bool isStatic = getter.LifetimeModifier == LifetimeModifier.Static;
-            var resolvedMethod = getter.MethodInfo;
-            ctx.CallSites!.Add(CallSiteCompiler.Compile(resolvedMethod, isStatic));
-            ctx.Code.Emit(OpCode.CallExternal,
-                PackExternal(siteIdx, getter.Parameters.Count(), resolvedMethod.ReturnType != typeof(void)));
+            ctx.CallSites!.Add(CallSiteCompiler.Compile(getter.MethodInfo, isStatic));
+            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
         throw new InvalidOperationException($"Index access not resolved");
@@ -605,7 +594,7 @@ internal static class Lowering {
                 EmitNode(arg, ref ctx, lambdaState);
             int siteIdx = ctx.CallSites!.Count;
             ctx.CallSites!.Add(CallSiteCompiler.CompileConstructor(ctor.ConstructorInfo));
-            ctx.Code.Emit(OpCode.CallExternal, PackExternal(siteIdx, n.Arguments.Length, true));
+            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
         throw new InvalidOperationException($"Constructor not resolved for new {n.Type}");
@@ -618,7 +607,7 @@ internal static class Lowering {
         if (getAwaiter is not null) {
             int siteIdx = ctx.CallSites!.Count;
             ctx.CallSites.Add(CallSiteCompiler.Compile(getAwaiter, false));
-            ctx.Code.Emit(OpCode.CallExternal, PackExternal(siteIdx, 0, true));
+            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
         }
     }
 
@@ -641,8 +630,7 @@ internal static class Lowering {
         int siteIdx = ctx.CallSites!.Count;
         bool isStatic = setter.LifetimeModifier == LifetimeModifier.Static;
         ctx.CallSites!.Add(CallSiteCompiler.Compile(setter.MethodInfo, isStatic));
-        ctx.Code.Emit(OpCode.CallExternal,
-            PackExternal(siteIdx, setter.Parameters.Count(), false));
+        ctx.Code.Emit(OpCode.CallExternal, siteIdx);
     }
 
     private static void EmitMemberStore(Member m, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -653,8 +641,7 @@ internal static class Lowering {
         int siteIdx = ctx.CallSites!.Count;
         bool isStatic = setter.LifetimeModifier == LifetimeModifier.Static;
         ctx.CallSites!.Add(CallSiteCompiler.Compile(setter.MethodInfo, isStatic));
-        ctx.Code.Emit(OpCode.CallExternal,
-            PackExternal(siteIdx, setter.Parameters.Count(), false));
+        ctx.Code.Emit(OpCode.CallExternal, siteIdx);
     }
 
     // ── Discovery helpers (unchanged from original) ──

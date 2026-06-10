@@ -103,15 +103,11 @@ internal static class Vm {
                             }
 
                         case OpCode.CallExternal: {
-                                long packed = Code64(ref codeRef, codeOff + 1);
-                                int siteIndex = (int)(packed & 0xFFFFFFFF);
-                                int argSlots = (int)((packed >> 32) & 0xFFFF);
-                                bool hasRet = ((packed >> 48) & 1) != 0;
+                                int siteIndex = (int)Code64(ref codeRef, codeOff + 1);
                                 if ((uint)siteIndex >= (uint)prog.CallSites.Count ||
                                     prog.CallSites[siteIndex] is null)
                                     throw new InvalidOperationException(
                                         $"CallExternal: no target at site {siteIndex}");
-                                state.CachedArgSlots = argSlots;
                                 state.Stack.SetSP(spOff);
                                 state.PC = codeOff + 9;
                                 prog.CallSites[siteIndex](state);

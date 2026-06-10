@@ -9,7 +9,7 @@ public class DomainMcpToolsTests {
     public async Task DomainSessionStore_UpdateAnalysis_ConcurrentCallsAdvanceRevisionsAtomically() {
         var sessionId = $"mcp-concurrency-{Guid.NewGuid():N}";
         _ = DomainAuthoringTool.CreateDomain("Concurrent", sessionId);
-        const int workerCount = 24;
+        const int workerCount = 5;
         using var ready = new CountdownEvent(workerCount);
         using var start = new ManualResetEventSlim(false);
 

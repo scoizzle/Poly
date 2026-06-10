@@ -30,6 +30,7 @@ internal static class Lowering {
         public Dictionary<Lambda, List<string>>? LambdaCaptureMap;
         public IReadOnlyDictionary<string, int>? UpvalueMap;
         public List<ExceptionRegion> ExceptionRegions;
+        public List<LoopBodyEntry>? LoopBodies;
     }
 
     public static Bytecode Lower(Node root, AnalysisResult analysis) {
@@ -41,6 +42,7 @@ internal static class Lowering {
             Constants = [],
             CallSites = [],
             ExceptionRegions = [],
+            LoopBodies = [],
         };
 
         // Discover referenced functions and lambdas
@@ -153,7 +155,7 @@ internal static class Lowering {
         // Functions are referenced by PC directly.
 
         return ctx.Code.BuildProgram(ctx.Functions, ctx.Constants, ctx.CallSites, ctx.ExceptionRegions,
-            sourceMap: ctx.SourceMap, analysisResult: analysis);
+            sourceMap: ctx.SourceMap, analysisResult: analysis, loopBodies: ctx.LoopBodies);
     }
 
     private sealed record LambdaEmitState(
@@ -396,11 +398,22 @@ internal static class Lowering {
         string end = ctx.Code.NextLabel();
 
         ctx.Code.Mark(cont);
+        int contPC = ctx.Code.Offset;
         EmitNode(wl.Condition, ref ctx, lambdaState);
         ctx.Code.EmitJump(OpCode.JumpIfFalse, end);
+        int bodyPC = ctx.Code.Offset;
         EmitNode(wl.Body, ref ctx, lambdaState);
+        if (EmitsValue(wl.Body, ctx.Analysis))
+            ctx.Code.Emit(OpCode.Pop);
+        int bodyEndPC = ctx.Code.Offset;
         ctx.Code.EmitJump(OpCode.Jump, cont);
         ctx.Code.Mark(end);
+        int endPC = ctx.Code.Offset;
+
+        ctx.LoopBodies?.Add(new(bodyPC, bodyEndPC - bodyPC, contPC, contPC, endPC, wl.Body) {
+            ParamIndexMap = ctx.ParamIndexMap,
+            LocalIndexMap = ctx.LocalIndexMap,
+        });
     }
 
     private static void EmitDoWhileLoop(DoWhileLoop dw, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -425,11 +438,15 @@ internal static class Lowering {
                 ctx.Code.Emit(OpCode.Pop);
         }
         ctx.Code.Mark(cont);
+        int contPC = ctx.Code.Offset;
         if (fl.Condition is not null) {
             EmitNode(fl.Condition, ref ctx, lambdaState);
             ctx.Code.EmitJump(OpCode.JumpIfFalse, end);
         }
+        int bodyPC = ctx.Code.Offset;
         EmitNode(fl.Body, ref ctx, lambdaState);
+        int bodyEndPC = ctx.Code.Offset;
+        int incPC = ctx.Code.Offset;
         if (fl.Increment is not null) {
             EmitNode(fl.Increment, ref ctx, lambdaState);
             if (EmitsValue(fl.Increment, ctx.Analysis))
@@ -437,6 +454,12 @@ internal static class Lowering {
         }
         ctx.Code.EmitJump(OpCode.Jump, cont);
         ctx.Code.Mark(end);
+        int endPC = ctx.Code.Offset;
+
+        ctx.LoopBodies?.Add(new(bodyPC, bodyEndPC - bodyPC, contPC, incPC, endPC, fl.Body) {
+            ParamIndexMap = ctx.ParamIndexMap,
+            LocalIndexMap = ctx.LocalIndexMap,
+        });
     }
 
     private static void EmitVariable(Variable v, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -772,11 +795,16 @@ internal static class Lowering {
     }
 
     private static void DiscoverLocalsFromAnalysis(Node body, VariableScopeMetadata scope, Dictionary<string, int> paramIndexMap, Dictionary<string, int> localIndexMap) {
+        // Collect names, sort for deterministic slot assignment
+        var names = new List<string>();
         foreach (var variable in scope.VariableReferences.Keys) {
             string name = variable.Name;
             if (!paramIndexMap.ContainsKey(name) && !localIndexMap.ContainsKey(name))
-                localIndexMap[name] = localIndexMap.Count;
+                names.Add(name);
         }
+        names.Sort();
+        foreach (var name in names)
+            localIndexMap[name] = localIndexMap.Count;
     }
 
     private static void DiscoverCapturesFromAnalysis(Node lambdaBody, VariableScopeMetadata scope, IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, Dictionary<MethodDefinitionNode, int>? funcIndexMap, HashSet<Block>? parentBlocks, HashSet<Block> descendantBlocks, AnalysisResult analysis, List<string> captures) {
@@ -810,6 +838,11 @@ internal static class Lowering {
 
     private static bool EmitsValue(Node node, AnalysisResult analysis) {
         if (node is null) return false;
+        // Loop constructs don't produce values — their bodies' results are
+        // consumed inside the loop by an explicit Pop in EmitWhileLoop etc.
+        if (node is WhileLoop or DoWhileLoop or ForLoop) return false;
+        // Assignments always produce a value, regardless of analysis metadata.
+        if (node is Assignment) return true;
         var type = analysis.GetResolvedType(node);
         if (type is not null && type.Name != "Void")
             return true;

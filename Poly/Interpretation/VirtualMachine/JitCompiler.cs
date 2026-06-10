@@ -109,6 +109,74 @@ internal static class JitCompiler {
         };
     }
 
+    public static LoopBodyDelegate CompileLoopBody(LoopBodyEntry entry, AnalysisResult analysis) {
+        if (analysis is null) return null!;
+
+        var gen = new LinqExpressionGenerator(analysis);
+        var compileResult = gen.Compile(entry.BodyNode);
+        var bodyExpr = compileResult.Expression;
+        var freeVars = compileResult.Parameters;
+
+        // Single Expression<LoopBodyDelegate> that reads VM stack directly
+        var s = Expression.Parameter(typeof(VmState), "s");
+        var stack = Expression.Property(s, "Stack");
+        var slots = Expression.Property(stack, "RawSlots");
+        var fbExpr = Expression.Property(s, "FrameBase");
+        var casExpr = Expression.Property(s, "CachedArgSlots");
+
+        // localBase = FrameBase + FrameHeaderSlots (4)
+        // paramBase = FrameBase - CachedArgSlots
+        var localBase = Expression.Add(fbExpr, Expression.Constant(Vm.FrameHeaderSlots));
+        var paramBase = Expression.Subtract(fbExpr, casExpr);
+
+        var body = new List<Expression>();
+        var argExprs = new Expression[freeVars.Count];
+
+        for (int i = 0; i < freeVars.Count; i++) {
+            var p = freeVars[i];
+            Expression rawRead;
+
+            if (p.Name is not null && entry.LocalIndexMap?.TryGetValue(p.Name, out int lSlot) == true) {
+                rawRead = Expression.ArrayIndex(slots, Expression.Add(localBase, Expression.Constant(lSlot)));
+            }
+            else if (p.Name is not null && entry.ParamIndexMap?.TryGetValue(p.Name, out int pSlot) == true) {
+                rawRead = Expression.ArrayIndex(slots, Expression.Add(paramBase, Expression.Constant(pSlot)));
+            }
+            else {
+                rawRead = Expression.Constant(0L);
+            }
+
+            argExprs[i] = ConvertSlotToExpr(rawRead, p.Type);
+        }
+
+        // Call the compiled body expression with the resolved arguments
+        Expression invokeBody = freeVars.Count > 0
+            ? Expression.Invoke(bodyExpr, argExprs)
+            : bodyExpr;
+
+        var debugCheck = Expression.Property(s, "DebugMode");
+        var fallback = Expression.Assign(Expression.Property(s, "JITFallbackRequested"), Expression.Constant(true));
+
+        body.Add(Expression.IfThen(debugCheck, Expression.Block(fallback, Expression.Return(Expression.Label()))));
+        body.Add(invokeBody);
+        body.Add(Expression.Constant(LoopResult.Normal));
+
+        return Expression.Lambda<LoopBodyDelegate>(
+            Expression.Block(body), s).Compile();
+    }
+
+    private static Expression ConvertSlotToExpr(Expression rawLong, Type targetType) {
+        if (targetType == typeof(long)) return rawLong;
+        if (targetType == typeof(int)) return Expression.Convert(rawLong, typeof(int));
+        if (targetType == typeof(short)) return Expression.Convert(rawLong, typeof(short));
+        if (targetType == typeof(byte)) return Expression.Convert(rawLong, typeof(byte));
+        if (targetType == typeof(bool)) return Expression.NotEqual(rawLong, Expression.Constant(0L));
+        if (targetType == typeof(double)) return Expression.Convert(rawLong, typeof(double));
+        if (targetType == typeof(float)) return Expression.Convert(rawLong, typeof(float));
+        if (targetType == typeof(uint)) return Expression.Convert(rawLong, typeof(uint));
+        return Expression.Convert(rawLong, targetType);
+    }
+
     private static Type? ResolveClrType(Node? typeRef, AnalysisResult analysis) {
         if (typeRef is null) return null;
         var resolved = analysis.GetResolvedType(typeRef);

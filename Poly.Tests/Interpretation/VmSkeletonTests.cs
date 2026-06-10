@@ -244,9 +244,9 @@ public class VmSkeletonTests {
     public async Task Vm_Jump_BranchesToTarget() {
         var prog = new Bytecode([
             .. J(OpCode.Push, 1),
-            .. J(OpCode.Jump, 3),           // jump to chunk 3 (skip chunk 2's Push 99)
+            .. J(OpCode.Jump, 27),          // jump past chunk 2 (offset 27 = 3 * 9)
             .. J(OpCode.Push, 99),          // chunk 2: skipped
-            .. J(OpCode.Push, 2),            // chunk 3
+            .. J(OpCode.Push, 2),           // chunk 3 (offset 27)
         ], []);
         using var state = new VmState { Program = prog };
         Vm.Execute(state);
@@ -260,7 +260,7 @@ public class VmSkeletonTests {
     public async Task Vm_JumpIfFalse_SkipsOnZero() {
         var prog = new Bytecode([
             .. J(OpCode.Push, 0),           // false
-            .. J(OpCode.JumpIfFalse, 3),    // jump to chunk 3 (skip chunk 2's Push 99)
+            .. J(OpCode.JumpIfFalse, 27),   // jump past chunk 2 (offset 27 = 3 * 9)
             .. J(OpCode.Push, 99),           // chunk 2: skipped
             .. J(OpCode.Push, 42),
         ], []);
@@ -509,6 +509,125 @@ public class VmSkeletonTests {
 
         await Assert.That(state.IsComplete).IsTrue();
         await Assert.That(result.Value).IsEqualTo(6L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_WhileLoop_Basic() {
+        // While(false) { } — never executes, returns null (void)
+        var body = new Block([new Constant(42)]);
+        var wl = new WhileLoop(new Constant(0), body);
+        var lambda = new Lambda([], wl);
+        var invoke = new Invoke(lambda);
+
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke);
+
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+    }
+
+    [Test]
+    public async Task Vm_Lambda_WithVariables() {
+        var x = new Variable("x"); var y = new Variable("y");
+        var body = new Block(
+            [new Assignment(x, new Constant(5)),
+             new Assignment(y, new Constant(3)),
+             new Add(x, y)],
+            [x, y]
+        );
+        var lambda = new Lambda([], body);
+        var invoke = new Invoke(lambda);
+
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(8L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_WhileLoop_IncLocal() {
+        var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(iVar, new Constant(1)),
+             new WhileLoop(new LessThanOrEqual(iVar, new Constant(3)),
+                 new Block([new Assignment(iVar, new Add(iVar, new Constant(1)))])),
+             iVar],
+            [iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(4L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_AssignAdd() {
+        // sum = sum + i (no loop, no IncLocal)
+        var sumVar = new Variable("sum"); var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(5)),
+             new Assignment(iVar, new Constant(3)),
+             new Assignment(sumVar, new Add(sumVar, iVar)),
+             sumVar],
+            [sumVar, iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(8L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_WhileLoop_Sum() {
+        var sumVar = new Variable("sum"); var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(0)),
+             new Assignment(iVar, new Constant(1)),
+             new WhileLoop(new LessThanOrEqual(iVar, new Constant(10)),
+                 new Block([
+                     new Assignment(sumVar, new Add(sumVar, iVar)),
+                     new Assignment(iVar, new Add(iVar, new Constant(1)))
+                 ])),
+             sumVar],
+            [sumVar, iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(55L);
     }
 
     [Test]

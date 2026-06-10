@@ -45,8 +45,7 @@ internal sealed class BytecodeBuilder {
             if (!_labels.TryGetValue(label, out int targetOffset))
                 throw new InvalidOperationException($"Undefined label: '{label}'");
 
-            int targetChunk = targetOffset / 9;
-            byte[] operand = BitConverter.GetBytes((long)targetChunk);
+            byte[] operand = BitConverter.GetBytes((long)targetOffset);
             for (int i = 0; i < 8; i++)
                 _code[patchOffset + 1 + i] = operand[i];
         }
@@ -61,7 +60,8 @@ internal sealed class BytecodeBuilder {
         List<ExceptionRegion>? exceptionRegions = null,
         Type? resultType = null,
         Dictionary<int, NodeId>? sourceMap = null,
-        AnalysisResult? analysisResult = null) {
-        return new Bytecode(Build(), sourceMap ?? [], functions, constants, callSites, exceptionRegions, resultType, analysisResult);
+        AnalysisResult? analysisResult = null,
+        List<LoopBodyEntry>? loopBodies = null) {
+        return new Bytecode(Build(), sourceMap ?? [], functions, constants, callSites, exceptionRegions, resultType, analysisResult, loopBodies);
     }
 }

@@ -114,18 +114,19 @@ internal static class Vm {
                             break;
 
                         case OpCode.Jump: {
-                                long target = Code64(ref codeRef, codeOff + 1);
-                                codeOff = (int)target * 9;
+                                codeOff = (int)Code64(ref codeRef, codeOff + 1);
                                 continue;
                             }
 
                         case OpCode.JumpIfFalse:
                             if (Slot(ref baseSlot, --spOff) == 0) {
-                                long target = Code64(ref codeRef, codeOff + 1);
-                                codeOff = (int)target * 9;
+                                codeOff = (int)Code64(ref codeRef, codeOff + 1);
                             }
                             else {
                                 codeOff += 9;
+                                // Loop body JIT: check if this fall-through PC starts a hot loop body
+                                if (!state.DebugMode && prog.LoopBodies.Count > 0)
+                                    TryJitLoopBody(ref codeOff, state, prog);
                             }
                             continue;
 
@@ -667,4 +668,31 @@ internal static class Vm {
 
     internal static bool IsValidHeapHandle(VmState state, int handle) =>
         handle >= 0 && handle < state.Heap.Count;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void TryJitLoopBody(ref int codeOff, VmState state, Bytecode prog) {
+        var bodies = prog.LoopBodies;
+        for (int i = 0; i < bodies.Count; i++) {
+            var entry = bodies[i];
+            if (codeOff != entry.BodyPC) continue;
+
+            if (entry.NativeFn is not null && !state.DebugMode) {
+                // JIT path: call native delegate
+                var result = entry.NativeFn(state);
+                codeOff = result switch {
+                    LoopResult.Normal => entry.BodyPC + entry.BodyLength,
+                    LoopResult.Break => entry.EndPC,
+                    LoopResult.Continue => entry.ContinuePC,
+                    _ => codeOff
+                };
+                return;
+            }
+
+            // Hotness threshold → compile native delegate
+            if (state.DebugMode) return;
+            if (entry.NativeFn is null && ++entry.HotCount > JitThreshold)
+                entry.NativeFn = JitCompiler.CompileLoopBody(entry, prog.AnalysisResult!);
+            return;
+        }
+    }
 }

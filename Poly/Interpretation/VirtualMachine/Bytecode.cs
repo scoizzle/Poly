@@ -20,6 +20,7 @@ internal sealed class Bytecode {
     public IReadOnlyList<ExceptionRegion> ExceptionRegions { get; }
     public Type? ResultType { get; }
     public AnalysisResult? AnalysisResult { get; }
+    public IReadOnlyList<LoopBodyEntry> LoopBodies { get; }
     public int CodeLength => Code.Length;
 
     public Bytecode(
@@ -30,7 +31,8 @@ internal sealed class Bytecode {
         List<CallSiteDelegate>? callSites = null,
         List<ExceptionRegion>? exceptionRegions = null,
         Type? resultType = null,
-        AnalysisResult? analysisResult = null) {
+        AnalysisResult? analysisResult = null,
+        List<LoopBodyEntry>? loopBodies = null) {
         Code = code;
         SourceMap = sourceMap;
         Functions = functions ?? [];
@@ -39,6 +41,7 @@ internal sealed class Bytecode {
         ExceptionRegions = exceptionRegions ?? [];
         ResultType = resultType;
         AnalysisResult = analysisResult;
+        LoopBodies = loopBodies ?? [];
     }
 
     public NodeId? GetNodeIdForInstruction(int pc) =>

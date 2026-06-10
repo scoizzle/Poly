@@ -33,6 +33,7 @@ internal sealed class VmState : IDisposable {
     public AnalysisResult? AnalysisResult { get; set; }
     public Dictionary<NodeId, string>? NodeDescriptions { get; set; }
     public TextWriter? Trace { get; set; }
+    public bool JITFallbackRequested { get; set; }
 
     public static Dictionary<NodeId, string> BuildNodeDescriptions(Node root) {
         var map = new Dictionary<NodeId, string>();
@@ -57,6 +58,7 @@ internal sealed class VmState : IDisposable {
         Status = InterpreterStatus.Running;
         LastResult = null;
         NodeDescriptions = null;
+        JITFallbackRequested = false;
         Stack.Reset();
         Heap.Clear();
     }

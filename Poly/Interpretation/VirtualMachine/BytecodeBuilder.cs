@@ -1,3 +1,5 @@
+using Poly.Syntax.Analysis;
+
 namespace Poly.Interpretation.VirtualMachine;
 
 internal sealed class BytecodeBuilder {
@@ -57,7 +59,9 @@ internal sealed class BytecodeBuilder {
         List<object?>? constants = null,
         List<CallSiteDelegate>? callSites = null,
         List<ExceptionRegion>? exceptionRegions = null,
-        Type? resultType = null) {
-        return new Bytecode(Build(), [], functions, constants, callSites, exceptionRegions, resultType);
+        Type? resultType = null,
+        Dictionary<int, NodeId>? sourceMap = null,
+        AnalysisResult? analysisResult = null) {
+        return new Bytecode(Build(), sourceMap ?? [], functions, constants, callSites, exceptionRegions, resultType, analysisResult);
     }
 }

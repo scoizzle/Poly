@@ -50,6 +50,7 @@ namespace Poly.Interpretation.VirtualMachine;
 
 internal static class Vm {
     internal const int FrameHeaderSlots = 4;
+    internal const int JitThreshold = 10;
 
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct CallFrame {
@@ -132,6 +133,29 @@ internal static class Vm {
                                 int funcIndex = (int)Code64(ref codeRef, codeOff + 1);
                                 int argSlots = (int)Slot(ref baseSlot, --spOff);
                                 var entry = prog.Functions[funcIndex];
+
+                                // JIT path: native delegate dispatch
+                                if (entry.NativeFn is not null && !state.DebugMode) {
+                                    state.Stack.SetSP(spOff);
+                                    state.PC = codeOff + 9;
+                                    entry.NativeFn(state);
+                                    spOff = state.Stack.SP;
+                                    codeOff = state.PC;
+
+                                    if (state.JITFallbackRequested) {
+                                        state.JITFallbackRequested = false;
+                                        Slot(ref baseSlot, spOff++) = argSlots; // restore argCount
+                                        goto Call_Bytecode;
+                                    }
+                                    continue;
+                                }
+
+                                // Hotness threshold → compile native delegate
+                                if (!state.DebugMode && entry.SourceNode is not null
+                                    && entry.NativeFn is null && ++entry.HotCount > JitThreshold)
+                                    entry.NativeFn = JitCompiler.Compile(entry, prog.AnalysisResult!);
+
+                            Call_Bytecode:
                                 int retPC = codeOff + 9;
                                 int prevBase = state.FrameBase;
                                 int newBase = spOff;
@@ -497,6 +521,29 @@ internal static class Vm {
                                 var closure = state.Heap.Get(closureHandle) as Closure
                                     ?? throw new InvalidOperationException("CallClosure target is not a Closure");
                                 var entry = prog.Functions[closure.FuncIndex];
+
+                                // JIT path: native delegate dispatch
+                                if (entry.NativeFn is not null && !state.DebugMode) {
+                                    state.Stack.SetSP(spOff);
+                                    state.PC = codeOff + 1;
+                                    entry.NativeFn(state);
+                                    spOff = state.Stack.SP;
+                                    codeOff = state.PC;
+
+                                    if (state.JITFallbackRequested) {
+                                        state.JITFallbackRequested = false;
+                                        Slot(ref baseSlot, spOff++) = argSlots;
+                                        goto CallClosure_Bytecode;
+                                    }
+                                    continue;
+                                }
+
+                                // Hotness threshold → compile native delegate
+                                if (!state.DebugMode && entry.SourceNode is not null
+                                    && entry.NativeFn is null && ++entry.HotCount > JitThreshold)
+                                    entry.NativeFn = JitCompiler.Compile(entry, prog.AnalysisResult!);
+
+                            CallClosure_Bytecode:
                                 int retPC = codeOff + 1;
                                 int prevBase = state.FrameBase;
                                 int newBase = spOff;

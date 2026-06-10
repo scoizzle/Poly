@@ -92,7 +92,9 @@ internal static class Lowering {
             EmitNode(method.Body ?? method, ref bodyCtx, null);
 
             var func = ctx.Functions[methodIdx];
-            ctx.Functions[methodIdx] = new FunctionEntry(entryPc, func.ArgBytes, func.RetBytes, 0);
+            ctx.Functions[methodIdx] = new FunctionEntry(entryPc, func.ArgBytes, func.RetBytes, 0) {
+                SourceNode = method
+            };
         }
         else {
             EmitNode(root, ref ctx, null);
@@ -141,14 +143,17 @@ internal static class Lowering {
             ctx.Code.Emit(OpCode.Return);
 
             var lambdaFunc = ctx.Functions[lambdaIdx];
-            ctx.Functions[lambdaIdx] = new FunctionEntry(entryPc, lambdaFunc.ArgBytes, lambdaFunc.RetBytes, localIndexMap.Count);
+            ctx.Functions[lambdaIdx] = new FunctionEntry(entryPc, lambdaFunc.ArgBytes, lambdaFunc.RetBytes, localIndexMap.Count) {
+                SourceNode = lambda
+            };
         }
 
         // Build programs for each function + main
         // For simplicity, the entire code is one linear sequence.
         // Functions are referenced by PC directly.
 
-        return ctx.Code.BuildProgram(ctx.Functions, ctx.Constants, ctx.CallSites, ctx.ExceptionRegions);
+        return ctx.Code.BuildProgram(ctx.Functions, ctx.Constants, ctx.CallSites, ctx.ExceptionRegions,
+            sourceMap: ctx.SourceMap, analysisResult: analysis);
     }
 
     private sealed record LambdaEmitState(

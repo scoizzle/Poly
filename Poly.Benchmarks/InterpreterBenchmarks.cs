@@ -8,6 +8,7 @@ using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Interpretation.VirtualMachine;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
@@ -16,10 +17,11 @@ namespace Poly.Benchmarks;
 
 [MemoryDiagnoser]
 public class InterpreterBenchmarks {
-    private Node? _poly;
-    private Func<object?>? _linqPolyJit, _linqPolyInterp;
     private Parameter? _polyX;
-    private Node? _polyParam;
+    private Node? _poly, _polyParam;
+    private AnalysisResult? _polyAnalysis, _polyParamAnalysis;
+    private Func<object?>? _linqPolyJit, _linqPolyInterp;
+    private Bytecode? _vmPolyProgram;
     private Func<int, int>? _linqPolyJitParam, _linqPolyInterpParam;
 
     [GlobalSetup]
@@ -49,8 +51,13 @@ public class InterpreterBenchmarks {
             new Constant(5)
         );
 
-        _linqPolyJit = CompileToFunc(_poly, preferInterpretation: false);
-        _linqPolyInterp = CompileToFunc(_poly, preferInterpretation: true);
+        _polyAnalysis = Analyze(_poly);
+        _polyParamAnalysis = Analyze(_polyParam);
+
+        _vmPolyProgram = Lowering.Lower(_poly, _polyAnalysis);
+        _linqPolyJit = CompileToFunc(_poly, _polyAnalysis, preferInterpretation: false);
+        _linqPolyInterp = CompileToFunc(_poly, _polyAnalysis, preferInterpretation: true);
+
 
         var paramAnalysis = Analyze(_polyParam!);
         var gen = new LinqExpressionGenerator(paramAnalysis);
@@ -68,6 +75,12 @@ public class InterpreterBenchmarks {
 
     [Benchmark]
     public object? LinqInterp_Poly() => _linqPolyInterp!();
+
+    [Benchmark]
+    public object? Vm_Poly() {
+        using var state = new VmState { Program = _vmPolyProgram };
+        return Vm.Execute(state).Value;
+    }
 
     [Benchmark]
     public int Baseline_PolyParam() {
@@ -93,8 +106,7 @@ public class InterpreterBenchmarks {
             .Analyze(node);
     }
 
-    private static Func<object?> CompileToFunc(Node node, bool preferInterpretation) {
-        var analysis = Analyze(node);
+    private static Func<object?> CompileToFunc(Node node, AnalysisResult analysis, bool preferInterpretation) {
         var expr = new LinqExpressionGenerator(analysis).Compile(node).Expression;
         var boxed = expr.Type.IsValueType
             ? Expression.Convert(expr, typeof(object))

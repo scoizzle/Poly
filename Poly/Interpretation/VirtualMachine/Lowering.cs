@@ -74,47 +74,6 @@ internal static class Lowering {
             ctx.LambdaCaptureMap[lambda] = captures;
         }
 
-        // Emit lambda bodies
-        foreach (var lambda in referencedLambdas) {
-            var paramIndexMap = new Dictionary<string, int>();
-            int idx = 1;
-            if (lambda.Parameters is not null) {
-                foreach (var p in lambda.Parameters)
-                    paramIndexMap[p.Name ?? ""] = idx++;
-            }
-
-            var localIndexMap = new Dictionary<string, int>();
-            var scope = GetVariableScopeMeta(lambda.Body, analysis);
-            if (scope is not null)
-                DiscoverLocalsFromAnalysis(lambda.Body, scope, paramIndexMap, localIndexMap);
-
-            var upvalueMap = new Dictionary<string, int>();
-            var captures = ctx.LambdaCaptureMap[lambda];
-            for (int i = 0; i < captures.Count; i++)
-                upvalueMap[captures[i]] = i;
-
-            int lambdaIdx = ctx.LambdaFuncMap[lambda];
-            int entryPc = ctx.Code.Offset;
-            var bodyCtx = ctx;
-            bodyCtx.ParamIndexMap = paramIndexMap;
-            bodyCtx.LocalIndexMap = localIndexMap;
-            bodyCtx.UpvalueMap = upvalueMap;
-
-            // Zero-init locals
-            foreach (var (name, lIdx) in localIndexMap) {
-                var node = FindVariableInBody(lambda.Body, name);
-                if (node is null || !IsDefinitelyAssigned(node, analysis)) {
-                    bodyCtx.Code.Emit(OpCode.Push, 0L);
-                    bodyCtx.Code.Emit(OpCode.StoreLocal, lIdx);
-                }
-            }
-
-            EmitNode(lambda.Body, ref bodyCtx, new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, upvalueMap));
-
-            var lambdaFunc = ctx.Functions[lambdaIdx];
-            ctx.Functions[lambdaIdx] = new FunctionEntry(entryPc, lambdaFunc.ArgBytes, lambdaFunc.RetBytes, localIndexMap.Count);
-        }
-
         // Emit main body
         if (referencedMethods.Count > 0) {
             var method = referencedMethods[0];
@@ -142,6 +101,48 @@ internal static class Lowering {
         // Emit final Return if not already present
         ctx.Code.Emit(OpCode.Return);
         ctx.SourceMap[ctx.Code.Offset] = NodeId.NewId();
+
+        // Emit lambda bodies (each with its own Return to pop the call frame)
+        foreach (var lambda in referencedLambdas) {
+            var paramIndexMap = new Dictionary<string, int>();
+            int idx = 1;
+            if (lambda.Parameters is not null) {
+                foreach (var p in lambda.Parameters)
+                    paramIndexMap[p.Name ?? ""] = idx++;
+            }
+
+            var localIndexMap = new Dictionary<string, int>();
+            var scope = GetVariableScopeMeta(lambda.Body, analysis);
+            if (scope is not null)
+                DiscoverLocalsFromAnalysis(lambda.Body, scope, paramIndexMap, localIndexMap);
+
+            var upvalueMap = new Dictionary<string, int>();
+            var captures = ctx.LambdaCaptureMap![lambda];
+            for (int i = 0; i < captures.Count; i++)
+                upvalueMap[captures[i]] = i;
+
+            int lambdaIdx = ctx.LambdaFuncMap![lambda];
+            int entryPc = ctx.Code.Offset;
+            var bodyCtx = ctx;
+            bodyCtx.ParamIndexMap = paramIndexMap;
+            bodyCtx.LocalIndexMap = localIndexMap;
+            bodyCtx.UpvalueMap = upvalueMap;
+
+            // Zero-init locals
+            foreach (var (name, lIdx) in localIndexMap) {
+                var node = FindVariableInBody(lambda.Body, name);
+                if (node is null || !IsDefinitelyAssigned(node, analysis)) {
+                    bodyCtx.Code.Emit(OpCode.Push, 0L);
+                    bodyCtx.Code.Emit(OpCode.StoreLocal, lIdx);
+                }
+            }
+
+            EmitNode(lambda.Body, ref bodyCtx, new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, upvalueMap));
+            ctx.Code.Emit(OpCode.Return);
+
+            var lambdaFunc = ctx.Functions[lambdaIdx];
+            ctx.Functions[lambdaIdx] = new FunctionEntry(entryPc, lambdaFunc.ArgBytes, lambdaFunc.RetBytes, localIndexMap.Count);
+        }
 
         // Build programs for each function + main
         // For simplicity, the entire code is one linear sequence.
@@ -423,11 +424,10 @@ internal static class Lowering {
         var resolved = ctx.Analysis.GetResolvedMember(invoke);
         var args = invoke.Arguments;
 
-        foreach (var arg in args)
-            EmitNode(arg, ref ctx, lambdaState);
-
         if (resolved is AstMethodDefinition astMethod) {
             int funcIdx = ctx.FunctionIndexMap!.TryGetValue(astMethod.DefinitionNode, out int idx) ? idx : 0;
+            foreach (var arg in args)
+                EmitNode(arg, ref ctx, lambdaState);
             ctx.Code.Emit(OpCode.Push, (long)args.Length);
             ctx.Code.Emit(OpCode.Call, funcIdx);
             return;
@@ -436,20 +436,28 @@ internal static class Lowering {
         if (resolved is ClrMethod clrMethod) {
             int siteIdx = ctx.CallSites!.Count;
             bool isStatic = clrMethod.LifetimeModifier == LifetimeModifier.Static;
+            foreach (var arg in args)
+                EmitNode(arg, ref ctx, lambdaState);
             ctx.CallSites!.Add(CallSiteCompiler.Compile(clrMethod.MethodInfo, isStatic));
             ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
 
         if (invoke.Delegate is Lambda lambda && ctx.LambdaFuncMap!.TryGetValue(lambda, out int lambdaIdx)) {
-            ctx.Code.Emit(OpCode.Push, (long)args.Length);
+            // Direct lambda call: args layout = [dummy_closure][user_args][argCount]
+            ctx.Code.Emit(OpCode.Push, -1L); // dummy closure handle at index 0
+            foreach (var arg in args)
+                EmitNode(arg, ref ctx, lambdaState);
+            ctx.Code.Emit(OpCode.Push, (long)args.Length + 1);
             ctx.Code.Emit(OpCode.Call, lambdaIdx);
             return;
         }
 
-        // Generic lambda/delegate call via CallClosure
+        // Generic lambda/delegate call via CallClosure: [closure_handle][user_args][argCount]
         EmitNode(invoke.Delegate, ref ctx, lambdaState);
-        ctx.Code.Emit(OpCode.Push, (long)args.Length);
+        foreach (var arg in args)
+            EmitNode(arg, ref ctx, lambdaState);
+        ctx.Code.Emit(OpCode.Push, (long)args.Length + 1);
         ctx.Code.Emit(OpCode.CallClosure);
     }
 

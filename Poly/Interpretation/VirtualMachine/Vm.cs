@@ -3,8 +3,64 @@ using System.Runtime.InteropServices;
 
 namespace Poly.Interpretation.VirtualMachine;
 
+// ── VM ABI (Calling Convention & Stack Layout) ──────────────────────────
+//
+// The VM uses a slot-based stack where each slot is a long (8 bytes).
+// All arithmetic operates on long slots; type coercion to int/double/etc.
+// happens only in ExtractResult (final value read-out).
+//
+// ── Instruction encoding (1 byte opcode) ──
+//   Bit 7 (0x80): InterruptBit — set by debugger for breakpoints
+//   Bit 6 (0x40): SizeBit — 0 = 1-byte nullary, 1 = 9-byte operand-bearing
+//   Bits 5-0 (0x3F): opcode value (max 64)
+//
+// ── Call / frame layout ──
+// Before a Call* opcode, the stack must be:
+//   [...stuff...][arg_0][arg_1]...[arg_N-1][argCount (N)]
+//                                                  ^ spOff
+// The Call* pops argCount (N), sets newBase = spOff, and writes a
+// CallFrame struct at newBase (4 slots: RetPC, SavedBase, ArgSlots,
+// RetSlots).  SP advances by 4 + LocalCount.  FrameBase = newBase.
+// Local variables occupy slots immediately after the frame header.
+//
+// ── Lambda calling convention ──
+// Lambdas reserve index 0 for the closure handle (or a dummy -1 when
+// called directly via OpCode.Call rather than OpCode.CallClosure).
+// Parameters are mapped starting at index 1.  The EmitInvoke path for
+// direct Lambda calls pushes -1 as a dummy closure, so the arg layout
+// matches what the lambda body expects:
+//   [-1 (dummy closure)][user_arg_1]...[user_arg_N][N+1 (argCount)]
+//
+// ── Return convention ──
+// OpCode.Return checks FrameBase:
+//   < 0  → top-level return: force loop exit (codeOff = codeLength)
+//   >= 0 → function return:
+//     ref var frame = ref FrameAt(ref baseSlot, FrameBase)
+//     preArg = FrameBase - frame.ArgSlots
+//     Copy frame.RetSlots values from spOff - frame.RetSlots to preArg
+//     spOff = preArg + frame.RetSlots
+//     FrameBase = frame.SavedBase (handles -1 → top-level sentinel)
+//     codeOff = frame.RetPC
+//
+// ── FrameBase sentinel ──
+// -1 means "no active frame" (top-level execution).  Call* saves the
+// current FrameBase verbatim (including -1) into SavedBase.  Return
+// restores it.  This is how top-level Return detects the end of
+// execution vs. a nested function return.
+
 internal static class Vm {
     internal const int FrameHeaderSlots = 4;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct CallFrame {
+        public readonly long RetPC;
+        public readonly long SavedBase;
+        public readonly long ArgSlots;
+        public readonly long RetSlots;
+        public CallFrame(long retPC, long savedBase, long argSlots, long retSlots) {
+            RetPC = retPC; SavedBase = savedBase; ArgSlots = argSlots; RetSlots = retSlots;
+        }
+    }
 
     public static InterpreterResult Execute(VmState state) {
         var prog = state.Program;
@@ -37,21 +93,8 @@ internal static class Vm {
             Unsafe.ReadUnaligned<long>(ref Unsafe.Add(ref b, o));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static (int retPC, int savedBase, int argSlots, int retSlots)
-            ReadFrame(ref long b, int off) => (
-            (int)Unsafe.Add(ref b, off),
-            (int)Unsafe.Add(ref b, off + 1),
-            (int)Unsafe.Add(ref b, off + 2),
-            (int)Unsafe.Add(ref b, off + 3));
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static void WriteFrame(ref long b, int off,
-            int retPC, int savedBase, int argSlots, int retSlots) {
-            Unsafe.Add(ref b, off) = retPC;
-            Unsafe.Add(ref b, off + 1) = savedBase;
-            Unsafe.Add(ref b, off + 2) = argSlots;
-            Unsafe.Add(ref b, off + 3) = retSlots;
-        }
+        static ref CallFrame FrameAt(ref long b, int frameBase) =>
+            ref Unsafe.As<long, CallFrame>(ref Unsafe.Add(ref b, frameBase));
 
         try {
             while (codeOff < codeLength && !state.ShouldStop) {
@@ -90,11 +133,11 @@ internal static class Vm {
                                 int argSlots = (int)Slot(ref baseSlot, --spOff);
                                 var entry = prog.Functions[funcIndex];
                                 int retPC = codeOff + 9;
-                                int prevBase = state.FrameBase < 0 ? 0 : state.FrameBase;
+                                int prevBase = state.FrameBase;
                                 int newBase = spOff;
                                 int totalSlots = FrameHeaderSlots + entry.LocalCount;
                                 spOff += totalSlots;
-                                WriteFrame(ref baseSlot, newBase,
+                                FrameAt(ref baseSlot, newBase) = new CallFrame(
                                     retPC, prevBase, argSlots, entry.RetBytes);
                                 state.FrameBase = newBase;
                                 state.CachedArgSlots = argSlots;
@@ -334,24 +377,25 @@ internal static class Vm {
                         // ── Frames ──
 
                         case OpCode.Return: {
-                                if (state.FrameBase < 0)
+                                if (state.FrameBase < 0) {
+                                    codeOff = codeLength; // force loop exit on top-level return
                                     break;
-                                var (retPC, savedBase, argSlots, retSlots) =
-                                    ReadFrame(ref baseSlot, state.FrameBase);
-                                int preArg = state.FrameBase - argSlots;
-                                if (retSlots > 0 && preArg >= 0) {
-                                    int retSrc = spOff - retSlots;
+                                }
+                                var frame = FrameAt(ref baseSlot, state.FrameBase);
+                                int preArg = state.FrameBase - (int)frame.ArgSlots;
+                                if (frame.RetSlots > 0 && preArg >= 0) {
+                                    int retSrc = spOff - (int)frame.RetSlots;
                                     if (retSrc >= preArg) {
                                         long[] raw = state.Stack.RawSlots;
-                                        Array.Copy(raw, retSrc, raw, preArg, retSlots);
+                                        Array.Copy(raw, retSrc, raw, preArg, (int)frame.RetSlots);
                                     }
                                 }
-                                int finalSp = preArg + retSlots;
+                                int finalSp = preArg + (int)frame.RetSlots;
                                 if (finalSp >= 0 && finalSp <= spOff)
                                     spOff = finalSp;
-                                state.CachedArgSlots = argSlots;
-                                state.FrameBase = savedBase >= 0 ? savedBase : -1;
-                                codeOff = retPC;
+                                state.CachedArgSlots = (int)frame.ArgSlots;
+                                state.FrameBase = (int)frame.SavedBase >= 0 ? (int)frame.SavedBase : -1;
+                                codeOff = (int)frame.RetPC;
                                 continue;
                             }
 
@@ -388,10 +432,10 @@ internal static class Vm {
                                     ?? throw new InvalidOperationException("CallClosure target is not a Closure");
                                 var entry = prog.Functions[closure.FuncIndex];
                                 int retPC = codeOff + 1;
-                                int prevBase = state.FrameBase < 0 ? 0 : state.FrameBase;
+                                int prevBase = state.FrameBase;
                                 int newBase = spOff;
                                 spOff += FrameHeaderSlots + entry.LocalCount;
-                                WriteFrame(ref baseSlot, newBase,
+                                FrameAt(ref baseSlot, newBase) = new CallFrame(
                                     retPC, prevBase, argSlots, entry.RetBytes);
                                 state.FrameBase = newBase;
                                 state.CachedArgSlots = argSlots;

@@ -370,4 +370,156 @@ public class VmSkeletonTests {
         await Assert.That(state.IsComplete).IsTrue();
         await Assert.That(result.Value).IsEqualTo(7L);
     }
+
+    [Test]
+    public async Task Vm_LambdaInvoke_NoParameters() {
+        // (() => 42)() = 42
+        var lambda = new Lambda([], new Constant(42));
+        var invoke = new Invoke(lambda);
+
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke);
+
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Vm_LambdaInvoke_WithParameter() {
+        // (x => x + 1)(5) = 6
+        var param = new Parameter("x", TypeReference.To<int>());
+        var lambda = new Lambda([param], new Add(param, new Constant(1)));
+        var invoke = new Invoke(lambda, new Constant(5));
+
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke);
+
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(6L);
+    }
+
+    [Test]
+    public async Task Vm_LambdaInvoke_MultipleParameters() {
+        // ((x, y) => x + y)(3, 4) = 7
+        var x = new Parameter("x", TypeReference.To<int>());
+        var y = new Parameter("y", TypeReference.To<int>());
+        var lambda = new Lambda([x, y], new Add(x, y));
+        var invoke = new Invoke(lambda, new Constant(3), new Constant(4));
+
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke);
+
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task Vm_LambdaInvoke_MultipleCalls() {
+        // (x => x * 2)(5) = 10 and (x => x * 2)(3) = 6
+        var param = new Parameter("x", TypeReference.To<int>());
+        var lambda = new Lambda([param], new Multiply(param, new Constant(2)));
+        var invoke5 = new Invoke(lambda, new Constant(5));
+        var invoke3 = new Invoke(lambda, new Constant(3));
+
+        var analysis5 = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke5);
+
+        var program5 = Lowering.Lower(invoke5, analysis5);
+        using var state5 = new VmState { Program = program5 };
+        var result5 = Vm.Execute(state5);
+
+        await Assert.That(state5.IsComplete).IsTrue();
+        await Assert.That(result5.Value).IsEqualTo(10L);
+
+        var analysis3 = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(invoke3);
+
+        var program3 = Lowering.Lower(invoke3, analysis3);
+        using var state3 = new VmState { Program = program3 };
+        var result3 = Vm.Execute(state3);
+
+        await Assert.That(state3.IsComplete).IsTrue();
+        await Assert.That(result3.Value).IsEqualTo(6L);
+    }
+
+    [Test]
+    public async Task Vm_ManualBytecode_SimpleCall() {
+        // Simplest Call/Return: function pushes 42
+        // Layout: Push -1(dummy), Push 1(argCount), Call 0, Return(main)
+        //         Push 42(func body), Return(func ret)
+        var c = new List<byte>();
+        c.AddRange(J(OpCode.Push, -1L));
+        c.AddRange(J(OpCode.Push, 1L));
+        c.AddRange(J(OpCode.Call, 0));
+        c.Add((byte)OpCode.Return);
+        c.AddRange(J(OpCode.Push, 42L));
+        c.Add((byte)OpCode.Return);
+
+        var program = new Bytecode([.. c], [], [new(28, 1, 1, 0)]);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Vm_ManualBytecode_LambdaCall() {
+        // Manually construct: same bytecode as (x => x + 1)(5)
+        var c = new List<byte>();
+        c.AddRange(J(OpCode.Push, -1L));
+        c.AddRange(J(OpCode.Push, 5L));
+        c.AddRange(J(OpCode.Push, 2L));
+        c.AddRange(J(OpCode.Call, 0));
+        c.Add((byte)OpCode.Return);
+        c.AddRange(J(OpCode.LoadArg, 1));
+        c.AddRange(J(OpCode.Push, 1L));
+        c.Add((byte)OpCode.Add);
+        c.Add((byte)OpCode.Return);
+
+        var program = new Bytecode([.. c], [], [new(37, 2, 1, 0)]);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(6L);
+    }
+
+    [Test]
+    public async Task Vm_ManualBytecode_SimplePush() {
+        var c = new List<byte>();
+        c.AddRange(J(OpCode.Push, 42L));
+        c.Add((byte)OpCode.Return);
+        var program = new Bytecode([.. c], [], null);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(42L);
+    }
 }

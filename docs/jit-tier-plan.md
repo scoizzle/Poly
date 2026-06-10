@@ -44,8 +44,8 @@ Add a tiered execution layer to the Poly VM: hot functions (Lambda/MethodDefinit
 
 ## Constants
 ```csharp
-// In JitCompiler.cs
-internal const int JitThreshold = 100;
+// In Vm.cs
+internal const int JitThreshold = 10;
 ```
 
 ## Edge Cases

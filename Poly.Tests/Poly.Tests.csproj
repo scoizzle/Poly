@@ -7,7 +7,7 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="TUnit" Version="1.17.7" />
+		<PackageReference Include="TUnit" Version="1.53.0" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Poly\Poly.csproj" />

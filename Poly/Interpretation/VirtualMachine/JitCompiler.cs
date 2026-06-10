@@ -112,57 +112,75 @@ internal static class JitCompiler {
     public static LoopBodyDelegate CompileLoopBody(LoopBodyEntry entry, AnalysisResult analysis) {
         if (analysis is null) return null!;
 
+        // Build a CallSiteDelegate for the loop body, wrapped in LoopBodyDelegate.
+        // This correctly handles mutable locals because the delegate reads/writes
+        // through VmState (same as CallExternal).
+        return BuildLoopBodyWrapper(entry, analysis);
+    }
+
+    private static LoopBodyDelegate BuildLoopBodyWrapper(LoopBodyEntry entry, AnalysisResult analysis) {
         var gen = new LinqExpressionGenerator(analysis);
-        var compileResult = gen.Compile(entry.BodyNode);
-        var bodyExpr = compileResult.Expression;
-        var freeVars = compileResult.Parameters;
+        var bodyExpr = gen.Compile(entry.BodyNode).Expression;
 
-        // Single Expression<LoopBodyDelegate> that reads VM stack directly
+        // Collect free ParameterExpressions
+        var collector = new ParameterCollector();
+        collector.Visit(bodyExpr);
+
+        // Build CallSiteDelegate-style wrapper: read slots → compute → write back
         var s = Expression.Parameter(typeof(VmState), "s");
-        var stack = Expression.Property(s, "Stack");
-        var slots = Expression.Property(stack, "RawSlots");
-        var fbExpr = Expression.Property(s, "FrameBase");
-        var casExpr = Expression.Property(s, "CachedArgSlots");
+        var slots = Expression.Property(Expression.Property(s, "Stack"), "RawSlots");
+        var fb = Expression.Property(s, "FrameBase");
+        var cas = Expression.Property(s, "CachedArgSlots");
+        var localBase = Expression.Add(fb, Expression.Constant(Vm.FrameHeaderSlots));
+        var paramBase = Expression.Subtract(fb, cas);
 
-        // localBase = FrameBase + FrameHeaderSlots (4)
-        // paramBase = FrameBase - CachedArgSlots
-        var localBase = Expression.Add(fbExpr, Expression.Constant(Vm.FrameHeaderSlots));
-        var paramBase = Expression.Subtract(fbExpr, casExpr);
-
+        var tempVars = new List<ParameterExpression>();
         var body = new List<Expression>();
-        var argExprs = new Expression[freeVars.Count];
+        var readBack = new List<Expression>();
 
-        for (int i = 0; i < freeVars.Count; i++) {
-            var p = freeVars[i];
-            Expression rawRead;
+        // Build mapping of original Parameter → temp Parameter, with read + write-back
+        var originalToTemp = new Dictionary<ParameterExpression, Expression>();
+        foreach (var orig in collector.Parameters) {
+            Expression slotAccess;
+            if (orig.Name is not null && entry.LocalIndexMap?.TryGetValue(orig.Name, out int lSlot) == true)
+                slotAccess = Expression.ArrayAccess(slots, Expression.Add(localBase, Expression.Constant(lSlot)));
+            else if (orig.Name is not null && entry.ParamIndexMap?.TryGetValue(orig.Name, out int pSlot) == true)
+                slotAccess = Expression.ArrayAccess(slots, Expression.Add(paramBase, Expression.Constant(pSlot)));
+            else
+                continue; // skip variables we don't know about
 
-            if (p.Name is not null && entry.LocalIndexMap?.TryGetValue(p.Name, out int lSlot) == true) {
-                rawRead = Expression.ArrayIndex(slots, Expression.Add(localBase, Expression.Constant(lSlot)));
-            }
-            else if (p.Name is not null && entry.ParamIndexMap?.TryGetValue(p.Name, out int pSlot) == true) {
-                rawRead = Expression.ArrayIndex(slots, Expression.Add(paramBase, Expression.Constant(pSlot)));
-            }
-            else {
-                rawRead = Expression.Constant(0L);
-            }
-
-            argExprs[i] = ConvertSlotToExpr(rawRead, p.Type);
+            // Build: <type> temp = (<type>)slot;
+            //         ... compute using temp ...
+            //         slot = (long)temp;
+            var temp = Expression.Variable(orig.Type, orig.Name);
+            tempVars.Add(temp);
+            originalToTemp[orig] = temp;
+            body.Add(Expression.Assign(temp, Expression.Convert(slotAccess, orig.Type)));
+            readBack.Add(Expression.Assign(slotAccess, Expression.Convert(temp, typeof(long))));
         }
 
-        // Call the compiled body expression with the resolved arguments
-        Expression invokeBody = freeVars.Count > 0
-            ? Expression.Invoke(bodyExpr, argExprs)
+        // Substitute original ParameterExpressions with temp ParameterExpressions in the body
+        var substituted = originalToTemp.Count > 0
+            ? new ParameterSubstitutor(originalToTemp).Visit(bodyExpr)
             : bodyExpr;
 
-        var debugCheck = Expression.Property(s, "DebugMode");
-        var fallback = Expression.Assign(Expression.Property(s, "JITFallbackRequested"), Expression.Constant(true));
-
-        body.Add(Expression.IfThen(debugCheck, Expression.Block(fallback, Expression.Return(Expression.Label()))));
-        body.Add(invokeBody);
+        // Execute, write back, return Normal
+        body.Add(substituted);
+        body.AddRange(readBack);
         body.Add(Expression.Constant(LoopResult.Normal));
 
         return Expression.Lambda<LoopBodyDelegate>(
-            Expression.Block(body), s).Compile();
+            Expression.Block([.. tempVars], body), s).Compile();
+    }
+
+    private sealed class ParameterCollector : ExpressionVisitor {
+        public readonly HashSet<ParameterExpression> Parameters = [];
+        protected override Expression VisitParameter(ParameterExpression node) { Parameters.Add(node); return node; }
+    }
+
+    private sealed class ParameterSubstitutor(Dictionary<ParameterExpression, Expression> map) : ExpressionVisitor {
+        protected override Expression VisitParameter(ParameterExpression node) =>
+            map.TryGetValue(node, out var replacement) ? replacement : base.VisitParameter(node);
     }
 
     private static Expression ConvertSlotToExpr(Expression rawLong, Type targetType) {

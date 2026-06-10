@@ -631,6 +631,243 @@ public class VmSkeletonTests {
     }
 
     [Test]
+    public async Task Vm_Lambda_WhileLoop_Sum_Jit() {
+        // Same as Sum but 15 iterations to trigger loop body JIT (threshold=10)
+        // sum(1..15) = 120
+        var sumVar = new Variable("sum"); var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(0)),
+             new Assignment(iVar, new Constant(1)),
+             new WhileLoop(new LessThanOrEqual(iVar, new Constant(15)),
+                 new Block([
+                     new Assignment(sumVar, new Add(sumVar, iVar)),
+                     new Assignment(iVar, new Add(iVar, new Constant(1)))
+                 ])),
+             sumVar],
+            [sumVar, iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        // If result != 120, the loop body JIT doesn't write mutated variables back to VM stack
+        await Assert.That(result.Value).IsEqualTo(120L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_DoWhileLoop_Sum() {
+        // sum = 0; i = 1; do { sum += i; i++; } while (i <= 10); sum → 55
+        var sumVar = new Variable("sum"); var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(0)),
+             new Assignment(iVar, new Constant(1)),
+             new DoWhileLoop(
+                 new Block([
+                     new Assignment(sumVar, new Add(sumVar, iVar)),
+                     new Assignment(iVar, new Add(iVar, new Constant(1)))
+                 ]),
+                 new LessThanOrEqual(iVar, new Constant(10))),
+             sumVar],
+            [sumVar, iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(55L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_ForLoop_Sum() {
+        // sum = 0; for (int i = 1; i <= 10; i++) sum += i; sum → 55
+        var sumVar = new Variable("sum"); var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(0)),
+             new ForLoop(
+                 new Assignment(iVar, new Constant(1)),    // initializer
+                 new LessThanOrEqual(iVar, new Constant(10)), // condition
+                 new Assignment(iVar, new Add(iVar, new Constant(1))), // increment
+                 new Assignment(sumVar, new Add(sumVar, iVar)) // body
+             ),
+             sumVar],
+            [sumVar, iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(55L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_ForLoop_IncLocal() {
+        // for (int i = 1; i <= 3; i++) { }; i → 4
+        var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new ForLoop(
+                 new Assignment(iVar, new Constant(1)),
+                 new LessThanOrEqual(iVar, new Constant(3)),
+                 new Assignment(iVar, new Add(iVar, new Constant(1))),
+                 new Constant(0) // body: no-op
+             ),
+             iVar],
+            [iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(4L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_NestedWhile_Product() {
+        // sum = 0; i = 1; while (i <= 3) { j = 1; while (j <= 3) { sum += i * j; j++; } i++; }
+        // = (1*1+1*2+1*3)+(2*1+2*2+2*3)+(3*1+3*2+3*3) = 6+12+18 = 36
+        var sumVar = new Variable("sum"); var iVar = new Variable("i"); var jVar = new Variable("j");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(0)),
+             new Assignment(iVar, new Constant(1)),
+             new WhileLoop(new LessThanOrEqual(iVar, new Constant(3)),
+                 new Block([
+                     new Assignment(jVar, new Constant(1)),
+                     new WhileLoop(new LessThanOrEqual(jVar, new Constant(3)),
+                         new Block([
+                             new Assignment(sumVar, new Add(sumVar, new Multiply(iVar, jVar))),
+                             new Assignment(jVar, new Add(jVar, new Constant(1)))
+                         ])),
+                     new Assignment(iVar, new Add(iVar, new Constant(1)))
+                 ])),
+             sumVar],
+            [sumVar, iVar, jVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(36L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_LoopBodyOnly() {
+        // While loop as the ONLY expression in the lambda body — no preceding/following nodes
+        // i = 1; while (i <= 1) { i++; }; i (only the loop and the result variable)
+        var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(iVar, new Constant(1)),
+             new WhileLoop(new LessThanOrEqual(iVar, new Constant(1)),
+                 new Block([new Assignment(iVar, new Add(iVar, new Constant(1)))])),
+             iVar],
+            [iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_TwoLoops_Sum() {
+        // Two consecutive while loops: first sums 1..5, second sums 6..10, total = 15 + 40 = 55
+        var sumVar = new Variable("sum"); var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(0)),
+             new Assignment(iVar, new Constant(1)),
+             new WhileLoop(new LessThanOrEqual(iVar, new Constant(5)),
+                 new Block([
+                     new Assignment(sumVar, new Add(sumVar, iVar)),
+                     new Assignment(iVar, new Add(iVar, new Constant(1)))
+                 ])),
+             new WhileLoop(new LessThanOrEqual(iVar, new Constant(10)),
+                 new Block([
+                     new Assignment(sumVar, new Add(sumVar, iVar)),
+                     new Assignment(iVar, new Add(iVar, new Constant(1)))
+                 ])),
+             sumVar],
+            [sumVar, iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(55L);
+    }
+
+    [Test]
+    public async Task Vm_Lambda_WhileLoop_AndCondition() {
+        // while (i <= 10 AND sum < 30) { sum += i; i++; }
+        // Sum until either i > 10 or sum >= 30: i=1..7 → sum=28, i=8 → sum=36≥30 stops
+        var sumVar = new Variable("sum"); var iVar = new Variable("i");
+        var lambda = new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(0)),
+             new Assignment(iVar, new Constant(1)),
+             new WhileLoop(
+                 new And(new LessThanOrEqual(iVar, new Constant(10)),
+                         new LessThan(sumVar, new Constant(30))),
+                 new Block([
+                     new Assignment(sumVar, new Add(sumVar, iVar)),
+                     new Assignment(iVar, new Add(iVar, new Constant(1)))
+                 ])),
+             sumVar],
+            [sumVar, iVar]
+        ));
+        var invoke = new Invoke(lambda);
+        var analysis = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(invoke);
+        var program = Lowering.Lower(invoke, analysis);
+        using var state = new VmState { Program = program };
+        var result = Vm.Execute(state);
+        await Assert.That(state.IsComplete).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(36L); // sum(1..8) = 36 (i=8 enters, then 36<30 stops)
+    }
+
+    [Test]
     public async Task Vm_ManualBytecode_SimplePush() {
         var c = new List<byte>();
         c.AddRange(J(OpCode.Push, 42L));

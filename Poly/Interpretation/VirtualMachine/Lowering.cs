@@ -189,8 +189,16 @@ internal static class Lowering {
             case GreaterThan gt: EmitBinary(gt.LeftHandValue, gt.RightHandValue, OpCode.Gt, ref ctx, lambdaState); return;
             case GreaterThanOrEqual ge: EmitBinary(ge.LeftHandValue, ge.RightHandValue, OpCode.Ge, ref ctx, lambdaState); return;
 
-            case UnaryMinus um: EmitNode(um.Operand, ref ctx, lambdaState); ctx.Code.Emit(OpCode.Neg); return;
-            case Not n: EmitNode(n.Value, ref ctx, lambdaState); ctx.Code.Emit(OpCode.Not); return;
+            case UnaryMinus um:
+                if (TryGetConstantLong(um.Operand, out long negVal)) {
+                    ctx.Code.Emit(OpCode.Push, -negVal); // fold: -Constant → Push -val
+                }
+                else {
+                    EmitNode(um.Operand, ref ctx, lambdaState);
+                    ctx.Code.Emit(OpCode.Neg);
+                }
+                return;
+            case Not n: EmitNodeOrConstant(n.Value, OpCode.Not, ref ctx, lambdaState); return;
 
             case BitwiseNot bn: EmitNode(bn.Operand, ref ctx, lambdaState); ctx.Code.Emit(OpCode.BitNot); return;
             case BitwiseAnd ba: EmitBinary(ba.LeftHandValue, ba.RightHandValue, OpCode.BitAnd, ref ctx, lambdaState); return;
@@ -225,6 +233,7 @@ internal static class Lowering {
             case Parameter p: EmitParameter(p, ref ctx, lambdaState); return;
 
             case Assignment assign: {
+                    if (TryFuseIncDec(assign, ref ctx, lambdaState)) return;
                     EmitNode(assign.Value, ref ctx, lambdaState);
                     // Dup if this assignment yields the assigned value
                     if (EmitsValue(assign, ctx.Analysis))
@@ -258,8 +267,68 @@ internal static class Lowering {
 
     private static void EmitBinary(Node left, Node right, OpCode op, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         EmitNode(left, ref ctx, lambdaState);
-        EmitNode(right, ref ctx, lambdaState);
-        ctx.Code.Emit(op);
+        // When the right operand is a compile-time integer constant, fuse Push+op into a single
+        // operand-bearing instruction (SizeBit set).  The VM's nullary/operand-bearing dispatch
+        // naturally separates the two forms using the same opcode value.
+        EmitNodeOrConstant(right, op, ref ctx, lambdaState);
+    }
+
+    private static void EmitNodeOrConstant(Node node, OpCode op, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+        if (TryGetConstantLong(node, out long val)) {
+            // Fused form: opcode | SizeBit + inline operand → 9 bytes
+            ctx.Code.Emit(op, val);
+        }
+        else {
+            EmitNode(node, ref ctx, lambdaState);
+            ctx.Code.Emit(op);
+        }
+    }
+
+    private static bool TryGetConstantLong(Node node, out long value) {
+        if (node is Constant c) {
+            if (c.Value is int iv) { value = iv; return true; }
+            if (c.Value is long lv) { value = lv; return true; }
+            if (c.Value is short sv) { value = sv; return true; }
+            if (c.Value is byte bv) { value = bv; return true; }
+            if (c.Value is uint uiv) { value = uiv; return true; }
+            if (c.Value is bool bvv) { value = bvv ? 1 : 0; return true; }
+        }
+        value = 0;
+        return false;
+    }
+
+    private static bool TryFuseIncDec(Assignment assign, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+        if (assign.Destination is not Variable dst || ctx.LocalIndexMap is null)
+            return false;
+        if (!ctx.LocalIndexMap.TryGetValue(dst.Name, out int slot))
+            return false;
+
+        // dst = dst + const  →  IncLocal dst, +const
+        if (assign.Value is Add add) {
+            if (MatchIncDec(add.LeftHandValue, add.RightHandValue, dst.Name, out long delta) ||
+                MatchIncDec(add.RightHandValue, add.LeftHandValue, dst.Name, out delta)) {
+                long packed = ((long)slot << 32) | (long)(int)delta;
+                ctx.Code.Emit(OpCode.IncLocal, packed);
+                return true;
+            }
+        }
+
+        // dst = dst - const  →  IncLocal dst, -const
+        if (assign.Value is Subtract sub &&
+            MatchIncDec(sub.LeftHandValue, sub.RightHandValue, dst.Name, out long delta2)) {
+            long packed = ((long)slot << 32) | (long)(int)(-delta2);
+            ctx.Code.Emit(OpCode.IncLocal, packed);
+            return true;
+        }
+
+        return false;
+
+        static bool MatchIncDec(Node left, Node right, string dstName, out long delta) {
+            delta = 0;
+            if (left is Variable v && v.Name == dstName && TryGetConstantLong(right, out delta))
+                return true;
+            return false;
+        }
     }
 
     private static void EmitDivRem(Node left, Node right, ref EmitContext ctx, LambdaEmitState? lambdaState) {

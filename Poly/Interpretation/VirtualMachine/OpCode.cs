@@ -37,6 +37,9 @@ internal enum OpCode : byte {
     StoreLocal,
     LoadUpvalue,
     StoreUpvalue,
+
+    // ── Fused inc/dec: packed operand = (slot << 32) | (int)inc ──
+    IncLocal,
 }
 
 internal static class OpCodeEncoding {

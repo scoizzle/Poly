@@ -2,6 +2,8 @@ using System;
 using System.CommandLine;
 using System.IO;
 
+using BenchmarkDotNet.Running;
+
 using Poly.Benchmarks;
 using Poly.Benchmarks.DomainModeling;
 using Poly.Benchmarks.DomainModeling.Demos;
@@ -9,89 +11,87 @@ using Poly.Data.Modeling;
 using Poly.Data.Modeling.Analysis;
 using Poly.Interpretation.CSharp;
 
-if (args.Length > 0 && args[0] == "--interp-bench") {
-    BenchmarkDotNet.Running.BenchmarkRunner.Run<InterpreterBenchmarks>();
-    return 0;
-}
+BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+return 0;
 
-if (args.Length > 0 && args[0] == "--micro-bench") {
-    BenchmarkDotNet.Running.BenchmarkRunner.Run<Microbenchmarks>();
-    return 0;
-}
+// if (args.Length > 0 && args[0] == "--micro-bench") {
+//     BenchmarkDotNet.Running.BenchmarkRunner.Run<Microbenchmarks>();
+//     return 0;
+// }
 
-var domainNameOption = new Option<string>("--name") {
-    Description = "Name for the domain being modeled."
-};
+// var domainNameOption = new Option<string>("--name") {
+//     Description = "Name for the domain being modeled."
+// };
 
-var libraryDomainOption = new Option<bool>("--library-domain") {
-    Description = "Test the Library Management System domain."
-};
+// var libraryDomainOption = new Option<bool>("--library-domain") {
+//     Description = "Test the Library Management System domain."
+// };
 
-var ecommerceDomainOption = new Option<bool>("--ecommerce-domain") {
-    Description = "Test the E-commerce domain with imported OpenAPI contract wiring."
-};
+// var ecommerceDomainOption = new Option<bool>("--ecommerce-domain") {
+//     Description = "Test the E-commerce domain with imported OpenAPI contract wiring."
+// };
 
-var dumpCsharpOption = new Option<string>("--dump-csharp") {
-    Description = "Dump generated C# for a domain (library, ecommerce)."
-};
+// var dumpCsharpOption = new Option<string>("--dump-csharp") {
+//     Description = "Dump generated C# for a domain (library, ecommerce)."
+// };
 
-var outputOption = new Option<string>("--output", "-o") {
-    Description = "Output file path for --dump-csharp. Writes to stdout if not specified."
-};
+// var outputOption = new Option<string>("--output", "-o") {
+//     Description = "Output file path for --dump-csharp. Writes to stdout if not specified."
+// };
 
-var rootCommand = new RootCommand("Interactive domain modeling workbench") {
-    domainNameOption,
-    libraryDomainOption,
-    ecommerceDomainOption,
-    dumpCsharpOption,
-    outputOption
-};
+// var rootCommand = new RootCommand("Interactive domain modeling workbench") {
+//     domainNameOption,
+//     libraryDomainOption,
+//     ecommerceDomainOption,
+//     dumpCsharpOption,
+//     outputOption
+// };
 
-rootCommand.SetAction(parseResult => {
-    var domainName = parseResult.GetValue(domainNameOption) ?? "Interactive Domain";
-    var testLibraryDomain = parseResult.GetValue(libraryDomainOption);
-    var testECommerceDomain = parseResult.GetValue(ecommerceDomainOption);
-    var dumpCsharp = parseResult.GetValue(dumpCsharpOption);
+// rootCommand.SetAction(parseResult => {
+//     var domainName = parseResult.GetValue(domainNameOption) ?? "Interactive Domain";
+//     var testLibraryDomain = parseResult.GetValue(libraryDomainOption);
+//     var testECommerceDomain = parseResult.GetValue(ecommerceDomainOption);
+//     var dumpCsharp = parseResult.GetValue(dumpCsharpOption);
 
-    if (dumpCsharp is not null) {
-        var domain = dumpCsharp switch {
-            "library" => LibraryDomain.Build(),
-            "ecommerce" => ECommerceDomain.BuildECommerceDomain(),
-            _ => throw new ArgumentException($"Unknown domain: {dumpCsharp}")
-        };
+//     if (dumpCsharp is not null) {
+//         var domain = dumpCsharp switch {
+//             "library" => LibraryDomain.Build(),
+//             "ecommerce" => ECommerceDomain.BuildECommerceDomain(),
+//             _ => throw new ArgumentException($"Unknown domain: {dumpCsharp}")
+//         };
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
-        var pass = new DomainImplementationLoweringPass();
-        var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
-        var testStmts = pass.GenerateTestStatements(domain, analysis);
-        var csharp = new CSharpGenerator().Generate(typeDefs, testStmts);
+//         var analysis = new DomainModelAnalyzer().Analyze(domain);
+//         var pass = new DomainImplementationLoweringPass();
+//         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
+//         var testStmts = pass.GenerateTestStatements(domain, analysis);
+//         var csharp = new CSharpGenerator().Generate(typeDefs, testStmts);
 
-        var outputPath = parseResult.GetValue(outputOption);
-        if (outputPath is not null) {
-            File.WriteAllText(outputPath, csharp);
-            Console.Error.WriteLine($"Generated C# written to: {outputPath}");
-        }
-        else {
-            Console.Write(csharp);
-        }
-        return 0;
-    }
+//         var outputPath = parseResult.GetValue(outputOption);
+//         if (outputPath is not null) {
+//             File.WriteAllText(outputPath, csharp);
+//             Console.Error.WriteLine($"Generated C# written to: {outputPath}");
+//         }
+//         else {
+//             Console.Write(csharp);
+//         }
+//         return 0;
+//     }
 
-    if (testLibraryDomain) {
-        TestLibraryDomain.Run();
-        return 0;
-    }
+//     if (testLibraryDomain) {
+//         TestLibraryDomain.Run();
+//         return 0;
+//     }
 
-    if (testECommerceDomain) {
-        TestECommerceDomain.Run();
-        return 0;
-    }
+//     if (testECommerceDomain) {
+//         TestECommerceDomain.Run();
+//         return 0;
+//     }
 
-    InteractiveDomainConsole.Run(domainName);
-    return 0;
-});
+//     InteractiveDomainConsole.Run(domainName);
+//     return 0;
+// });
 
-return await rootCommand.Parse(args).InvokeAsync();
+// return await rootCommand.Parse(args).InvokeAsync();
 
 // if (analysisResult.Diagnostics.Count > 0) {
 //     Console.WriteLine("Analysis Diagnostics:");

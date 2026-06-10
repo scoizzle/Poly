@@ -27,6 +27,9 @@ internal sealed class VmState : IDisposable {
         LastResult = result;
     }
 
+    /// <summary>When false, skips the interrupt-bit check on every instruction (hot-path optimization).</summary>
+    public bool DebugMode { get; set; }
+
     public AnalysisResult? AnalysisResult { get; set; }
     public Dictionary<NodeId, string>? NodeDescriptions { get; set; }
     public TextWriter? Trace { get; set; }
@@ -55,6 +58,7 @@ internal sealed class VmState : IDisposable {
         LastResult = null;
         NodeDescriptions = null;
         Stack.Reset();
+        Heap.Clear();
     }
 
     public void Dispose() => Stack.Dispose();

@@ -153,8 +153,10 @@ internal static class CallSiteCompiler {
     }
 
     private static Expression ReadSpanInt(Expression stack, Expression baseOff, int slotOffset) {
+        var rawSlots = Expression.Property(stack, "RawSlots");
         var idx = Expression.Add(baseOff, Expression.Constant(slotOffset));
-        return Expression.Call(stack, "ReadSlot", Type.EmptyTypes, idx);
+        var val = Expression.ArrayIndex(rawSlots, idx);
+        return Expression.Convert(val, typeof(int));
     }
 
     private static Expression ResolveArg(Expression rawInt, Type targetType, Expression s) {
@@ -175,7 +177,7 @@ internal static class CallSiteCompiler {
             Expression.GreaterThanOrEqual(rawInt, Expression.Constant(0)),
             Expression.LessThan(rawInt, count));
 
-        var get = Expression.Call(heap, "Get", Type.EmptyTypes, rawInt);
+        var get = Expression.Call(heap, "UnsafeGet", Type.EmptyTypes, rawInt);
         return Expression.Condition(inBounds,
             Expression.Convert(get, targetType),
             targetType == typeof(object) ? Expression.Convert(rawInt, typeof(object)) : Expression.Default(targetType));

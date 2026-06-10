@@ -100,7 +100,7 @@ internal static class Vm {
             while (codeOff < codeLength && !state.ShouldStop) {
                 byte rawOp = Unsafe.Add(ref codeRef, codeOff);
 
-                if ((rawOp & OpCodeEncoding.InterruptBit) != 0) {
+                if (state.DebugMode && (rawOp & OpCodeEncoding.InterruptBit) != 0) {
                     state.Status = InterpreterStatus.Suspended;
                     break;
                 }
@@ -207,6 +207,18 @@ internal static class Vm {
                                 break;
                             }
 
+                        case OpCode.IncLocal: {
+                                long packed = Code64(ref codeRef, codeOff + 1);
+                                int index = (int)(packed >> 32);
+                                long inc = (int)(packed & 0xFFFFFFFF);
+                                if (state.FrameBase < 0)
+                                    throw new InvalidOperationException("IncLocal outside of function frame");
+                                int localOff = state.FrameBase + FrameHeaderSlots + index;
+                                Slot(ref baseSlot, localOff) += inc;
+                                Slot(ref baseSlot, spOff++) = Slot(ref baseSlot, localOff);
+                                break;
+                            }
+
                         case OpCode.LoadUpvalue: {
                                 int upvalueIndex = (int)Code64(ref codeRef, codeOff + 1);
                                 if (state.FrameBase < 0)
@@ -237,6 +249,60 @@ internal static class Vm {
                                 closure.Captures[upvalueIndex] = Slot(ref baseSlot, --spOff);
                                 break;
                             }
+
+                        // ── Fused push+op (same opcode as nullary form, SizeBit distinguishes) ──
+
+                        case OpCode.Add:
+                            Slot(ref baseSlot, spOff - 1) += Code64(ref codeRef, codeOff + 1);
+                            break;
+
+                        case OpCode.Sub:
+                            Slot(ref baseSlot, spOff - 1) -= Code64(ref codeRef, codeOff + 1);
+                            break;
+
+                        case OpCode.Mul:
+                            Slot(ref baseSlot, spOff - 1) *= Code64(ref codeRef, codeOff + 1);
+                            break;
+
+                        case OpCode.Lt:
+                            Slot(ref baseSlot, spOff - 1) =
+                                Slot(ref baseSlot, spOff - 1) < Code64(ref codeRef, codeOff + 1) ? 1L : 0L;
+                            break;
+
+                        case OpCode.Gt:
+                            Slot(ref baseSlot, spOff - 1) =
+                                Slot(ref baseSlot, spOff - 1) > Code64(ref codeRef, codeOff + 1) ? 1L : 0L;
+                            break;
+
+                        case OpCode.Eq:
+                            Slot(ref baseSlot, spOff - 1) =
+                                Slot(ref baseSlot, spOff - 1) == Code64(ref codeRef, codeOff + 1) ? 1L : 0L;
+                            break;
+
+                        case OpCode.Le:
+                            Slot(ref baseSlot, spOff - 1) =
+                                Slot(ref baseSlot, spOff - 1) <= Code64(ref codeRef, codeOff + 1) ? 1L : 0L;
+                            break;
+
+                        case OpCode.Ge:
+                            Slot(ref baseSlot, spOff - 1) =
+                                Slot(ref baseSlot, spOff - 1) >= Code64(ref codeRef, codeOff + 1) ? 1L : 0L;
+                            break;
+
+                        case OpCode.Ne:
+                            Slot(ref baseSlot, spOff - 1) =
+                                Slot(ref baseSlot, spOff - 1) != Code64(ref codeRef, codeOff + 1) ? 1L : 0L;
+                            break;
+
+                        case OpCode.Not:
+                            Slot(ref baseSlot, spOff - 1) =
+                                Code64(ref codeRef, codeOff + 1) == 0 ? 1L : 0L;
+                            break;
+
+                        case OpCode.Neg:
+                            Slot(ref baseSlot, spOff - 1) =
+                                -Code64(ref codeRef, codeOff + 1);
+                            break;
 
                         default:
                             throw new InvalidOperationException(

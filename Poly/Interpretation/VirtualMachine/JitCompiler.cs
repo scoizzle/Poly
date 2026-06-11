@@ -26,12 +26,13 @@ internal static class JitCompiler {
         var paramTypes = lambda.Parameters
             .Select(p => ResolveClrType(p.TypeReference, analysis) ?? typeof(object))
             .ToArray();
+        var returnType = ResolveReturnType(lambda.Body, analysis);
         var delegateType = Expression.GetDelegateType(
-            [.. paramTypes, typeof(object)]);
+            [.. paramTypes, returnType]);
 
         var inner = CompileToDelegate(lambda.Body, lambda.Parameters, delegateType, analysis);
 
-        return BuildCallSiteDelegate(inner, lambda.Parameters.Count, paramTypes);
+        return BuildCallSiteDelegate(inner, lambda.Parameters.Count, paramTypes, returnType);
     }
 
     private static CallSiteDelegate CompileMethod(MethodDefinitionNode method, AnalysisResult analysis) {
@@ -41,19 +42,21 @@ internal static class JitCompiler {
             .ToArray();
 
         // MethodDefinitionNode doesn't have a closure slot — user params start at 0
+        var returnType = ResolveReturnType(body, analysis);
         var delegateType = Expression.GetDelegateType(
-            [.. paramTypes, typeof(object)]);
+            [.. paramTypes, returnType]);
 
         var inner = CompileToDelegate(body, method.Parameters ?? [], delegateType, analysis);
 
         // For methods, baseOff = sp - paramCount (no closure at 0)
-        return BuildCallSiteDelegate(inner, paramTypes.Length, paramTypes, hasClosure: false);
+        return BuildCallSiteDelegate(inner, paramTypes.Length, paramTypes, returnType, hasClosure: false);
     }
 
     private static Delegate CompileToDelegate(Node body, IReadOnlyList<Parameter> parameters, Type delegateType, AnalysisResult analysis) {
         var gen = new LinqExpressionGenerator(analysis);
         var method = typeof(LinqExpressionGenerator).GetMethods()
             .First(m => m.Name == nameof(LinqExpressionGenerator.CompileAsDelegate)
+                && m.IsGenericMethodDefinition
                 && m.GetParameters().Length == 2
                 && m.GetParameters()[0].ParameterType == typeof(Node)
                 && m.GetParameters()[1].ParameterType == typeof(Parameter[]))
@@ -61,7 +64,7 @@ internal static class JitCompiler {
         return (Delegate)method.Invoke(gen, [body, parameters.ToArray()])!;
     }
 
-    private static CallSiteDelegate BuildCallSiteDelegate(Delegate inner, int paramCount, Type[] paramTypes, bool hasClosure = true) {
+    private static CallSiteDelegate BuildCallSiteDelegate(Delegate inner, int paramCount, Type[] paramTypes, Type returnType, bool hasClosure = true) {
         return (VmState state) => {
             if (state.DebugMode) { state.JITFallbackRequested = true; return; }
             var slots = state.Stack.RawSlots;
@@ -198,6 +201,13 @@ internal static class JitCompiler {
     private static Type? ResolveClrType(Node? typeRef, AnalysisResult analysis) {
         if (typeRef is null) return null;
         var resolved = analysis.GetResolvedType(typeRef);
+        return resolved is ClrTypeDefinition clr
+            ? clr.RuntimeType
+            : typeof(object);
+    }
+
+    private static Type ResolveReturnType(Node body, AnalysisResult analysis) {
+        var resolved = analysis.GetResolvedType(body);
         return resolved is ClrTypeDefinition clr
             ? clr.RuntimeType
             : typeof(object);

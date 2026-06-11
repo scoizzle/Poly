@@ -8,9 +8,43 @@ internal sealed class BytecodeBuilder {
     private readonly List<(int offset, string label)> _pending = [];
     private int _labelCounter;
 
+    public int Offset => _code.Count;
     public string NextLabel() => $"L{_labelCounter++}";
 
-    public int Offset => _code.Count;
+    public static int EstimateMaxStack(byte[] code) {
+        // Conservative: walk linearly, track SP per instruction.
+        // Skip unreachable code after unconditional Jump/Return.
+        int sp = 0, max = 0;
+        bool reachable = true;
+        for (int i = 0; i < code.Length && reachable;) {
+            byte raw = code[i];
+            int size = (raw & 0x40) != 0 ? 9 : 1;
+            var op = (OpCode)(raw & 0x3F);
+            switch (op) {
+                case OpCode.Push or OpCode.IncLocal or OpCode.Dup
+                    or OpCode.LoadLocal or OpCode.LoadArg or OpCode.LoadValue or OpCode.LoadUpvalue:
+                    sp++; break;
+                case OpCode.Pop or OpCode.StoreLocal or OpCode.StoreArg or OpCode.StoreValue or OpCode.StoreUpvalue:
+                    sp--; break;
+                case OpCode.Add or OpCode.Sub or OpCode.Mul or OpCode.Div or OpCode.DivRem
+                    or OpCode.Eq or OpCode.Ne or OpCode.Lt or OpCode.Le or OpCode.Gt or OpCode.Ge
+                    or OpCode.BitAnd or OpCode.BitOr or OpCode.BitXor or OpCode.Shl or OpCode.Shr:
+                    sp--; break;
+                case OpCode.JumpIfFalse:
+                    sp--;
+                    // fall-through path stays reachable; jump path tracked via label analysis (TODO)
+                    break;
+                case OpCode.Jump:
+                case OpCode.Return:
+                    reachable = false; break; // skip unreachable
+                case OpCode.CallClosure:
+                    sp--; break;
+            }
+            if (sp > max) max = sp;
+            i += size;
+        }
+        return max < 16 ? 16 : max; // minimum 16 to handle entry frames
+    }
 
     public void Emit(OpCode op) {
         _code.Add((byte)op);
@@ -61,7 +95,8 @@ internal sealed class BytecodeBuilder {
         Type? resultType = null,
         Dictionary<int, NodeId>? sourceMap = null,
         AnalysisResult? analysisResult = null,
-        List<LoopBodyEntry>? loopBodies = null) {
-        return new Bytecode(Build(), sourceMap ?? [], functions, constants, callSites, exceptionRegions, resultType, analysisResult, loopBodies);
+        List<LoopBodyEntry>? loopBodies = null,
+        List<string>? callSiteTargets = null) {
+        return new Bytecode(Build(), sourceMap ?? [], functions, constants, callSites, exceptionRegions, resultType, analysisResult, loopBodies, callSiteTargets);
     }
 }

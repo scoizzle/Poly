@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+using System.Reflection;
 
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
@@ -26,6 +26,8 @@ internal static class Lowering {
         public IReadOnlyDictionary<string, int>? ParamIndexMap, LocalIndexMap;
         public List<object?>? Constants;
         public List<CallSiteDelegate>? CallSites;
+        public List<string>? CallSiteTargets;
+        public Dictionary<MethodInfo, int>? CallSiteCache;
         public Dictionary<Lambda, int>? LambdaFuncMap;
         public Dictionary<Lambda, List<string>>? LambdaCaptureMap;
         public IReadOnlyDictionary<string, int>? UpvalueMap;
@@ -41,6 +43,8 @@ internal static class Lowering {
             Functions = [],
             Constants = [],
             CallSites = [],
+            CallSiteTargets = [],
+            CallSiteCache = [],
             ExceptionRegions = [],
             LoopBodies = [],
         };
@@ -155,7 +159,8 @@ internal static class Lowering {
         // Functions are referenced by PC directly.
 
         return ctx.Code.BuildProgram(ctx.Functions, ctx.Constants, ctx.CallSites, ctx.ExceptionRegions,
-            sourceMap: ctx.SourceMap, analysisResult: analysis, loopBodies: ctx.LoopBodies);
+            sourceMap: ctx.SourceMap, analysisResult: analysis, loopBodies: ctx.LoopBodies,
+            callSiteTargets: ctx.CallSiteTargets);
     }
 
     private sealed record LambdaEmitState(
@@ -531,11 +536,10 @@ internal static class Lowering {
         }
 
         if (resolved is ClrMethod clrMethod) {
-            int siteIdx = ctx.CallSites!.Count;
             bool isStatic = clrMethod.LifetimeModifier == LifetimeModifier.Static;
             foreach (var arg in args)
                 EmitNode(arg, ref ctx, lambdaState);
-            ctx.CallSites!.Add(CallSiteCompiler.Compile(clrMethod.MethodInfo, isStatic));
+            int siteIdx = GetOrAddCallSite(ref ctx, clrMethod.MethodInfo, isStatic);
             ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
@@ -668,9 +672,8 @@ internal static class Lowering {
         var resolved = ctx.Analysis.GetResolvedMember(m);
         if (resolved is ClrMethod getter) {
             EmitNode(m.Value, ref ctx, lambdaState);
-            int siteIdx = ctx.CallSites!.Count;
-            bool isStatic = getter.LifetimeModifier == LifetimeModifier.Static;
-            ctx.CallSites!.Add(CallSiteCompiler.Compile(getter.MethodInfo, isStatic));
+            int siteIdx = GetOrAddCallSite(ref ctx, getter.MethodInfo,
+                getter.LifetimeModifier == LifetimeModifier.Static);
             ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
@@ -683,9 +686,8 @@ internal static class Lowering {
             EmitNode(ia.Value, ref ctx, lambdaState);
             foreach (var arg in ia.Arguments)
                 EmitNode(arg, ref ctx, lambdaState);
-            int siteIdx = ctx.CallSites!.Count;
-            bool isStatic = getter.LifetimeModifier == LifetimeModifier.Static;
-            ctx.CallSites!.Add(CallSiteCompiler.Compile(getter.MethodInfo, isStatic));
+            int siteIdx = GetOrAddCallSite(ref ctx, getter.MethodInfo,
+                getter.LifetimeModifier == LifetimeModifier.Static);
             ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
@@ -697,8 +699,8 @@ internal static class Lowering {
         if (resolved is ClrConstructor ctor) {
             foreach (var arg in n.Arguments)
                 EmitNode(arg, ref ctx, lambdaState);
-            int siteIdx = ctx.CallSites!.Count;
-            ctx.CallSites!.Add(CallSiteCompiler.CompileConstructor(ctor.ConstructorInfo));
+            int siteIdx = AddCallSite(ref ctx,
+                CallSiteCompiler.CompileConstructor(ctor.ConstructorInfo));
             ctx.Code.Emit(OpCode.CallExternal, siteIdx);
             return;
         }
@@ -710,8 +712,7 @@ internal static class Lowering {
         var getAwaiter = typeof(Task<>).GetMethod("GetAwaiter")?.MakeGenericMethod(typeof(object))
             ?? typeof(Task).GetMethod("GetAwaiter");
         if (getAwaiter is not null) {
-            int siteIdx = ctx.CallSites!.Count;
-            ctx.CallSites.Add(CallSiteCompiler.Compile(getAwaiter, false));
+            int siteIdx = AddCallSite(ref ctx, CallSiteCompiler.Compile(getAwaiter, false));
             ctx.Code.Emit(OpCode.CallExternal, siteIdx);
         }
     }
@@ -724,7 +725,25 @@ internal static class Lowering {
     private static int AddCallSite(ref EmitContext ctx, CallSiteDelegate d) {
         int idx = ctx.CallSites!.Count;
         ctx.CallSites!.Add(d);
+        ctx.CallSiteTargets!.Add(d.Method.ToString() ?? "");
         return idx;
+    }
+
+    private static int GetOrAddCallSite(ref EmitContext ctx, MethodInfo mi, bool isStatic) {
+        if (ctx.CallSiteCache!.TryGetValue(mi, out int idx))
+            return idx;
+        idx = ctx.CallSites!.Count;
+        ctx.CallSites!.Add(CallSiteCompiler.Compile(mi, isStatic));
+        ctx.CallSiteCache[mi] = idx;
+        ctx.CallSiteTargets!.Add(FormatMethodTarget(mi, isStatic));
+        return idx;
+    }
+
+    private static string FormatMethodTarget(MethodInfo mi, bool isStatic) {
+        var par = string.Join(", ", mi.GetParameters().Select(p => p.ParameterType.Name));
+        var ret = mi.ReturnType == typeof(void) ? "void" : mi.ReturnType.Name;
+        var cls = mi.DeclaringType?.Name ?? "?";
+        return $"{ret} {cls}.{mi.Name}({par})";
     }
 
     private static void EmitIndexAccessStore(IndexAccess ia, ref EmitContext ctx, LambdaEmitState? lambdaState) {

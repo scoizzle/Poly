@@ -87,7 +87,15 @@ internal static class Vm {
         int spOff = state.Stack.SP;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static ref long Slot(ref long b, int o) => ref Unsafe.Add(ref b, o);
+        static ref long Slot(ref long b, int o) {
+            if (o < 0) StackUnderflow(o);
+            return ref Unsafe.Add(ref b, o);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void StackUnderflow(int o) =>
+            throw new InvalidOperationException(
+                $"Stack underflow: slot {o}");
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static long Code64(ref byte b, int o) =>
@@ -99,6 +107,9 @@ internal static class Vm {
 
         try {
             while (codeOff < codeLength && !state.ShouldStop) {
+                if ((uint)spOff > (uint)state.Stack.RawSlots.Length)
+                    throw new InvalidOperationException(
+                        $"Stack overflow: SP={spOff} capacity={state.Stack.RawSlots.Length} at PC=0x{codeOff:X}");
                 byte rawOp = Unsafe.Add(ref codeRef, codeOff);
 
                 if (state.DebugMode && (rawOp & OpCodeEncoding.InterruptBit) != 0) {

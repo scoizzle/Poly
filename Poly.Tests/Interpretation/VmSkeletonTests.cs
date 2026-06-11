@@ -1,8 +1,13 @@
+using System.IO;
+using System.Linq.Expressions;
+using System.Reflection;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.VirtualMachine;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
@@ -878,4 +883,208 @@ public class VmSkeletonTests {
         await Assert.That(state.IsComplete).IsTrue();
         await Assert.That(result.Value).IsEqualTo(42L);
     }
+
+    [Test]
+    public async Task Vm_Dump_Bytecode() {
+        var outDir = "/tmp/poly_vm_dump";
+        Directory.CreateDirectory(outDir);
+
+        // Helper to dump bytecode
+        void DumpBytecode(Bytecode prog, string label, string path) {
+            using var w = new StreamWriter(path);
+            w.WriteLine($"=== {label} ===");
+            w.WriteLine($"Code: {prog.Code.Length} bytes  (max stack: {prog.MaxStackDepth})");
+            w.WriteLine($"Functions: {prog.Functions.Count}");
+            w.WriteLine($"Loop bodies: {prog.LoopBodies.Count}");
+            w.WriteLine($"Constants: {prog.Constants.Count}");
+            w.WriteLine($"Call sites: {prog.CallSites.Count}");
+            for (int si = 0; si < prog.CallSites.Count; si++) {
+                var desc = si < prog.CallSiteTargets.Count ? prog.CallSiteTargets[si] : "";
+                w.WriteLine($"  Site[{si}]: {desc}");
+            }
+
+            for (int fi = 0; fi < prog.Functions.Count; fi++) {
+                var fn = prog.Functions[fi];
+                w.WriteLine($"\nFunc[{fi}]: PC=0x{fn.PC:X4} ArgBytes={fn.ArgBytes} RetBytes={fn.RetBytes} LocalCount={fn.LocalCount} SourceNode={fn.SourceNode?.GetType().Name}");
+            }
+
+            for (int li = 0; li < prog.LoopBodies.Count; li++) {
+                var lb = prog.LoopBodies[li];
+                w.WriteLine($"\nLoopBody[{li}]: BodyPC=0x{lb.BodyPC:X4} BodyLen={lb.BodyLength} ContPC=0x{lb.ContPC:X4} ContinuePC=0x{lb.ContinuePC:X4} EndPC=0x{lb.EndPC:X4}");
+            }
+
+            w.WriteLine("\nBytecode dump:");
+            int pos = 0;
+            while (pos < prog.Code.Length) {
+                byte raw = prog.Code[pos];
+                int size = (raw & OpCodeEncoding.SizeBit) != 0 ? 9 : 1;
+                var op = (OpCode)(raw & OpCodeEncoding.OpcodeMask);
+                w.Write($"  0x{pos:X4}: ");
+                for (int i = 0; i < size && pos + i < prog.Code.Length; i++)
+                    w.Write($"{prog.Code[pos + i]:X2} ");
+                w.Write(new string(' ', Math.Max(0, 24 - size * 3)));
+                w.Write($"// {op,-13}");
+                long operand = size == 9 ? BitConverter.ToInt64(prog.Code, pos + 1) : 0;
+                if (size == 9) {
+                    if (op is OpCode.Jump or OpCode.JumpIfFalse)
+                        w.Write($"-> 0x{operand:X4}");
+                    else if (op is OpCode.IncLocal)
+                        w.Write($"slot={(int)(operand >> 32)} delta={(int)operand}");
+                    else if (op is OpCode.LoadLocal or OpCode.StoreLocal or OpCode.LoadArg or OpCode.StoreArg)
+                        w.Write($"slot={operand}");
+                    else if (op is OpCode.Call)
+                        w.Write($"func={operand}");
+                    else if (op is OpCode.CallExternal) {
+                        var si = (int)operand;
+                        w.Write($"site={si}");
+                        if (si < prog.CallSiteTargets.Count)
+                            w.Write($" {prog.CallSiteTargets[si]}");
+                    }
+                    else if (op is OpCode.Push)
+                        w.Write($"0x{operand:X}");
+                    else
+                        w.Write($"0x{operand:X}");
+                }
+                w.WriteLine();
+                pos += size;
+            }
+        }
+
+        // 1. While loop sum
+        var sumVar = new Variable("sum"); var iVar = new Variable("i");
+        var whileSum = new Invoke(new Lambda([], new Block(
+            [new Assignment(sumVar, new Constant(0)),
+             new Assignment(iVar, new Constant(1)),
+             new WhileLoop(new LessThanOrEqual(iVar, new Constant(10)),
+                 new Block([
+                     new Assignment(sumVar, new Add(sumVar, iVar)),
+                     new Assignment(iVar, new Add(iVar, new Constant(1)))
+                 ])),
+             sumVar],
+            [sumVar, iVar]
+        )));
+        var wa = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build().Analyze(whileSum);
+        DumpBytecode(Lowering.Lower(whileSum, wa), "While Loop Sum", Path.Combine(outDir, "while_loop_sum.txt"));
+
+        // 2. CLR call chain
+        var maxMethod = new Member(new TypeReference(typeof(Math).FullName!), nameof(Math.Max));
+        Node chain = new Constant(1);
+        for (int i = 2; i <= 10; i++)
+            chain = new Invoke(maxMethod, chain, new Constant(i));
+        var ca = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().Build().Analyze(chain);
+        DumpBytecode(Lowering.Lower(chain, ca), "CLR Call Chain (10)", Path.Combine(outDir, "clr_chain_10.txt"));
+
+        // 3. Deep sum (balanced tree)
+        Node BuildDeep(int n) {
+            var vals = new int[n];
+            for (int i = 0; i < n; i++) vals[i] = i + 1;
+            return BuildBal(vals, 0, n - 1);
+            static Node BuildBal(int[] v, int s, int e) =>
+                s == e ? new Constant(v[s]) : new Add(BuildBal(v, s, (s + e) / 2), BuildBal(v, (s + e) / 2 + 1, e));
+        }
+        var deep = BuildDeep(20);
+        var da = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().Build().Analyze(deep);
+        DumpBytecode(Lowering.Lower(deep, da), "Deep Sum (20)", Path.Combine(outDir, "deep_sum_20.txt"));
+
+        // 5. Expression tree: CallSiteCompiler wrapper for Math.Max
+        using var csw = new StreamWriter(Path.Combine(outDir, "callexpr_math_max.txt"));
+        csw.WriteLine("=== CallSiteCompiler Generated Expression: Math.Max wrapper ===");
+        csw.WriteLine("(Expression tree is built dynamically inside CallSiteCompiler.Compile)");
+        csw.WriteLine("The wrapper reads args from VmState.Stack, calls Math.Max, pushes result.\n");
+        var maxMethodInfo = typeof(Math).GetMethod(nameof(Math.Max), [typeof(int), typeof(int)])!;
+        var maxDel = CallSiteCompiler.Compile(maxMethodInfo, isStatic: true);
+        csw.WriteLine($"Compiled delegate: {maxDel.Method}");
+        csw.WriteLine($"Target closure fields:");
+        if (maxDel.Target is not null)
+            foreach (var f in maxDel.Target.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Instance))
+                csw.WriteLine($"  {f.Name}: {f.GetValue(maxDel.Target)?.GetType().Name}");
+
+        // 6. Expression tree from LinqExpressionGenerator for x => x + 1
+        using var jw = new StreamWriter(Path.Combine(outDir, "jitexpr_add_one.txt"));
+        jw.WriteLine("=== LinqExpressionGenerator Expression: x => x + 1 ===");
+        var jitX = new Parameter("x", TypeReference.To<int>());
+        var jitExpr = new Add(jitX, new Constant(1));
+        var jitLambda = new Lambda([jitX], jitExpr);
+        var jitAnalysis2 = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().Build()
+            .Analyze(jitLambda);
+        var gen = new LinqExpressionGenerator(jitAnalysis2);
+        var compileResult = gen.Compile(jitLambda.Body);
+        jw.WriteLine($"Expression: {compileResult.Expression}");
+        jw.WriteLine($"Type: {compileResult.Expression.Type}");
+        jw.WriteLine($"Parameters ({compileResult.Parameters.Count}):");
+        foreach (var p in compileResult.Parameters)
+            jw.WriteLine($"  {p.Name}: {p.Type}");
+        jw.WriteLine($"\nToString(): {compileResult.Expression}");
+
+        // 7. Expression tree for while loop body (using Parameter for typed vars)
+        using var lbw = new StreamWriter(Path.Combine(outDir, "jitexpr_loop_body.txt"));
+        lbw.WriteLine("=== LinqExpressionGenerator Expression: while loop body ===");
+        var lbSp = new Parameter("s", TypeReference.To<int>());
+        var lbIp = new Parameter("i", TypeReference.To<int>());
+        var lbBody2 = new Block([
+            new Assignment(lbSp, new Add(lbSp, lbIp)),
+            new Assignment(lbIp, new Add(lbIp, new Constant(1)))
+        ]);
+        var lbLambda3 = new Lambda([lbSp, lbIp], lbBody2);
+        var lbAnalysis3 = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().Build().Analyze(lbLambda3);
+        var lbGen2 = new LinqExpressionGenerator(lbAnalysis3);
+        var lbResult2 = lbGen2.Compile(lbBody2);
+        lbw.WriteLine($"Expression: {lbResult2.Expression}");
+        lbw.WriteLine($"Type: {lbResult2.Expression.Type}");
+        lbw.WriteLine($"Parameters ({lbResult2.Parameters.Count}):");
+        foreach (var p in lbResult2.Parameters)
+            lbw.WriteLine($"  {p.Name}: {p.Type}");
+        lbw.WriteLine($"\nToString(): {lbResult2.Expression}");
+        if (lbResult2.Expression is BlockExpression block) {
+            lbw.WriteLine($"\nBlock expressions ({block.Expressions.Count}):");
+            for (int i = 0; i < block.Expressions.Count; i++)
+                lbw.WriteLine($"  [{i}] {block.Expressions[i]}");
+        }
+
+        // 8. Expression tree for deep sum chain
+        using var dsw = new StreamWriter(Path.Combine(outDir, "jitexpr_deep_sum.txt"));
+        dsw.WriteLine("=== LinqExpressionGenerator Expression: sum(1..20) ===");
+        Node BuildDeep8(int n) {
+            var vals = new int[n];
+            for (int i = 0; i < n; i++) vals[i] = i + 1;
+            return BuildBal(vals, 0, n - 1);
+            static Node BuildBal(int[] v, int s, int e) =>
+                s == e ? new Constant(v[s]) : new Add(BuildBal(v, s, (s + e) / 2), BuildBal(v, (s + e) / 2 + 1, e));
+        }
+        var deep8 = BuildDeep8(20);
+        var deepAnalysis2 = new AnalyzerBuilder()
+            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
+            .UseSideEffectAnalysis().UseThisReferenceContext()
+            .UseControlFlowAnalysis().Build().Analyze(deep8);
+        var deepGen = new LinqExpressionGenerator(deepAnalysis2);
+        var deepResult = deepGen.Compile(deep8);
+        dsw.WriteLine($"Expression: {deepResult.Expression}");
+        dsw.WriteLine($"Type: {deepResult.Expression.Type}");
+        dsw.WriteLine($"\nToString(): {deepResult.Expression}");
+
+        await Assert.That(File.Exists(Path.Combine(outDir, "while_loop_sum.txt"))).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(outDir, "clr_chain_10.txt"))).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(outDir, "deep_sum_20.txt"))).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(outDir, "callexpr_math_max.txt"))).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(outDir, "jitexpr_add_one.txt"))).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(outDir, "jitexpr_loop_body.txt"))).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(outDir, "jitexpr_deep_sum.txt"))).IsTrue();
+    }
+
 }

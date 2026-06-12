@@ -98,6 +98,14 @@ public class UopBenchmarks {
     // Gcd
     private Bytecode _gcd = null!;
 
+    // Prime sieve (trial division)
+    private Bytecode _countPrimes100 = null!;
+    private Bytecode _countPrimes1000 = null!;
+
+    // Sieve of Eratosthenes (BitArray)
+    private Bytecode _sieve100 = null!;
+    private Bytecode _sieve1M = null!;
+
     [GlobalSetup]
     public void Setup() {
         _state = new VmState();
@@ -112,6 +120,10 @@ public class UopBenchmarks {
         _clrChain100 = Lower(BuildClrChain(100));
         _stringConcat = Lower(new Add(new Constant("Hello, "), new Constant("World")));
         _gcd = Lower(BuildGcd(123456, 7890));
+        _countPrimes100 = Lower(BuildCountPrimes(100));
+        _countPrimes1000 = Lower(BuildCountPrimes(1000));
+        _sieve100 = Lower(BuildSieve(100000));
+        _sieve1M = Lower(BuildSieve(1000000));
     }
 
     [GlobalCleanup]
@@ -176,7 +188,19 @@ public class UopBenchmarks {
     [Benchmark]
     public object? Gcd() => Exec(_gcd);
 
-    // ═══════════════════════════════════════════════
+    [Benchmark]
+    public object? CountPrimes_100() => Exec(_countPrimes100);
+
+    [Benchmark]
+    public object? CountPrimes_1000() => Exec(_countPrimes1000);
+
+    [Benchmark]
+    public object? Sieve_100K() => Exec(_sieve100);
+
+    [Benchmark]
+    public object? Sieve_1M() => Exec(_sieve1M);
+
+    // ═══════════════════════════════════════════════════
     //  Builders
     // ═══════════════════════════════════════════════
 
@@ -266,5 +290,78 @@ public class UopBenchmarks {
                  ])),
              x],
             [x, y, tmp])));
+    }
+
+    private static Node BuildSieve(int limit) {
+        var wordCnt = (limit + 64) / 64;
+        var bits = new Variable("bits"); var tmp = new Variable("tmp");
+        var i = new Variable("i"); var j = new Variable("j"); var cnt = new Variable("cnt");
+
+        Node Wi(Node x) => new ShiftRight(x, new Constant(6));
+        Node Bi(Node x) => new BitwiseAnd(x, new Constant(63L));
+        Node Bit(Node x) => new ShiftLeft(new Constant(1L), Bi(x));
+        Node IsP(Node x) => new Equal(new BitwiseAnd(
+            new ShiftRight(new IndexAccess(bits, Wi(x)), Bi(x)), new Constant(1L)), new Constant(0L));
+
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(bits, new NewArray(new TypeReference("System.Int64"), new Constant(wordCnt))),
+             new Assignment(i, new Constant(2)),
+             new WhileLoop(new LessThanOrEqual(new Multiply(i, i), new Constant(limit)),
+                 new Block([
+                     new IfStatement(IsP(i),
+                         new Block([
+                             new Assignment(j, new Multiply(i, i)),
+                             new WhileLoop(new LessThanOrEqual(j, new Constant(limit)),
+                                 new Block([
+                                     new Assignment(tmp, new BitwiseOr(new IndexAccess(bits, Wi(j)), Bit(j))),
+                                     new Assignment(new IndexAccess(bits, Wi(j)), tmp),
+                                     new Assignment(j, new Add(j, i))
+                                 ]))
+                         ])),
+                     new Assignment(i, new Add(i, new Constant(1)))
+                 ])),
+             new Assignment(cnt, new Constant(0)),
+             new Assignment(i, new Constant(2)),
+             new WhileLoop(new LessThanOrEqual(i, new Constant(limit)),
+                 new Block([
+                     new Assignment(cnt, new Add(cnt, new Conditional(IsP(i),
+                         new Constant(1), new Constant(0)))),
+                     new Assignment(i, new Add(i, new Constant(1)))
+                 ])),
+             cnt],
+            [bits, tmp, i, j, cnt])));
+    }
+
+    private static Node BuildCountPrimes(int limit) {
+        var n = new Variable("n");
+        var i = new Variable("i");
+        var count = new Variable("count");
+        var isPrime = new Variable("isPrime");
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(count, new Constant(0L)),
+             new Assignment(n, new Constant(2L)),
+             new WhileLoop(new LessThanOrEqual(n, new Constant(limit)),
+                 new Block([
+                     new Assignment(isPrime, new Constant(1L)),
+                     new Assignment(i, new Constant(2L)),
+                     new WhileLoop(
+                         new And(
+                             new LessThanOrEqual(new Multiply(i, i), n),
+                             new Equal(isPrime, new Constant(1L))),
+                         new Block([
+                             // if (n % i == 0) isPrime = 0
+                             new Assignment(isPrime, new Conditional(
+                                 new Equal(new Modulo(n, i), new Constant(0L)),
+                                 new Constant(0L), isPrime)),
+                             new Assignment(i, new Add(i, new Constant(1L)))
+                         ])),
+                     // count += isPrime ? 1 : 0
+                     new Assignment(count, new Add(count,
+                         new Conditional(new Equal(isPrime, new Constant(1L)),
+                             new Constant(1L), new Constant(0L)))),
+                     new Assignment(n, new Add(n, new Constant(1L)))
+                 ])),
+             count],
+            [n, i, count, isPrime])));
     }
 }

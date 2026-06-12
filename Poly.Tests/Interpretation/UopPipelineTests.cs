@@ -118,11 +118,11 @@ public class UopPipelineTests {
     }
 
     [Test]
-    public async Task DivRem_ProducesQuotientOnly() {
-        // Modulo 17 % 5 → quotient 3 (remainder popped)
+    public async Task Modulo_ReturnsRemainder() {
+        // 17 % 5 → remainder 2 (quotient popped)
         var node = new Modulo(new Constant(17), new Constant(5));
         var result = Execute(node);
-        await Assert.That(result.Value).IsEqualTo(3L);
+        await Assert.That(result.Value).IsEqualTo(2L);
     }
 
     [Test]

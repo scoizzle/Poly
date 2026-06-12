@@ -429,8 +429,8 @@ internal sealed record DivRemOp(NodeId? Source = null) : MicroOp(Source) {
             Expression.Assign(q, ctx.Pop()),
             Expression.IfThen(Expression.Equal(r, Expression.Constant(0L)),
                 Expression.Throw(Expression.Constant(new DivideByZeroException()))),
-            ctx.Push(Expression.Divide(q, r)),   // quotient
-            ctx.Push(Expression.Modulo(q, r)));   // remainder
+            ctx.Push(Expression.Modulo(q, r)),   // remainder (on top)
+            ctx.Push(Expression.Divide(q, r)));   // quotient
     }
 }
 
@@ -564,6 +564,85 @@ internal sealed record CallExternalOp(int SiteIndex, NodeId? Source = null) : Mi
             ctx.WritebackPC(),
             Expression.Call(_method, ctx.State, Expression.Constant(SiteIndex)),
             ctx.ResyncPC(), ctx.ResyncSP());
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Direct array access (no CLR call site overhead)
+// ═══════════════════════════════════════════════════════════════════
+
+/// <summary>Load <c>arr[index]</c> where <c>arr</c> is a heap-stored
+/// <c>long[]</c>.  Stack: <c>[..., arr_handle, index] → [..., value]</c>.</summary>
+internal sealed record ArrayLoadOp(NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => "arrayload";
+    static readonly System.Reflection.MethodInfo HeapGet =
+        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+    public override Expression ToExpression(CompilationContext ctx) {
+        var idx = Expression.Variable(typeof(int), "i");
+        var handle = Expression.Variable(typeof(int), "h");
+        var arr = Expression.Variable(typeof(long[]), "a");
+        ctx.Variables.Add(idx); ctx.Variables.Add(handle); ctx.Variables.Add(arr);
+        return Expression.Block(
+            Expression.Assign(idx, Expression.Convert(ctx.Pop(), typeof(int))),
+            Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))),
+            Expression.Assign(arr, Expression.Convert(
+                Expression.Call(Expression.Property(ctx.State, "Heap"), HeapGet, handle),
+                typeof(long[]))),
+            ctx.Push(Expression.ArrayAccess(arr, idx)));
+    }
+}
+
+/// <summary>Create a <c>long[size]</c> on the heap and push its handle.
+/// Stack: <c>[..., size] → [..., handle]</c>.</summary>
+internal sealed record NewArrayOp(NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => "newarray";
+    public override Expression ToExpression(CompilationContext ctx) {
+        var size = Expression.Variable(typeof(int), "s");
+        var arr = Expression.Variable(typeof(long[]), "a");
+        ctx.Variables.Add(size); ctx.Variables.Add(arr);
+        var heapAlloc = typeof(Heap).GetMethod("Allocate", [typeof(object)])!;
+        return Expression.Block(
+            Expression.Assign(size, Expression.Convert(ctx.Pop(), typeof(int))),
+            Expression.Assign(arr, Expression.NewArrayBounds(typeof(long), size)),
+            ctx.Push(Expression.Convert(
+                Expression.Call(Expression.Property(ctx.State, "Heap"), heapAlloc,
+                    Expression.Convert(arr, typeof(object))),
+                typeof(long))));
+    }
+}
+
+/// <summary>Store <c>arr[index] = val</c> where <c>arr</c> is a heap-stored
+/// <c>long[]</c>.  Stack: <c>[..., arr_handle, index, val] → [...]</c>.</summary>
+internal sealed record ArrayStoreOp(NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => "arraystore";
+    static readonly System.Reflection.MethodInfo HeapGet =
+        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+    public override Expression ToExpression(CompilationContext ctx) {
+        var val = Expression.Variable(typeof(long), "v");
+        var idx = Expression.Variable(typeof(int), "i");
+        var handle = Expression.Variable(typeof(int), "h");
+        var arr = Expression.Variable(typeof(long[]), "a");
+        ctx.Variables.Add(val); ctx.Variables.Add(idx); ctx.Variables.Add(handle); ctx.Variables.Add(arr);
+        return Expression.Block(
+            Expression.Assign(val, ctx.Pop()),
+            Expression.Assign(idx, Expression.Convert(ctx.Pop(), typeof(int))),
+            Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))),
+            Expression.Assign(arr, Expression.Convert(
+                Expression.Call(Expression.Property(ctx.State, "Heap"), HeapGet, handle),
+                typeof(long[]))),
+            Expression.Assign(Expression.ArrayAccess(arr, idx), val));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Trace µop (inserted by Lowering when VM_TRACE is defined)
+// ═══════════════════════════════════════════════════════════════════
+
+/// <summary>No-op µop that carries a trace message.  Inserted during
+/// lowering when <c>VM_TRACE</c> is defined.  Zero runtime cost —
+/// <see cref="ToExpression"/> returns a no-op.</summary>
+internal sealed record TraceUop(string Message, NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => $"trace: {Message}";
+    public override Expression ToExpression(CompilationContext ctx) => Expression.Empty();
 }
 
 // ═══════════════════════════════════════════════════════════════════

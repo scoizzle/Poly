@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
@@ -252,6 +254,16 @@ internal static class Lowering {
             case Parameter p: EmitParameter(p, ref ctx, lambdaState); return;
 
             case Assignment assign: {
+                    // Array store: arr[i] = val — push arr, index, val (ArrayStoreOp convention)
+                    if (assign.Destination is IndexAccess ia && IsArrayType(ia.Value, ctx)) {
+                        EmitNode(ia.Value, ref ctx, lambdaState);        // arr_handle
+                        EmitNode(ia.Arguments[0], ref ctx, lambdaState); // index
+                        EmitNode(assign.Value, ref ctx, lambdaState);    // val
+                        ctx.Code.Add(new ArrayStoreOp());                // pops [arr, idx, val]
+                        if (EmitsValue(assign, ctx.Analysis))
+                            ctx.Code.Add(new DupOp());                   // dup result if needed
+                        return;
+                    }
                     EmitNode(assign.Value, ref ctx, lambdaState);
                     if (EmitsValue(assign, ctx.Analysis))
                         ctx.Code.Add(new DupOp());
@@ -261,7 +273,7 @@ internal static class Lowering {
 
             case Invoke invoke: EmitInvoke(invoke, ref ctx, lambdaState); return;
             case Lambda lam: EmitLambda(lam, ref ctx, lambdaState); return;
-            case Return: ctx.Code.Add(new ReturnFromCallOp(ctx.CurrentArgSlots)); return;
+            case Return: TraceReturn(ref ctx); ctx.Code.Add(new ReturnFromCallOp(ctx.CurrentArgSlots)); return;
 
             case Conditional cond: EmitConditional(cond, ref ctx, lambdaState); return;
             case IfStatement iff: EmitIfStatement(iff, ref ctx, lambdaState); return;
@@ -290,6 +302,7 @@ internal static class Lowering {
             case Member m: EmitMember(m, ref ctx, lambdaState); return;
             case IndexAccess ia: EmitIndexAccess(ia, ref ctx, lambdaState); return;
             case New n: EmitNew(n, ref ctx, lambdaState); return;
+            case NewArray na: EmitNode(na.Length, ref ctx, lambdaState); ctx.Code.Add(new NewArrayOp()); return;
 
             case Await aw: EmitAwait(aw, ref ctx, lambdaState); return;
             case SuspendNode sn: EmitSuspendNode(sn, ref ctx, lambdaState); return;
@@ -525,6 +538,7 @@ internal static class Lowering {
     }
 
     private static void EmitInvoke(Invoke invoke, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+        TraceInvoke(ref ctx, invoke);
         var resolved = ctx.Analysis.GetResolvedMember(invoke);
         var args = invoke.Arguments;
 
@@ -538,6 +552,8 @@ internal static class Lowering {
 
         if (resolved is ClrMethod clrMethod) {
             bool isStatic = clrMethod.LifetimeModifier == LifetimeModifier.Static;
+            if (!isStatic && invoke.Delegate is Member instanceMethod)
+                EmitNode(instanceMethod.Value, ref ctx, lambdaState);
             foreach (var arg in args)
                 EmitNode(arg, ref ctx, lambdaState);
             int siteIdx = GetOrAddCallSite(ref ctx, clrMethod.MethodInfo, isStatic);
@@ -545,11 +561,11 @@ internal static class Lowering {
             return;
         }
 
-        if (invoke.Delegate is Lambda lambda && ctx.LambdaFuncMap!.TryGetValue(lambda, out int lambdaIdx)) {
+        if (invoke.Delegate is Lambda lambda2 && ctx.LambdaFuncMap!.TryGetValue(lambda2, out int lambdaIdx2)) {
             ctx.Code.Add(new PushOp(-1L)); // dummy closure handle at index 0
             foreach (var arg in args)
                 EmitNode(arg, ref ctx, lambdaState);
-            ctx.Code.Add(new CallOp(lambdaIdx, args.Length + 1));
+            ctx.Code.Add(new CallOp(lambdaIdx2, args.Length + 1));
             return;
         }
 
@@ -667,7 +683,9 @@ internal static class Lowering {
     private static void EmitMember(Member m, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         var resolved = ctx.Analysis.GetResolvedMember(m);
         if (resolved is ClrMethod getter) {
-            EmitNode(m.Value, ref ctx, lambdaState);
+            // Skip the TypeReference for static members — it's a type marker, not a value
+            if (m.Value is not TypeReference)
+                EmitNode(m.Value, ref ctx, lambdaState);
             int siteIdx = GetOrAddCallSite(ref ctx, getter.MethodInfo,
                 getter.LifetimeModifier == LifetimeModifier.Static);
             ctx.Code.Add(new CallExternalOp(siteIdx));
@@ -687,6 +705,15 @@ internal static class Lowering {
             ctx.Code.Add(new CallExternalOp(siteIdx));
             return;
         }
+
+        // Array index read via direct µop (no CLR call overhead)
+        if (IsArrayType(ia.Value, ctx)) {
+            EmitNode(ia.Value, ref ctx, lambdaState);     // push arr_handle
+            EmitNode(ia.Arguments[0], ref ctx, lambdaState); // push index
+            ctx.Code.Add(new ArrayLoadOp());
+            return;
+        }
+
         throw new InvalidOperationException($"Index access not resolved");
     }
 
@@ -744,13 +771,25 @@ internal static class Lowering {
 
     private static void EmitIndexAccessStore(IndexAccess ia, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         var resolved = ctx.Analysis.GetResolvedMember(ia);
-        if (resolved is not ClrMethod setter)
-            throw new InvalidOperationException($"Index setter not found");
+        if (resolved is ClrMethod setter) {
+            int siteIdx = ctx.CallSites!.Count;
+            bool isStatic = setter.LifetimeModifier == LifetimeModifier.Static;
+            ctx.CallSites!.Add(CallSiteCompiler.Compile(setter.MethodInfo, isStatic));
+            ctx.Code.Add(new CallExternalOp(siteIdx));
+            return;
+        }
 
-        int siteIdx = ctx.CallSites!.Count;
-        bool isStatic = setter.LifetimeModifier == LifetimeModifier.Static;
-        ctx.CallSites!.Add(CallSiteCompiler.Compile(setter.MethodInfo, isStatic));
-        ctx.Code.Add(new CallExternalOp(siteIdx));
+        // Array index write: arr[i] = val → Array.SetValue(val, i)
+        // Stack at entry: [arr, val, index] (arranged by Assignment case)
+        if (IsArrayType(ia.Value, ctx)) {
+            var setValue = typeof(Array).GetMethod("SetValue", [typeof(object), typeof(int)])!;
+            int siteIdx = ctx.CallSites!.Count;
+            ctx.CallSites!.Add(CallSiteCompiler.Compile(setValue, false));
+            ctx.Code.Add(new CallExternalOp(siteIdx));
+            return;
+        }
+
+        throw new InvalidOperationException($"Index setter not found");
     }
 
     private static void EmitMemberStore(Member m, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -850,6 +889,14 @@ internal static class Lowering {
         return meta?.DefinitelyAssigned.Count > 0;
     }
 
+    private static bool IsArrayType(Node node, EmitContext ctx) {
+        var type = ctx.Analysis.GetResolvedType(node);
+        if (type is null) return false;
+        if (type is Introspection.CommonLanguageRuntime.ClrTypeDefinition ctd)
+            return ctd.RuntimeType.IsArray;
+        return type.FullName is { } n && n.EndsWith("[]");
+    }
+
     private static bool EmitsValue(Node node, AnalysisResult analysis) {
         if (node is null) return false;
         if (node is WhileLoop or DoWhileLoop or ForLoop) return false;
@@ -860,5 +907,30 @@ internal static class Lowering {
         if (node is Block block && block.Nodes.Count > 0)
             return EmitsValue(block.Nodes[^1], analysis);
         return false;
+    }
+
+    // ── Trace helpers (compiled only in Debug builds) ──
+
+    [Conditional("DEBUG")]
+    private static void TraceOp(ref EmitContext ctx, Node node, string phase) {
+        var msg = $"{phase}: {node.GetType().Name} at µop {ctx.Code.Count}";
+        ctx.Code.Add(new TraceUop(msg));
+        Debug.WriteLine(msg);
+    }
+
+    [Conditional("DEBUG")]
+    private static void TraceInvoke(ref EmitContext ctx, Invoke invoke) {
+        var resolved = ctx.Analysis.GetResolvedMember(invoke);
+        string target = resolved?.ToString() ?? invoke.Delegate?.ToString() ?? "?";
+        var msg = $"EMIT CALL {target} at µop {ctx.Code.Count}";
+        ctx.Code.Add(new TraceUop(msg));
+        Debug.WriteLine(msg);
+    }
+
+    [Conditional("DEBUG")]
+    private static void TraceReturn(ref EmitContext ctx) {
+        var msg = $"EMIT RET_CALL at µop {ctx.Code.Count}";
+        ctx.Code.Add(new TraceUop(msg));
+        Debug.WriteLine(msg);
     }
 }

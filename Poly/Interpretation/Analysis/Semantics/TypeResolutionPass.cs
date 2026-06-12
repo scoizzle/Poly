@@ -44,6 +44,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
             Member memberAccess => ResolveMemberAccessType(context, memberAccess),
             Invoke methodInv => ResolveMethodInvocationType(context, methodInv),
             New @new => ResolveConstructorInvocationType(context, @new),
+            NewArray newArr => ResolveNewArrayType(context, newArr),
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
@@ -172,6 +173,16 @@ internal sealed class TypeResolver : INodeAnalyzer {
 
         var constructor = ConstructorInvocationSemanticResolver.ResolveConstructor(context, @new);
         return constructor?.MemberTypeDefinition ?? targetType;
+    }
+
+    private static ITypeDefinition? ResolveNewArrayType(AnalysisContext context, NewArray newArr) {
+        var elemType = ResolveNodeType(context, newArr.ElementType);
+        var lengthType = ResolveNodeType(context, newArr.Length);
+        if (elemType is Introspection.CommonLanguageRuntime.ClrTypeDefinition elemClr)
+            return context.TypeDefinitions.GetTypeDefinition(elemClr.RuntimeType.MakeArrayType());
+        if (elemType?.FullName is { } fn)
+            return context.TypeDefinitions.GetTypeDefinition(fn + "[]");
+        return null;
     }
 
     private static ITypeDefinition? ResolveIndexAccessType(

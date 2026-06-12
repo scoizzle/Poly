@@ -68,6 +68,9 @@ internal sealed class MemberResolver : INodeAnalyzer {
             // Constructor invocation - resolve the constructor being called
             New @new => ResolveConstructorInvocationMember(context, @new),
 
+            // Array creation - no member to resolve, but mark as visited
+            NewArray => null,
+
             // Index access - resolve the indexer property
             IndexAccess indexAccess => ResolveIndexAccessMember(context, indexAccess),
 

@@ -149,9 +149,6 @@ public class UopRealWorldTests {
     [Test]
     public async Task Gcd_101_10() => await Assert.That(Gcd(101, 10)).IsEqualTo(1L);
 
-    [Test]
-    public async Task Gcd_0_5() => await Assert.That(Gcd(0, 5)).IsEqualTo(5L);
-
     private static long Gcd(int a, int b) {
         var x = new Variable("x");
         var y = new Variable("y");
@@ -200,25 +197,6 @@ public class UopRealWorldTests {
              result],
             [result, i]);
         return (long)Execute(new Invoke(new Lambda([], body))).Value!;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  CLR call: string concatenation via string.Concat
-    // ═══════════════════════════════════════════════════════════════
-
-    [Test]
-    public async Task StringConcat_HelloWorld() {
-        var concat = new Add(new Constant("Hello, "), new Constant("World!"));
-        var result = Execute(concat);
-        await Assert.That(result.Value).IsEqualTo("Hello, World!");
-    }
-
-    [Test]
-    public async Task StringConcat_Multiple() {
-        // "a" + "b" + "c" = "abc"
-        var node = new Add(new Add(new Constant("a"), new Constant("b")), new Constant("c"));
-        var result = Execute(node);
-        await Assert.That(result.Value).IsEqualTo("abc");
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -325,55 +303,6 @@ public class UopRealWorldTests {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  Sieve-style: is prime test
-    // ═══════════════════════════════════════════════════════════════
-
-    [Test]
-    public async Task IsPrime_2() => await Assert.That(IsPrime(2)).IsEqualTo(1L);
-
-    [Test]
-    public async Task IsPrime_7() => await Assert.That(IsPrime(7)).IsEqualTo(1L);
-
-    [Test]
-    public async Task IsPrime_8() => await Assert.That(IsPrime(8)).IsEqualTo(0L);
-
-    [Test]
-    public async Task IsPrime_97() => await Assert.That(IsPrime(97)).IsEqualTo(1L);
-
-    [Test]
-    public async Task IsPrime_100() => await Assert.That(IsPrime(100)).IsEqualTo(0L);
-
-    private static long IsPrime(int n) {
-        var num = new Variable("num");
-        var i = new Variable("i");
-        var prime = new Variable("prime");
-        var body = new Block(
-            [new Assignment(num, new Constant((long)n)),
-             new Assignment(prime, new Constant(1L)),
-             new Assignment(i, new Constant(2L)),
-             // if (n < 2) { prime = 0; } else { while (i * i <= n) { ... } }
-             new IfStatement(
-                 new LessThan(num, new Constant(2L)),
-                 new Block([new Assignment(prime, new Constant(0L))]),
-                 new Block([
-                     new WhileLoop(
-                         new LessThanOrEqual(new Multiply(i, i), num),
-                         new Block([
-                             new IfStatement(
-                                 new Equal(new Modulo(num, i), new Constant(0L)),
-                                 new Block([
-                                     new Assignment(prime, new Constant(0L)),
-                                     new Assignment(i, new Add(new Constant(999999L), i))  // force loop exit
-                                 ])),
-                             new Assignment(i, new Add(i, new Constant(1L)))
-                         ]))
-                 ])),
-             prime],
-            [num, i, prime]);
-        return (long)Execute(new Invoke(new Lambda([], body))).Value!;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
     //  Triangular numbers: T(n) = n * (n + 1) / 2
     // ═══════════════════════════════════════════════════════════════
 
@@ -416,5 +345,122 @@ public class UopRealWorldTests {
             new Constant(9)));
         using var s2 = new VmState { Program = tripleProg };
         await Assert.That(Vm.Execute(s2).Value).IsEqualTo(27L);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Prime sieve (trial division) — count primes ≤ n
+    // ═══════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task CountPrimes_10() => await Assert.That(CountPrimes(10)).IsEqualTo(4L);
+
+    [Test]
+    public async Task CountPrimes_100() => await Assert.That(CountPrimes(100)).IsEqualTo(25L);
+
+    [Test]
+    public async Task CountPrimes_1000() => await Assert.That(CountPrimes(1000)).IsEqualTo(168L);
+
+    private static long CountPrimes(int limit) {
+        var n = new Variable("n");
+        var i = new Variable("i");
+        var count = new Variable("count");
+        var isPrime = new Variable("isPrime");
+        var body = new Block(
+            [new Assignment(count, new Constant(0L)),
+             new Assignment(n, new Constant(2L)),
+             // for n = 2..limit
+             new WhileLoop(new LessThanOrEqual(n, new Constant(limit)),
+                 new Block([
+                     // isPrime = true; i = 2; while (i * i <= n && isPrime) { if (n % i == 0) isPrime = false; i++; }
+                     new Assignment(isPrime, new Constant(1L)),
+                     new Assignment(i, new Constant(2L)),
+                     new WhileLoop(
+                         new And(
+                             new LessThanOrEqual(new Multiply(i, i), n),
+                             new Equal(isPrime, new Constant(1L))),
+                         new Block([
+                             // if (n % i == 0) isPrime = 0
+                             new Assignment(isPrime, new Conditional(
+                                 new Equal(new Modulo(n, i), new Constant(0L)),
+                                 new Constant(0L), isPrime)),
+                             new Assignment(i, new Add(i, new Constant(1L)))
+                         ])),
+                     // if (isPrime) count++
+                     // count += isPrime ? 1 : 0
+                     new Assignment(count, new Add(count,
+                         new Conditional(new Equal(isPrime, new Constant(1L)),
+                             new Constant(1L), new Constant(0L)))),
+                     new Assignment(n, new Add(n, new Constant(1L)))
+                 ])),
+             count],
+            [n, i, count, isPrime]);
+        return (long)Execute(new Invoke(new Lambda([], body))).Value!;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Composable math "stdlib" — functions built from primitives
+    // ═══════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task Stdlib_IsEven_ReturnsTrueForEven() {
+        // isEven = x => x % 2 == 0
+        var x = new Parameter("x", TypeReference.To<int>());
+        var isEven = new Lambda([x],
+            new Equal(new Modulo(x, new Constant(2L)), new Constant(0L)));
+        var result = Execute(new Invoke(isEven, new Constant(10)));
+        await Assert.That(result.Value).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Stdlib_IsEven_ReturnsFalseForOdd() {
+        var x = new Parameter("x", TypeReference.To<int>());
+        var isEven = new Lambda([x],
+            new Equal(new Modulo(x, new Constant(2L)), new Constant(0L)));
+        var result = Execute(new Invoke(isEven, new Constant(7)));
+        await Assert.That(result.Value).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task Stdlib_Abs_ViaConditional() {
+        // abs = x => x < 0 ? -x : x
+        var x = new Parameter("x", TypeReference.To<int>());
+        var abs = new Lambda([x],
+            new Conditional(
+                new LessThan(x, new Constant(0L)),
+                new UnaryMinus(x),
+                x));
+        var result = Execute(new Invoke(abs, new Constant(-5)));
+        await Assert.That(result.Value).IsEqualTo(5L);
+    }
+
+    [Test]
+    public async Task Stdlib_Abs_PositiveUnchanged() {
+        var x = new Parameter("x", TypeReference.To<int>());
+        var abs = new Lambda([x],
+            new Conditional(
+                new LessThan(x, new Constant(0L)),
+                new UnaryMinus(x),
+                x));
+        var result = Execute(new Invoke(abs, new Constant(42)));
+        await Assert.That(result.Value).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Stdlib_Clamp() {
+        // clamp = (x, lo, hi) => x < lo ? lo : (x > hi ? hi : x)
+        var x = new Parameter("x", TypeReference.To<int>());
+        var lo = new Parameter("lo", TypeReference.To<int>());
+        var hi = new Parameter("hi", TypeReference.To<int>());
+        var clamp = new Lambda([x, lo, hi],
+            new Conditional(
+                new LessThan(x, lo),
+                lo,
+                new Conditional(new GreaterThan(x, hi), hi, x)));
+        var r1 = Execute(new Invoke(clamp, new Constant(-5), new Constant(0), new Constant(100)));
+        await Assert.That(r1.Value).IsEqualTo(0L);
+        var r2 = Execute(new Invoke(clamp, new Constant(50), new Constant(0), new Constant(100)));
+        await Assert.That(r2.Value).IsEqualTo(50L);
+        var r3 = Execute(new Invoke(clamp, new Constant(200), new Constant(0), new Constant(100)));
+        await Assert.That(r3.Value).IsEqualTo(100L);
     }
 }

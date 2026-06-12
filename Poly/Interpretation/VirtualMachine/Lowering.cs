@@ -10,16 +10,21 @@ using Poly.Syntax.Nodes;
 
 namespace Poly.Interpretation.VirtualMachine;
 
+/// <summary>AST → µop lowering.  Each AST node produces one or more
+/// <see cref="MicroOp"/> records.  The resulting µop list is compiled
+/// directly by <see cref="ProgramCompiler.Compile"/> — there is no
+/// intermediate bytecode format.</summary>
 internal static class Lowering {
-    private readonly record struct EmitWork(Node? Node, EmitPhase Phase, int Data = 0, string? Label = null, string? Label2 = null);
+    private sealed record LambdaEmitState(
+        IReadOnlyDictionary<Lambda, int>? FuncMap,
+        IReadOnlyDictionary<Lambda, List<string>>? CaptureMap,
+        IReadOnlyDictionary<string, int>? UpvalueMap
+    );
 
-    private enum EmitPhase : byte {
-        Enter, AfterChildren, MarkLabel, Jump, JumpIfFalse, Pop, Dup,
-    }
+    private static readonly HashSet<Type> _voidTypes = [typeof(void), typeof(ValueTuple), typeof(ValueTuple<>)];
 
     private ref struct EmitContext {
-        public BytecodeBuilder Code;
-        public Dictionary<int, NodeId> SourceMap;
+        public List<MicroOp> Code;
         public AnalysisResult Analysis;
         public List<FunctionEntry> Functions;
         public Dictionary<MethodDefinitionNode, int>? FunctionIndexMap;
@@ -33,12 +38,13 @@ internal static class Lowering {
         public IReadOnlyDictionary<string, int>? UpvalueMap;
         public List<ExceptionRegion> ExceptionRegions;
         public List<LoopBodyEntry>? LoopBodies;
+        public int CurrentArgSlots;
+        public Dictionary<int, int> LabelTargets;   // label name → µop index
     }
 
     public static Bytecode Lower(Node root, AnalysisResult analysis) {
         var ctx = new EmitContext {
-            Code = new(),
-            SourceMap = [],
+            Code = [],
             Analysis = analysis,
             Functions = [],
             Constants = [],
@@ -47,6 +53,7 @@ internal static class Lowering {
             CallSiteCache = [],
             ExceptionRegions = [],
             LoopBodies = [],
+            LabelTargets = [],
         };
 
         // Discover referenced functions and lambdas
@@ -91,26 +98,25 @@ internal static class Lowering {
             }
 
             int methodIdx = ctx.FunctionIndexMap[method];
-            int entryPc = ctx.Code.Offset;
+            int entryUop = ctx.Code.Count;
             var bodyCtx = ctx;
             bodyCtx.ParamIndexMap = paramIndexMap;
+            bodyCtx.CurrentArgSlots = paramIndexMap.Count;
 
             EmitNode(method.Body ?? method, ref bodyCtx, null);
+            bodyCtx.Code.Add(new ReturnFromCallOp(bodyCtx.CurrentArgSlots));
 
             var func = ctx.Functions[methodIdx];
-            ctx.Functions[methodIdx] = new FunctionEntry(entryPc, func.ArgBytes, func.RetBytes, 0) {
+            ctx.Functions[methodIdx] = new FunctionEntry(entryUop, func.ArgSlots, func.RetSlots, 0) {
                 SourceNode = method
             };
         }
         else {
             EmitNode(root, ref ctx, null);
+            ctx.Code.Add(new ReturnOp());
         }
 
-        // Emit final Return if not already present
-        ctx.Code.Emit(OpCode.Return);
-        ctx.SourceMap[ctx.Code.Offset] = NodeId.NewId();
-
-        // Emit lambda bodies (each with its own Return to pop the call frame)
+        // Emit lambda bodies
         foreach (var lambda in referencedLambdas) {
             var paramIndexMap = new Dictionary<string, int>();
             int idx = 1;
@@ -130,105 +136,140 @@ internal static class Lowering {
                 upvalueMap[captures[i]] = i;
 
             int lambdaIdx = ctx.LambdaFuncMap![lambda];
-            int entryPc = ctx.Code.Offset;
+            int entryUop = ctx.Code.Count;
             var bodyCtx = ctx;
             bodyCtx.ParamIndexMap = paramIndexMap;
             bodyCtx.LocalIndexMap = localIndexMap;
             bodyCtx.UpvalueMap = upvalueMap;
+            bodyCtx.CurrentArgSlots = paramIndexMap.Count + 1;
 
             // Zero-init locals
             foreach (var (name, lIdx) in localIndexMap) {
                 var node = FindVariableInBody(lambda.Body, name);
                 if (node is null || !IsDefinitelyAssigned(node, analysis)) {
-                    bodyCtx.Code.Emit(OpCode.Push, 0L);
-                    bodyCtx.Code.Emit(OpCode.StoreLocal, lIdx);
+                    bodyCtx.Code.Add(new PushOp(0L));
+                    bodyCtx.Code.Add(new StoreLocalOp(lIdx));
                 }
             }
 
             EmitNode(lambda.Body, ref bodyCtx, new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, upvalueMap));
-            ctx.Code.Emit(OpCode.Return);
+            bodyCtx.Code.Add(new ReturnFromCallOp(bodyCtx.CurrentArgSlots));
 
             var lambdaFunc = ctx.Functions[lambdaIdx];
-            ctx.Functions[lambdaIdx] = new FunctionEntry(entryPc, lambdaFunc.ArgBytes, lambdaFunc.RetBytes, localIndexMap.Count) {
+            ctx.Functions[lambdaIdx] = new FunctionEntry(entryUop, lambdaFunc.ArgSlots, lambdaFunc.RetSlots, localIndexMap.Count) {
                 SourceNode = lambda
             };
         }
 
-        // Build programs for each function + main
-        // For simplicity, the entire code is one linear sequence.
-        // Functions are referenced by PC directly.
+        // Resolve pending labels to µop indices
+        ResolveLabels(ref ctx);
 
-        return ctx.Code.BuildProgram(ctx.Functions, ctx.Constants, ctx.CallSites, ctx.ExceptionRegions,
-            sourceMap: ctx.SourceMap, analysisResult: analysis, loopBodies: ctx.LoopBodies,
-            callSiteTargets: ctx.CallSiteTargets);
+        return new Bytecode(ctx.Code, ctx.Functions, ctx.Constants, ctx.CallSites,
+            ctx.CallSiteTargets, ctx.ExceptionRegions, null, analysis, ctx.LoopBodies);
     }
 
-    private sealed record LambdaEmitState(
-        IReadOnlyDictionary<Lambda, int>? FuncMap,
-        IReadOnlyDictionary<Lambda, List<string>>? CaptureMap,
-        IReadOnlyDictionary<string, int>? UpvalueMap
-    );
+    private static void ResolveLabels(ref EmitContext ctx) {
+        // Walk the µop list and fix up any JumpOp/JumpIfFalseOp targets
+        // that were emitted as unresolved label indices.
+        for (int i = 0; i < ctx.Code.Count; i++) {
+            switch (ctx.Code[i]) {
+                case JumpOp jmp when ctx.LabelTargets.TryGetValue(jmp.Target, out int target):
+                    ctx.Code[i] = new JumpOp(target);
+                    break;
+                case JumpIfFalseOp jif when ctx.LabelTargets.TryGetValue(jif.Target, out int target):
+                    ctx.Code[i] = new JumpIfFalseOp(target);
+                    break;
+            }
+        }
+    }
+
+    private static int EmitLabel(ref EmitContext ctx) {
+        int label = ctx.LabelTargets.Count;
+        ctx.LabelTargets[label] = ctx.Code.Count;
+        return label;
+    }
 
     private static void EmitNode(Node node, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        int sourcePc = ctx.Code.Offset;
-        ctx.SourceMap[sourcePc] = node.Id;
-
         switch (node) {
             case Constant c: {
-                    if (c.Value is int iv) { ctx.Code.Emit(OpCode.Push, (long)iv); return; }
-                    if (c.Value is long lv) { ctx.Code.Emit(OpCode.Push, lv); return; }
-                    if (c.Value is short sv) { ctx.Code.Emit(OpCode.Push, (long)sv); return; }
-                    if (c.Value is byte bv) { ctx.Code.Emit(OpCode.Push, (long)bv); return; }
-                    if (c.Value is bool bvv) { ctx.Code.Emit(OpCode.Push, bvv ? 1L : 0L); return; }
-                    if (c.Value is uint uiv) { ctx.Code.Emit(OpCode.Push, (long)uiv); return; }
+                    if (c.Value is int iv) { ctx.Code.Add(new PushOp(iv)); return; }
+                    if (c.Value is long lv) { ctx.Code.Add(new PushOp(lv)); return; }
+                    if (c.Value is short sv) { ctx.Code.Add(new PushOp((long)sv)); return; }
+                    if (c.Value is byte bv) { ctx.Code.Add(new PushOp((long)bv)); return; }
+                    if (c.Value is bool bvv) { ctx.Code.Add(new PushOp(bvv ? 1L : 0L)); return; }
+                    if (c.Value is uint uiv) { ctx.Code.Add(new PushOp((long)uiv)); return; }
                     // Heap-allocated constant
                     int constIdx = ctx.Constants!.Count;
                     ctx.Constants!.Add(c.Value);
-                    ctx.Code.Emit(OpCode.Push, constIdx);
+                    ctx.Code.Add(new PushOp(constIdx));
                     return;
                 }
 
-            case Add a: EmitBinary(a.LeftHandValue, a.RightHandValue, OpCode.Add, ref ctx, lambdaState); return;
-            case Subtract s: EmitBinary(s.LeftHandValue, s.RightHandValue, OpCode.Sub, ref ctx, lambdaState); return;
-            case Multiply m: EmitBinary(m.LeftHandValue, m.RightHandValue, OpCode.Mul, ref ctx, lambdaState); return;
-            case Divide d: EmitBinary(d.LeftHandValue, d.RightHandValue, OpCode.Div, ref ctx, lambdaState); return;
+            case Add a: EmitBinary(a.LeftHandValue, a.RightHandValue, static () => new AddOp(), ref ctx, lambdaState); return;
+            case Subtract s: EmitBinary(s.LeftHandValue, s.RightHandValue, static () => new SubOp(), ref ctx, lambdaState); return;
+            case Multiply m: EmitBinary(m.LeftHandValue, m.RightHandValue, static () => new MulOp(), ref ctx, lambdaState); return;
+            case Divide d: EmitBinary(d.LeftHandValue, d.RightHandValue, static () => new DivOp(), ref ctx, lambdaState); return;
             case Modulo m: EmitDivRem(m.LeftHandValue, m.RightHandValue, ref ctx, lambdaState); return;
 
-            case Equal e: EmitBinary(e.LeftHandValue, e.RightHandValue, OpCode.Eq, ref ctx, lambdaState); return;
-            case NotEqual ne: EmitBinary(ne.LeftHandValue, ne.RightHandValue, OpCode.Ne, ref ctx, lambdaState); return;
-            case LessThan lt: EmitBinary(lt.LeftHandValue, lt.RightHandValue, OpCode.Lt, ref ctx, lambdaState); return;
-            case LessThanOrEqual le: EmitBinary(le.LeftHandValue, le.RightHandValue, OpCode.Le, ref ctx, lambdaState); return;
-            case GreaterThan gt: EmitBinary(gt.LeftHandValue, gt.RightHandValue, OpCode.Gt, ref ctx, lambdaState); return;
-            case GreaterThanOrEqual ge: EmitBinary(ge.LeftHandValue, ge.RightHandValue, OpCode.Ge, ref ctx, lambdaState); return;
+            case Equal e: EmitBinary(e.LeftHandValue, e.RightHandValue, static () => new EqOp(), ref ctx, lambdaState); return;
+            case NotEqual ne: EmitBinary(ne.LeftHandValue, ne.RightHandValue, static () => new NeOp(), ref ctx, lambdaState); return;
+            case LessThan lt: EmitBinary(lt.LeftHandValue, lt.RightHandValue, static () => new LtOp(), ref ctx, lambdaState); return;
+            case LessThanOrEqual le: EmitBinary(le.LeftHandValue, le.RightHandValue, static () => new LeOp(), ref ctx, lambdaState); return;
+            case GreaterThan gt: EmitBinary(gt.LeftHandValue, gt.RightHandValue, static () => new GtOp(), ref ctx, lambdaState); return;
+            case GreaterThanOrEqual ge: EmitBinary(ge.LeftHandValue, ge.RightHandValue, static () => new GeOp(), ref ctx, lambdaState); return;
 
             case UnaryMinus um:
                 if (TryGetConstantLong(um.Operand, out long negVal)) {
-                    ctx.Code.Emit(OpCode.Push, -negVal); // fold: -Constant → Push -val
+                    ctx.Code.Add(new PushOp(-negVal));
                 }
                 else {
                     EmitNode(um.Operand, ref ctx, lambdaState);
-                    ctx.Code.Emit(OpCode.Neg);
+                    ctx.Code.Add(new NegOp());
                 }
                 return;
-            case Not n: EmitNodeOrConstant(n.Value, OpCode.Not, ref ctx, lambdaState); return;
 
-            case BitwiseNot bn: EmitNode(bn.Operand, ref ctx, lambdaState); ctx.Code.Emit(OpCode.BitNot); return;
-            case BitwiseAnd ba: EmitBinary(ba.LeftHandValue, ba.RightHandValue, OpCode.BitAnd, ref ctx, lambdaState); return;
-            case BitwiseOr bo: EmitBinary(bo.LeftHandValue, bo.RightHandValue, OpCode.BitOr, ref ctx, lambdaState); return;
-            case BitwiseXor bx: EmitBinary(bx.LeftHandValue, bx.RightHandValue, OpCode.BitXor, ref ctx, lambdaState); return;
-            case ShiftLeft sl: EmitBinary(sl.LeftHandValue, sl.RightHandValue, OpCode.Shl, ref ctx, lambdaState); return;
-            case ShiftRight sr: EmitBinary(sr.LeftHandValue, sr.RightHandValue, OpCode.Shr, ref ctx, lambdaState); return;
+            case Not n:
+                if (TryGetConstantLong(n.Value, out long notVal)) {
+                    ctx.Code.Add(new PushOp(notVal == 0 ? 1L : 0L));
+                }
+                else {
+                    EmitNode(n.Value, ref ctx, lambdaState);
+                    ctx.Code.Add(new NotOp());
+                }
+                return;
+
+            case BitwiseNot bn: EmitNode(bn.Operand, ref ctx, lambdaState); ctx.Code.Add(new BitNotOp()); return;
+            case BitwiseAnd ba: EmitBinary(ba.LeftHandValue, ba.RightHandValue, static () => new BitAndOp(), ref ctx, lambdaState); return;
+            case BitwiseOr bo: EmitBinary(bo.LeftHandValue, bo.RightHandValue, static () => new BitOrOp(), ref ctx, lambdaState); return;
+            case BitwiseXor bx: EmitBinary(bx.LeftHandValue, bx.RightHandValue, static () => new BitXorOp(), ref ctx, lambdaState); return;
+            case ShiftLeft sl: EmitBinary(sl.LeftHandValue, sl.RightHandValue, static () => new ShlOp(), ref ctx, lambdaState); return;
+            case ShiftRight sr: EmitBinary(sr.LeftHandValue, sr.RightHandValue, static () => new ShrOp(), ref ctx, lambdaState); return;
 
             case And and: EmitShortCircuit(and.LeftHandValue, and.RightHandValue, false, ref ctx, lambdaState); return;
             case Or or: EmitShortCircuit(or.LeftHandValue, or.RightHandValue, true, ref ctx, lambdaState); return;
+
+            case Variable v: EmitVariable(v, ref ctx, lambdaState); return;
+            case Parameter p: EmitParameter(p, ref ctx, lambdaState); return;
+
+            case Assignment assign: {
+                    EmitNode(assign.Value, ref ctx, lambdaState);
+                    if (EmitsValue(assign, ctx.Analysis))
+                        ctx.Code.Add(new DupOp());
+                    EmitVariableStore(assign.Destination, ref ctx, lambdaState);
+                    return;
+                }
+
+            case Invoke invoke: EmitInvoke(invoke, ref ctx, lambdaState); return;
+            case Lambda lam: EmitLambda(lam, ref ctx, lambdaState); return;
+            case Return: ctx.Code.Add(new ReturnFromCallOp(ctx.CurrentArgSlots)); return;
 
             case Conditional cond: EmitConditional(cond, ref ctx, lambdaState); return;
             case IfStatement iff: EmitIfStatement(iff, ref ctx, lambdaState); return;
             case WhileLoop wl: EmitWhileLoop(wl, ref ctx, lambdaState); return;
             case DoWhileLoop dw: EmitDoWhileLoop(dw, ref ctx, lambdaState); return;
             case ForLoop fl: EmitForLoop(fl, ref ctx, lambdaState); return;
-            case BreakStatement: ctx.Code.Emit(OpCode.Jump, 0 /* fixed in for loop */); return;
-            case ContinueStatement: ctx.Code.Emit(OpCode.Jump, 0 /* fixed in for loop */); return;
+            case BreakStatement: ctx.Code.Add(new JumpOp(0)); return;
+            case ContinueStatement: ctx.Code.Add(new JumpOp(0)); return;
 
             case Block block: {
                     for (int i = 0; i < block.Nodes.Count; i++) {
@@ -236,31 +277,12 @@ internal static class Lowering {
                         bool isLast = i == block.Nodes.Count - 1 && EmitsValue(block, ctx.Analysis);
                         EmitNode(child, ref ctx, lambdaState);
                         if (!isLast && EmitsValue(child, ctx.Analysis))
-                            ctx.Code.Emit(OpCode.Pop);
+                            ctx.Code.Add(new PopOp());
                     }
                     return;
                 }
 
-            case Variable v: EmitVariable(v, ref ctx, lambdaState); return;
-            case Parameter p: EmitParameter(p, ref ctx, lambdaState); return;
-
-            case Assignment assign: {
-                    if (TryFuseIncDec(assign, ref ctx, lambdaState)) return;
-                    EmitNode(assign.Value, ref ctx, lambdaState);
-                    // Dup if this assignment yields the assigned value
-                    if (EmitsValue(assign, ctx.Analysis))
-                        ctx.Code.Emit(OpCode.Dup);
-                    EmitVariableStore(assign.Destination, ref ctx, lambdaState);
-                    return;
-                }
-
-            case Invoke invoke: EmitInvoke(invoke, ref ctx, lambdaState); return;
-
-            case Lambda lam: EmitLambda(lam, ref ctx, lambdaState); return;
-            case Return: return; // handled by caller
-
-            case ThrowStatement thr: EmitNode(thr.Exception, ref ctx, lambdaState); ctx.Code.Emit(OpCode.Throw); return;
-
+            case ThrowStatement thr: EmitNode(thr.Exception, ref ctx, lambdaState); ctx.Code.Add(new ThrowOp()); return;
             case TryCatchFinally tcf: EmitTryCatchFinally(tcf, ref ctx, lambdaState); return;
             case ForEachLoop fel: EmitForEachLoop(fel, ref ctx, lambdaState); return;
             case UsingStatement us: EmitUsingStatement(us, ref ctx, lambdaState); return;
@@ -277,22 +299,33 @@ internal static class Lowering {
         }
     }
 
-    private static void EmitBinary(Node left, Node right, OpCode op, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+    private static void EmitBinary(Node left, Node right, Func<MicroOp> makeOp, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         EmitNode(left, ref ctx, lambdaState);
-        // When the right operand is a compile-time integer constant, fuse Push+op into a single
-        // operand-bearing instruction (SizeBit set).  The VM's nullary/operand-bearing dispatch
-        // naturally separates the two forms using the same opcode value.
-        EmitNodeOrConstant(right, op, ref ctx, lambdaState);
-    }
-
-    private static void EmitNodeOrConstant(Node node, OpCode op, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        if (TryGetConstantLong(node, out long val)) {
-            // Fused form: opcode | SizeBit + inline operand → 9 bytes
-            ctx.Code.Emit(op, val);
+        if (TryGetConstantLong(right, out long val)) {
+            var op = makeOp();
+            // Only fuse if there's a dedicated Imm variant
+            if (op is AddOp or SubOp or MulOp or EqOp or NeOp or LtOp or LeOp or GtOp or GeOp) {
+                ctx.Code.Add(op switch {
+                    AddOp => new AddImmOp(val),
+                    SubOp => new SubImmOp(val),
+                    MulOp => new MulImmOp(val),
+                    EqOp => new EqImmOp(val),
+                    NeOp => new NeImmOp(val),
+                    LtOp => new LtImmOp(val),
+                    LeOp => new LeImmOp(val),
+                    GtOp => new GtImmOp(val),
+                    GeOp => new GeImmOp(val),
+                    _ => op  // unreachable
+                });
+                return;
+            }
+            // No fused form — push constant as a regular value
+            ctx.Code.Add(new PushOp(val));
+            ctx.Code.Add(op);
         }
         else {
-            EmitNode(node, ref ctx, lambdaState);
-            ctx.Code.Emit(op);
+            EmitNode(right, ref ctx, lambdaState);
+            ctx.Code.Add(makeOp());
         }
     }
 
@@ -309,159 +342,128 @@ internal static class Lowering {
         return false;
     }
 
-    private static bool TryFuseIncDec(Assignment assign, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        if (assign.Destination is not Variable dst || ctx.LocalIndexMap is null)
-            return false;
-        if (!ctx.LocalIndexMap.TryGetValue(dst.Name, out int slot))
-            return false;
-
-        // dst = dst + const  →  IncLocal dst, +const
-        if (assign.Value is Add add) {
-            if (MatchIncDec(add.LeftHandValue, add.RightHandValue, dst.Name, out long delta) ||
-                MatchIncDec(add.RightHandValue, add.LeftHandValue, dst.Name, out delta)) {
-                long packed = ((long)slot << 32) | (long)(int)delta;
-                ctx.Code.Emit(OpCode.IncLocal, packed);
-                return true;
-            }
-        }
-
-        // dst = dst - const  →  IncLocal dst, -const
-        if (assign.Value is Subtract sub &&
-            MatchIncDec(sub.LeftHandValue, sub.RightHandValue, dst.Name, out long delta2)) {
-            long packed = ((long)slot << 32) | (long)(int)(-delta2);
-            ctx.Code.Emit(OpCode.IncLocal, packed);
-            return true;
-        }
-
-        return false;
-
-        static bool MatchIncDec(Node left, Node right, string dstName, out long delta) {
-            delta = 0;
-            if (left is Variable v && v.Name == dstName && TryGetConstantLong(right, out delta))
-                return true;
-            return false;
-        }
-    }
-
     private static void EmitDivRem(Node left, Node right, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         EmitNode(left, ref ctx, lambdaState);
         EmitNode(right, ref ctx, lambdaState);
-        ctx.Code.Emit(OpCode.DivRem);
-        ctx.Code.Emit(OpCode.Pop); // discard remainder, keep quotient
+        ctx.Code.Add(new DivRemOp());
+        ctx.Code.Add(new PopOp()); // discard remainder, keep quotient
     }
 
     private static void EmitShortCircuit(Node left, Node right, bool isOr, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        string end = ctx.Code.NextLabel();
-        string evalRight = ctx.Code.NextLabel();
+        int end = EmitLabel(ref ctx);
 
         EmitNode(left, ref ctx, lambdaState);
-        ctx.Code.Emit(OpCode.Dup);
-        if (isOr)
-            ctx.Code.EmitJump(OpCode.JumpIfFalse, evalRight);
-        else
-            ctx.Code.EmitJump(OpCode.JumpIfFalse, end);
-        ctx.Code.Mark(evalRight);
-        ctx.Code.Emit(OpCode.Pop);
+        ctx.Code.Add(new DupOp());
+        if (isOr) {
+            // OR: if left is 0, eval right; otherwise short-circuit to left
+            int evalRight = EmitLabel(ref ctx);
+            ctx.Code.Add(new JumpIfFalseOp(evalRight));
+            ctx.Code.Add(new PopOp());
+            ctx.Code.Add(new JumpOp(end));
+            ctx.LabelTargets[evalRight] = ctx.Code.Count;
+            ctx.Code.Add(new PopOp()); // remove original left
+        }
+        else {
+            // AND: if left is 0, skip right (result is left on stack)
+            ctx.Code.Add(new JumpIfFalseOp(end));
+            ctx.Code.Add(new PopOp()); // remove original left
+        }
         EmitNode(right, ref ctx, lambdaState);
-        ctx.Code.Mark(end);
+        ctx.LabelTargets[end] = ctx.Code.Count;
     }
 
     private static void EmitConditional(Conditional cond, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        string end = ctx.Code.NextLabel();
-        string else_ = ctx.Code.NextLabel();
+        int else_ = EmitLabel(ref ctx);
+        int end = EmitLabel(ref ctx);
 
         EmitNode(cond.Condition, ref ctx, lambdaState);
-        ctx.Code.EmitJump(OpCode.JumpIfFalse, else_);
+        ctx.Code.Add(new JumpIfFalseOp(else_));
         EmitNode(cond.IfTrue, ref ctx, lambdaState);
-        ctx.Code.EmitJump(OpCode.Jump, end);
-        ctx.Code.Mark(else_);
+        ctx.Code.Add(new JumpOp(end));
+        ctx.LabelTargets[else_] = ctx.Code.Count;
         EmitNode(cond.IfFalse, ref ctx, lambdaState);
-        ctx.Code.Mark(end);
+        ctx.LabelTargets[end] = ctx.Code.Count;
     }
 
     private static void EmitIfStatement(IfStatement iff, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        string end = ctx.Code.NextLabel();
+        int end = EmitLabel(ref ctx);
 
         EmitNode(iff.Condition, ref ctx, lambdaState);
         if (iff.ElseBranch is not null) {
-            string else_ = ctx.Code.NextLabel();
-            ctx.Code.EmitJump(OpCode.JumpIfFalse, else_);
+            int else_ = EmitLabel(ref ctx);
+            ctx.Code.Add(new JumpIfFalseOp(else_));
             EmitNode(iff.ThenBranch, ref ctx, lambdaState);
-            ctx.Code.EmitJump(OpCode.Jump, end);
-            ctx.Code.Mark(else_);
+            ctx.Code.Add(new JumpOp(end));
+            ctx.LabelTargets[else_] = ctx.Code.Count;
             EmitNode(iff.ElseBranch, ref ctx, lambdaState);
         }
         else {
-            ctx.Code.EmitJump(OpCode.JumpIfFalse, end);
+            ctx.Code.Add(new JumpIfFalseOp(end));
             EmitNode(iff.ThenBranch, ref ctx, lambdaState);
         }
-        ctx.Code.Mark(end);
+        ctx.LabelTargets[end] = ctx.Code.Count;
     }
 
     private static void EmitWhileLoop(WhileLoop wl, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        string cont = ctx.Code.NextLabel();
-        string end = ctx.Code.NextLabel();
+        int cont = EmitLabel(ref ctx);
+        int end = EmitLabel(ref ctx);
 
-        ctx.Code.Mark(cont);
-        int contPC = ctx.Code.Offset;
+        // Mark condition label
+        ctx.LabelTargets[cont] = ctx.Code.Count;
         EmitNode(wl.Condition, ref ctx, lambdaState);
-        ctx.Code.EmitJump(OpCode.JumpIfFalse, end);
-        int bodyPC = ctx.Code.Offset;
+        ctx.Code.Add(new JumpIfFalseOp(end));
+        int bodyStart = ctx.Code.Count;
         EmitNode(wl.Body, ref ctx, lambdaState);
         if (EmitsValue(wl.Body, ctx.Analysis))
-            ctx.Code.Emit(OpCode.Pop);
-        int bodyEndPC = ctx.Code.Offset;
-        ctx.Code.EmitJump(OpCode.Jump, cont);
-        ctx.Code.Mark(end);
-        int endPC = ctx.Code.Offset;
+            ctx.Code.Add(new PopOp());
+        int bodyEnd = ctx.Code.Count;
+        ctx.Code.Add(new JumpOp(cont));
+        ctx.LabelTargets[end] = ctx.Code.Count;
 
-        ctx.LoopBodies?.Add(new(bodyPC, bodyEndPC - bodyPC, contPC, contPC, endPC, wl.Body) {
+        ctx.LoopBodies?.Add(new LoopBodyEntry(bodyStart, bodyEnd - bodyStart, cont, cont, end, wl.Body) {
             ParamIndexMap = ctx.ParamIndexMap,
             LocalIndexMap = ctx.LocalIndexMap,
         });
     }
 
     private static void EmitDoWhileLoop(DoWhileLoop dw, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        string cont = ctx.Code.NextLabel();
-        string end = ctx.Code.NextLabel();
+        int cont = EmitLabel(ref ctx);
+        int end = EmitLabel(ref ctx);
 
-        ctx.Code.Mark(cont);
+        ctx.LabelTargets[cont] = ctx.Code.Count;
         EmitNode(dw.Body, ref ctx, lambdaState);
         EmitNode(dw.Condition, ref ctx, lambdaState);
-        ctx.Code.EmitJump(OpCode.JumpIfFalse, end);
-        ctx.Code.EmitJump(OpCode.Jump, cont);
-        ctx.Code.Mark(end);
+        ctx.Code.Add(new JumpIfFalseOp(end));
+        ctx.Code.Add(new JumpOp(cont));
+        ctx.LabelTargets[end] = ctx.Code.Count;
     }
 
     private static void EmitForLoop(ForLoop fl, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        string cont = ctx.Code.NextLabel();
-        string end = ctx.Code.NextLabel();
+        int cont = EmitLabel(ref ctx);
+        int end = EmitLabel(ref ctx);
 
         if (fl.Initializer is not null) {
             EmitNode(fl.Initializer, ref ctx, lambdaState);
             if (EmitsValue(fl.Initializer, ctx.Analysis))
-                ctx.Code.Emit(OpCode.Pop);
+                ctx.Code.Add(new PopOp());
         }
-        ctx.Code.Mark(cont);
-        int contPC = ctx.Code.Offset;
+        ctx.LabelTargets[cont] = ctx.Code.Count;
         if (fl.Condition is not null) {
             EmitNode(fl.Condition, ref ctx, lambdaState);
-            ctx.Code.EmitJump(OpCode.JumpIfFalse, end);
+            ctx.Code.Add(new JumpIfFalseOp(end));
         }
-        int bodyPC = ctx.Code.Offset;
+        int bodyStart = ctx.Code.Count;
         EmitNode(fl.Body, ref ctx, lambdaState);
-        int bodyEndPC = ctx.Code.Offset;
-        int incPC = ctx.Code.Offset;
+        int bodyEnd = ctx.Code.Count;
         if (fl.Increment is not null) {
             EmitNode(fl.Increment, ref ctx, lambdaState);
             if (EmitsValue(fl.Increment, ctx.Analysis))
-                ctx.Code.Emit(OpCode.Pop);
+                ctx.Code.Add(new PopOp());
         }
-        ctx.Code.EmitJump(OpCode.Jump, cont);
-        ctx.Code.Mark(end);
-        int endPC = ctx.Code.Offset;
+        ctx.Code.Add(new JumpOp(cont));
+        ctx.LabelTargets[end] = ctx.Code.Count;
 
-        ctx.LoopBodies?.Add(new(bodyPC, bodyEndPC - bodyPC, contPC, incPC, endPC, fl.Body) {
+        ctx.LoopBodies?.Add(new LoopBodyEntry(bodyStart, bodyEnd - bodyStart, cont, ctx.Code.Count, end, fl.Body) {
             ParamIndexMap = ctx.ParamIndexMap,
             LocalIndexMap = ctx.LocalIndexMap,
         });
@@ -469,15 +471,15 @@ internal static class Lowering {
 
     private static void EmitVariable(Variable v, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         if (ctx.ParamIndexMap?.TryGetValue(v.Name, out int pIdx) == true) {
-            ctx.Code.Emit(OpCode.LoadArg, pIdx);
+            ctx.Code.Add(new LoadArgOp(pIdx));
             return;
         }
         if (ctx.LocalIndexMap?.TryGetValue(v.Name, out int lIdx) == true) {
-            ctx.Code.Emit(OpCode.LoadLocal, lIdx);
+            ctx.Code.Add(new LoadLocalOp(lIdx));
             return;
         }
         if (lambdaState?.UpvalueMap?.TryGetValue(v.Name, out int uIdx) == true) {
-            ctx.Code.Emit(OpCode.LoadUpvalue, uIdx);
+            ctx.Code.Add(new LoadUpvalueOp(uIdx));
             return;
         }
         throw new InvalidOperationException($"Variable '{v.Name}' not found in any scope");
@@ -488,25 +490,25 @@ internal static class Lowering {
             EmitNode(p.DefaultValue, ref ctx, lambdaState);
         }
         else if (ctx.ParamIndexMap?.TryGetValue(p.Name ?? "", out int pIdx) == true) {
-            ctx.Code.Emit(OpCode.LoadArg, pIdx);
+            ctx.Code.Add(new LoadArgOp(pIdx));
         }
         else {
-            ctx.Code.Emit(OpCode.Push, 0L);
+            ctx.Code.Add(new PushOp(0L));
         }
     }
 
     private static void EmitVariableStore(Node target, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         if (target is Variable v) {
             if (ctx.ParamIndexMap?.TryGetValue(v.Name, out int pIdx) == true) {
-                ctx.Code.Emit(OpCode.StoreArg, pIdx);
+                ctx.Code.Add(new StoreArgOp(pIdx));
                 return;
             }
             if (ctx.LocalIndexMap?.TryGetValue(v.Name, out int lIdx) == true) {
-                ctx.Code.Emit(OpCode.StoreLocal, lIdx);
+                ctx.Code.Add(new StoreLocalOp(lIdx));
                 return;
             }
             if (lambdaState?.UpvalueMap?.TryGetValue(v.Name, out int uIdx) == true) {
-                ctx.Code.Emit(OpCode.StoreUpvalue, uIdx);
+                ctx.Code.Add(new StoreUpvalueOp(uIdx));
                 return;
             }
             throw new InvalidOperationException($"Store target '{v.Name}' not found");
@@ -530,8 +532,7 @@ internal static class Lowering {
             int funcIdx = ctx.FunctionIndexMap!.TryGetValue(astMethod.DefinitionNode, out int idx) ? idx : 0;
             foreach (var arg in args)
                 EmitNode(arg, ref ctx, lambdaState);
-            ctx.Code.Emit(OpCode.Push, (long)args.Length);
-            ctx.Code.Emit(OpCode.Call, funcIdx);
+            ctx.Code.Add(new CallOp(funcIdx, args.Length));
             return;
         }
 
@@ -540,26 +541,23 @@ internal static class Lowering {
             foreach (var arg in args)
                 EmitNode(arg, ref ctx, lambdaState);
             int siteIdx = GetOrAddCallSite(ref ctx, clrMethod.MethodInfo, isStatic);
-            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
+            ctx.Code.Add(new CallExternalOp(siteIdx));
             return;
         }
 
         if (invoke.Delegate is Lambda lambda && ctx.LambdaFuncMap!.TryGetValue(lambda, out int lambdaIdx)) {
-            // Direct lambda call: args layout = [dummy_closure][user_args][argCount]
-            ctx.Code.Emit(OpCode.Push, -1L); // dummy closure handle at index 0
+            ctx.Code.Add(new PushOp(-1L)); // dummy closure handle at index 0
             foreach (var arg in args)
                 EmitNode(arg, ref ctx, lambdaState);
-            ctx.Code.Emit(OpCode.Push, (long)args.Length + 1);
-            ctx.Code.Emit(OpCode.Call, lambdaIdx);
+            ctx.Code.Add(new CallOp(lambdaIdx, args.Length + 1));
             return;
         }
 
-        // Generic lambda/delegate call via CallClosure: [closure_handle][user_args][argCount]
+        // Generic lambda/delegate call via CallClosure
         EmitNode(invoke.Delegate, ref ctx, lambdaState);
         foreach (var arg in args)
             EmitNode(arg, ref ctx, lambdaState);
-        ctx.Code.Emit(OpCode.Push, (long)args.Length + 1);
-        ctx.Code.Emit(OpCode.CallClosure);
+        ctx.Code.Add(new CallClosureOp());
     }
 
     private static void EmitLambda(Lambda lam, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -568,58 +566,56 @@ internal static class Lowering {
 
         int funcIdx = ctx.LambdaFuncMap!.TryGetValue(lam, out int idx) ? idx : 0;
 
-        // Push captures
         foreach (var cap in captures) {
             if (ctx.ParamIndexMap?.TryGetValue(cap, out int pIdx) == true)
-                ctx.Code.Emit(OpCode.LoadArg, pIdx);
+                ctx.Code.Add(new LoadArgOp(pIdx));
             else if (ctx.LocalIndexMap?.TryGetValue(cap, out int lIdx) == true)
-                ctx.Code.Emit(OpCode.LoadLocal, lIdx);
+                ctx.Code.Add(new LoadLocalOp(lIdx));
             else if (lambdaState?.UpvalueMap?.TryGetValue(cap, out int uIdx) == true)
-                ctx.Code.Emit(OpCode.LoadUpvalue, uIdx);
+                ctx.Code.Add(new LoadUpvalueOp(uIdx));
             else
-                ctx.Code.Emit(OpCode.Push, 0L);
+                ctx.Code.Add(new PushOp(0L));
         }
 
-        ctx.Code.Emit(OpCode.AllocClosure, (long)(captures.Count << 32) | (long)(uint)funcIdx);
+        ctx.Code.Add(new AllocClosureOp(funcIdx, captures.Count));
     }
 
     private static void EmitTryCatchFinally(TryCatchFinally tcf, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        string end = ctx.Code.NextLabel();
+        int end = EmitLabel(ref ctx);
         int? finallyEntry = null;
         int? catchStart = null;
 
-        int tryStart = ctx.Code.Offset;
+        int tryStart = ctx.Code.Count;
         EmitNode(tcf.TryBlock, ref ctx, lambdaState);
-        ctx.Code.EmitJump(OpCode.Jump, end);
-        int tryEnd = ctx.Code.Offset;
+        ctx.Code.Add(new JumpOp(end));
+        int tryEnd = ctx.Code.Count;
 
         if (tcf.CatchClauses is not null) {
-            catchStart = ctx.Code.Offset;
+            catchStart = ctx.Code.Count;
             foreach (var cc in tcf.CatchClauses) {
-                ctx.Code.Mark(ctx.Code.NextLabel());
+                EmitLabel(ref ctx);
                 if (cc.VariableName is not null) {
-                    ctx.Code.Emit(OpCode.Dup);
+                    ctx.Code.Add(new DupOp());
                     if (ctx.ParamIndexMap?.TryGetValue(cc.VariableName, out int pi) == true)
-                        ctx.Code.Emit(OpCode.StoreArg, pi);
+                        ctx.Code.Add(new StoreArgOp(pi));
                     else if (ctx.LocalIndexMap?.TryGetValue(cc.VariableName, out int li) == true)
-                        ctx.Code.Emit(OpCode.StoreLocal, li);
+                        ctx.Code.Add(new StoreLocalOp(li));
                 }
-                else ctx.Code.Emit(OpCode.Pop);
+                else ctx.Code.Add(new PopOp());
                 EmitNode(cc.Body, ref ctx, lambdaState);
-                ctx.Code.EmitJump(OpCode.Jump, end);
+                ctx.Code.Add(new JumpOp(end));
             }
         }
 
         if (tcf.FinallyBlock is not null) {
-            finallyEntry = ctx.Code.Offset;
+            finallyEntry = ctx.Code.Count;
             EmitNode(tcf.FinallyBlock, ref ctx, lambdaState);
             if (EmitsValue(tcf.FinallyBlock, ctx.Analysis))
-                ctx.Code.Emit(OpCode.Pop);
-            ctx.Code.Emit(OpCode.EndFinally);
+                ctx.Code.Add(new PopOp());
+            ctx.Code.Add(new EndFinallyOp());
         }
 
-        ctx.Code.Mark(end);
-
+        ctx.LabelTargets[end] = ctx.Code.Count;
         ctx.ExceptionRegions.Add(new ExceptionRegion(tryStart, tryEnd, catchStart ?? -1, finallyEntry));
     }
 
@@ -629,32 +625,32 @@ internal static class Lowering {
             .GetMethod("GetEnumerator")!
             .MakeGenericMethod(typeof(object));
         int initSite = AddCallSite(ref ctx, CallSiteCompiler.Compile(getEnum, false));
-        ctx.Code.Emit(OpCode.Push, 1L);
-        ctx.Code.Emit(OpCode.CallExternal, initSite);
+        ctx.Code.Add(new PushOp(1L));
+        ctx.Code.Add(new CallExternalOp(initSite));
 
-        string cont = ctx.Code.NextLabel();
-        string end = ctx.Code.NextLabel();
+        int cont = EmitLabel(ref ctx);
+        int end = EmitLabel(ref ctx);
 
-        ctx.Code.Mark(cont);
-        ctx.Code.Emit(OpCode.Dup);
+        ctx.LabelTargets[cont] = ctx.Code.Count;
+        ctx.Code.Add(new DupOp());
         int moveNextSite = AddCallSite(ref ctx, CallSiteCompiler.Compile(
             typeof(IEnumerator).GetMethod("MoveNext")!, false));
-        ctx.Code.Emit(OpCode.Push, 1L);
-        ctx.Code.Emit(OpCode.CallExternal, moveNextSite);
-        ctx.Code.EmitJump(OpCode.JumpIfFalse, end);
+        ctx.Code.Add(new PushOp(1L));
+        ctx.Code.Add(new CallExternalOp(moveNextSite));
+        ctx.Code.Add(new JumpIfFalseOp(end));
 
-        ctx.Code.Emit(OpCode.Dup);
+        ctx.Code.Add(new DupOp());
         int currentSite = AddCallSite(ref ctx, CallSiteCompiler.Compile(
             typeof(IEnumerator).GetProperty("Current")!.GetGetMethod()!, false));
-        ctx.Code.Emit(OpCode.Push, 1L);
-        ctx.Code.Emit(OpCode.CallExternal, currentSite);
+        ctx.Code.Add(new PushOp(1L));
+        ctx.Code.Add(new CallExternalOp(currentSite));
 
         EmitVariableStore(fel.LoopVariable, ref ctx, lambdaState);
         EmitNode(fel.Body, ref ctx, lambdaState);
         if (EmitsValue(fel.Body, ctx.Analysis))
-            ctx.Code.Emit(OpCode.Pop);
-        ctx.Code.EmitJump(OpCode.Jump, cont);
-        ctx.Code.Mark(end);
+            ctx.Code.Add(new PopOp());
+        ctx.Code.Add(new JumpOp(cont));
+        ctx.LabelTargets[end] = ctx.Code.Count;
     }
 
     private static void EmitUsingStatement(UsingStatement us, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -662,10 +658,10 @@ internal static class Lowering {
         ctx.Constants.Add(new object[1]);
 
         EmitNode(us.Resource, ref ctx, lambdaState);
-        ctx.Code.Emit(OpCode.StoreValue);
+        ctx.Code.Add(new StoreValueOp());
         EmitNode(us.Body, ref ctx, lambdaState);
         if (EmitsValue(us.Body, ctx.Analysis))
-            ctx.Code.Emit(OpCode.Pop);
+            ctx.Code.Add(new PopOp());
     }
 
     private static void EmitMember(Member m, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -674,7 +670,7 @@ internal static class Lowering {
             EmitNode(m.Value, ref ctx, lambdaState);
             int siteIdx = GetOrAddCallSite(ref ctx, getter.MethodInfo,
                 getter.LifetimeModifier == LifetimeModifier.Static);
-            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
+            ctx.Code.Add(new CallExternalOp(siteIdx));
             return;
         }
         throw new InvalidOperationException($"Member access not resolved: {m.MemberName}");
@@ -688,7 +684,7 @@ internal static class Lowering {
                 EmitNode(arg, ref ctx, lambdaState);
             int siteIdx = GetOrAddCallSite(ref ctx, getter.MethodInfo,
                 getter.LifetimeModifier == LifetimeModifier.Static);
-            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
+            ctx.Code.Add(new CallExternalOp(siteIdx));
             return;
         }
         throw new InvalidOperationException($"Index access not resolved");
@@ -701,7 +697,7 @@ internal static class Lowering {
                 EmitNode(arg, ref ctx, lambdaState);
             int siteIdx = AddCallSite(ref ctx,
                 CallSiteCompiler.CompileConstructor(ctor.ConstructorInfo));
-            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
+            ctx.Code.Add(new CallExternalOp(siteIdx));
             return;
         }
         throw new InvalidOperationException($"Constructor not resolved for new {n.Type}");
@@ -713,13 +709,13 @@ internal static class Lowering {
             ?? typeof(Task).GetMethod("GetAwaiter");
         if (getAwaiter is not null) {
             int siteIdx = AddCallSite(ref ctx, CallSiteCompiler.Compile(getAwaiter, false));
-            ctx.Code.Emit(OpCode.CallExternal, siteIdx);
+            ctx.Code.Add(new CallExternalOp(siteIdx));
         }
     }
 
     private static void EmitSuspendNode(SuspendNode sn, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         EmitNode(sn.Inner, ref ctx, lambdaState);
-        ctx.Code.Emit(OpCode.Pop);
+        ctx.Code.Add(new PopOp());
     }
 
     private static int AddCallSite(ref EmitContext ctx, CallSiteDelegate d) {
@@ -754,7 +750,7 @@ internal static class Lowering {
         int siteIdx = ctx.CallSites!.Count;
         bool isStatic = setter.LifetimeModifier == LifetimeModifier.Static;
         ctx.CallSites!.Add(CallSiteCompiler.Compile(setter.MethodInfo, isStatic));
-        ctx.Code.Emit(OpCode.CallExternal, siteIdx);
+        ctx.Code.Add(new CallExternalOp(siteIdx));
     }
 
     private static void EmitMemberStore(Member m, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -765,10 +761,10 @@ internal static class Lowering {
         int siteIdx = ctx.CallSites!.Count;
         bool isStatic = setter.LifetimeModifier == LifetimeModifier.Static;
         ctx.CallSites!.Add(CallSiteCompiler.Compile(setter.MethodInfo, isStatic));
-        ctx.Code.Emit(OpCode.CallExternal, siteIdx);
+        ctx.Code.Add(new CallExternalOp(siteIdx));
     }
 
-    // ── Discovery helpers (unchanged from original) ──
+    // ── Discovery helpers ──
 
     private static void DiscoverFunctions(Node node, AnalysisResult? analysis, List<MethodDefinitionNode> result) {
         if (node is Invoke invoke) {
@@ -814,7 +810,6 @@ internal static class Lowering {
     }
 
     private static void DiscoverLocalsFromAnalysis(Node body, VariableScopeMetadata scope, Dictionary<string, int> paramIndexMap, Dictionary<string, int> localIndexMap) {
-        // Collect names, sort for deterministic slot assignment
         var names = new List<string>();
         foreach (var variable in scope.VariableReferences.Keys) {
             string name = variable.Name;
@@ -857,10 +852,7 @@ internal static class Lowering {
 
     private static bool EmitsValue(Node node, AnalysisResult analysis) {
         if (node is null) return false;
-        // Loop constructs don't produce values — their bodies' results are
-        // consumed inside the loop by an explicit Pop in EmitWhileLoop etc.
         if (node is WhileLoop or DoWhileLoop or ForLoop) return false;
-        // Assignments always produce a value, regardless of analysis metadata.
         if (node is Assignment) return true;
         var type = analysis.GetResolvedType(node);
         if (type is not null && type.Name != "Void")

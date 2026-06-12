@@ -9,4 +9,5 @@ internal sealed record LoopBodyEntry(int BodyPC, int BodyLength, int ContPC, int
     public LoopBodyDelegate? NativeFn;
     public IReadOnlyDictionary<string, int>? ParamIndexMap;
     public IReadOnlyDictionary<string, int>? LocalIndexMap;
+    public int ArgSlots;
 }

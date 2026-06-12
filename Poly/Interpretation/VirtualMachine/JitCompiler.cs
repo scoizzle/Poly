@@ -134,8 +134,9 @@ internal static class JitCompiler {
         var slots = Expression.Property(Expression.Property(s, "Stack"), "RawSlots");
         var fb = Expression.Property(s, "FrameBase");
         var cas = Expression.Property(s, "CachedArgSlots");
-        var localBase = Expression.Add(fb, Expression.Constant(Vm.FrameHeaderSlots));
-        var paramBase = Expression.Subtract(fb, cas);
+        var localBase = Expression.Add(fb, Expression.Add(cas, Expression.Constant(1)));
+        // local[i] at Slot(FB + ArgSlots + 1 + i) = Slot(FB + CachedArgSlots + 1 + i)
+        var paramBase = fb;
 
         var tempVars = new List<ParameterExpression>();
         var body = new List<Expression>();

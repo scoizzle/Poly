@@ -1,0 +1,270 @@
+using BenchmarkDotNet.Attributes;
+
+using Poly.Interpretation;
+using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Interpretation.Analysis.ControlFlow;
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.VirtualMachine;
+using Poly.Syntax;
+using Poly.Syntax.Analysis;
+using Poly.Syntax.Nodes;
+
+namespace Poly.Benchmarks;
+
+/// <summary>Micro-benchmarks for individual compiled µops (no lowering, no analysis).</summary>
+[MemoryDiagnoser]
+public class OpcodeBenchmarks {
+    private Action<VmState>? _cPush, _cAdd, _cSub, _cMul, _cEq, _cAddImm, _cNot, _cNeg, _cDup, _cPop;
+    private Action<VmState>? _cLoadLocal, _cStoreLocal, _cIncLocal, _cLoadArg;
+
+    [GlobalSetup]
+    public void Setup() {
+        _cPush = ProgramCompiler.Compile(new MicroOp[] { new PushOp(42L) });
+        _cAdd = ProgramCompiler.Compile(new MicroOp[] { new PushOp(10L), new PushOp(20L), new AddOp() });
+        _cSub = ProgramCompiler.Compile(new MicroOp[] { new PushOp(50L), new PushOp(20L), new SubOp() });
+        _cMul = ProgramCompiler.Compile(new MicroOp[] { new PushOp(7L), new PushOp(8L), new MulOp() });
+        _cEq = ProgramCompiler.Compile(new MicroOp[] { new PushOp(10L), new PushOp(10L), new EqOp() });
+        _cAddImm = ProgramCompiler.Compile(new MicroOp[] { new PushOp(10L), new AddImmOp(5L) });
+        _cNot = ProgramCompiler.Compile(new MicroOp[] { new PushOp(0L), new NotOp() });
+        _cNeg = ProgramCompiler.Compile(new MicroOp[] { new PushOp(42L), new NegOp() });
+        _cDup = ProgramCompiler.Compile(new MicroOp[] { new PushOp(42L), new DupOp() });
+        _cPop = ProgramCompiler.Compile(new MicroOp[] { new PushOp(10L), new PushOp(20L), new PopOp() });
+
+        _cLoadLocal = ProgramCompiler.Compile(new MicroOp[] { new LoadLocalOp(0) });
+        _cStoreLocal = ProgramCompiler.Compile(new MicroOp[] { new PushOp(42L), new StoreLocalOp(0) });
+        _cIncLocal = ProgramCompiler.Compile(new MicroOp[] { new PushOp(0L), new StoreLocalOp(0), new IncLocalOp(0, 1L) });
+        _cLoadArg = ProgramCompiler.Compile(new MicroOp[] { new LoadArgOp(1) });
+    }
+
+    private const int R = 5000;
+
+    private static long RunCompiled(Action<VmState> del) {
+        using var s = new VmState();
+        long r = 0;
+        for (int i = 0; i < R; i++) { s.Reset(); del(s); r += s.Stack.SP > 0 ? s.Stack.Pop() : 0; }
+        return r;
+    }
+
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Push_Compiled() => RunCompiled(_cPush!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Add_Compiled() => RunCompiled(_cAdd!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Sub_Compiled() => RunCompiled(_cSub!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Mul_Compiled() => RunCompiled(_cMul!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Eq_Compiled() => RunCompiled(_cEq!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long AddImm_Compiled() => RunCompiled(_cAddImm!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Not_Compiled() => RunCompiled(_cNot!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Neg_Compiled() => RunCompiled(_cNeg!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Dup_Compiled() => RunCompiled(_cDup!);
+    [Benchmark(OperationsPerInvoke = R)]
+    public long Pop_Compiled() => RunCompiled(_cPop!);
+}
+
+/// <summary>Full-pipeline benchmarks: AST → Lowering → µops → execute.
+/// Measures real-world algorithmic patterns end-to-end.</summary>
+[MemoryDiagnoser]
+public class UopBenchmarks {
+    private VmState? _state;
+
+    // Loop sum programs
+    private Bytecode _loopSum1000 = null!;
+    private Bytecode _loopSum10000 = null!;
+
+    // Fibonacci programs
+    private Bytecode _fib10 = null!;
+    private Bytecode _fib20 = null!;
+
+    // Factorial
+    private Bytecode _fact10 = null!;
+
+    // Deep balanced sum (no loops, pure arithmetic dispatch)
+    private Bytecode _deepSum1000 = null!;
+    private Bytecode _deepSum10000 = null!;
+
+    // CLR call chain
+    private Bytecode _clrChain100 = null!;
+
+    // String concatenation (uses CLR string.Concat)
+    private Bytecode _stringConcat = null!;
+
+    // Gcd
+    private Bytecode _gcd = null!;
+
+    [GlobalSetup]
+    public void Setup() {
+        _state = new VmState();
+
+        _loopSum1000 = Lower(BuildLoopSum(1000));
+        _loopSum10000 = Lower(BuildLoopSum(10000));
+        _fib10 = Lower(BuildFib(10));
+        _fib20 = Lower(BuildFib(20));
+        _fact10 = Lower(BuildFact(10));
+        _deepSum1000 = Lower(BuildDeepSum(1000));
+        _deepSum10000 = Lower(BuildDeepSum(10000));
+        _clrChain100 = Lower(BuildClrChain(100));
+        _stringConcat = Lower(new Add(new Constant("Hello, "), new Constant("World")));
+        _gcd = Lower(BuildGcd(123456, 7890));
+    }
+
+    [GlobalCleanup]
+    public void Cleanup() => _state?.Dispose();
+
+    private static Bytecode Lower(Node node) {
+        var builder = new AnalyzerBuilder()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .UseConstantFolding()
+            .UseSideEffectAnalysis()
+            .UseThisReferenceContext()
+            .UseControlFlowAnalysis()
+            .UseVariableScopeValidator();
+        return Lowering.Lower(node, builder.Build().Analyze(node));
+    }
+
+    private object? Exec(Bytecode prog) {
+        _state!.Program = prog;
+        _state.Reset();
+        return Vm.Execute(_state).Value;
+    }
+
+    // ── Loop sum: Σ 1..n ──
+
+    [Benchmark]
+    public object? LoopSum_1000() => Exec(_loopSum1000);
+    [Benchmark]
+    public object? LoopSum_10000() => Exec(_loopSum10000);
+
+    // ── Fibonacci (iterative) ──
+
+    [Benchmark]
+    public object? Fib_10() => Exec(_fib10);
+    [Benchmark]
+    public object? Fib_20() => Exec(_fib20);
+
+    // ── Factorial ──
+
+    [Benchmark]
+    public object? Fact_10() => Exec(_fact10);
+
+    // ── Deep sum (balanced tree, no loops) ──
+
+    [Benchmark]
+    public object? DeepSum_1000() => Exec(_deepSum1000);
+    [Benchmark]
+    public object? DeepSum_10000() => Exec(_deepSum10000);
+
+    // ── CLR call chain ──
+
+    [Benchmark]
+    public object? ClrChain_100() => Exec(_clrChain100);
+
+    // ── String concat ──
+
+    [Benchmark]
+    public object? StringConcat() => Exec(_stringConcat);
+
+    // ── GCD (Euclidean algorithm) ──
+
+    [Benchmark]
+    public object? Gcd() => Exec(_gcd);
+
+    // ═══════════════════════════════════════════════
+    //  Builders
+    // ═══════════════════════════════════════════════
+
+    private static Node BuildDeepSum(int n) {
+        var vals = new int[n];
+        for (int i = 0; i < n; i++) vals[i] = i + 1;
+        return BuildBalanced(vals, 0, n - 1);
+    }
+
+    private static Node BuildBalanced(int[] v, int s, int e) {
+        if (s == e) return new Constant(v[s]);
+        int m = (s + e) / 2;
+        return new Add(BuildBalanced(v, s, m), BuildBalanced(v, m + 1, e));
+    }
+
+    private static Node BuildLoopSum(int n) {
+        var sum = new Variable("sum");
+        var i = new Variable("i");
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(sum, new Constant(0L)),
+             new Assignment(i, new Constant(1L)),
+             new WhileLoop(new LessThanOrEqual(i, new Constant(n)),
+                 new Block([
+                     new Assignment(sum, new Add(sum, i)),
+                     new Assignment(i, new Add(i, new Constant(1L)))
+                 ])),
+             sum],
+            [sum, i])));
+    }
+
+    private static Node BuildFib(int n) {
+        var a = new Variable("a");
+        var b = new Variable("b");
+        var i = new Variable("i");
+        var next = new Variable("next");
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(a, new Constant(0L)),
+             new Assignment(b, new Constant(1L)),
+             new Assignment(i, new Constant(0L)),
+             new WhileLoop(new LessThan(i, new Constant(n)),
+                 new Block([
+                     new Assignment(next, new Add(a, b)),
+                     new Assignment(a, b),
+                     new Assignment(b, next),
+                     new Assignment(i, new Add(i, new Constant(1L)))
+                 ])),
+             a],
+            [a, b, i, next])));
+    }
+
+    private static Node BuildFact(int n) {
+        var r = new Variable("r");
+        var i = new Variable("i");
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(r, new Constant(1L)),
+             new Assignment(i, new Constant(1L)),
+             new WhileLoop(new LessThanOrEqual(i, new Constant(n)),
+                 new Block([
+                     new Assignment(r, new Multiply(r, i)),
+                     new Assignment(i, new Add(i, new Constant(1L)))
+                 ])),
+             r],
+            [r, i])));
+    }
+
+    private static Node BuildClrChain(int n) {
+        var maxMtd = new Member(
+            new TypeReference(typeof(Math).FullName!), nameof(Math.Max));
+        Node c = new Constant(1);
+        for (int i = 2; i <= n; i++)
+            c = new Invoke(maxMtd, c, new Constant(i));
+        return c;
+    }
+
+    private static Node BuildGcd(int a, int b) {
+        var x = new Variable("x");
+        var y = new Variable("y");
+        var tmp = new Variable("tmp");
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(x, new Constant((long)a)),
+             new Assignment(y, new Constant((long)b)),
+             new WhileLoop(new NotEqual(y, new Constant(0L)),
+                 new Block([
+                     new Assignment(tmp, new Modulo(x, y)),
+                     new Assignment(x, y),
+                     new Assignment(y, tmp)
+                 ])),
+             x],
+            [x, y, tmp])));
+    }
+}

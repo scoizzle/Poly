@@ -8,12 +8,16 @@ using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
 
+using Poly.Tests.TestHelpers;
+
 namespace Poly.Tests.Interpretation;
 
 /// <summary>Real-world algorithmic tests: AST → Lowering → µops → execute.
 /// Exercises the full pipeline on nontrivial programs (loops, recursion,
 /// clr calls, etc.).</summary>
 public class UopRealWorldTests {
+    private static readonly DebugTextWriter _traceWriter = new();
+
     private static Bytecode LowerWith(Node node) {
         var builder = new AnalyzerBuilder()
             .UseTypeResolver()
@@ -29,7 +33,7 @@ public class UopRealWorldTests {
 
     private static InterpreterResult Execute(Node node) {
         var prog = LowerWith(node);
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
         return Vm.Execute(state);
     }
 

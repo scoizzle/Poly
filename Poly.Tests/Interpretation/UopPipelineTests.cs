@@ -28,9 +28,11 @@ public class UopPipelineTests {
         return Lowering.Lower(node, analysis);
     }
 
+    private static readonly DebugTextWriter _traceWriter = new();
+
     private static InterpreterResult Execute(Node node, Action<AnalyzerBuilder>? configure = null) {
         var prog = LowerWith(node, configure);
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
         return Vm.Execute(state);
     }
 

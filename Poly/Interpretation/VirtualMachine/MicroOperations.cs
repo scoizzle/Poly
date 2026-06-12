@@ -64,6 +64,19 @@ internal sealed record CompilationContext(
     /// current value.</summary>
     public Expression WritebackPC() => Expression.Assign(
         Expression.Property(State, "PC"), PC);
+
+    private readonly Dictionary<string, ParameterExpression> _aliasVars = new();
+    /// <summary>Get or create a typed alias variable in the compiled delegate's
+    /// local scope.  Used by µops to hold direct CLR references, avoiding
+    /// heap lookups.</summary>
+    public ParameterExpression GetOrCreateAlias(string name, Type type) {
+        if (!_aliasVars.TryGetValue(name, out var alias)) {
+            alias = Expression.Variable(type, name);
+            _aliasVars[name] = alias;
+            Variables.Add(alias);
+        }
+        return alias;
+    }
 }
 
 /// <summary>Base record for all micro-operations.  Each µop defines its
@@ -571,34 +584,54 @@ internal sealed record CallExternalOp(int SiteIndex, NodeId? Source = null) : Mi
 // ═══════════════════════════════════════════════════════════════════
 
 /// <summary>Load <c>arr[index]</c> where <c>arr</c> is a heap-stored
-/// <c>long[]</c>.  Stack: <c>[..., arr_handle, index] → [..., value]</c>.</summary>
-internal sealed record ArrayLoadOp(NodeId? Source = null) : MicroOp(Source) {
-    public override string ToString() => "arrayload";
+/// <c>long[]</c>.  Stack: <c>[..., arr_handle, index] → [..., value]</c>.
+/// When <c>Alias</c> is set, <c>arr_handle</c> is omitted — the alias
+/// variable holds the direct <c>long[]</c> reference.</summary>
+internal sealed record ArrayLoadOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => Alias is null ? "arrayload" : $"arrayload alias={Alias}";
     static readonly System.Reflection.MethodInfo HeapGet =
         typeof(Heap).GetMethod("Get", [typeof(int)])!;
     public override Expression ToExpression(CompilationContext ctx) {
         var idx = Expression.Variable(typeof(int), "i");
+        ctx.Variables.Add(idx);
+        if (Alias is not null) {
+            var arr = ctx.GetOrCreateAlias(Alias, typeof(long[]));
+            return Expression.Block(
+                Expression.Assign(idx, Expression.Convert(ctx.Pop(), typeof(int))),
+                ctx.Push(Expression.ArrayAccess(arr, idx)));
+        }
         var handle = Expression.Variable(typeof(int), "h");
-        var arr = Expression.Variable(typeof(long[]), "a");
-        ctx.Variables.Add(idx); ctx.Variables.Add(handle); ctx.Variables.Add(arr);
+        var arr2 = Expression.Variable(typeof(long[]), "a");
+        ctx.Variables.Add(handle); ctx.Variables.Add(arr2);
         return Expression.Block(
             Expression.Assign(idx, Expression.Convert(ctx.Pop(), typeof(int))),
             Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))),
-            Expression.Assign(arr, Expression.Convert(
+            Expression.Assign(arr2, Expression.Convert(
                 Expression.Call(Expression.Property(ctx.State, "Heap"), HeapGet, handle),
                 typeof(long[]))),
-            ctx.Push(Expression.ArrayAccess(arr, idx)));
+            ctx.Push(Expression.ArrayAccess(arr2, idx)));
     }
 }
 
-/// <summary>Create a <c>long[size]</c> on the heap and push its handle.
-/// Stack: <c>[..., size] → [..., handle]</c>.</summary>
-internal sealed record NewArrayOp(NodeId? Source = null) : MicroOp(Source) {
-    public override string ToString() => "newarray";
+/// <summary>Create a <c>long[size]</c> and push its handle.
+/// Stack: <c>[..., size] → [..., handle]</c>.
+/// When <c>Alias</c> is set, heap allocation is skipped — the array
+/// reference is stored directly in the alias variable and a dummy
+/// value (0) is pushed for the slot.</summary>
+internal sealed record NewArrayOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => Alias is null ? "newarray" : $"newarray alias={Alias}";
     public override Expression ToExpression(CompilationContext ctx) {
         var size = Expression.Variable(typeof(int), "s");
         var arr = Expression.Variable(typeof(long[]), "a");
         ctx.Variables.Add(size); ctx.Variables.Add(arr);
+        if (Alias is not null) {
+            var aliasVar = ctx.GetOrCreateAlias(Alias, typeof(long[]));
+            return Expression.Block(
+                Expression.Assign(size, Expression.Convert(ctx.Pop(), typeof(int))),
+                Expression.Assign(arr, Expression.NewArrayBounds(typeof(long), size)),
+                Expression.Assign(aliasVar, arr),
+                ctx.Push(Expression.Constant(0L)));
+        }
         var heapAlloc = typeof(Heap).GetMethod("Allocate", [typeof(object)])!;
         return Expression.Block(
             Expression.Assign(size, Expression.Convert(ctx.Pop(), typeof(int))),
@@ -611,25 +644,218 @@ internal sealed record NewArrayOp(NodeId? Source = null) : MicroOp(Source) {
 }
 
 /// <summary>Store <c>arr[index] = val</c> where <c>arr</c> is a heap-stored
-/// <c>long[]</c>.  Stack: <c>[..., arr_handle, index, val] → [...]</c>.</summary>
-internal sealed record ArrayStoreOp(NodeId? Source = null) : MicroOp(Source) {
-    public override string ToString() => "arraystore";
+/// <c>long[]</c>.  Stack: <c>[..., arr_handle, index, val] → [...]</c>.
+/// When <c>Alias</c> is set, <c>arr_handle</c> is omitted — the alias
+/// variable holds the direct <c>long[]</c> reference.</summary>
+internal sealed record ArrayStoreOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => Alias is null ? "arraystore" : $"arraystore alias={Alias}";
     static readonly System.Reflection.MethodInfo HeapGet =
         typeof(Heap).GetMethod("Get", [typeof(int)])!;
     public override Expression ToExpression(CompilationContext ctx) {
         var val = Expression.Variable(typeof(long), "v");
         var idx = Expression.Variable(typeof(int), "i");
+        ctx.Variables.Add(val); ctx.Variables.Add(idx);
+        if (Alias is not null) {
+            var arr = ctx.GetOrCreateAlias(Alias, typeof(long[]));
+            return Expression.Block(
+                Expression.Assign(val, ctx.Pop()),
+                Expression.Assign(idx, Expression.Convert(ctx.Pop(), typeof(int))),
+                Expression.Assign(Expression.ArrayAccess(arr, idx), val));
+        }
         var handle = Expression.Variable(typeof(int), "h");
-        var arr = Expression.Variable(typeof(long[]), "a");
-        ctx.Variables.Add(val); ctx.Variables.Add(idx); ctx.Variables.Add(handle); ctx.Variables.Add(arr);
+        var arr2 = Expression.Variable(typeof(long[]), "a");
+        ctx.Variables.Add(handle); ctx.Variables.Add(arr2);
         return Expression.Block(
             Expression.Assign(val, ctx.Pop()),
             Expression.Assign(idx, Expression.Convert(ctx.Pop(), typeof(int))),
             Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))),
+            Expression.Assign(arr2, Expression.Convert(
+                Expression.Call(Expression.Property(ctx.State, "Heap"), HeapGet, handle),
+                typeof(long[]))),
+            Expression.Assign(Expression.ArrayAccess(arr2, idx), val));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Batch reduce over a heap-stored long[].
+//  Applies `reducer(state, element) → newState` to each element,
+//  running the entire loop in a single compiled expression (no µop
+//  dispatch per element).  Stack: [arr_handle, wordCount, initialState] → [finalState]
+//
+//  The reducer is a `Func<Expression, Expression, Expression>` captured
+//  at µop creation time.  Common reducers (Sum, CountNonZero, Max, Min)
+//  are available as static factory methods.
+// ═══════════════════════════════════════════════════════════════════
+
+internal sealed record BatchReduceOp(
+    Func<Expression, Expression, Expression> Reducer,
+    string? Alias = null,
+    NodeId? Source = null
+) : MicroOp(Source) {
+    public override string ToString() => Alias is null ? "batchreduce" : $"batchreduce alias={Alias}";
+    static readonly System.Reflection.MethodInfo HeapGet =
+        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+
+    public override Expression ToExpression(CompilationContext ctx) {
+        var wc = Expression.Variable(typeof(int), "wc");
+        var arr = Expression.Variable(typeof(long[]), "a");
+        var state = Expression.Variable(typeof(long), "s");
+        var i = Expression.Variable(typeof(int), "i");
+        ctx.Variables.Add(wc); ctx.Variables.Add(arr);
+        ctx.Variables.Add(state); ctx.Variables.Add(i);
+        var start = Expression.Label("start");
+        var done = Expression.Label("done");
+
+        // Stack: [arr_handle, wordCount, initialState]
+        List<Expression> setup =
+        [
+            Expression.Assign(state, ctx.Pop()),  // pop initialState (top)
+            Expression.Assign(wc, Expression.Convert(ctx.Pop(), typeof(int))),  // pop wordCount
+        ];
+
+        if (Alias is not null) {
+            setup.Add(Expression.Assign(arr, ctx.GetOrCreateAlias(Alias, typeof(long[]))));
+        }
+        else {
+            var handle = Expression.Variable(typeof(int), "h");
+            ctx.Variables.Add(handle);
+            setup.Add(Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))));  // pop handle (bottom)
+            setup.Add(Expression.Assign(arr, Expression.Convert(
+                Expression.Call(Expression.Property(ctx.State, "Heap"), HeapGet, handle),
+                typeof(long[]))));
+        }
+
+        setup.Add(Expression.Assign(i, Expression.Constant(0)));
+        setup.Add(Expression.Label(start));
+        setup.Add(Expression.IfThen(
+            Expression.LessThan(i, wc),
+            Expression.Block(
+                Expression.Assign(state, Reducer(state, Expression.ArrayAccess(arr, i))),
+                Expression.PreIncrementAssign(i),
+                Expression.Goto(start))));
+        setup.Add(Expression.Label(done));
+        setup.Add(ctx.Push(state));
+
+        return Expression.Block(setup);
+    }
+
+    // ── Common reducers ──
+
+    public static Func<Expression, Expression, Expression> Sum =>
+        (s, e) => Expression.Add(s, e);
+
+    public static Func<Expression, Expression, Expression> CountNonZero =>
+        (s, e) => Expression.Condition(
+            Expression.NotEqual(e, Expression.Constant(0L)),
+            Expression.Add(s, Expression.Constant(1L)),
+            s);
+
+    public static Func<Expression, Expression, Expression> BitwiseOr =>
+        (s, e) => Expression.Or(s, e);
+
+    public static Func<Expression, Expression, Expression> BitwiseAnd =>
+        (s, e) => Expression.And(s, e);
+
+    public static Func<Expression, Expression, Expression> Min =>
+        (s, e) => Expression.Condition(
+            Expression.LessThan(e, s),
+            e, s);
+
+    public static Func<Expression, Expression, Expression> Max =>
+        (s, e) => Expression.Condition(
+            Expression.GreaterThan(e, s),
+            e, s);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  CountBitsOp — count set bits in a long[] range.
+//  Uses BitOperations.PopCount (JIT emits CNT/POPCNT).
+//  Stack: [arr_handle, wordCount] → [bitCount]
+// ═══════════════════════════════════════════════════════════════════
+
+internal sealed record CountBitsOp(NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => "countbits";
+    static readonly System.Reflection.MethodInfo HeapGet =
+        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+    static readonly System.Reflection.MethodInfo PopCount =
+        typeof(System.Numerics.BitOperations).GetMethod("PopCount", [typeof(ulong)])!;
+    public override Expression ToExpression(CompilationContext ctx) {
+        var wc = Expression.Variable(typeof(int), "wc");
+        var handle = Expression.Variable(typeof(int), "h");
+        var arr = Expression.Variable(typeof(long[]), "a");
+        var total = Expression.Variable(typeof(long), "t");
+        var i = Expression.Variable(typeof(int), "i");
+        ctx.Variables.Add(wc); ctx.Variables.Add(handle);
+        ctx.Variables.Add(arr); ctx.Variables.Add(total); ctx.Variables.Add(i);
+        var start = Expression.Label("start"); var done = Expression.Label("done");
+        return Expression.Block(
+            Expression.Assign(wc, Expression.Convert(ctx.Pop(), typeof(int))),
+            Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))),
             Expression.Assign(arr, Expression.Convert(
                 Expression.Call(Expression.Property(ctx.State, "Heap"), HeapGet, handle),
                 typeof(long[]))),
-            Expression.Assign(Expression.ArrayAccess(arr, idx), val));
+            Expression.Assign(total, Expression.Constant(0L)),
+            Expression.Assign(i, Expression.Constant(0)),
+            Expression.Label(start),
+            Expression.IfThen(
+                Expression.LessThan(i, wc),
+                Expression.Block(
+                    Expression.AddAssign(total, Expression.Convert(
+                        Expression.Call(PopCount,
+                            Expression.Convert(Expression.ArrayAccess(arr, i), typeof(ulong))),
+                        typeof(long))),
+                    Expression.PreIncrementAssign(i),
+                    Expression.Goto(start))),
+            Expression.Label(done),
+            ctx.Push(total));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  StridedSetOp — for each j in [start..limit] step step, set
+//  bits[j >> 6] |= 1L << (j & 63).  Runs the entire loop in a
+//  single compiled expression (no µop dispatch per iteration).
+//  Stack: [arr_handle, startValue, step, limit] → []
+// ═══════════════════════════════════════════════════════════════════
+
+/// <summary>For each j in [start..limit] step step, set bits[j>>6] |= 1L << (j&63).
+/// Stack: [arr_handle, startValue, step, limit] → []</summary>
+internal sealed record StridedSetOp(NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => "stridedset";
+    static readonly System.Reflection.MethodInfo HeapGet =
+        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+    public override Expression ToExpression(CompilationContext ctx) {
+        var handle = Expression.Variable(typeof(int), "h");
+        var arr = Expression.Variable(typeof(long[]), "a");
+        var limit = Expression.Variable(typeof(long), "lim");
+        var step = Expression.Variable(typeof(long), "stp");
+        var j = Expression.Variable(typeof(long), "j");
+        ctx.Variables.Add(handle); ctx.Variables.Add(arr);
+        ctx.Variables.Add(limit); ctx.Variables.Add(step); ctx.Variables.Add(j);
+        var start = Expression.Label("start"); var done = Expression.Label("done");
+        return Expression.Block(
+            Expression.Assign(limit, ctx.Pop()),
+            Expression.Assign(step, ctx.Pop()),
+            Expression.Assign(j, ctx.Pop()),
+            // Leave handle on stack (peek via Top) — subsequent µops need it
+            Expression.Assign(handle, Expression.Convert(ctx.Top(), typeof(int))),
+            Expression.Assign(arr, Expression.Convert(
+                Expression.Call(Expression.Property(ctx.State, "Heap"), HeapGet, handle),
+                typeof(long[]))),
+            Expression.Label(start),
+            Expression.IfThen(
+                Expression.LessThanOrEqual(j, limit),
+                Expression.Block(
+                    Expression.Assign(Expression.ArrayAccess(arr,
+                        Expression.Convert(Expression.RightShift(j, Expression.Constant(6)), typeof(int))),
+                        Expression.Or(
+                            Expression.ArrayAccess(arr,
+                                Expression.Convert(Expression.RightShift(j, Expression.Constant(6)), typeof(int))),
+                            Expression.LeftShift(Expression.Constant(1L),
+                                Expression.Convert(Expression.And(j, Expression.Constant(63L)), typeof(int))))),
+                    Expression.AddAssign(j, step),
+                    Expression.Goto(start))),
+            Expression.Label(done));
     }
 }
 
@@ -637,12 +863,16 @@ internal sealed record ArrayStoreOp(NodeId? Source = null) : MicroOp(Source) {
 //  Trace µop (inserted by Lowering when VM_TRACE is defined)
 // ═══════════════════════════════════════════════════════════════════
 
-/// <summary>No-op µop that carries a trace message.  Inserted during
-/// lowering when <c>VM_TRACE</c> is defined.  Zero runtime cost —
-/// <see cref="ToExpression"/> returns a no-op.</summary>
+/// <summary>Runtime-gated trace µop.  Calls <c>VmTrace.LogUop</c>
+/// which checks <c>state.Trace</c> — ~1 ns when tracing is off.
+/// Always compiled (Debug + Release), cheap when disabled.</summary>
 internal sealed record TraceUop(string Message, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"trace: {Message}";
-    public override Expression ToExpression(CompilationContext ctx) => Expression.Empty();
+    static readonly System.Reflection.MethodInfo LogMethod = typeof(VmTrace).GetMethod(
+        nameof(VmTrace.LogUop), [typeof(int), typeof(string), typeof(VmState)])!;
+    public override Expression ToExpression(CompilationContext ctx) =>
+        Expression.Call(LogMethod, Expression.Constant(ctx.GetHashCode()),
+            Expression.Constant(Message), ctx.State);
 }
 
 // ═══════════════════════════════════════════════════════════════════

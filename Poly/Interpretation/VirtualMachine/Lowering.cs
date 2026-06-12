@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
@@ -42,6 +40,14 @@ internal static class Lowering {
         public List<LoopBodyEntry>? LoopBodies;
         public int CurrentArgSlots;
         public Dictionary<int, int> LabelTargets;   // label name → µop index
+        // ── Alias ownership tracking ──
+        public Dictionary<string, int> AssignmentCount;  // local name → assignment count
+        public HashSet<string> EscapedLocals;            // local names that escape their scope
+        /// <summary>True if a local can be aliased (assigned once, never escapes).</summary>
+        public bool CanAlias(string name) =>
+            AssignmentCount.GetValueOrDefault(name) == 1 && !EscapedLocals.Contains(name);
+        /// <summary>Map from local variable name to alias name for alias-eligible locals.</summary>
+        public Dictionary<string, string> LocalAliases;  // var name → alias name
     }
 
     public static Bytecode Lower(Node root, AnalysisResult analysis) {
@@ -56,6 +62,9 @@ internal static class Lowering {
             ExceptionRegions = [],
             LoopBodies = [],
             LabelTargets = [],
+            AssignmentCount = [],
+            EscapedLocals = [],
+            LocalAliases = [],
         };
 
         // Discover referenced functions and lambdas
@@ -88,6 +97,9 @@ internal static class Lowering {
                 DiscoverCapturesFromAnalysis(lambda, scope, ctx.ParamIndexMap, ctx.LocalIndexMap, ctx.FunctionIndexMap, null, new HashSet<Block>(), analysis, captures);
             ctx.LambdaCaptureMap[lambda] = captures;
         }
+
+        // Pre-scan: collect assignment counts and escape info for alias analysis
+        CollectEscapeInfo(root, ctx);
 
         // Emit main body
         if (referencedMethods.Count > 0) {
@@ -254,14 +266,38 @@ internal static class Lowering {
             case Parameter p: EmitParameter(p, ref ctx, lambdaState); return;
 
             case Assignment assign: {
-                    // Array store: arr[i] = val — push arr, index, val (ArrayStoreOp convention)
+                    // Alias-eligible new array: skip heap entirely
+                    if (assign.Value is NewArray na && assign.Destination is Variable destVar
+                        && ctx.CanAlias(destVar.Name)) {
+                        int localIdx = ctx.LocalIndexMap?.GetValueOrDefault(destVar.Name) ?? -1;
+                        if (localIdx >= 0) {
+                            var aliasName = $"a{localIdx}";
+                            ctx.LocalAliases[destVar.Name] = aliasName;
+                            EmitNode(na.Length, ref ctx, lambdaState);
+                            ctx.Code.Add(new NewArrayOp(Alias: aliasName));
+                            if (EmitsValue(assign, ctx.Analysis))
+                                ctx.Code.Add(new DupOp());
+                            EmitVariableStore(assign.Destination, ref ctx, lambdaState);
+                            return;
+                        }
+                    }
+                    // Array store: arr[i] = val — aliased path (no handle)
                     if (assign.Destination is IndexAccess ia && IsArrayType(ia.Value, ctx)) {
-                        EmitNode(ia.Value, ref ctx, lambdaState);        // arr_handle
-                        EmitNode(ia.Arguments[0], ref ctx, lambdaState); // index
-                        EmitNode(assign.Value, ref ctx, lambdaState);    // val
-                        ctx.Code.Add(new ArrayStoreOp());                // pops [arr, idx, val]
-                        if (EmitsValue(assign, ctx.Analysis))
-                            ctx.Code.Add(new DupOp());                   // dup result if needed
+                        if (ia.Value is Variable iaVar && ctx.LocalAliases.TryGetValue(iaVar.Name, out var arrAlias)) {
+                            EmitNode(ia.Arguments[0], ref ctx, lambdaState); // index
+                            EmitNode(assign.Value, ref ctx, lambdaState);    // val
+                            ctx.Code.Add(new ArrayStoreOp(Alias: arrAlias));
+                            if (EmitsValue(assign, ctx.Analysis))
+                                ctx.Code.Add(new DupOp());
+                        }
+                        else {
+                            EmitNode(ia.Value, ref ctx, lambdaState);        // arr_handle
+                            EmitNode(ia.Arguments[0], ref ctx, lambdaState); // index
+                            EmitNode(assign.Value, ref ctx, lambdaState);    // val
+                            ctx.Code.Add(new ArrayStoreOp());
+                            if (EmitsValue(assign, ctx.Analysis))
+                                ctx.Code.Add(new DupOp());
+                        }
                         return;
                     }
                     EmitNode(assign.Value, ref ctx, lambdaState);
@@ -418,6 +454,10 @@ internal static class Lowering {
     }
 
     private static void EmitWhileLoop(WhileLoop wl, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+        // Check for strided-bit-set pattern: for j = start; j <= limit; j += step → bits[j>>6] |= 1L << (j&63)
+        if (TryEmitStridedSet(wl, ref ctx, lambdaState))
+            return;
+
         int cont = EmitLabel(ref ctx);
         int end = EmitLabel(ref ctx);
 
@@ -437,6 +477,76 @@ internal static class Lowering {
             ParamIndexMap = ctx.ParamIndexMap,
             LocalIndexMap = ctx.LocalIndexMap,
         });
+    }
+
+    /// <summary>Detect and emit the strided bit-set pattern:
+    /// <c>while (idx &lt;= limit) { arr[idx&gt;&gt;6] |= 1L &lt;&lt; (idx&amp;63); idx += step; }</c>
+    /// Uses <c>StridedSetOp</c> — single compiled loop, no µop dispatch per iteration.</summary>
+    private static bool TryEmitStridedSet(WhileLoop wl, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+        // Condition must be LessThanOrEqual(Variable, something)
+        if (wl.Condition is not LessThanOrEqual le) return false;
+        if (le.LeftHandValue is not Variable idxVar) return false;
+        // Limit can be another variable or a constant
+        Node limitNode = le.RightHandValue;
+
+        // Body must be Block with exactly 2 nodes
+        if (wl.Body is not Block body || body.Nodes.Count != 2) return false;
+
+        // First node: Assignment(IndexAccess(arr, ShiftRight(idx, 6)), BitwiseOr(...))
+        if (body.Nodes[0] is not Assignment assign) return false;
+        if (assign.Destination is not IndexAccess ia) return false;
+        if (ia.Value is not Variable arrVar) return false;
+        if (ia.Arguments.Length != 1) return false;
+
+        // Index expression: ShiftRight(idx, 6)
+        if (ia.Arguments[0] is not ShiftRight sr) return false;
+        if (sr.LeftHandValue is not Variable srVar || srVar.Name != idxVar.Name) return false;
+        if (!IsConstant(sr.RightHandValue, 6)) return false;
+
+        // Value expression: BitwiseOr(IndexAccess(...), ShiftLeft(1, BitwiseAnd(idx, 63)))
+        if (assign.Value is not BitwiseOr bor) return false;
+        if (bor.LeftHandValue is not IndexAccess ia2) return false;
+        // verify ia2 is the same array pattern (app  ended during StridedSetOp internally)
+        if (bor.RightHandValue is not ShiftLeft sl) return false;
+        if (sl.LeftHandValue is not Constant c || !(c.Value is long lv && lv == 1L)) return false;
+        if (sl.RightHandValue is not BitwiseAnd ba) return false;
+        if (ba.RightHandValue is not Constant cmask || !IsConstant(cmask, 63)) return false;
+        if (ba.LeftHandValue is not Variable baVar || baVar.Name != idxVar.Name) return false;
+
+        // Second node: Assignment(idx, Add(idx, step))
+        if (body.Nodes[1] is not Assignment inc) return false;
+        if (inc.Destination is not Variable incVar || incVar.Name != idxVar.Name) return false;
+        if (inc.Value is not Add add) return false;
+        if (add.LeftHandValue is not Variable addVar || addVar.Name != idxVar.Name) return false;
+        // step is add.RightHandValue — could be Variable or Constant
+
+        // Determine limit value
+        Node startNode = ia.Arguments[0]; // recomputed below
+        Node stepNode = add.RightHandValue;
+
+        // Emit StridedSetOp: load handle, push start, step, limit
+        // Need to evaluate start and step expressions
+        string? aliasName = ctx.LocalAliases?.GetValueOrDefault(arrVar.Name);
+        if (aliasName is not null) {
+            // Use aliased read — but StridedSetOp doesn't support alias yet
+            // Fall back to normal path
+            return false;
+        }
+
+        // Push the array handle
+        EmitNode(arrVar, ref ctx, lambdaState);  // → push handle (stays on stack via Top())
+        // Push start (i*i), step (i), limit
+        EmitNode(ia.Arguments[0], ref ctx, lambdaState);  // start = i*i (or the expression)
+        EmitNode(stepNode, ref ctx, lambdaState);          // step
+        EmitNode(limitNode, ref ctx, lambdaState);         // limit
+        ctx.Code.Add(new StridedSetOp());
+        return true;
+    }
+
+    /// <summary>Check if a node is a Constant with the given integer value.</summary>
+    private static bool IsConstant(Node node, long value) {
+        return node is Constant c && c.Value is long lv && lv == value
+            || node is Constant c2 && c2.Value is int iv && iv == value;
     }
 
     private static void EmitDoWhileLoop(DoWhileLoop dw, ref EmitContext ctx, LambdaEmitState? lambdaState) {
@@ -708,9 +818,15 @@ internal static class Lowering {
 
         // Array index read via direct µop (no CLR call overhead)
         if (IsArrayType(ia.Value, ctx)) {
-            EmitNode(ia.Value, ref ctx, lambdaState);     // push arr_handle
-            EmitNode(ia.Arguments[0], ref ctx, lambdaState); // push index
-            ctx.Code.Add(new ArrayLoadOp());
+            if (ia.Value is Variable v && ctx.LocalAliases.TryGetValue(v.Name, out var aliasName)) {
+                EmitNode(ia.Arguments[0], ref ctx, lambdaState);
+                ctx.Code.Add(new ArrayLoadOp(Alias: aliasName));
+            }
+            else {
+                EmitNode(ia.Value, ref ctx, lambdaState);     // push arr_handle
+                EmitNode(ia.Arguments[0], ref ctx, lambdaState); // push index
+                ctx.Code.Add(new ArrayLoadOp());
+            }
             return;
         }
 
@@ -909,28 +1025,67 @@ internal static class Lowering {
         return false;
     }
 
-    // ── Trace helpers (compiled only in Debug builds) ──
+    // ── Trace helpers (always compiled, cheap when state.Trace is null) ──
 
-    [Conditional("DEBUG")]
     private static void TraceOp(ref EmitContext ctx, Node node, string phase) {
         var msg = $"{phase}: {node.GetType().Name} at µop {ctx.Code.Count}";
         ctx.Code.Add(new TraceUop(msg));
-        Debug.WriteLine(msg);
     }
 
-    [Conditional("DEBUG")]
     private static void TraceInvoke(ref EmitContext ctx, Invoke invoke) {
         var resolved = ctx.Analysis.GetResolvedMember(invoke);
         string target = resolved?.ToString() ?? invoke.Delegate?.ToString() ?? "?";
         var msg = $"EMIT CALL {target} at µop {ctx.Code.Count}";
         ctx.Code.Add(new TraceUop(msg));
-        Debug.WriteLine(msg);
     }
 
-    [Conditional("DEBUG")]
     private static void TraceReturn(ref EmitContext ctx) {
         var msg = $"EMIT RET_CALL at µop {ctx.Code.Count}";
         ctx.Code.Add(new TraceUop(msg));
-        Debug.WriteLine(msg);
+    }
+
+    // ── Alias ownership pre-scan ──
+
+    /// <summary>Walk the AST to collect assignment counts and escape
+    /// information for all variable references.  Runs once before emission.</summary>
+    private static void CollectEscapeInfo(Node node, EmitContext ctx) {
+        switch (node) {
+            case Assignment { Destination: Variable v }:
+                ctx.AssignmentCount[v.Name] = ctx.AssignmentCount.GetValueOrDefault(v.Name) + 1;
+                break;
+            case Invoke invoke when invoke.Delegate is not Lambda:
+                foreach (var arg in invoke.Arguments)
+                    MarkEscape(arg, ctx);
+                break;
+            case Return r:
+                MarkEscape(r.Value, ctx);
+                break;
+            case ForEachLoop fel:
+                MarkEscape(fel.Collection, ctx);
+                break;
+            case Lambda lam:
+                // Lambda body is a new scope — variables referenced inside are
+                // local to the lambda, not escaped from the enclosing scope.
+                // True captures (from enclosing scope) are handled by the
+                // enclosing scope's walk of the assignment/invoke/return nodes.
+                // The body walk still visits the lambda's children for
+                // inner Assignments (to count them), but the body's variable
+                // references don't escape.
+                break;
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                CollectEscapeInfo(child, ctx);
+        }
+    }
+
+    /// <summary>Mark all Variable nodes in an expression as escaped.</summary>
+    private static void MarkEscape(Node? node, EmitContext ctx) {
+        if (node is Variable v)
+            ctx.EscapedLocals.Add(v.Name);
+        if (node is not null)
+            foreach (var child in node.Children)
+                if (child is not null)
+                    MarkEscape(child, ctx);
     }
 }

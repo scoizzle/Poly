@@ -1,0 +1,4 @@
+FROM oven/bun:1
+WORKDIR /app
+COPY sieve.bun.js ./sieve.js
+ENTRYPOINT ["bun", "/app/sieve.js"]

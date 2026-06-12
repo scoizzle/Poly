@@ -116,7 +116,7 @@ For simulation purposes, `Await` nodes extract results synchronously via `GetAwa
 
 **Breakpoints** reuse the `Int`/`Iret` interrupt mechanism (vector=1). See `docs/decisions/2026-06-08-breakpoint-architecture.md`.
 
-**µop-level tracing:** The `[Conditional("DEBUG")]` trace helpers in `Lowering.cs` (`TraceOp`, `TraceInvoke`, `TraceReturn`) insert `TraceUop` records into the µop list and write to `Debug.WriteLine`. Active in Debug builds (the default for `dotnet run`), zero cost in Release. The `TraceUop` µop is a no-op at runtime (`Expression.Empty()`); it only exists for dump/debug visibility.
+**µop-level tracing:** `Lowering.cs` trace helpers (`TraceOp`, `TraceInvoke`, `TraceReturn`) always insert `TraceUop` records into the µop list. At runtime, `TraceUop.ToExpression` calls `VmTrace.LogUop(…)` which checks `state.Trace` (a `TextWriter?`).  When `state.Trace` is null (default) the cost is ~1 ns per trace µop (null check + predictable branch).  Set `state.Trace = Console.Error` (or any `TextWriter`) in tests to see per-µop traces.  In Debug builds tests automatically route through `Debug.WriteLine` via `DebugTextWriter`.  No compile-time flags needed.
 
 **Key artifacts:**
 - `Await(Node Operand)` — `Syntax/Nodes/Await.cs`

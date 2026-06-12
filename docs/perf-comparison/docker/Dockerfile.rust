@@ -1,0 +1,8 @@
+FROM rust:1-slim-bookworm AS build
+WORKDIR /src
+COPY sieve.rs .
+RUN rustc -O -C target-cpu=native -o /sieve sieve.rs
+
+FROM debian:bookworm-slim
+COPY --from=build /sieve /
+ENTRYPOINT ["/sieve"]

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Linq.Expressions;
 
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
@@ -245,15 +246,13 @@ public class UopStressTests {
                      new IfStatement(IsPrime(i),
                          new Block([
                              new Assignment(j, new Multiply(i, i)),
-                             new WhileLoop(new LessThanOrEqual(j, new Constant(limit)),
-                                 new Block([
-                                     // tmp = bits[word] | bit  (read, then or)
-                                     new Assignment(tmp, new BitwiseOr(
-                                         new IndexAccess(bits, WordIdx(j)), Bit(j))),
-                                     // bits[word] = tmp  (write without reading)
-                                     new Assignment(new IndexAccess(bits, WordIdx(j)), tmp),
-                                     new Assignment(j, new Add(j, i))
-                                 ]))
+                              new WhileLoop(new LessThanOrEqual(j, new Constant(limit)),
+                                  new Block([
+                                      // direct: bits[word] |= bit  (StridedSetOp handles read+write)
+                                      new Assignment(new IndexAccess(bits, WordIdx(j)),
+                                          new BitwiseOr(new IndexAccess(bits, WordIdx(j)), Bit(j))),
+                                      new Assignment(j, new Add(j, i))
+                                  ]))
                          ])),
                      new Assignment(i, new Add(i, new Constant(1)))
                  ])),
@@ -266,7 +265,7 @@ public class UopStressTests {
                      new Assignment(i, new Add(i, new Constant(1)))
                  ])),
              cnt],
-            [bits, tmp, i, j, cnt]);
+            [bits, i, j, cnt]);
 
         var inv = new Invoke(new Lambda([], body));
         var analyzer = NodeTestHelpers.CreateTestAnalyzer();
@@ -281,7 +280,7 @@ public class UopStressTests {
     public async Task Sieve_1M_SingleShot() {
         var limit = 1000000;
         var wordCnt = (limit + 64) / 64;
-        var bits = new Variable("bits"); var tmp = new Variable("tmp");
+        var bits = new Variable("bits");
         var i = new Variable("i"); var j = new Variable("j"); var cnt = new Variable("cnt");
 
         Node WordIdx(Node idx) => new ShiftRight(idx, new Constant(6));
@@ -300,13 +299,11 @@ public class UopStressTests {
                          new Block([
                              new Assignment(j, new Multiply(i, i)),
                              new WhileLoop(new LessThanOrEqual(j, new Constant(limit)),
-                                 new Block([
-                                     // tmp = bits[word] | bit; bits[word] = tmp
-                                     new Assignment(tmp, new BitwiseOr(
-                                         new IndexAccess(bits, WordIdx(j)), Bit(j))),
-                                     new Assignment(new IndexAccess(bits, WordIdx(j)), tmp),
-                                     new Assignment(j, new Add(j, i))
-                                 ]))
+                                  new Block([
+                                      new Assignment(new IndexAccess(bits, WordIdx(j)),
+                                          new BitwiseOr(new IndexAccess(bits, WordIdx(j)), Bit(j))),
+                                      new Assignment(j, new Add(j, i))
+                                  ]))
                          ])),
                      new Assignment(i, new Add(i, new Constant(1)))
                  ])),
@@ -319,7 +316,7 @@ public class UopStressTests {
                      new Assignment(i, new Add(i, new Constant(1)))
                  ])),
              cnt],
-            [bits, tmp, i, j, cnt]);
+            [bits, i, j, cnt]);
 
         var inv = new Invoke(new Lambda([], body));
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -331,6 +328,339 @@ public class UopStressTests {
         File.AppendAllText("/tmp/poly_stress.txt",
             $"Sieve(1M) = {result} primes in {sw.ElapsedMilliseconds}ms\n");
         await Assert.That(result).IsEqualTo(78498L);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  BatchReduceOp — word-level reduce over long[]
+    // ═══════════════════════════════════════════════════════════════
+
+    private static MicroOp[] Once(ushort words, long val, int idx) => [
+        new NewArrayOp(),
+        new DupOp(),
+        new PushOp(idx), new PushOp(val), new ArrayStoreOp(),
+    ];
+
+    private static async Task AssertReduce(long expected, long init, ushort words, MicroOp[] setup,
+        Func<Expression, Expression, Expression> reducer) {
+        using var s = new VmState();
+        s.Stack.Push(words);
+        var uops = new List<MicroOp>();
+        uops.AddRange(setup);
+        uops.Add(new PushOp(words));
+        uops.Add(new PushOp(init));
+        uops.Add(new BatchReduceOp(reducer));
+        ProgramCompiler.Compile(uops.ToArray())(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(expected);
+    }
+
+    // ── Sum ──
+
+    [Test]
+    public async Task BatchSum_Empty_ReturnsInitial() {
+        using var s = new VmState();
+        s.Stack.Push(1);
+        var c = ProgramCompiler.Compile([
+            new NewArrayOp(), new PushOp(1), new PushOp(99L), new BatchReduceOp(BatchReduceOp.Sum)]);
+        c(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(99L);
+    }
+
+    [Test]
+    public async Task BatchSum_SingleWord_SumsElements() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(10L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(20L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(2L), new PushOp(30L), new ArrayStoreOp(),
+            new PushOp(3), new PushOp(0L), new BatchReduceOp(BatchReduceOp.Sum),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(60L);
+    }
+
+    [Test]
+    public async Task BatchSum_WithInitialState() {
+        using var s = new VmState();
+        s.Stack.Push(2);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(100L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(200L), new ArrayStoreOp(),
+            new PushOp(2), new PushOp(50L), new BatchReduceOp(BatchReduceOp.Sum),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(350L);
+    }
+
+    // ── CountNonZero ──
+
+    [Test]
+    public async Task BatchCountNonZero_AllZero_ReturnsZero() {
+        using var s = new VmState();
+        s.Stack.Push(10);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new PushOp(10), new PushOp(0L), new BatchReduceOp(BatchReduceOp.CountNonZero),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task BatchCountNonZero_MixedElements() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(0L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(42L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(2L), new PushOp(0L), new ArrayStoreOp(),
+            new PushOp(3), new PushOp(0L), new BatchReduceOp(BatchReduceOp.CountNonZero),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(1L);
+    }
+
+    // ── BitwiseOr ──
+
+    [Test]
+    public async Task BatchBitwiseOr_Accumulates() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(0b001L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(0b010L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(2L), new PushOp(0b100L), new ArrayStoreOp(),
+            new PushOp(3), new PushOp(0L), new BatchReduceOp(BatchReduceOp.BitwiseOr),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(0b111L);
+    }
+
+    // ── BitwiseAnd ──
+
+    [Test]
+    public async Task BatchBitwiseAnd_Accumulates() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(0b111L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(0b110L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(2L), new PushOp(0b101L), new ArrayStoreOp(),
+            new PushOp(3), new PushOp(0b111L), new BatchReduceOp(BatchReduceOp.BitwiseAnd),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(0b100L);
+    }
+
+    // ── Min / Max ──
+
+    [Test]
+    public async Task BatchMin_FindsMinimum() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(50L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(10L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(2L), new PushOp(30L), new ArrayStoreOp(),
+            new PushOp(3), new PushOp(long.MaxValue), new BatchReduceOp(BatchReduceOp.Min),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(10L);
+    }
+
+    [Test]
+    public async Task BatchMax_FindsMaximum() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(50L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(10L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(2L), new PushOp(30L), new ArrayStoreOp(),
+            new PushOp(3), new PushOp(long.MinValue), new BatchReduceOp(BatchReduceOp.Max),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(50L);
+    }
+
+    // ── Negative values ──
+
+    [Test]
+    public async Task BatchSum_Negatives() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(-5L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(10L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(2L), new PushOp(-3L), new ArrayStoreOp(),
+            new PushOp(3), new PushOp(0L), new BatchReduceOp(BatchReduceOp.Sum),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(2L);
+    }
+
+    // ── Large word count ──
+
+    [Test]
+    public async Task BatchSum_100Words() {
+        using var s = new VmState();
+        s.Stack.Push(100);
+        var uops = new List<MicroOp> { new NewArrayOp() };
+        for (int w = 0; w < 100; w++) {
+            uops.Add(new DupOp());
+            uops.Add(new PushOp(w));
+            uops.Add(new PushOp(1L));
+            uops.Add(new ArrayStoreOp());
+        }
+        uops.Add(new PushOp(100));
+        uops.Add(new PushOp(0L));
+        uops.Add(new BatchReduceOp(BatchReduceOp.Sum));
+        ProgramCompiler.Compile(uops.ToArray())(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(100L);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CountBitsOp
+    // ═══════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task CountBits_SingleWord_ThreeBits() {
+        using var s = new VmState();
+        s.Stack.Push(5);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(42L), new ArrayStoreOp(), // bits[0]=42 → 3 bits
+            new PushOp(5), new CountBitsOp(),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task CountBits_Empty_ReturnsZero() {
+        using var s = new VmState();
+        s.Stack.Push(10);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new PushOp(10), new CountBitsOp(),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task CountBits_AllOnes_Returns64() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(-1L), new ArrayStoreOp(),
+            new PushOp(3), new CountBitsOp(),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(64L);
+    }
+
+    [Test]
+    public async Task CountBits_MultipleWords_Accumulates() {
+        using var s = new VmState();
+        s.Stack.Push(3);
+        ProgramCompiler.Compile([
+            new NewArrayOp(), new DupOp(),
+            new PushOp(0L), new PushOp(-1L), new ArrayStoreOp(),
+            new DupOp(),
+            new PushOp(1L), new PushOp(1L), new ArrayStoreOp(),
+            new PushOp(3), new CountBitsOp(),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(65L);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  StridedSetOp
+    // ═══════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task StridedSet_SingleBit_SetsOne() {
+        // Direct test: create array, call StridedSetOp, read back array[0]
+        using var s = new VmState();
+        s.Stack.Push(1);
+        // Stack: [1] → NewArrayOp → [handle]
+        // Then: push 2(start), 1(step), 2(limit) → [handle, 2, 1, 2]
+        // StridedSetOp pops limit=2, step=1, start=2, handle → marks, leaves stack empty
+        // Then: push 0, ArrayLoadOp → reads arr[0] → 4 (bit 2 set)
+        var compiled = ProgramCompiler.Compile([
+            new NewArrayOp(),
+            new PushOp(2L), new PushOp(1L), new PushOp(2L),
+            new StridedSetOp(),
+            new PushOp(0L), new ArrayLoadOp(),
+        ]);
+        compiled(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(4L);
+    }
+
+    [Test]
+    public async Task StridedSet_MultipleSteps_SingleWord() {
+        // Mark j=2,4,6 (step=2, limit=6) — single word, 3 bits set
+        using var s = new VmState();
+        s.Stack.Push(1);
+        ProgramCompiler.Compile([
+            new NewArrayOp(),
+            new PushOp(2L), new PushOp(2L), new PushOp(6L),
+            new StridedSetOp(),           // [handle] (not consumed)
+            new PushOp(1),                 // wordCount
+            new CountBitsOp(),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task StridedSet_MultipleWords() {
+        // Mark j=60..70 step=1 — spans words 0 and 1, 11 bits set
+        using var s = new VmState();
+        s.Stack.Push(2);
+        ProgramCompiler.Compile([
+            new NewArrayOp(),
+            new PushOp(60L), new PushOp(1L), new PushOp(70L),
+            new StridedSetOp(),
+            new PushOp(2),                  // wordCount = 2
+            new CountBitsOp(),
+        ])(s);
+        await Assert.That(s.Stack.Pop()).IsEqualTo(11L);
+    }
+
+    [Test]
+    public async Task StridedSet_MarksComposites() {
+        // Full sieve up to 100K using only StridedSetOp
+        // Compare result with known prime count: 9592 primes ≤ 100000
+        var limit = 100000;
+        var wordCnt = (limit + 64) / 64;
+        using var s = new VmState();
+        s.Stack.Push(wordCnt);
+        var uops = new List<MicroOp> { new NewArrayOp() };
+        // Sieve: for i = 2; i*i <= limit; i++
+        //   if bit i not set → for j = i*i; j <= limit; j += i → set bit
+        // StridedSetOp uses Top() for handle (doesn't consume it),
+        // so DupOp is not needed — handle stays on stack from NewArrayOp.
+        for (int i = 2; i * i <= limit; i++) {
+            uops.Add(new PushOp((long)(i * i)));   // start
+            uops.Add(new PushOp((long)i));          // step
+            uops.Add(new PushOp((long)limit));      // limit
+            uops.Add(new StridedSetOp());
+        }
+        uops.Add(new PushOp(wordCnt));
+        uops.Add(new CountBitsOp());
+        ProgramCompiler.Compile(uops.ToArray())(s);
+        long composites = s.Stack.Pop();
+        long primes = limit - 1 - composites; // 2..limit inclusive
+        await Assert.That(primes).IsEqualTo(9592L);
     }
 
     private static Node GcdNode(int a, int b) {

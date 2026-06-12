@@ -1,0 +1,57 @@
+version: "3.9"
+services:
+  sieve-c:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.c
+    image: poly-sieve-c
+    command: ["1000000"]
+
+  sieve-cpp:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cpp
+    image: poly-sieve-cpp
+    command: ["1000000"]
+
+  sieve-rust:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.rust
+    image: poly-sieve-rust
+    command: ["1000000"]
+
+  sieve-python:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.python
+    image: poly-sieve-python
+    command: ["1000000"]
+
+  sieve-js:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.js
+    image: poly-sieve-js
+    command: ["1000000"]
+
+  sieve-bun:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.bun
+    image: poly-sieve-bun
+    command: ["1000000"]
+
+  sieve-deno:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.deno
+    image: poly-sieve-deno
+    command: ["1000000"]
+
+  sieve-numpy:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.numpy
+    image: poly-sieve-numpy
+    command: ["1000000"]

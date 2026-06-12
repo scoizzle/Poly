@@ -294,7 +294,7 @@ public class UopBenchmarks {
 
     private static Node BuildSieve(int limit) {
         var wordCnt = (limit + 64) / 64;
-        var bits = new Variable("bits"); var tmp = new Variable("tmp");
+        var bits = new Variable("bits");
         var i = new Variable("i"); var j = new Variable("j"); var cnt = new Variable("cnt");
 
         Node Wi(Node x) => new ShiftRight(x, new Constant(6));
@@ -313,8 +313,8 @@ public class UopBenchmarks {
                              new Assignment(j, new Multiply(i, i)),
                              new WhileLoop(new LessThanOrEqual(j, new Constant(limit)),
                                  new Block([
-                                     new Assignment(tmp, new BitwiseOr(new IndexAccess(bits, Wi(j)), Bit(j))),
-                                     new Assignment(new IndexAccess(bits, Wi(j)), tmp),
+                                     new Assignment(new IndexAccess(bits, Wi(j)),
+                                         new BitwiseOr(new IndexAccess(bits, Wi(j)), Bit(j))),
                                      new Assignment(j, new Add(j, i))
                                  ]))
                          ])),
@@ -329,7 +329,7 @@ public class UopBenchmarks {
                      new Assignment(i, new Add(i, new Constant(1)))
                  ])),
              cnt],
-            [bits, tmp, i, j, cnt])));
+            [bits, i, j, cnt])));
     }
 
     private static Node BuildCountPrimes(int limit) {

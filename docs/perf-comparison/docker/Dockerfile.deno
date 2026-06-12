@@ -1,0 +1,4 @@
+FROM denoland/deno:alpine
+WORKDIR /app
+COPY sieve.deno.js ./sieve.js
+ENTRYPOINT ["deno", "run", "--allow-hrtime", "/app/sieve.js"]

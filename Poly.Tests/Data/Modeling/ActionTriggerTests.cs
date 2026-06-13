@@ -25,7 +25,7 @@ public class ActionTriggerTests {
             .AddEventSubscription(entity, subscription)
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.EventSubscription);
 
         await Assert.That(diagnostic).IsNull();

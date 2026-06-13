@@ -8,20 +8,16 @@ using Poly.Data.Modeling.Validation;
 namespace Poly.Data.Modeling;
 
 public sealed partial record Domain {
-    public Mutation CreateMutation(DomainModelAnalyzer? analyzer = null) => new Mutation(this, analyzer ?? new DomainModelAnalyzer());
+    public Mutation CreateMutation() => new Mutation(this);
 
     public sealed class Mutation {
         private readonly Domain _domain;
-        private readonly DomainModelAnalyzer _analyzer;
         private readonly List<DomainMutationCommand> _steps = [];
         private bool _completed;
 
-        internal Mutation(Domain domain, DomainModelAnalyzer analyzer) {
+        internal Mutation(Domain domain) {
             ArgumentNullException.ThrowIfNull(domain);
-            ArgumentNullException.ThrowIfNull(analyzer);
-
             _domain = domain;
-            _analyzer = analyzer;
         }
 
         public Domain Domain => _domain;
@@ -281,8 +277,8 @@ public sealed partial record Domain {
                     var affectedNodeIds = affectedNodes.Select(static node => node.Id).Distinct().ToArray();
 
                     var analysis = preMutationAnalysis is null
-                        ? _analyzer.Analyze(Domain)
-                        : _analyzer.Analyze(Domain, preMutationAnalysis, affectedNodes);
+                        ? DomainModelAnalyzer.Analyze(Domain)
+                        : DomainModelAnalyzer.Analyze(Domain, preMutationAnalysis, affectedNodes);
 
                     if (analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)) {
                         Rollback(appliedSteps);

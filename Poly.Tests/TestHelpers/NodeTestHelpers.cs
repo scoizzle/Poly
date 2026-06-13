@@ -23,13 +23,14 @@ public static class AnalyzerBuilderExtensions {
 }
 
 public static class NodeTestHelpers {
-    /// <summary>
-    /// Creates a standard analyzer for testing that performs semantic analysis passes.
-    /// </summary>
-    public static Analyzer CreateTestAnalyzer() {
-        return new AnalyzerBuilder().UseAllAnalyzers().Build();
-    }
+    private static readonly Analyzer _analyzer = new AnalyzerBuilder().UseAllAnalyzers().Build();
 
+    /// <summary>
+    /// Analyzes a node using the standard test analyzer pipeline.
+    /// </summary>
+    public static AnalysisResult AnalyzeNode(this Node node) {
+        return _analyzer.Analyze(node);
+    }
 
     /// <summary>
     /// Builds a LINQ Expression Tree from a node using the standard analyzer and generator pipeline.
@@ -37,8 +38,7 @@ public static class NodeTestHelpers {
     /// <param name="node">The node to transform.</param>
     /// <returns>A LINQ Expression representation.</returns>
     public static Expr BuildExpression(this Node node) {
-        var analyzer = CreateTestAnalyzer();
-        var analysisResult = analyzer.Analyze(node);
+        var analysisResult = node.AnalyzeNode();
         var generator = new LinqExpressionGenerator(analysisResult);
         return generator.Compile(node).Expression;
     }
@@ -52,19 +52,16 @@ public static class NodeTestHelpers {
     public static (Expr Expression, Exprs.ParameterExpression[] Parameters) BuildExpressionWithParameters(
         this Node node,
         params (Parameter param, Type clrType)[] parameters) {
-        var analyzer = CreateTestAnalyzer();
 
-        // Pre-register parameter types with a custom action before analysis
-        var analysisResult = analyzer
-            .With(ctx => {
-                foreach (var (param, clrType) in parameters) {
-                    var typeDef = ctx.TypeDefinitions.GetTypeDefinition(clrType);
-                    if (typeDef != null) {
-                        ctx.SetResolvedType(param, typeDef);
-                    }
+        // Pre-register parameter types with a setup action before analysis
+        var analysisResult = _analyzer.Analyze(node, setup: ctx => {
+            foreach (var (param, clrType) in parameters) {
+                var typeDef = ctx.TypeDefinitions.GetTypeDefinition(clrType);
+                if (typeDef != null) {
+                    ctx.SetResolvedType(param, typeDef);
                 }
-            })
-            .Analyze(node);
+            }
+        });
 
         var generator = new LinqExpressionGenerator(analysisResult);
         var compilation = generator.Compile(node);
@@ -100,13 +97,5 @@ public static class NodeTestHelpers {
         where TDelegate : Delegate {
         var (expression, parameterExpressions) = node.BuildExpressionWithParameters(parameters);
         return (TDelegate)System.Linq.Expressions.Expression.Lambda(expression, parameterExpressions).Compile();
-    }
-
-    /// <summary>
-    /// Analyzes a node using the standard test analyzer pipeline.
-    /// </summary>
-    public static AnalysisResult AnalyzeNode(this Node node) {
-        var analyzer = CreateTestAnalyzer();
-        return analyzer.Analyze(node);
     }
 }

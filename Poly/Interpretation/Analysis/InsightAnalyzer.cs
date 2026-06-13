@@ -24,13 +24,9 @@ public sealed class InsightAnalyzer {
 
     public AnalysisResult Analyze(Node node) {
         var builder = new AnalyzerBuilder();
-
-        foreach (var analyzer in _analyzers) {
-            builder.AddAnalyzer(analyzer);
-        }
-
-        var analyzerInstance = builder.Build();
-        return analyzerInstance.Analyze(node);
+        foreach (var a in _analyzers)
+            builder.AddAnalyzer(a);
+        return builder.Build().Analyze(node);
     }
 
     public AnalysisResult AnalyzeSuspended(SuspendedExecution suspended) {

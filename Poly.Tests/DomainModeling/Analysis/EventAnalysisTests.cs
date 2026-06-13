@@ -23,8 +23,7 @@ public class EventAnalysisTests {
         var entity = consumer with { EventSubscriptions = [subscription] };
         var domain = new Domain("Test", [text, ticketAssigned, differentPayload, entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ActionEventContract)).IsTrue();
@@ -36,8 +35,7 @@ public class EventAnalysisTests {
         var @event = new Event("TicketEscalated", [], []);
         var domain = new Domain("Test", [entity, @event], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EventFlowLiveness &&
@@ -59,8 +57,7 @@ public class EventAnalysisTests {
             [], [action], [], []);
         var domain = new Domain("Test", [text, @event, entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EventFlowLiveness)).IsTrue();
@@ -87,8 +84,7 @@ public class EventAnalysisTests {
         var entity = consumer with { EventSubscriptions = [subscription] };
         var domain = new Domain("Test", [text, @event, entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EventCorrelationSoundness)).IsTrue();
@@ -105,8 +101,7 @@ public class EventAnalysisTests {
         var entity = new Entity("Ticket", [], [], [first, second], [], []);
         var domain = new Domain("Test", [entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ActionOrderingCausality)).IsTrue();
@@ -126,8 +121,7 @@ public class EventAnalysisTests {
         var entity = consumer with { EventSubscriptions = [subscription] };
         var domain = new Domain("Test", [@event, entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ActionIdempotencyReplay)).IsTrue();
@@ -148,8 +142,7 @@ public class EffectAnalysisTests {
         var ticket = entity with { Actions = [action] };
         var domain = new Domain("Test", [text, ticket], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectPrePostCondition)).IsTrue();
@@ -166,8 +159,7 @@ public class EffectAnalysisTests {
             [childTitle], [], [], [], []) { ParentEntityName = "Ticket" };
         var domain = new Domain("Test", [text, parent, child], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ConstraintFixedPoint)).IsTrue();
@@ -181,8 +173,7 @@ public class EffectAnalysisTests {
         var entity = new Entity("Ticket", [score], [], [], [], []);
         var domain = new Domain("Test", [number, entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsTrue();
@@ -204,8 +195,7 @@ public class EffectAnalysisTests {
         var entity = new Entity("Ticket", [required], [], [action], [], [stage]);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.RuleCoverage)).IsTrue();
@@ -226,8 +216,7 @@ public class EffectAnalysisTests {
         var entity = new Entity("MyEntity", [], [], [action], [], [stage]);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectUnusedParameter)).IsTrue();
@@ -245,8 +234,7 @@ public class EffectAnalysisTests {
             [], [action], [], []);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectUnusedParameter)).IsFalse();

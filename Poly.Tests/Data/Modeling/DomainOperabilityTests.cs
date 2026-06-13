@@ -140,8 +140,7 @@ public class DomainOperabilityTests {
         var domain = new Domain("Support");
         domain.CreateMutation().AddType(new Primitive(domain, "string", TypeCategory.Text)).Apply();
 
-        var analyzer = new DomainModelAnalyzer();
-        var run = analyzer.Analyze(domain);
+        var run = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(run.HasErrors).IsFalse();
         await Assert.That(run.Telemetry.Passes.Count).IsGreaterThan(0);
@@ -160,13 +159,12 @@ public class DomainOperabilityTests {
 
         domain.CreateMutation().AddType(stringType).AddType(entity).Apply();
 
-        var analyzer = new DomainModelAnalyzer();
-        var initial = analyzer.Analyze(domain);
+        var initial = DomainModelAnalyzer.Analyze(domain);
 
         var title = new Property(domain, "Title", stringType);
         domain.CreateMutation().AddProperty(entity, title).Apply(initial);
 
-        var run = analyzer.Analyze(domain, initial, [title]);
+        var run = DomainModelAnalyzer.Analyze(domain, initial, [title]);
 
         await Assert.That(run.Telemetry.Incremental).IsTrue();
         await Assert.That(run.Telemetry.InvalidatedNodeCount).IsEqualTo(1);
@@ -248,7 +246,7 @@ public class DomainOperabilityTests {
         new Domain.AddTypeCommand(after, afterEntity).Apply();
         new Entity.AddPropertyCommand(afterEntity, afterProp).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(after);
+        var analysis = DomainModelAnalyzer.Analyze(after);
         var diff = DomainDiffUtil.Compare(before, after, analysis);
         var changedProperty = diff.Changed.FirstOrDefault(change => change.NodeId == propId);
 
@@ -266,7 +264,7 @@ public class DomainOperabilityTests {
         new Domain.AddTypeCommand(domain, entity).Apply();
         new Entity.AddPropertyCommand(entity, new Property(domain, "Title", foreignType)).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.HasErrors).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
@@ -281,7 +279,7 @@ public class DomainOperabilityTests {
 
         new Domain.AddTypeCommand(domain, invalidPrimitive).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.HasErrors).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
@@ -296,7 +294,7 @@ public class DomainOperabilityTests {
 
         new Domain.AddTypeCommand(domain, invalidPrimitive).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.HasErrors).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
@@ -307,7 +305,7 @@ public class DomainOperabilityTests {
     [Test]
     public async Task ApplyWithTrace_LongMutationSequence_StaysDeterministic() {
         var domain = new Domain("Scale");
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         for (var i = 0; i < 120; i++) {
             var execution = domain.CreateMutation()
@@ -378,13 +376,12 @@ public class DomainOperabilityTests {
             .Apply();
 
         var traversal = new TreeTraversalCoverageAnalyzer();
-        var analyzer = new AnalyzerBuilder()
+        var analysis = new AnalyzerBuilder()
             .UseIncrementalAnalysis()
             .UseDomainModelValidation()
             .AddAnalyzer(traversal)
-            .Build();
-
-        var analysis = analyzer.Analyze(domain);
+            .Build()
+            .Analyze(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
         var expectedNodes = new Node[] {

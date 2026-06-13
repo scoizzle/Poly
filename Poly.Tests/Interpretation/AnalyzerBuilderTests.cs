@@ -8,12 +8,8 @@ public class AnalyzerBuilderTests {
     [Test]
     public async Task Builder_WithExplicitTypeDefinitionProvider_UsesProvider() {
         var provider = new TrackingTypeDefinitionProvider(ClrTypeDefinitionRegistry.Shared);
-        var analyzer = new AnalyzerBuilder(provider)
-            .UseTypeResolver()
-            .Build();
-
         var node = new Constant(123);
-        var result = analyzer.Analyze(node);
+        var result = new AnalyzerBuilder().UseTypeResolver().Build().Analyze(node, typeDefinitions: provider);
 
         await Assert.That(result.GetResolvedType(node)).IsNotNull();
         await Assert.That(provider.RequestedTypes).Contains(typeof(int));
@@ -21,14 +17,16 @@ public class AnalyzerBuilderTests {
 
     [Test]
     public async Task Builder_WithExplicitEmptyProviderSet_DoesNotFallbackToShared() {
-        var analyzer = new AnalyzerBuilder(Array.Empty<ITypeDefinitionProvider>())
-            .UseTypeResolver()
-            .Build();
-
+        var emptyProvider = new NoOpTypeDefinitionProvider();
         var node = new Constant(123);
-        var result = analyzer.Analyze(node);
+        var result = new AnalyzerBuilder().UseTypeResolver().Build().Analyze(node, typeDefinitions: emptyProvider);
 
         await Assert.That(result.GetResolvedType(node)).IsNull();
+    }
+
+    private sealed class NoOpTypeDefinitionProvider : ITypeDefinitionProvider {
+        public ITypeDefinition? GetTypeDefinition(string name) => null;
+        public ITypeDefinition? GetTypeDefinition(Type type) => null;
     }
 
     private sealed class TrackingTypeDefinitionProvider(ITypeDefinitionProvider innerProvider) : ITypeDefinitionProvider {

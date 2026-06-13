@@ -22,15 +22,17 @@ public class UopStressTests {
     private const int OneSecond = 1000;
 
     private static Bytecode Lower(Node node) {
-        var builder = new AnalyzerBuilder()
+        var result = new AnalyzerBuilder()
             .UseTypeResolver()
             .UseMemberResolver()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
-            .UseVariableScopeValidator();
-        return Lowering.Lower(node, builder.Build().Analyze(node));
+            .UseVariableScopeValidator()
+            .Build()
+            .Analyze(node);
+        return Lowering.Lower(node, result);
     }
 
     [Test]
@@ -215,8 +217,7 @@ public class UopStressTests {
              new IndexAccess(arr, new Constant(5))],
             [arr]);
         var inv = new Invoke(new Lambda([], body));
-        var analyzer = NodeTestHelpers.CreateTestAnalyzer();
-        var prog = Lowering.Lower(inv, analyzer.Analyze(inv));
+        var prog = Lowering.Lower(inv, inv.AnalyzeNode());
         // Dump µops
         var dump = string.Join("\n", prog.MicroOps.Select((m, i) => $"  [{i}] {m}"));
         File.AppendAllText("/tmp/poly_uop_dump.txt", dump + "\n");
@@ -269,8 +270,7 @@ public class UopStressTests {
             [bits, i, j, cnt]);
 
         var inv = new Invoke(new Lambda([], body));
-        var analyzer = NodeTestHelpers.CreateTestAnalyzer();
-        var prog = Lowering.Lower(inv, analyzer.Analyze(inv));
+        var prog = Lowering.Lower(inv, inv.AnalyzeNode());
         using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset(); Vm.Execute(state);
         long result = (long)state.Stack.Pop();
@@ -321,8 +321,7 @@ public class UopStressTests {
 
         var inv = new Invoke(new Lambda([], body));
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var analyzer = NodeTestHelpers.CreateTestAnalyzer();
-        var prog = Lowering.Lower(inv, analyzer.Analyze(inv));
+        var prog = Lowering.Lower(inv, inv.AnalyzeNode());
         using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset(); Vm.Execute(state); sw.Stop();
         long result = (long)state.Stack.Pop();

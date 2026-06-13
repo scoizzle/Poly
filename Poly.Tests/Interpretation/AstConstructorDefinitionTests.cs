@@ -17,11 +17,10 @@ public class AstConstructorDefinitionTests {
                 ]),
             ]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-
-        var analysis = analyzer.Build().Analyze(typeNode);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(typeNode);
         var resolvedType = analysis.GetMetadata<TypeDefinitionMetadata>(typeNode)?.TypeDefinition;
 
         await Assert.That(resolvedType).IsNotNull();
@@ -56,13 +55,13 @@ public class AstConstructorDefinitionTests {
         var newNode = new New(new TypeReference("Sample.Widget"), new Constant("alpha"));
         var root = new Block([typeNode, newNode]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-        analyzer.UseTypeResolver();
-        analyzer.UseMemberResolver();
-
-        var analysis = analyzer.Build().Analyze(root);
+        var tda = new TypeDefinitionNodeAnalyzer();
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(tda)
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(root, typeDefinitions: tda);
         var resolvedConstructor = analysis.GetResolvedMember(newNode) as ITypeConstructor;
         var resolvedType = analysis.GetResolvedType(newNode);
 

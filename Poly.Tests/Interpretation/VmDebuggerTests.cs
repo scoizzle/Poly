@@ -14,15 +14,16 @@ namespace Poly.Tests.Interpretation;
 
 public class VmDebuggerTests {
     private static Bytecode Lower(Node node) {
-        var builder = new AnalyzerBuilder()
+        var analysis = new AnalyzerBuilder()
             .UseTypeResolver()
             .UseMemberResolver()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
-            .UseVariableScopeValidator();
-        var analysis = builder.Build().Analyze(node);
+            .UseVariableScopeValidator()
+            .Build()
+            .Analyze(node);
         return Lowering.Lower(node, analysis);
     }
 
@@ -180,11 +181,12 @@ public class VmDebuggerTests {
         var invoke = new Invoke(addFn, [new Constant(1), new Constant(2)]);
         var node = new Block(addFn, invoke);
 
-        var builder = new AnalyzerBuilder()
+        var analysis = new AnalyzerBuilder()
             .UseTypeResolver().UseMemberResolver().UseConstantFolding()
             .UseSideEffectAnalysis().UseThisReferenceContext()
-            .UseControlFlowAnalysis().UseVariableScopeValidator();
-        var analysis = builder.Build().Analyze(node);
+            .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .Build()
+            .Analyze(node);
         var prog = Lowering.Lower(node, analysis);
 
         using var state = new VmState { Program = prog, DebugMode = true };

@@ -15,11 +15,9 @@ namespace Poly.DomainModeling.Evolution;
 /// </summary>
 public sealed class DomainEvolution {
     private readonly Domain _current;
-    private readonly DomainModelAnalyzer _analyzer;
 
-    public DomainEvolution(Domain current, DomainModelAnalyzer? analyzer = null) {
+    public DomainEvolution(Domain current) {
         _current = current ?? throw new ArgumentNullException(nameof(current));
-        _analyzer = analyzer ?? new DomainModelAnalyzer(AnalysisOptions.StopOnStructuralErrors);
     }
 
     public Domain Current => _current;
@@ -35,8 +33,8 @@ public sealed class DomainEvolution {
         var proposed = ApplyChanges(_current, changes);
 
         var analysis = priorAnalysis is null
-            ? Analyze(proposed)
-            : Analyze(proposed, priorAnalysis, GetAffectedNodes(proposed, changes));
+            ? DomainModelAnalyzer.Analyze(proposed)
+            : DomainModelAnalyzer.Analyze(proposed, priorAnalysis, GetAffectedNodes(proposed, changes));
 
         // Integrate change history as first-class Information diagnostics *immediately*
         // after analysis, before any access to .Diagnostics. This ensures the EVOLUTION_STEP
@@ -78,14 +76,6 @@ public sealed class DomainEvolution {
     /// analysis gate when the final Apply() is called.
     /// </summary>
     public EvolutionBuilder Evolve() => new(this, _current);
-
-    // --- Internal analysis hooks (will be refined for incremental support) ---
-
-    internal AnalysisResult Analyze(Domain domain)
-        => _analyzer.Analyze(domain);
-
-    internal AnalysisResult Analyze(Domain domain, AnalysisResult prior, IEnumerable<Node> affected)
-        => _analyzer.Analyze(domain, prior, affected);
 
     private Domain ApplyChanges(Domain current, IReadOnlyList<DomainChange> changes) {
         if (changes.Count == 0)

@@ -130,15 +130,17 @@ public class UopBenchmarks {
     public void Cleanup() => _state?.Dispose();
 
     private static Bytecode Lower(Node node) {
-        var builder = new AnalyzerBuilder()
+        var result = new AnalyzerBuilder()
             .UseTypeResolver()
             .UseMemberResolver()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
-            .UseVariableScopeValidator();
-        return Lowering.Lower(node, builder.Build().Analyze(node));
+            .UseVariableScopeValidator()
+            .Build()
+            .Analyze(node);
+        return Lowering.Lower(node, result);
     }
 
     private object? Exec(Bytecode prog) {

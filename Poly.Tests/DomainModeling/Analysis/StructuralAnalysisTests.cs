@@ -13,7 +13,7 @@ public class StructuralAnalysisTests {
         var second = new Entity("Ticket", [], [], [], [], []);
         var domain = new Domain("Test", [first, second], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.StructuralDuplicate)).IsTrue();
@@ -25,7 +25,7 @@ public class StructuralAnalysisTests {
         var second = new Event("OrderPlaced", [], []);
         var domain = new Domain("Test", [first, second], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.StructuralDuplicate)).IsTrue();
@@ -37,7 +37,7 @@ public class StructuralAnalysisTests {
         var entityB = new Entity("B", [], [], [], [], []) { ParentEntityName = "A" };
         var domain = new Domain("Test", [entityA, entityB], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.StructuralCycle)).IsTrue();
@@ -53,7 +53,7 @@ public class StructuralAnalysisTests {
             RelationshipCardinality.ManyToMany, []) { SourceOwnsTarget = true };
         var domain = new Domain("Test", [text, source, target], [rel]);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.StructuralOwnership)).IsTrue();
@@ -69,7 +69,7 @@ public class StructuralAnalysisTests {
             RelationshipCardinality.ManyToOne, []) { SourceOwnsTarget = true };
         var domain = new Domain("Test", [text, source, target], [rel]);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.StructuralOwnership)).IsTrue();
@@ -85,7 +85,7 @@ public class StructuralAnalysisTests {
             RelationshipCardinality.OneToOne, []) { SourceOwnsTarget = true };
         var domain = new Domain("Test", [text, source, target], [rel]);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.StructuralOwnership)).IsFalse();
@@ -98,7 +98,7 @@ public class SemanticAnalysisTests {
         var nullable = new Poly.DomainModeling.PrimitiveType("NullableInt", TypeCategory.Nullable, []);
         var domain = new Domain("Test", [nullable], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
@@ -109,7 +109,7 @@ public class SemanticAnalysisTests {
         var collection = new Poly.DomainModeling.PrimitiveType("CollectionInt", TypeCategory.Collection, []);
         var domain = new Domain("Test", [collection], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
@@ -122,7 +122,7 @@ public class SemanticAnalysisTests {
             [new DomainTypeReference("Text")], [], [], []);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
@@ -148,7 +148,7 @@ public class SemanticAnalysisTests {
         var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
         var domain = new Domain("Test", [text, parent, child], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch)).IsTrue();
@@ -160,7 +160,7 @@ public class SemanticAnalysisTests {
             [new Property("Title", new DomainTypeReference("UndefinedType"), [])], [], [], [], []);
         var domain = new Domain("Test", [entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SemanticReferenceResolution)).IsTrue();
@@ -171,7 +171,7 @@ public class SemanticAnalysisTests {
         var entity = new Entity("Ticket", [], [new DomainTypeReference("NonExistentEvent")], [], [], []);
         var domain = new Domain("Test", [entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SemanticReferenceResolution)).IsTrue();
@@ -182,7 +182,7 @@ public class SemanticAnalysisTests {
         var entity = new Entity("Ticket", [], [], [], [], []) { ParentEntityName = "NonExistent" };
         var domain = new Domain("Test", [entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SemanticReferenceResolution)).IsTrue();
@@ -198,7 +198,7 @@ public class EffectBindingTests {
         var entity = new Entity("Maker", [], [], [action], [], []);
         var domain = new Domain("Test", [entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
@@ -213,7 +213,7 @@ public class EffectBindingTests {
         var entity = new Entity("Publisher", [], [], [action], [], []);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
@@ -227,7 +227,7 @@ public class EffectBindingTests {
         var entity = new Entity("Worker", [], [], [action], [], []);
         var domain = new Domain("Test", [entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
@@ -242,7 +242,7 @@ public class EffectBindingTests {
         var entity = new Entity("Ticket", [], [], [action], [], []);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
@@ -256,7 +256,7 @@ public class EffectBindingTests {
         var entity = new Entity("Ticket", [], [], [action], [], []);
         var domain = new Domain("Test", [entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
@@ -271,7 +271,7 @@ public class EffectBindingTests {
         var entity = new Entity("Source", [], [], [action], [], []);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
@@ -293,7 +293,7 @@ public class UnsatisfiedRequirementTests {
         var entity = new Entity("Ticket", [title], [], [action], [], [stage]);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement)).IsFalse();
@@ -310,7 +310,7 @@ public class UnsatisfiedRequirementTests {
         var entity = new Entity("Ticket", [title], [], [action], [], [stage]);
         var domain = new Domain("Test", [text, entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement)).IsTrue();
@@ -327,7 +327,7 @@ public class UnsatisfiedRequirementTests {
         var entity = new Entity("Factory", [], [], [action], [], []);
         var domain = new Domain("Test", [text, target, entity], []);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement)).IsTrue();

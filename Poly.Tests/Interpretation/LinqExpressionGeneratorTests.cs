@@ -15,12 +15,10 @@ public class LinqExpressionGeneratorTests {
         var y = new Parameter("y", TypeReference.To<int>());
         var root = new Block(x, y);
 
-        var analysis = NodeTestHelpers.CreateTestAnalyzer()
-            .With(ctx => {
-                ctx.SetResolvedType(x, ctx.TypeDefinitions.GetTypeDefinition(typeof(int))!);
-                ctx.SetResolvedType(y, ctx.TypeDefinitions.GetTypeDefinition(typeof(int))!);
-            })
-            .Analyze(root);
+        var analysis = new AnalyzerBuilder().UseAllAnalyzers().Build().Analyze(root, setup: ctx => {
+            ctx.SetResolvedType(x, ctx.TypeDefinitions.GetTypeDefinition(typeof(int))!);
+            ctx.SetResolvedType(y, ctx.TypeDefinitions.GetTypeDefinition(typeof(int))!);
+        });
 
         var generator = new LinqExpressionGenerator(analysis);
 
@@ -39,7 +37,7 @@ public class LinqExpressionGeneratorTests {
         var firstBlock = new Block(Return.True);
         var secondBlock = new Block(new Return(new Constant(42)));
         var root = new Block(firstBlock, secondBlock);
-        var analysis = NodeTestHelpers.CreateTestAnalyzer().Analyze(root);
+        var analysis = root.AnalyzeNode();
         var generator = new LinqExpressionGenerator(analysis);
 
         var firstExpression = generator.Compile(firstBlock).Expression;
@@ -60,13 +58,11 @@ public class LinqExpressionGeneratorTests {
             new Lambda([inner], new Add(inner, outer)),
             new Constant(5));
 
-        var analysis = NodeTestHelpers.CreateTestAnalyzer()
-            .With(ctx => {
-                var intType = ctx.TypeDefinitions.GetTypeDefinition(typeof(int))!;
-                ctx.SetResolvedType(outer, intType);
-                ctx.SetResolvedType(inner, intType);
-            })
-            .Analyze(node);
+        var analysis = new AnalyzerBuilder().UseAllAnalyzers().Build().Analyze(node, setup: ctx => {
+            var intType = ctx.TypeDefinitions.GetTypeDefinition(typeof(int))!;
+            ctx.SetResolvedType(outer, intType);
+            ctx.SetResolvedType(inner, intType);
+        });
 
         var generator = new LinqExpressionGenerator(analysis);
         var compilation = generator.Compile(node);

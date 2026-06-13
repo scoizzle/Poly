@@ -736,7 +736,7 @@ public static class DomainQueryTool {
             return session.LatestAnalysis;
         }
 
-        var analysis = new DomainModelAnalyzer().Analyze(session.Domain);
+        var analysis = DomainModelAnalyzer.Analyze(session.Domain);
         _ = DomainSessionStore.UpdateAnalysis(sessionId, analysis);
 
         if (!DomainSessionStore.TryGet(sessionId, out var updated)) {
@@ -1041,8 +1041,7 @@ public static class DomainOperabilityTool {
     }
 
     private static (AnalysisResult Analysis, long Revision) AnalyzeCommittedDomain(string sessionId, DomainSessionState session) {
-        var analyzer = new DomainModelAnalyzer();
-        var run = analyzer.Analyze(session.Domain);
+        var run = DomainModelAnalyzer.Analyze(session.Domain);
         var revision = DomainSessionStore.UpdateAnalysis(sessionId, run);
         return (run, revision);
     }

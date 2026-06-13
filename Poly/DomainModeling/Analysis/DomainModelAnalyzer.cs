@@ -2,23 +2,22 @@ using Poly.Syntax.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
 
-public sealed class DomainModelAnalyzer {
-    private readonly Analyzer _analyzer;
+/// <summary>
+/// Static analyzer for V3 domain models. Uses a cached pipeline internally.
+/// Thread-safe — the underlying passes are stateless.
+/// </summary>
+public static class DomainModelAnalyzer {
+    private static readonly Analyzer _analyzer = new AnalyzerBuilder()
+        .UseIncrementalAnalysis()
+        .UseV3DomainModelValidation()
+        .Build();
 
-    public DomainModelAnalyzer(AnalysisOptions? options = null) {
-        _analyzer = new AnalyzerBuilder()
-            .UseIncrementalAnalysis()
-            .UseV3DomainModelValidation()
-            .WithOptions(options ?? AnalysisOptions.Default)
-            .Build();
-    }
-
-    public AnalysisResult Analyze(Domain domain) {
+    public static AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         return _analyzer.Analyze(domain);
     }
 
-    public AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
+    public static AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(priorAnalysis);
         ArgumentNullException.ThrowIfNull(invalidatedNodes);

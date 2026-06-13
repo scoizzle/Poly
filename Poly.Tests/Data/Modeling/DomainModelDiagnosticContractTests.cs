@@ -22,7 +22,7 @@ public class DomainModelDiagnosticContractTests {
         new Domain.AddTypeCommand(domain, left).Apply();
         new Domain.AddTypeCommand(domain, right).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.StructuralDuplicate);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -42,7 +42,7 @@ public class DomainModelDiagnosticContractTests {
         new Entity.AddPropertyCommand(entity, left).Apply();
         new Entity.AddPropertyCommand(entity, right).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var structuralDuplicate = analysis.Diagnostics.FirstOrDefault(d =>
             d.Severity == DiagnosticSeverity.Error &&
             d.Code == DomainModelDiagnosticCodes.StructuralDuplicate &&
@@ -68,7 +68,7 @@ public class DomainModelDiagnosticContractTests {
         new Entity.AddStageCommand(parent, parentStage).Apply();
         new Entity.AddStageCommand(child, childStage).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticStageInheritance);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -89,7 +89,7 @@ public class DomainModelDiagnosticContractTests {
         new Entity.AddStageCommand(entity, a).Apply();
         new Entity.AddStageCommand(entity, b).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.StructuralCycle);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -110,7 +110,7 @@ public class DomainModelDiagnosticContractTests {
         new Policy.AddRuleCommand(policy, rule).Apply();
         new Entity.AddPolicyCommand(entity, policy).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.PolicyMissingProperty);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -134,7 +134,7 @@ public class DomainModelDiagnosticContractTests {
         new Entity.AddActionCommand(entity, action).Apply();
         new DomainAction.AddEffectCommand(action, effect).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.EffectBinding);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -152,7 +152,7 @@ public class DomainModelDiagnosticContractTests {
         new Domain.AddTypeCommand(domain, target).Apply();
         new Domain.AddRelationshipCommand(domain, relationship).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.StructuralOwnership);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -167,7 +167,7 @@ public class DomainModelDiagnosticContractTests {
 
         new Domain.AddTypeCommand(domain, foreignType).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.MutationInvariant);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -187,7 +187,7 @@ public class DomainModelDiagnosticContractTests {
         new Entity.AddStageCommand(owner, stage).Apply();
         new Stage.AddActionCommand(stage, foreignAction).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticActionVisibility);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -205,7 +205,7 @@ public class DomainModelDiagnosticContractTests {
         new Domain.AddTypeCommand(domain, entity).Apply();
         new Entity.AddPropertyCommand(entity, property).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -224,7 +224,7 @@ public class DomainModelDiagnosticContractTests {
         new Policy.AddRuleCommand(policy, rule).Apply();
         new Entity.AddPolicyCommand(entity, policy).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -243,7 +243,7 @@ public class DomainModelDiagnosticContractTests {
         new Entity.AddPropertyCommand(entity, property).Apply();
         new Property.AddConstraintCommand(property, new UnsupportedConstraint()).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.PolicyAstGeneration);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -263,7 +263,7 @@ public class DomainModelDiagnosticContractTests {
         new Property.AddConstraintCommand(property, new EnumConstraint(new EnumConstraint.EnumMember("Open"), new EnumConstraint.EnumMember("Closed"))).Apply();
         new Property.AddConstraintCommand(property, new RangeConstraint(0, 2)).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.PolicyAstGeneration);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -293,7 +293,7 @@ public class DomainModelDiagnosticContractTests {
         new Entity.AddActionCommand(entity, action).Apply();
         new DomainAction.AddEffectCommand(action, transition).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -323,7 +323,7 @@ public class DomainModelDiagnosticContractTests {
             new EnumConstraint.EnumMember("Active"),
             new EnumConstraint.EnumMember("Unknown"))).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -353,7 +353,7 @@ public class DomainModelDiagnosticContractTests {
             new EnumConstraint.EnumMember("Active"),
             new EnumConstraint.EnumMember("Inactive"))).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch);
 
         await Assert.That(diagnostic).IsNull();
@@ -379,7 +379,7 @@ public class DomainModelDiagnosticContractTests {
         new Entity.AddPropertyCommand(child, childProperty).Apply();
         // No enum constraint on child - inherits parent's; no subset mismatch
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch);
 
         await Assert.That(diagnostic).IsNull();
@@ -417,7 +417,7 @@ public class DomainModelDiagnosticContractTests {
         new Property.AddConstraintCommand(childProperty, new EnumConstraint(
             new EnumConstraint.EnumMember("Active"))).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch);
 
         await Assert.That(diagnostic).IsNull();
@@ -454,7 +454,7 @@ public class DomainModelDiagnosticContractTests {
         new Property.AddConstraintCommand(childProperty, new EnumConstraint(
             new EnumConstraint.EnumMember("Unknown"))).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch);
 
         await Assert.That(diagnostic).IsNotNull();
@@ -477,7 +477,7 @@ public class DomainModelDiagnosticContractTests {
         new ImportedContract.AddEndpointCommand(contract, endpoint).Apply();
         new Domain.AddContractBindingCommand(domain, binding).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var diagnostic = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.ContractIntegration);
 
         await Assert.That(diagnostic).IsNotNull();

@@ -30,7 +30,7 @@ public class DomainTests {
         await Assert.That(error is not null).IsTrue();
 
         // Validate rollback: re-analyze should yield no errors
-        var reanalysis = new DomainModelAnalyzer().Analyze(parentDomain);
+        var reanalysis = DomainModelAnalyzer.Analyze(parentDomain);
         await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
@@ -103,7 +103,7 @@ public class DomainTests {
         await Assert.That(error is not null).IsTrue();
 
         // Validate rollback: re-analyze should yield no errors
-        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        var reanalysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
@@ -122,7 +122,7 @@ public class DomainTests {
         await Assert.That(error is not null).IsTrue();
 
         // Validate rollback: re-analyze should yield no errors
-        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        var reanalysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
@@ -141,7 +141,7 @@ public class DomainTests {
         await Assert.That(error is not null).IsTrue();
 
         // Validate rollback: re-analyze should yield no errors
-        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        var reanalysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
@@ -262,7 +262,7 @@ public class DomainTests {
         await Assert.That(error is not null).IsTrue();
 
         // Validate rollback: re-analyze should yield no errors
-        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        var reanalysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
@@ -284,7 +284,7 @@ public class DomainTests {
         await Assert.That(error is not null).IsTrue();
 
         // Validate rollback: re-analyze should yield no errors
-        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        var reanalysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 
@@ -303,7 +303,7 @@ public class DomainTests {
         await Assert.That(error is not null).IsTrue();
 
         // Validate rollback: re-analyze should yield no errors
-        var reanalysis = new DomainModelAnalyzer().Analyze(domain);
+        var reanalysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(reanalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
     }
 

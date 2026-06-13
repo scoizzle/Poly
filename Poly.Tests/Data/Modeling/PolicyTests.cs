@@ -28,8 +28,7 @@ public class PolicyTests {
         await Assert.That(diagnostic).IsNotNull();
         await Assert.That(diagnostic!.Message).Contains("Ghost");
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysisResult = analyzer.Analyze(domain);
+        var analysisResult = DomainModelAnalyzer.Analyze(domain);
         var analysisDiagnostic = analysisResult.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
         await Assert.That(analysisDiagnostic).IsNull();
     }
@@ -50,8 +49,7 @@ public class PolicyTests {
         await Assert.That(diagnostic).IsNotNull();
         await Assert.That(diagnostic!.Message).Contains("Stray");
 
-        var analyzer = new DomainModelAnalyzer();
-        var analysisResult = analyzer.Analyze(domain);
+        var analysisResult = DomainModelAnalyzer.Analyze(domain);
         var analysisDiagnostic = analysisResult.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
         await Assert.That(analysisDiagnostic).IsNull();
     }
@@ -76,7 +74,7 @@ public class PolicyTests {
         await Assert.That(diagnostic).IsNotNull();
         await Assert.That(diagnostic!.Message).Contains("Ghost");
 
-        var analysisResult = new DomainModelAnalyzer().Analyze(domain);
+        var analysisResult = DomainModelAnalyzer.Analyze(domain);
         var analysisDiagnostic = analysisResult.Diagnostics.FirstOrDefault(d => d.Code == DomainModelDiagnosticCodes.PolicyActorReference);
         await Assert.That(analysisDiagnostic).IsNull();
     }

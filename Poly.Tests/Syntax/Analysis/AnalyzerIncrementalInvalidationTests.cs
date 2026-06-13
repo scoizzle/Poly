@@ -4,9 +4,15 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Tests.Syntax.Analysis;
 
 public class AnalyzerIncrementalInvalidationTests {
+    private static Analyzer CreateAnalyzerWith(Func<AnalyzerBuilder, AnalyzerBuilder> configure) =>
+        configure(new AnalyzerBuilder()).Build();
+
+    private static Analyzer DefaultIncrementalAnalyzer<T>() where T : INodeAnalyzer, new() =>
+        new AnalyzerBuilder().UseIncrementalAnalysis().AddAnalyzer(new T()).Build();
+
     [Test]
     public async Task Analyze_WithInvalidatedChild_AlsoInvalidatesAncestors() {
-        var analyzer = CreateAnalyzer(new TestMetadataAnalyzer());
+        var analyzer = DefaultIncrementalAnalyzer<TestMetadataAnalyzer>();
         var initialLeaf = new TestLeaf(1);
         var initialRoot = new TestParent(initialLeaf);
 
@@ -22,7 +28,7 @@ public class AnalyzerIncrementalInvalidationTests {
 
     [Test]
     public async Task Analyze_WithInvalidatedAncestor_AlsoInvalidatesDescendants() {
-        var analyzer = CreateAnalyzer(new TestMetadataAnalyzer());
+        var analyzer = DefaultIncrementalAnalyzer<TestMetadataAnalyzer>();
         var initialLeaf = new TestLeaf(1);
         var initialRoot = new TestParent(initialLeaf);
 
@@ -38,7 +44,7 @@ public class AnalyzerIncrementalInvalidationTests {
 
     [Test]
     public async Task Analyze_WhenPriorMissingTopologyMetadata_FallsBackToFreshFullAnalysis() {
-        var analyzer = CreateAnalyzer(new ReuseSensitiveMetadataAnalyzer());
+        var analyzer = CreateAnalyzerWith(b => b.UseIncrementalAnalysis().AddAnalyzer(new ReuseSensitiveMetadataAnalyzer()));
         var initialLeaf = new TestLeaf(1);
         var initialRoot = new TestParent(initialLeaf);
 
@@ -59,7 +65,7 @@ public class AnalyzerIncrementalInvalidationTests {
 
     [Test]
     public async Task Analyze_WithCarryForwardDiagnostics_RemovesDiagnosticsForInvalidatedNodes() {
-        var analyzer = CreateAnalyzer(new TestDiagnosticAnalyzer());
+        var analyzer = DefaultIncrementalAnalyzer<TestDiagnosticAnalyzer>();
 
         var left = new TestLeaf(-1);
         var right = new TestLeaf(-1);
@@ -79,7 +85,7 @@ public class AnalyzerIncrementalInvalidationTests {
 
     [Test]
     public async Task Analyze_WhenSameDiagnosticReportedTwice_DeduplicatesByNodeSeverityCodeAndMessage() {
-        var analyzer = CreateAnalyzer(new DuplicateDiagnosticAnalyzer());
+        var analyzer = DefaultIncrementalAnalyzer<DuplicateDiagnosticAnalyzer>();
         var leaf = new TestLeaf(1);
 
         var result = analyzer.Analyze(leaf);
@@ -91,7 +97,11 @@ public class AnalyzerIncrementalInvalidationTests {
 
     [Test]
     public async Task Analyze_WhenMultipleAnalyzersReportSameDiagnostic_DeduplicatesWithinSingleRun() {
-        var analyzer = CreateAnalyzer(new DuplicateDiagnosticAnalyzer(), new DuplicateDiagnosticAnalyzer());
+        var analyzer = new AnalyzerBuilder()
+            .UseIncrementalAnalysis()
+            .AddAnalyzer(new DuplicateDiagnosticAnalyzer())
+            .AddAnalyzer(new DuplicateDiagnosticAnalyzer())
+            .Build();
         var leaf = new TestLeaf(1);
 
         var result = analyzer.Analyze(leaf);
@@ -103,7 +113,7 @@ public class AnalyzerIncrementalInvalidationTests {
 
     [Test]
     public async Task Analyze_WhenAnalyzerRevisitsSameNode_MetadataSkipPreventsDuplicateWork() {
-        var analyzer = CreateAnalyzer(new DuplicateVisitAnalyzer());
+        var analyzer = DefaultIncrementalAnalyzer<DuplicateVisitAnalyzer>();
         var leaf = new TestLeaf(1);
 
         var result = analyzer.Analyze(leaf);
@@ -115,11 +125,11 @@ public class AnalyzerIncrementalInvalidationTests {
 
     [Test]
     public async Task Analyze_WhenPassesAreNamed_TelemetryPreservesExecutionOrder() {
-        var builder = new AnalyzerBuilder(new NoopTypeDefinitionProvider())
+        var analyzer = new AnalyzerBuilder()
             .AddAnalyzer(new NoopAnalyzer(), "pass-b")
-            .AddAnalyzer(new NoopAnalyzer(), "pass-a");
+            .AddAnalyzer(new NoopAnalyzer(), "pass-a")
+            .Build();
 
-        var analyzer = builder.Build();
         var result = analyzer.Analyze(new TestLeaf(1));
 
         await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(2);
@@ -129,7 +139,7 @@ public class AnalyzerIncrementalInvalidationTests {
 
     [Test]
     public async Task Analyze_IncrementalRun_CapturesIncrementalTelemetry() {
-        var analyzer = CreateAnalyzer(new TestMetadataAnalyzer());
+        var analyzer = DefaultIncrementalAnalyzer<TestMetadataAnalyzer>();
         var initialLeaf = new TestLeaf(1);
         var initialRoot = new TestParent(initialLeaf);
         var priorAnalysis = analyzer.Analyze(initialRoot);
@@ -140,17 +150,6 @@ public class AnalyzerIncrementalInvalidationTests {
 
         await Assert.That(result.Telemetry.Incremental).IsTrue();
         await Assert.That(result.Telemetry.InvalidatedNodeCount).IsEqualTo(1);
-    }
-
-    private static Analyzer CreateAnalyzer(params INodeAnalyzer[] testAnalyzers) {
-        var builder = new AnalyzerBuilder(new NoopTypeDefinitionProvider())
-            .UseIncrementalAnalysis();
-
-        foreach (var analyzer in testAnalyzers) {
-            builder.AddAnalyzer(analyzer);
-        }
-
-        return builder.Build();
     }
 
     private sealed class NoopAnalyzer : INodeAnalyzer {

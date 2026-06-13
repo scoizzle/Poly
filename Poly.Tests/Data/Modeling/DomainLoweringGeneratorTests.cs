@@ -75,7 +75,7 @@ public class DomainLoweringGeneratorTests {
         MutationApply.AddType(domain, supportCase);
         MutationApply.AddRelationship(domain, new Relationship(domain, "CustomerCases", customer, supportCase, RelationshipCardinality.OneToMany, true));
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.HasErrors).IsFalse();
     }

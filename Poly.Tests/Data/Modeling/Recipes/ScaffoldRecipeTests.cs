@@ -63,8 +63,7 @@ public class ScaffoldRecipeTests {
             .WithStage("Draft");
         recipe.BuildInto(recipeDomain);
 
-        var recipeAnalyzer = new DomainModelAnalyzer();
-        var recipeResult = recipeAnalyzer.Analyze(recipeDomain);
+        var recipeResult = DomainModelAnalyzer.Analyze(recipeDomain);
 
         // Path 2: Using low-level mutations
         var lowLevelDomain = new Domain("TestDomain");
@@ -77,8 +76,7 @@ public class ScaffoldRecipeTests {
         mutation.AddStage(entity, new Stage(lowLevelDomain, "Draft"));
         mutation.Apply();
 
-        var lowLevelAnalyzer = new DomainModelAnalyzer();
-        var lowLevelResult = lowLevelAnalyzer.Analyze(lowLevelDomain);
+        var lowLevelResult = DomainModelAnalyzer.Analyze(lowLevelDomain);
 
         // Both paths must produce equivalent diagnostics
         await Assert.That(recipeResult.Diagnostics.Count).IsEqualTo(lowLevelResult.Diagnostics.Count);
@@ -151,8 +149,7 @@ public class ScaffoldRecipeTests {
             .WithCardinality(RelationshipCardinality.OneToMany);
         recipe.BuildInto(recipeDomain);
 
-        var recipeAnalyzer = new DomainModelAnalyzer();
-        var recipeResult = recipeAnalyzer.Analyze(recipeDomain);
+        var recipeResult = DomainModelAnalyzer.Analyze(recipeDomain);
 
         // Path 2: Using low-level mutations
         var lowLevelDomain = new Domain("TestDomain");
@@ -174,8 +171,7 @@ public class ScaffoldRecipeTests {
         mutation.AddEntityRelationship(lowLevelSource, relationship);
         mutation.Apply();
 
-        var lowLevelAnalyzer = new DomainModelAnalyzer();
-        var lowLevelResult = lowLevelAnalyzer.Analyze(lowLevelDomain);
+        var lowLevelResult = DomainModelAnalyzer.Analyze(lowLevelDomain);
 
         // Both paths must produce equivalent diagnostics
         await Assert.That(recipeResult.Diagnostics.Count).IsEqualTo(lowLevelResult.Diagnostics.Count);
@@ -263,8 +259,7 @@ public class ScaffoldRecipeTests {
             .WithStateTransition("Draft", "Submitted");
         recipe.BuildInto(recipeDomain);
 
-        var recipeAnalyzer = new DomainModelAnalyzer();
-        var recipeResult = recipeAnalyzer.Analyze(recipeDomain);
+        var recipeResult = DomainModelAnalyzer.Analyze(recipeDomain);
 
         // Path 2: Using low-level mutations
         var lowLevelDomain = new Domain("TestDomain");
@@ -277,8 +272,7 @@ public class ScaffoldRecipeTests {
 
         mutation.Apply();
 
-        var lowLevelAnalyzer = new DomainModelAnalyzer();
-        var lowLevelResult = lowLevelAnalyzer.Analyze(lowLevelDomain);
+        var lowLevelResult = DomainModelAnalyzer.Analyze(lowLevelDomain);
 
         // Both paths must produce equivalent diagnostics
         await Assert.That(recipeResult.Diagnostics.Count).IsEqualTo(lowLevelResult.Diagnostics.Count);

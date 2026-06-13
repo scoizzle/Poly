@@ -20,15 +20,16 @@ public class UopRealWorldTests {
     private static readonly TestTraceWriter? _traceWriter = Debugger.IsAttached ? new() : null;
 
     private static Bytecode LowerWith(Node node) {
-        var builder = new AnalyzerBuilder()
+        var analysis = new AnalyzerBuilder()
             .UseTypeResolver()
             .UseMemberResolver()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
-            .UseVariableScopeValidator();
-        var analysis = builder.Build().Analyze(node);
+            .UseVariableScopeValidator()
+            .Build()
+            .Analyze(node);
         return Lowering.Lower(node, analysis);
     }
 

@@ -731,22 +731,19 @@ public class C99ParserInterpreterTests {
         var invokeMethod = typeof(TDelegate).GetMethod("Invoke")
             ?? throw new InvalidOperationException($"Delegate type {typeof(TDelegate).Name} does not expose an Invoke method.");
 
-        var analyzer = new AnalyzerBuilder()
+        var allParams = fn.Parameters.Concat(fn.Locals).ToArray();
+
+        var analysisResult = new AnalyzerBuilder()
             .UseTypeResolver()
             .UseMemberResolver()
             .UseVariableScopeValidator()
-            .Build();
-
-        var allParams = fn.Parameters.Concat(fn.Locals).ToArray();
-
-        var analysisResult = analyzer
-            .With(ctx => {
+            .Build()
+            .Analyze(fn.Body, setup: ctx => {
                 foreach (var (param, clrType) in allParams) {
                     var typeDef = ctx.TypeDefinitions.GetTypeDefinition(clrType);
                     if (typeDef != null) ctx.SetResolvedType(param, typeDef);
                 }
-            })
-            .Analyze(fn.Body);
+            });
 
         var generator = new LinqExpressionGenerator(analysisResult);
         var parameters = fn.Parameters.Select(p => p.Param).ToArray();

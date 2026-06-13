@@ -27,31 +27,19 @@ public sealed record MustExecuteMetadata(bool MustExecute) : IAnalysisMetadata;
 /// Builds a control flow graph from an AST and performs reachability analysis.
 /// </summary>
 public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
-    private ControlFlowGraph? _cfg;
-    private BasicBlock? _currentBlock;
-    private readonly Dictionary<string, BasicBlock> _labeledBlocks = [];
-    private readonly Dictionary<string, LabelDeclaration> _labelDecls = [];
-    private readonly List<(GotoStatement Goto, string Label)> _pendingGotos = [];
-    private readonly Stack<(BasicBlock Continue, BasicBlock Break)> _loopContexts = new();
-
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ControlFlowAnalysisPass>(node)) {
             return;
         }
 
-        _cfg = new ControlFlowGraph();
-        _currentBlock = _cfg.CreateBlock();
-        _labeledBlocks.Clear();
-        _labelDecls.Clear();
-        _pendingGotos.Clear();
-        _loopContexts.Clear();
-
-        BuildCfg(context, node);
+        var state = new CfgState();
+        state.CurrentBlock = state.Cfg.CreateBlock();
+        BuildCfg(context, node, state);
 
         // Resolve pending gotos
-        foreach (var (gotoStmt, label) in _pendingGotos) {
-            if (_labeledBlocks.TryGetValue(label, out var targetBlock)) {
-                var sourceBlock = _cfg.GetBlockForNode(gotoStmt);
+        foreach (var (gotoStmt, label) in state.PendingGotos) {
+            if (state.LabeledBlocks.TryGetValue(label, out var targetBlock)) {
+                var sourceBlock = state.Cfg.GetBlockForNode(gotoStmt);
                 sourceBlock?.AddSuccessor(targetBlock);
             }
             else {
@@ -61,184 +49,181 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         }
 
         // Finalize CFG
-        _cfg.IdentifyExitBlocks();
-        _cfg.ComputeReachability();
+        state.Cfg.IdentifyExitBlocks();
+        state.Cfg.ComputeReachability();
 
-        // Dead label detection (labels only reachable via dead gotos or untar geted)
-        foreach (var (name, labelBlock) in _labeledBlocks) {
-            if (!labelBlock.IsReachable && _labelDecls.TryGetValue(name, out var decl)) {
+        // Dead label detection
+        foreach (var (name, labelBlock) in state.LabeledBlocks) {
+            if (!labelBlock.IsReachable && state.LabelDecls.TryGetValue(name, out var decl)) {
                 context.ReportDiagnostic(decl, DiagnosticSeverity.Warning, $"Unreachable label '{name}'", "CF0013");
                 MarkElidable(context, decl, "CF0013", $"Label declaration '{name}' is unreachable from live code");
             }
         }
 
         // Report dead code diagnostics
-        foreach (var deadNode in _cfg.DeadCode) {
+        foreach (var deadNode in state.Cfg.DeadCode) {
             context.ReportDiagnostic(deadNode, DiagnosticSeverity.Warning,
                 "Unreachable code detected", "CF0002");
         }
 
-        // Tag dead/unreachable nodes with Elidable so elision consumers (interpreter block
-        // skipping, generators) can uniformly skip them. This covers code after infinite loops
-        // etc.
-        foreach (var deadNode in _cfg.DeadCode) {
+        // Tag dead/unreachable nodes with Elidable
+        foreach (var deadNode in state.Cfg.DeadCode) {
             context.SetMetadata(deadNode, ElidableFlyweight);
         }
 
-        ComputeMustExecuteFacts(context, _cfg);
+        ComputeMustExecuteFacts(context, state.Cfg);
 
         // Store CFG as metadata on root node
-        context.SetMetadata(node, new ControlFlowMetadata(_cfg));
+        context.SetMetadata(node, new ControlFlowMetadata(state.Cfg));
     }
 
-    private void BuildCfg(AnalysisContext context, Node node) {
-        if (_currentBlock == null || _cfg == null) return;
+    private sealed class CfgState {
+        public ControlFlowGraph Cfg = new();
+        public BasicBlock? CurrentBlock;
+        public Dictionary<string, BasicBlock> LabeledBlocks = [];
+        public Dictionary<string, LabelDeclaration> LabelDecls = [];
+        public List<(GotoStatement Goto, string Label)> PendingGotos = [];
+        public Stack<(BasicBlock Continue, BasicBlock Break)> LoopContexts = new();
+    }
+
+    private void BuildCfg(AnalysisContext context, Node node, CfgState state) {
+        if (state.CurrentBlock == null) return;
 
         switch (node) {
             case Block block:
-                BuildBlockCfg(context, block);
+                BuildBlockCfg(context, block, state);
                 break;
 
             case IfStatement ifStmt:
-                BuildIfCfg(context, ifStmt);
+                BuildIfCfg(context, ifStmt, state);
                 break;
 
             case WhileLoop whileLoop:
-                BuildWhileLoopCfg(context, whileLoop);
+                BuildWhileLoopCfg(context, whileLoop, state);
                 break;
 
             case DoWhileLoop doWhileLoop:
-                BuildDoWhileLoopCfg(context, doWhileLoop);
+                BuildDoWhileLoopCfg(context, doWhileLoop, state);
                 break;
 
             case ForLoop forLoop:
-                BuildForLoopCfg(context, forLoop);
+                BuildForLoopCfg(context, forLoop, state);
                 break;
 
             case ForEachLoop forEachLoop:
-                BuildForEachLoopCfg(context, forEachLoop);
+                BuildForEachLoopCfg(context, forEachLoop, state);
                 break;
 
             case Return returnStmt:
-                AddStatement(returnStmt);
-                _currentBlock.SetTerminator(returnStmt);
-                // Return terminates the current block with no successors
-                _currentBlock = null;
+                AddStatement(returnStmt, state);
+                state.CurrentBlock.SetTerminator(returnStmt);
+                state.CurrentBlock = null;
                 break;
 
             case ThrowStatement throwStmt:
-                AddStatement(throwStmt);
-                _currentBlock.SetTerminator(throwStmt);
-                // Throw terminates the current block
-                _currentBlock = null;
+                AddStatement(throwStmt, state);
+                state.CurrentBlock.SetTerminator(throwStmt);
+                state.CurrentBlock = null;
                 break;
 
             case BreakStatement breakStmt:
-                AddStatement(breakStmt);
-                _currentBlock.SetTerminator(breakStmt);
-                if (_loopContexts.TryPeek(out var loopCtx)) {
-                    _currentBlock.AddSuccessor(loopCtx.Break);
+                AddStatement(breakStmt, state);
+                state.CurrentBlock.SetTerminator(breakStmt);
+                if (state.LoopContexts.TryPeek(out var loopCtx)) {
+                    state.CurrentBlock.AddSuccessor(loopCtx.Break);
                 }
-                _currentBlock = null;
+                state.CurrentBlock = null;
                 break;
 
             case ContinueStatement continueStmt:
-                AddStatement(continueStmt);
-                _currentBlock.SetTerminator(continueStmt);
-                if (_loopContexts.TryPeek(out var continueCtx)) {
-                    _currentBlock.AddSuccessor(continueCtx.Continue);
+                AddStatement(continueStmt, state);
+                state.CurrentBlock.SetTerminator(continueStmt);
+                if (state.LoopContexts.TryPeek(out var continueCtx)) {
+                    state.CurrentBlock.AddSuccessor(continueCtx.Continue);
                 }
-                _currentBlock = null;
+                state.CurrentBlock = null;
                 break;
 
             case GotoStatement gotoStmt:
-                if (_currentBlock != null) {
-                    AddStatement(gotoStmt);
-                    _currentBlock.SetTerminator(gotoStmt);
-                    _pendingGotos.Add((gotoStmt, gotoStmt.Target));
-                    _currentBlock = null;
+                if (state.CurrentBlock != null) {
+                    AddStatement(gotoStmt, state);
+                    state.CurrentBlock.SetTerminator(gotoStmt);
+                    state.PendingGotos.Add((gotoStmt, gotoStmt.Target));
+                    state.CurrentBlock = null;
                 }
-                // if current was null, this goto is in dead code; ignore for resolution
                 break;
 
             case LabelDeclaration labelDecl:
-                // Start a new block for the label
-                var labelBlock = _cfg.CreateBlock();
-                if (_currentBlock != null) {
-                    _currentBlock.AddSuccessor(labelBlock);
+                var labelBlock = state.Cfg.CreateBlock();
+                if (state.CurrentBlock != null) {
+                    state.CurrentBlock.AddSuccessor(labelBlock);
                 }
-                _currentBlock = labelBlock;
-                _labeledBlocks[labelDecl.Name] = labelBlock;
-                _labelDecls[labelDecl.Name] = labelDecl;
-                AddStatement(labelDecl);
+                state.CurrentBlock = labelBlock;
+                state.LabeledBlocks[labelDecl.Name] = labelBlock;
+                state.LabelDecls[labelDecl.Name] = labelDecl;
+                AddStatement(labelDecl, state);
                 break;
 
             case TryCatchFinally tryCatch:
-                BuildTryCatchCfg(context, tryCatch);
+                BuildTryCatchCfg(context, tryCatch, state);
                 break;
 
             case SwitchStatement switchStmt:
-                BuildSwitchCfg(context, switchStmt);
+                BuildSwitchCfg(context, switchStmt, state);
                 break;
 
             default:
-                // Regular statement - add to current block
-                AddStatement(node);
+                AddStatement(node, state);
                 break;
         }
     }
 
-    private void AddStatement(Node node) {
-        if (_currentBlock == null || _cfg == null) return;
-        _currentBlock.AddStatement(node);
-        _cfg.MapNodeToBlock(node, _currentBlock);
+    private static void AddStatement(Node node, CfgState state) {
+        if (state.CurrentBlock == null) return;
+        state.CurrentBlock.AddStatement(node);
+        state.Cfg.MapNodeToBlock(node, state.CurrentBlock);
     }
 
-    private void BuildBlockCfg(AnalysisContext context, Block block) {
+    private void BuildBlockCfg(AnalysisContext context, Block block, CfgState state) {
         foreach (var stmt in block.Nodes) {
-            if (_currentBlock == null) {
-                // Code after terminator - create new unreachable block
-                _currentBlock = _cfg!.CreateBlock();
+            if (state.CurrentBlock == null) {
+                state.CurrentBlock = state.Cfg.CreateBlock();
             }
-            BuildCfg(context, stmt);
+            BuildCfg(context, stmt, state);
         }
     }
 
-    private void BuildIfCfg(AnalysisContext context, IfStatement ifStmt) {
-        if (_currentBlock == null || _cfg == null) return;
+    private void BuildIfCfg(AnalysisContext context, IfStatement ifStmt, CfgState state) {
+        if (state.CurrentBlock == null) return;
 
-        // Add condition to current block
-        AddStatement(ifStmt.Condition);
+        AddStatement(ifStmt.Condition, state);
 
-        var conditionBlock = _currentBlock;
-        var mergeBlock = _cfg.CreateBlock();
+        var conditionBlock = state.CurrentBlock;
+        var mergeBlock = state.Cfg.CreateBlock();
 
         bool constTrue = IsStaticallyConstantTrue(context, ifStmt.Condition);
         bool constFalse = IsStaticallyConstantFalse(context, ifStmt.Condition);
 
         if (constTrue) {
-            // Prune else (if any); only then is possible
-            var thenBlock = _cfg.CreateBlock();
+            var thenBlock = state.Cfg.CreateBlock();
             conditionBlock.AddSuccessor(thenBlock);
-            _currentBlock = thenBlock;
-            BuildCfg(context, ifStmt.ThenBranch);
-            var afterThen = _currentBlock;
+            state.CurrentBlock = thenBlock;
+            BuildCfg(context, ifStmt.ThenBranch, state);
+            var afterThen = state.CurrentBlock;
             if (afterThen != null) {
                 afterThen.AddSuccessor(mergeBlock);
             }
             if (ifStmt.ElseBranch != null) {
                 MarkSubtreeElidable(context, ifStmt.ElseBranch, "CF0004", "Else branch is unreachable because if condition is constantly true");
             }
-            // do not wire condition->else
         }
         else if (constFalse) {
-            // Prune then; only else (or fall) is possible
             if (ifStmt.ElseBranch != null) {
-                var elseBlock = _cfg.CreateBlock();
+                var elseBlock = state.Cfg.CreateBlock();
                 conditionBlock.AddSuccessor(elseBlock);
-                _currentBlock = elseBlock;
-                BuildCfg(context, ifStmt.ElseBranch);
-                var afterElse = _currentBlock;
+                state.CurrentBlock = elseBlock;
+                BuildCfg(context, ifStmt.ElseBranch, state);
+                var afterElse = state.CurrentBlock;
                 if (afterElse != null) {
                     afterElse.AddSuccessor(mergeBlock);
                 }
@@ -249,19 +234,18 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             MarkSubtreeElidable(context, ifStmt.ThenBranch, "CF0005", "Then branch is unreachable because if condition is constantly false");
         }
         else {
-            // General case - both (or fall) possible
-            var thenBlock = _cfg.CreateBlock();
+            var thenBlock = state.Cfg.CreateBlock();
             conditionBlock.AddSuccessor(thenBlock);
-            _currentBlock = thenBlock;
-            BuildCfg(context, ifStmt.ThenBranch);
-            var afterThen = _currentBlock;
+            state.CurrentBlock = thenBlock;
+            BuildCfg(context, ifStmt.ThenBranch, state);
+            var afterThen = state.CurrentBlock;
 
             if (ifStmt.ElseBranch != null) {
-                var elseBlock = _cfg.CreateBlock();
+                var elseBlock = state.Cfg.CreateBlock();
                 conditionBlock.AddSuccessor(elseBlock);
-                _currentBlock = elseBlock;
-                BuildCfg(context, ifStmt.ElseBranch);
-                var afterElse = _currentBlock;
+                state.CurrentBlock = elseBlock;
+                BuildCfg(context, ifStmt.ElseBranch, state);
+                var afterElse = state.CurrentBlock;
                 if (afterElse != null) {
                     afterElse.AddSuccessor(mergeBlock);
                 }
@@ -275,27 +259,21 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             }
         }
 
-        if (mergeBlock.Predecessors.Count > 0) {
-            _currentBlock = mergeBlock;
-        }
-        else {
-            _currentBlock = null;
-        }
+        state.CurrentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
     }
 
-    private void BuildWhileLoopCfg(AnalysisContext context, WhileLoop whileLoop) {
-        if (_currentBlock == null || _cfg == null) return;
+    private void BuildWhileLoopCfg(AnalysisContext context, WhileLoop whileLoop, CfgState state) {
+        if (state.CurrentBlock == null) return;
 
-        var preLoop = _currentBlock;
-        var conditionBlock = _cfg.CreateBlock();
-        var bodyBlock = _cfg.CreateBlock();
-        var exitBlock = _cfg.CreateBlock();
+        var preLoop = state.CurrentBlock;
+        var conditionBlock = state.Cfg.CreateBlock();
+        var bodyBlock = state.Cfg.CreateBlock();
+        var exitBlock = state.Cfg.CreateBlock();
 
         preLoop.AddSuccessor(conditionBlock);
 
-        // Condition
-        _currentBlock = conditionBlock;
-        AddStatement(whileLoop.Condition);
+        state.CurrentBlock = conditionBlock;
+        AddStatement(whileLoop.Condition, state);
 
         bool isInfinite = IsStaticallyInfinite(whileLoop, context);
         bool constFalse = IsStaticallyConstantFalse(context, whileLoop.Condition);
@@ -316,46 +294,42 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             conditionBlock.AddSuccessor(exitBlock);
         }
 
-        // Body
-        _loopContexts.Push((Continue: conditionBlock, Break: exitBlock));
-        _currentBlock = bodyBlock;
+        state.LoopContexts.Push((Continue: conditionBlock, Break: exitBlock));
+        state.CurrentBlock = bodyBlock;
         if (!constFalse) {
-            BuildCfg(context, whileLoop.Body);
+            BuildCfg(context, whileLoop.Body, state);
         }
 
-        // Loop back to condition (only if body could have executed)
-        if (_currentBlock != null && !constFalse) {
-            _currentBlock.AddSuccessor(conditionBlock);
+        if (state.CurrentBlock != null && !constFalse) {
+            state.CurrentBlock.AddSuccessor(conditionBlock);
         }
 
-        _loopContexts.Pop();
-        _currentBlock = exitBlock;
+        state.LoopContexts.Pop();
+        state.CurrentBlock = exitBlock;
     }
 
-    private void BuildDoWhileLoopCfg(AnalysisContext context, DoWhileLoop doWhileLoop) {
-        if (_currentBlock == null || _cfg == null) return;
+    private void BuildDoWhileLoopCfg(AnalysisContext context, DoWhileLoop doWhileLoop, CfgState state) {
+        if (state.CurrentBlock == null) return;
 
-        var preLoop = _currentBlock;
-        var bodyBlock = _cfg.CreateBlock();
-        var conditionBlock = _cfg.CreateBlock();
-        var exitBlock = _cfg.CreateBlock();
+        var preLoop = state.CurrentBlock;
+        var bodyBlock = state.Cfg.CreateBlock();
+        var conditionBlock = state.Cfg.CreateBlock();
+        var exitBlock = state.Cfg.CreateBlock();
 
         preLoop.AddSuccessor(bodyBlock);
 
-        // Body first
-        _loopContexts.Push((Continue: conditionBlock, Break: exitBlock));
-        _currentBlock = bodyBlock;
-        BuildCfg(context, doWhileLoop.Body);
+        state.LoopContexts.Push((Continue: conditionBlock, Break: exitBlock));
+        state.CurrentBlock = bodyBlock;
+        BuildCfg(context, doWhileLoop.Body, state);
 
-        // Condition
-        if (_currentBlock != null) {
-            _currentBlock.AddSuccessor(conditionBlock);
+        if (state.CurrentBlock != null) {
+            state.CurrentBlock.AddSuccessor(conditionBlock);
         }
-        _currentBlock = conditionBlock;
-        AddStatement(doWhileLoop.Condition);
-        conditionBlock.AddSuccessor(bodyBlock); // Loop back
+        state.CurrentBlock = conditionBlock;
+        AddStatement(doWhileLoop.Condition, state);
+        conditionBlock.AddSuccessor(bodyBlock);
         if (!IsStaticallyInfinite(doWhileLoop, context)) {
-            conditionBlock.AddSuccessor(exitBlock); // Exit
+            conditionBlock.AddSuccessor(exitBlock);
         }
         if (IsStaticallyInfinite(doWhileLoop, context)) {
             bool hasEffects = !IsPure(context, doWhileLoop.Body);
@@ -363,30 +337,28 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             context.ReportDiagnostic(doWhileLoop, DiagnosticSeverity.Information, "Infinite loop detected", "CF0003");
         }
 
-        _loopContexts.Pop();
-        _currentBlock = exitBlock;
+        state.LoopContexts.Pop();
+        state.CurrentBlock = exitBlock;
     }
 
-    private void BuildForLoopCfg(AnalysisContext context, ForLoop forLoop) {
-        if (_currentBlock == null || _cfg == null) return;
+    private void BuildForLoopCfg(AnalysisContext context, ForLoop forLoop, CfgState state) {
+        if (state.CurrentBlock == null) return;
 
-        // Initializer
         if (forLoop.Initializer != null) {
-            AddStatement(forLoop.Initializer);
+            AddStatement(forLoop.Initializer, state);
         }
 
-        var preLoop = _currentBlock;
-        var conditionBlock = _cfg.CreateBlock();
-        var bodyBlock = _cfg.CreateBlock();
-        var iteratorBlock = _cfg.CreateBlock();
-        var exitBlock = _cfg.CreateBlock();
+        var preLoop = state.CurrentBlock;
+        var conditionBlock = state.Cfg.CreateBlock();
+        var bodyBlock = state.Cfg.CreateBlock();
+        var iteratorBlock = state.Cfg.CreateBlock();
+        var exitBlock = state.Cfg.CreateBlock();
 
         preLoop.AddSuccessor(conditionBlock);
 
-        // Condition
-        _currentBlock = conditionBlock;
+        state.CurrentBlock = conditionBlock;
         if (forLoop.Condition != null) {
-            AddStatement(forLoop.Condition);
+            AddStatement(forLoop.Condition, state);
         }
 
         bool isInfinite = IsStaticallyInfinite(forLoop, context);
@@ -397,7 +369,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             MarkSubtreeElidable(context, forLoop.Body, "CF0006", "For body is unreachable because condition is constantly false");
         }
         else if (isInfinite) {
-            // no exit
             bool hasEffects = !IsPure(context, forLoop.Body) || (forLoop.Initializer != null && !IsPure(context, forLoop.Initializer)) || (forLoop.Increment != null && !IsPure(context, forLoop.Increment));
             context.SetMetadata(forLoop, hasEffects ? EffectfulInfiniteFlyweight : PureInfiniteFlyweight);
             context.ReportDiagnostic(forLoop, DiagnosticSeverity.Information, "Infinite loop detected", "CF0003");
@@ -406,132 +377,133 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             conditionBlock.AddSuccessor(exitBlock);
         }
 
-        // Body
-        _loopContexts.Push((Continue: iteratorBlock, Break: exitBlock));
-        _currentBlock = bodyBlock;
+        state.LoopContexts.Push((Continue: iteratorBlock, Break: exitBlock));
+        state.CurrentBlock = bodyBlock;
         if (!constFalse) {
-            BuildCfg(context, forLoop.Body);
+            BuildCfg(context, forLoop.Body, state);
         }
 
-        // Iterator (if not const false path)
-        if (_currentBlock != null && !constFalse) {
-            _currentBlock.AddSuccessor(iteratorBlock);
+        if (state.CurrentBlock != null && !constFalse) {
+            state.CurrentBlock.AddSuccessor(iteratorBlock);
         }
         if (!constFalse) {
-            _currentBlock = iteratorBlock;
+            state.CurrentBlock = iteratorBlock;
             if (forLoop.Increment != null) {
-                AddStatement(forLoop.Increment);
+                AddStatement(forLoop.Increment, state);
             }
             iteratorBlock.AddSuccessor(conditionBlock);
         }
 
-        _loopContexts.Pop();
-        _currentBlock = exitBlock;
+        state.LoopContexts.Pop();
+        state.CurrentBlock = exitBlock;
     }
 
-    private void BuildForEachLoopCfg(AnalysisContext context, ForEachLoop forEachLoop) {
-        if (_currentBlock == null || _cfg == null) return;
+    private void BuildForEachLoopCfg(AnalysisContext context, ForEachLoop forEachLoop, CfgState state) {
+        if (state.CurrentBlock == null) return;
 
-        var preLoop = _currentBlock;
-        var conditionBlock = _cfg.CreateBlock();
-        var bodyBlock = _cfg.CreateBlock();
-        var exitBlock = _cfg.CreateBlock();
+        var preLoop = state.CurrentBlock;
+        var conditionBlock = state.Cfg.CreateBlock();
+        var bodyBlock = state.Cfg.CreateBlock();
+        var exitBlock = state.Cfg.CreateBlock();
 
         preLoop.AddSuccessor(conditionBlock);
 
-        // Collection expression is evaluated before each iteration check.
-        _currentBlock = conditionBlock;
-        AddStatement(forEachLoop.Collection);
+        state.CurrentBlock = conditionBlock;
+        AddStatement(forEachLoop.Collection, state);
         conditionBlock.AddSuccessor(bodyBlock);
         conditionBlock.AddSuccessor(exitBlock);
 
-        _loopContexts.Push((Continue: conditionBlock, Break: exitBlock));
-        _currentBlock = bodyBlock;
-        BuildCfg(context, forEachLoop.Body);
+        state.LoopContexts.Push((Continue: conditionBlock, Break: exitBlock));
+        state.CurrentBlock = bodyBlock;
+        BuildCfg(context, forEachLoop.Body, state);
 
-        if (_currentBlock != null) {
-            _currentBlock.AddSuccessor(conditionBlock);
+        if (state.CurrentBlock != null) {
+            state.CurrentBlock.AddSuccessor(conditionBlock);
         }
 
-        _loopContexts.Pop();
-        _currentBlock = exitBlock;
+        state.LoopContexts.Pop();
+        state.CurrentBlock = exitBlock;
     }
 
-    private void BuildTryCatchCfg(AnalysisContext context, TryCatchFinally tryCatch) {
-        if (_currentBlock == null || _cfg == null) return;
+    private void BuildTryCatchCfg(AnalysisContext context, TryCatchFinally tryCatch, CfgState state) {
+        if (state.CurrentBlock == null) return;
 
-        var preTry = _currentBlock;
-        var tryBlock = _cfg.CreateBlock();
-        var mergeBlock = _cfg.CreateBlock();
+        var preTry = state.CurrentBlock;
+        var tryBlock = state.Cfg.CreateBlock();
+        var mergeBlock = state.Cfg.CreateBlock();
 
         preTry.AddSuccessor(tryBlock);
 
-        // Try block
-        _currentBlock = tryBlock;
-        BuildCfg(context, tryCatch.TryBlock);
-        var afterTry = _currentBlock;
+        state.CurrentBlock = tryBlock;
+        BuildCfg(context, tryCatch.TryBlock, state);
+        var afterTry = state.CurrentBlock;
 
         bool mayThrow = ContainsThrow(context, tryCatch.TryBlock);
 
-        // Catch blocks
         if (tryCatch.CatchClauses != null) {
             foreach (var catchClause in tryCatch.CatchClauses) {
                 if (!mayThrow) {
-                    // No throw in try subtree => this catch is unreachable from try (model assumption)
                     MarkSubtreeElidable(context, catchClause.Body, "CF0010", "Catch clause is unreachable - no throw statement in try block");
                     continue;
                 }
-                var catchEntry = _cfg.CreateBlock();
-                tryBlock.AddSuccessor(catchEntry); // Exception can jump to catch
-                _currentBlock = catchEntry;
+                var catchEntry = state.Cfg.CreateBlock();
+                tryBlock.AddSuccessor(catchEntry);
+                state.CurrentBlock = catchEntry;
 
                 if (catchClause.ExceptionType != null) {
-                    AddStatement(catchClause.ExceptionType);
+                    AddStatement(catchClause.ExceptionType, state);
                 }
 
-                BuildCfg(context, catchClause.Body);
+                BuildCfg(context, catchClause.Body, state);
 
-                if (_currentBlock != null) {
-                    _currentBlock.AddSuccessor(mergeBlock);
+                if (state.CurrentBlock != null) {
+                    state.CurrentBlock.AddSuccessor(mergeBlock);
                 }
             }
         }
 
-        // Finally block (usually executes on way out or exception)
         if (tryCatch.FinallyBlock != null) {
-            var finallyEntry = _cfg.CreateBlock();
+            var finallyEntry = state.Cfg.CreateBlock();
             if (afterTry != null) {
                 afterTry.AddSuccessor(finallyEntry);
             }
-            _currentBlock = finallyEntry;
-            BuildCfg(context, tryCatch.FinallyBlock);
+            state.CurrentBlock = finallyEntry;
+            BuildCfg(context, tryCatch.FinallyBlock, state);
 
-            if (_currentBlock != null) {
-                _currentBlock.AddSuccessor(mergeBlock);
+            if (state.CurrentBlock != null) {
+                state.CurrentBlock.AddSuccessor(mergeBlock);
             }
         }
         else if (afterTry != null) {
             afterTry.AddSuccessor(mergeBlock);
         }
 
-        _currentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
+        state.CurrentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
     }
 
-    private bool ContainsThrow(AnalysisContext context, Node node) {
+    private static bool ContainsThrow(AnalysisContext context, Node node) {
         if (node is ThrowStatement) return true;
-        // Use AnyChild (framework walk) for subtree check -- applies AggregateChildren pattern lesson for consistency and potential future fusion with ShouldAnalyze/visit tracking.
-        return this.AnyChild<ControlFlowMetadata>(context, node, (ctx, ch) => ch is ThrowStatement);
+        return AnyChild(context, node, static (ctx, ch) => ch is ThrowStatement);
     }
 
-    private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt) {
-        if (_currentBlock == null || _cfg == null) return;
+    private static bool AnyChild(AnalysisContext context, Node node, Func<AnalysisContext, Node, bool> predicate) {
+        foreach (var child in node.Children) {
+            if (child is null || !context.ShouldAnalyze(child))
+                continue;
+            if (predicate(context, child!))
+                return true;
+        }
+        return false;
+    }
 
-        // Switch value
-        AddStatement(switchStmt.Value);
-        var switchBlock = _currentBlock;
-        var exitBlock = _cfg.CreateBlock();
+    private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
+        if (state.CurrentBlock == null) return;
 
-        _loopContexts.Push((Continue: switchBlock, Break: exitBlock));
+        AddStatement(switchStmt.Value, state);
+        var switchBlock = state.CurrentBlock;
+        var exitBlock = state.Cfg.CreateBlock();
+
+        state.LoopContexts.Push((Continue: switchBlock, Break: exitBlock));
 
         object? switchConst = IsPure(context, switchStmt.Value) ? GetConstValue(context, switchStmt.Value) : null;
         bool hasConstValue = switchConst != null;
@@ -548,41 +520,39 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
                 continue;
             }
 
-            var caseEntry = _cfg.CreateBlock();
+            var caseEntry = state.Cfg.CreateBlock();
             switchBlock.AddSuccessor(caseEntry);
-            _currentBlock = caseEntry;
+            state.CurrentBlock = caseEntry;
 
-            AddStatement(caseBlock.Pattern);
-            BuildCfg(context, caseBlock.Body);
+            AddStatement(caseBlock.Pattern, state);
+            BuildCfg(context, caseBlock.Body, state);
 
-            if (_currentBlock != null) {
-                _currentBlock.AddSuccessor(exitBlock);
+            if (state.CurrentBlock != null) {
+                state.CurrentBlock.AddSuccessor(exitBlock);
             }
         }
 
-        // Default
         if (switchStmt.DefaultCase != null) {
             bool defaultLive = true;
             if (hasConstValue && sawExactMatch) {
-                // Conservative: if we saw exact literal case for the const, default is dead (no fallthrough assumed)
                 defaultLive = false;
             }
             if (hasConstValue && !defaultLive) {
                 MarkSubtreeElidable(context, switchStmt.DefaultCase, "CF0012", "Default case is unreachable - switch value covered by prior cases");
             }
             else {
-                var defaultEntry = _cfg.CreateBlock();
+                var defaultEntry = state.Cfg.CreateBlock();
                 switchBlock.AddSuccessor(defaultEntry);
-                _currentBlock = defaultEntry;
-                BuildCfg(context, switchStmt.DefaultCase);
-                if (_currentBlock != null) {
-                    _currentBlock.AddSuccessor(exitBlock);
+                state.CurrentBlock = defaultEntry;
+                BuildCfg(context, switchStmt.DefaultCase, state);
+                if (state.CurrentBlock != null) {
+                    state.CurrentBlock.AddSuccessor(exitBlock);
                 }
             }
         }
 
-        _loopContexts.Pop();
-        _currentBlock = exitBlock;
+        state.LoopContexts.Pop();
+        state.CurrentBlock = exitBlock;
     }
 
     // --- Infinite loop / termination helpers (migrated from SideEffectAnalyzer) ---

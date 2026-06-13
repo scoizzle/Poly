@@ -12,21 +12,17 @@ public sealed record DomainOperabilityDelta(
 );
 
 public static class DomainOperabilityFacade {
-    public static DomainOperabilitySnapshot Capture(Domain domain, DomainModelAnalyzer? analyzer = null) {
+    public static DomainOperabilitySnapshot Capture(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
-
-        var subjectAnalyzer = analyzer ?? new DomainModelAnalyzer();
-        var analysis = subjectAnalyzer.Analyze(domain);
-
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         return new DomainOperabilitySnapshot(analysis);
     }
 
-    public static DomainOperabilityDelta AnalyzeExplainDiff(Domain before, Domain after, DomainModelAnalyzer? analyzer = null) {
+    public static DomainOperabilityDelta AnalyzeExplainDiff(Domain before, Domain after) {
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(after);
 
-        var subjectAnalyzer = analyzer ?? new DomainModelAnalyzer();
-        var analysis = subjectAnalyzer.Analyze(after);
+        var analysis = DomainModelAnalyzer.Analyze(after);
         var diff = DomainDiffUtil.Compare(before, after, analysis);
 
         return new DomainOperabilityDelta(analysis, diff);

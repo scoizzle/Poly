@@ -34,7 +34,7 @@ public class ActionEventConstraintAnalysisTests {
         new Poly.Data.Modeling.Action.AddParameterCommand(handler, payloadParam).Apply();
         new Entity.AddEventSubscriptionCommand(consumer, subscription).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.ActionEventContract)).IsTrue();
     }
@@ -50,7 +50,7 @@ public class ActionEventConstraintAnalysisTests {
             .AddType(@event)
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EventFlowLiveness &&
@@ -79,7 +79,7 @@ public class ActionEventConstraintAnalysisTests {
             .SetEventPropertyBinding(action, publish, "Reason", new EventPropertyBindingSource.EntityProperty("Reason"))
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.EventFlowLiveness)).IsTrue();
     }
@@ -114,7 +114,7 @@ public class ActionEventConstraintAnalysisTests {
             .AddEventSubscriptionCorrelation(subscription, new EventCorrelationBinding(domain, "Environment", "TenantId"))
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.EventCorrelationSoundness)).IsTrue();
     }
@@ -136,7 +136,7 @@ public class ActionEventConstraintAnalysisTests {
             .AddEffect(second, callFirst)
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.ActionOrderingCausality)).IsTrue();
     }
@@ -162,7 +162,7 @@ public class ActionEventConstraintAnalysisTests {
             .AddEventSubscription(consumer, subscription)
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.ActionIdempotencyReplay)).IsTrue();
     }
@@ -188,7 +188,7 @@ public class ActionEventConstraintAnalysisTests {
             .AddEffect(action, assign)
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.EffectPrePostCondition)).IsTrue();
     }
@@ -211,7 +211,7 @@ public class ActionEventConstraintAnalysisTests {
             .AddProperty(child, childTitle)
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.ConstraintFixedPoint)).IsTrue();
     }
@@ -228,7 +228,7 @@ public class ActionEventConstraintAnalysisTests {
         new Entity.AddPropertyCommand(entity, score).Apply();
         new Property.AddConstraintCommand(score, new RangeConstraint(10, 1)).Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsTrue();
     }
@@ -253,7 +253,7 @@ public class ActionEventConstraintAnalysisTests {
             .AddEffect(action, transition)
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.RuleCoverage)).IsTrue();
     }

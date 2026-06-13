@@ -15,12 +15,8 @@ public class ControlFlowAnalysisTests {
             Wrap(3)
         );
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
         // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -39,12 +35,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new IfStatement(condition, thenBranch, elseBranch);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -62,12 +53,7 @@ public class ControlFlowAnalysisTests {
             Wrap(3) // This should be dead code
         );
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -86,12 +72,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new WhileLoop(condition, body);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -112,12 +93,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new WhileLoop(condition, body);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -138,12 +114,7 @@ public class ControlFlowAnalysisTests {
             new LabelDeclaration("end", Wrap(3))
         );
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -163,12 +134,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new ForLoop(init, condition, increment, body);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -185,12 +151,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new ForEachLoop(new Variable("item"), collection, body);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -214,12 +175,7 @@ public class ControlFlowAnalysisTests {
             Wrap(3)
         );
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -238,12 +194,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new DoWhileLoop(body, condition);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -267,12 +218,7 @@ public class ControlFlowAnalysisTests {
             Wrap(3)
         );
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -294,12 +240,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new WhileLoop(condition, body);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -320,12 +261,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new ForEachLoop(new Variable("item"), new Variable("items"), body);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -346,12 +282,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new ForEachLoop(new Variable("item"), new Variable("items"), body);
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -370,12 +301,7 @@ public class ControlFlowAnalysisTests {
             Wrap(3) // Dead code
         );
 
-        var analyzer = new AnalyzerBuilder()
-            .UseControlFlowAnalysis()
-            .Build();
-
-        // Act
-        var result = analyzer.Analyze(ast);
+        var result = new AnalyzerBuilder().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -397,13 +323,12 @@ public class ControlFlowAnalysisTests {
             post
         );
 
-        var analyzer = new AnalyzerBuilder()
+        var result = new AnalyzerBuilder()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseControlFlowAnalysis()
-            .Build();
-
-        var result = analyzer.Analyze(ast);
+            .Build()
+            .Analyze(ast);
 
         await Assert.That(result.IsInfiniteLoop(ast.Nodes[0])).IsTrue();
 
@@ -424,13 +349,12 @@ public class ControlFlowAnalysisTests {
         var elseB = new Block(new Constant(2));
         var ast = new IfStatement(cond, thenB, elseB);
 
-        var analyzer = new AnalyzerBuilder()
+        var result = new AnalyzerBuilder()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseControlFlowAnalysis()
-            .Build();
-
-        var result = analyzer.Analyze(ast);
+            .Build()
+            .Analyze(ast);
 
         // then branch is dead for const false; else is live
         await Assert.That(result.CanElide(thenB)).IsTrue();
@@ -448,13 +372,12 @@ public class ControlFlowAnalysisTests {
         var def = new Block(new Constant("def"));
         var ast = new SwitchStatement(val, new[] { case0, case1 }, def);
 
-        var analyzer = new AnalyzerBuilder()
+        var result = new AnalyzerBuilder()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseControlFlowAnalysis()
-            .Build();
-
-        var result = analyzer.Analyze(ast);
+            .Build()
+            .Analyze(ast);
 
         // case0 body should be elidable (const 1 doesn't match 0)
         await Assert.That(result.CanElide(case0.Body)).IsTrue();
@@ -470,13 +393,12 @@ public class ControlFlowAnalysisTests {
             new Constant(2)
         );
 
-        var analyzer = new AnalyzerBuilder()
+        var result = new AnalyzerBuilder()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseControlFlowAnalysis()
-            .Build();
-
-        var result = analyzer.Analyze(ast);
+            .Build()
+            .Analyze(ast);
 
         // first stmts in entry often marked must-execute by our simple heuristic
         if (ast.Nodes.Count > 0) {

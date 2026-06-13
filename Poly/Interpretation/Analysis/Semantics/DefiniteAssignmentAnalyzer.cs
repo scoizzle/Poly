@@ -4,103 +4,116 @@ using Poly.Syntax.Nodes;
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal sealed class DefiniteAssignmentAnalyzer : INodeAnalyzer {
-    private readonly Stack<HashSet<string>> _scopeStack = new();
-    private HashSet<string> _assigned = [];
-
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<DefiniteAssignmentAnalyzer>(node))
             return;
 
+        var scopeStack = new Stack<HashSet<string>>();
+        var assigned = new HashSet<string>();
+        AnalyzeImpl(context, node, scopeStack, ref assigned);
+    }
+
+    private static void AnalyzeImpl(AnalysisContext context, Node node,
+        Stack<HashSet<string>> scopeStack, ref HashSet<string> assigned) {
+
         switch (node) {
             case Lambda lambda:
-                _scopeStack.Push(_assigned);
-                _assigned = [.. _assigned]; // copy parent scope (captured vars)
-                this.AnalyzeChildren(context, node);
-                // Store metadata on the lambda body for the lowering to query
+                scopeStack.Push(assigned);
+                assigned = [.. assigned];
+                AnalyzeChildrenImpl(context, node, scopeStack, ref assigned);
                 if (lambda.Body is not null)
-                    context.SetMetadata(lambda.Body, new DefiniteAssignmentMetadata([.. _assigned]));
-                _assigned = _scopeStack.Pop();
+                    context.SetMetadata(lambda.Body, new DefiniteAssignmentMetadata([.. assigned]));
+                assigned = scopeStack.Pop();
                 return;
 
             case Block block:
-                AnalyzeBlock(context, block);
-                return; // children already processed in AnalyzeBlock
+                AnalyzeBlock(context, block, scopeStack, ref assigned);
+                return;
 
             case Assignment { Destination: Variable v } when v.Name is not null:
-                _assigned.Add(v.Name);
-                this.AnalyzeChildren(context, node);
+                assigned.Add(v.Name);
+                AnalyzeChildrenImpl(context, node, scopeStack, ref assigned);
                 return;
 
             case IfStatement ifStmt:
-                AnalyzeIf(context, ifStmt);
+                AnalyzeIf(context, ifStmt, scopeStack, ref assigned);
                 return;
 
             case WhileLoop wl:
-                var before = new HashSet<string>(_assigned);
-                this.AnalyzeChildren(context, wl.Condition);
-                if (wl.Body is not null) this.AnalyzeChildren(context, wl.Body);
-                _assigned = before;
+                var before = new HashSet<string>(assigned);
+                AnalyzeChildrenImpl(context, wl.Condition, scopeStack, ref assigned);
+                if (wl.Body is not null) AnalyzeChildrenImpl(context, wl.Body, scopeStack, ref assigned);
+                assigned = before;
                 return;
 
             case ForLoop fl:
-                var beforeFor = new HashSet<string>(_assigned);
-                this.AnalyzeChildren(context, fl);
-                _assigned = beforeFor;
+                var beforeFor = new HashSet<string>(assigned);
+                AnalyzeChildrenImpl(context, fl, scopeStack, ref assigned);
+                assigned = beforeFor;
                 return;
 
             case TryCatchFinally tcf:
-                AnalyzeTry(context, tcf);
+                AnalyzeTry(context, tcf, scopeStack, ref assigned);
                 return;
 
             case BreakStatement or ContinueStatement or GotoStatement or Return or ThrowStatement:
-                return; // no children, and they don't assign
+                return;
 
             default:
-                this.AnalyzeChildren(context, node);
+                AnalyzeChildrenImpl(context, node, scopeStack, ref assigned);
                 return;
         }
     }
 
-    private void AnalyzeBlock(AnalysisContext context, Block block) {
+    private static void AnalyzeBlock(AnalysisContext context, Block block,
+        Stack<HashSet<string>> scopeStack, ref HashSet<string> assigned) {
         for (int i = 0; i < block.Nodes.Count; i++)
-            Analyze(context, block.Nodes[i]);
+            AnalyzeImpl(context, block.Nodes[i], scopeStack, ref assigned);
     }
 
-    private void AnalyzeIf(AnalysisContext context, IfStatement ifStmt) {
-        var before = new HashSet<string>(_assigned);
-        Analyze(context, ifStmt.Condition);
+    private static void AnalyzeIf(AnalysisContext context, IfStatement ifStmt,
+        Stack<HashSet<string>> scopeStack, ref HashSet<string> assigned) {
+        var before = new HashSet<string>(assigned);
+        AnalyzeImpl(context, ifStmt.Condition, scopeStack, ref assigned);
 
-        // Then branch
-        _assigned = [.. before];
-        if (ifStmt.ThenBranch is not null) Analyze(context, ifStmt.ThenBranch);
-        var afterThen = new HashSet<string>(_assigned);
+        assigned = [.. before];
+        if (ifStmt.ThenBranch is not null) AnalyzeImpl(context, ifStmt.ThenBranch, scopeStack, ref assigned);
+        var afterThen = new HashSet<string>(assigned);
 
-        // Else branch (or no else — use 'before' as the else path)
-        _assigned = [.. before];
-        if (ifStmt.ElseBranch is not null) Analyze(context, ifStmt.ElseBranch);
+        assigned = [.. before];
+        if (ifStmt.ElseBranch is not null) AnalyzeImpl(context, ifStmt.ElseBranch, scopeStack, ref assigned);
 
-        // Intersection: variable is definitely assigned only if assigned in both paths
-        _assigned.IntersectWith(afterThen);
+        assigned.IntersectWith(afterThen);
     }
 
-    private void AnalyzeTry(AnalysisContext context, TryCatchFinally tcf) {
-        var before = new HashSet<string>(_assigned);
+    private static void AnalyzeTry(AnalysisContext context, TryCatchFinally tcf,
+        Stack<HashSet<string>> scopeStack, ref HashSet<string> assigned) {
+        var before = new HashSet<string>(assigned);
 
-        _assigned = [.. before];
-        Analyze(context, tcf.TryBlock);
-        var afterTry = new HashSet<string>(_assigned);
+        assigned = [.. before];
+        AnalyzeImpl(context, tcf.TryBlock, scopeStack, ref assigned);
+        var afterTry = new HashSet<string>(assigned);
 
-        _assigned = [.. before];
+        assigned = [.. before];
         if (tcf.CatchClauses is not null)
             foreach (var cc in tcf.CatchClauses)
-                Analyze(context, cc.Body);
-        var afterCatch = new HashSet<string>(_assigned);
+                AnalyzeImpl(context, cc.Body, scopeStack, ref assigned);
+        var afterCatch = new HashSet<string>(assigned);
 
-        _assigned.IntersectWith(afterTry);
-        _assigned.IntersectWith(afterCatch);
+        assigned.IntersectWith(afterTry);
+        assigned.IntersectWith(afterCatch);
 
         if (tcf.FinallyBlock is not null)
-            Analyze(context, tcf.FinallyBlock);
+            AnalyzeImpl(context, tcf.FinallyBlock, scopeStack, ref assigned);
+    }
+
+    private static void AnalyzeChildrenImpl(AnalysisContext context, Node node,
+        Stack<HashSet<string>> scopeStack, ref HashSet<string> assigned) {
+        foreach (var child in node.Children) {
+            if (child is null || !context.ShouldAnalyze(child))
+                continue;
+            AnalyzeImpl(context, child!, scopeStack, ref assigned);
+        }
     }
 }
 

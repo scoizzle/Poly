@@ -53,8 +53,7 @@ public class ConstraintPropagationAnalyzerTests {
         invokeEffect.BindParameterFrom("book", createEffect, "entity");
 
         // Run analysis
-        var analyzer = new DomainModelAnalyzer();
-        var result = analyzer.Analyze(domain);
+        var result = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(result.Diagnostics).IsEmpty();
     }
@@ -95,8 +94,7 @@ public class ConstraintPropagationAnalyzerTests {
         invokeA.BindParameterFrom("item", createForA, CreateEntityInstance.ResultParameterName);
 
         // Run analysis - should complete without infinite recursion
-        var analyzer = new DomainModelAnalyzer();
-        var result = analyzer.Analyze(domain);
+        var result = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.Diagnostics).IsEmpty();
@@ -150,8 +148,7 @@ public class ConstraintPropagationAnalyzerTests {
         invokeB.BindParameterFrom("doc", createForB, CreateEntityInstance.ResultParameterName);
 
         // Run analysis
-        var analyzer = new DomainModelAnalyzer();
-        var result = analyzer.Analyze(domain);
+        var result = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.Diagnostics).IsEmpty();
@@ -179,8 +176,7 @@ public class ConstraintPropagationAnalyzerTests {
             }
         });
 
-        var analyzer = new DomainModelAnalyzer();
-        var result = analyzer.Analyze(domain);
+        var result = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(result).IsNotNull();
     }

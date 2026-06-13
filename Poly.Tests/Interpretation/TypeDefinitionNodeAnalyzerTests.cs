@@ -30,16 +30,15 @@ public class TypeDefinitionNodeAnalyzerTests {
             Interfaces: [new NamedTypeReference("IWidget", "Sample")],
             GenericParameters: [new Parameter("T")]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-
-        var analysis = analyzer.Build().Analyze(new Block([baseType, interfaceType, subjectType]));
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(new Block([baseType, interfaceType, subjectType]));
         var resolvedType = analysis.GetMetadata<TypeDefinitionMetadata>(subjectType)?.TypeDefinition;
 
         await Assert.That(resolvedType).IsNotNull();
         await Assert.That(resolvedType!.BaseType?.FullName).IsEqualTo("Sample.Base");
-        await Assert.That(resolvedType.Interfaces.Select(static type => type.FullName).ToArray()).IsEquivalentTo(["Sample.IWidget"]);
+        await Assert.That(resolvedType.Interfaces.Select(static type => type.FullName).ToArray()).IsEquivalentTo(new[] { "Sample.IWidget" });
 
         var genericParameter = resolvedType.GenericParameters.Single();
         await Assert.That(genericParameter.Name).IsEqualTo("T");
@@ -89,11 +88,10 @@ public class TypeDefinitionNodeAnalyzerTests {
                     ]))
             ]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-
-        var analysis = analyzer.Build().Analyze(new Block([sameTypeUnion, mixedTypeUnion]));
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(new Block([sameTypeUnion, mixedTypeUnion]));
 
         var sameTypeDefinition = analysis.GetMetadata<TypeDefinitionMetadata>(sameTypeUnion)?.TypeDefinition;
         var mixedTypeDefinition = analysis.GetMetadata<TypeDefinitionMetadata>(mixedTypeUnion)?.TypeDefinition;
@@ -139,11 +137,10 @@ public class TypeDefinitionNodeAnalyzerTests {
             ],
             BaseType: new NamedTypeReference("BaseWidget", "Sample"));
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-
-        var analysis = analyzer.Build().Analyze(new Block([baseType, subjectType]));
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(new Block([baseType, subjectType]));
         var resolvedType = analysis.GetMetadata<TypeDefinitionMetadata>(subjectType)?.TypeDefinition;
 
         await Assert.That(resolvedType).IsNotNull();
@@ -167,17 +164,16 @@ public class TypeDefinitionNodeAnalyzerTests {
             ],
             Semantics: TypeDefinitionSemantics.ImmutableValue);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-
-        var analysis = analyzer.Build().Analyze(subjectType);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(subjectType);
         var resolvedType = analysis.GetMetadata<TypeDefinitionMetadata>(subjectType)?.TypeDefinition;
 
         await Assert.That(resolvedType).IsNotNull();
         await Assert.That(resolvedType!.Constructors.Single().Parameters.Select(static p => p.Name).ToArray())
-            .IsEquivalentTo(["Name", "Version"]);
+            .IsEquivalentTo(new[] { "Name", "Version" });
         await Assert.That(resolvedType.Properties.Select(static property => property.Name).ToArray())
-            .IsEquivalentTo(["Name", "Version"]);
+            .IsEquivalentTo(new[] { "Name", "Version" });
     }
 }

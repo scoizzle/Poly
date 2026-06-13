@@ -31,16 +31,16 @@ public sealed class DomainMutationIntentEngine {
         return typedNode;
     }
 
-    public AnalysisResult Apply(Domain domain, DomainMutationIntent intent, DomainModelAnalyzer? analyzer = null, AnalysisResult? preMutationAnalysis = null) {
+    public AnalysisResult Apply(Domain domain, DomainMutationIntent intent, AnalysisResult? preMutationAnalysis = null) {
         ArgumentNullException.ThrowIfNull(intent);
-        return Apply(domain, [intent], analyzer, preMutationAnalysis);
+        return Apply(domain, [intent], preMutationAnalysis);
     }
 
-    public AnalysisResult Apply(Domain domain, IEnumerable<DomainMutationIntent> intents, DomainModelAnalyzer? analyzer = null, AnalysisResult? preMutationAnalysis = null) {
+    public AnalysisResult Apply(Domain domain, IEnumerable<DomainMutationIntent> intents, AnalysisResult? preMutationAnalysis = null) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(intents);
 
-        var mutation = domain.CreateMutation(analyzer);
+        var mutation = domain.CreateMutation();
 
         foreach (var intent in intents) {
             ArgumentNullException.ThrowIfNull(intent);

@@ -375,8 +375,7 @@ public class DomainModelingIntegrationTests {
     [Test]
     public async Task SupportCase_TransitionRequirements_IncludeEntityRootPolicyRequirements() {
         var (domain, _) = BuildSupportCaseDomain();
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var supportCase = domain.RequireEntity("SupportCase");
         var inProgress = supportCase.RequireStage("InProgress");
@@ -392,8 +391,7 @@ public class DomainModelingIntegrationTests {
     [Test]
     public async Task AgentSupportCasesRelationship_ActiveStage_HasRequiredProperties() {
         var (domain, _) = BuildSupportCaseDomain();
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var relationship = domain.RequireRelationship("AgentSupportCases");
         var active = relationship.RequireStage("Active");
@@ -407,8 +405,7 @@ public class DomainModelingIntegrationTests {
     [Test]
     public async Task AgentSupportCasesRelationship_InactiveStage_HasRequiredProperties() {
         var (domain, _) = BuildSupportCaseDomain();
-        var analyzer = new DomainModelAnalyzer();
-        var analysis = analyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var relationship = domain.RequireRelationship("AgentSupportCases");
         var inactive = relationship.RequireStage("Inactive");

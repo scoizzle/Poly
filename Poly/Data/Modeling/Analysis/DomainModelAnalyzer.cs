@@ -2,25 +2,28 @@ using Poly.Syntax.Analysis;
 
 namespace Poly.Data.Modeling.Analysis;
 
-public sealed class DomainModelAnalyzer {
-    private readonly Analyzer _analyzer = new AnalyzerBuilder()
+/// <summary>
+/// Static analyzer for Data domain models. Uses a cached pipeline internally.
+/// Thread-safe — the underlying passes are stateless.
+/// </summary>
+public static class DomainModelAnalyzer {
+    private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseIncrementalAnalysis()
         .UseDomainModelValidation()
         .Build();
 
-    public AnalysisResult Analyze(Domain domain) {
+    public static AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         return _analyzer.Analyze(domain);
     }
 
-    public AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
+    public static AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(priorAnalysis);
         ArgumentNullException.ThrowIfNull(invalidatedNodes);
         return _analyzer.Analyze(domain, priorAnalysis, invalidatedNodes);
     }
 }
-
 
 public static class DomainModelAnalysisBuilderExtensions {
     extension(AnalyzerBuilder builder) {

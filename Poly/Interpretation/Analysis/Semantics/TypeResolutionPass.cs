@@ -47,6 +47,7 @@ internal sealed class TypeResolver : INodeAnalyzer {
             NewArray newArr => ResolveNewArrayType(context, newArr),
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
+            ClrTypeReference clrTypeRef => context.TypeDefinitions.GetTypeDefinition(clrTypeRef.RuntimeType),
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
             TypeIs => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),

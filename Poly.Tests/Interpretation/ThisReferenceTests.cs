@@ -21,14 +21,13 @@ public class ThisReferenceTests {
                     Body: memberAccess)
             ]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-        analyzer.UseThisReferenceContext();
-        analyzer.UseTypeResolver();
-        analyzer.UseMemberResolver();
-
-        var analysis = analyzer.Build().Analyze(typeNode);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .UseThisReferenceContext()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(typeNode);
         var resolvedType = analysis.GetResolvedType(thisReference);
         var resolvedMember = analysis.GetResolvedMember(memberAccess);
 
@@ -49,13 +48,12 @@ public class ThisReferenceTests {
                 new ConstructorDefinitionNode(Body: thisReference)
             ]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-        analyzer.UseThisReferenceContext();
-        analyzer.UseTypeResolver();
-
-        var analysis = analyzer.Build().Analyze(typeNode);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .UseThisReferenceContext()
+            .UseTypeResolver()
+            .Build()
+            .Analyze(typeNode);
         var resolvedType = analysis.GetResolvedType(thisReference);
 
         await Assert.That(resolvedType).IsNotNull();
@@ -76,13 +74,12 @@ public class ThisReferenceTests {
                     IsStatic: true)
             ]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-        analyzer.UseThisReferenceContext();
-        analyzer.UseTypeResolver();
-
-        var analysis = analyzer.Build().Analyze(typeNode);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .UseThisReferenceContext()
+            .UseTypeResolver()
+            .Build()
+            .Analyze(typeNode);
         var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0001").ToArray();
         var resolvedType = analysis.GetResolvedType(thisReference);
 
@@ -106,14 +103,14 @@ public class ThisReferenceTests {
                     Getter: new PropertyGetterDefinitionNode(memberAccess))
             ]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-        analyzer.UseThisReferenceContext();
-        analyzer.UseTypeResolver();
-        analyzer.UseMemberResolver();
-
-        var analysis = analyzer.Build().Analyze(typeNode);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .UseThisReferenceContext()
+            .UseTypeResolver()
+            .UseMemberResolver()
+            .Build()
+            .Analyze(typeNode);
+        var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0001").ToArray();
         var resolvedType = analysis.GetResolvedType(thisReference);
         var resolvedMember = analysis.GetResolvedMember(memberAccess);
 
@@ -137,13 +134,12 @@ public class ThisReferenceTests {
                     IsStatic: true)
             ]);
 
-        var analyzerPass = new TypeDefinitionNodeAnalyzer();
-        var analyzer = new AnalyzerBuilder(analyzerPass);
-        analyzer.AddAnalyzer(analyzerPass);
-        analyzer.UseThisReferenceContext();
-        analyzer.UseTypeResolver();
-
-        var analysis = analyzer.Build().Analyze(typeNode);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .UseThisReferenceContext()
+            .UseTypeResolver()
+            .Build()
+            .Analyze(typeNode);
         var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0001").ToArray();
         var resolvedType = analysis.GetResolvedType(thisReference);
 
@@ -156,12 +152,11 @@ public class ThisReferenceTests {
     public async Task Analyze_ThisReferenceOutsideMemberBody_ProducesDiagnostic() {
         var thisReference = new ThisReference();
 
-        var analyzer = new AnalyzerBuilder()
+        var analysis = new AnalyzerBuilder()
             .UseThisReferenceContext()
             .UseTypeResolver()
-            .Build();
-
-        var analysis = analyzer.Analyze(thisReference);
+            .Build()
+            .Analyze(thisReference);
         var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0002").ToArray();
         var resolvedType = analysis.GetResolvedType(thisReference);
 

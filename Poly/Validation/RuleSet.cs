@@ -48,13 +48,13 @@ public sealed class RuleSet<T> {
         var buildingContext = new RuleBuildingContext(typeDefinition);
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
 
-        var analyzer = new AnalyzerBuilder(providers.Providers)
+        var targetAnalyzer = new AnalyzerBuilder()
             .UseTypeResolver()
             .UseMemberResolver()
             .UseVariableScopeValidator()
             .Build();
 
-        var analysisResult = analyzer.Analyze(RuleSetInterpretation);
+        var analysisResult = targetAnalyzer.Analyze(RuleSetInterpretation, typeDefinitions: providers);
         var generator = new LinqExpressionGenerator(analysisResult);
         var compilation = generator.Compile(RuleSetInterpretation);
 

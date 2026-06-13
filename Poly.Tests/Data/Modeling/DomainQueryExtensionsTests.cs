@@ -182,7 +182,7 @@ public class DomainQueryExtensionsTests {
         var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var assignAction = supportCase.RequireStage("New").RequireAction("Assign");
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var capabilities = analysis.GetCapabilityView(assignAction);
 
@@ -199,7 +199,7 @@ public class DomainQueryExtensionsTests {
         var (domain, _) = BuildSupportCaseDomain();
         var supportCase = domain.RequireEntity("SupportCase");
         var assigned = supportCase.RequireStage("Assigned");
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var capabilities = analysis.GetCapabilityView(assigned);
 
@@ -224,7 +224,7 @@ public class DomainQueryExtensionsTests {
     public async Task Relationship_GetCapabilityView_ContainsCoreMetadata() {
         var (domain, _) = BuildSupportCaseDomain();
         var relationship = domain.RequireRelationship("CustomerCases");
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var capability = analysis.GetCapabilityView(relationship);
 
@@ -238,7 +238,7 @@ public class DomainQueryExtensionsTests {
     [Test]
     public async Task Relationship_GetCapabilityView_ContainsPropertiesStagesAndPolicies() {
         var (domain, _) = BuildSupportCaseDomain();
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var capability = analysis.GetCapabilityView(domain.RequireRelationship("AgentSupportCases"));
 

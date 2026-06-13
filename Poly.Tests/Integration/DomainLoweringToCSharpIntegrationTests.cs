@@ -29,7 +29,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddProperty(entity, new Property(domain, "IsActive", boolType));
         MutationApply.AddType(domain, entity);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -63,7 +63,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddStage(entity, new Stage(domain, "Published"));
         MutationApply.AddStage(entity, new Stage(domain, "Archived"));
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -96,7 +96,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         var employee = new Entity(domain, "Employee", parentEntity: user);
         MutationApply.AddType(domain, employee);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -129,7 +129,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         var assignEffect = new Assign(domain) { Target = nameProp, Value = param };
         MutationApply.AddEffect(setAction, assignEffect);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -162,7 +162,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         var assignEffect = new Assign(domain) { Target = nameProp, Value = param };
         MutationApply.AddEffect(setAction, assignEffect);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -188,7 +188,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddProperty(ev, new Property(domain, "ItemName", textType));
         MutationApply.AddEvent(entity, ev);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -207,7 +207,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddProperty(entity, new Property(domain, "ISBN", textType));
         MutationApply.AddType(domain, entity);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -232,7 +232,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         var rel = new Relationship(domain, "SourceTargets", source, target, RelationshipCardinality.OneToMany, true);
         MutationApply.AddRelationship(domain, rel);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -263,7 +263,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddEffect(setName, new Assign(domain) { Target = nameProperty, Value = newName });
         MutationApply.AddType(domain, entity);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
         var testStatements = pass.GenerateTestStatements(domain, analysis);
@@ -296,7 +296,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddRule(policy, new ActorPropertyRule(domain, "DepartmentMatches", department, new EqualityConstraint("Engineering")));
         MutationApply.AddPolicy(entity, policy);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -316,7 +316,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddRule(policy, new ActorRoleRule(domain, "MustBeEditor", "Editor"));
         MutationApply.AddPolicy(entity, policy);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -350,7 +350,7 @@ public class DomainLoweringToCSharpIntegrationTests {
             .SetEventPropertyBinding(ship, publish, "Number", new EventPropertyBindingSource.EntityProperty("Number"))
             .Apply();
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
 
@@ -371,7 +371,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddProperty(entity, new Property(domain, "Name", textType));
         MutationApply.AddType(domain, entity);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var contracts = pass.LowerToContractInterfaces(domain, analysis);
         var csharp = new CSharpGenerator().Generate(contracts);
@@ -393,7 +393,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddStage(user, new Stage(domain, "Active"));
         MutationApply.AddStage(user, new Stage(domain, "Inactive"));
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var contracts = pass.LowerToContractInterfaces(domain, analysis);
         var csharp = new CSharpGenerator().Generate(contracts);
@@ -424,7 +424,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         var activate = new DomainAction(domain, "Activate", user);
         MutationApply.AddAction(inactive, activate);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var contracts = pass.LowerToContractInterfaces(domain, analysis);
         var csharp = new CSharpGenerator().Generate(contracts);
@@ -450,7 +450,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddProperty(employee, new Property(domain, "EmployeeId", textType));
         MutationApply.AddType(domain, employee);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var contracts = pass.LowerToContractInterfaces(domain, analysis);
         var csharp = new CSharpGenerator().Generate(contracts);
@@ -480,7 +480,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         var activeChecking = new Stage(domain, "ActiveChecking") { Parent = active };
         MutationApply.AddStage(employee, activeChecking);
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var contracts = pass.LowerToContractInterfaces(domain, analysis);
         var csharp = new CSharpGenerator().Generate(contracts);
@@ -521,7 +521,7 @@ public class DomainLoweringToCSharpIntegrationTests {
         MutationApply.AddAction(shipped, complete);
         MutationApply.AddEffect(complete, new StageTransition(domain) { TargetStage = delivered });
 
-        var analysis = new DomainModelAnalyzer().Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var pass = new DomainImplementationLoweringPass();
         var typeDefs = pass.LowerToTypeDefinitions(domain, analysis);
         var csharp = new CSharpGenerator().Generate(typeDefs);

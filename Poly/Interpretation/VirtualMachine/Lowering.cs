@@ -21,8 +21,6 @@ internal static class Lowering {
         IReadOnlyDictionary<string, int>? UpvalueMap
     );
 
-    private static readonly HashSet<Type> _voidTypes = [typeof(void), typeof(ValueTuple), typeof(ValueTuple<>)];
-
     private ref struct EmitContext {
         public List<MicroOp> Code;
         public AnalysisResult Analysis;
@@ -48,9 +46,7 @@ internal static class Lowering {
             AssignmentCount.GetValueOrDefault(name) == 1 && !EscapedLocals.Contains(name);
         /// <summary>Map from local variable name to alias name for alias-eligible locals.</summary>
         public Dictionary<string, string> LocalAliases;  // var name → alias name
-        /// <summary>Set by Block before emitting a child when the child's value
-        /// will be immediately popped.  Assignment case uses this to skip DupOp.</summary>
-        public bool PoppingAssignmentValue;
+
     }
 
     public static Bytecode Lower(Node root, AnalysisResult analysis) {
@@ -68,7 +64,6 @@ internal static class Lowering {
             AssignmentCount = [],
             EscapedLocals = [],
             LocalAliases = [],
-            PoppingAssignmentValue = false,
         };
 
         // Discover referenced functions and lambdas
@@ -538,7 +533,7 @@ internal static class Lowering {
         // Value expression: BitwiseOr(IndexAccess(...), ShiftLeft(1, BitwiseAnd(idx, 63)))
         if (assign.Value is not BitwiseOr bor) return false;
         if (bor.LeftHandValue is not IndexAccess ia2) return false;
-        // verify ia2 is the same array pattern (app  ended during StridedSetOp internally)
+        // verify ia2 is the same array pattern (appended during StridedSetOp internally)
         if (bor.RightHandValue is not ShiftLeft sl) return false;
         if (sl.LeftHandValue is not Constant c || !(c.Value is long lv && lv == 1L)) return false;
         if (sl.RightHandValue is not BitwiseAnd ba) return false;
@@ -560,7 +555,7 @@ internal static class Lowering {
         // Need to evaluate start and step expressions
         string? aliasName = ctx.LocalAliases?.GetValueOrDefault(arrVar.Name);
         if (aliasName is not null) {
-            // Use aliased read — but StridedSetOp doesn't support alias yet
+            // Use aliased read
             // Fall back to normal path
             return false;
         }
@@ -1016,25 +1011,6 @@ internal static class Lowering {
             if (!isParam && !isLocal && !captures.Contains(name))
                 captures.Add(name);
         }
-    }
-
-    private static Variable? FindVariableInBody(Node body, string name) {
-        Variable? result = null;
-        Search(body);
-        return result;
-
-        void Search(Node n) {
-            if (result is not null) return;
-            if (n is Variable v && v.Name == name) { result = v; return; }
-            foreach (var child in n.Children) {
-                if (child is not null) Search(child);
-            }
-        }
-    }
-
-    private static bool IsDefinitelyAssigned(Node node, AnalysisResult analysis) {
-        var meta = analysis.GetMetadata<DefiniteAssignmentMetadata>(node);
-        return meta?.DefinitelyAssigned.Count > 0;
     }
 
     private static bool IsArrayType(Node node, EmitContext ctx) {

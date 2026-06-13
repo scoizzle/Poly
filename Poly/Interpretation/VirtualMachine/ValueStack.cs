@@ -7,8 +7,6 @@ internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
     private long[] _slots = ArrayPool<long>.Shared.Rent(initialSlots);
 
     public int SP { get; private set; }
-    public bool IsEmpty => SP == 0;
-    public Span<long> AsSpan() => _slots.AsSpan(0, SP);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Push(long value) {
@@ -31,25 +29,7 @@ internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
     private static long ThrowUnderflow() =>
         throw new InvalidOperationException("Stack underflow");
 
-    public int PopInt() => (int)Pop();
-
-    public void Drop(int count) {
-        if (count < 0 || SP < count)
-            throw new InvalidOperationException("Stack underflow");
-        SP -= count;
-    }
-
-    public void Reserve(int count) {
-        if (SP + count > _slots.Length)
-            Grow();
-        SP += count;
-    }
-
     internal long[] RawSlots => _slots;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal int ReadSlot(int index) =>
-        index >= 0 && index < _slots.Length ? (int)_slots[index] : 0;
 
     internal void SetSP(int value) => SP = value;
 

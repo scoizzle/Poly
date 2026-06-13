@@ -14,7 +14,6 @@ internal sealed class VmState : IDisposable {
 
     public bool IsComplete => Status == InterpreterStatus.Completed;
     public bool IsSuspended => Status == InterpreterStatus.Suspended;
-    public bool ShouldStop => Status != InterpreterStatus.Running;
 
     /// <summary>PCs where the VM should suspend before executing the µop.</summary>
     public HashSet<int>? BreakpointPCs { get; set; }

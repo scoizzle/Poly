@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace Poly.Interpretation.VirtualMachine;
 
@@ -95,12 +94,6 @@ internal static partial class Vm {
         }
         return null;
     }
-
-    internal static object? ResolveHeapValue(VmState state, int raw) =>
-        raw >= 0 && raw < state.Heap.Count ? state.Heap.UnsafeGet(raw) : (object?)raw;
-
-    internal static bool IsValidHeapHandle(VmState state, int handle) =>
-        handle >= 0 && handle < state.Heap.Count;
 
     // ── µop handler helpers (called via Expression.Call from compiled delegates) ──
 

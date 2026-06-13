@@ -101,6 +101,19 @@ internal abstract record MicroOp(NodeId? Source) {
     public abstract Expression ToExpression(CompilationContext ctx);
 }
 
+// ── Cached reflection helpers ──
+file static class UopReflection {
+    public static readonly System.Reflection.MethodInfo HeapGet =
+        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+    public static readonly System.Reflection.MethodInfo HeapSet =
+        typeof(Heap).GetMethod("Set", [typeof(int), typeof(object)])!;
+    public static readonly System.Reflection.MethodInfo HeapAlloc =
+        typeof(Heap).GetMethod("Allocate", [typeof(object)])!;
+    public static System.Reflection.MethodInfo VmHandler(string name) =>
+        typeof(Vm).GetMethod(name, System.Reflection.BindingFlags.Static
+            | System.Reflection.BindingFlags.NonPublic)!;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  Stack manipulations
 // ═══════════════════════════════════════════════════════════════════
@@ -322,18 +335,6 @@ internal sealed record IncLocalOp(int Index, long Increment, NodeId? Source = nu
             ctx.Push(Expression.ArrayAccess(ctx.Slots, off)));
     }
 }
-/// <summary>Pop val, add to local <c>Index</c>, push new local value.
-/// Stack: <c>[..., val] → [..., local_new]</c>.</summary>
-internal sealed record AddToLocalOp(int Index, NodeId? Source = null) : MicroOp(Source) {
-    public override string ToString() => $"addtolocal {Index}";
-    public override Expression ToExpression(CompilationContext ctx) {
-        var off = Expression.Add(Expression.Add(ctx.FB, ctx.CAS), Expression.Constant(1 + Index));
-        return Expression.Block(
-            Expression.AddAssign(Expression.ArrayAccess(ctx.Slots, off),
-                Expression.Convert(ctx.Pop(), typeof(long))),
-            ctx.Push(Expression.ArrayAccess(ctx.Slots, off)));
-    }
-}
 internal sealed record LoadArgOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"loadarg {Index}";
     public override Expression ToExpression(CompilationContext ctx) =>
@@ -484,13 +485,12 @@ internal sealed record LoadValueOp(NodeId? Source = null) : MicroOp(Source) {
         var handle = Expression.Variable(typeof(int), "h");
         var val = Expression.Variable(typeof(long), "v");
         ctx.Variables.Add(handle); ctx.Variables.Add(val);
-        var heapGet = typeof(Heap).GetMethod("Get", [typeof(int)])!;
         return Expression.Block(
             Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))),
             Expression.IfThenElse(
                 Expression.GreaterThanOrEqual(Expression.Constant(handle), Expression.Constant(0)),
                 Expression.Assign(val, Expression.Convert(
-                    Expression.Call(Expression.Property(ctx.State, "Heap"), heapGet, handle), typeof(long))),
+                    Expression.Call(Expression.Property(ctx.State, "Heap"), UopReflection.HeapGet, handle), typeof(long))),
                 Expression.Assign(val, Expression.ArrayAccess(ctx.Slots, Expression.Negate(handle)))),
             ctx.Push(val));
     }
@@ -501,13 +501,12 @@ internal sealed record StoreValueOp(NodeId? Source = null) : MicroOp(Source) {
         var handle = Expression.Variable(typeof(int), "h");
         var val = Expression.Variable(typeof(long), "v");
         ctx.Variables.Add(handle); ctx.Variables.Add(val);
-        var heapSet = typeof(Heap).GetMethod("Set", [typeof(int), typeof(object)])!;
         return Expression.Block(
             Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))),
             Expression.Assign(val, ctx.Pop()),
             Expression.IfThenElse(
                 Expression.GreaterThanOrEqual(Expression.Constant(handle), Expression.Constant(0)),
-                Expression.Call(Expression.Property(ctx.State, "Heap"), heapSet, handle, Expression.Convert(val, typeof(object))),
+                Expression.Call(Expression.Property(ctx.State, "Heap"), UopReflection.HeapSet, handle, Expression.Convert(val, typeof(object))),
                 Expression.Assign(Expression.ArrayAccess(ctx.Slots, Expression.Negate(handle)), val)));
     }
 }
@@ -518,8 +517,7 @@ internal sealed record StoreValueOp(NodeId? Source = null) : MicroOp(Source) {
 
 internal sealed record AllocClosureOp(int FuncIndex, int CaptureCount, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"allocclo func={FuncIndex} caps={CaptureCount}";
-    static readonly System.Reflection.MethodInfo _method = typeof(Vm).GetMethod("HandleAllocClosure",
-        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    static readonly System.Reflection.MethodInfo _method = UopReflection.VmHandler("HandleAllocClosure");
     public override Expression ToExpression(CompilationContext ctx) {
         return Expression.Block(
             ctx.WritebackSP(),
@@ -530,15 +528,13 @@ internal sealed record AllocClosureOp(int FuncIndex, int CaptureCount, NodeId? S
 
 internal sealed record LoadUpvalueOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"loadupv {Index}";
-    static readonly System.Reflection.MethodInfo _method = typeof(Vm).GetMethod("HandleLoadUpvalue",
-        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    static readonly System.Reflection.MethodInfo _method = UopReflection.VmHandler("HandleLoadUpvalue");
     public override Expression ToExpression(CompilationContext ctx) =>
         ctx.Push(Expression.Call(_method, ctx.State, Expression.Constant(Index)));
 }
 internal sealed record StoreUpvalueOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"storeupv {Index}";
-    static readonly System.Reflection.MethodInfo _method = typeof(Vm).GetMethod("HandleStoreUpvalue",
-        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    static readonly System.Reflection.MethodInfo _method = UopReflection.VmHandler("HandleStoreUpvalue");
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Call(_method, ctx.State, Expression.Constant(Index), ctx.Pop());
 }
@@ -549,8 +545,7 @@ internal sealed record StoreUpvalueOp(int Index, NodeId? Source = null) : MicroO
 
 internal sealed record ThrowOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "throw";
-    static readonly System.Reflection.MethodInfo _method = typeof(Vm).GetMethod("HandleThrow",
-        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    static readonly System.Reflection.MethodInfo _method = UopReflection.VmHandler("HandleThrow");
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Block(
             ctx.WritebackSP(),
@@ -559,8 +554,7 @@ internal sealed record ThrowOp(NodeId? Source = null) : MicroOp(Source) {
 }
 internal sealed record EndFinallyOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "endfinally";
-    static readonly System.Reflection.MethodInfo _method = typeof(Vm).GetMethod("HandleEndFinally",
-        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    static readonly System.Reflection.MethodInfo _method = UopReflection.VmHandler("HandleEndFinally");
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Block(
             ctx.WritebackSP(),
@@ -574,8 +568,7 @@ internal sealed record EndFinallyOp(NodeId? Source = null) : MicroOp(Source) {
 
 internal sealed record CallOp(int FuncIndex, int ArgSlots, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"call func={FuncIndex} args={ArgSlots}";
-    static readonly System.Reflection.MethodInfo _method = typeof(Vm).GetMethod("HandleCall",
-        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    static readonly System.Reflection.MethodInfo _method = UopReflection.VmHandler("HandleCall");
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Block(
             ctx.WritebackSP(),
@@ -585,8 +578,7 @@ internal sealed record CallOp(int FuncIndex, int ArgSlots, NodeId? Source = null
 }
 internal sealed record CallClosureOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "callclo";
-    static readonly System.Reflection.MethodInfo _method = typeof(Vm).GetMethod("HandleCallClosure",
-        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    static readonly System.Reflection.MethodInfo _method = UopReflection.VmHandler("HandleCallClosure");
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Block(
             ctx.WritebackSP(),
@@ -596,8 +588,7 @@ internal sealed record CallClosureOp(NodeId? Source = null) : MicroOp(Source) {
 }
 internal sealed record CallExternalOp(int SiteIndex, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"callext site={SiteIndex}";
-    static readonly System.Reflection.MethodInfo _method = typeof(Vm).GetMethod("HandleCallExternal",
-        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    static readonly System.Reflection.MethodInfo _method = UopReflection.VmHandler("HandleCallExternal");
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Block(
             ctx.WritebackSP(),
@@ -617,7 +608,7 @@ internal sealed record CallExternalOp(int SiteIndex, NodeId? Source = null) : Mi
 internal sealed record ArrayLoadOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "arrayload" : $"arrayload alias={Alias}";
     static readonly System.Reflection.MethodInfo HeapGet =
-        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+        UopReflection.HeapGet;
     public override Expression ToExpression(CompilationContext ctx) {
         var idx = Expression.Variable(typeof(int), "i");
         ctx.Variables.Add(idx);
@@ -659,7 +650,7 @@ internal sealed record NewArrayOp(string? Alias = null, NodeId? Source = null) :
                 Expression.Assign(aliasVar, arr),
                 ctx.Push(Expression.Constant(0L)));
         }
-        var heapAlloc = typeof(Heap).GetMethod("Allocate", [typeof(object)])!;
+        var heapAlloc = UopReflection.HeapAlloc;
         return Expression.Block(
             Expression.Assign(size, Expression.Convert(ctx.Pop(), typeof(int))),
             Expression.Assign(arr, Expression.NewArrayBounds(typeof(long), size)),
@@ -677,7 +668,7 @@ internal sealed record NewArrayOp(string? Alias = null, NodeId? Source = null) :
 internal sealed record ArrayStoreOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "arraystore" : $"arraystore alias={Alias}";
     static readonly System.Reflection.MethodInfo HeapGet =
-        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+        UopReflection.HeapGet;
     public override Expression ToExpression(CompilationContext ctx) {
         var val = Expression.Variable(typeof(long), "v");
         var idx = Expression.Variable(typeof(int), "i");
@@ -721,7 +712,7 @@ internal sealed record BatchReduceOp(
 ) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "batchreduce" : $"batchreduce alias={Alias}";
     static readonly System.Reflection.MethodInfo HeapGet =
-        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+        UopReflection.HeapGet;
 
     public override Expression ToExpression(CompilationContext ctx) {
         var wc = Expression.Variable(typeof(int), "wc");
@@ -803,7 +794,7 @@ internal sealed record BatchReduceOp(
 internal sealed record CountBitsOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "countbits";
     static readonly System.Reflection.MethodInfo HeapGet =
-        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+        UopReflection.HeapGet;
     static readonly System.Reflection.MethodInfo PopCount =
         typeof(System.Numerics.BitOperations).GetMethod("PopCount", [typeof(ulong)])!;
     public override Expression ToExpression(CompilationContext ctx) {
@@ -850,7 +841,7 @@ internal sealed record CountBitsOp(NodeId? Source = null) : MicroOp(Source) {
 internal sealed record StridedSetOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "stridedset";
     static readonly System.Reflection.MethodInfo HeapGet =
-        typeof(Heap).GetMethod("Get", [typeof(int)])!;
+        UopReflection.HeapGet;
 
     public override Expression ToExpression(CompilationContext ctx) {
         var handle = Expression.Variable(typeof(int), "h");

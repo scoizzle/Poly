@@ -1,12 +1,8 @@
-using System.Collections.Generic;
-
 namespace Poly.Interpretation.VirtualMachine;
 
 internal sealed class Heap {
     private readonly List<object?> _objects = [];
     private readonly Stack<int> _freeSlots = [];
-
-    public Action<int, object?>? OnAllocate { get; set; }
 
     public int Count => _objects.Count;
 
@@ -20,7 +16,6 @@ internal sealed class Heap {
             handle = _objects.Count;
             _objects.Add(value);
         }
-        OnAllocate?.Invoke(handle, value);
         return handle;
     }
 
@@ -45,8 +40,6 @@ internal sealed class Heap {
         if (value is null)
             _freeSlots.Push(handle);
     }
-
-    internal IReadOnlyList<object?> DebugView => _objects;
 
     public void Clear() {
         _objects.Clear();

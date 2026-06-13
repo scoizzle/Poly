@@ -3,8 +3,6 @@ using Poly.Syntax.Analysis;
 namespace Poly.Interpretation.VirtualMachine;
 
 internal sealed record FunctionEntry(int PC, int ArgSlots, int RetSlots, int LocalCount = 0) {
-    public int HotCount;
-    public CallSiteDelegate? NativeFn;
     public Node? SourceNode;
 }
 internal sealed record ExceptionRegion(int TryStart, int TryEnd, int CatchStart, int? FinallyStart);

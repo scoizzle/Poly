@@ -114,44 +114,6 @@ internal static class CallSiteCompiler {
             Expression.Block([baseOffV, resultV], body), s).Compile();
     }
 
-    public static CallSiteDelegate CompileFieldGetter(FieldInfo field, bool isStatic) {
-        var returnType = field.FieldType;
-        int argSlots = isStatic ? 0 : 1;
-
-        var s = Expression.Parameter(typeof(VmState), "s");
-        var stack = Expression.Property(s, "Stack");
-        var pushInt = typeof(ValueStack).GetMethod("Push", [typeof(int)])!;
-
-        var baseOffV = Expression.Variable(typeof(int), "baseOff");
-
-        var body = new List<Expression>();
-
-        body.Add(Expression.Assign(baseOffV,
-            Expression.Subtract(Expression.Property(stack, "SP"),
-                Expression.Constant(argSlots))));
-
-        Expression resultExpr;
-        if (isStatic) {
-            resultExpr = Expression.Field(null, field);
-        }
-        else {
-            var owner = ReadSpanInt(stack, baseOffV, 0);
-            var resolvedOwner = ResolveArg(owner, field.DeclaringType!, s);
-            resultExpr = Expression.Field(resolvedOwner, field);
-        }
-
-        var resultV = Expression.Variable(returnType, "result");
-        body.Add(Expression.Assign(resultV, resultExpr));
-
-        if (argSlots > 0)
-            body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
-
-        body.Add(Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s)));
-
-        return Expression.Lambda<CallSiteDelegate>(
-            Expression.Block([baseOffV, resultV], body), s).Compile();
-    }
-
     private static Expression ReadSpanInt(Expression stack, Expression baseOff, int slotOffset) {
         var rawSlots = Expression.Property(stack, "RawSlots");
         var idx = Expression.Add(baseOff, Expression.Constant(slotOffset));
@@ -181,47 +143,6 @@ internal static class CallSiteCompiler {
         return Expression.Condition(inBounds,
             Expression.Convert(get, targetType),
             targetType == typeof(object) ? Expression.Convert(rawInt, typeof(object)) : Expression.Default(targetType));
-    }
-
-    public static CallSiteDelegate CompileFieldSetter(FieldInfo field, bool isStatic) {
-        int argSlots = isStatic ? 1 : 2;
-        var s = Expression.Parameter(typeof(VmState), "s");
-        var stack = Expression.Property(s, "Stack");
-        var baseOffV = Expression.Variable(typeof(int), "baseOff");
-
-        var body = new List<Expression>();
-
-        body.Add(Expression.Assign(baseOffV,
-            Expression.Subtract(Expression.Property(stack, "SP"),
-                Expression.Constant(argSlots))));
-
-        var setValueMethod = typeof(FieldInfo).GetMethod("SetValue", [typeof(object), typeof(object)])!;
-
-        if (isStatic) {
-            var rawValue = ReadSpanInt(stack, baseOffV, 0);
-            var typedValue = ResolveArg(rawValue, field.FieldType, s);
-            body.Add(Expression.Call(
-                Expression.Constant(field),
-                setValueMethod,
-                Expression.Constant(null, typeof(object)),
-                Expression.Convert(typedValue, typeof(object))));
-        }
-        else {
-            var rawTarget = ReadSpanInt(stack, baseOffV, 0);
-            var rawValue = ReadSpanInt(stack, baseOffV, 1);
-            var typedTarget = ResolveArg(rawTarget, field.DeclaringType!, s);
-            var typedValue = ResolveArg(rawValue, field.FieldType, s);
-            body.Add(Expression.Call(
-                Expression.Constant(field),
-                setValueMethod,
-                Expression.Convert(typedTarget, typeof(object)),
-                Expression.Convert(typedValue, typeof(object))));
-        }
-
-        if (argSlots > 0)
-            body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
-
-        return Expression.Lambda<CallSiteDelegate>(Expression.Block([baseOffV], body), s).Compile();
     }
 
     private static Expression ConvertToStackInt(Expression value, Type returnType, Expression s) {

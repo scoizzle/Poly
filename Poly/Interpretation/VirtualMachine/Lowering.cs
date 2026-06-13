@@ -101,9 +101,37 @@ internal static class Lowering {
         // Pre-scan: collect assignment counts and escape info for alias analysis
         CollectEscapeInfo(root, ctx);
 
-        // Emit main body
-        if (referencedMethods.Count > 0) {
-            var method = referencedMethods[0];
+        // ── Emit root as entry point ──
+        if (root is MethodDefinitionNode rootMethod) {
+            var paramIndexMap = new Dictionary<string, int>();
+            if (rootMethod.Parameters is not null) {
+                int pi = 0;
+                foreach (var p in rootMethod.Parameters)
+                    paramIndexMap[p.Name ?? ""] = pi++;
+            }
+
+            int rootIdx = ctx.FunctionIndexMap[rootMethod];
+            int entryUop = ctx.Code.Count;
+            var bodyCtx = ctx;
+            bodyCtx.ParamIndexMap = paramIndexMap;
+            bodyCtx.CurrentArgSlots = paramIndexMap.Count;
+
+            EmitNode(rootMethod.Body ?? rootMethod, ref bodyCtx, null);
+            bodyCtx.Code.Add(new ReturnFromCallOp(bodyCtx.CurrentArgSlots));
+
+            ctx.Functions[rootIdx] = new FunctionEntry(entryUop, paramIndexMap.Count, 1, 0) {
+                SourceNode = rootMethod
+            };
+        }
+        else {
+            EmitNode(root, ref ctx, null);
+            ctx.Code.Add(new ReturnOp());
+        }
+
+        // ── Emit utility method bodies (all referenced methods except root) ──
+        foreach (var method in referencedMethods) {
+            if (method == root) continue;
+
             var paramIndexMap = new Dictionary<string, int>();
             if (method.Parameters is not null) {
                 int pi = 0;
@@ -111,7 +139,8 @@ internal static class Lowering {
                     paramIndexMap[p.Name ?? ""] = pi++;
             }
 
-            int methodIdx = ctx.FunctionIndexMap[method];
+            var funcIndexMap = ctx.FunctionIndexMap!;
+            int methodIdx = funcIndexMap[method];
             int entryUop = ctx.Code.Count;
             var bodyCtx = ctx;
             bodyCtx.ParamIndexMap = paramIndexMap;
@@ -120,17 +149,12 @@ internal static class Lowering {
             EmitNode(method.Body ?? method, ref bodyCtx, null);
             bodyCtx.Code.Add(new ReturnFromCallOp(bodyCtx.CurrentArgSlots));
 
-            var func = ctx.Functions[methodIdx];
-            ctx.Functions[methodIdx] = new FunctionEntry(entryUop, func.ArgSlots, func.RetSlots, 0) {
+            ctx.Functions[methodIdx] = new FunctionEntry(entryUop, paramIndexMap.Count, 1, 0) {
                 SourceNode = method
             };
         }
-        else {
-            EmitNode(root, ref ctx, null);
-            ctx.Code.Add(new ReturnOp());
-        }
 
-        // Emit lambda bodies
+        // ── Emit lambda bodies ──
         foreach (var lambda in referencedLambdas) {
             var paramIndexMap = new Dictionary<string, int>();
             int idx = 1;
@@ -256,7 +280,7 @@ internal static class Lowering {
             case GreaterThanOrEqual ge: EmitBinary(ge.LeftHandValue, ge.RightHandValue, static () => new GeOp(), ref ctx, lambdaState, ge); return;
 
             case UnaryMinus um:
-                if (TryGetConstantLong(um.Operand, out long negVal)) {
+                if (TryGetConstantLong(ref ctx, um.Operand, out long negVal)) {
                     ctx.Code.Add(new PushOp(-negVal));
                 }
                 else {
@@ -266,7 +290,7 @@ internal static class Lowering {
                 return;
 
             case Not n:
-                if (TryGetConstantLong(n.Value, out long notVal)) {
+                if (TryGetConstantLong(ref ctx, n.Value, out long notVal)) {
                     ctx.Code.Add(new PushOp(notVal == 0 ? 1L : 0L));
                 }
                 else {
@@ -368,6 +392,9 @@ internal static class Lowering {
             case Await aw: EmitAwait(aw, ref ctx, lambdaState); return;
             case SuspendNode sn: EmitSuspendNode(sn, ref ctx, lambdaState); return;
 
+            case MethodDefinitionNode:
+                return; // declaration — no µops in linear stream
+
             default:
                 throw new InvalidOperationException($"Lowering not yet implemented for {node.GetType().Name}");
         }
@@ -375,7 +402,7 @@ internal static class Lowering {
 
     private static void EmitBinary(Node left, Node right, Func<MicroOp> makeOp, ref EmitContext ctx, LambdaEmitState? lambdaState, Node? source = null) {
         EmitNode(left, ref ctx, lambdaState);
-        if (TryGetConstantLong(right, out long val)) {
+        if (TryGetConstantLong(ref ctx, right, out long val)) {
             var op = makeOp();
             if (op is AddOp or SubOp or MulOp or EqOp or NeOp or LtOp or LeOp or GtOp or GeOp) {
                 EmitOp(ref ctx, op switch {
@@ -401,7 +428,9 @@ internal static class Lowering {
         }
     }
 
-    private static bool TryGetConstantLong(Node node, out long value) {
+    private static bool TryGetConstantLong(ref EmitContext ctx, Node node, out long value) {
+        node = ctx.Analysis.GetNodeReplacement(node) ?? node; // Node may have been substituted by constant folding
+
         if (node is Constant c) {
             if (c.Value is int iv) { value = iv; return true; }
             if (c.Value is long lv) { value = lv; return true; }
@@ -706,6 +735,13 @@ internal static class Lowering {
             return;
         }
 
+        if (invoke.Delegate is MethodDefinitionNode mdn2 && ctx.FunctionIndexMap!.TryGetValue(mdn2, out int mdnIdx)) {
+            foreach (var arg in args)
+                EmitNode(arg, ref ctx, lambdaState);
+            ctx.Code.Add(new CallOp(mdnIdx, args.Length));
+            return;
+        }
+
         // Generic lambda/delegate call via CallClosure
         EmitNode(invoke.Delegate, ref ctx, lambdaState);
         foreach (var arg in args)
@@ -959,6 +995,9 @@ internal static class Lowering {
                     DiscoverFunctions(body, analysis, result);
                 }
             }
+        }
+        else if (node is MethodDefinitionNode mdn && !result.Contains(mdn)) {
+            result.Add(mdn);
         }
         foreach (var child in node.Children) {
             if (child is not null)

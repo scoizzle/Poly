@@ -29,6 +29,20 @@ internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
     private static long ThrowUnderflow() =>
         throw new InvalidOperationException("Stack underflow");
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Drop(int count) {
+        var sp = SP - count;
+        if ((uint)sp > (uint)SP)
+            ThrowUnderflow();
+        SP = sp;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Reserve(int count) {
+        var sp = SP + count;
+        if (sp > _slots.Length) Grow();
+        SP += count;
+    }
     internal long[] RawSlots => _slots;
 
     internal void SetSP(int value) => SP = value;

@@ -1,3 +1,5 @@
+using System.IO;
+
 using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.VirtualMachine;
@@ -52,5 +54,63 @@ internal sealed class Bytecode {
         if (CompiledLoop is not null) return CompiledLoop;
         CompiledLoop = ProgramCompiler.Compile(MicroOps);
         return CompiledLoop;
+    }
+
+    /// <summary>Dump the entire µop listing to <paramref name="writer"/>
+    /// in a human-readable format, including function table, exception
+    /// regions, and each µop with PC index and source annotation.</summary>
+    public void Dump(TextWriter writer) {
+        var uops = MicroOps;
+
+        // ── Function table ──
+        var funcs = Functions;
+        if (funcs.Count > 0) {
+            writer.WriteLine(";; Functions");
+            for (var i = 0; i < funcs.Count; i++) {
+                var f = funcs[i];
+                writer.WriteLine(
+                    $";;   {i}: PC={f.PC}, args={f.ArgSlots}, ret={f.RetSlots}, locals={f.LocalCount}");
+            }
+
+            writer.WriteLine();
+        }
+
+        // ── Exception regions ──
+        if (ExceptionRegions.Count > 0) {
+            writer.WriteLine(";; Exception Regions");
+            foreach (var er in ExceptionRegions) {
+                writer.Write($";;   try [{er.TryStart}..{er.TryEnd}) → catch at {er.CatchStart}");
+                if (er.FinallyStart is not null)
+                    writer.Write($", finally at {er.FinallyStart}");
+                writer.WriteLine();
+            }
+
+            writer.WriteLine();
+        }
+
+        // ── µop listing ──
+        // Build PC → function index map for inline headers
+        var funcAtPC = new Dictionary<int, int>();
+        for (var i = 0; i < funcs.Count; i++)
+            funcAtPC[funcs[i].PC] = i;
+
+        writer.WriteLine(";; µops");
+        for (var i = 0; i < uops.Count; i++) {
+            if (funcAtPC.TryGetValue(i, out var fi))
+                writer.WriteLine($";; --- function {fi} ---");
+
+            var op = uops[i];
+            if (op.SourceName is not null)
+                writer.WriteLine($"{i,4}  {op}  ← {op.SourceName}");
+            else
+                writer.WriteLine($"{i,4}  {op}");
+        }
+    }
+
+    /// <summary>Dump the µop listing to a string.</summary>
+    public string DumpToString() {
+        var sw = new StringWriter();
+        Dump(sw);
+        return sw.ToString();
     }
 }

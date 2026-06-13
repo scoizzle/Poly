@@ -20,6 +20,9 @@ internal sealed class Bytecode {
     public IReadOnlyList<LoopBodyEntry> LoopBodies { get; }
     public Type? ResultType { get; }
     public AnalysisResult? AnalysisResult { get; }
+    /// <summary>PC range for each AST node, built during lowering.
+    /// Used by the debugger for step-over range computation.</summary>
+    public Dictionary<NodeId, (int StartPC, int EndPC)>? NodeRanges { get; }
     public int CodeLength => MicroOps.Count;
 
     public Bytecode(
@@ -31,7 +34,8 @@ internal sealed class Bytecode {
         List<ExceptionRegion>? exceptionRegions = null,
         Type? resultType = null,
         AnalysisResult? analysisResult = null,
-        List<LoopBodyEntry>? loopBodies = null) {
+        List<LoopBodyEntry>? loopBodies = null,
+        Dictionary<NodeId, (int StartPC, int EndPC)>? nodeRanges = null) {
         MicroOps = microOps;
         Functions = functions ?? [];
         Constants = constants ?? [];
@@ -41,6 +45,7 @@ internal sealed class Bytecode {
         ResultType = resultType;
         AnalysisResult = analysisResult;
         LoopBodies = loopBodies ?? [];
+        NodeRanges = nodeRanges;
     }
 
     /// <summary>Compile the µop list on first call and cache the resulting

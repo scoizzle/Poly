@@ -14,6 +14,8 @@ namespace Poly.Tests.Interpretation;
 /// <summary>Full pipeline tests: AST → Lowering → µops → compiled delegate → execute.
 /// These are the accuracy and regression tests for the µop execution path.</summary>
 public class UopPipelineTests {
+    private static readonly TestTraceWriter _traceWriter = new();
+
     private static Bytecode LowerWith(Node node, Action<AnalyzerBuilder>? configure = null) {
         var builder = new AnalyzerBuilder()
             .UseTypeResolver()
@@ -27,8 +29,6 @@ public class UopPipelineTests {
         var analysis = builder.Build().Analyze(node);
         return Lowering.Lower(node, analysis);
     }
-
-    private static readonly DebugTextWriter _traceWriter = new();
 
     private static InterpreterResult Execute(Node node, Action<AnalyzerBuilder>? configure = null) {
         var prog = LowerWith(node, configure);
@@ -347,11 +347,11 @@ public class UopPipelineTests {
         var lambda = new Lambda([param], new Multiply(param, new Constant(2)));
 
         var prog5 = LowerWith(new Invoke(lambda, new Constant(5)));
-        using var s5 = new VmState { Program = prog5 };
+        using var s5 = new VmState { Program = prog5, Trace = _traceWriter };
         await Assert.That(Vm.Execute(s5).Value).IsEqualTo(10L);
 
         var prog3 = LowerWith(new Invoke(lambda, new Constant(3)));
-        using var s3 = new VmState { Program = prog3 };
+        using var s3 = new VmState { Program = prog3, Trace = _traceWriter };
         await Assert.That(Vm.Execute(s3).Value).IsEqualTo(6L);
     }
 
@@ -441,7 +441,7 @@ public class UopPipelineTests {
     [Test]
     public async Task WhileLoop_NeverExecutes() {
         var prog = LowerWith(new Invoke(new Lambda([], new WhileLoop(new Constant(0), new Block([new Constant(42)])))));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
         var result = Vm.Execute(state);
         await Assert.That(state.IsComplete).IsTrue();
     }
@@ -749,7 +749,7 @@ public class UopPipelineTests {
     public async Task DivisionByZero_Throws() {
         var node = new Divide(new Constant(10), new Constant(0));
         var prog = LowerWith(node);
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
         await Assert.That(() => Vm.Execute(state)).Throws<DivideByZeroException>();
     }
 
@@ -757,7 +757,7 @@ public class UopPipelineTests {
     public async Task DivRemByZero_Throws() {
         var node = new Modulo(new Constant(10), new Constant(0));
         var prog = LowerWith(node);
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
         await Assert.That(() => Vm.Execute(state)).Throws<DivideByZeroException>();
     }
 
@@ -816,7 +816,7 @@ public class UopPipelineTests {
     [Test]
     public async Task SingleExpressionBlock_ReturnsThatExpression() {
         var prog = LowerWith(new Block(new Constant(42)));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
         var result = Vm.Execute(state);
         await Assert.That(state.IsComplete).IsTrue();
         await Assert.That(result.Value).IsEqualTo(42L);
@@ -896,7 +896,7 @@ public class UopPipelineTests {
         // while (false) { noop } should complete without error
         var node = new Invoke(new Lambda([], new WhileLoop(new Constant(0), new Block([new Constant(0)]))));
         var prog = LowerWith(node);
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
         var result = Vm.Execute(state);
         await Assert.That(state.IsComplete).IsTrue();
     }
@@ -936,11 +936,11 @@ public class UopPipelineTests {
         var lambda = new Lambda([param], new Multiply(param, new Constant(3)));
         // Call it with 5, then with 7
         var prog = LowerWith(new Invoke(lambda, new Constant(5)));
-        using var s5 = new VmState { Program = prog };
+        using var s5 = new VmState { Program = prog, Trace = _traceWriter };
         await Assert.That(Vm.Execute(s5).Value).IsEqualTo(15L);
 
         var prog2 = LowerWith(new Invoke(lambda, new Constant(7)));
-        using var s7 = new VmState { Program = prog2 };
+        using var s7 = new VmState { Program = prog2, Trace = _traceWriter };
         await Assert.That(Vm.Execute(s7).Value).IsEqualTo(21L);
     }
 
@@ -949,7 +949,7 @@ public class UopPipelineTests {
         // Lambda that returns void (constant expression as no-op body)
         var node = new Invoke(new Lambda([], new Block([new Constant(0)])));
         var prog = LowerWith(node);
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
         var result = Vm.Execute(state);
         await Assert.That(state.IsComplete).IsTrue();
     }

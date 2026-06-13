@@ -11,6 +11,13 @@ internal static class ProgramCompiler {
     static readonly PropertyInfo FB = typeof(VmState).GetProperty(nameof(VmState.FrameBase), BF)!;
     static readonly PropertyInfo CAS = typeof(VmState).GetProperty(nameof(VmState.CachedArgSlots), BF)!;
 
+    // ── Breakpoint check reflection ──
+    static readonly PropertyInfo DebugModeProp = typeof(VmState).GetProperty(nameof(VmState.DebugMode), BF)!;
+    static readonly PropertyInfo BPPcsProp = typeof(VmState).GetProperty(nameof(VmState.BreakpointPCs), BF)!;
+    static readonly PropertyInfo SavedPCProp = typeof(VmState).GetProperty(nameof(VmState.SavedPC), BF)!;
+    static readonly PropertyInfo StatusProp = typeof(VmState).GetProperty(nameof(VmState.Status), BF)!;
+    static readonly MethodInfo ContainsMethod = typeof(HashSet<int>).GetMethod("Contains", [typeof(int)])!;
+
     /// <summary>Compile a dispatch-loop delegate.  The delegate reads
     /// <c>state.PC</c> at entry, loops dispatching via a switch on PC,
     /// and exits when <c>pc >= count</c>.  Call/Return/Jump all work
@@ -31,16 +38,35 @@ internal static class ProgramCompiler {
         // (or sets it for control flow). After the case, the loop
         // re-checks pc < count and dispatches again.
         var switchCases = new System.Linq.Expressions.SwitchCase[uops.Count];
+        var suspendStatus = Expression.Constant(InterpreterStatus.Suspended);
         for (int i = 0; i < uops.Count; i++) {
-            var body = new List<Expression> { uops[i].ToExpression(ctx) };
-            // µops that don't modify pc get pc++
-            if (uops[i] is not JumpOp and not JumpIfFalseOp
+            var uop = uops[i];
+            // Normal execution block: trace → µop → pc++
+            var execBody = new List<Expression> { uop.ToExpression(ctx) };
+            execBody.Insert(0, ctx.TraceBefore(uop));
+            if (uop is not JumpOp and not JumpIfFalseOp
                 and not ReturnOp and not ReturnFromCallOp
                 and not CallOp and not CallClosureOp)
-                body.Add(Expression.Assign(pc, Expression.Add(pc, Expression.Constant(1))));
-            body.Add(Expression.Empty());
-            switchCases[i] = Expression.SwitchCase(
-                Expression.Block(typeof(void), body), Expression.Constant(i));
+                execBody.Add(Expression.Assign(pc, Expression.Add(pc, Expression.Constant(1))));
+            execBody.Add(Expression.Empty());
+
+            // Gated by breakpoint check — when DebugMode + BreakpointPCs.Contains(pc)
+            // we suspend (skipping trace + µop + pc++ entirely).
+            var breakCheck = Expression.IfThenElse(
+                Expression.AndAlso(
+                    Expression.Property(s, DebugModeProp),
+                    Expression.AndAlso(
+                        Expression.NotEqual(Expression.Property(s, BPPcsProp),
+                            Expression.Constant(null, typeof(HashSet<int>))),
+                        Expression.Call(Expression.Property(s, BPPcsProp),
+                            ContainsMethod, pc))),
+                Expression.Block(
+                    Expression.Assign(Expression.Property(s, SavedPCProp), pc),
+                    Expression.Assign(Expression.Property(s, StatusProp), suspendStatus),
+                    Expression.Assign(pc, codeLen)),
+                Expression.Block(typeof(void), execBody));
+
+            switchCases[i] = Expression.SwitchCase(breakCheck, Expression.Constant(i));
         }
 
         // Loop body: if pc < count → switch(pc) → case body → fall through → repeat

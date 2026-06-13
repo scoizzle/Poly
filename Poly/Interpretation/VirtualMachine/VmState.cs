@@ -1,5 +1,3 @@
-using Poly.Syntax.Analysis;
-
 namespace Poly.Interpretation.VirtualMachine;
 
 internal sealed class VmState : IDisposable {
@@ -18,6 +16,13 @@ internal sealed class VmState : IDisposable {
     public bool IsSuspended => Status == InterpreterStatus.Suspended;
     public bool ShouldStop => Status != InterpreterStatus.Running;
 
+    /// <summary>PCs where the VM should suspend before executing the µop.</summary>
+    public HashSet<int>? BreakpointPCs { get; set; }
+
+    /// <summary>PC at the point of suspension (set by the breakpoint check
+    /// before the µop is executed).</summary>
+    public int SavedPC { get; set; }
+
     public void Complete(InterpreterResult result) {
         Status = InterpreterStatus.Completed;
         LastResult = result;
@@ -27,28 +32,11 @@ internal sealed class VmState : IDisposable {
         LastResult = result;
     }
 
-    /// <summary>When false, skips the interrupt-bit check on every instruction (hot-path optimization).</summary>
+    /// <summary>When true, breakpoint checks are active (hot-path optimization
+    /// skips them when false).</summary>
     public bool DebugMode { get; set; }
 
-    public AnalysisResult? AnalysisResult { get; set; }
-    public Dictionary<NodeId, string>? NodeDescriptions { get; set; }
     public TextWriter? Trace { get; set; }
-    public bool JITFallbackRequested { get; set; }
-
-    public static Dictionary<NodeId, string> BuildNodeDescriptions(Node root) {
-        var map = new Dictionary<NodeId, string>();
-        CollectDescriptions(root, map);
-        return map;
-    }
-
-    private static void CollectDescriptions(Node node, Dictionary<NodeId, string> map) {
-        if (!map.ContainsKey(node.Id))
-            map[node.Id] = node.ToTraceString();
-        foreach (var child in node.Children) {
-            if (child is not null)
-                CollectDescriptions(child, map);
-        }
-    }
 
     public void Reset() {
         PC = 0;
@@ -57,8 +45,6 @@ internal sealed class VmState : IDisposable {
         PendingExceptionValue = null;
         Status = InterpreterStatus.Running;
         LastResult = null;
-        NodeDescriptions = null;
-        JITFallbackRequested = false;
         Stack.Reset();
         Heap.Clear();
     }

@@ -54,6 +54,8 @@ internal static partial class Vm {
 
         // After the compiled delegate exits, extract the result.
         if (state.IsSuspended) {
+            // Restore PC to the breakpoint site so resume re-executes from there
+            state.PC = state.SavedPC;
             var suspendResult = InterpreterResult.Suspend();
             state.SetLastResultWithoutChangingStatus(suspendResult);
             return suspendResult;

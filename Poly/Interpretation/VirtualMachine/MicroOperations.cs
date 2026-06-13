@@ -1,8 +1,5 @@
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.InteropServices;
-
-using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.VirtualMachine;
 
@@ -65,6 +62,20 @@ internal sealed record CompilationContext(
     public Expression WritebackPC() => Expression.Assign(
         Expression.Property(State, "PC"), PC);
 
+    /// <summary>If the µop has <c>SourceName</c>, emit a <c>VmTrace.LogUop</c>
+    /// call.  Runtime cost is <c>state.Trace?.WriteLine(...)</c> — ~1 ns when
+    /// <c>Trace</c> is null.  Always compiled.</summary>
+    public Expression TraceBefore(MicroOp op) {
+        if (op.SourceName is not null)
+            return Expression.Call(TraceLogMethod, PC,
+                Expression.Constant($"{op}  ← {op.SourceName}"), SP, FB, State);
+        return Expression.Empty();
+    }
+
+    private static readonly System.Reflection.MethodInfo TraceLogMethod =
+        typeof(VmTrace).GetMethod(nameof(VmTrace.LogUop),
+            [typeof(int), typeof(string), typeof(int), typeof(int), typeof(VmState)])!;
+
     private readonly Dictionary<string, ParameterExpression> _aliasVars = new();
     /// <summary>Get or create a typed alias variable in the compiled delegate's
     /// local scope.  Used by µops to hold direct CLR references, avoiding
@@ -83,6 +94,10 @@ internal sealed record CompilationContext(
 /// contribution to the compiled expression tree via <see cref="ToExpression"/>.
 /// Only the compiled delegate executes — there is no interpretive path.</summary>
 internal abstract record MicroOp(NodeId? Source) {
+    /// <summary>Human-readable description of the AST node that produced
+    /// this µop, set during lowering.  Used by the compiled delegate to
+    /// emit a trace before the operation.</summary>
+    public string? SourceName { get; init; }
     public abstract Expression ToExpression(CompilationContext ctx);
 }
 
@@ -304,6 +319,18 @@ internal sealed record IncLocalOp(int Index, long Increment, NodeId? Source = nu
         var off = Expression.Add(Expression.Add(ctx.FB, ctx.CAS), Expression.Constant(1 + Index));
         return Expression.Block(
             Expression.AddAssign(Expression.ArrayAccess(ctx.Slots, off), Expression.Constant(Increment)),
+            ctx.Push(Expression.ArrayAccess(ctx.Slots, off)));
+    }
+}
+/// <summary>Pop val, add to local <c>Index</c>, push new local value.
+/// Stack: <c>[..., val] → [..., local_new]</c>.</summary>
+internal sealed record AddToLocalOp(int Index, NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => $"addtolocal {Index}";
+    public override Expression ToExpression(CompilationContext ctx) {
+        var off = Expression.Add(Expression.Add(ctx.FB, ctx.CAS), Expression.Constant(1 + Index));
+        return Expression.Block(
+            Expression.AddAssign(Expression.ArrayAccess(ctx.Slots, off),
+                Expression.Convert(ctx.Pop(), typeof(long))),
             ctx.Push(Expression.ArrayAccess(ctx.Slots, off)));
     }
 }
@@ -824,6 +851,7 @@ internal sealed record StridedSetOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "stridedset";
     static readonly System.Reflection.MethodInfo HeapGet =
         typeof(Heap).GetMethod("Get", [typeof(int)])!;
+
     public override Expression ToExpression(CompilationContext ctx) {
         var handle = Expression.Variable(typeof(int), "h");
         var arr = Expression.Variable(typeof(long[]), "a");
@@ -860,19 +888,14 @@ internal sealed record StridedSetOp(NodeId? Source = null) : MicroOp(Source) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Trace µop (inserted by Lowering when VM_TRACE is defined)
+//  Markers (no-op labels for µop list readability)
 // ═══════════════════════════════════════════════════════════════════
 
-/// <summary>Runtime-gated trace µop.  Calls <c>VmTrace.LogUop</c>
-/// which checks <c>state.Trace</c> — ~1 ns when tracing is off.
-/// Always compiled (Debug + Release), cheap when disabled.</summary>
-internal sealed record TraceUop(string Message, NodeId? Source = null) : MicroOp(Source) {
-    public override string ToString() => $"trace: {Message}";
-    static readonly System.Reflection.MethodInfo LogMethod = typeof(VmTrace).GetMethod(
-        nameof(VmTrace.LogUop), [typeof(int), typeof(string), typeof(VmState)])!;
-    public override Expression ToExpression(CompilationContext ctx) =>
-        Expression.Call(LogMethod, Expression.Constant(ctx.GetHashCode()),
-            Expression.Constant(Message), ctx.State);
+/// <summary>No-op marker µop for readability of the µop list during
+/// debugging.  Generates zero code at runtime.</summary>
+internal sealed record CommentOp(string Text, NodeId? Source = null) : MicroOp(Source) {
+    public override string ToString() => $"; {Text}";
+    public override Expression ToExpression(CompilationContext ctx) => Expression.Empty();
 }
 
 // ═══════════════════════════════════════════════════════════════════

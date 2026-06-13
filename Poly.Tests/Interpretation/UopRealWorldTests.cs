@@ -7,7 +7,6 @@ using Poly.Interpretation.VirtualMachine;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
-
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -16,7 +15,7 @@ namespace Poly.Tests.Interpretation;
 /// Exercises the full pipeline on nontrivial programs (loops, recursion,
 /// clr calls, etc.).</summary>
 public class UopRealWorldTests {
-    private static readonly DebugTextWriter _traceWriter = new();
+    private static readonly TestTraceWriter _traceWriter = new();
 
     private static Bytecode LowerWith(Node node) {
         var builder = new AnalyzerBuilder()
@@ -340,14 +339,14 @@ public class UopRealWorldTests {
             new Lambda([new Parameter("x", TypeReference.To<int>())],
                 new Multiply(new Variable("x"), new Constant(2L))),
             new Constant(7)));
-        using var s1 = new VmState { Program = doubleProg };
+        using var s1 = new VmState { Program = doubleProg, Trace = _traceWriter };
         await Assert.That(Vm.Execute(s1).Value).IsEqualTo(14L);
 
         var tripleProg = LowerWith(new Invoke(
             new Lambda([new Parameter("x", TypeReference.To<int>())],
                 new Multiply(new Variable("x"), new Constant(3L))),
             new Constant(9)));
-        using var s2 = new VmState { Program = tripleProg };
+        using var s2 = new VmState { Program = tripleProg, Trace = _traceWriter };
         await Assert.That(Vm.Execute(s2).Value).IsEqualTo(27L);
     }
 

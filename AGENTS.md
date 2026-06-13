@@ -116,7 +116,7 @@ For simulation purposes, `Await` nodes extract results synchronously via `GetAwa
 
 **Breakpoints** reuse the `Int`/`Iret` interrupt mechanism (vector=1). See `docs/decisions/2026-06-08-breakpoint-architecture.md`.
 
-**µop-level tracing:** `Lowering.cs` trace helpers (`TraceOp`, `TraceInvoke`, `TraceReturn`) always insert `TraceUop` records into the µop list. At runtime, `TraceUop.ToExpression` calls `VmTrace.LogUop(…)` which checks `state.Trace` (a `TextWriter?`).  When `state.Trace` is null (default) the cost is ~1 ns per trace µop (null check + predictable branch).  Set `state.Trace = Console.Error` (or any `TextWriter`) in tests to see per-µop traces.  In Debug builds tests automatically route through `Debug.WriteLine` via `DebugTextWriter`.  No compile-time flags needed.
+**µop-level tracing:** `Lowering.cs` attaches `SourceName` to each µop via `EmitOp(ref ctx, op, source)`. At compile time `TraceBefore` generates a `VmTrace.LogUop(pc, text, sp, fb, state)` call insider each µop's expression, gated at runtime by `state.Trace != null` — ~1 ns when `state.Trace` is null (default). `CommentOp` markers (`; text`) alias section boundaries in the µop list for readability and generate zero code. Test files set `state.Trace = TestTraceWriter` which routes to `Console.Error` — visible in TUnit via `--show-stderr`.  Active in all build configurations.
 
 **Key artifacts:**
 - `Await(Node Operand)` — `Syntax/Nodes/Await.cs`

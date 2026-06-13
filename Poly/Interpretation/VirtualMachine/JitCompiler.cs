@@ -66,7 +66,7 @@ internal static class JitCompiler {
 
     private static CallSiteDelegate BuildCallSiteDelegate(Delegate inner, int paramCount, Type[] paramTypes, Type returnType, bool hasClosure = true) {
         return (VmState state) => {
-            if (state.DebugMode) { state.JITFallbackRequested = true; return; }
+            if (state.DebugMode) { return; }
             var slots = state.Stack.RawSlots;
 
             // baseOff = sp - paramCount - (hasClosure ? 1 : 0)

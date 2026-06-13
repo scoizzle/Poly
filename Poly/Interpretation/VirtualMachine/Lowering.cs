@@ -48,6 +48,9 @@ internal static class Lowering {
             AssignmentCount.GetValueOrDefault(name) == 1 && !EscapedLocals.Contains(name);
         /// <summary>Map from local variable name to alias name for alias-eligible locals.</summary>
         public Dictionary<string, string> LocalAliases;  // var name → alias name
+        /// <summary>Set by Block before emitting a child when the child's value
+        /// will be immediately popped.  Assignment case uses this to skip DupOp.</summary>
+        public bool PoppingAssignmentValue;
     }
 
     public static Bytecode Lower(Node root, AnalysisResult analysis) {
@@ -65,6 +68,7 @@ internal static class Lowering {
             AssignmentCount = [],
             EscapedLocals = [],
             LocalAliases = [],
+            PoppingAssignmentValue = false,
         };
 
         // Discover referenced functions and lambdas
@@ -89,6 +93,7 @@ internal static class Lowering {
         foreach (var lambda in referencedLambdas) {
             int idx = ctx.Functions.Count;
             ctx.LambdaFuncMap[lambda] = idx;
+            // Temporarily add with +1 for potential closure handle
             ctx.Functions.Add(new FunctionEntry(0, (lambda.Parameters?.Count ?? 0) + 1, 1, 0));
 
             var captures = new List<string>();
@@ -157,13 +162,15 @@ internal static class Lowering {
             bodyCtx.UpvalueMap = upvalueMap;
             bodyCtx.CurrentArgSlots = paramIndexMap.Count + 1;
 
-            // Zero-init locals
+            // Zero-init locals (skip those definitely assigned in the body)
+            var definiteInit = (lambda.Body is Block initBlock)
+                ? analysis.GetMetadata<DefiniteAssignmentMetadata>(initBlock)
+                : null;
             foreach (var (name, lIdx) in localIndexMap) {
-                var node = FindVariableInBody(lambda.Body, name);
-                if (node is null || !IsDefinitelyAssigned(node, analysis)) {
-                    bodyCtx.Code.Add(new PushOp(0L));
-                    bodyCtx.Code.Add(new StoreLocalOp(lIdx));
-                }
+                if (definiteInit is not null && definiteInit.DefinitelyAssigned.Contains(name))
+                    continue;
+                bodyCtx.Code.Add(new PushOp(0L));
+                bodyCtx.Code.Add(new StoreLocalOp(lIdx));
             }
 
             EmitNode(lambda.Body, ref bodyCtx, new LambdaEmitState(ctx.LambdaFuncMap, ctx.LambdaCaptureMap, upvalueMap));
@@ -178,8 +185,30 @@ internal static class Lowering {
         // Resolve pending labels to µop indices
         ResolveLabels(ref ctx);
 
+        // Build NodeRanges from µop Source tracking
+        var nodeRanges = new Dictionary<NodeId, (int, int)>();
+        NodeId? currentId = null;
+        int rangeStart = 0;
+        for (int i = 0; i < ctx.Code.Count; i++) {
+            var src = ctx.Code[i].Source;
+            if (src != currentId) {
+                if (currentId is not null)
+                    nodeRanges[currentId.Value] = (rangeStart, i);
+                if (src is not null) {
+                    currentId = src;
+                    rangeStart = i;
+                }
+                else {
+                    currentId = null;
+                }
+            }
+        }
+        if (currentId is not null)
+            nodeRanges[currentId.Value] = (rangeStart, ctx.Code.Count);
+
         return new Bytecode(ctx.Code, ctx.Functions, ctx.Constants, ctx.CallSites,
-            ctx.CallSiteTargets, ctx.ExceptionRegions, null, analysis, ctx.LoopBodies);
+            ctx.CallSiteTargets, ctx.ExceptionRegions, null, analysis, ctx.LoopBodies,
+            nodeRanges: nodeRanges);
     }
 
     private static void ResolveLabels(ref EmitContext ctx) {
@@ -206,31 +235,30 @@ internal static class Lowering {
     private static void EmitNode(Node node, ref EmitContext ctx, LambdaEmitState? lambdaState) {
         switch (node) {
             case Constant c: {
-                    if (c.Value is int iv) { ctx.Code.Add(new PushOp(iv)); return; }
-                    if (c.Value is long lv) { ctx.Code.Add(new PushOp(lv)); return; }
-                    if (c.Value is short sv) { ctx.Code.Add(new PushOp((long)sv)); return; }
-                    if (c.Value is byte bv) { ctx.Code.Add(new PushOp((long)bv)); return; }
-                    if (c.Value is bool bvv) { ctx.Code.Add(new PushOp(bvv ? 1L : 0L)); return; }
-                    if (c.Value is uint uiv) { ctx.Code.Add(new PushOp((long)uiv)); return; }
-                    // Heap-allocated constant
+                    if (c.Value is int iv) { EmitOp(ref ctx, new PushOp(iv), c); return; }
+                    if (c.Value is long lv) { EmitOp(ref ctx, new PushOp(lv), c); return; }
+                    if (c.Value is short sv) { EmitOp(ref ctx, new PushOp((long)sv), c); return; }
+                    if (c.Value is byte bv) { EmitOp(ref ctx, new PushOp((long)bv), c); return; }
+                    if (c.Value is bool bvv) { EmitOp(ref ctx, new PushOp(bvv ? 1L : 0L), c); return; }
+                    if (c.Value is uint uiv) { EmitOp(ref ctx, new PushOp((long)uiv), c); return; }
                     int constIdx = ctx.Constants!.Count;
                     ctx.Constants!.Add(c.Value);
-                    ctx.Code.Add(new PushOp(constIdx));
+                    EmitOp(ref ctx, new PushOp(constIdx), c);
                     return;
                 }
 
-            case Add a: EmitBinary(a.LeftHandValue, a.RightHandValue, static () => new AddOp(), ref ctx, lambdaState); return;
-            case Subtract s: EmitBinary(s.LeftHandValue, s.RightHandValue, static () => new SubOp(), ref ctx, lambdaState); return;
-            case Multiply m: EmitBinary(m.LeftHandValue, m.RightHandValue, static () => new MulOp(), ref ctx, lambdaState); return;
-            case Divide d: EmitBinary(d.LeftHandValue, d.RightHandValue, static () => new DivOp(), ref ctx, lambdaState); return;
+            case Add a: EmitBinary(a.LeftHandValue, a.RightHandValue, static () => new AddOp(), ref ctx, lambdaState, a); return;
+            case Subtract s: EmitBinary(s.LeftHandValue, s.RightHandValue, static () => new SubOp(), ref ctx, lambdaState, s); return;
+            case Multiply m: EmitBinary(m.LeftHandValue, m.RightHandValue, static () => new MulOp(), ref ctx, lambdaState, m); return;
+            case Divide d: EmitBinary(d.LeftHandValue, d.RightHandValue, static () => new DivOp(), ref ctx, lambdaState, d); return;
             case Modulo m: EmitDivRem(m.LeftHandValue, m.RightHandValue, ref ctx, lambdaState); return;
 
-            case Equal e: EmitBinary(e.LeftHandValue, e.RightHandValue, static () => new EqOp(), ref ctx, lambdaState); return;
-            case NotEqual ne: EmitBinary(ne.LeftHandValue, ne.RightHandValue, static () => new NeOp(), ref ctx, lambdaState); return;
-            case LessThan lt: EmitBinary(lt.LeftHandValue, lt.RightHandValue, static () => new LtOp(), ref ctx, lambdaState); return;
-            case LessThanOrEqual le: EmitBinary(le.LeftHandValue, le.RightHandValue, static () => new LeOp(), ref ctx, lambdaState); return;
-            case GreaterThan gt: EmitBinary(gt.LeftHandValue, gt.RightHandValue, static () => new GtOp(), ref ctx, lambdaState); return;
-            case GreaterThanOrEqual ge: EmitBinary(ge.LeftHandValue, ge.RightHandValue, static () => new GeOp(), ref ctx, lambdaState); return;
+            case Equal e: EmitBinary(e.LeftHandValue, e.RightHandValue, static () => new EqOp(), ref ctx, lambdaState, e); return;
+            case NotEqual ne: EmitBinary(ne.LeftHandValue, ne.RightHandValue, static () => new NeOp(), ref ctx, lambdaState, ne); return;
+            case LessThan lt: EmitBinary(lt.LeftHandValue, lt.RightHandValue, static () => new LtOp(), ref ctx, lambdaState, lt); return;
+            case LessThanOrEqual le: EmitBinary(le.LeftHandValue, le.RightHandValue, static () => new LeOp(), ref ctx, lambdaState, le); return;
+            case GreaterThan gt: EmitBinary(gt.LeftHandValue, gt.RightHandValue, static () => new GtOp(), ref ctx, lambdaState, gt); return;
+            case GreaterThanOrEqual ge: EmitBinary(ge.LeftHandValue, ge.RightHandValue, static () => new GeOp(), ref ctx, lambdaState, ge); return;
 
             case UnaryMinus um:
                 if (TryGetConstantLong(um.Operand, out long negVal)) {
@@ -253,16 +281,18 @@ internal static class Lowering {
                 return;
 
             case BitwiseNot bn: EmitNode(bn.Operand, ref ctx, lambdaState); ctx.Code.Add(new BitNotOp()); return;
-            case BitwiseAnd ba: EmitBinary(ba.LeftHandValue, ba.RightHandValue, static () => new BitAndOp(), ref ctx, lambdaState); return;
-            case BitwiseOr bo: EmitBinary(bo.LeftHandValue, bo.RightHandValue, static () => new BitOrOp(), ref ctx, lambdaState); return;
-            case BitwiseXor bx: EmitBinary(bx.LeftHandValue, bx.RightHandValue, static () => new BitXorOp(), ref ctx, lambdaState); return;
-            case ShiftLeft sl: EmitBinary(sl.LeftHandValue, sl.RightHandValue, static () => new ShlOp(), ref ctx, lambdaState); return;
-            case ShiftRight sr: EmitBinary(sr.LeftHandValue, sr.RightHandValue, static () => new ShrOp(), ref ctx, lambdaState); return;
+            case BitwiseAnd ba: EmitBinary(ba.LeftHandValue, ba.RightHandValue, static () => new BitAndOp(), ref ctx, lambdaState, ba); return;
+            case BitwiseOr bo: EmitBinary(bo.LeftHandValue, bo.RightHandValue, static () => new BitOrOp(), ref ctx, lambdaState, bo); return;
+            case BitwiseXor bx: EmitBinary(bx.LeftHandValue, bx.RightHandValue, static () => new BitXorOp(), ref ctx, lambdaState, bx); return;
+            case ShiftLeft sl: EmitBinary(sl.LeftHandValue, sl.RightHandValue, static () => new ShlOp(), ref ctx, lambdaState, sl); return;
+            case ShiftRight sr: EmitBinary(sr.LeftHandValue, sr.RightHandValue, static () => new ShrOp(), ref ctx, lambdaState, sr); return;
 
             case And and: EmitShortCircuit(and.LeftHandValue, and.RightHandValue, false, ref ctx, lambdaState); return;
             case Or or: EmitShortCircuit(or.LeftHandValue, or.RightHandValue, true, ref ctx, lambdaState); return;
 
-            case Variable v: EmitVariable(v, ref ctx, lambdaState); return;
+            case Variable v:
+                EmitVariable(v, ref ctx, lambdaState);
+                return;
             case Parameter p: EmitParameter(p, ref ctx, lambdaState); return;
 
             case Assignment assign: {
@@ -348,13 +378,12 @@ internal static class Lowering {
         }
     }
 
-    private static void EmitBinary(Node left, Node right, Func<MicroOp> makeOp, ref EmitContext ctx, LambdaEmitState? lambdaState) {
+    private static void EmitBinary(Node left, Node right, Func<MicroOp> makeOp, ref EmitContext ctx, LambdaEmitState? lambdaState, Node? source = null) {
         EmitNode(left, ref ctx, lambdaState);
         if (TryGetConstantLong(right, out long val)) {
             var op = makeOp();
-            // Only fuse if there's a dedicated Imm variant
             if (op is AddOp or SubOp or MulOp or EqOp or NeOp or LtOp or LeOp or GtOp or GeOp) {
-                ctx.Code.Add(op switch {
+                EmitOp(ref ctx, op switch {
                     AddOp => new AddImmOp(val),
                     SubOp => new SubImmOp(val),
                     MulOp => new MulImmOp(val),
@@ -364,17 +393,16 @@ internal static class Lowering {
                     LeOp => new LeImmOp(val),
                     GtOp => new GtImmOp(val),
                     GeOp => new GeImmOp(val),
-                    _ => op  // unreachable
-                });
+                    _ => op
+                }, source);
                 return;
             }
-            // No fused form — push constant as a regular value
-            ctx.Code.Add(new PushOp(val));
-            ctx.Code.Add(op);
+            EmitOp(ref ctx, new PushOp(val), source);
+            EmitOp(ref ctx, op, source);
         }
         else {
             EmitNode(right, ref ctx, lambdaState);
-            ctx.Code.Add(makeOp());
+            EmitOp(ref ctx, makeOp(), source);
         }
     }
 
@@ -454,24 +482,28 @@ internal static class Lowering {
     }
 
     private static void EmitWhileLoop(WhileLoop wl, ref EmitContext ctx, LambdaEmitState? lambdaState) {
-        // Check for strided-bit-set pattern: for j = start; j <= limit; j += step → bits[j>>6] |= 1L << (j&63)
-        if (TryEmitStridedSet(wl, ref ctx, lambdaState))
+        ctx.Code.Add(new CommentOp("while start"));
+        if (TryEmitStridedSet(wl, ref ctx, lambdaState)) {
+            ctx.Code.Add(new CommentOp("while end (strided)"));
             return;
+        }
 
         int cont = EmitLabel(ref ctx);
         int end = EmitLabel(ref ctx);
 
-        // Mark condition label
         ctx.LabelTargets[cont] = ctx.Code.Count;
+        ctx.Code.Add(new CommentOp("while cond"));
         EmitNode(wl.Condition, ref ctx, lambdaState);
         ctx.Code.Add(new JumpIfFalseOp(end));
         int bodyStart = ctx.Code.Count;
+        ctx.Code.Add(new CommentOp("while body"));
         EmitNode(wl.Body, ref ctx, lambdaState);
         if (EmitsValue(wl.Body, ctx.Analysis))
             ctx.Code.Add(new PopOp());
         int bodyEnd = ctx.Code.Count;
         ctx.Code.Add(new JumpOp(cont));
         ctx.LabelTargets[end] = ctx.Code.Count;
+        ctx.Code.Add(new CommentOp("while end"));
 
         ctx.LoopBodies?.Add(new LoopBodyEntry(bodyStart, bodyEnd - bodyStart, cont, cont, end, wl.Body) {
             ParamIndexMap = ctx.ParamIndexMap,
@@ -1027,21 +1059,49 @@ internal static class Lowering {
 
     // ── Trace helpers (always compiled, cheap when state.Trace is null) ──
 
-    private static void TraceOp(ref EmitContext ctx, Node node, string phase) {
-        var msg = $"{phase}: {node.GetType().Name} at µop {ctx.Code.Count}";
-        ctx.Code.Add(new TraceUop(msg));
+    /// <summary>Emit a µop and attach the source AST node's text for
+    /// trace visibility.  The compiled delegate fires a trace call before
+    /// the operation (gated at runtime by <c>state.Trace != null</c>).</summary>
+    private static void EmitOp(ref EmitContext ctx, MicroOp op, Node? source = null) {
+        if (source is not null) {
+            var text = source.ToString() ?? "";
+            if (text.Length > 60) text = text[..57] + "...";
+            ctx.Code.Add(op with { Source = source.Id, SourceName = text });
+        }
+        else {
+            ctx.Code.Add(op);
+        }
+    }
+
+    private static string FormatTarget(Invoke invoke, EmitContext ctx) {
+        var resolved = ctx.Analysis.GetResolvedMember(invoke);
+        if (resolved is Introspection.CommonLanguageRuntime.ClrMethod cm)
+            return $"{cm.DeclaringTypeDefinition.Name}.{cm.Name}";
+        if (resolved is Introspection.CommonLanguageRuntime.ClrConstructor cc)
+            return $"new {cc.Name}";
+        if (resolved is Introspection.CommonLanguageRuntime.ClrTypeProperty cp)
+            return $"{cp.Name}";
+        if (invoke.Delegate is Lambda lam) {
+            var pm = lam.Parameters?.Count > 0
+                ? string.Join(",", lam.Parameters.Select(p => p.Name ?? "?"))
+                : "";
+            var body = lam.Body switch {
+                Block b => b.Nodes.Count == 1 ? b.Nodes[0].GetType().Name : $"block[{b.Nodes.Count}]",
+                Node n => n.GetType().Name,
+                null => "?"
+            };
+            return $"λ({pm}) → {body}";
+        }
+        if (invoke.Delegate is Member m) return m.MemberName;
+        return invoke.Delegate?.GetType().Name ?? "?";
     }
 
     private static void TraceInvoke(ref EmitContext ctx, Invoke invoke) {
-        var resolved = ctx.Analysis.GetResolvedMember(invoke);
-        string target = resolved?.ToString() ?? invoke.Delegate?.ToString() ?? "?";
-        var msg = $"EMIT CALL {target} at µop {ctx.Code.Count}";
-        ctx.Code.Add(new TraceUop(msg));
+        ctx.Code.Add(new CommentOp($"CALL {FormatTarget(invoke, ctx)}"));
     }
 
     private static void TraceReturn(ref EmitContext ctx) {
-        var msg = $"EMIT RET_CALL at µop {ctx.Code.Count}";
-        ctx.Code.Add(new TraceUop(msg));
+        ctx.Code.Add(new CommentOp($"RETURN (args={ctx.CurrentArgSlots})"));
     }
 
     // ── Alias ownership pre-scan ──

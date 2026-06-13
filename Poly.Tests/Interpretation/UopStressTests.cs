@@ -18,6 +18,7 @@ namespace Poly.Tests.Interpretation;
 /// <summary>Throughput / stress tests.  Not correctness assertions —
 /// measures how much work the µop pipeline can sustain per second.</summary>
 public class UopStressTests {
+    private static readonly TestTraceWriter _trace = new();
     private const int OneSecond = 1000;
 
     private static Bytecode Lower(Node node) {
@@ -36,7 +37,7 @@ public class UopStressTests {
     public async Task CountPrimes_1M_SingleShot() {
         var sw = Stopwatch.StartNew();
         var prog = Lower(CountPrimesNode(1000000));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset();
         Vm.Execute(state);
         sw.Stop();
@@ -49,7 +50,7 @@ public class UopStressTests {
     [Test]
     public async Task CountPrimes_Throughput_1s() {
         var prog = Lower(CountPrimesNode(100000));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset();
         var sw = Stopwatch.StartNew();
         int count = 0;
@@ -68,7 +69,7 @@ public class UopStressTests {
     [Test]
     public async Task LoopSum_Throughput_1s() {
         var prog = Lower(LoopSumNode(100000));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset();
         var sw = Stopwatch.StartNew();
         int count = 0;
@@ -87,7 +88,7 @@ public class UopStressTests {
     [Test]
     public async Task Fibonacci_Throughput_1s() {
         var prog = Lower(FibNode(30));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset();
         var sw = Stopwatch.StartNew();
         int count = 0;
@@ -106,7 +107,7 @@ public class UopStressTests {
     [Test]
     public async Task Gcd_Throughput_1s() {
         var prog = Lower(GcdNode(12345678, 98765432));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset();
         var sw = Stopwatch.StartNew();
         int count = 0;
@@ -193,7 +194,7 @@ public class UopStressTests {
     [Test]
     public async Task Array_BasicReadWrite() {
         // Pure µop-level test: NewArrayOp + ArrayStoreOp + ArrayLoadOp round-trip
-        using var state = new VmState();
+        using var state = new VmState { Trace = _trace };
         state.Stack.Push(10);
         var compiled = ProgramCompiler.Compile(new MicroOp[] {
             new NewArrayOp(), new DupOp(), new PushOp(5L),
@@ -219,7 +220,7 @@ public class UopStressTests {
         // Dump µops
         var dump = string.Join("\n", prog.MicroOps.Select((m, i) => $"  [{i}] {m}"));
         File.AppendAllText("/tmp/poly_uop_dump.txt", dump + "\n");
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset(); Vm.Execute(state);
         await Assert.That(state.Stack.Pop()).IsEqualTo(42L);
     }
@@ -270,7 +271,7 @@ public class UopStressTests {
         var inv = new Invoke(new Lambda([], body));
         var analyzer = NodeTestHelpers.CreateTestAnalyzer();
         var prog = Lowering.Lower(inv, analyzer.Analyze(inv));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset(); Vm.Execute(state);
         long result = (long)state.Stack.Pop();
         await Assert.That(result).IsEqualTo(9592L);
@@ -322,7 +323,7 @@ public class UopStressTests {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var analyzer = NodeTestHelpers.CreateTestAnalyzer();
         var prog = Lowering.Lower(inv, analyzer.Analyze(inv));
-        using var state = new VmState { Program = prog };
+        using var state = new VmState { Program = prog, Trace = _trace };
         state.Reset(); Vm.Execute(state); sw.Stop();
         long result = (long)state.Stack.Pop();
         File.AppendAllText("/tmp/poly_stress.txt",
@@ -342,7 +343,7 @@ public class UopStressTests {
 
     private static async Task AssertReduce(long expected, long init, ushort words, MicroOp[] setup,
         Func<Expression, Expression, Expression> reducer) {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(words);
         var uops = new List<MicroOp>();
         uops.AddRange(setup);
@@ -357,7 +358,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchSum_Empty_ReturnsInitial() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(1);
         var c = ProgramCompiler.Compile([
             new NewArrayOp(), new PushOp(1), new PushOp(99L), new BatchReduceOp(BatchReduceOp.Sum)]);
@@ -367,7 +368,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchSum_SingleWord_SumsElements() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -383,7 +384,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchSum_WithInitialState() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(2);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -399,7 +400,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchCountNonZero_AllZero_ReturnsZero() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(10);
         ProgramCompiler.Compile([
             new NewArrayOp(), new PushOp(10), new PushOp(0L), new BatchReduceOp(BatchReduceOp.CountNonZero),
@@ -409,7 +410,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchCountNonZero_MixedElements() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -427,7 +428,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchBitwiseOr_Accumulates() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -445,7 +446,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchBitwiseAnd_Accumulates() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -463,7 +464,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchMin_FindsMinimum() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -479,7 +480,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchMax_FindsMaximum() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -497,7 +498,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchSum_Negatives() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -515,7 +516,7 @@ public class UopStressTests {
 
     [Test]
     public async Task BatchSum_100Words() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(100);
         var uops = new List<MicroOp> { new NewArrayOp() };
         for (int w = 0; w < 100; w++) {
@@ -537,7 +538,7 @@ public class UopStressTests {
 
     [Test]
     public async Task CountBits_SingleWord_ThreeBits() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(5);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -549,7 +550,7 @@ public class UopStressTests {
 
     [Test]
     public async Task CountBits_Empty_ReturnsZero() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(10);
         ProgramCompiler.Compile([
             new NewArrayOp(), new PushOp(10), new CountBitsOp(),
@@ -559,7 +560,7 @@ public class UopStressTests {
 
     [Test]
     public async Task CountBits_AllOnes_Returns64() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -571,7 +572,7 @@ public class UopStressTests {
 
     [Test]
     public async Task CountBits_MultipleWords_Accumulates() {
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(3);
         ProgramCompiler.Compile([
             new NewArrayOp(), new DupOp(),
@@ -590,7 +591,7 @@ public class UopStressTests {
     [Test]
     public async Task StridedSet_SingleBit_SetsOne() {
         // Direct test: create array, call StridedSetOp, read back array[0]
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(1);
         // Stack: [1] → NewArrayOp → [handle]
         // Then: push 2(start), 1(step), 2(limit) → [handle, 2, 1, 2]
@@ -609,7 +610,7 @@ public class UopStressTests {
     [Test]
     public async Task StridedSet_MultipleSteps_SingleWord() {
         // Mark j=2,4,6 (step=2, limit=6) — single word, 3 bits set
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(1);
         ProgramCompiler.Compile([
             new NewArrayOp(),
@@ -624,7 +625,7 @@ public class UopStressTests {
     [Test]
     public async Task StridedSet_MultipleWords() {
         // Mark j=60..70 step=1 — spans words 0 and 1, 11 bits set
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(2);
         ProgramCompiler.Compile([
             new NewArrayOp(),
@@ -642,7 +643,7 @@ public class UopStressTests {
         // Compare result with known prime count: 9592 primes ≤ 100000
         var limit = 100000;
         var wordCnt = (limit + 64) / 64;
-        using var s = new VmState();
+        using var s = new VmState { Trace = _trace };
         s.Stack.Push(wordCnt);
         var uops = new List<MicroOp> { new NewArrayOp() };
         // Sieve: for i = 2; i*i <= limit; i++

@@ -15,9 +15,6 @@ internal record VariableAnalysisMetadata(
 internal record ScopeVertex(Block Block, ScopeVertex? Parent, HashSet<Variable> Declared);
 
 internal sealed class ScopeValidator : INodeAnalyzer {
-    // Shared metadata instance reused across all analyses on the same AST.
-    // The Analyzer doc says passes are stateless; all mutable state is in
-    // this single record whose dictionaries are populated during the walk.
     private readonly VariableAnalysisMetadata _meta = new(
         BlockScopes: [],
         VariableReferences: [],
@@ -26,7 +23,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         AssignmentCount: [],
         EscapedVariables: []
     );
-    private readonly List<Block> _scopeStack = [];  // used as a stack (Add/RemoveAt)
+    private readonly List<Block> _scopeStack = [];
     private readonly Dictionary<string, Stack<Variable>> _variablesByName = [];
 
     public void Analyze(AnalysisContext context, Node node) {

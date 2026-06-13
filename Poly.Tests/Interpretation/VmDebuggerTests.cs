@@ -186,6 +186,7 @@ public class VmDebuggerTests {
             .UseTypeResolver().UseMemberResolver().UseConstantFolding()
             .UseSideEffectAnalysis().UseThisReferenceContext()
             .UseControlFlowAnalysis().UseVariableScopeValidator()
+            .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);
         var prog = Lowering.Lower(node, analysis);

@@ -22,6 +22,7 @@ public class VmDebuggerTests {
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
             .UseVariableScopeValidator()
+            .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);
         return Lowering.Lower(node, analysis);

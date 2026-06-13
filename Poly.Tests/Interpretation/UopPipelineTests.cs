@@ -26,7 +26,8 @@ public class UopPipelineTests {
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
-            .UseVariableScopeValidator();
+            .UseVariableScopeValidator()
+            .UseDefiniteAssignmentAnalysis();
         configure?.Invoke(builder);
         var analysis = builder.Build().Analyze(node);
         return Lowering.Lower(node, analysis);

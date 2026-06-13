@@ -1095,6 +1095,7 @@ internal static class Lowering {
     private static void DiscoverLocalsFromAnalysis(Node body, VariableAnalysisMetadata scope, Dictionary<string, int> paramIndexMap, Dictionary<string, int> localIndexMap) {
         var names = new List<string>();
         foreach (var variable in scope.VariableReferences.Keys) {
+            if (variable is null) continue;
             string name = variable.Name;
             if (!paramIndexMap.ContainsKey(name) && !localIndexMap.ContainsKey(name))
                 names.Add(name);
@@ -1106,6 +1107,7 @@ internal static class Lowering {
 
     private static void DiscoverCapturesFromAnalysis(Node lambdaBody, VariableAnalysisMetadata scope, IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, Dictionary<MethodDefinitionNode, int>? funcIndexMap, HashSet<Block>? parentBlocks, HashSet<Block> descendantBlocks, AnalysisResult analysis, List<string> captures) {
         foreach (var (variable, _) in scope.VariableReferences) {
+            if (variable is null) continue;
             string name = variable.Name;
             bool isParam = paramIndexMap?.ContainsKey(name) == true;
             bool isLocal = localIndexMap?.ContainsKey(name) == true;

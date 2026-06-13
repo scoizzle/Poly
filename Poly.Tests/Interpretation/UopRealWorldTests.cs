@@ -28,6 +28,7 @@ public class UopRealWorldTests {
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
             .UseVariableScopeValidator()
+            .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);
         return Lowering.Lower(node, analysis);

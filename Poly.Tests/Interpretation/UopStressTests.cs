@@ -30,6 +30,7 @@ public class UopStressTests {
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
             .UseVariableScopeValidator()
+            .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);
         return Lowering.Lower(node, result);

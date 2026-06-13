@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
@@ -14,7 +16,7 @@ namespace Poly.Tests.Interpretation;
 /// <summary>Full pipeline tests: AST → Lowering → µops → compiled delegate → execute.
 /// These are the accuracy and regression tests for the µop execution path.</summary>
 public class UopPipelineTests {
-    private static readonly TestTraceWriter _traceWriter = new();
+    private static readonly TestTraceWriter? _traceWriter = Debugger.IsAttached ? new() : null;
 
     private static Bytecode LowerWith(Node node, Action<AnalyzerBuilder>? configure = null) {
         var builder = new AnalyzerBuilder()

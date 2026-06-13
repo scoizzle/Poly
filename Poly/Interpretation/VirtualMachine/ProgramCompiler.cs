@@ -4,19 +4,21 @@ using System.Reflection;
 namespace Poly.Interpretation.VirtualMachine;
 
 internal static class ProgramCompiler {
-    const BindingFlags BF = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-    static readonly PropertyInfo StackProp = typeof(VmState).GetProperty(nameof(VmState.Stack), BF)!;
-    static readonly PropertyInfo RawSlotsProp = typeof(ValueStack).GetProperty(nameof(ValueStack.RawSlots), BF)!;
-    static readonly MethodInfo SetSP = typeof(ValueStack).GetMethod(nameof(ValueStack.SetSP), BF)!;
-    static readonly PropertyInfo FB = typeof(VmState).GetProperty(nameof(VmState.FrameBase), BF)!;
-    static readonly PropertyInfo CAS = typeof(VmState).GetProperty(nameof(VmState.CachedArgSlots), BF)!;
+    // ── Cached PropertyInfo / MethodInfo via compile-time-safe expression trees ──
+    static readonly PropertyInfo StackProp = MemberHelper.PropertyOf(() => default(VmState)!.Stack);
+    static readonly PropertyInfo RawSlotsProp = MemberHelper.PropertyOf(() => default(ValueStack)!.RawSlots);
+    static readonly MethodInfo SetSP = MemberHelper.MethodOf(() => default(ValueStack)!.SetSP(default));
+    static readonly PropertyInfo FB = MemberHelper.PropertyOf(() => default(VmState)!.FrameBase);
+    static readonly PropertyInfo CAS = MemberHelper.PropertyOf(() => default(VmState)!.CachedArgSlots);
 
-    // ── Breakpoint check reflection ──
-    static readonly PropertyInfo DebugModeProp = typeof(VmState).GetProperty(nameof(VmState.DebugMode), BF)!;
-    static readonly PropertyInfo BPPcsProp = typeof(VmState).GetProperty(nameof(VmState.BreakpointPCs), BF)!;
-    static readonly PropertyInfo SavedPCProp = typeof(VmState).GetProperty(nameof(VmState.SavedPC), BF)!;
-    static readonly PropertyInfo StatusProp = typeof(VmState).GetProperty(nameof(VmState.Status), BF)!;
-    static readonly MethodInfo ContainsMethod = typeof(HashSet<int>).GetMethod("Contains", [typeof(int)])!;
+    // ── Breakpoint check & entry/exit sync ──
+    static readonly PropertyInfo PcProp = MemberHelper.PropertyOf(() => default(VmState)!.PC);
+    static readonly PropertyInfo SpProp = MemberHelper.PropertyOf(() => default(ValueStack)!.SP);
+    static readonly PropertyInfo DebugModeProp = MemberHelper.PropertyOf(() => default(VmState)!.DebugMode);
+    static readonly PropertyInfo BPPcsProp = MemberHelper.PropertyOf(() => default(VmState)!.BreakpointPCs);
+    static readonly PropertyInfo SavedPCProp = MemberHelper.PropertyOf(() => default(VmState)!.SavedPC);
+    static readonly PropertyInfo StatusProp = MemberHelper.PropertyOf(() => default(VmState)!.Status);
+    static readonly MethodInfo ContainsMethod = MemberHelper.MethodOf(() => default(HashSet<int>)!.Contains(default));
 
     /// <summary>Compile a dispatch-loop delegate.  The delegate reads
     /// <c>state.PC</c> at entry, loops dispatching via a switch on PC,
@@ -78,11 +80,11 @@ internal static class ProgramCompiler {
 
         var final = Expression.Block(
             [sp, pc, .. ctx.Variables],
-            Expression.Assign(sp, Expression.Property(stack, "SP")),
-            Expression.Assign(pc, Expression.Property(s, "PC")),
+            Expression.Assign(sp, Expression.Property(stack, SpProp)),
+            Expression.Assign(pc, Expression.Property(s, PcProp)),
             Expression.Loop(loopBody, breakTarget),
             Expression.Call(stack, SetSP, sp),
-            Expression.Assign(Expression.Property(s, "PC"), pc));
+            Expression.Assign(Expression.Property(s, PcProp), pc));
 
         return Expression.Lambda<Action<VmState>>(final, s).Compile();
     }

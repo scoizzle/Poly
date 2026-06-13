@@ -6,6 +6,17 @@ namespace Poly.Interpretation.VirtualMachine;
 internal delegate void CallSiteDelegate(VmState state);
 
 internal static class CallSiteCompiler {
+    // ── Cached MethodInfo / PropertyInfo via compile-time-safe expression trees ──
+    private static readonly MethodInfo DropMethod = MemberHelper.MethodOf(() => default(ValueStack)!.Drop(0));
+    private static readonly MethodInfo PushIntMethod = MemberHelper.MethodOf(() => default(ValueStack)!.Push(0));
+    private static readonly MethodInfo UnsafeGetMethod = MemberHelper.MethodOf(() => default(Heap)!.UnsafeGet(0));
+    private static readonly MethodInfo AllocateMethod = MemberHelper.MethodOf(() => default(Heap)!.Allocate(null));
+    private static readonly PropertyInfo StackProp = MemberHelper.PropertyOf(() => default(VmState)!.Stack);
+    private static readonly PropertyInfo SpProp = MemberHelper.PropertyOf(() => default(ValueStack)!.SP);
+    private static readonly PropertyInfo RawSlotsProp = MemberHelper.PropertyOf(() => default(ValueStack)!.RawSlots);
+    private static readonly PropertyInfo HeapProp = MemberHelper.PropertyOf(() => default(VmState)!.Heap);
+    private static readonly PropertyInfo CountProp = MemberHelper.PropertyOf(() => default(Heap)!.Count);
+
     public static CallSiteDelegate Compile(MethodInfo method, bool isStatic) {
         var paramInfos = method.GetParameters();
         var returnType = method.ReturnType;
@@ -13,15 +24,14 @@ internal static class CallSiteCompiler {
         int hasRet = returnType != typeof(void) ? 1 : 0;
 
         var s = Expression.Parameter(typeof(VmState), "s");
-        var stack = Expression.Property(s, "Stack");
-        var pushInt = typeof(ValueStack).GetMethod("Push", [typeof(int)])!;
+        var stack = Expression.Property(s, StackProp);
 
         var baseOffV = Expression.Variable(typeof(int), "baseOff");
 
         var body = new List<Expression>
         {
             Expression.Assign(baseOffV,
-            Expression.Subtract(Expression.Property(stack, "SP"),
+            Expression.Subtract(Expression.Property(stack, SpProp),
                 Expression.Constant(argSlots)))
         };
 
@@ -58,10 +68,10 @@ internal static class CallSiteCompiler {
             body.Add(Expression.Assign(resultV, callExpr));
 
             if (argSlots > 0)
-                body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
+                body.Add(Expression.Call(stack, DropMethod, Expression.Constant(argSlots)));
 
             if (hasRet != 0)
-                body.Add(Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s)));
+                body.Add(Expression.Call(stack, PushIntMethod, ConvertToStackInt(resultV, returnType, s)));
 
             return Expression.Lambda<CallSiteDelegate>(
                 Expression.Block([baseOffV, resultV], body), s).Compile();
@@ -69,7 +79,7 @@ internal static class CallSiteCompiler {
 
         body.Add(callExpr);
         if (argSlots > 0)
-            body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
+            body.Add(Expression.Call(stack, DropMethod, Expression.Constant(argSlots)));
 
         return Expression.Lambda<CallSiteDelegate>(
             Expression.Block([baseOffV], body), s).Compile();
@@ -81,14 +91,13 @@ internal static class CallSiteCompiler {
         int argSlots = paramInfos.Length;
 
         var s = Expression.Parameter(typeof(VmState), "s");
-        var stack = Expression.Property(s, "Stack");
-        var pushInt = typeof(ValueStack).GetMethod("Push", [typeof(int)])!;
+        var stack = Expression.Property(s, StackProp);
 
         var baseOffV = Expression.Variable(typeof(int), "baseOff");
 
         var body = new List<Expression>();
         body.Add(Expression.Assign(baseOffV,
-            Expression.Subtract(Expression.Property(stack, "SP"),
+            Expression.Subtract(Expression.Property(stack, SpProp),
                 Expression.Constant(argSlots))));
 
         var rawArgs = new Expression[paramInfos.Length];
@@ -106,16 +115,16 @@ internal static class CallSiteCompiler {
         body.Add(Expression.Assign(resultV, callExpr));
 
         if (argSlots > 0)
-            body.Add(Expression.Call(stack, "Drop", Type.EmptyTypes, Expression.Constant(argSlots)));
+            body.Add(Expression.Call(stack, DropMethod, Expression.Constant(argSlots)));
 
-        body.Add(Expression.Call(stack, pushInt, ConvertToStackInt(resultV, returnType, s)));
+        body.Add(Expression.Call(stack, PushIntMethod, ConvertToStackInt(resultV, returnType, s)));
 
         return Expression.Lambda<CallSiteDelegate>(
             Expression.Block([baseOffV, resultV], body), s).Compile();
     }
 
     private static Expression ReadSpanInt(Expression stack, Expression baseOff, int slotOffset) {
-        var rawSlots = Expression.Property(stack, "RawSlots");
+        var rawSlots = Expression.Property(stack, RawSlotsProp);
         var idx = Expression.Add(baseOff, Expression.Constant(slotOffset));
         var val = Expression.ArrayIndex(rawSlots, idx);
         return Expression.Convert(val, typeof(int));
@@ -133,13 +142,13 @@ internal static class CallSiteCompiler {
         if (targetType == typeof(ushort)) return Expression.Convert(rawInt, typeof(ushort));
         if (targetType == typeof(sbyte)) return Expression.Convert(rawInt, typeof(sbyte));
 
-        var heap = Expression.Property(s, "Heap");
-        var count = Expression.Property(heap, "Count");
+        var heap = Expression.Property(s, HeapProp);
+        var count = Expression.Property(heap, CountProp);
         var inBounds = Expression.AndAlso(
             Expression.GreaterThanOrEqual(rawInt, Expression.Constant(0)),
             Expression.LessThan(rawInt, count));
 
-        var get = Expression.Call(heap, "UnsafeGet", Type.EmptyTypes, rawInt);
+        var get = Expression.Call(heap, UnsafeGetMethod, rawInt);
         return Expression.Condition(inBounds,
             Expression.Convert(get, targetType),
             targetType == typeof(object) ? Expression.Convert(rawInt, typeof(object)) : Expression.Default(targetType));
@@ -156,7 +165,7 @@ internal static class CallSiteCompiler {
         if (returnType == typeof(bool)) return Expression.Condition(value, Expression.Constant(1), Expression.Constant(0));
         if (returnType == typeof(double)) return Expression.Convert(value, typeof(int));
         if (returnType == typeof(float)) return Expression.Convert(value, typeof(int));
-        var heap = Expression.Property(s, "Heap");
-        return Expression.Call(heap, "Allocate", Type.EmptyTypes, Expression.Convert(value, typeof(object)));
+        var heap = Expression.Property(s, HeapProp);
+        return Expression.Call(heap, AllocateMethod, Expression.Convert(value, typeof(object)));
     }
 }

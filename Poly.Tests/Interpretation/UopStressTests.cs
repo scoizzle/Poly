@@ -18,7 +18,7 @@ namespace Poly.Tests.Interpretation;
 /// <summary>Throughput / stress tests.  Not correctness assertions —
 /// measures how much work the µop pipeline can sustain per second.</summary>
 public class UopStressTests {
-    private static readonly TestTraceWriter _trace = new();
+    private static readonly TestTraceWriter? _trace = Debugger.IsAttached ? new() : null;
     private const int OneSecond = 1000;
 
     private static Bytecode Lower(Node node) {

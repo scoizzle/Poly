@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
@@ -15,7 +17,7 @@ namespace Poly.Tests.Interpretation;
 /// Exercises the full pipeline on nontrivial programs (loops, recursion,
 /// clr calls, etc.).</summary>
 public class UopRealWorldTests {
-    private static readonly TestTraceWriter _traceWriter = new();
+    private static readonly TestTraceWriter? _traceWriter = Debugger.IsAttached ? new() : null;
 
     private static Bytecode LowerWith(Node node) {
         var builder = new AnalyzerBuilder()

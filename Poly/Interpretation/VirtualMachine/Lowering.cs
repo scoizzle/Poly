@@ -39,15 +39,21 @@ internal static class Lowering {
         public List<LoopBodyEntry>? LoopBodies;
         public int CurrentArgSlots;
         public Dictionary<int, int> LabelTargets = null!;
-        // ── Alias ownership tracking ──
-        public Dictionary<string, int> AssignmentCount = null!;
-        public HashSet<string> EscapedLocals = null!;
-        public bool CanAlias(string name) =>
-            AssignmentCount.GetValueOrDefault(name) == 1 && !EscapedLocals.Contains(name);
         public Dictionary<string, string> LocalAliases = null!;
 
         /// <summary>Create a scope child that shares all mutable collections
         /// but resets per-scope fields (ParamIndexMap, LocalIndexMap, etc.).</summary>
+        /// <summary>Check if a variable is eligible for alias optimization
+        /// according to analysis metadata: assigned exactly once and never
+        /// escapes its scope.</summary>
+        private bool IsAliasEligible(Variable variable) {
+            var meta = Analysis.GetMetadata<VariableAnalysisMetadata>(variable);
+            if (meta is null) return false;
+            var decl = meta.VariableReferences.GetValueOrDefault(variable) ?? variable;
+            return meta.AssignmentCount.GetValueOrDefault(decl) == 1
+                && !meta.EscapedVariables.Contains(decl);
+        }
+
         public EmitContext NewScope() => new() {
             Code = Code,
             Analysis = Analysis,
@@ -62,8 +68,6 @@ internal static class Lowering {
             ExceptionRegions = ExceptionRegions,
             LoopBodies = LoopBodies,
             LabelTargets = LabelTargets,
-            AssignmentCount = AssignmentCount,
-            EscapedLocals = EscapedLocals,
             LocalAliases = LocalAliases,
         };
 
@@ -177,43 +181,6 @@ internal static class Lowering {
             return type.FullName is { } n && n.EndsWith("[]");
         }
 
-        // ── Alias ownership pre-scan (recursive tree walk) ──
-
-        private void MarkEscape(Node? node) {
-            if (node is Variable v)
-                EscapedLocals.Add(v.Name);
-            if (node is not null)
-                foreach (var child in node.Children)
-                    if (child is not null)
-                        MarkEscape(child);
-        }
-
-        /// <summary>Pre-scan: collect assignment counts and escape info
-        /// for alias analysis.  Runs once before emission.</summary>
-        public void CollectEscapeInfo(Node node) {
-            switch (node) {
-                case Assignment { Destination: Variable v }:
-                    AssignmentCount[v.Name] = AssignmentCount.GetValueOrDefault(v.Name) + 1;
-                    break;
-                case Invoke invoke when invoke.Delegate is not Lambda:
-                    foreach (var arg in invoke.Arguments)
-                        MarkEscape(arg);
-                    break;
-                case Return r:
-                    MarkEscape(r.Value);
-                    break;
-                case ForEachLoop fel:
-                    MarkEscape(fel.Collection);
-                    break;
-                case Lambda lam:
-                    break;
-            }
-            foreach (var child in node.Children) {
-                if (child is not null)
-                    CollectEscapeInfo(child);
-            }
-        }
-
         // ═══════════════════════════════════════════════════════════════════
         //  Emission — entry point
         // ═══════════════════════════════════════════════════════════════════
@@ -283,7 +250,7 @@ internal static class Lowering {
 
                 case Assignment assign: {
                         if (assign.Value is NewArray na && assign.Destination is Variable destVar
-                            && CanAlias(destVar.Name)) {
+                            && IsAliasEligible(destVar)) {
                             int localIdx = LocalIndexMap?.GetValueOrDefault(destVar.Name) ?? -1;
                             if (localIdx >= 0) {
                                 var aliasName = $"a{localIdx}";
@@ -912,8 +879,6 @@ internal static class Lowering {
             ExceptionRegions = [],
             LoopBodies = [],
             LabelTargets = [],
-            AssignmentCount = [],
-            EscapedLocals = [],
             LocalAliases = [],
         };
 
@@ -949,8 +914,6 @@ internal static class Lowering {
         }
 
         // Pre-scan: collect assignment counts and escape info for alias analysis
-        ctx.CollectEscapeInfo(root);
-
         // ── Emit root as entry point ──
         if (root is MethodDefinitionNode rootMethod) {
             var paramIndexMap = new Dictionary<string, int>();
@@ -1113,12 +1076,12 @@ internal static class Lowering {
         }
     }
 
-    private static VariableScopeMetadata? GetVariableScopeMeta(Node body, AnalysisResult analysis) {
-        if (analysis.GetMetadata<VariableScopeMetadata>(body) is { } meta)
+    private static VariableAnalysisMetadata? GetVariableScopeMeta(Node body, AnalysisResult analysis) {
+        if (analysis.GetMetadata<VariableAnalysisMetadata>(body) is { } meta)
             return meta;
         Variable? found = null;
         FindAnyVariable(body, ref found);
-        return found is not null && analysis.GetMetadata<VariableScopeMetadata>(found) is { } m ? m : null;
+        return found is not null && analysis.GetMetadata<VariableAnalysisMetadata>(found) is { } m ? m : null;
     }
 
     private static void FindAnyVariable(Node node, ref Variable? result) {
@@ -1129,7 +1092,7 @@ internal static class Lowering {
         }
     }
 
-    private static void DiscoverLocalsFromAnalysis(Node body, VariableScopeMetadata scope, Dictionary<string, int> paramIndexMap, Dictionary<string, int> localIndexMap) {
+    private static void DiscoverLocalsFromAnalysis(Node body, VariableAnalysisMetadata scope, Dictionary<string, int> paramIndexMap, Dictionary<string, int> localIndexMap) {
         var names = new List<string>();
         foreach (var variable in scope.VariableReferences.Keys) {
             string name = variable.Name;
@@ -1141,7 +1104,7 @@ internal static class Lowering {
             localIndexMap[name] = localIndexMap.Count;
     }
 
-    private static void DiscoverCapturesFromAnalysis(Node lambdaBody, VariableScopeMetadata scope, IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, Dictionary<MethodDefinitionNode, int>? funcIndexMap, HashSet<Block>? parentBlocks, HashSet<Block> descendantBlocks, AnalysisResult analysis, List<string> captures) {
+    private static void DiscoverCapturesFromAnalysis(Node lambdaBody, VariableAnalysisMetadata scope, IReadOnlyDictionary<string, int>? paramIndexMap, IReadOnlyDictionary<string, int>? localIndexMap, Dictionary<MethodDefinitionNode, int>? funcIndexMap, HashSet<Block>? parentBlocks, HashSet<Block> descendantBlocks, AnalysisResult analysis, List<string> captures) {
         foreach (var (variable, _) in scope.VariableReferences) {
             string name = variable.Name;
             bool isParam = paramIndexMap?.ContainsKey(name) == true;

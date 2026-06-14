@@ -14,134 +14,156 @@ internal record VariableAnalysisMetadata(
 
 internal record ScopeVertex(Block Block, ScopeVertex? Parent, HashSet<Variable> Declared);
 
-internal sealed class ScopeValidator : INodeAnalyzer {
-    private readonly VariableAnalysisMetadata _meta = new(
-        BlockScopes: [],
-        VariableReferences: [],
-        ScopeVertices: [],
-        VariableDeclarationScope: [],
-        AssignmentCount: [],
-        EscapedVariables: []
-    );
-    private readonly List<Block> _scopeStack = [];
-    private readonly Dictionary<string, Stack<Variable>> _variablesByName = [];
+/// <summary>Per-analysis mutable state threaded through recursive calls.</summary>
+internal sealed record ScopeState(
+    VariableAnalysisMetadata Meta,
+    List<Block> ScopeStack,
+    Dictionary<string, Stack<Variable>> VariablesByName
+);
 
+internal sealed class ScopeValidator : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ScopeValidator>(node))
             return;
 
+        var state = new ScopeState(
+            Meta: new(
+                BlockScopes: [],
+                VariableReferences: [],
+                ScopeVertices: [],
+                VariableDeclarationScope: [],
+                AssignmentCount: [],
+                EscapedVariables: []
+            ),
+            ScopeStack: [],
+            VariablesByName: []
+        );
+        // Stash the metadata on the root node so any consumer (e.g. lowering)
+        // can find it via analysis.GetMetadata<>(rootNode) or FindAnyVariable.
+        context.SetMetadata(node, state.Meta);
+
+        AnalyzeNode(context, state, node);
+    }
+
+    /// <summary>Analyze child nodes using the current state, NOT creating fresh
+    /// per-child state as <c>this.AnalyzeChildren</c> would.</summary>
+    private void AnalyzeChildrenWithState(AnalysisContext context, ScopeState state, Node node) {
+        foreach (var child in node.Children) {
+            if (child is not null && context.ShouldAnalyze(child))
+                AnalyzeNode(context, state, child);
+        }
+    }
+
+    private void AnalyzeNode(AnalysisContext context, ScopeState state, Node node) {
         switch (node) {
             case Block block:
-                AnalyzeBlock(context, block);
+                AnalyzeBlock(context, state, block);
                 break;
 
             case ForEachLoop forEachLoop:
-                AnalyzeForEachLoop(context, forEachLoop);
+                AnalyzeForEachLoop(context, state, forEachLoop);
                 break;
 
             case Variable variable when variable.Value == null:
-                ValidateVariableReference(context, variable);
-                this.AnalyzeChildren(context, node);
+                ValidateVariableReference(context, state, variable);
+                AnalyzeChildrenWithState(context, state, node);
                 break;
 
             case Assignment assignment when assignment.Destination is Variable v:
-                if (!_variablesByName.TryGetValue(v.Name, out var stack) || stack.Count == 0)
-                    RegisterScopedVariable(context, v);
+                if (!state.VariablesByName.TryGetValue(v.Name, out var stack) || stack.Count == 0)
+                    RegisterScopedVariable(context, state, v);
                 else
-                    ValidateVariableReference(context, v);
-                if (_variablesByName.TryGetValue(v.Name, out var countStack) && countStack.Count > 0) {
+                    ValidateVariableReference(context, state, v);
+                if (state.VariablesByName.TryGetValue(v.Name, out var countStack) && countStack.Count > 0) {
                     var decl = countStack.Peek();
-                    _meta.AssignmentCount.TryGetValue(decl, out var count);
-                    _meta.AssignmentCount[decl] = count + 1;
+                    state.Meta.AssignmentCount.TryGetValue(decl, out var count);
+                    state.Meta.AssignmentCount[decl] = count + 1;
                 }
-                this.AnalyzeChildren(context, node);
+                AnalyzeChildrenWithState(context, state, node);
                 break;
 
             case Invoke invoke:
                 if (invoke.Delegate is not Lambda)
-                    MarkSubtreeEscaped(invoke.Arguments);
-                this.AnalyzeChildren(context, node);
+                    MarkSubtreeEscaped(state, invoke.Arguments);
+                AnalyzeChildrenWithState(context, state, node);
                 break;
 
             case Return r:
-                MarkSubtreeEscaped(r.Value);
-                this.AnalyzeChildren(context, node);
+                MarkSubtreeEscaped(state, r.Value);
+                AnalyzeChildrenWithState(context, state, node);
                 break;
 
             default:
-                this.AnalyzeChildren(context, node);
+                AnalyzeChildrenWithState(context, state, node);
                 break;
         }
     }
 
-    private void AnalyzeForEachLoop(AnalysisContext context, ForEachLoop forEachLoop) {
-        Analyze(context, forEachLoop.Collection);
-        MarkSubtreeEscaped(forEachLoop.Collection);
-        RegisterScopedVariable(context, forEachLoop.LoopVariable);
-        _meta.VariableDeclarationScope[forEachLoop.LoopVariable] =
-            _scopeStack.Count > 0 ? _scopeStack[^1] : forEachLoop;
-        Analyze(context, forEachLoop.Body);
-        UnregisterVariable(forEachLoop.LoopVariable);
+    private void AnalyzeForEachLoop(AnalysisContext context, ScopeState state, ForEachLoop forEachLoop) {
+        AnalyzeNode(context, state, forEachLoop.Collection);
+        MarkSubtreeEscaped(state, forEachLoop.Collection);
+        RegisterScopedVariable(context, state, forEachLoop.LoopVariable);
+        state.Meta.VariableDeclarationScope[forEachLoop.LoopVariable] =
+            state.ScopeStack.Count > 0 ? state.ScopeStack[^1] : forEachLoop;
+        AnalyzeNode(context, state, forEachLoop.Body);
+        UnregisterVariable(state, forEachLoop.LoopVariable);
     }
 
-    private void AnalyzeBlock(AnalysisContext context, Block block) {
-        _scopeStack.Add(block);
+    private void AnalyzeBlock(AnalysisContext context, ScopeState state, Block block) {
+        state.ScopeStack.Add(block);
 
-        // Peek at the block below the top (parent scope) without enumerating
-        // the stack, since ElementAt would create an enumerator that's
-        // invalidated by nested Push/Pop during child block analysis.
-        var parent = _scopeStack.Count > 1
-            ? _meta.ScopeVertices.GetValueOrDefault(_scopeStack[^2])
+        var parent = state.ScopeStack.Count > 1
+            ? state.Meta.ScopeVertices.GetValueOrDefault(state.ScopeStack[^2])
             : null;
         var vars = block.Variables;
         for (int i = 0; i < vars.Count; i++) {
-            if (vars[i] is Variable v) RegisterVariable(context, v, block);
+            if (vars[i] is Variable v) RegisterVariable(context, state, v, block);
         }
 
-        _meta.ScopeVertices[block] = new ScopeVertex(block, parent,
-            _meta.BlockScopes.GetValueOrDefault(block) ?? []);
+        state.Meta.ScopeVertices[block] = new ScopeVertex(block, parent,
+            state.Meta.BlockScopes.GetValueOrDefault(block) ?? []);
 
-        this.AnalyzeChildren(context, block);
+        AnalyzeChildrenWithState(context, state, block);
 
         for (int i = 0; i < vars.Count; i++) {
-            if (vars[i] is Variable v) UnregisterVariable(v);
+            if (vars[i] is Variable v) UnregisterVariable(state, v);
         }
 
-        _scopeStack.RemoveAt(_scopeStack.Count - 1);
+        state.ScopeStack.RemoveAt(state.ScopeStack.Count - 1);
     }
 
-    private void RegisterVariable(AnalysisContext context, Variable variable, Block scope) {
-        RegisterScopedVariable(context, variable);
+    private void RegisterVariable(AnalysisContext context, ScopeState state, Variable variable, Block scope) {
+        RegisterScopedVariable(context, state, variable);
 
-        var meta = GetOrCreateMetadata(context, variable);
+        var meta = GetOrCreateMetadata(context, state.Meta, variable);
         if (!meta.BlockScopes.TryGetValue(scope, out var scopeVars)) {
             scopeVars = [];
             meta.BlockScopes[scope] = scopeVars;
         }
 
         scopeVars.Add(variable);
-        _meta.VariableDeclarationScope[variable] = scope;
+        state.Meta.VariableDeclarationScope[variable] = scope;
     }
 
-    private void RegisterScopedVariable(AnalysisContext context, Variable variable) {
-        if (!_variablesByName.TryGetValue(variable.Name, out var stack)) {
+    private static void RegisterScopedVariable(AnalysisContext context, ScopeState state, Variable variable) {
+        if (!state.VariablesByName.TryGetValue(variable.Name, out var stack)) {
             stack = new Stack<Variable>();
-            _variablesByName[variable.Name] = stack;
+            state.VariablesByName[variable.Name] = stack;
         }
         if (stack.Count > 0)
             context.ReportWarning(variable, $"Variable '{variable.Name}' shadows outer scope variable");
         stack.Push(variable);
     }
 
-    private void UnregisterVariable(Variable variable) {
-        if (_variablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0)
+    private static void UnregisterVariable(ScopeState state, Variable variable) {
+        if (state.VariablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0)
             stack.Pop();
     }
 
-    private void ValidateVariableReference(AnalysisContext context, Variable variable) {
-        if (_variablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0) {
+    private void ValidateVariableReference(AnalysisContext context, ScopeState state, Variable variable) {
+        if (state.VariablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0) {
             var declaration = stack.Peek();
-            var metadata = GetOrCreateMetadata(context, variable);
+            var metadata = GetOrCreateMetadata(context, state.Meta, variable);
             metadata.VariableReferences[variable] = declaration;
         }
         else {
@@ -149,33 +171,33 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         }
     }
 
-    private VariableAnalysisMetadata GetOrCreateMetadata(AnalysisContext context, Node node) =>
-        context.Metadata.GetOrAdd(node, () => _meta);
+    private static VariableAnalysisMetadata GetOrCreateMetadata(AnalysisContext context, VariableAnalysisMetadata meta, Node node) =>
+        context.Metadata.GetOrAdd(node, () => meta);
 
-    private void MarkSubtreeEscaped(Node? node) {
+    private static void MarkSubtreeEscaped(ScopeState state, Node? node) {
         if (node is Variable v) {
-            MarkVariableEscaped(v);
+            MarkVariableEscaped(state, v);
             return;
         }
         if (node is not null) {
             foreach (var child in node.Children) {
                 if (child is not null)
-                    MarkSubtreeEscaped(child);
+                    MarkSubtreeEscaped(state, child);
             }
         }
     }
 
-    private void MarkSubtreeEscaped(IReadOnlyList<Node?> nodes) {
+    private static void MarkSubtreeEscaped(ScopeState state, IReadOnlyList<Node?> nodes) {
         for (int i = 0; i < nodes.Count; i++) {
             if (nodes[i] is not null)
-                MarkSubtreeEscaped(nodes[i]);
+                MarkSubtreeEscaped(state, nodes[i]);
         }
     }
 
-    private void MarkVariableEscaped(Variable v) {
-        if (_variablesByName.TryGetValue(v.Name, out var stack) && stack.Count > 0) {
+    private static void MarkVariableEscaped(ScopeState state, Variable v) {
+        if (state.VariablesByName.TryGetValue(v.Name, out var stack) && stack.Count > 0) {
             var decl = stack.Peek();
-            _meta.EscapedVariables.Add(decl);
+            state.Meta.EscapedVariables.Add(decl);
         }
     }
 }

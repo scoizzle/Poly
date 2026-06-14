@@ -20,8 +20,7 @@ public class UopPipelineTests {
 
     private static Bytecode LowerWith(Node node, Action<AnalyzerBuilder>? configure = null) {
         var builder = new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()

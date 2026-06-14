@@ -40,7 +40,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             includeInterfaceMembers: RuntimeType.IsInterface,
             static typeDefinition => typeDefinition.Properties,
             GetPropertySignature,
-            property => !RuntimeType.IsArray || property.DeclaringTypeDefinition == this || property.Parameters is null));
+            property => !RuntimeType.IsArray || property.DeclaringTypeDefinition == this || !property.Parameters.Any()));
         _methods = new(() => ComposeMemberCollection(
             declaredMethods,
             BaseType,

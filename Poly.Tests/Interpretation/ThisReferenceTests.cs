@@ -24,8 +24,7 @@ public class ThisReferenceTests {
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
             .UseThisReferenceContext()
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(typeNode);
         var resolvedType = analysis.GetResolvedType(thisReference);
@@ -51,7 +50,7 @@ public class ThisReferenceTests {
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
             .UseThisReferenceContext()
-            .UseTypeResolver()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(typeNode);
         var resolvedType = analysis.GetResolvedType(thisReference);
@@ -77,7 +76,7 @@ public class ThisReferenceTests {
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
             .UseThisReferenceContext()
-            .UseTypeResolver()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(typeNode);
         var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0001").ToArray();
@@ -106,8 +105,7 @@ public class ThisReferenceTests {
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
             .UseThisReferenceContext()
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(typeNode);
         var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0001").ToArray();
@@ -137,7 +135,7 @@ public class ThisReferenceTests {
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
             .UseThisReferenceContext()
-            .UseTypeResolver()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(typeNode);
         var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0001").ToArray();
@@ -154,7 +152,7 @@ public class ThisReferenceTests {
 
         var analysis = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeResolver()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(thisReference);
         var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0002").ToArray();

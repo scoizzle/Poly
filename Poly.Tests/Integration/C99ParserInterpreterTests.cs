@@ -734,8 +734,7 @@ public class C99ParserInterpreterTests {
         var allParams = fn.Parameters.Concat(fn.Locals).ToArray();
 
         var analysisResult = new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .Build()
             .Analyze(fn.Body, setup: ctx => {

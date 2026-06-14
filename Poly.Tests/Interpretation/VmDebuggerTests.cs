@@ -15,8 +15,7 @@ namespace Poly.Tests.Interpretation;
 public class VmDebuggerTests {
     private static Bytecode Lower(Node node) {
         var analysis = new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()
@@ -183,7 +182,6 @@ public class VmDebuggerTests {
         var node = new Block(addFn, invoke);
 
         var analysis = new AnalyzerBuilder()
-            .UseTypeResolver().UseMemberResolver().UseConstantFolding()
             .UseSideEffectAnalysis().UseThisReferenceContext()
             .UseControlFlowAnalysis().UseVariableScopeValidator()
             .UseDefiniteAssignmentAnalysis()

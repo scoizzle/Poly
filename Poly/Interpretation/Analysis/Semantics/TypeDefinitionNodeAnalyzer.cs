@@ -220,10 +220,8 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
         }
     }
 
-    private static string GetParameterSignature(IEnumerable<IParameter>? parameters) {
-        return parameters is null
-            ? string.Empty
-            : string.Join(",", parameters.Select(static parameter => parameter.ParameterTypeDefinition.FullName));
+    private static string GetParameterSignature(IEnumerable<IParameter> parameters) {
+        return string.Join(",", parameters.Select(static parameter => parameter.ParameterTypeDefinition.FullName));
     }
 
     internal ITypeDefinition ResolveType(Node typeNode) => AstTypeReferenceResolver.Resolve(typeNode, _provider);
@@ -251,7 +249,6 @@ internal sealed class AstConstructorDefinition : ITypeConstructor {
     public ITypeDefinition MemberTypeDefinition => _declaringType;
     public ITypeDefinition DeclaringTypeDefinition => _declaringType;
     public IEnumerable<IParameter> Parameters => _parameters.Value;
-    IEnumerable<IParameter>? ITypeMember.Parameters => Parameters;
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
 
@@ -292,7 +289,7 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _memberType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
-    public IEnumerable<IParameter>? Parameters => _node.IndexParameters is null ? null : _declaring.MapParameters(_node.IndexParameters);
+    public IEnumerable<IParameter> Parameters => _node.IndexParameters is null ? [] : _declaring.MapParameters(_node.IndexParameters);
 
     public MemberReadDelegate? Read => null;
     public MemberWriteDelegate? Write => null;
@@ -336,7 +333,7 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _fieldType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
-    public IEnumerable<IParameter>? Parameters => null;
+    public IEnumerable<IParameter> Parameters => [];
 
     public MemberReadDelegate? Read => null;
     public MemberWriteDelegate? Write => null;

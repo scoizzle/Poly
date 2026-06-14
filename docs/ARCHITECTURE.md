@@ -165,8 +165,7 @@ All in `Poly/Syntax/Nodes/TypeDefinitions/`:
 
 ```csharp
 new AnalyzerBuilder()
-    .UseTypeResolver()              // resolve types for all nodes
-    .UseMemberResolver()            // resolve member access (methods, fields, etc.)
+    .UseTypeAndMemberResolver()     // resolve types and members in one pass
     .UseVariableScopeValidator()    // validate scopes, produce VariableAnalysisMetadata
     .UseThisReferenceContext()      // validate `this` usage
     .UseControlFlowAnalysis()       // build CFG, detect dead code
@@ -178,15 +177,11 @@ new AnalyzerBuilder()
 
 ### Analysis Passes (`Poly/Interpretation/Analysis/`)
 
-#### Type Resolution — `Semantics/TypeResolutionPass.cs`
-- Resolves the CLR `ITypeDefinition` for every AST node
-- Stores `TypeResolutionMetadata` with `GetResolvedType(Node)` extension
-- Registration: `UseTypeResolver()`
-
-#### Member Resolution — `Semantics/MemberResolutionPass.cs`
-- Resolves members, methods, constructors, indexers
-- Stores `MemberResolutionMetadata` with `GetResolvedMember(Node)` extension
-- Registration: `UseMemberResolver()`
+#### Type & Member Resolution — `Semantics/TypeAndMemberResolutionPass.cs`
+- Resolves both CLR `ITypeDefinition` and `ITypeMember` for every AST node in a single pass
+- Merged from former separate TypeResolver + MemberResolver passes to eliminate duplicate tree walk
+- Stores `TypeResolutionMetadata` (`GetResolvedType`) and `MemberResolutionMetadata` (`GetResolvedMember`)
+- Registration: `UseTypeAndMemberResolver()`
 
 #### Variable Scope & Alias Analysis — `Semantics/VariableLifetimePass.cs`
 - Fully stateless pass — per-analysis `ScopeState` allocated on entry, threaded through recursive calls, discarded on return

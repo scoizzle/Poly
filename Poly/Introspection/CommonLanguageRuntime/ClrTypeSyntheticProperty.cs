@@ -52,7 +52,7 @@ internal sealed class ClrTypeSyntheticProperty : ClrPropertyMember {
 
     public override ClrTypeDefinition MemberTypeDefinition => _memberType.Value;
     public override ClrTypeDefinition DeclaringTypeDefinition => _declaringType;
-    public override IEnumerable<ClrParameter>? Parameters => _parameters;
+    public override IEnumerable<ClrParameter> Parameters => _parameters;
     public override string Name => _name;
 
     public override MemberReadDelegate? Read => _read;

@@ -9,7 +9,7 @@ public class AnalyzerBuilderTests {
     public async Task Builder_WithExplicitTypeDefinitionProvider_UsesProvider() {
         var provider = new TrackingTypeDefinitionProvider(ClrTypeDefinitionRegistry.Shared);
         var node = new Constant(123);
-        var result = new AnalyzerBuilder().UseTypeResolver().Build().Analyze(node, typeDefinitions: provider);
+        var result = new AnalyzerBuilder().UseTypeAndMemberResolver().Build().Analyze(node, typeDefinitions: provider);
 
         await Assert.That(result.GetResolvedType(node)).IsNotNull();
         await Assert.That(provider.RequestedTypes).Contains(typeof(int));
@@ -19,7 +19,7 @@ public class AnalyzerBuilderTests {
     public async Task Builder_WithExplicitEmptyProviderSet_DoesNotFallbackToShared() {
         var emptyProvider = new NoOpTypeDefinitionProvider();
         var node = new Constant(123);
-        var result = new AnalyzerBuilder().UseTypeResolver().Build().Analyze(node, typeDefinitions: emptyProvider);
+        var result = new AnalyzerBuilder().UseTypeAndMemberResolver().Build().Analyze(node, typeDefinitions: emptyProvider);
 
         await Assert.That(result.GetResolvedType(node)).IsNull();
     }

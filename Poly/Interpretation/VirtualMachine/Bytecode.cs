@@ -4,9 +4,17 @@ using Poly.Syntax.Analysis;
 
 namespace Poly.Interpretation.VirtualMachine;
 
-internal sealed record FunctionEntry(int PC, int ArgSlots, int RetSlots, int LocalCount = 0) {
-    public Node? SourceNode;
-}
+/// <summary>Speculative payload carried on <see cref="Bytecode"/> for
+/// debugging, tooling, or future optimizations.  Null when the consumer
+/// does not need these fields — they are populated during lowering for
+/// potential use but are not required for correct VM execution.</summary>
+internal sealed record BytecodeSpec(
+    AnalysisResult? AnalysisResult,
+    IReadOnlyList<string> CallSiteTargets,
+    IReadOnlyList<LoopBodyEntry> LoopBodies
+);
+
+internal sealed record FunctionEntry(int PC, int ArgSlots, int LocalCount = 0);
 internal sealed record ExceptionRegion(int TryStart, int TryEnd, int CatchStart, int? FinallyStart);
 
 internal sealed class Bytecode {
@@ -15,11 +23,9 @@ internal sealed class Bytecode {
     public IReadOnlyList<FunctionEntry> Functions { get; }
     public IReadOnlyList<object?> Constants { get; }
     public IReadOnlyList<CallSiteDelegate> CallSites { get; }
-    public IReadOnlyList<string> CallSiteTargets { get; }
     public IReadOnlyList<ExceptionRegion> ExceptionRegions { get; }
-    public IReadOnlyList<LoopBodyEntry> LoopBodies { get; }
     public Type? ResultType { get; }
-    public AnalysisResult? AnalysisResult { get; }
+    public BytecodeSpec? Spec { get; }
     /// <summary>PC range for each AST node, built during lowering.
     /// Used by the debugger for step-over range computation.</summary>
     public Dictionary<NodeId, (int StartPC, int EndPC)>? NodeRanges { get; }
@@ -30,21 +36,17 @@ internal sealed class Bytecode {
         List<FunctionEntry>? functions = null,
         List<object?>? constants = null,
         List<CallSiteDelegate>? callSites = null,
-        List<string>? callSiteTargets = null,
         List<ExceptionRegion>? exceptionRegions = null,
         Type? resultType = null,
-        AnalysisResult? analysisResult = null,
-        List<LoopBodyEntry>? loopBodies = null,
+        BytecodeSpec? spec = null,
         Dictionary<NodeId, (int StartPC, int EndPC)>? nodeRanges = null) {
         MicroOps = microOps;
         Functions = functions ?? [];
         Constants = constants ?? [];
         CallSites = callSites ?? [];
-        CallSiteTargets = callSiteTargets ?? [];
         ExceptionRegions = exceptionRegions ?? [];
         ResultType = resultType;
-        AnalysisResult = analysisResult;
-        LoopBodies = loopBodies ?? [];
+        Spec = spec;
         NodeRanges = nodeRanges;
     }
 
@@ -69,7 +71,7 @@ internal sealed class Bytecode {
             for (var i = 0; i < funcs.Count; i++) {
                 var f = funcs[i];
                 writer.WriteLine(
-                    $";;   {i}: PC={f.PC}, args={f.ArgSlots}, ret={f.RetSlots}, locals={f.LocalCount}");
+                    $";;   {i}: PC={f.PC}, args={f.ArgSlots}, locals={f.LocalCount}");
             }
 
             writer.WriteLine();

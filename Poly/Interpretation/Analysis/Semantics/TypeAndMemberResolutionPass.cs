@@ -2,9 +2,13 @@ namespace Poly.Interpretation.Analysis.Semantics;
 
 using Poly.Syntax.Nodes;
 
-internal sealed class TypeResolver : INodeAnalyzer {
+/// <summary>Resolves both types and member references for all AST nodes.
+/// Merged from the former separate TypeResolver + MemberResolver passes
+/// to avoid duplicate tree walks — both call the same resolvers for
+/// Invoke, New, Member, and IndexAccess nodes.</summary>
+internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<TypeResolver>(node)) {
+        if (!context.TryBeginAnalyzerVisit<TypeAndMemberResolver>(node)) {
             return;
         }
 
@@ -127,6 +131,10 @@ internal sealed class TypeResolver : INodeAnalyzer {
             return null;
 
         var member = instanceType.Members.WithName(memberAccess.MemberName).FirstOrDefault();
+        if (member is null)
+            context.ReportStructuralFailure(memberAccess, $"Type '{instanceType.Name}' does not contain a member named '{memberAccess.MemberName}'.");
+        else
+            context.SetResolvedMember(memberAccess, member);
         return member?.MemberTypeDefinition;
     }
 
@@ -154,6 +162,8 @@ internal sealed class TypeResolver : INodeAnalyzer {
         }
 
         var method = MethodInvocationSemanticResolver.ResolveMethod(context, invoke);
+        if (method is not null)
+            context.SetResolvedMember(invoke, method);
         return method?.MemberTypeDefinition;
     }
 
@@ -173,6 +183,8 @@ internal sealed class TypeResolver : INodeAnalyzer {
         }
 
         var constructor = ConstructorInvocationSemanticResolver.ResolveConstructor(context, @new);
+        if (constructor is not null)
+            context.SetResolvedMember(@new, constructor);
         return constructor?.MemberTypeDefinition ?? targetType;
     }
 
@@ -197,10 +209,18 @@ internal sealed class TypeResolver : INodeAnalyzer {
             .Select(argument => ResolveNodeType(context, argument))
             .ToArray();
 
+        // Also store the resolved indexer member (merged from MemberResolver)
         if (argumentTypes.All(static type => type is not null)) {
+            var matchedIndexer = instanceType.FindMatchingIndexers(argumentTypes!).FirstOrDefault();
+            if (matchedIndexer is not null)
+                context.SetResolvedMember(indexAccess, matchedIndexer);
             return instanceType.GetElementType(argumentTypes!);
         }
 
+        var fallbackIndexer = instanceType.Properties
+            .FirstOrDefault(static property => property.Parameters is { } parameters && parameters.Any());
+        if (fallbackIndexer is not null)
+            context.SetResolvedMember(indexAccess, fallbackIndexer);
         return instanceType.GetElementType();
     }
 
@@ -258,8 +278,8 @@ public static class TypeResolutionMetadataExtensions {
     };
 
     extension(AnalyzerBuilder builder) {
-        public AnalyzerBuilder UseTypeResolver() {
-            builder.AddAnalyzer(new TypeResolver());
+        public AnalyzerBuilder UseTypeAndMemberResolver() {
+            builder.AddAnalyzer(new TypeAndMemberResolver());
             return builder;
         }
     }
@@ -274,6 +294,84 @@ public static class TypeResolutionMetadataExtensions {
     extension(INodeMetadataProvider typedMetadataProvider) {
         public ITypeDefinition? GetResolvedType(Node node) {
             return typedMetadataProvider.GetMetadata<TypeResolutionMetadata>(node)?.ResolvedTypeDefinition;
+        }
+    }
+}
+
+// ── Shared resolvers (used by TypeAndMemberResolver) ──
+
+internal static class MethodInvocationSemanticResolver {
+    public static ITypeMethod? ResolveMethod(AnalysisContext context, Invoke methodInv) {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(methodInv);
+
+        if (methodInv.Delegate is not Member memberAccess)
+            return null;
+
+        var targetType = context.GetResolvedType(memberAccess.Value);
+        if (targetType == null)
+            return null;
+
+        var argumentTypes = new ITypeDefinition[methodInv.Arguments.Length];
+        for (var i = 0; i < methodInv.Arguments.Length; i++) {
+            var argumentType = context.GetResolvedType(methodInv.Arguments[i]);
+            if (argumentType == null)
+                return null;
+
+            argumentTypes[i] = argumentType;
+        }
+
+        return targetType
+            .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes)
+            .FirstOrDefault();
+    }
+}
+
+internal static class ConstructorInvocationSemanticResolver {
+    public static ITypeConstructor? ResolveConstructor(AnalysisContext context, New @new) {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(@new);
+
+        var targetType = context.GetResolvedType(@new.Type);
+        if (targetType == null)
+            return null;
+
+        var argumentTypes = new ITypeDefinition[@new.Arguments.Length];
+        for (var i = 0; i < @new.Arguments.Length; i++) {
+            var argumentType = context.GetResolvedType(@new.Arguments[i]);
+            if (argumentType == null)
+                return null;
+
+            argumentTypes[i] = argumentType;
+        }
+
+        return targetType
+            .FindMatchingConstructors(argumentTypes)
+            .FirstOrDefault();
+    }
+}
+
+// ── Member resolution metadata (populated by TypeAndMemberResolver) ──
+
+public static class MemberResolutionMetadataExtensions {
+    private sealed class MemberResolutionMetadata : IAnalysisMetadata {
+        public ITypeMember? ResolvedMember { get; set; }
+    };
+
+    extension(AnalysisContext context) {
+        public void SetResolvedMember(Node node, ITypeMember member) {
+            ArgumentNullException.ThrowIfNull(member);
+
+            var metadata = context.GetOrAddMetadata(node, static () => new MemberResolutionMetadata());
+            metadata.ResolvedMember = member;
+
+            context.SetResolvedType(node, member.MemberTypeDefinition);
+        }
+    }
+
+    extension(INodeMetadataProvider typedMetadataProvider) {
+        public ITypeMember? GetResolvedMember(Node node) {
+            return typedMetadataProvider.GetMetadata<MemberResolutionMetadata>(node)?.ResolvedMember;
         }
     }
 }

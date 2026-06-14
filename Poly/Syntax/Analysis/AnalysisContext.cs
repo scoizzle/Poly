@@ -135,38 +135,13 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     }
 
     /// <summary>
-    /// Requests that analysis should stop as soon as reasonably possible.
-    /// The pipeline may honor this request depending on the active <see cref="AnalysisOptions"/>.
-    /// </summary>
-    public void RequestEarlyExit() {
-        _earlyExitRequested = true;
-    }
-
-    internal bool ShouldContinueAnalysis(AnalysisOptions options) {
-        if (!_earlyExitRequested)
-            return true;
-
-        return options.Mode != AnalysisMode.FailFast;
-    }
-
-    // Helper for analyzers / pipeline
-    internal bool ShouldStopOnStructuralErrors(AnalysisOptions options) =>
-        options.ShouldStopOnStructuralErrors && HasStructuralFailure;
-
-    /// <summary>
     /// Returns whether analysis should continue running additional passes,
     /// based on the provided options and any structural failures reported so far.
     /// Analyzers can call this to decide whether to do expensive work.
     /// </summary>
     public bool ShouldContinue(AnalysisOptions options) {
-        if (_earlyExitRequested)
-            return options.Mode != AnalysisMode.FailFast;
-
         if (options.ShouldStopOnStructuralErrors && HasStructuralFailure)
             return false;
-
         return true;
     }
-
-    private bool _earlyExitRequested;
 }

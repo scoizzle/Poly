@@ -12,12 +12,10 @@ namespace Poly.Tests.TestHelpers;
 public static class AnalyzerBuilderExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseAllAnalyzers() => builder
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseLambdaReturnTypeResolution()
-            .UseStackDepthAnalysis()
             .UseDefiniteAssignmentAnalysis();
     }
 }

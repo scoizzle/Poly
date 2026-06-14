@@ -58,8 +58,7 @@ public class AstConstructorDefinitionTests {
         var tda = new TypeDefinitionNodeAnalyzer();
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(tda)
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(root, typeDefinitions: tda);
         var resolvedConstructor = analysis.GetResolvedMember(newNode) as ITypeConstructor;

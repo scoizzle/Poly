@@ -36,11 +36,6 @@ internal sealed class ClrConstructor : ClrTypeMember, ITypeConstructor {
     /// </summary>
     public override IEnumerable<ClrParameter> Parameters => _parameters;
 
-    IEnumerable<IParameter> ITypeConstructor.Parameters => _parameters;
-
-    /// <summary>
-    /// Gets the constructor display name.
-    /// </summary>
     public override string Name => _declaringType.Name;
 
     /// <summary>

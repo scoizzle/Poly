@@ -38,14 +38,6 @@ internal sealed class ClrMethod : ClrTypeMember, ITypeMethod {
     /// </summary>
     public override IEnumerable<ClrParameter> Parameters { get; }
 
-    /// <summary>
-    /// Explicit implementation for ITypeMethod.Parameters to guarantee non-null.
-    /// </summary>
-    IEnumerable<IParameter> ITypeMethod.Parameters => Parameters;
-
-    /// <summary>
-    /// Gets the method name.
-    /// </summary>
     public override string Name { get; }
 
     /// <summary>

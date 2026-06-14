@@ -23,10 +23,8 @@ public sealed record AnalysisResult : INodeMetadataProvider {
                 .ToList());
         Telemetry = telemetry;
         HasStructuralFailure = context.HasStructuralFailure;
-
         var effectiveOptions = options ?? AnalysisOptions.Default;
         AnalysisWasTerminatedEarly = !context.ShouldContinue(effectiveOptions);
-        OptionsUsed = effectiveOptions;
         SettingsUsed = context.Settings;
     }
 

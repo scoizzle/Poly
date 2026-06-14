@@ -52,7 +52,7 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     /// <summary>
     /// Fields do not have parameters; always null.
     /// </summary>
-    public override IOrderedEnumerable<ClrParameter>? Parameters => null;
+    public override IEnumerable<ClrParameter> Parameters => [];
 
     /// <summary>
     /// Gets the field name.

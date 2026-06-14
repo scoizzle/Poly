@@ -895,7 +895,7 @@ internal static class Lowering {
             int idx = ctx.Functions.Count;
             ctx.FunctionIndexMap[method] = idx;
             int paramCount = method.Parameters?.Count ?? 0;
-            ctx.Functions.Add(new FunctionEntry(0, paramCount, 1, 0));
+            ctx.Functions.Add(new FunctionEntry(0, paramCount));
         }
 
         // Pre-scan lambdas: assign indices, compute captures
@@ -904,7 +904,7 @@ internal static class Lowering {
         foreach (var lambda in referencedLambdas) {
             int idx = ctx.Functions.Count;
             ctx.LambdaFuncMap[lambda] = idx;
-            ctx.Functions.Add(new FunctionEntry(0, (lambda.Parameters?.Count ?? 0) + 1, 1, 0));
+            ctx.Functions.Add(new FunctionEntry(0, (lambda.Parameters?.Count ?? 0) + 1));
 
             var captures = new List<string>();
             var scope = GetVariableScopeMeta(lambda.Body, analysis);
@@ -932,9 +932,7 @@ internal static class Lowering {
             bodyCtx.EmitNode(rootMethod.Body ?? rootMethod, null);
             bodyCtx.Code.Add(new ReturnFromCallOp(bodyCtx.CurrentArgSlots));
 
-            ctx.Functions[rootIdx] = new FunctionEntry(entryUop, paramIndexMap.Count, 1, 0) {
-                SourceNode = rootMethod
-            };
+            ctx.Functions[rootIdx] = new FunctionEntry(entryUop, paramIndexMap.Count);
         }
         else {
             ctx.EmitNode(root, null);
@@ -962,9 +960,7 @@ internal static class Lowering {
             bodyCtx.EmitNode(method.Body ?? method, null);
             bodyCtx.Code.Add(new ReturnFromCallOp(bodyCtx.CurrentArgSlots));
 
-            ctx.Functions[methodIdx] = new FunctionEntry(entryUop, paramIndexMap.Count, 1, 0) {
-                SourceNode = method
-            };
+            ctx.Functions[methodIdx] = new FunctionEntry(entryUop, paramIndexMap.Count);
         }
 
         // ── Emit lambda bodies ──
@@ -1008,9 +1004,7 @@ internal static class Lowering {
             bodyCtx.Code.Add(new ReturnFromCallOp(bodyCtx.CurrentArgSlots));
 
             var lambdaFunc = ctx.Functions[lambdaIdx];
-            ctx.Functions[lambdaIdx] = new FunctionEntry(entryUop, lambdaFunc.ArgSlots, lambdaFunc.RetSlots, localIndexMap.Count) {
-                SourceNode = lambda
-            };
+            ctx.Functions[lambdaIdx] = new FunctionEntry(entryUop, lambdaFunc.ArgSlots, localIndexMap.Count);
         }
 
         // Resolve pending labels to µop indices
@@ -1038,7 +1032,8 @@ internal static class Lowering {
             nodeRanges[currentId.Value] = (rangeStart, ctx.Code.Count);
 
         return new Bytecode(ctx.Code, ctx.Functions, ctx.Constants, ctx.CallSites,
-            ctx.CallSiteTargets, ctx.ExceptionRegions, null, analysis, ctx.LoopBodies,
+            ctx.ExceptionRegions, null,
+            spec: new BytecodeSpec(analysis, ctx.CallSiteTargets ?? [], ctx.LoopBodies ?? []),
             nodeRanges: nodeRanges);
     }
 

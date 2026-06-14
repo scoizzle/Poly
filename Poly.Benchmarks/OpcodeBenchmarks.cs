@@ -131,8 +131,7 @@ public class UopBenchmarks {
 
     private static Bytecode Lower(Node node) {
         var result = new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()

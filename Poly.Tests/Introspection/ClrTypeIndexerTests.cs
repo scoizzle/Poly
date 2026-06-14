@@ -9,7 +9,7 @@ public class ClrTypeIndexerTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var arrayType = registry.GetTypeDefinition<int[]>();
 
-        var indexers = arrayType.Properties.Where(p => p.Parameters != null).ToList();
+        var indexers = arrayType.Properties.Where(p => p.Parameters.Any()).ToList();
 
         await Assert.That(indexers.Count).IsEqualTo(1);
         await Assert.That(indexers[0].Name).IsEqualTo("Item");
@@ -24,7 +24,7 @@ public class ClrTypeIndexerTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var arrayType = registry.GetTypeDefinition<int[,]>();
 
-        var indexer = arrayType.Properties.Single(p => p.Parameters != null);
+        var indexer = arrayType.Properties.Single(p => p.Parameters.Any());
 
         await Assert.That(indexer.Name).IsEqualTo("Item");
         await Assert.That(indexer.Parameters!.Count()).IsEqualTo(2);
@@ -37,7 +37,7 @@ public class ClrTypeIndexerTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
 
-        var indexers = listType.Properties.Where(p => p.Parameters != null).ToList();
+        var indexers = listType.Properties.Where(p => p.Parameters.Any()).ToList();
 
         await Assert.That(indexers.Count).IsGreaterThan(0);
         var indexer = indexers.First();
@@ -51,7 +51,7 @@ public class ClrTypeIndexerTests {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var dictType = registry.GetTypeDefinition<Dictionary<string, int>>();
 
-        var indexers = dictType.Properties.Where(p => p.Parameters != null).ToList();
+        var indexers = dictType.Properties.Where(p => p.Parameters.Any()).ToList();
 
         await Assert.That(indexers.Count).IsGreaterThan(0);
         var indexer = indexers.First();
@@ -62,7 +62,7 @@ public class ClrTypeIndexerTests {
     public async Task ListIndexer_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
-        var indexer = listType.Properties.First(p => p.Parameters != null);
+        var indexer = listType.Properties.First(p => p.Parameters.Any());
 
         await Assert.That(indexer.Name).Contains("Item");
         // IList indexer returns object, not int

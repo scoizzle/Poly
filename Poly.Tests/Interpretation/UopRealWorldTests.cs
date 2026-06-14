@@ -21,8 +21,7 @@ public class UopRealWorldTests {
 
     private static Bytecode LowerWith(Node node) {
         var analysis = new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()

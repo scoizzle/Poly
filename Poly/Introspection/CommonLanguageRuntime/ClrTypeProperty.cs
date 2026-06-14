@@ -74,7 +74,7 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
     /// <summary>
     /// Gets the index parameters for an indexer property, or null for regular properties.
     /// </summary>
-    public override IEnumerable<ClrParameter>? Parameters => _parameters;
+    public override IEnumerable<ClrParameter> Parameters => _parameters ?? [];
 
     /// <summary>
     /// Gets the property name.

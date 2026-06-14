@@ -42,7 +42,7 @@ public static class TypeDefinitionExtensions {
             ArgumentNullException.ThrowIfNull(indexParameterTypes);
 
             return typeDefinition.Properties
-                .Where(static property => property is { Parameters: not null, Name: "Item" })
+                .Where(static property => property.Name == "Item" && property.Parameters.Any())
                 .WithParameterTypes(indexParameterTypes);
         }
 
@@ -60,10 +60,10 @@ public static class TypeDefinitionExtensions {
             }
 
             var positionalIndexer = typeDefinition.Properties
-                .Where(static property => property is { Parameters: not null, Name: "Item" })
+                .Where(static property => property.Name == "Item" && property.Parameters.Any())
                 .Select(static property => new {
                     Property = property,
-                    Parameters = property.Parameters!.ToArray(),
+                    Parameters = property.Parameters.ToArray(),
                     ReturnsObject = property.MemberTypeDefinition.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(object)
                 })
                 .Where(candidate => candidate.Parameters.All(static parameter => parameter.ParameterTypeDefinition.TypeCategory.Is(TypeCategory.Integer)))

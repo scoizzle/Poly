@@ -19,6 +19,20 @@ internal static class ProgramCompiler {
     static readonly PropertyInfo SavedPCProp = MemberHelper.PropertyOf(() => default(VmState)!.SavedPC);
     static readonly PropertyInfo StatusProp = MemberHelper.PropertyOf(() => default(VmState)!.Status);
     static readonly MethodInfo ContainsMethod = MemberHelper.MethodOf(() => default(HashSet<int>)!.Contains(default));
+    static readonly MethodInfo ReserveMethod = MemberHelper.MethodOf(() => default(ValueStack)!.Reserve(default));
+
+    /// <summary>Compute a safe upper bound for stack depth by counting
+    /// all µops that unconditionally push a value.  This is conservative
+    /// (overestimates, never underestimates) and O(n) in µop count —
+    /// much faster than a full AST walk for stack depth analysis.</summary>
+    private static int ComputeMaxDepth(IReadOnlyList<MicroOp> uops) {
+        int depth = 0;
+        for (int i = 0; i < uops.Count; i++) {
+            if (uops[i] is PushOp or DupOp or LoadArgOp or LoadLocalOp or LoadUpvalueOp or LoadValueOp)
+                depth++;
+        }
+        return depth;
+    }
 
     /// <summary>Compile a dispatch-loop delegate.  The delegate reads
     /// <c>state.PC</c> at entry, loops dispatching via a switch on PC,
@@ -78,10 +92,12 @@ internal static class ProgramCompiler {
             Expression.Switch(pc, Expression.Break(breakTarget), switchCases),
             Expression.Break(breakTarget));
 
+        var maxDepth = ComputeMaxDepth(uops);
         var final = Expression.Block(
             [sp, pc, .. ctx.Variables],
             Expression.Assign(sp, Expression.Property(stack, SpProp)),
             Expression.Assign(pc, Expression.Property(s, PcProp)),
+            Expression.Call(stack, ReserveMethod, Expression.Constant(maxDepth)),
             Expression.Loop(loopBody, breakTarget),
             Expression.Call(stack, SetSP, sp),
             Expression.Assign(Expression.Property(s, PcProp), pc));

@@ -62,9 +62,9 @@ public interface ITypeMember {
 
     /// <summary>
     /// Gets parameters for callable members (methods) or index parameters for indexer properties.
-    /// Returns null for fields and parameterless properties.
+    /// Empty for fields and parameterless properties.
     /// </summary>
-    IEnumerable<IParameter>? Parameters { get; }
+    IEnumerable<IParameter> Parameters { get; }
 
     /// <summary>
     /// Gets the visibility of this member.

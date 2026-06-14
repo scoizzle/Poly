@@ -49,8 +49,7 @@ public sealed class RuleSet<T> {
         RuleSetInterpretation = CombinedRules.BuildInterpretationTree(buildingContext);
 
         var targetAnalyzer = new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseMemberResolver()
+            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .Build();
 

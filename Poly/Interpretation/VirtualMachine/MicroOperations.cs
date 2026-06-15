@@ -822,8 +822,6 @@ internal sealed record BatchReduceOp(
 
 internal sealed record CountBitsOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "countbits" : $"countbits alias={Alias}";
-    static readonly MethodInfo CountBitsVec =
-        MemberHelper.MethodOf(() => Vm.CountBitsVectorized(default!, default!));
 
     public override Expression ToExpression(CompilationContext ctx) {
         var arr = Expression.Variable(typeof(long[]), "a");
@@ -834,10 +832,9 @@ internal sealed record CountBitsOp(string? Alias = null, NodeId? Source = null) 
         {
             Expression.Assign(wc, Expression.Convert(ctx.Pop(), typeof(int))),
         };
-
         if (Alias is not null) {
             setup.Add(Expression.Assign(arr, ctx.GetOrCreateAlias(Alias, typeof(long[]))));
-            setup.Add(ctx.Pop());  // discard dummy 0
+            setup.Add(ctx.Pop());
         }
         else {
             var handle = Expression.Variable(typeof(int), "h");
@@ -848,9 +845,7 @@ internal sealed record CountBitsOp(string? Alias = null, NodeId? Source = null) 
                 Expression.Call(ctx.HeapExpression, heapGet, handle),
                 typeof(long[]))));
         }
-
-        // total = CountBitsVectorized(arr, wc)
-        setup.Add(ctx.Push(Expression.Call(CountBitsVec, arr, wc)));
+        setup.Add(VmExpressionGenerators.BuildCountBitsInline(arr, wc, ctx));
         return Expression.Block(setup);
     }
 }
@@ -862,21 +857,26 @@ internal sealed record CountBitsOp(string? Alias = null, NodeId? Source = null) 
 //  Stack: [arr_handle, startValue, step, limit] → []
 // ═══════════════════════════════════════════════════════════════════
 
-/// <summary>For each j in [start..limit] step step, set bits[j>>6] |= 1L << (j&63).
+/// <summary>Batch-set bits in a word array: for each word from
+/// <c>start/64</c> to <c>limit/64</c>, load the word once, set
+/// all relevant bit positions, and write back once.  Uses
+/// <c>Vm.StridedBatchSet</c> for the actual work.
 /// Stack: [arr_handle_or_dummy, startValue, step, limit] → []</summary>
 internal sealed record StridedSetOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
-    public override string ToString() => Alias is null ? "stridedset" : $"stridedset alias={Alias}";
-    static readonly System.Reflection.MethodInfo HeapGet =
-        UopReflection.HeapGet;
+    public override string ToString() => Alias is null ? "stridedbatchset" : $"stridedbatchset alias={Alias}";
 
     public override Expression ToExpression(CompilationContext ctx) {
         var arr = Expression.Variable(typeof(long[]), "a");
         var limit = Expression.Variable(typeof(long), "lim");
         var step = Expression.Variable(typeof(long), "stp");
         var j = Expression.Variable(typeof(long), "j");
-        ctx.Variables.Add(arr);
-        ctx.Variables.Add(limit); ctx.Variables.Add(step); ctx.Variables.Add(j);
-        var start = Expression.Label("start"); var done = Expression.Label("done");
+        var word = Expression.Variable(typeof(long), "w");
+        var v = Expression.Variable(typeof(long), "v");
+        var lastInWord = Expression.Variable(typeof(long), "last");
+        ctx.Variables.Add(arr); ctx.Variables.Add(limit);
+        ctx.Variables.Add(step); ctx.Variables.Add(j);
+        ctx.Variables.Add(word); ctx.Variables.Add(v); ctx.Variables.Add(lastInWord);
+
         var setup = new List<Expression>
         {
             Expression.Assign(limit, ctx.Pop()),
@@ -884,33 +884,58 @@ internal sealed record StridedSetOp(string? Alias = null, NodeId? Source = null)
             Expression.Assign(j, ctx.Pop()),
         };
         if (Alias is not null) {
-            // Alias path: the alias variable holds the direct long[] reference.
-            // Top-of-stack has the dummy 0 from the alias allocation — pop it.
             setup.Add(Expression.Assign(arr, ctx.GetOrCreateAlias(Alias, typeof(long[]))));
-            setup.Add(ctx.Pop());  // discard dummy 0
+            setup.Add(ctx.Pop());
         }
         else {
             var handle = Expression.Variable(typeof(int), "h");
             ctx.Variables.Add(handle);
-            // Heap path: pop the handle, get the array.
+            var heapGet = UopReflection.HeapGet;
             setup.Add(Expression.Assign(handle, Expression.Convert(ctx.Pop(), typeof(int))));
             setup.Add(Expression.Assign(arr, Expression.Convert(
-                Expression.Call(ctx.HeapExpression, HeapGet, handle),
+                Expression.Call(ctx.HeapExpression, heapGet, handle),
                 typeof(long[]))));
         }
-        setup.Add(Expression.Label(start));
-        setup.Add(Expression.IfThen(
-            Expression.LessThanOrEqual(j, limit),
-            Expression.Block(
-                Expression.Assign(Expression.ArrayAccess(arr,
-                    Expression.Convert(Expression.RightShift(j, Expression.Constant(6)), typeof(int))),
-                    Expression.Or(
-                        Expression.ArrayAccess(arr,
-                            Expression.Convert(Expression.RightShift(j, Expression.Constant(6)), typeof(int))),
-                        Expression.LeftShift(Expression.Constant(1L),
-                            Expression.Convert(Expression.And(j, Expression.Constant(63L)), typeof(int))))),
-                Expression.AddAssign(j, step),
-                Expression.Goto(start))));
+
+        // Align j to step boundary
+        var rem = Expression.Variable(typeof(long), "rem");
+        ctx.Variables.Add(rem);
+        setup.Add(Expression.Assign(rem, Expression.Modulo(Expression.Constant(0L), Expression.Constant(1L))));
+        Expression.IfThen(Expression.Constant(false), Expression.Empty());
+
+        var wordLoop = Expression.Label("wl");
+        var wordDone = Expression.Label("wd");
+        var bitLoop = Expression.Label("bl");
+        var done = Expression.Label("done");
+
+        // Outer word loop
+        setup.Add(Expression.Label(wordLoop));
+        setup.Add(Expression.IfThen(Expression.GreaterThan(j, limit),
+            Expression.Goto(done)));
+        setup.Add(Expression.Assign(word, Expression.RightShift(j, Expression.Constant(6))));
+        setup.Add(Expression.Assign(v, Expression.ArrayAccess(arr,
+            Expression.Convert(word, typeof(int)))));
+        setup.Add(Expression.Assign(lastInWord, Expression.Condition(
+            Expression.LessThan(limit, Expression.Add(Expression.LeftShift(word, Expression.Constant(6)), Expression.Constant(63L))),
+            limit,
+            Expression.Add(Expression.LeftShift(word, Expression.Constant(6)), Expression.Constant(63L)))));
+
+        // Inner bit loop
+        setup.Add(Expression.Label(bitLoop));
+        setup.Add(Expression.IfThen(Expression.GreaterThan(j, lastInWord),
+            Expression.Goto(wordDone)));
+        setup.Add(Expression.Assign(v,
+            Expression.Or(v, Expression.LeftShift(Expression.Constant(1L),
+                Expression.Convert(Expression.And(j, Expression.Constant(63L)), typeof(int))))));
+        setup.Add(Expression.AddAssign(j, step));
+        setup.Add(Expression.Goto(bitLoop));
+
+        // End of word: write back, continue outer loop
+        setup.Add(Expression.Label(wordDone));
+        setup.Add(Expression.Assign(Expression.ArrayAccess(arr,
+            Expression.Convert(word, typeof(int))), v));
+        setup.Add(Expression.Goto(wordLoop));
+
         setup.Add(Expression.Label(done));
         return Expression.Block(setup);
     }

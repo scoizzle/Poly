@@ -296,6 +296,20 @@ internal static class Lowering {
                             }
                             return;
                         }
+                        // Fused inc/dec for local variable: i = i + N  or  i = i - N
+                        if (assign.Destination is Variable incVar
+                            && assign.Value is Add incAdd
+                            && incAdd.LeftHandValue is Variable incLHS
+                            && incLHS.Name == incVar.Name
+                            && TryGetConstantLong(incAdd.RightHandValue, out long incAmt)) {
+                            int incIdx = LocalIndexMap?.GetValueOrDefault(incVar.Name) ?? -1;
+                            if (incIdx >= 0) {
+                                Code.Add(new IncLocalOp(incIdx, incAmt));
+                                if (!AssignmentValueIsUsed(assign))
+                                    Code.Add(new PopOp());
+                                return;
+                            }
+                        }
                         EmitNode(assign.Value, lambdaState);
                         if (AssignmentValueIsUsed(assign))
                             Code.Add(new DupOp());
@@ -460,8 +474,8 @@ internal static class Lowering {
 
         private void EmitWhileLoop(WhileLoop wl, LambdaEmitState? lambdaState) {
             Code.Add(new CommentOp("while start"));
-            if (TryEmitCountPrimes(wl, lambdaState)) {
-                Code.Add(new CommentOp("while end (countprimes)"));
+            if (TryEmitCountBits(wl, lambdaState)) {
+                Code.Add(new CommentOp("while end (countbits)"));
                 return;
             }
             if (TryEmitStridedSet(wl, lambdaState)) {
@@ -536,71 +550,120 @@ internal static class Lowering {
             return true;
         }
 
-        /// <summary>Detect a counting loop pattern of the form:
-        /// <c>while (i &lt;= limit) { cnt += IsPrime(i) ? 1 : 0; i++; }</c>
-        /// where <c>IsPrime</c> reads from a sieve bit array, and replace
-        /// it with <c>CountBitsOp</c> + subtraction to compute the prime
-        /// count via SIMD-accelerated PopCount.</summary>
-        private bool TryEmitCountPrimes(WhileLoop wl, LambdaEmitState? lambdaState) {
+        /// <summary>Detect a while loop that iterates over a range and
+        /// reads bits from a word array, accumulating into a counter.
+        /// Replaces it with <c>CountBitsOp</c> over the whole array,
+        /// which uses SIMD-accelerated PopCount.</summary>
+        private bool TryEmitCountBits(WhileLoop wl, LambdaEmitState? lambdaState) {
             // Condition: i <= Constant(limit)
             if (wl.Condition is not LessThanOrEqual le) return false;
             if (le.LeftHandValue is not Variable idxVar) return false;
             Node limitNode = le.RightHandValue;
-            if (!TryGetConstantLong(limitNode, out _)) return false;
+            if (!TryGetConstantLong(limitNode, out long limitVal)) return false;
 
-            // Body: Block with 2 children (count increment + loop variable increment)
+            // Body: Block with 2 children (accumulator + loop variable increment)
             if (wl.Body is not Block body || body.Nodes.Count != 2) return false;
 
-            // Second assignment: i = i + 1 (loop variable increment)
+            // Second child: i = i + 1
             if (body.Nodes[1] is not Assignment inc) return false;
             if (inc.Destination is not Variable incVar || incVar.Name != idxVar.Name) return false;
             if (inc.Value is not Add incAdd) return false;
             if (incAdd.LeftHandValue is not Variable incL || incL.Name != idxVar.Name) return false;
             if (!TryGetConstantLong(incAdd.RightHandValue, out long stepVal) || stepVal != 1L) return false;
 
-            // First assignment: cnt = cnt + (IsPrime(i) ? 1 : 0)  — or —  cnt += IsPrime(i) ? 1 : 0
+            // First child: acc += f(i) — where f(i) reads from an array
             if (body.Nodes[0] is not Assignment cntAssign) return false;
             if (cntAssign.Destination is not Variable) return false;
             if (cntAssign.Value is not Add cntAdd) return false;
-
-            // cntAdd.LeftHandValue should be the cnt variable itself
             if (cntAdd.LeftHandValue is not Variable cntLHS) return false;
             if (cntLHS.Name != ((Variable)cntAssign.Destination).Name) return false;
 
-            // cntAdd.RightHandValue should be Conditional(IsPrime(i), 1, 0)
-            if (cntAdd.RightHandValue is not Conditional cond) return false;
-            if (!TryGetConstantLong(cond.IfTrue, out long trueVal) || trueVal != 1L) return false;
-            if (!TryGetConstantLong(cond.IfFalse, out long falseVal) || falseVal != 0L) return false;
+            // Walk the addition's RHS to find an IndexAccess into a word array.
+            // The pattern can be Conditional(bittest, 1, 0) or just the raw read.
+            Node? arrayRead = FindWordArrayRead(cntAdd.RightHandValue, idxVar);
+            if (arrayRead is null) return false;
 
-            // IsPrime(i) = Equal(BitwiseAnd(ShiftRight(IndexAccess(arr, ShiftRight(i, 6)), BitwiseAnd(i, 63)), 1), 0)
-            if (cond.Condition is not Equal eq) return false;
-            if (!TryGetConstantLong(eq.RightHandValue, out long eqVal) || eqVal != 0L) return false;
-            if (eq.LeftHandValue is not BitwiseAnd ba) return false;
-            if (!TryGetConstantLong(ba.RightHandValue, out long baVal) || baVal != 1L) return false;
-            if (ba.LeftHandValue is not ShiftRight sr) return false;
-            if (sr.LeftHandValue is not IndexAccess ia) return false;
+            // bits[i >> K] — the array variable and shift
+            if (arrayRead is IndexAccess ia && ia.Value is Variable arrVar) {
+                if (ia.Arguments.Length != 1) return false;
+                if (ia.Arguments[0] is not ShiftRight idxSr) return false;
+                if (idxSr.LeftHandValue is not Variable idxSrVar || idxSrVar.Name != idxVar.Name) return false;
+                if (!TryGetConstantLong(idxSr.RightHandValue, out long k) || k != 6) return false;
 
-            // ia.Value = bits variable, ia.Arguments[0] = ShiftRight(i, 6)
-            if (ia.Arguments.Length != 1) return false;
-            if (ia.Arguments[0] is not ShiftRight idxSr) return false;
-            if (idxSr.LeftHandValue is not Variable idxSrVar || idxSrVar.Name != idxVar.Name) return false;
-            if (!TryGetConstantLong(idxSr.RightHandValue, out long idxSrVal) || idxSrVal != 6) return false;
+                string? aliasName = LocalAliases?.GetValueOrDefault(arrVar.Name);
+                if (aliasName is null) return false;
 
-            // bits[i >> 6] — the array variable
-            if (ia.Value is not Variable arrVar) return false;
-            string? aliasName = LocalAliases?.GetValueOrDefault(arrVar.Name);
-            if (aliasName is null) return false;
+                // Emit: CountBitsOp over word array, then adjust for range start/end
+                // For a standard sieve counting loop (start=2, step=1, reads bits[i>>6]):
+                // total composites = CountBits(arr), primes = (limit-1) - composites
+                bool countsSetBits = CountsSetBits(cntAdd.RightHandValue);
+                int wc = (int)((limitVal + 64) >> 6);
+                if (!countsSetBits) {
+                    // Counting clear bits: (limit - 1) - compositeCount
+                    // Push limit-1 BEFORE CountBitsOp so SubOp gets:
+                    // r = Pop() = compositeCount, Top = (limit-1) - compositeCount = primes
+                    Code.Add(new PushOp(limitVal - 1));
+                }
+                EmitNode(arrVar, lambdaState);
+                Code.Add(new PushOp(wc));
+                Code.Add(new CountBitsOp(Alias: aliasName));
+                if (!countsSetBits) {
+                    Code.Add(new SubOp());  // (limit-1) - compositeCount
+                }
+                // Store the result to the accumulator variable so any
+                // subsequent `cnt` reference loads the correct value.
+                if (cntAssign.Destination is Variable cntVar) {
+                    int cntIdx = LocalIndexMap?.GetValueOrDefault(cntVar.Name) ?? -1;
+                    if (cntIdx >= 0) {
+                        Code.Add(new DupOp());
+                        Code.Add(new StoreLocalOp(cntIdx));
+                    }
+                }
+                return true;
+            }
 
-            // Emit: CountBitsOp → composite count, then compute (limit - 1) - compositeCount
-            // Stack: [limitMinus1, arr, wordCount] → CountBitsOp → [limitMinus1, compositeCount]
-            // → SubOp → [primes]
-            TryGetConstantLong(limitNode, out long limitVal);
-            Code.Add(new PushOp(limitVal - 1));  // limit - 1
-            int wc = (int)((limitVal + 64) >> 6);
-            EmitNode(arrVar, lambdaState);
-            Code.Add(new PushOp(wc));
-            Code.Add(new CountBitsOp(Alias: aliasName));
-            Code.Add(new SubOp());  // (limit-1) - compositeCount
+            return false;
+        }
+
+        /// <summary>Walk a node tree to find the first <c>IndexAccess</c>
+        /// into a word array keyed on <paramref name="idxVar"/>.</summary>
+        private static Node? FindWordArrayRead(Node node, Variable idxVar) {
+            if (node is Conditional cond) {
+                return FindWordArrayRead(cond.Condition, idxVar);
+            }
+            if (node is Equal eq) {
+                return FindWordArrayRead(eq.LeftHandValue, idxVar)
+                    ?? FindWordArrayRead(eq.RightHandValue, idxVar);
+            }
+            if (node is BitwiseAnd ba) {
+                return FindWordArrayRead(ba.LeftHandValue, idxVar)
+                    ?? FindWordArrayRead(ba.RightHandValue, idxVar);
+            }
+            if (node is ShiftRight sr) {
+                return FindWordArrayRead(sr.LeftHandValue, idxVar)
+                    ?? FindWordArrayRead(sr.RightHandValue, idxVar);
+            }
+            if (node is IndexAccess ia) {
+                return ia;
+            }
+            return null;
+        }
+
+        /// <summary>Quick heuristic: does the expression count set bits
+        /// (the Conditional yields 1 when the bit is 1) or clear bits?</summary>
+        private static bool CountsSetBits(Node node) {
+            // Look for Equal(bits & 1, 0) ? 1 : 0 → counts clear bits (primes)
+            // vs just IndexAccess directly → counts set bits
+            if (node is Conditional cond) {
+                if (cond.IfTrue is Constant ct && ct.Value is 1L or 1
+                    && cond.IfFalse is Constant cf && cf.Value is 0L or 0) {
+                    // Check if the condition is Equal(value, 0)
+                    if (cond.Condition is Equal eq
+                        && eq.RightHandValue is Constant ec
+                        && ec.Value is 0L or 0)
+                        return false;  // Equal(x, 0) → true when bit is 0 → counting clear bits
+                }
+            }
             return true;
         }
 

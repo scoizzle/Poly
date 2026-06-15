@@ -603,15 +603,21 @@ public class UopStressTests {
         using var s = new VmState { Trace = _trace };
         s.Stack.Push(1);
         // Stack: [1] → NewArrayOp → [handle]
-        // Then: push 2(start), 1(step), 2(limit) → [handle, 2, 1, 2]
-        // StridedSetOp pops limit=2, step=1, start=2, handle → marks, leaves stack empty
-        // Then: push 0, ArrayLoadOp → reads arr[0] → 4 (bit 2 set)
+        // Duplicate handle, then push 2(start), 1(step), 2(limit)
+        // StridedSetOp pops all 4 → clean stack
+        // Then: push 0, ArrayLoadOp → needs handle, so dup again
         var compiled = ProgramCompiler.Compile([
             new NewArrayOp(),
+            new DupOp(),
             new PushOp(2L), new PushOp(1L), new PushOp(2L),
             new StridedSetOp(),
+            new DupOp(),
             new PushOp(0L), new ArrayLoadOp(),
         ]);
+        // After first DupOp: stack = [H, H]
+        // After pop limit, step, start, handle: stack = [H]
+        // After second DupOp: stack = [H, H]
+        // After push 0, ArrayLoadOp: stack = [H, 4]
         compiled(s);
         await Assert.That(s.Stack.Pop()).IsEqualTo(4L);
     }
@@ -623,10 +629,11 @@ public class UopStressTests {
         s.Stack.Push(1);
         ProgramCompiler.Compile([
             new NewArrayOp(),
+            new DupOp(),
             new PushOp(2L), new PushOp(2L), new PushOp(6L),
-            new StridedSetOp(),           // [handle] (not consumed)
+            new StridedSetOp(),           // pops handle
             new PushOp(1),                 // wordCount
-            new CountBitsOp(),
+            new CountBitsOp(),             // pops handle, pushes 3
         ])(s);
         await Assert.That(s.Stack.Pop()).IsEqualTo(3L);
     }
@@ -638,6 +645,7 @@ public class UopStressTests {
         s.Stack.Push(2);
         ProgramCompiler.Compile([
             new NewArrayOp(),
+            new DupOp(),
             new PushOp(60L), new PushOp(1L), new PushOp(70L),
             new StridedSetOp(),
             new PushOp(2),                  // wordCount = 2
@@ -654,16 +662,17 @@ public class UopStressTests {
         var wordCnt = (limit + 64) / 64;
         using var s = new VmState { Trace = _trace };
         s.Stack.Push(wordCnt);
-        var uops = new List<MicroOp> { new NewArrayOp() };
+        var uops = new List<MicroOp> { new NewArrayOp(), new DupOp() };
         // Sieve: for i = 2; i*i <= limit; i++
         //   if bit i not set → for j = i*i; j <= limit; j += i → set bit
-        // StridedSetOp uses Top() for handle (doesn't consume it),
-        // so DupOp is not needed — handle stays on stack from NewArrayOp.
+        // DupOp at the start preserves handle for each StridedSetOp call
+        // (StridedSetOp now pops the handle, so we need a copy for each call).
         for (int i = 2; i * i <= limit; i++) {
-            uops.Add(new PushOp((long)(i * i)));   // start
-            uops.Add(new PushOp((long)i));          // step
-            uops.Add(new PushOp((long)limit));      // limit
-            uops.Add(new StridedSetOp());
+            uops.Add(new DupOp());                   // copy handle
+            uops.Add(new PushOp((long)(i * i)));     // start
+            uops.Add(new PushOp((long)i));            // step
+            uops.Add(new PushOp((long)limit));        // limit
+            uops.Add(new StridedSetOp());             // pops handle, start, step, limit
         }
         uops.Add(new PushOp(wordCnt));
         uops.Add(new CountBitsOp());

@@ -105,6 +105,7 @@ public class UopBenchmarks {
     // Sieve of Eratosthenes (BitArray)
     private Bytecode _sieve100 = null!;
     private Bytecode _sieve1M = null!;
+    private Bytecode _sieve1B = null!;
 
     [GlobalSetup]
     public void Setup() {
@@ -124,6 +125,7 @@ public class UopBenchmarks {
         _countPrimes1000 = Lower(BuildCountPrimes(1000));
         _sieve100 = Lower(BuildSieve(100000));
         _sieve1M = Lower(BuildSieve(1000000));
+        _sieve1B = Lower(BuildSieve(1000000000));
     }
 
     [GlobalCleanup]
@@ -200,6 +202,9 @@ public class UopBenchmarks {
 
     [Benchmark]
     public object? Sieve_1M() => Exec(_sieve1M);
+
+    [Benchmark]
+    public object? Sieve_1B() => Exec(_sieve1B);
 
     // ═══════════════════════════════════════════════════
     //  Builders
@@ -305,7 +310,7 @@ public class UopBenchmarks {
             new ShiftRight(new IndexAccess(bits, Wi(x)), Bi(x)), new Constant(1L)), new Constant(0L));
 
         return new Invoke(new Lambda([], new Block(
-            [new Assignment(bits, new NewArray(new TypeReference("System.Int64"), new Constant(wordCnt))),
+            [new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant(wordCnt))),
              new Assignment(i, new Constant(2)),
              new WhileLoop(new LessThanOrEqual(new Multiply(i, i), new Constant(limit)),
                  new Block([

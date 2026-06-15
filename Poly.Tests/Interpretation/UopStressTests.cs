@@ -212,7 +212,7 @@ public class UopStressTests {
         // Full lowering path: new long[10]; arr[5] = 42; return arr[5]
         var arr = new Variable("arr");
         var body = new Block(
-            [new Assignment(arr, new NewArray(new TypeReference("System.Int64"), new Constant(10))),
+            [new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(10))),
              new Assignment(new IndexAccess(arr, new Constant(5)), new Constant(42L)),
              new IndexAccess(arr, new Constant(5))],
             [arr]);
@@ -241,7 +241,7 @@ public class UopStressTests {
             new Constant(0L));
 
         var body = new Block(
-            [new Assignment(bits, new NewArray(new TypeReference("System.Int64"), new Constant(wordCnt))),
+            [new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant(wordCnt))),
              new Assignment(i, new Constant(2)),
              new WhileLoop(new LessThanOrEqual(new Multiply(i, i), new Constant(limit)),
                  new Block([
@@ -292,7 +292,7 @@ public class UopStressTests {
             new Constant(0L));
 
         var body = new Block(
-            [new Assignment(bits, new NewArray(new TypeReference("System.Int64"), new Constant(wordCnt))),
+            [new Assignment(bits, new NewArray(TypeReference.To<long>(), new Constant(wordCnt))),
              new Assignment(i, new Constant(2)),
              new WhileLoop(new LessThanOrEqual(new Multiply(i, i), new Constant(limit)),
                  new Block([

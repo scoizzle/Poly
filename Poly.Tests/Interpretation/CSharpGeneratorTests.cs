@@ -157,7 +157,7 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_New_ProducesConstructorCall() {
-        var node = new New(new TypeReference("System.String"), new Constant("hello"));
+        var node = new New(TypeReference.To<string>(), new Constant("hello"));
         var result = new CSharpGenerator().Generate(node);
         await Assert.That(result).IsEqualTo("new System.String(\"hello\");");
     }
@@ -185,21 +185,21 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_TypeCast_ProducesCastExpression() {
-        var node = new TypeCast(new Variable("x"), new TypeReference("System.Int32"));
+        var node = new TypeCast(new Variable("x"), TypeReference.To<int>());
         var result = new CSharpGenerator().Generate(node);
         await Assert.That(result).IsEqualTo("(System.Int32)x;");
     }
 
     [Test]
     public async Task Generate_TypeIs_ProducesIsExpression() {
-        var node = new TypeIs(new Variable("x"), new TypeReference("System.String"));
+        var node = new TypeIs(new Variable("x"), TypeReference.To<string>());
         var result = new CSharpGenerator().Generate(node);
         await Assert.That(result).IsEqualTo("x is System.String;");
     }
 
     [Test]
     public async Task Generate_TypeAs_ProducesAsExpression() {
-        var node = new TypeAs(new Variable("x"), new TypeReference("System.String"));
+        var node = new TypeAs(new Variable("x"), TypeReference.To<string>());
         var result = new CSharpGenerator().Generate(node);
         await Assert.That(result).IsEqualTo("x as System.String;");
     }
@@ -373,7 +373,7 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_Throw_ProducesThrow() {
-        var result = new CSharpGenerator().Generate(new ThrowStatement(new New(new TypeReference("System.Exception"))));
+        var result = new CSharpGenerator().Generate(new ThrowStatement(new New(TypeReference.To<System.Exception>())));
         await Assert.That(result).IsEqualTo("throw new System.Exception();");
     }
 
@@ -381,7 +381,7 @@ public class CSharpGeneratorTests {
     public async Task Generate_TryCatchFinally_ProducesFullStructure() {
         var node = new TryCatchFinally(
             new Block(new Constant(1)),
-            [new CatchClause(new TypeReference("System.Exception"), "ex", new Block(new Constant(2)))],
+            [new CatchClause(TypeReference.To<System.Exception>(), "ex", new Block(new Constant(2)))],
             new Block(new Constant(3)));
         var result = new CSharpGenerator().Generate(node);
         var expected = "try" + Environment.NewLine +

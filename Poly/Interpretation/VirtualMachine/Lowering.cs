@@ -290,7 +290,12 @@ internal static class Lowering {
 
                 case Invoke invoke: EmitInvoke(invoke, lambdaState); return;
                 case Lambda lam: EmitLambda(lam, lambdaState); return;
-                case Return: TraceReturn(); Code.Add(new ReturnFromCallOp(CurrentArgSlots)); return;
+                case Return ret:
+                    if (ret.Value is not null)
+                        EmitNode(ret.Value, lambdaState);
+                    TraceReturn();
+                    Code.Add(new ReturnFromCallOp(CurrentArgSlots));
+                    return;
 
                 case Conditional cond: EmitConditional(cond, lambdaState); return;
                 case IfStatement iff: EmitIfStatement(iff, lambdaState); return;
@@ -568,6 +573,9 @@ internal static class Lowering {
             else if (ParamIndexMap?.TryGetValue(p.Name ?? "", out int pIdx) == true) {
                 Code.Add(new LoadArgOp(pIdx));
             }
+            else if (LocalIndexMap?.TryGetValue(p.Name ?? "", out int lIdx) == true) {
+                Code.Add(new LoadLocalOp(lIdx));
+            }
             else {
                 Code.Add(new PushOp(0L));
             }
@@ -600,6 +608,17 @@ internal static class Lowering {
             if (target is Member m) {
                 EmitMemberStore(m, lambdaState);
                 return;
+            }
+            if (target is Parameter p) {
+                if (ParamIndexMap?.TryGetValue(p.Name ?? "", out int pIdx) == true) {
+                    Code.Add(new StoreArgOp(pIdx));
+                    return;
+                }
+                if (LocalIndexMap?.TryGetValue(p.Name ?? "", out int lIdx) == true) {
+                    Code.Add(new StoreLocalOp(lIdx));
+                    return;
+                }
+                throw new InvalidOperationException($"Store target parameter '{p.Name}' not found in param or local maps");
             }
             throw new InvalidOperationException($"Unsupported assignment target: {target.GetType().Name}");
         }
@@ -923,16 +942,28 @@ internal static class Lowering {
                     paramIndexMap[p.Name ?? ""] = pi++;
             }
 
+            // Discover local Parameter nodes (e.g. from C99-style declarations)
+            // and assign them local slots.
+            var localIndexMap = new Dictionary<string, int>();
+            DiscoverLocalParameters(rootMethod.Body ?? rootMethod, paramIndexMap, localIndexMap);
+
             int rootIdx = ctx.FunctionIndexMap[rootMethod];
             int entryUop = ctx.Code.Count;
             var bodyCtx = ctx.NewScope();
             bodyCtx.ParamIndexMap = paramIndexMap;
+            bodyCtx.LocalIndexMap = localIndexMap;
             bodyCtx.CurrentArgSlots = paramIndexMap.Count;
+
+            // Initialize local slots
+            foreach (var (name, lIdx) in localIndexMap) {
+                bodyCtx.Code.Add(new PushOp(0L));
+                bodyCtx.Code.Add(new StoreLocalOp(lIdx));
+            }
 
             bodyCtx.EmitNode(rootMethod.Body ?? rootMethod, null);
             bodyCtx.Code.Add(new ReturnFromCallOp(bodyCtx.CurrentArgSlots));
 
-            ctx.Functions[rootIdx] = new FunctionEntry(entryUop, paramIndexMap.Count);
+            ctx.Functions[rootIdx] = new FunctionEntry(entryUop, paramIndexMap.Count, localIndexMap.Count);
         }
         else {
             ctx.EmitNode(root, null);
@@ -1068,6 +1099,19 @@ internal static class Lowering {
         foreach (var child in node.Children) {
             if (child is not null)
                 DiscoverLambdas(child, result);
+        }
+    }
+
+    private static void DiscoverLocalParameters(Node node, Dictionary<string, int> paramIndexMap,
+        Dictionary<string, int> localIndexMap) {
+        if (node is Parameter p && p.Name is not null
+            && !paramIndexMap.ContainsKey(p.Name)
+            && !localIndexMap.ContainsKey(p.Name)) {
+            localIndexMap[p.Name] = localIndexMap.Count;
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                DiscoverLocalParameters(child, paramIndexMap, localIndexMap);
         }
     }
 

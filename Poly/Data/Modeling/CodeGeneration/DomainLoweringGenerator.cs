@@ -1060,13 +1060,13 @@ public sealed class DomainImplementationLoweringPass {
         var typeNode = DomainLoweringGenerator.MapDomainTypeToNode(property.Type);
         var constraints = property.EffectiveConstraints
             .Select<Constraint, Node>(constraint => constraint switch {
-                RequiredConstraint => new Member(new TypeReference("System.ComponentModel.DataAnnotations"), "Required"),
+                RequiredConstraint => TypeReference.To<System.ComponentModel.DataAnnotations.RequiredAttribute>(),
                 RangeConstraint range => new New(
-                    new TypeReference("System.ComponentModel.DataAnnotations.RangeAttribute"),
+                    TypeReference.To<System.ComponentModel.DataAnnotations.RangeAttribute>(),
                     new Constant(range.MinValue ?? 0),
                     new Constant(range.MaxValue ?? 0)),
                 LengthConstraint length => new New(
-                    new TypeReference("System.ComponentModel.DataAnnotations.StringLengthAttribute"),
+                    TypeReference.To<System.ComponentModel.DataAnnotations.StringLengthAttribute>(),
                     new Constant(length.MaxLength ?? -1)),
                 _ => new Constant(constraint.ToString())
             })

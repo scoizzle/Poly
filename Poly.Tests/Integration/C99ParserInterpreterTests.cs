@@ -3,6 +3,7 @@ using System.Reflection;
 
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Interpretation.VirtualMachine;
 
 namespace Poly.Tests.Integration;
 
@@ -753,6 +754,34 @@ public class C99ParserInterpreterTests {
         return linqDelegate;
     }
 
+    /// <summary>Compile C99 source through the VM pipeline (VmCompiler) instead of LinqExpressionGenerator.</summary>
+    private static TDelegate CompileC99ViaVm<TDelegate>(string source) where TDelegate : Delegate {
+        var tokens = new C99Lexer(source).Tokenize();
+        var fn = new C99Parser(tokens).ParseFunction();
+        var invokeMethod = typeof(TDelegate).GetMethod("Invoke")
+            ?? throw new InvalidOperationException($"Delegate type {typeof(TDelegate).Name} does not expose an Invoke method.");
+
+        var allParams = fn.Parameters.Concat(fn.Locals).ToArray();
+
+        var analysisResult = new AnalyzerBuilder()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .Build()
+            .Analyze(fn.Body, setup: ctx => {
+                foreach (var (param, clrType) in allParams) {
+                    var typeDef = ctx.TypeDefinitions.GetTypeDefinition(clrType);
+                    if (typeDef != null) ctx.SetResolvedType(param, typeDef);
+                }
+            });
+
+        var compiler = new VmCompiler(analysisResult);
+        var parameters = fn.Parameters.Select(p => p.Param).ToArray();
+
+        return parameters.Length == 0
+            ? compiler.CompileAsDelegate<TDelegate>(fn.Body)
+            : compiler.CompileAsDelegate<TDelegate>(fn.Body, parameters);
+    }
+
     // =========================================================================
     // Tests
     // =========================================================================
@@ -1053,4 +1082,52 @@ public class C99ParserInterpreterTests {
             .Throws<InvalidOperationException>()
             .WithMessage("C99 does not support namespaces.");
     }
+
+    // =========================================================================
+    // VM Compiler validation — cross-validate VmCompiler against LinqExpressionGenerator
+    // =========================================================================
+
+    /// <summary>Run the same C99 source through both compilation paths and assert both produce expected results.</summary>
+    private static async Task AssertBothPaths<TDelegate>(string source, object[] args, object expected)
+        where TDelegate : Delegate {
+        var linqFn = CompileC99<TDelegate>(source);
+        var vmFn = CompileC99ViaVm<TDelegate>(source);
+        await Assert.That(linqFn).IsNotNull();
+        await Assert.That(vmFn).IsNotNull();
+
+        var linqResult = linqFn.DynamicInvoke(args);
+        var vmResult = vmFn.DynamicInvoke(args);
+        await Assert.That(linqResult).IsEqualTo(expected);
+        await Assert.That(vmResult).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task VmCompiler_Arithmetic_MatchLinqExpressionPath() {
+        await AssertBothPaths<Func<int, int, int>>(
+            "int add(int a, int b) { return a + b; }",
+            new object[] { 3, 7 }, 10);
+        await AssertBothPaths<Func<int, int>>(
+            "int abs(int x) { return x < 0 ? -x : x; }",
+            new object[] { -5 }, 5);
+        await AssertBothPaths<Func<int, int, int, int>>(
+            "int clamp(int x, int lo, int hi) { return x < lo ? lo : x > hi ? hi : x; }",
+            new object[] { 15, 0, 10 }, 10);
+    }
+
+    [Test]
+    public async Task VmCompiler_ControlFlow_MatchLinqExpressionPath() {
+        await AssertBothPaths<Func<int, int>>(
+            "int fact(int n) { int r = 1; int i = 2; while (i <= n) { r = r * i; i = i + 1; } return r; }",
+            new object[] { 5 }, 120);
+        await AssertBothPaths<Func<int, int>>(
+            "int fib(int n) { int a=0; int b=1; int i=0; int t=0; for(i=0; i<n; i=i+1) { t=b; b=a+b; a=t; } return a; }",
+            new object[] { 10 }, 55);
+        await AssertBothPaths<Func<int, int>>(
+            "int isEven(int n) { int r=0; if (n>=0 && n%2==0) { r=1; } return r; }",
+            new object[] { 4 }, 1);
+    }
+
+    // Note: Array designated initializers are not tested through VmCompiler
+    // because the VM's array µops use long[] exclusively, while the C99 parser
+    // creates int[] arrays.  This is a pre-existing VM limitation.
 }

@@ -134,8 +134,8 @@ public class NumericTypePromotionTests {
     [Test]
     public async Task NumericTypePromotion_Add_WithParameters_PromotesCorrectly() {
         // Arrange
-        var param1 = new Parameter("a", new TypeReference("System.Int32"));
-        var param2 = new Parameter("b", new TypeReference("System.Double"));
+        var param1 = new Parameter("a", TypeReference.To<int>());
+        var param2 = new Parameter("b", TypeReference.To<double>());
         var node = new Add(param1, param2);
 
         // Act

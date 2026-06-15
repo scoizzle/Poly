@@ -375,6 +375,12 @@ internal static class Lowering {
 
         private void EmitBinary(Node left, Node right, Func<MicroOp> makeOp, LambdaEmitState? lambdaState, Node? source = null) {
             EmitNode(left, lambdaState);
+            // CSE: when both operands are the same variable, dup instead of re-emitting
+            if (left == right && left is Variable or Parameter) {
+                Code.Add(new DupOp());
+                EmitOp(makeOp(), source);
+                return;
+            }
             if (TryGetConstantLong(right, out long val)) {
                 var op = makeOp();
                 if (op is AddOp or SubOp or MulOp or EqOp or NeOp or LtOp or LeOp or GtOp or GeOp

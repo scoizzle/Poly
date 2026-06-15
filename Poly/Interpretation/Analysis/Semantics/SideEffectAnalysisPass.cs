@@ -48,6 +48,12 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 var childKind = childMeta?.Kind ?? SideEffectKind.External;
                 blockKind = ClassifyWorst(blockKind, childKind);
 
+                // Track whether an Assignment's value is used by the enclosing block.
+                // Non-last Assignments in a Block never have their value consumed.
+                if (child is Assignment) {
+                    context.SetMetadata(child, new AssignmentValueUsedMetadata(i == n - 1));
+                }
+
                 if (i < n - 1 && (childKind == SideEffectKind.Pure || childKind == SideEffectKind.Read)) {
                     context.SetMetadata(child, Elidable);
                     if (emitDiags) {
@@ -166,6 +172,14 @@ public sealed record SideEffectMetadata(SideEffectKind Kind) : IAnalysisMetadata
 /// during interpretation or lowering without changing observable behavior or results.
 /// </summary>
 public sealed record ElisionMetadata(bool CanElide) : IAnalysisMetadata;
+
+/// <summary>
+/// Metadata indicating whether an <see cref="Assignment"/> node's value is consumed
+/// by a parent expression. When <c>false</c>, the lowering can skip the <c>DupOp</c>
+/// that preserves the assignment's value, eliminating the redundant <c>dup; store; pop</c>
+/// pattern.
+/// </summary>
+public sealed record AssignmentValueUsedMetadata(bool IsValueUsed) : IAnalysisMetadata;
 
 public static class SideEffectAnalysisExtensions {
     extension(AnalyzerBuilder builder) {

@@ -322,8 +322,18 @@ public class UopStressTests {
         var inv = new Invoke(new Lambda([], body));
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var prog = Lowering.Lower(inv, inv.AnalyzeNode());
+        sw.Stop();
+        {
+
+            using var file = File.OpenWrite("/tmp/poly_stress.txt");
+            using var writer = new StreamWriter(file);
+            prog.Dump(writer);
+        }
+        sw.Start();
         using var state = new VmState { Program = prog, Trace = _trace };
-        state.Reset(); Vm.Execute(state); sw.Stop();
+        state.Reset();
+        Vm.Execute(state);
+        sw.Stop();
         long result = (long)state.Stack.Pop();
         File.AppendAllText("/tmp/poly_stress.txt",
             $"Sieve(1M) = {result} primes in {sw.ElapsedMilliseconds}ms\n");

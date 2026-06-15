@@ -1,4 +1,9 @@
+using System.Numerics;
+using System.Numerics.Tensors;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
 
 namespace Poly.Interpretation.VirtualMachine;
 
@@ -193,5 +198,26 @@ internal static partial class Vm {
             }
             else throw new InvalidOperationException("Unhandled VM exception: " + exVal);
         }
+    }
+
+    /// <summary>Count set bits in a <c>long[]</c> word array using
+    /// <c>TensorPrimitives.PopCount</c> for SIMD-accelerated per-element
+    /// PopCount, then <c>TensorPrimitives.Sum</c> for vectorized
+    /// reduction.  Processes the array in fixed-size chunks to avoid
+    /// large temporary allocations.</summary>
+    internal static long CountBitsVectorized(long[] arr, int wordCount) {
+        const int ChunkWords = 4096;
+        long total = 0;
+        int offset = 0;
+        var counts = new ulong[ChunkWords];
+        while (offset < wordCount) {
+            int count = Math.Min(ChunkWords, wordCount - offset);
+            var chunk = arr.AsSpan(offset, count);
+            var ulongChunk = MemoryMarshal.Cast<long, ulong>(chunk);
+            TensorPrimitives.PopCount(ulongChunk, counts.AsSpan(0, count));
+            total += (long)TensorPrimitives.Sum<ulong>(counts.AsSpan(0, count));
+            offset += count;
+        }
+        return total;
     }
 }

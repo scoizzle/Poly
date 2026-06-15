@@ -71,6 +71,19 @@ internal static class Lowering {
             LocalAliases = LocalAliases,
         };
 
+        /// <summary>True when an Assignment node's value is consumed by the
+        /// enclosing expression, so a <c>DupOp</c> should be emitted.
+        /// Falls back to <see cref="EmitsValue"/> when analysis metadata is absent
+        /// (e.g. when <c>SideEffectAnalysisPass</c> was not registered).</summary>
+        private bool AssignmentValueIsUsed(Assignment assign) =>
+            Analysis.GetMetadata<AssignmentValueUsedMetadata>(assign)?.IsValueUsed
+            ?? EmitsValue(assign, Analysis);
+
+        private bool ChildEmitsValue(Node child) =>
+            child is Assignment assign
+                ? AssignmentValueIsUsed(assign)
+                : EmitsValue(child, Analysis);
+
         // ── Trace helpers ──
 
         /// <summary>Emit a µop and attach the source AST node's text for
@@ -162,6 +175,8 @@ internal static class Lowering {
 
         private bool TryGetConstantLong(Node node, out long value) {
             var val = Analysis.GetConstantValue(node);
+            if (val is null && node is Constant c && c.Value is not null)
+                val = c.Value;
             if (val is null) { value = 0; return false; }
             if (val is int iv) { value = iv; return true; }
             if (val is long lv) { value = lv; return true; }
@@ -257,7 +272,7 @@ internal static class Lowering {
                                 LocalAliases[destVar.Name] = aliasName;
                                 EmitNode(na.Length, lambdaState);
                                 Code.Add(new NewArrayOp(Alias: aliasName));
-                                if (EmitsValue(assign, Analysis))
+                                if (AssignmentValueIsUsed(assign))
                                     Code.Add(new DupOp());
                                 EmitVariableStore(assign.Destination, lambdaState);
                                 return;
@@ -268,7 +283,7 @@ internal static class Lowering {
                                 EmitNode(ia.Arguments[0], lambdaState);
                                 EmitNode(assign.Value, lambdaState);
                                 Code.Add(new ArrayStoreOp(Alias: arrAlias));
-                                if (EmitsValue(assign, Analysis))
+                                if (AssignmentValueIsUsed(assign))
                                     Code.Add(new DupOp());
                             }
                             else {
@@ -276,13 +291,13 @@ internal static class Lowering {
                                 EmitNode(ia.Arguments[0], lambdaState);
                                 EmitNode(assign.Value, lambdaState);
                                 Code.Add(new ArrayStoreOp());
-                                if (EmitsValue(assign, Analysis))
+                                if (AssignmentValueIsUsed(assign))
                                     Code.Add(new DupOp());
                             }
                             return;
                         }
                         EmitNode(assign.Value, lambdaState);
-                        if (EmitsValue(assign, Analysis))
+                        if (AssignmentValueIsUsed(assign))
                             Code.Add(new DupOp());
                         EmitVariableStore(assign.Destination, lambdaState);
                         return;
@@ -310,7 +325,7 @@ internal static class Lowering {
                             var child = block.Nodes[i];
                             bool isLast = i == block.Nodes.Count - 1 && EmitsValue(block, Analysis);
                             EmitNode(child, lambdaState);
-                            if (!isLast && EmitsValue(child, Analysis))
+                            if (!isLast && ChildEmitsValue(child))
                                 Code.Add(new PopOp());
                         }
                         return;
@@ -324,7 +339,10 @@ internal static class Lowering {
                 case Member m: EmitMember(m, lambdaState); return;
                 case IndexAccess ia: EmitIndexAccess(ia, lambdaState); return;
                 case New n: EmitNew(n, lambdaState); return;
-                case NewArray na: EmitNode(na.Length, lambdaState); Code.Add(new NewArrayOp()); return;
+                case NewArray na:
+                    EmitNode(na.Length, lambdaState);
+                    Code.Add(new NewArrayOp());
+                    return;
 
                 case Await aw: EmitAwait(aw, lambdaState); return;
                 case SuspendNode sn: EmitSuspendNode(sn, lambdaState); return;
@@ -345,17 +363,24 @@ internal static class Lowering {
             EmitNode(left, lambdaState);
             if (TryGetConstantLong(right, out long val)) {
                 var op = makeOp();
-                if (op is AddOp or SubOp or MulOp or EqOp or NeOp or LtOp or LeOp or GtOp or GeOp) {
+                if (op is AddOp or SubOp or MulOp or EqOp or NeOp or LtOp or LeOp or GtOp or GeOp
+                    or DivOp or BitAndOp or BitOrOp or BitXorOp or ShlOp or ShrOp) {
                     EmitOp(op switch {
-                        AddOp => new AddImmOp(val),
-                        SubOp => new SubImmOp(val),
-                        MulOp => new MulImmOp(val),
-                        EqOp => new EqImmOp(val),
-                        NeOp => new NeImmOp(val),
-                        LtOp => new LtImmOp(val),
-                        LeOp => new LeImmOp(val),
-                        GtOp => new GtImmOp(val),
-                        GeOp => new GeImmOp(val),
+                        AddOp => new AddOp(Immediate: val),
+                        SubOp => new SubOp(Immediate: val),
+                        MulOp => new MulOp(Immediate: val),
+                        DivOp => new DivOp(Immediate: val),
+                        EqOp => new EqOp(Immediate: val),
+                        NeOp => new NeOp(Immediate: val),
+                        LtOp => new LtOp(Immediate: val),
+                        LeOp => new LeOp(Immediate: val),
+                        GtOp => new GtOp(Immediate: val),
+                        GeOp => new GeOp(Immediate: val),
+                        BitAndOp => new BitAndOp(Immediate: val),
+                        BitOrOp => new BitOrOp(Immediate: val),
+                        BitXorOp => new BitXorOp(Immediate: val),
+                        ShlOp => new ShlOp(Immediate: val),
+                        ShrOp => new ShrOp(Immediate: val),
                         _ => op
                     }, source);
                     return;
@@ -435,6 +460,10 @@ internal static class Lowering {
 
         private void EmitWhileLoop(WhileLoop wl, LambdaEmitState? lambdaState) {
             Code.Add(new CommentOp("while start"));
+            if (TryEmitCountPrimes(wl, lambdaState)) {
+                Code.Add(new CommentOp("while end (countprimes)"));
+                return;
+            }
             if (TryEmitStridedSet(wl, lambdaState)) {
                 Code.Add(new CommentOp("while end (strided)"));
                 return;
@@ -450,7 +479,7 @@ internal static class Lowering {
             int bodyStart = Code.Count;
             Code.Add(new CommentOp("while body"));
             EmitNode(wl.Body, lambdaState);
-            if (EmitsValue(wl.Body, Analysis))
+            if (ChildEmitsValue(wl.Body))
                 Code.Add(new PopOp());
             int bodyEnd = Code.Count;
             Code.Add(new JumpOp(cont));
@@ -495,15 +524,83 @@ internal static class Lowering {
             Node stepNode = add.RightHandValue;
 
             string? aliasName = LocalAliases?.GetValueOrDefault(arrVar.Name);
-            if (aliasName is not null) {
+            if (aliasName is null) {
                 return false;
             }
 
             EmitNode(arrVar, lambdaState);
-            EmitNode(ia.Arguments[0], lambdaState);
+            EmitNode(idxVar, lambdaState);    // start value (j = i*i)
             EmitNode(stepNode, lambdaState);
             EmitNode(limitNode, lambdaState);
-            Code.Add(new StridedSetOp());
+            Code.Add(new StridedSetOp(Alias: aliasName));
+            return true;
+        }
+
+        /// <summary>Detect a counting loop pattern of the form:
+        /// <c>while (i &lt;= limit) { cnt += IsPrime(i) ? 1 : 0; i++; }</c>
+        /// where <c>IsPrime</c> reads from a sieve bit array, and replace
+        /// it with <c>CountBitsOp</c> + subtraction to compute the prime
+        /// count via SIMD-accelerated PopCount.</summary>
+        private bool TryEmitCountPrimes(WhileLoop wl, LambdaEmitState? lambdaState) {
+            // Condition: i <= Constant(limit)
+            if (wl.Condition is not LessThanOrEqual le) return false;
+            if (le.LeftHandValue is not Variable idxVar) return false;
+            Node limitNode = le.RightHandValue;
+            if (!TryGetConstantLong(limitNode, out _)) return false;
+
+            // Body: Block with 2 children (count increment + loop variable increment)
+            if (wl.Body is not Block body || body.Nodes.Count != 2) return false;
+
+            // Second assignment: i = i + 1 (loop variable increment)
+            if (body.Nodes[1] is not Assignment inc) return false;
+            if (inc.Destination is not Variable incVar || incVar.Name != idxVar.Name) return false;
+            if (inc.Value is not Add incAdd) return false;
+            if (incAdd.LeftHandValue is not Variable incL || incL.Name != idxVar.Name) return false;
+            if (!TryGetConstantLong(incAdd.RightHandValue, out long stepVal) || stepVal != 1L) return false;
+
+            // First assignment: cnt = cnt + (IsPrime(i) ? 1 : 0)  — or —  cnt += IsPrime(i) ? 1 : 0
+            if (body.Nodes[0] is not Assignment cntAssign) return false;
+            if (cntAssign.Destination is not Variable) return false;
+            if (cntAssign.Value is not Add cntAdd) return false;
+
+            // cntAdd.LeftHandValue should be the cnt variable itself
+            if (cntAdd.LeftHandValue is not Variable cntLHS) return false;
+            if (cntLHS.Name != ((Variable)cntAssign.Destination).Name) return false;
+
+            // cntAdd.RightHandValue should be Conditional(IsPrime(i), 1, 0)
+            if (cntAdd.RightHandValue is not Conditional cond) return false;
+            if (!TryGetConstantLong(cond.IfTrue, out long trueVal) || trueVal != 1L) return false;
+            if (!TryGetConstantLong(cond.IfFalse, out long falseVal) || falseVal != 0L) return false;
+
+            // IsPrime(i) = Equal(BitwiseAnd(ShiftRight(IndexAccess(arr, ShiftRight(i, 6)), BitwiseAnd(i, 63)), 1), 0)
+            if (cond.Condition is not Equal eq) return false;
+            if (!TryGetConstantLong(eq.RightHandValue, out long eqVal) || eqVal != 0L) return false;
+            if (eq.LeftHandValue is not BitwiseAnd ba) return false;
+            if (!TryGetConstantLong(ba.RightHandValue, out long baVal) || baVal != 1L) return false;
+            if (ba.LeftHandValue is not ShiftRight sr) return false;
+            if (sr.LeftHandValue is not IndexAccess ia) return false;
+
+            // ia.Value = bits variable, ia.Arguments[0] = ShiftRight(i, 6)
+            if (ia.Arguments.Length != 1) return false;
+            if (ia.Arguments[0] is not ShiftRight idxSr) return false;
+            if (idxSr.LeftHandValue is not Variable idxSrVar || idxSrVar.Name != idxVar.Name) return false;
+            if (!TryGetConstantLong(idxSr.RightHandValue, out long idxSrVal) || idxSrVal != 6) return false;
+
+            // bits[i >> 6] — the array variable
+            if (ia.Value is not Variable arrVar) return false;
+            string? aliasName = LocalAliases?.GetValueOrDefault(arrVar.Name);
+            if (aliasName is null) return false;
+
+            // Emit: CountBitsOp → composite count, then compute (limit - 1) - compositeCount
+            // Stack: [limitMinus1, arr, wordCount] → CountBitsOp → [limitMinus1, compositeCount]
+            // → SubOp → [primes]
+            TryGetConstantLong(limitNode, out long limitVal);
+            Code.Add(new PushOp(limitVal - 1));  // limit - 1
+            int wc = (int)((limitVal + 64) >> 6);
+            EmitNode(arrVar, lambdaState);
+            Code.Add(new PushOp(wc));
+            Code.Add(new CountBitsOp(Alias: aliasName));
+            Code.Add(new SubOp());  // (limit-1) - compositeCount
             return true;
         }
 
@@ -525,7 +622,7 @@ internal static class Lowering {
 
             if (fl.Initializer is not null) {
                 EmitNode(fl.Initializer, lambdaState);
-                if (EmitsValue(fl.Initializer, Analysis))
+                if (ChildEmitsValue(fl.Initializer))
                     Code.Add(new PopOp());
             }
             LabelTargets[cont] = Code.Count;
@@ -538,7 +635,7 @@ internal static class Lowering {
             int bodyEnd = Code.Count;
             if (fl.Increment is not null) {
                 EmitNode(fl.Increment, lambdaState);
-                if (EmitsValue(fl.Increment, Analysis))
+                if (ChildEmitsValue(fl.Increment))
                     Code.Add(new PopOp());
             }
             Code.Add(new JumpOp(cont));
@@ -754,7 +851,7 @@ internal static class Lowering {
             if (tcf.FinallyBlock is not null) {
                 finallyEntry = Code.Count;
                 EmitNode(tcf.FinallyBlock, lambdaState);
-                if (EmitsValue(tcf.FinallyBlock, Analysis))
+                if (ChildEmitsValue(tcf.FinallyBlock))
                     Code.Add(new PopOp());
                 Code.Add(new EndFinallyOp());
             }
@@ -791,7 +888,7 @@ internal static class Lowering {
 
             EmitVariableStore(fel.LoopVariable, lambdaState);
             EmitNode(fel.Body, lambdaState);
-            if (EmitsValue(fel.Body, Analysis))
+            if (ChildEmitsValue(fel.Body))
                 Code.Add(new PopOp());
             Code.Add(new JumpOp(cont));
             LabelTargets[end] = Code.Count;
@@ -804,7 +901,7 @@ internal static class Lowering {
             EmitNode(us.Resource, lambdaState);
             Code.Add(new StoreValueOp());
             EmitNode(us.Body, lambdaState);
-            if (EmitsValue(us.Body, Analysis))
+            if (ChildEmitsValue(us.Body))
                 Code.Add(new PopOp());
         }
 

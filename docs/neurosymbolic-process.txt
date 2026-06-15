@@ -1,0 +1,359 @@
+╔════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║                                     POLY NEUROSYMBOLIC PROCESS                                     ║
+║              Model-codified algorithms → Symbolic IR → VM verification → Native code               ║
+╚════════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+  Legend:
+  ┌──────────┐  Component / data      ╔══════════════╗  Module boundary (layer-colored)
+  │          │  (rounded = process)   ║  Module Name ║
+  └──────────┘                        ╚══════════════╝
+  ───────→  Primary data flow         - - - - - →  Feedback / diagnostics
+  ◇  Decision point                   ●  Entry/exit
+
+  Layer colors (labels on left border):
+  [DOM]  DomainModeling (V3 immutable)          [INT]  Introspection (type abstraction)
+  [SYN]  Syntax (AST nodes)                     [VAL]  Validation (rules)
+  [ANA]  Interpretation.Analysis (semantic)     [SYS]  Synthesis (macro discovery)
+  [VM]   Interpretation.VirtualMachine          [ALT]  Alternative backends
+  [EXE]  Execution (ProgramCompiler + Vm)
+
+ ╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+ ║   TIER 1  NEUROSYMBOLIC LOOP — Cognitive Cycle (Conceptual Architecture)                       ║
+ ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+                       ●  Model/Agent  ●
+                       (LLM or Human)
+                            │
+                            │  discovers algorithm / writes policy
+                            ▼
+                 ┌─────────────────────┐               ┌─────────────────────┐
+                 │     Domain Model    │               │  Macro / Heuristic  │
+                 │ (Poly.DomainModel-) │──────────────→│(symbolic IR: µop)   │
+                 │  ing immutable      │               │   patterns or AST   │
+                 │  records)           │               │   fragments)        │
+                 └──────────┬──────────┘               └──────────┬──────────┘
+                            │                                     │
+                            │  lowered to                         │  validated by
+                            ▼                                     ▼
+                 ┌──────────────────────────────────────────────────────────────┐
+                 │                                                              │
+                 │            ANALYSIS + LOWERING + VM EXECUTION                │
+                 │          (verification gate: AnalysisResult +                │
+                 │           InterpreterResult)                                 │
+                 │                                                              │
+                 └──────────────────────────┬───────────────────────────────────┘
+                                            │
+                                       ┌────┴────┐
+                                       │ Passes? │
+                                       ◇         ◇
+                                       └────┬────┘
+                 ┌──────────────────────────┼──────────────┐
+                            ▼               │              ▼
+                 ┌─────────────────────┐    │   ┌─────────────────────┐
+                 │     Macro Library   │    │   │   Rich Diagnostics  │
+                 │  (provenance,       │    │   │  (severity: Error,  │
+                 │   signature,        │    │   │   Warning, Info,    │
+                 │   expanded AST,     │    │   │   Suggestion,       │
+                 │   frequency)        │    │   │   Explanation)      │
+                 └──────────┬──────────┘    │   └──────────┬──────────┘
+                            │               │              │
+                            │  compiled to  │              │  fed back to
+                            ▼               │              ▼
+                 ┌─────────────────────┐    │   ┌─────────────────────┐
+                 │   Native Backends   │    │   │ Model/Agent (revise)│
+                 │  (C# / WASM / etc)  │    │   │                     │
+                 │  zero inference     │    │   │                     │
+                 │  cost per use       │    │   │                     │
+                 └─────────────────────┘    │   └─────────────────────┘
+                                            │  Each macro paid inference cost once;
+                                            │  every subsequent use is free.
+                                            │  Platform turns model expertise into
+                                            │  a durable, portable asset.
+                                            └───────────────────────────────────────
+
+
+ ╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+ ║   TIER 2  PIPELINE DETAIL — Full Data Flow with Module Boundaries                              ║
+ ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+   ╔════════════════════════  Poly.DomainModeling — V3 Immutable Domain  ═════════════════════════╗
+   ║   ┌──────────────┐                                                                           ║
+   ║   │    Domain    │   Immutable root record                                                   ║
+   ║   │   (Entities, │   ├─ Entity (with Stages, Actions)                                        ║
+   ║   │   Relations, │   ├─ Relationship (ownership semantics)                                   ║
+   ║   │   Events,    │   ├─ Event                                                                ║
+   ║   │   Policies)  │   ├─ Policy (All/Any aggregation of rules)                                ║
+   ║   └──────┬───────┘  └─ Effect (CreateEntity, PublishEvent,                                   ║
+   ║          │              StageTransition, AssignEffect)                                       ║
+   ║          │            Evolution: DomainChange → DomainEvolution.Apply()                      ║
+   ║          │            → analysis gate → EvolutionResult                                      ║
+   ║          │                                                                                   ║
+   ║          │  DomainExpression system: property bindings, policies, effects                    ║
+   ║          ▼                                                                                   ║
+   ║   DomainImplementationLoweringPass.LowerToContractInterfaces()                               ║
+   ║   ─→ I{StageName}{EntityName} interfaces (actor contract surface)                            ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+                │ lowered via DomainExpression → NodeExtensions fluent API
+                ▼
+
+   ╔══════════════════════════════  Poly.Syntax — AST Construction  ══════════════════════════════╗
+   ║                                                                                              ║
+   ║   NodeExtensions fluent construction API:                                                    ║
+   ║     .Add() .Subtract() .Invoke() .Assign() .Block() .Lambda()                                ║
+   ║     .If() .While() .Member() .New() .TypeReference()                                         ║
+   ║                                                                                              ║
+   ║   ┌─────────────────────────────────────────────────────────────────────┐                    ║
+   ║   │                         AST (Node record tree)                      │                    ║
+   ║   │  Binary: Add, Subtract, Multiply, Divide, Modulo, Power             │                    ║
+   ║   │  Comparison: Equal, NotEqual, LessThan, GreaterThan, LessThanOrEq,  │                    ║
+   ║   │             GreaterThanOrEq                                         │                    ║
+   ║   │  Boolean: And, Or, Not                                              │                    ║
+   ║   │  Control: Block, IfStatement, WhileLoop, ForLoop, Switch            │                    ║
+   ║   │  Functions: Lambda, Invoke, MethodDefinitionNode                    │                    ║
+   ║   │  Members: Member (field/prop), New, TypeOf, TypeIs                  │                    ║
+   ║   │  Variables: Variable, Parameter, Assign, Let                        │                    ║
+   ║   │  Constants: Constant (int, string, bool, double, null, ...)         │                    ║
+   ║   │  Exceptions: TryCatchFinally, Throw, Rethrow                        │                    ║
+   ║   │  Async: Await (sync extraction via GetResult)                       │                    ║
+   ║   │  Collections: ListLiteral, ArrayIndex, ArrayLength                  │                    ║
+   ║   │  NodeId (GUID v7 or source-position) on every node                  │                    ║
+   ║   └─────────────────────────────────────────────────────────────────────┘                    ║
+   ║                                                                                              ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+                │ analyzed by
+                ▼
+
+   ╔══════════════════════  Poly.Interpretation.Analysis — Semantic Passes  ══════════════════════╗
+   ║   AnalyzerBuilder ──→ Analyzer ──→ AnalysisContext + node tree                               ║
+   ║                                                                                              ║
+   ║   Semantic analysis passes (ordered pipeline):                                               ║
+   ║   ┌────────────────────────────────────────────────────────────────────┐                     ║
+   ║   │ 1. TypeAndMemberResolutionPass  ──→ resolves CLR types/members     │                     ║
+   ║   │                                      (uses Introspection layer)    │                     ║
+   ║   │ 2. VariableScopeValidator        ──→ variable lifetime/scope       │                     ║
+   ║   │ 3. ConstantFolding              ──→ fold const sub-expressions     │                     ║
+   ║   │ 4. ControlFlowAnalysis          ──→ build CFG metadata             │                     ║
+   ║   │ 5. SideEffectAnalysisPass       ──→ DCE support                    │                     ║
+   ║   │ 6. DefiniteAssignmentAnalyzer   ──→ definitely-assigned tracking   │                     ║
+   ║   │ 7. LambdaReturnTypeAnalyzer     ──→ infer lambda return types      │                     ║
+   ║   │ 8. ThisReferenceContextPass     ──→ validate `this` context        │                     ║
+   ║   └────────────────────────────────────────────────────────────────────┘                     ║
+   ║                                                                                              ║
+   ║   ┌────────────────────────────────────────────────────────────────────┐                     ║
+   ║   │ AnalysisResult — immutable result snapshot                         │                     ║
+   ║   │  • GetMetadata<T>(nodeId) → typed metadata per node                │                     ║
+   ║   │  • Diagnostics — list of {Severity, Message, Code, NodeId}         │                     ║
+   ║   │  • HasErrors → bool                                                │                     ║
+   ║   └────────────────────────────────────────────────────────────────────┘                     ║
+   ║                                                                                              ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+                │ lowered to µop IR (with AnalysisResult metadata)
+                ▼
+
+   ╔══════════════════════  Poly.Interpretation.VirtualMachine — Lowering  ═══════════════════════╗
+   ║   Lowering pipeline (Lowering.cs):                                                           ║
+   ║                                                                                              ║
+   ║      DiscoverFunctions(root, analysis, refMethods)                                           ║
+   ║      DiscoverLambdas(root, refLambdas)                                                       ║
+   ║            │                                                                                 ║
+   ║            ▼                                                                                 ║
+   ║      Assign function indices (methods + lambdas)                                             ║
+   ║      Pre-scan lambdas: compute capture lists                                                 ║
+   ║            │                                                                                 ║
+   ║            ▼                                                                                 ║
+   ║      EmitNode(root, null) → generates µops for root expression/body                          ║
+   ║      Add ReturnFromCallOp (or ReturnOp for top-level)                                        ║
+   ║            │                                                                                 ║
+   ║            ▼                                                                                 ║
+   ║      For each ref'd method (except root): EmitNode(method.Body)                              ║
+   ║      For each ref'd lambda: build maps → EmitNode(lambda.Body)                               ║
+   ║            │                                                                                 ║
+   ║            ▼                                                                                 ║
+   ║      ResolveLabels() ──→ patch JumpOp/JumpIfFalseOp targets                                  ║
+   ║      BuildNodeRanges() ──→ NodeId ──→ (startPC, endPC)                                       ║
+   ║            │                                                                                 ║
+   ║            ▼                                                                                 ║
+   ║      ┌─────────────────────────────────────────────────────────────────┐                     ║
+   ║      │ Bytecode — assembled program:                                   │                     ║
+   ║      │  • MicroOps: List<MicroOp> record hierarchy (60+ subtypes)      │                     ║
+   ║      │    PushOp, AddOp, SubOp, JumpOp, CallOp, CallClosureOp,         │                     ║
+   ║      │    LoadLocalOp, StoreLocalOp, LoadArgOp, NewArrayOp,            │                     ║
+   ║      │    AllocClosureOp, LoadUpvalueOp, ThrowOp, ArrayLoadOp,         │                     ║
+   ║      │    BatchReduceOp, CountBitsOp, StridedSetOp, CommentOp, ...     │                     ║
+   ║      │  • Functions: List<FunctionEntry> — PC, ArgSlots, LocalCount    │                     ║
+   ║      │  • Constants: List<object?>                                     │                     ║
+   ║      │  • CallSites: List<CallSiteData>                                │                     ║
+   ║      │  • ExceptionRegions: List<ExceptionRegion>                      │                     ║
+   ║      │  • NodeRanges: Dictionary<NodeId, (int, int)>                   │                     ║
+   ║      └─────────────────────────────────────────────────────────────────┘                     ║
+   ║                                                                                              ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+                │ compiled on first execution
+                ▼
+
+   ╔═════════════════════════  Execution — ProgramCompiler + Vm.Execute  ═════════════════════════╗
+   ║   ProgramCompiler.Compile(bytecode.MicroOps)                                                 ║
+   ║     ─→ generates LINQ Expression.Switch over PC values                                       ║
+   ║     ─→ each case = compiled µop body (PushOp, AddOp, etc.)                                   ║
+   ║     ─→ compiles to Action<VmState> delegate                                                  ║
+   ║     ─→ cached: EnsureCompiled() on first call                                                ║
+   ║            │                                                                                 ║
+   ║            ▼                                                                                 ║
+   ║   Vm.Execute(state)                                                                          ║
+   ║     • Pre-load constants from Bytecode.Constants into Heap                                   ║
+   ║     • prog.EnsureCompiled() (lazy)                                                           ║
+   ║     • loop(state) — compiled dispatch, runs until Return                                     ║
+   ║     • Extract result from stack top                                                          ║
+   ║     • Supports suspend/resume: Int/Iret interrupts (vector=1)                                ║
+   ║     • Breakpoints: BreakpointPCs HashSet, checked in dispatch                                ║
+   ║            │                                                                                 ║
+   ║            ▼                                                                                 ║
+   ║   ┌────────────────────────────────────────────────────────────────────┐                     ║
+   ║   │ VmState — runtime state:                                           │                     ║
+   ║   │  • Stack (ValueStack): slot-based long[]                           │                     ║
+   ║   │    Frame layout: [args][metadata: (returnPC<<32)|fb][locals][eval] │                     ║
+   ║   │    FrameBase sentinel: -1 = top-level (no active frame)            │                     ║
+   ║   │  • Heap: List<object?> + free-list (Stack<int>)                    │                     ║
+   ║   │    Set(handle, null) reclaims slot; no tracing GC                  │                     ║
+   ║   │  • PC, FrameCount, BreakpointPCs, Trace                            │                     ║
+   ║   │  • InterpreterResult: Value (boxed) + Diagnostics                  │                     ║
+   ║   │    Trace: VmTrace.LogUop — gated, ~1ns when null (default)         │                     ║
+   ║   └────────────────────────────────────────────────────────────────────┘                     ║
+   ║                                                                                              ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+                │ InterpreterResult  (Value + Diagnostics)
+                ▼
+
+            ┌──────────────────┐
+            │  Interpreter     │  Passed back to caller (benchmark, test, or
+            │  Result          │  hosting environment). If errors, diagnostics
+            └──────────────────┘  feed back to the Model/Agent for revision.
+
+
+ ╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+ ║   TIER 3  FEEDBACK & SUPPORT — Synthesis, Validation, Alternative Backends                     ║
+ ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+   ╔══════════════════  Poly.Synthesis — µop Pattern Discovery & Optimization  ═══════════════════╗
+   ║   Bytecode.MicroOps  (from Lowering)                                                         ║
+   ║         │                                                                                    ║
+   ║         ▼                                                                                    ║
+   ║   ┌────────────────────────────────────────────────────────────────────────────────┐         ║
+   ║   │ UopAnalyzer.Discover(µop sequence) — sliding-window frequency analysis         │         ║
+   ║   │  • window sizes 2..maxWindow                                                   │         ║
+   ║   │  • frequency >= minFrequency                                                   │         ║
+   ║   │  • returns: (int[] pattern, int[] positions)[]                                 │         ║
+   ║   └──────────────────────────┬─────────────────────────────────────────────────────┘         ║
+   ║   ┌────────────────────────────────────────────────────────────────────────────────┐         ║
+   ║   │ UopRegistry.Optimize(sequence) — greedy longest-match-first reduction          │         ║
+   ║   │  • each pattern: MatchTypes[] + Reduce function                                │         ║
+   ║   │  • RegisterBuiltins() → 9 Push+Op fusions (AddImm, SubImm, etc.)               │         ║
+   ║   │  • returns: optimized µop sequence                                             │         ║
+   ║   └──────────────────────────┬─────────────────────────────────────────────────────┘         ║
+   ║   ┌────────────────────────────────────────────────────────────────────────────────┐         ║
+   ║   │ Fused µops — AddImm, SubImm, CmpLocalLe, CmpLocalJmp, BatchReduce, ...         │         ║
+   ║   └──────────────────────────┬─────────────────────────────────────────────────────┘         ║
+   ║   │                                                                                          ║
+   ║   ▼                                                                                          ║
+   ║   ┌────────────────────────────────────────────────────────────────────────────────┐         ║
+   ║   │ Macro Library (planned)                                                        │         ║
+   ║   │  • Provenance (which model/agent created it)                                   │         ║
+   ║   │  • Signature (input/output types)                                              │         ║
+   ║   │  • Expanded AST (the original µop sequence)                                    │         ║
+   ║   │  • Usage frequency                                                             │         ║
+   ║   │  • Composition: macros can nest other macros                                   │         ║
+   ║   └────────────────────────────────────────────────────────────────────────────────┘         ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+
+   ╔═══════════════  Poly.Validation — Declarative Rules → Executable Predicates  ════════════════╗
+   ║   Rule[] (ComparisonRule, AndRule, OrRule, ...)                                              ║
+   ║         │                                                                                    ║
+   ║         ▼                                                                                    ║
+   ║   RuleSet<T>.BuildInterpretationTree(ctx)                                                    ║
+   ║         │  ─→ recursively builds Syntax.Node tree from Rule objects                          ║
+   ║         ▼                                                                                    ║
+   ║   AnalyzerBuilder.Analyze(nodeTree)                                                          ║
+   ║         │  ─→ same analysis pipeline (type resolution, scope, folding, ...)                  ║
+   ║         ▼                                                                                    ║
+   ║   LinqExpressionGenerator.Compile(node, analysis)                                            ║
+   ║         │  ─→ System.Linq.Expressions.Expression tree                                        ║
+   ║         ▼                                                                                    ║
+   ║   Predicate<T> delegate  (callable at runtime, zero overhead after compile)                  ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+
+   ╔══════════════════════  Poly.Introspection — Type Provider Abstraction  ══════════════════════╗
+   ║   ITypeDefinition            ─→  Name, FullName, Members, GetMembers(name)                   ║
+   ║   ITypeMember                ─→  Name, MemberTypeDefinition, Parameters, IsStatic            ║
+   ║   ITypeDefinitionProvider    ─→  Type resolution interface                                   ║
+   ║   TypeDefinitionProviderCollection  ─→  Composable LIFO provider stack                       ║
+   ║   ClrTypeDefinitionRegistry  ─→  CLR-backed singleton (default provider)                     ║
+   ║                                                                                              ║
+   ║   Used by: TypeAndMemberResolutionPass (analysis), CSharpGenerator                           ║
+   ║   Must NOT depend on Interpretation (enforced boundary)                                      ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+
+   ╔═══════════════════  Alternative Backends (parallel compilation targets)  ════════════════════╗
+   ║                                                                                              ║
+   ║   ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐             ║
+   ║   │ LinqExpressionGen    │   │   CSharpGenerator    │   │  MermaidAstGenerator │             ║
+   ║   │ (Poly.Interpretation │   │   (Poly.Interpret-   │   │  (Poly.Interpret-    │             ║
+   ║   │  .LinqExpressions)   │   │    ation.CSharp)     │   │   ation.Mermaid)     │             ║
+   ║   ├──────────────────────┤   ├──────────────────────┤   ├──────────────────────┤             ║
+   ║   │ AST → LINQ Expression│   │  AST → C# source code│   │  AST → Mermaid graph │             ║
+   ║   │ tree → compiled      │   │ string (for emission)│   │  TB diagram (via     │             ║
+   ║   │ delegate             │   │                      │   │ Console.Error)       │             ║
+   ║   │ Test reference, may  │   │                      │   │ Direction: TB/LR/BT/ │             ║
+   ║   │ become "remove" tier │   │                      │   │ RL + type shapes     │             ║
+   ║   └──────────────────────┘   └──────────────────────┘   └──────────────────────┘             ║
+   ║                                                                                              ║
+   ╚══════════════════════════════════════════════════════════════════════════════════════════════╝
+
+
+ ╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+ ║   MODULE BOUNDARIES & DEPENDENCY RULES (enforced, one-way)                                     ║
+ ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+   Layer 0:  Syntax  ←──  all other modules (Syntax is the base layer — no deps on anything)
+   Layer 1:  Interpretation ──→  Introspection
+             Validation     ──→  Interpretation
+   Layer 2:  Synthesis      ──→  Syntax, Interpretation (VM for macro validation)
+   Layer 3:  DomainModeling ──→  Syntax, Interpretation, Synthesis (evolution loop)
+
+   Key rules:
+     • No module may depend on Synthesis except DomainModeling (evolution loop).
+     • Introspection must NOT depend on Interpretation (CLR providers add types, not deps).
+     • Domain concepts lower to generic VM opcodes only — no domain-specific opcodes.
+       See docs/decisions/2026-06-08-domain-lowering-boundary.md
+
+
+ ╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+ ║   KEY ARCHITECTURAL PROPERTIES                                                                 ║
+ ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+     • VM is CANONICAL SEMANTICS — all future backends must pass VmParityTests.
+     • LinqExpressions tier is the test reference (may be removed).
+     • µop-level tracing via VmTrace.LogUop — ~1ns when state.Trace is null (default).
+       Active in all build configurations. TestTraceWriter routes to stderr.
+     • AnalysisContext holds type defs, node metadata, and diagnostics.
+     • Zero external dependencies in core (net10.0, only BCL).
+     • The domain-as-macro principle: domain = macro that expands to generic IR at lowering time.
+
+
+ ╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+ ║   DOCUMENTED GAPS (from docs/decisions/vm-gap-analysis.md)                                     ║
+ ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+     Missing: GC (append-only heap), native array/string opcodes (uses CLR interop),
+     correct TypeIs, tail calls, dynamic dispatch, policy/event/actor opcodes,
+     breakpoints (planned: Int/Iret vector=1), state serialization, sandboxing,
+     optimizer passes. Tracked with priority order in the vm-gap-analysis decision doc.
+
+

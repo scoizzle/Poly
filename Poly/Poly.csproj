@@ -33,4 +33,8 @@
              No effect on public API surface or packaged consumers. -->
         <InternalsVisibleTo Include="Poly.Tests" />
     </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="System.Numerics.Tensors" Version="10.0.0" />
+    </ItemGroup>
 </Project>

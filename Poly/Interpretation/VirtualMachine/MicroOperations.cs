@@ -845,7 +845,9 @@ internal sealed record CountBitsOp(string? Alias = null, NodeId? Source = null) 
                 Expression.Call(ctx.HeapExpression, heapGet, handle),
                 typeof(long[]))));
         }
-        setup.Add(VmExpressionGenerators.BuildCountBitsInline(arr, wc, ctx));
+        setup.Add(ctx.Push(Expression.Call(
+            MemberHelper.MethodOf(() => Vm.CountBitsVectorized(default!, default!)),
+            arr, wc)));
         return Expression.Block(setup);
     }
 }

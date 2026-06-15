@@ -1264,10 +1264,14 @@ internal static class Lowering {
 
     private static void DiscoverLocalParameters(Node node, Dictionary<string, int> paramIndexMap,
         Dictionary<string, int> localIndexMap) {
-        if (node is Parameter p && p.Name is not null
-            && !paramIndexMap.ContainsKey(p.Name)
-            && !localIndexMap.ContainsKey(p.Name)) {
-            localIndexMap[p.Name] = localIndexMap.Count;
+        string? name = node switch {
+            Parameter p => p.Name,
+            Variable v => v.Name,
+            _ => null
+        };
+        if (name is not null && !paramIndexMap.ContainsKey(name)
+            && !localIndexMap.ContainsKey(name)) {
+            localIndexMap[name] = localIndexMap.Count;
         }
         foreach (var child in node.Children) {
             if (child is not null)

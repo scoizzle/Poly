@@ -12,13 +12,8 @@ namespace Poly.Interpretation.VirtualMachine;
 internal static class VmExpressionGenerators {
     // ── Reflection handles ──
 
-    static readonly MethodInfo AsSpanMethod = typeof(MemoryExtensions)
-        .GetMethods(BindingFlags.Public | BindingFlags.Static)
-        .First(m => m.Name == "AsSpan"
-            && m.IsGenericMethod
-            && m.GetParameters().Length == 3
-            && m.GetParameters()[0].ParameterType.IsArray)
-        .MakeGenericMethod(typeof(long));
+    static readonly ConstructorInfo SpanCtor = typeof(ReadOnlySpan<long>)
+        .GetConstructor([typeof(long[]), typeof(int), typeof(int)])!;
 
     static readonly MethodInfo CastMethod = typeof(MemoryMarshal)
         .GetMethods(BindingFlags.Public | BindingFlags.Static)
@@ -34,7 +29,7 @@ internal static class VmExpressionGenerators {
             && m.IsGenericMethod)
         .MakeGenericMethod(typeof(ulong));
 
-    // ── CountBitsOp inline: TensorPrimitives.PopCount<ulong>(MemoryMarshal.Cast<long, ulong>(arr.AsSpan(0, wc))) ──
+    // ── CountBitsOp inline: TensorPrimitives.PopCount<ulong>(MemoryMarshal.Cast<long, ulong>(span)) ──
 
     /// <summary>Build an expression that computes the total PopCount
     /// of <c>arr[0..wc)</c> using <c>TensorPrimitives.PopCount</c>
@@ -47,10 +42,8 @@ internal static class VmExpressionGenerators {
         var total = Expression.Variable(typeof(long), "t");
         ctx.Variables.Add(arr); ctx.Variables.Add(wc); ctx.Variables.Add(total);
 
-        var zero = Expression.Constant(0);
-        var spanExpr = Expression.Convert(
-            Expression.Call(null, AsSpanMethod, arrExpr, zero, wcExpr),
-            typeof(ReadOnlySpan<long>));
+        // new ReadOnlySpan<long>(arr, 0, wc) — no implicit Span→ROS conversion needed
+        var spanExpr = Expression.New(SpanCtor, arrExpr, Expression.Constant(0), wcExpr);
         var ulongSpan = Expression.Call(null, CastMethod, spanExpr);
         var pop = Expression.Call(null, PopCountMethod, ulongSpan);
         return Expression.Block(

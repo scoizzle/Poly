@@ -28,15 +28,24 @@ public sealed class VmCompiler {
 
     // Cached reflection handles for internal members
     private static readonly PropertyInfo StackProp = typeof(VmState).GetProperty(nameof(VmState.Stack))!;
-    private static readonly PropertyInfo RawSlotsProp = typeof(ValueStack).GetProperty("RawSlots",
+    private static readonly PropertyInfo ProgramProp = typeof(VmState).GetProperty(nameof(VmState.Program))!;
+    private static readonly PropertyInfo FrameBaseProp = typeof(VmState).GetProperty(nameof(VmState.FrameBase))!;
+    private static readonly PropertyInfo PCProp = typeof(VmState).GetProperty(nameof(VmState.PC))!;
+    private static readonly PropertyInfo RawSlotsProp = typeof(ValueStack).GetProperty(nameof(ValueStack.RawSlots),
         BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
-    private static readonly MethodInfo SetSpMethod = typeof(ValueStack).GetMethod("SetSP",
+    private static readonly MethodInfo SetSpMethod = typeof(ValueStack).GetMethod(nameof(ValueStack.SetSP),
         BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
-    private static readonly PropertyInfo CachedArgSlotsProp = typeof(VmState).GetProperty("CachedArgSlots",
+    private static readonly PropertyInfo CachedArgSlotsProp = typeof(VmState).GetProperty(nameof(VmState.CachedArgSlots),
         BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
     private static readonly PropertyInfo HeapProp = typeof(VmState).GetProperty(nameof(VmState.Heap))!;
     private static readonly MethodInfo HeapAllocate = typeof(Heap).GetMethod("Allocate",
         [typeof(object)])!;
+    private static readonly MethodInfo DisposeMethod = typeof(VmState).GetMethod("Dispose",
+        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+    private static readonly MethodInfo CreateStateMethod = typeof(Vm).GetMethod(nameof(Vm.CreateState),
+        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
+    private static readonly MethodInfo VmExecute = typeof(Vm).GetMethod("Execute",
+        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
 
     public VmCompiler(AnalysisResult analysisResult) {
         _analysisResult = analysisResult ?? throw new ArgumentNullException(nameof(analysisResult));
@@ -89,10 +98,10 @@ public sealed class VmCompiler {
         var blockVars = new List<ParameterExpression> { stateVar };
         var bodyExprs = new List<Expression>();
 
-        // state = new VmState { Program = program }
-        bodyExprs.Add(Expression.Assign(stateVar, Expression.New(typeof(VmState))));
+        // state = Vm.CreateState()
+        bodyExprs.Add(Expression.Assign(stateVar, Expression.Call(null, CreateStateMethod)));
         bodyExprs.Add(Expression.Assign(
-            Expression.Property(stateVar, nameof(VmState.Program)),
+            Expression.Property(stateVar, ProgramProp),
             Expression.Constant(program, typeof(Bytecode))));
 
         // Load each delegate argument into slots[0..N-1]
@@ -110,20 +119,20 @@ public sealed class VmCompiler {
 
         // Configure the initial call frame
         bodyExprs.Add(Expression.Assign(
-            Expression.Property(stateVar, nameof(VmState.FrameBase)),
+            Expression.Property(stateVar, FrameBaseProp),
             Expression.Constant(0)));
         bodyExprs.Add(Expression.Assign(
             Expression.Property(stateVar, CachedArgSlotsProp),
             Expression.Constant(argCount)));
         bodyExprs.Add(Expression.Assign(
-            Expression.Property(stateVar, nameof(VmState.PC)),
+            Expression.Property(stateVar, PCProp),
             Expression.Constant(entry?.PC ?? 0)));
         // SP starts after locals: args + metadata + locals = argCount + 1 + localCount
         bodyExprs.Add(Expression.Call(stackExpr, SetSpMethod,
             Expression.Constant(argCount + 1 + localCount)));
 
         // Execute the VM
-        bodyExprs.Add(Expression.Call(typeof(Vm), nameof(Vm.Execute), null, stateVar));
+        bodyExprs.Add(Expression.Call(null, VmExecute, stateVar));
 
         // Extract result: store in a variable before dispose so the block
         // has the correct return type.
@@ -138,7 +147,7 @@ public sealed class VmCompiler {
         }
 
         // Dispose
-        bodyExprs.Add(Expression.Call(stateVar, nameof(IDisposable.Dispose), null));
+        bodyExprs.Add(Expression.Call(stateVar, DisposeMethod));
 
         // Return the result (or void if no result)
         if (resultVar is not null)

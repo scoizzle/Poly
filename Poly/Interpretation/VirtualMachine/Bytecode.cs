@@ -18,7 +18,8 @@ public sealed record FunctionEntry(int PC, int ArgSlots, int LocalCount = 0);
 public sealed record ExceptionRegion(int TryStart, int TryEnd, int CatchStart, int? FinallyStart);
 
 public sealed class Bytecode {
-    public IReadOnlyList<MicroOp> MicroOps { get; }
+    private IReadOnlyList<MicroOp> _microOps;
+    public IReadOnlyList<MicroOp> MicroOps => _microOps;
     public Action<VmState>? CompiledLoop { get; internal set; }
     public IReadOnlyList<FunctionEntry> Functions { get; }
     public IReadOnlyList<object?> Constants { get; }
@@ -29,7 +30,15 @@ public sealed class Bytecode {
     /// <summary>PC range for each AST node, built during lowering.
     /// Used by the debugger for step-over range computation.</summary>
     public Dictionary<NodeId, (int StartPC, int EndPC)>? NodeRanges { get; }
-    public int CodeLength => MicroOps.Count;
+    /// <summary>Replace the µop list after optimization.
+    /// Preserves identity — callers holding a reference to the
+    /// same <c>Bytecode</c> instance see the new list.</summary>
+    internal void ReplaceOps(IReadOnlyList<MicroOp> ops) {
+        _microOps = ops;
+        CompiledLoop = null;
+    }
+
+    public int CodeLength => _microOps.Count;
 
     public Bytecode(
         List<MicroOp> microOps,
@@ -40,7 +49,7 @@ public sealed class Bytecode {
         Type? resultType = null,
         BytecodeSpec? spec = null,
         Dictionary<NodeId, (int StartPC, int EndPC)>? nodeRanges = null) {
-        MicroOps = microOps;
+        _microOps = microOps;
         Functions = functions ?? [];
         Constants = constants ?? [];
         CallSites = callSites ?? [];
@@ -51,10 +60,17 @@ public sealed class Bytecode {
     }
 
     /// <summary>Compile the µop list on first call and cache the resulting
-    /// delegate.  Subsequent calls are O(1).</summary>
+    /// delegate.  Subsequent calls are O(1).  Runs µop-level optimization
+    /// before compilation, storing the optimized ops back into this
+    /// instance so dumps and debuggers see the post-optimization stream.</summary>
     public Action<VmState> EnsureCompiled() {
         if (CompiledLoop is not null) return CompiledLoop;
-        CompiledLoop = ProgramCompiler.Compile(MicroOps);
+        var optimized = UopOptimizer.Optimize([.. _microOps], Spec,
+            Functions is List<FunctionEntry> fnList ? fnList : null);
+        if (optimized.Length != _microOps.Count
+            || optimized.Zip(_microOps, (a, b) => a == b).Any(x => !x))
+            ReplaceOps(optimized);
+        CompiledLoop = ProgramCompiler.Compile(_microOps);
         return CompiledLoop;
     }
 

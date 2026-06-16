@@ -201,6 +201,13 @@ public static class Lowering {
         // ═══════════════════════════════════════════════════════════════════
 
         public void EmitNode(Node node, LambdaEmitState? lambdaState) {
+            // Check for analysis-pass node replacements (e.g. constant folding
+            // structural simplifications like Modulo → BitwiseAnd, Multiply → ShiftLeft).
+            if (Analysis.GetNodeReplacement(node) is Node replacement) {
+                EmitNode(replacement, lambdaState);
+                return;
+            }
+
             switch (node) {
                 case Constant c: {
                         if (c.Value is int iv) { EmitOp(new PushOp(iv), c); return; }
@@ -218,7 +225,9 @@ public static class Lowering {
                 case Add a: EmitBinary(a.LeftHandValue, a.RightHandValue, static () => new AddOp(), lambdaState, a); return;
                 case Subtract s: EmitBinary(s.LeftHandValue, s.RightHandValue, static () => new SubOp(), lambdaState, s); return;
                 case Multiply m: EmitBinary(m.LeftHandValue, m.RightHandValue, static () => new MulOp(), lambdaState, m); return;
-                case Divide d: EmitBinary(d.LeftHandValue, d.RightHandValue, static () => new DivOp(), lambdaState, d); return;
+                case Divide d:
+                    EmitBinary(d.LeftHandValue, d.RightHandValue, static () => new DivOp(), lambdaState, d);
+                    return;
                 case Modulo m: EmitDivRem(m.LeftHandValue, m.RightHandValue, lambdaState); return;
 
                 case Equal e: EmitBinary(e.LeftHandValue, e.RightHandValue, static () => new EqOp(), lambdaState, e); return;
@@ -364,6 +373,11 @@ public static class Lowering {
                 case MethodDefinitionNode:
                     return;
 
+                case TypeCast tc:
+                    // VM is typeless — just emit the operand value
+                    EmitNode(tc.Operand, lambdaState);
+                    return;
+
                 default:
                     throw new InvalidOperationException($"Lowering not yet implemented for {node.GetType().Name}");
             }
@@ -375,12 +389,6 @@ public static class Lowering {
 
         private void EmitBinary(Node left, Node right, Func<MicroOp> makeOp, LambdaEmitState? lambdaState, Node? source = null) {
             EmitNode(left, lambdaState);
-            // CSE: when both operands are the same variable, dup instead of re-emitting
-            if (left == right && left is Variable or Parameter) {
-                Code.Add(new DupOp());
-                EmitOp(makeOp(), source);
-                return;
-            }
             if (TryGetConstantLong(right, out long val)) {
                 var op = makeOp();
                 if (op is AddOp or SubOp or MulOp or EqOp or NeOp or LtOp or LeOp or GtOp or GeOp
@@ -516,7 +524,7 @@ public static class Lowering {
             LabelTargets[end] = Code.Count;
             Code.Add(new CommentOp("while end"));
 
-            LoopBodies?.Add(new LoopBodyEntry(bodyStart, bodyEnd - bodyStart, cont, cont, end, wl.Body) {
+            LoopBodies?.Add(new LoopBodyEntry(bodyStart, bodyEnd - bodyStart, LabelTargets[cont], LabelTargets[cont], LabelTargets[end], wl.Body) {
                 ParamIndexMap = ParamIndexMap,
                 LocalIndexMap = LocalIndexMap,
             });
@@ -720,7 +728,7 @@ public static class Lowering {
             Code.Add(new JumpOp(cont));
             LabelTargets[end] = Code.Count;
 
-            LoopBodies?.Add(new LoopBodyEntry(bodyStart, bodyEnd - bodyStart, cont, Code.Count, end, fl.Body) {
+            LoopBodies?.Add(new LoopBodyEntry(bodyStart, bodyEnd - bodyStart, LabelTargets[cont], Code.Count, LabelTargets[end], fl.Body) {
                 ParamIndexMap = ParamIndexMap,
                 LocalIndexMap = LocalIndexMap,
             });
@@ -1338,7 +1346,10 @@ public static class Lowering {
     private static bool EmitsValue(Node node, AnalysisResult analysis) {
         if (node is null) return false;
         if (node is WhileLoop or DoWhileLoop or ForLoop) return false;
-        if (node is Assignment) return true;
+        if (node is Assignment assign) {
+            var meta = analysis.GetMetadata<AssignmentValueUsedMetadata>(assign);
+            return meta?.IsValueUsed ?? true;
+        }
         if (node is IfStatement iff)
             return EmitsValue(iff.ThenBranch, analysis);
         var type = analysis.GetResolvedType(node);

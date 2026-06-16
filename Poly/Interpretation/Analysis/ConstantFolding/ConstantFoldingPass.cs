@@ -1,3 +1,5 @@
+using Poly.Interpretation.Analysis.Semantics;
+
 namespace Poly.Interpretation.Analysis.ConstantFolding;
 
 /// <summary>
@@ -26,13 +28,15 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         var foldedValue = TryFold(context, node);
         if (foldedValue.HasValue) {
             context.SetMetadata(node, new ConstantValueMetadata(foldedValue.Value));
-            context.SetNodeReplacement(node, new Constant(foldedValue.Value));
+            var foldedNode = TypeMatchReplacement(node, new Constant(foldedValue.Value), context);
+            context.SetNodeReplacement(node, foldedNode);
             return;
         }
 
-        var replacement = TrySimplify(context, node);
-        if (replacement != null) {
-            context.SetNodeReplacement(node, replacement);
+        var simplified = TrySimplify(context, node);
+        if (simplified != null) {
+            var typed = TypeMatchReplacement(node, simplified, context);
+            context.SetNodeReplacement(node, typed);
         }
     }
 
@@ -92,11 +96,59 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Subtract sub => SimplifySubtraction(context, sub),
             Multiply mul => SimplifyMultiplication(context, mul),
             Divide div => SimplifyDivision(context, div),
+            Modulo mod => SimplifyModulo(context, mod),
+            UnaryMinus neg => SimplifyUnaryMinus(context, neg),
+            BitwiseNot bn => SimplifyBitwiseNot(context, bn),
+            Not n => SimplifyNot(context, n),
+            BitwiseAnd ba => SimplifyBitwiseAnd(context, ba),
+            BitwiseOr bo => SimplifyBitwiseOr(context, bo),
+            BitwiseXor bx => SimplifyBitwiseXor(context, bx),
             And and => SimplifyAnd(context, and),
             Or or => SimplifyOr(context, or),
             _ => null
         };
     }
+
+    /// <summary>If the replacement node's type differs from the original
+    /// node's resolved type, wrap in a <see cref="TypeCast"/> to preserve
+    /// the original type, and copy the resolved type onto the cast so
+    /// downstream passes see consistent types.</summary>
+    private static Node TypeMatchReplacement(Node original, Node replacement, AnalysisContext context) {
+        // Only wrap Constant replacements whose value type doesn't match
+        if (replacement is not Constant c || c.Value is null)
+            return replacement;
+
+        var resolvedType = context.GetResolvedType(original);
+        if (resolvedType is null)
+            return replacement;
+
+        var valueType = c.Value.GetType();
+        var resolvedFullName = resolvedType.FullName;
+
+        string valueTypeName = valueType switch {
+            Type t when t == typeof(int) => "System.Int32",
+            Type t when t == typeof(long) => "System.Int64",
+            Type t when t == typeof(short) => "System.Int16",
+            Type t when t == typeof(byte) => "System.Byte",
+            Type t when t == typeof(uint) => "System.UInt32",
+            Type t when t == typeof(ulong) => "System.UInt64",
+            Type t when t == typeof(double) => "System.Double",
+            Type t when t == typeof(float) => "System.Single",
+            Type t when t == typeof(bool) => "System.Boolean",
+            _ => valueType.FullName ?? valueType.Name
+        };
+
+        if (valueTypeName == resolvedFullName)
+            return replacement;
+
+        // Type mismatch — wrap in a cast to preserve the original type,
+        // and propagate the resolved type so backends can lower it.
+        var cast = new TypeCast(replacement, new TypeReference(resolvedFullName));
+        context.SetResolvedType(cast, resolvedType);
+        return cast;
+    }
+
+    private static bool IsPowerOf2(long n) => n > 0 && (n & (n - 1)) == 0;
 
     private FoldResult FoldBinaryArithmetic(AnalysisContext context, Node left, Node right, Func<object, object, object?> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
         var leftValue = GetConstantValue(context, left, parameterValues);
@@ -189,20 +241,99 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     }
 
     private Node? SimplifyMultiplication(AnalysisContext context, Multiply multiply) {
-        if (IsOne(context, multiply.LeftHandValue)) {
+        if (IsOne(context, multiply.LeftHandValue))
             return multiply.RightHandValue;
-        }
-
-        if (IsOne(context, multiply.RightHandValue)) {
+        if (IsOne(context, multiply.RightHandValue))
             return multiply.LeftHandValue;
-        }
-
+        if (IsZero(context, multiply.LeftHandValue) || IsZero(context, multiply.RightHandValue))
+            return new Constant(0L);
+        // x * 2^n → shift left by n
+        var mulRightVal = GetConstantValue(context, multiply.RightHandValue);
+        if (mulRightVal.HasValue && ToLong(mulRightVal.Value) is long mr && IsPowerOf2(mr))
+            return new ShiftLeft(multiply.LeftHandValue, new Constant((int)double.Log2(mr)));
         return null;
     }
 
     private Node? SimplifyDivision(AnalysisContext context, Divide divide) {
-        return IsOne(context, divide.RightHandValue) ? divide.LeftHandValue : null;
+        if (IsOne(context, divide.RightHandValue))
+            return divide.LeftHandValue;
+        // x / 2^n → shift right by n
+        var divRightVal = GetConstantValue(context, divide.RightHandValue);
+        if (divRightVal.HasValue && ToLong(divRightVal.Value) is long dr && IsPowerOf2(dr))
+            return new ShiftRight(divide.LeftHandValue, new Constant((int)double.Log2(dr)));
+        return null;
     }
+
+    private Node? SimplifyModulo(AnalysisContext context, Modulo mod) {
+        // x % 2^n → bitwise and with (2^n - 1)
+        var modRightVal = GetConstantValue(context, mod.RightHandValue);
+        if (modRightVal.HasValue && ToLong(modRightVal.Value) is long mr && IsPowerOf2(mr))
+            return new BitwiseAnd(mod.LeftHandValue, new Constant(mr - 1));
+        return null;
+    }
+
+    private Node? SimplifyUnaryMinus(AnalysisContext context, UnaryMinus neg) {
+        // -(-x) → x
+        return neg.Operand is UnaryMinus inner ? inner.Operand : null;
+    }
+
+    private Node? SimplifyBitwiseNot(AnalysisContext context, BitwiseNot bn) {
+        // ~~x → x
+        return bn.Operand is BitwiseNot inner ? inner.Operand : null;
+    }
+
+    private Node? SimplifyNot(AnalysisContext context, Not n) {
+        // !!x → x
+        return n.Value is Not inner ? inner.Value : null;
+    }
+
+    private Node? SimplifyBitwiseAnd(AnalysisContext context, BitwiseAnd ba) {
+        if (IsZero(context, ba.RightHandValue))
+            return new Constant(0L);
+        var baVal = GetConstantValue(context, ba.RightHandValue);
+        if (baVal.HasValue && ToLong(baVal.Value) == -1)
+            return ba.LeftHandValue;
+        return null;
+    }
+
+    private Node? SimplifyBitwiseOr(AnalysisContext context, BitwiseOr bo) {
+        if (IsZero(context, bo.RightHandValue))
+            return bo.LeftHandValue;
+        var boVal = GetConstantValue(context, bo.RightHandValue);
+        if (boVal.HasValue && ToLong(boVal.Value) == -1)
+            return new Constant(-1L);
+        return null;
+    }
+
+    private Node? SimplifyBitwiseXor(AnalysisContext context, BitwiseXor bx) {
+        if (IsZero(context, bx.RightHandValue))
+            return bx.LeftHandValue;
+        return null;
+    }
+
+    /// <summary>int * int can overflow 32 bits; promote to long and
+    /// return long when the result doesn't fit in int.</summary>
+    private static object SafeIntMultiply(int x, int y) {
+        long r = (long)x * y;
+        if (r >= int.MinValue && r <= int.MaxValue)
+            return (int)r;
+        return r;
+    }
+
+    private static object NegateInt(int x) {
+        if (x == int.MinValue)
+            return -(long)x;
+        return -x;
+    }
+
+    private static long? ToLong(object? value) => value switch {
+        int i => i,
+        long l => l,
+        short s => s,
+        byte b => b,
+        uint u => u,
+        _ => null
+    };
 
     private Node? SimplifyAnd(AnalysisContext context, And and) {
         var leftValue = GetConstantValue(context, and.LeftHandValue);
@@ -398,7 +529,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     };
 
     private static object? Multiply(object a, object b) => (a, b) switch {
-        (int x, int y) => x * y,
+        (int x, int y) => SafeIntMultiply(x, y),
         (long x, long y) => x * y,
         (double x, double y) => x * y,
         (float x, float y) => x * y,
@@ -433,7 +564,9 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     };
 
     private static object? Negate(object a) => a switch {
-        int x => -x,
+        // int.MinValue overflows int negation; cast to long first.
+        // Use if/return to avoid ternary type-promoting int to long.
+        int x => NegateInt(x),
         long x => -x,
         double x => -x,
         float x => -x,

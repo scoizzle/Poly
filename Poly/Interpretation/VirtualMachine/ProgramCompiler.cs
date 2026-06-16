@@ -57,6 +57,16 @@ internal static class ProgramCompiler {
         var suspendStatus = Expression.Constant(InterpreterStatus.Suspended);
         for (int i = 0; i < uops.Count; i++) {
             var uop = uops[i];
+
+            // CommentOps are trace-only markers — skip µop body and trace entirely.
+            if (uop is CommentOp) {
+                switchCases[i] = Expression.SwitchCase(
+                    Expression.Block(typeof(void),
+                        Expression.Assign(pc, Expression.Add(pc, Expression.Constant(1)))),
+                    Expression.Constant(i));
+                continue;
+            }
+
             // Normal execution block: trace → µop → pc++
             var execBody = new List<Expression> { uop.ToExpression(ctx) };
             execBody.Insert(0, ctx.TraceBefore(uop));

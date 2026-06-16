@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -69,13 +70,18 @@ public sealed record CompilationContext(
     public Expression WritebackPC() => Expression.Assign(
         Expression.Property(State, PcProp), PC);
 
-    /// <summary>If the µop has <c>SourceName</c>, emit a <c>VmTrace.LogUop</c>
-    /// call.  Runtime cost is <c>state.Trace?.WriteLine(...)</c> — ~1 ns when
-    /// <c>Trace</c> is null.  Always compiled.</summary>
+    /// <summary>If the µop has <c>SourceName</c>, emit a conditional call
+    /// to <c>VmTrace.LogUop</c>, gated by <c>state.Trace != null</c>.
+    /// When tracing is disabled (the common case) the cost is a single
+    /// null check + branch — the LogUop call is never made.</summary>
     public Expression TraceBefore(MicroOp op) {
-        if (op.SourceName is not null)
-            return Expression.Call(TraceLogMethod, PC,
-                Expression.Constant($"{op}  ← {op.SourceName}"), SP, FB, State);
+        if (op.SourceName is not null) {
+            var traceProp = Expression.Property(State, "Trace");
+            return Expression.IfThen(
+                Expression.NotEqual(traceProp, Expression.Constant(null, typeof(TextWriter))),
+                Expression.Call(TraceLogMethod, PC,
+                    Expression.Constant($"{op}  ← {op.SourceName}"), SP, FB, State));
+        }
         return Expression.Empty();
     }
 

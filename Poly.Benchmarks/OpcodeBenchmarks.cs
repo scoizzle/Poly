@@ -107,6 +107,13 @@ public class UopBenchmarks {
     private Bytecode _sieve1M = null!;
     private Bytecode _sieve1B = null!;
 
+    // Mandelbrot (fixed-point integer)
+    private Bytecode _mandelbrot = null!;
+    private Bytecode _nqueens = null!;
+
+    // Collatz max sequence length
+    private Bytecode _collatz = null!;
+
     [GlobalSetup]
     public void Setup() {
         _state = new VmState();
@@ -126,6 +133,10 @@ public class UopBenchmarks {
         _sieve100 = Lower(BuildSieve(100000));
         _sieve1M = Lower(BuildSieve(1000000));
         _sieve1B = Lower(BuildSieve(1000000000));
+        _mandelbrot = Lower(BuildMandelbrot(128));
+        _nqueens = Lower(BuildNQueens(8));
+        _collatz = Lower(BuildCollatz(1000));
+        // NQueens disabled — recursive Lambda has circular type resolution issues
     }
 
     [GlobalCleanup]
@@ -205,6 +216,15 @@ public class UopBenchmarks {
 
     [Benchmark]
     public object? Sieve_1B() => Exec(_sieve1B);
+
+    [Benchmark]
+    public object? Mandelbrot() => Exec(_mandelbrot);
+
+    [Benchmark]
+    public object? NQueens() => Exec(_nqueens);
+
+    [Benchmark]
+    public object? Collatz() => Exec(_collatz);
 
     // ═══════════════════════════════════════════════════
     //  Builders
@@ -336,6 +356,168 @@ public class UopBenchmarks {
                  ])),
              cnt],
             [bits, i, j, cnt])));
+    }
+
+    /// <summary>Mandelbrot escape-time count over a grid using
+    /// fixed-point integer arithmetic (shift=8).  Exposes: tight
+    /// mixed arithmetic loops (multiply, add, shift, compare),
+    /// nested loops, and conditional escape checks.</summary>
+    private static Node BuildMandelbrot(int size) {
+        var x = new Variable("x"); var y = new Variable("y");
+        var zx = new Variable("zx"); var zy = new Variable("zy");
+        var zx2 = new Variable("zx2"); var zy2 = new Variable("zy2");
+        var iter = new Variable("iter"); var total = new Variable("total");
+        const int S = 8; // scale shift
+
+        // Pixel center cx, cy as (x - size/2) * 4  scaled by S
+        // So cx range is [-2*S*size/2, 2*S*size/2] which fits in long
+        Node Cx(Node xv) => new ShiftLeft(
+            new Multiply(new Subtract(new ShiftLeft(xv, new Constant(2)),
+                new Constant(size)), new Constant(2)), new Constant(S));
+        Node Cy(Node yv) => Cx(yv); // same formula
+
+        // Inner Mandelbrot loop for one pixel
+        Node mandelPixel = new Block([
+            new Assignment(zx, new Constant(0L)),
+            new Assignment(zy, new Constant(0L)),
+            new Assignment(iter, new Constant(0L)),
+            new WhileLoop(
+                new And(
+                    new LessThan(iter, new Constant(256)),
+                    new LessThanOrEqual(
+                        new Add(
+                            new ShiftRight(new Multiply(zx, zx), new Constant(S)),
+                            new ShiftRight(new Multiply(zy, zy), new Constant(S))),
+                        new Constant(4 << S))),
+                new Block([
+                    new Assignment(zx2, new Add(
+                        new Subtract(
+                            new ShiftRight(new Multiply(zx, zx), new Constant(S)),
+                            new ShiftRight(new Multiply(zy, zy), new Constant(S))),
+                        Cx(x))),
+                    new Assignment(zy, new Add(
+                        new ShiftRight(new Multiply(
+                            new Multiply(zx, new Constant(2L)), zy), new Constant(S)),
+                        Cy(y))),
+                    new Assignment(zx, zx2),
+                    new Assignment(iter, new Add(iter, new Constant(1L)))
+                ])),
+            iter
+        ]);
+
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(total, new Constant(0L)),
+             new Assignment(y, new Constant(0L)),
+             new WhileLoop(new LessThan(y, new Constant(size)),
+                 new Block([
+                     new Assignment(x, new Constant(0L)),
+                     new WhileLoop(new LessThan(x, new Constant(size)),
+                         new Block([
+                             new Assignment(total, new Add(total, mandelPixel)),
+                             new Assignment(x, new Add(x, new Constant(1L)))
+                         ])),
+                     new Assignment(y, new Add(y, new Constant(1L)))
+                 ])),
+             total],
+            [x, y, zx, zy, zx2, zy2, iter, total])));
+    }
+
+    /// <summary>N-queens solver via iterative backtracking with an
+    /// explicit stack.  Exposes: nested loops, bitwise operations,
+    /// complex control flow, array access.</summary>
+    private static Node BuildNQueens(int boardSize) {
+        var stack = new Variable("stack");
+        var sp = new Variable("sp");
+        var total = new Variable("total");
+        var ld = new Variable("ld"); var cols = new Variable("cols");
+        var rd = new Variable("rd");
+        var avail = new Variable("avail"); var bit = new Variable("bit");
+
+        long allBits = (1L << boardSize) - 1;
+        int maxDepth = boardSize;
+
+        Node StackAt(Node idx) => new IndexAccess(stack, idx);
+        Node Long(long v) => new Constant(v);
+
+        int stackSize = maxDepth * maxDepth * maxDepth * 3;
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(stack, new NewArray(TypeReference.To<long>(), new Constant(stackSize))),
+             new Assignment(sp, Long(0)),
+             new Assignment(total, Long(0)),
+             // push initial state: stack[sp]=0, stack[sp+1]=0, stack[sp+2]=0
+             new Assignment(StackAt(sp), Long(0)),
+             new Assignment(StackAt(new Add(sp, Long(1))), Long(0)),
+             new Assignment(StackAt(new Add(sp, Long(2))), Long(0)),
+             new Assignment(sp, new Add(sp, Long(3))),
+             // while (sp > 0)
+             new WhileLoop(new GreaterThan(sp, Long(0)), new Block([
+                 // pop: sp -= 3; ld = stack[sp]; cols = stack[sp+1]; rd = stack[sp+2]
+                 new Assignment(sp, new Subtract(sp, Long(3))),
+                 new Assignment(ld, StackAt(sp)),
+                 new Assignment(cols, StackAt(new Add(sp, Long(1)))),
+                 new Assignment(rd, StackAt(new Add(sp, Long(2)))),
+                 // if (cols == allBits) total++
+                 new IfStatement(new Equal(cols, Long(allBits)),
+                     new Assignment(total, new Add(total, Long(1)))),
+                 // avail = ~(ld|cols|rd) & allBits
+                 new Assignment(avail, new BitwiseAnd(
+                     new BitwiseNot(new BitwiseOr(new BitwiseOr(ld, cols), rd)),
+                     Long(allBits))),
+                 // while (avail): push next state
+                 new WhileLoop(new NotEqual(avail, Long(0)), new Block([
+                     new Assignment(bit, new BitwiseAnd(new UnaryMinus(avail), avail)),
+                     new Assignment(avail, new BitwiseXor(avail, bit)),
+                     new Assignment(StackAt(sp),
+                         new ShiftLeft(new BitwiseOr(ld, bit), Long(1))),
+                     new Assignment(StackAt(new Add(sp, Long(1))),
+                         new BitwiseOr(cols, bit)),
+                     new Assignment(StackAt(new Add(sp, Long(2))),
+                         new ShiftRight(new BitwiseOr(rd, bit), Long(1))),
+                     new Assignment(sp, new Add(sp, Long(3))),
+                 ])),
+             ])),
+             total],
+            [stack, sp, total, ld, cols, rd, avail, bit])));
+    }
+
+    /// <summary>Collatz max sequence length for n in [1, limit].
+    /// Exposes: mixed arithmetic (modulo, multiply, shift, add),
+    /// variable-iteration while loops, unpredictable branching.</summary>
+    private static Node BuildCollatz(int limit) {
+        var n = new Variable("n"); var i = new Variable("i");
+        var len = new Variable("len"); var maxLen = new Variable("maxLen");
+        var bestN = new Variable("bestN");
+
+        // for n = 1..limit:
+        //   len = 1; i = n
+        //   while (i != 1) { i = i % 2 == 0 ? i/2 : 3*i+1; len++; }
+        //   if (len > maxLen) { maxLen = len; bestN = n; }
+        return new Invoke(new Lambda([], new Block(
+            [new Assignment(maxLen, new Constant(0L)),
+             new Assignment(bestN, new Constant(0L)),
+             new Assignment(n, new Constant(1L)),
+             new WhileLoop(new LessThanOrEqual(n, new Constant(limit)),
+                 new Block([
+                     new Assignment(len, new Constant(1L)),
+                     new Assignment(i, n),
+                     new WhileLoop(new NotEqual(i, new Constant(1L)),
+                         new Block([
+                             new Assignment(i, new Conditional(
+                                 new Equal(new Modulo(i, new Constant(2L)), new Constant(0L)),
+                                 new ShiftRight(i, new Constant(1)),       // even: i/2
+                                 new Add(new Multiply(i, new Constant(3L)), new Constant(1L)))),  // odd: 3i+1
+                             new Assignment(len, new Add(len, new Constant(1L)))
+                         ])),
+                     new IfStatement(
+                         new GreaterThan(len, maxLen),
+                         new Block([
+                             new Assignment(maxLen, len),
+                             new Assignment(bestN, n)
+                         ])),
+                     new Assignment(n, new Add(n, new Constant(1L)))
+                 ])),
+             maxLen],
+            [n, i, len, maxLen, bestN])));
     }
 
     private static Node BuildCountPrimes(int limit) {

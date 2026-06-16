@@ -1,12 +1,12 @@
 namespace Poly.Interpretation.VirtualMachine;
 
-internal sealed class VmState : IDisposable {
+public sealed class VmState : IDisposable {
     public ValueStack Stack { get; } = new();
     public Heap Heap { get; } = new();
     public Bytecode? Program { get; set; }
     public int PC { get; set; }
     public int FrameBase { get; set; } = -1;
-    internal int CachedArgSlots { get; set; }
+    public int CachedArgSlots { get; set; }
     public int? PendingExceptionValue { get; set; }
 
     public InterpreterStatus Status { get; internal set; } = InterpreterStatus.Running;

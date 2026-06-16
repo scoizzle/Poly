@@ -1,4 +1,6 @@
+ARG SOURCE_FILE=sieve.py
 FROM python:3-alpine
+ARG SOURCE_FILE
 WORKDIR /app
-COPY sieve.py .
-ENTRYPOINT ["python3", "/app/sieve.py"]
+COPY $SOURCE_FILE source.py
+ENTRYPOINT ["python3", "/app/source.py"]

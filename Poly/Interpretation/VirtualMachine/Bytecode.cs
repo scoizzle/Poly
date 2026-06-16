@@ -8,16 +8,16 @@ namespace Poly.Interpretation.VirtualMachine;
 /// debugging, tooling, or future optimizations.  Null when the consumer
 /// does not need these fields — they are populated during lowering for
 /// potential use but are not required for correct VM execution.</summary>
-internal sealed record BytecodeSpec(
+public sealed record BytecodeSpec(
     AnalysisResult? AnalysisResult,
     IReadOnlyList<string> CallSiteTargets,
     IReadOnlyList<LoopBodyEntry> LoopBodies
 );
 
-internal sealed record FunctionEntry(int PC, int ArgSlots, int LocalCount = 0);
-internal sealed record ExceptionRegion(int TryStart, int TryEnd, int CatchStart, int? FinallyStart);
+public sealed record FunctionEntry(int PC, int ArgSlots, int LocalCount = 0);
+public sealed record ExceptionRegion(int TryStart, int TryEnd, int CatchStart, int? FinallyStart);
 
-internal sealed class Bytecode {
+public sealed class Bytecode {
     public IReadOnlyList<MicroOp> MicroOps { get; }
     public Action<VmState>? CompiledLoop { get; internal set; }
     public IReadOnlyList<FunctionEntry> Functions { get; }

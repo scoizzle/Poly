@@ -31,6 +31,7 @@ public sealed class VmCompiler {
     private static readonly PropertyInfo ProgramProp = typeof(VmState).GetProperty(nameof(VmState.Program))!;
     private static readonly PropertyInfo FrameBaseProp = typeof(VmState).GetProperty(nameof(VmState.FrameBase))!;
     private static readonly PropertyInfo PCProp = typeof(VmState).GetProperty(nameof(VmState.PC))!;
+    private static readonly PropertyInfo TraceProp = typeof(VmState).GetProperty(nameof(VmState.Trace))!;
     private static readonly PropertyInfo RawSlotsProp = typeof(ValueStack).GetProperty(nameof(ValueStack.RawSlots),
         BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
     private static readonly MethodInfo SetSpMethod = typeof(ValueStack).GetMethod(nameof(ValueStack.SetSP),
@@ -150,6 +151,108 @@ public sealed class VmCompiler {
         bodyExprs.Add(Expression.Call(stateVar, DisposeMethod));
 
         // Return the result (or void if no result)
+        if (resultVar is not null)
+            bodyExprs.Add(resultVar);
+
+        var bodyBlock = Expression.Block(blockVars, bodyExprs);
+        return Expression.Lambda<TDelegate>(bodyBlock, lambdaParams).Compile();
+    }
+
+    /// <summary>
+    /// Compiles an AST node into a delegate whose first parameter is a
+    /// <c>TextWriter?</c> for VM trace output.  The returned delegate
+    /// sets <c>VmState.Trace</c> before execution, enabling per-invocation
+    /// µop tracing (written to the provided writer).
+    /// </summary>
+    /// <typeparam name="TDelegate">
+    /// Delegate type whose first parameter is <c>TextWriter?</c> followed
+    /// by the function arguments, e.g. <c>Func&lt;TextWriter?, long&gt;</c>
+    /// for a parameterless function with tracing.
+    /// </typeparam>
+    public TDelegate CompileAsTraceableDelegate<TDelegate>(Node node, params Parameter[] parameters)
+        where TDelegate : Delegate {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        var root = (node as MethodDefinitionNode)
+            ?? new MethodDefinitionNode(
+                "$entry",
+                TypeReference.To<int>(),
+                parameters,
+                node is Block b ? b : new Block(node));
+
+        var program = Lowering.Lower(root, _analysisResult);
+        var compiled = program.EnsureCompiled();
+        var entry = program.Functions.Count > 0 ? program.Functions[0] : null;
+        int argCount = entry?.ArgSlots ?? parameters.Length;
+        int localCount = entry?.LocalCount ?? 0;
+        int codeLen = program.CodeLength;
+
+        var invokeMethod = typeof(TDelegate).GetMethod("Invoke")
+            ?? throw new InvalidOperationException($"Delegate type {typeof(TDelegate).Name} has no Invoke method.");
+        var delegateParams = invokeMethod.GetParameters();
+
+        // First parameter must be TextWriter? (the trace writer)
+        if (delegateParams.Length < 1 || delegateParams[0].ParameterType != typeof(System.IO.TextWriter))
+            throw new ArgumentException($"First parameter of {typeof(TDelegate).Name} must be TextWriter? for trace output.");
+
+        var lambdaParams = delegateParams
+            .Select(p => Expression.Parameter(p.ParameterType, p.Name))
+            .ToArray();
+        var traceParam = lambdaParams[0]; // TextWriter?
+        var funcParams = lambdaParams[1..]; // the actual function parameters
+
+        var returnType = invokeMethod.ReturnType;
+        var stateVar = Expression.Variable(typeof(VmState), "state");
+        var stackExpr = Expression.Property(stateVar, StackProp);
+        var slotsExpr = Expression.Property(stackExpr, RawSlotsProp);
+        var heapExpr = Expression.Property(stateVar, HeapProp);
+
+        var blockVars = new List<ParameterExpression> { stateVar };
+        var bodyExprs = new List<Expression>();
+
+        bodyExprs.Add(Expression.Assign(stateVar, Expression.Call(null, CreateStateMethod)));
+        bodyExprs.Add(Expression.Assign(
+            Expression.Property(stateVar, ProgramProp),
+            Expression.Constant(program, typeof(Bytecode))));
+
+        // Set trace writer
+        bodyExprs.Add(Expression.Assign(
+            Expression.Property(stateVar, TraceProp), traceParam));
+
+        for (int i = 0; i < argCount && i < funcParams.Length; i++) {
+            bodyExprs.Add(Expression.Assign(
+                Expression.ArrayAccess(slotsExpr, Expression.Constant(i)),
+                ToSlotExpression(funcParams[i], heapExpr)));
+        }
+
+        long packed = ((long)codeLen << 32) | unchecked((uint)(-1));
+        bodyExprs.Add(Expression.Assign(
+            Expression.ArrayAccess(slotsExpr, Expression.Constant(argCount)),
+            Expression.Constant(packed)));
+
+        bodyExprs.Add(Expression.Assign(
+            Expression.Property(stateVar, FrameBaseProp), Expression.Constant(0)));
+        bodyExprs.Add(Expression.Assign(
+            Expression.Property(stateVar, CachedArgSlotsProp), Expression.Constant(argCount)));
+        bodyExprs.Add(Expression.Assign(
+            Expression.Property(stateVar, PCProp), Expression.Constant(entry?.PC ?? 0)));
+        bodyExprs.Add(Expression.Call(stackExpr, SetSpMethod,
+            Expression.Constant(argCount + 1 + localCount)));
+
+        bodyExprs.Add(Expression.Call(null, VmExecute, stateVar));
+
+        ParameterExpression? resultVar = null;
+        if (returnType != typeof(void)) {
+            resultVar = Expression.Variable(returnType, "result");
+            blockVars.Add(resultVar);
+            bodyExprs.Add(Expression.Assign(resultVar,
+                FromSlotExpression(
+                    Expression.ArrayAccess(slotsExpr, Expression.Constant(0)),
+                    returnType)));
+        }
+
+        bodyExprs.Add(Expression.Call(stateVar, DisposeMethod));
         if (resultVar is not null)
             bodyExprs.Add(resultVar);
 

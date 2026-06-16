@@ -6,7 +6,7 @@ namespace Poly.Interpretation.VirtualMachine;
 /// <summary>Context passed to <see cref="MicroOp.ToExpression"/> during
 /// program compilation.  Carries <c>ParameterExpression</c>s and helpers
 /// shared across all µops in a program.</summary>
-internal sealed record CompilationContext(
+public sealed record CompilationContext(
     ParameterExpression State,          // VmState
     Expression Slots,          // state.Stack.RawSlots
     ParameterExpression SP,             // stack pointer
@@ -99,7 +99,7 @@ internal sealed record CompilationContext(
 /// <summary>Base record for all micro-operations.  Each µop defines its
 /// contribution to the compiled expression tree via <see cref="ToExpression"/>.
 /// Only the compiled delegate executes — there is no interpretive path.</summary>
-internal abstract record MicroOp(NodeId? Source) {
+public abstract record MicroOp(NodeId? Source) {
     /// <summary>Human-readable description of the AST node that produced
     /// this µop, set during lowering.  Used by the compiled delegate to
     /// emit a trace before the operation.</summary>
@@ -121,19 +121,19 @@ file static class UopReflection {
 //  Stack manipulations
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record PushOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record PushOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"push {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         ctx.Push(Expression.Constant(Value));
 }
 
-internal sealed record PopOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record PopOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "pop";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.PreDecrementAssign(ctx.SP);
 }
 
-internal sealed record DupOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record DupOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "dup";
     public override Expression ToExpression(CompilationContext ctx) {
         var v = Expression.Variable(typeof(long), "v");
@@ -150,28 +150,28 @@ internal sealed record DupOp(NodeId? Source = null) : MicroOp(Source) {
 //  All use local variables for operands so the stack pointer is
 //  stable during evaluation.
 
-internal sealed record AddOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record AddOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"addi {imm}" : "add";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
             ? Expression.Assign(ctx.Top(), Expression.Add(ctx.Top(), Expression.Constant(imm)))
             : ctx.BinaryArith(Expression.Add);
 }
-internal sealed record SubOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record SubOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"subi {imm}" : "sub";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
             ? Expression.Assign(ctx.Top(), Expression.Subtract(ctx.Top(), Expression.Constant(imm)))
             : ctx.BinaryArith(Expression.Subtract);
 }
-internal sealed record MulOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record MulOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"muli {imm}" : "mul";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
             ? Expression.Assign(ctx.Top(), Expression.Multiply(ctx.Top(), Expression.Constant(imm)))
             : ctx.BinaryArith(Expression.Multiply);
 }
-internal sealed record DivOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record DivOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"divi {imm}" : "div";
     public override Expression ToExpression(CompilationContext ctx) {
         if (Immediate is { } imm) {
@@ -190,7 +190,7 @@ internal sealed record DivOp(long? Immediate = null, NodeId? Source = null) : Mi
     }
 }
 
-internal sealed record EqOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record EqOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"eqi {imm}" : "eq";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
@@ -199,7 +199,7 @@ internal sealed record EqOp(long? Immediate = null, NodeId? Source = null) : Mic
                     Expression.Constant(1L), Expression.Constant(0L)))
             : ctx.BinaryCmp(Expression.Equal);
 }
-internal sealed record NeOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record NeOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"nei {imm}" : "ne";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
@@ -208,7 +208,7 @@ internal sealed record NeOp(long? Immediate = null, NodeId? Source = null) : Mic
                     Expression.Constant(1L), Expression.Constant(0L)))
             : ctx.BinaryCmp(Expression.NotEqual);
 }
-internal sealed record LtOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record LtOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"lti {imm}" : "lt";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
@@ -217,7 +217,7 @@ internal sealed record LtOp(long? Immediate = null, NodeId? Source = null) : Mic
                     Expression.Constant(1L), Expression.Constant(0L)))
             : ctx.BinaryCmp(Expression.LessThan);
 }
-internal sealed record LeOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record LeOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"lei {imm}" : "le";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
@@ -226,7 +226,7 @@ internal sealed record LeOp(long? Immediate = null, NodeId? Source = null) : Mic
                     Expression.Constant(1L), Expression.Constant(0L)))
             : ctx.BinaryCmp(Expression.LessThanOrEqual);
 }
-internal sealed record GtOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record GtOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"gti {imm}" : "gt";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
@@ -235,7 +235,7 @@ internal sealed record GtOp(long? Immediate = null, NodeId? Source = null) : Mic
                     Expression.Constant(1L), Expression.Constant(0L)))
             : ctx.BinaryCmp(Expression.GreaterThan);
 }
-internal sealed record GeOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record GeOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"gei {imm}" : "ge";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
@@ -249,12 +249,12 @@ internal sealed record GeOp(long? Immediate = null, NodeId? Source = null) : Mic
 //  Unary arithmetic
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record NegOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record NegOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "neg";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(), Expression.Negate(ctx.Top()));
 }
-internal sealed record NotOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record NotOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "not";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(),
@@ -266,33 +266,33 @@ internal sealed record NotOp(NodeId? Source = null) : MicroOp(Source) {
 //  Bitwise
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record BitNotOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record BitNotOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "bitnot";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(), Expression.OnesComplement(ctx.Top()));
 }
-internal sealed record BitAndOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record BitAndOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"bitandi {imm}" : "bitand";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
             ? Expression.Assign(ctx.Top(), Expression.And(ctx.Top(), Expression.Constant(imm)))
             : ctx.BinaryArith(Expression.And);
 }
-internal sealed record BitOrOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record BitOrOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"bitori {imm}" : "bitor";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
             ? Expression.Assign(ctx.Top(), Expression.Or(ctx.Top(), Expression.Constant(imm)))
             : ctx.BinaryArith(Expression.Or);
 }
-internal sealed record BitXorOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record BitXorOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"bitxori {imm}" : "bitxor";
     public override Expression ToExpression(CompilationContext ctx) =>
         Immediate is { } imm
             ? Expression.Assign(ctx.Top(), Expression.ExclusiveOr(ctx.Top(), Expression.Constant(imm)))
             : ctx.BinaryArith(Expression.ExclusiveOr);
 }
-internal sealed record ShlOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record ShlOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"shli {imm}" : "shl";
     public override Expression ToExpression(CompilationContext ctx) {
         if (Immediate is { } imm)
@@ -304,7 +304,7 @@ internal sealed record ShlOp(long? Immediate = null, NodeId? Source = null) : Mi
             Expression.Assign(ctx.Top(), Expression.LeftShift(ctx.Top(), r)));
     }
 }
-internal sealed record ShrOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record ShrOp(long? Immediate = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Immediate is { } imm ? $"shri {imm}" : "shr";
     public override Expression ToExpression(CompilationContext ctx) {
         if (Immediate is { } imm)
@@ -321,48 +321,48 @@ internal sealed record ShrOp(long? Immediate = null, NodeId? Source = null) : Mi
 //  Fused push + op (operand-bearing forms)
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record AddImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record AddImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"addi {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(), Expression.Add(ctx.Top(), Expression.Constant(Value)));
 }
-internal sealed record SubImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record SubImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"subi {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(), Expression.Subtract(ctx.Top(), Expression.Constant(Value)));
 }
-internal sealed record MulImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record MulImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"muli {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(), Expression.Multiply(ctx.Top(), Expression.Constant(Value)));
 }
-internal sealed record EqImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record EqImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"eqi {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(),
             Expression.Condition(Expression.Equal(ctx.Top(), Expression.Constant(Value)),
                 Expression.Constant(1L), Expression.Constant(0L)));
 }
-internal sealed record LtImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record LtImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"lti {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(),
             Expression.Condition(Expression.LessThan(ctx.Top(), Expression.Constant(Value)),
                 Expression.Constant(1L), Expression.Constant(0L)));
 }
-internal sealed record LeImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record LeImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"lei {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(),
             Expression.Condition(Expression.LessThanOrEqual(ctx.Top(), Expression.Constant(Value)),
                 Expression.Constant(1L), Expression.Constant(0L)));
 }
-internal sealed record NegImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record NegImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"negi {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(), Expression.Negate(Expression.Constant(Value)));
 }
-internal sealed record NotImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record NotImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"noti {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(),
@@ -374,20 +374,20 @@ internal sealed record NotImmOp(long Value, NodeId? Source = null) : MicroOp(Sou
 //  Local / argument access
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record LoadLocalOp(int Index, NodeId? Source = null) : MicroOp(Source) {
+public sealed record LoadLocalOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"loadlocal {Index}";
     public override Expression ToExpression(CompilationContext ctx) =>
         ctx.Push(Expression.ArrayAccess(ctx.Slots,
             Expression.Add(Expression.Add(ctx.FB, ctx.CAS), Expression.Constant(1 + Index))));
 }
-internal sealed record StoreLocalOp(int Index, NodeId? Source = null) : MicroOp(Source) {
+public sealed record StoreLocalOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"storelocal {Index}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(Expression.ArrayAccess(ctx.Slots,
             Expression.Add(Expression.Add(ctx.FB, ctx.CAS), Expression.Constant(1 + Index))),
             ctx.Pop());
 }
-internal sealed record IncLocalOp(int Index, long Increment, NodeId? Source = null) : MicroOp(Source) {
+public sealed record IncLocalOp(int Index, long Increment, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"inclocal {Index} +{Increment}";
     public override Expression ToExpression(CompilationContext ctx) {
         var off = Expression.Add(Expression.Add(ctx.FB, ctx.CAS), Expression.Constant(1 + Index));
@@ -396,12 +396,12 @@ internal sealed record IncLocalOp(int Index, long Increment, NodeId? Source = nu
             ctx.Push(Expression.ArrayAccess(ctx.Slots, off)));
     }
 }
-internal sealed record LoadArgOp(int Index, NodeId? Source = null) : MicroOp(Source) {
+public sealed record LoadArgOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"loadarg {Index}";
     public override Expression ToExpression(CompilationContext ctx) =>
         ctx.Push(Expression.ArrayAccess(ctx.Slots, Expression.Add(ctx.FB, Expression.Constant(Index))));
 }
-internal sealed record StoreArgOp(int Index, NodeId? Source = null) : MicroOp(Source) {
+public sealed record StoreArgOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"storearg {Index}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(Expression.ArrayAccess(ctx.Slots, Expression.Add(ctx.FB, Expression.Constant(Index))),
@@ -412,12 +412,12 @@ internal sealed record StoreArgOp(int Index, NodeId? Source = null) : MicroOp(So
 //  Control flow
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record JumpOp(int Target, NodeId? Source = null) : MicroOp(Source) {
+public sealed record JumpOp(int Target, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"jump {Target}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.PC, Expression.Constant(Target));
 }
-internal sealed record JumpIfFalseOp(int Target, NodeId? Source = null) : MicroOp(Source) {
+public sealed record JumpIfFalseOp(int Target, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"jmpf {Target}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.IfThenElse(
@@ -425,13 +425,13 @@ internal sealed record JumpIfFalseOp(int Target, NodeId? Source = null) : MicroO
             Expression.Assign(ctx.PC, Expression.Constant(Target)),
             Expression.AddAssign(ctx.PC, Expression.Constant(1)));
 }
-internal sealed record ReturnOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record ReturnOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "return";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.IfThen(Expression.LessThan(ctx.FB, Expression.Constant(0)),
             Expression.Assign(ctx.PC, ctx.CodeLen));
 }
-internal sealed record ReturnFromCallOp(int ArgSlots, NodeId? Source = null) : MicroOp(Source) {
+public sealed record ReturnFromCallOp(int ArgSlots, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"ret_call {ArgSlots}";
     static readonly PropertyInfo FBprop = MemberHelper.PropertyOf(() => default(VmState)!.FrameBase);
     public override Expression ToExpression(CompilationContext ctx) {
@@ -451,7 +451,7 @@ internal sealed record ReturnFromCallOp(int ArgSlots, NodeId? Source = null) : M
     }
 }
 
-internal sealed record BitNotImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
+public sealed record BitNotImmOp(long Value, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"bitnoti {Value}";
     public override Expression ToExpression(CompilationContext ctx) =>
         Expression.Assign(ctx.Top(), Expression.OnesComplement(Expression.Constant(Value)));
@@ -461,7 +461,7 @@ internal sealed record BitNotImmOp(long Value, NodeId? Source = null) : MicroOp(
 //  DivRem (pop two, push remainder then quotient)
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record DivRemOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record DivRemOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "divrem";
     public override Expression ToExpression(CompilationContext ctx) {
         var r = Expression.Variable(typeof(long), "r");
@@ -481,7 +481,7 @@ internal sealed record DivRemOp(NodeId? Source = null) : MicroOp(Source) {
 //  Heap operations (LoadValue / StoreValue)
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record LoadValueOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record LoadValueOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "loadval";
     public override Expression ToExpression(CompilationContext ctx) {
         var handle = Expression.Variable(typeof(int), "h");
@@ -497,7 +497,7 @@ internal sealed record LoadValueOp(NodeId? Source = null) : MicroOp(Source) {
             ctx.Push(val));
     }
 }
-internal sealed record StoreValueOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record StoreValueOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "storeval";
     public override Expression ToExpression(CompilationContext ctx) {
         var handle = Expression.Variable(typeof(int), "h");
@@ -517,7 +517,7 @@ internal sealed record StoreValueOp(NodeId? Source = null) : MicroOp(Source) {
 //  Closures
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record AllocClosureOp(int FuncIndex, int CaptureCount, NodeId? Source = null) : MicroOp(Source) {
+public sealed record AllocClosureOp(int FuncIndex, int CaptureCount, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"allocclo func={FuncIndex} caps={CaptureCount}";
     static readonly MethodInfo _method = MemberHelper.MethodOf(() => Vm.HandleAllocClosure(default!, default!, default!));
     public override Expression ToExpression(CompilationContext ctx) {
@@ -528,13 +528,13 @@ internal sealed record AllocClosureOp(int FuncIndex, int CaptureCount, NodeId? S
     }
 }
 
-internal sealed record LoadUpvalueOp(int Index, NodeId? Source = null) : MicroOp(Source) {
+public sealed record LoadUpvalueOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"loadupv {Index}";
     static readonly MethodInfo _method = MemberHelper.MethodOf(() => Vm.HandleLoadUpvalue(default!, default));
     public override Expression ToExpression(CompilationContext ctx) =>
         ctx.Push(Expression.Call(_method, ctx.State, Expression.Constant(Index)));
 }
-internal sealed record StoreUpvalueOp(int Index, NodeId? Source = null) : MicroOp(Source) {
+public sealed record StoreUpvalueOp(int Index, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"storeupv {Index}";
     static readonly MethodInfo _method = MemberHelper.MethodOf(() => Vm.HandleStoreUpvalue(default!, default!, default));
     public override Expression ToExpression(CompilationContext ctx) =>
@@ -545,7 +545,7 @@ internal sealed record StoreUpvalueOp(int Index, NodeId? Source = null) : MicroO
 //  Exceptions
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record ThrowOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record ThrowOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "throw";
     static readonly MethodInfo _method = MemberHelper.MethodOf(() => Vm.HandleThrow(default!, default));
     public override Expression ToExpression(CompilationContext ctx) =>
@@ -554,7 +554,7 @@ internal sealed record ThrowOp(NodeId? Source = null) : MicroOp(Source) {
             Expression.Call(_method, ctx.State, ctx.Pop()),
             ctx.ResyncPC());
 }
-internal sealed record EndFinallyOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record EndFinallyOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "endfinally";
     static readonly MethodInfo _method = MemberHelper.MethodOf(() => Vm.HandleEndFinally(default!));
     public override Expression ToExpression(CompilationContext ctx) =>
@@ -568,7 +568,7 @@ internal sealed record EndFinallyOp(NodeId? Source = null) : MicroOp(Source) {
 //  Call / CallClosure / External
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record CallOp(int FuncIndex, int ArgSlots, NodeId? Source = null) : MicroOp(Source) {
+public sealed record CallOp(int FuncIndex, int ArgSlots, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"call func={FuncIndex} args={ArgSlots}";
     static readonly MethodInfo _method = MemberHelper.MethodOf(() => Vm.HandleCall(default!, default!, default!));
     public override Expression ToExpression(CompilationContext ctx) =>
@@ -578,7 +578,7 @@ internal sealed record CallOp(int FuncIndex, int ArgSlots, NodeId? Source = null
             Expression.Call(_method, ctx.State, Expression.Constant(FuncIndex), Expression.Constant(ArgSlots)),
             ctx.ResyncPC(), ctx.ResyncSP());
 }
-internal sealed record CallClosureOp(NodeId? Source = null) : MicroOp(Source) {
+public sealed record CallClosureOp(NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => "callclo";
     static readonly MethodInfo _method = MemberHelper.MethodOf(() => Vm.HandleCallClosure(default!));
     public override Expression ToExpression(CompilationContext ctx) =>
@@ -588,7 +588,7 @@ internal sealed record CallClosureOp(NodeId? Source = null) : MicroOp(Source) {
             Expression.Call(_method, ctx.State),
             ctx.ResyncPC(), ctx.ResyncSP());
 }
-internal sealed record CallExternalOp(int SiteIndex, NodeId? Source = null) : MicroOp(Source) {
+public sealed record CallExternalOp(int SiteIndex, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"callext site={SiteIndex}";
     static readonly MethodInfo _method = MemberHelper.MethodOf(() => Vm.HandleCallExternal(default!, default));
     public override Expression ToExpression(CompilationContext ctx) =>
@@ -607,7 +607,7 @@ internal sealed record CallExternalOp(int SiteIndex, NodeId? Source = null) : Mi
 /// <c>long[]</c>.  Stack: <c>[..., arr_handle, index] → [..., value]</c>.
 /// When <c>Alias</c> is set, <c>arr_handle</c> is omitted — the alias
 /// variable holds the direct <c>long[]</c> reference.</summary>
-internal sealed record ArrayLoadOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record ArrayLoadOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "arrayload" : $"arrayload alias={Alias}";
     static readonly System.Reflection.MethodInfo HeapGet =
         UopReflection.HeapGet;
@@ -638,7 +638,7 @@ internal sealed record ArrayLoadOp(string? Alias = null, NodeId? Source = null) 
 /// When <c>Alias</c> is set, heap allocation is skipped — the array
 /// reference is stored directly in the alias variable and a dummy
 /// value (0) is pushed for the slot.</summary>
-internal sealed record NewArrayOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record NewArrayOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "newarray" : $"newarray alias={Alias}";
     public override Expression ToExpression(CompilationContext ctx) {
         var size = Expression.Variable(typeof(int), "s");
@@ -668,7 +668,7 @@ internal sealed record NewArrayOp(string? Alias = null, NodeId? Source = null) :
 /// When <c>Alias</c> is set, heap allocation is skipped — the array
 /// reference is stored directly in the alias variable and a dummy
 /// value (0) is pushed for the slot.</summary>
-internal sealed record NewArrayImmOp(int Size, string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record NewArrayImmOp(int Size, string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? $"newarray {Size}" : $"newarray {Size} alias={Alias}";
     public override Expression ToExpression(CompilationContext ctx) {
         var arr = Expression.Variable(typeof(long[]), "a");
@@ -694,7 +694,7 @@ internal sealed record NewArrayImmOp(int Size, string? Alias = null, NodeId? Sou
 /// <c>long[]</c>.  Stack: <c>[..., arr_handle, index, val] → [...]</c>.
 /// When <c>Alias</c> is set, <c>arr_handle</c> is omitted — the alias
 /// variable holds the direct <c>long[]</c> reference.</summary>
-internal sealed record ArrayStoreOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record ArrayStoreOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "arraystore" : $"arraystore alias={Alias}";
     static readonly System.Reflection.MethodInfo HeapGet =
         UopReflection.HeapGet;
@@ -734,7 +734,7 @@ internal sealed record ArrayStoreOp(string? Alias = null, NodeId? Source = null)
 //  are available as static factory methods.
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record BatchReduceOp(
+public sealed record BatchReduceOp(
     Func<Expression, Expression, Expression> Reducer,
     string? Alias = null,
     NodeId? Source = null
@@ -820,7 +820,7 @@ internal sealed record BatchReduceOp(
 //  Stack: [arr_handle, wordCount] → [bitCount]
 // ═══════════════════════════════════════════════════════════════════
 
-internal sealed record CountBitsOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record CountBitsOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "countbits" : $"countbits alias={Alias}";
 
     public override Expression ToExpression(CompilationContext ctx) {
@@ -864,7 +864,7 @@ internal sealed record CountBitsOp(string? Alias = null, NodeId? Source = null) 
 /// all relevant bit positions, and write back once.  Uses
 /// <c>Vm.StridedBatchSet</c> for the actual work.
 /// Stack: [arr_handle_or_dummy, startValue, step, limit] → []</summary>
-internal sealed record StridedSetOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
+public sealed record StridedSetOp(string? Alias = null, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => Alias is null ? "stridedbatchset" : $"stridedbatchset alias={Alias}";
 
     public override Expression ToExpression(CompilationContext ctx) {
@@ -949,7 +949,7 @@ internal sealed record StridedSetOp(string? Alias = null, NodeId? Source = null)
 
 /// <summary>No-op marker µop for readability of the µop list during
 /// debugging.  Generates zero code at runtime.</summary>
-internal sealed record CommentOp(string Text, NodeId? Source = null) : MicroOp(Source) {
+public sealed record CommentOp(string Text, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"; {Text}";
     public override Expression ToExpression(CompilationContext ctx) => Expression.Empty();
 }
@@ -959,7 +959,7 @@ internal sealed record CommentOp(string Text, NodeId? Source = null) : MicroOp(S
 // ═══════════════════════════════════════════════════════════════════
 
 /// <summary>Fused: LoadLocal K; Push V; Le — no intermediate stack.</summary>
-internal sealed record CmpLocalLeOp(int LocalIndex, long Constant, NodeId? Source = null) : MicroOp(Source) {
+public sealed record CmpLocalLeOp(int LocalIndex, long Constant, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"cmplocalle loc={LocalIndex} cmp={Constant}";
     public override Expression ToExpression(CompilationContext ctx) {
         var off = Expression.Add(Expression.Add(ctx.FB, ctx.CAS), Expression.Constant(1 + LocalIndex));
@@ -972,7 +972,7 @@ internal sealed record CmpLocalLeOp(int LocalIndex, long Constant, NodeId? Sourc
 }
 
 /// <summary>Fused: LoadLocal K; Push V; Cmp; JumpIfFalse target — all inline.</summary>
-internal sealed record CmpLocalJmpOp(int LocalIndex, long Constant, int TargetPC, NodeId? Source = null) : MicroOp(Source) {
+public sealed record CmpLocalJmpOp(int LocalIndex, long Constant, int TargetPC, NodeId? Source = null) : MicroOp(Source) {
     public override string ToString() => $"cmplocaljmp loc={LocalIndex} cmp={Constant} -> {TargetPC}";
     public override Expression ToExpression(CompilationContext ctx) {
         var off = Expression.Add(Expression.Add(ctx.FB, ctx.CAS), Expression.Constant(1 + LocalIndex));

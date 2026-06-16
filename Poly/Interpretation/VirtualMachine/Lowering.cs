@@ -15,7 +15,7 @@ namespace Poly.Interpretation.VirtualMachine;
 /// <see cref="MicroOp"/> records.  The resulting µop list is compiled
 /// directly by <see cref="ProgramCompiler.Compile"/> — there is no
 /// intermediate bytecode format.</summary>
-internal static class Lowering {
+public static class Lowering {
     private sealed record LambdaEmitState(
         IReadOnlyDictionary<Lambda, int>? FuncMap,
         IReadOnlyDictionary<Lambda, List<string>>? CaptureMap,
@@ -460,22 +460,32 @@ internal static class Lowering {
         // ═══════════════════════════════════════════════════════════════════
 
         private void EmitIfStatement(IfStatement iff, LambdaEmitState? lambdaState) {
-            int end = EmitLabel();
-
             EmitNode(iff.Condition, lambdaState);
             if (iff.ElseBranch is not null) {
                 int else_ = EmitLabel();
+                int end = EmitLabel();
                 Code.Add(new JumpIfFalseOp(else_));
                 EmitNode(iff.ThenBranch, lambdaState);
                 Code.Add(new JumpOp(end));
                 LabelTargets[else_] = Code.Count;
                 EmitNode(iff.ElseBranch, lambdaState);
+                LabelTargets[end] = Code.Count;
             }
             else {
+                int end = EmitLabel();
                 Code.Add(new JumpIfFalseOp(end));
                 EmitNode(iff.ThenBranch, lambdaState);
+                if (EmitsValue(iff.ThenBranch, Analysis)) {
+                    int afterDefault = EmitLabel();
+                    Code.Add(new JumpOp(afterDefault));
+                    LabelTargets[end] = Code.Count;
+                    Code.Add(new PushOp(0L));
+                    LabelTargets[afterDefault] = Code.Count;
+                }
+                else {
+                    LabelTargets[end] = Code.Count;
+                }
             }
-            LabelTargets[end] = Code.Count;
         }
 
         private void EmitWhileLoop(WhileLoop wl, LambdaEmitState? lambdaState) {
@@ -1329,6 +1339,8 @@ internal static class Lowering {
         if (node is null) return false;
         if (node is WhileLoop or DoWhileLoop or ForLoop) return false;
         if (node is Assignment) return true;
+        if (node is IfStatement iff)
+            return EmitsValue(iff.ThenBranch, analysis);
         var type = analysis.GetResolvedType(node);
         if (type is not null && type.Name != "Void")
             return true;

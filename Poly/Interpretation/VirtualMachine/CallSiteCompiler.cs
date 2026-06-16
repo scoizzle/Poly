@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace Poly.Interpretation.VirtualMachine;
 
-internal delegate void CallSiteDelegate(VmState state);
+public delegate void CallSiteDelegate(VmState state);
 
 internal static class CallSiteCompiler {
     // ── Cached MethodInfo / PropertyInfo via compile-time-safe expression trees ──

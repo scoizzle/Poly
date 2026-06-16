@@ -6,7 +6,7 @@ namespace Poly.Interpretation;
 /// and stepping without any AST dependency — all operations are at the µop
 /// PC level.  AST-level mapping (NodeId → PCs) is handled externally via
 /// <see cref="Bytecode.NodeRanges"/>.</summary>
-internal sealed class VmDebugger {
+public sealed class VmDebugger {
     private readonly VmState _state;
     private readonly Bytecode _program;
 
@@ -91,6 +91,44 @@ internal sealed class VmDebugger {
     public void Resume() {
         _state.Status = InterpreterStatus.Running;
     }
+
+    // ── State inspection ──
+
+    /// <summary>Read a local variable from the current frame by local index.</summary>
+    public long ReadLocal(int localIndex) {
+        int slot = _state.FrameBase + _state.CachedArgSlots + 1 + localIndex;
+        return _state.Stack.RawSlots[slot];
+    }
+
+    /// <summary>Read a function argument from the current frame by argument index.</summary>
+    public long ReadArg(int argIndex) {
+        int slot = _state.FrameBase + argIndex;
+        return _state.Stack.RawSlots[slot];
+    }
+
+    /// <summary>Read the current stack value at the given depth (0 = TOS).</summary>
+    public long PeekStack(int depth = 0) {
+        int sp = _state.Stack.SP;
+        return _state.Stack.RawSlots[sp - 1 - depth];
+    }
+
+    /// <summary>Get the current stack height (number of values).</summary>
+    public int StackHeight => _state.Stack.SP;
+
+    /// <summary>Read the µop at the given PC.</summary>
+    public MicroOp? GetMicroOp(int pc) {
+        if (pc < 0 || pc >= _program.CodeLength) return null;
+        return _program.MicroOps[pc];
+    }
+
+    /// <summary>Get the current µop (at the suspended PC).</summary>
+    public MicroOp? CurrentMicroOp => GetMicroOp(_state.SavedPC);
+
+    /// <summary>The program being debugged.</summary>
+    public Bytecode Program => _program;
+
+    /// <summary>The VM state (stack, heap, PC, etc.).</summary>
+    public VmState State => _state;
 
     // ── Internals ──
 

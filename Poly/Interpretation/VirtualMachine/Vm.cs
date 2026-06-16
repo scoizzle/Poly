@@ -35,7 +35,7 @@ namespace Poly.Interpretation.VirtualMachine;
 // restores it.  This is how top-level Return detects the end of
 // execution vs. a nested function return.
 
-internal static partial class Vm {
+public static partial class Vm {
     public static InterpreterResult Execute(VmState state) {
         var prog = state.Program;
         if (prog is null) {

@@ -1,6 +1,6 @@
 namespace Poly.Interpretation.VirtualMachine;
 
-internal sealed class Heap {
+public sealed class Heap {
     private readonly List<object?> _objects = [];
     private readonly Stack<int> _freeSlots = [];
 

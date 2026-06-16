@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Poly.Interpretation.VirtualMachine;
 
-internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
+public sealed class ValueStack(int initialSlots = 256) : IDisposable {
     private long[] _slots = ArrayPool<long>.Shared.Rent(initialSlots);
 
     public int SP { get; private set; }
@@ -43,9 +43,9 @@ internal sealed class ValueStack(int initialSlots = 256) : IDisposable {
         if (sp > _slots.Length) Grow();
         SP += count;
     }
-    internal long[] RawSlots => _slots;
+    public long[] RawSlots => _slots;
 
-    internal void SetSP(int value) => SP = value;
+    public void SetSP(int value) => SP = value;
 
     public void Reset() => SP = 0;
 

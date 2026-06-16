@@ -16,7 +16,8 @@ public static class AnalyzerBuilderExtensions {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseLambdaReturnTypeResolution()
-            .UseDefiniteAssignmentAnalysis();
+            .UseDefiniteAssignmentAnalysis()
+            ;
     }
 }
 

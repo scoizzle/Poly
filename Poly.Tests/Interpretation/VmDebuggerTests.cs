@@ -16,7 +16,6 @@ public class VmDebuggerTests {
     private static Bytecode Lower(Node node) {
         var analysis = new AnalyzerBuilder()
             .UseTypeAndMemberResolver()
-            .UseConstantFolding()
             .UseSideEffectAnalysis()
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()

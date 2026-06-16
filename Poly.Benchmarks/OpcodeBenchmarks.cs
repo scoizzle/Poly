@@ -369,12 +369,10 @@ public class UopBenchmarks {
         var iter = new Variable("iter"); var total = new Variable("total");
         const int S = 8; // scale shift
 
-        // Pixel center cx, cy as (x - size/2) * 4  scaled by S
-        // So cx range is [-2*S*size/2, 2*S*size/2] which fits in long
-        Node Cx(Node xv) => new ShiftLeft(
-            new Multiply(new Subtract(new ShiftLeft(xv, new Constant(2)),
-                new Constant(size)), new Constant(2)), new Constant(S));
-        Node Cy(Node yv) => Cx(yv); // same formula
+        // Pixel center cx, cy as (x - size/2) * 8  in S=8 fixed-point.
+        // So cx range is [-size*4, size*4-8] which in real units = [-2, ~2].
+        Node Cx(Node xv) => new Subtract(new Multiply(xv, new Constant(8L)), new Constant(size * 4L));
+        Node Cy(Node yv) => Cx(yv);
 
         // Inner Mandelbrot loop for one pixel
         Node mandelPixel = new Block([
@@ -498,7 +496,7 @@ public class UopBenchmarks {
              new Assignment(n, new Constant(1L)),
              new WhileLoop(new LessThanOrEqual(n, new Constant(limit)),
                  new Block([
-                     new Assignment(len, new Constant(1L)),
+                     new Assignment(len, new Constant(0L)),
                      new Assignment(i, n),
                      new WhileLoop(new NotEqual(i, new Constant(1L)),
                          new Block([
@@ -516,8 +514,8 @@ public class UopBenchmarks {
                          ])),
                      new Assignment(n, new Add(n, new Constant(1L)))
                  ])),
-             maxLen],
-            [n, i, len, maxLen, bestN])));
+              new BitwiseOr(new ShiftLeft(bestN, new Constant(32L)), maxLen)],
+             [n, i, len, maxLen, bestN])));
     }
 
     private static Node BuildCountPrimes(int limit) {

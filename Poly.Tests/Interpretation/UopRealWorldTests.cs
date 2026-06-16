@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
@@ -468,5 +469,192 @@ public class UopRealWorldTests {
         await Assert.That(r2.Value).IsEqualTo(50L);
         var r3 = Execute(new Invoke(clamp, new Constant(200), new Constant(0), new Constant(100)));
         await Assert.That(r3.Value).IsEqualTo(100L);
+    }
+
+    [Test]
+    public async Task Mandelbrot_128_Compare() {
+        const int size = 128;
+        const int S = 8;
+        var x = new Variable("x"); var y = new Variable("y");
+        var zx = new Variable("zx"); var zy = new Variable("zy");
+        var zx2 = new Variable("zx2"); var zy2 = new Variable("zy2");
+        var iter = new Variable("iter"); var total = new Variable("total");
+
+        Node Cx(Node xv) => new Subtract(new Multiply(xv, new Constant(8L)), new Constant(size * 4L));
+        Node Cy(Node yv) => Cx(yv);
+
+        Node mandelPixel = new Block([
+            new Assignment(zx, new Constant(0L)),
+            new Assignment(zy, new Constant(0L)),
+            new Assignment(iter, new Constant(0L)),
+            new WhileLoop(
+                new And(
+                    new LessThan(iter, new Constant(256)),
+                    new LessThanOrEqual(
+                        new Add(
+                            new ShiftRight(new Multiply(zx, zx), new Constant(S)),
+                            new ShiftRight(new Multiply(zy, zy), new Constant(S))),
+                        new Constant(4 << S))),
+                new Block([
+                    new Assignment(zx2, new Add(
+                        new Subtract(
+                            new ShiftRight(new Multiply(zx, zx), new Constant(S)),
+                            new ShiftRight(new Multiply(zy, zy), new Constant(S))),
+                        Cx(x))),
+                    new Assignment(zy, new Add(
+                        new ShiftRight(new Multiply(
+                            new Multiply(zx, new Constant(2L)), zy), new Constant(S)),
+                        Cy(y))),
+                    new Assignment(zx, zx2),
+                    new Assignment(iter, new Add(iter, new Constant(1L)))
+                ])),
+            iter
+        ]);
+
+        var body = new Invoke(new Lambda([], new Block(
+            [new Assignment(total, new Constant(0L)),
+             new Assignment(y, new Constant(0L)),
+             new WhileLoop(new LessThan(y, new Constant(size)),
+                 new Block([
+                     new Assignment(x, new Constant(0L)),
+                     new WhileLoop(new LessThan(x, new Constant(size)),
+                         new Block([
+                             new Assignment(total, new Add(total, mandelPixel)),
+                             new Assignment(x, new Add(x, new Constant(1L)))
+                         ])),
+                     new Assignment(y, new Add(y, new Constant(1L)))
+                 ])),
+             total],
+            [x, y, zx, zy, zx2, zy2, iter, total])));
+
+        var prog = LowerWith(body);
+        prog.EnsureCompiled();
+        {
+            using var file = File.OpenWrite("/tmp/poly_mandelbrot.txt");
+            using var writer = new StreamWriter(file);
+            prog.Dump(writer);
+        }
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
+        Vm.Execute(state);
+        long result = (long)state.Stack.Pop();
+        File.AppendAllText("/tmp/poly_mandelbrot.txt",
+            $"Mandelbrot(128) = {result}\n");
+        await Assert.That(result).IsEqualTo(458080L);
+    }
+
+    [Test]
+    public async Task NQueens_8_Compare() {
+        var stack = new Variable("stack");
+        var sp = new Variable("sp");
+        var total = new Variable("total");
+        var ld = new Variable("ld"); var cols = new Variable("cols");
+        var rd = new Variable("rd");
+        var avail = new Variable("avail"); var bit = new Variable("bit");
+        const int boardSize = 8;
+        long allBits = (1L << boardSize) - 1;
+        int maxDepth = boardSize;
+        int stackSize = maxDepth * maxDepth * maxDepth * 3;
+
+        Node St(Node idx) => new IndexAccess(stack, idx);
+        Node L(long v) => new Constant(v);
+
+        var body = new Invoke(new Lambda([], new Block(
+            [new Assignment(stack, new NewArray(TypeReference.To<long>(), new Constant(stackSize))),
+             new Assignment(sp, L(0)),
+             new Assignment(total, L(0)),
+             new Assignment(St(sp), L(0)),
+             new Assignment(St(new Add(sp, L(1))), L(0)),
+             new Assignment(St(new Add(sp, L(2))), L(0)),
+             new Assignment(sp, new Add(sp, L(3))),
+             new WhileLoop(new GreaterThan(sp, L(0)), new Block([
+                 new Assignment(sp, new Subtract(sp, L(3))),
+                 new Assignment(ld, St(sp)),
+                 new Assignment(cols, St(new Add(sp, L(1)))),
+                 new Assignment(rd, St(new Add(sp, L(2)))),
+                 new IfStatement(new Equal(cols, L(allBits)),
+                     new Assignment(total, new Add(total, L(1)))),
+                 new Assignment(avail, new BitwiseAnd(
+                     new BitwiseNot(new BitwiseOr(new BitwiseOr(ld, cols), rd)),
+                     L(allBits))),
+                 new WhileLoop(new NotEqual(avail, L(0)), new Block([
+                     new Assignment(bit, new BitwiseAnd(new UnaryMinus(avail), avail)),
+                     new Assignment(avail, new BitwiseXor(avail, bit)),
+                     new Assignment(St(sp),
+                         new ShiftLeft(new BitwiseOr(ld, bit), L(1))),
+                     new Assignment(St(new Add(sp, L(1))),
+                         new BitwiseOr(cols, bit)),
+                     new Assignment(St(new Add(sp, L(2))),
+                         new ShiftRight(new BitwiseOr(rd, bit), L(1))),
+                     new Assignment(sp, new Add(sp, L(3))),
+                 ])),
+             ])),
+             total],
+            [stack, sp, total, ld, cols, rd, avail, bit])));
+
+        var prog = LowerWith(body);
+        prog.EnsureCompiled();
+        {
+            using var file = File.OpenWrite("/tmp/poly_nqueens.txt");
+            using var writer = new StreamWriter(file);
+            prog.Dump(writer);
+        }
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
+        Vm.Execute(state);
+        long result = (long)state.Stack.Pop();
+        File.AppendAllText("/tmp/poly_nqueens.txt",
+            $"NQueens({boardSize}) = {result}\n");
+        await Assert.That(result).IsEqualTo(92L);
+    }
+
+    [Test]
+    public async Task Collatz_10000_Compare() {
+        const int limit = 10000;
+        var n = new Variable("n"); var i = new Variable("i");
+        var len = new Variable("len"); var maxLen = new Variable("maxLen");
+        var bestN = new Variable("bestN");
+
+        var body = new Invoke(new Lambda([], new Block(
+            [new Assignment(maxLen, new Constant(0L)),
+             new Assignment(bestN, new Constant(0L)),
+             new Assignment(n, new Constant(1L)),
+             new WhileLoop(new LessThanOrEqual(n, new Constant(limit)),
+                 new Block([
+                     new Assignment(len, new Constant(0L)),
+                     new Assignment(i, n),
+                     new WhileLoop(new NotEqual(i, new Constant(1L)),
+                         new Block([
+                             new Assignment(i, new Conditional(
+                                 new Equal(new Modulo(i, new Constant(2L)), new Constant(0L)),
+                                 new ShiftRight(i, new Constant(1)),
+                                 new Add(new Multiply(i, new Constant(3L)), new Constant(1L)))),
+                             new Assignment(len, new Add(len, new Constant(1L)))
+                         ])),
+                     new IfStatement(
+                         new GreaterThan(len, maxLen),
+                         new Block([
+                             new Assignment(maxLen, len),
+                             new Assignment(bestN, n)
+                         ])),
+                     new Assignment(n, new Add(n, new Constant(1L)))
+                 ])),
+             new BitwiseOr(new ShiftLeft(bestN, new Constant(32L)), maxLen)],
+            [n, i, len, maxLen, bestN])));
+
+        var prog = LowerWith(body);
+        prog.EnsureCompiled();
+        {
+            using var file = File.OpenWrite("/tmp/poly_collatz.txt");
+            using var writer = new StreamWriter(file);
+            prog.Dump(writer);
+        }
+        using var state = new VmState { Program = prog, Trace = _traceWriter };
+        Vm.Execute(state);
+        long packed = (long)state.Stack.Pop();
+        long bestNResult = packed >> 32;
+        long maxLenResult = packed & 0xFFFFFFFFL;
+        File.AppendAllText("/tmp/poly_collatz.txt",
+            $"Collatz({limit}) = {bestNResult}:{maxLenResult}\n");
+        await Assert.That(bestNResult).IsEqualTo(6171L);
+        await Assert.That(maxLenResult).IsEqualTo(261L);
     }
 }

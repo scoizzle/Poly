@@ -22,6 +22,7 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
     private readonly Dictionary<string, int> _params = new();
     private readonly Dictionary<string, int> _locals = new();
     private int _currentArgSlots;
+    private int _maxLocalsDepth;
 
     private sealed record ScopeState(
         Dictionary<string, int> Params,
@@ -72,6 +73,10 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         if (!context.TryBeginAnalyzerVisit<UopGenerationPass>(node))
             return;
 
+        // Reset per-run state at the start of a new root-tree visit.
+        if (_scopeStack.Count == 0)
+            _maxLocalsDepth = 0;
+
         // ── Node replacement check (constant folding, etc.) ──
         if (context.GetNodeReplacement(node) is Node replacement) {
             Analyze(context, replacement);
@@ -79,6 +84,9 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
             var replUops = context.GetMetadata<LoweredUopMetadata>(replacement);
             if (replUops is not null)
                 context.SetMetadata(node, replUops);
+            var replDepth = context.GetMetadata<MaxLocalsDepthMetadata>(replacement);
+            if (replDepth is not null)
+                context.SetMetadata(node, replDepth);
             return;
         }
 
@@ -86,6 +94,9 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
 
         var uops = EmitThis(context, node);
         context.SetMetadata(node, new LoweredUopMetadata(uops));
+
+        // Track max locals depth across all Lambda scopes.
+        context.SetMetadata(node, new MaxLocalsDepthMetadata(_maxLocalsDepth));
 
         if (node is Lambda) PopScope();
     }
@@ -408,6 +419,10 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         if (lam.Parameters is not null)
             RegisterParameters(lam.Parameters);
 
+        // Track max slot depth for this Lambda scope.
+        int depth = _params.Count + _locals.Count;
+        if (depth > _maxLocalsDepth) _maxLocalsDepth = depth;
+
         var uops = new List<Instruction>();
         uops.AddRange(GetChildUops(context, lam.Body));
         uops.Add(new ReturnOp { SourceNodeId = lam.Id });
@@ -479,8 +494,12 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
                 }
             }
             _currentArgSlots = lambda.Parameters?.Count ?? 0;
+
             uops.AddRange(GetChildUops(context, lambda.Body));
             uops.Add(new ReturnOp { SourceNodeId = lambda.Id });
+
+            int inlineDepth = _params.Count + _locals.Count;
+            if (inlineDepth > _maxLocalsDepth) _maxLocalsDepth = inlineDepth;
 
             _currentArgSlots = savedArgSlots;
             _params.Clear();

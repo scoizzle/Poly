@@ -40,11 +40,15 @@ public static class Lowering {
         var labelRefs = new List<(int Index, int LabelId)>();
         var ring = new List<int>();
 
+        // ── Ring at each label position (for φ detection) ──
+        var labelRings = new Dictionary<int, List<int>>();
+
         void EmitFragment(List<Instruction> fragment) {
             foreach (var inst in fragment) {
-                // ── LabelMarker: record position, don't emit ──
+                // ── LabelMarker: record ring, record position, don't emit ──
                 if (inst is LabelMarker lm) {
                     labelPositions[lm.LabelId] = result.Count;
+                    labelRings[lm.LabelId] = new List<int>(ring);
                     continue;
                 }
 
@@ -77,6 +81,38 @@ public static class Lowering {
             }
         }
 
+        // ── Source range tracking ──────────────────────────────────────────
+        var sourceRanges = new Dictionary<NodeId, SourceRange>();
+
+        // Wrap EmitFragment to also track SourceNodeId index ranges.
+        void EmitFragmentWithRanges(List<Instruction> fragment) {
+            int before = result.Count;
+            EmitFragment(fragment);
+            int after = result.Count;
+
+            if (before == after) return;
+
+            // Track the range of indices for each unique SourceNodeId in this fragment.
+            var seenNodes = new HashSet<NodeId>();
+            for (int i = before; i < after; i++) {
+                var src = result[i].SourceNodeId;
+                if (src is null || !seenNodes.Add(src.Value)) continue;
+                // Find last occurrence of this SourceNodeId within this fragment.
+                int last = i;
+                for (int j = i + 1; j < after; j++) {
+                    if (result[j].SourceNodeId == src) last = j;
+                }
+                if (sourceRanges.TryGetValue(src.Value, out var existing)) {
+                    int f = Math.Min(existing.FirstProgramCounter, i);
+                    int l = Math.Max(existing.LastProgramCounterInclusive, last);
+                    sourceRanges[src.Value] = new SourceRange(root, f, l);
+                }
+                else {
+                    sourceRanges[src.Value] = new SourceRange(root, i, last);
+                }
+            }
+        }
+
         // ── Walk the root ────────────────────────────────────────────────
         // Emit the root's combined fragment.  All child fragments are included
         // recursively from UopGeneration.  LabelMarkers inside fragments tell
@@ -84,7 +120,72 @@ public static class Lowering {
 
         var rootUops = analysis.GetMetadata<Poly.Interpretation.Analysis.LoweringPrep.LoweredUopMetadata>(root)?.Uops;
         if (rootUops is not null)
-            EmitFragment(rootUops);
+            EmitFragmentWithRanges(rootUops);
+
+        // ── φ detection (runs BEFORE label resolution so BranchIfFalse targets are label IDs) ──
+        // Compare ring states at consecutive labels.  If depth-0 differs, the
+        // instruction after the later label is a merge consumer needing φ.
+        var sortedLabels = labelRings
+            .Select(kv => (Label: kv.Key, Pos: labelPositions.GetValueOrDefault(kv.Key, -1), Ring: kv.Value))
+            .Where(x => x.Pos >= 0)
+            .OrderBy(x => x.Pos)
+            .ToList();
+
+        for (int li = 1; li < sortedLabels.Count; li++) {
+            var prev = sortedLabels[li - 1];
+            var curr = sortedLabels[li];
+
+            int prevDepth0 = prev.Ring.Count > 0 ? prev.Ring[^1] : -1;  // then-exit PC
+            int currDepth0 = curr.Ring.Count > 0 ? curr.Ring[^1] : -1;  // else-exit PC
+            if (prevDepth0 < 0 || currDepth0 < 0 || prevDepth0 == currDepth0)
+                continue;
+
+            // Rings differ at depth 0 — find the BranchIfFalse that targets prev label.
+            int bifPc = -1;
+            for (int j = Math.Min(prev.Pos, result.Count - 1); j >= 0; j--) {
+                if (result[j] is Instruction instr) {
+                    var t = instr switch {
+                        var x when x.GetType().Name == "BranchIfFalse" => (int)((dynamic)x).Target,
+                        _ => -1
+                    };
+                    if (t == prev.Label) { bifPc = j; break; }
+                }
+            }
+            if (bifPc < 0) continue;
+
+            // Find the merge consumer (first instruction after curr position that pops).
+            for (int j = curr.Pos; j < result.Count; j++) {
+                if (result[j].PopCount > 0 && result[j] is not LabelMarker) {
+                    var old = result[j];
+                    var consumed = old.ConsumedFromPcs;
+                    if (consumed is not null && consumed.Length > 0) {
+                        // The differing entry is at ring depth 0 (first pushed, deepest).
+                        // In the consumed array, depth 0 maps to consumed[0].
+                        int consumedIdx = 0;
+
+                        // Swap: consumed should have then-exit PC (primary),
+                        // phiAlt gets the else-exit PC (alt when PC matches branch source).
+                        var newConsumed = (int[])consumed.Clone();
+                        newConsumed[consumedIdx] = prevDepth0;  // then-exit as primary
+
+                        // Build full-length φ arrays (-1 sentinel for non-φ entries).
+                        var srcs = new int[consumed.Length];
+                        var alts = new int[consumed.Length];
+                        Array.Fill(srcs, -1);
+                        Array.Fill(alts, -1);
+                        srcs[consumedIdx] = bifPc;
+                        alts[consumedIdx] = currDepth0;  // else-exit as alt
+
+                        result[j] = old with {
+                            ConsumedFromPcs = newConsumed,
+                            PhiSourcePcs = srcs,
+                            PhiAltPcs = alts
+                        };
+                    }
+                    break;
+                }
+            }
+        }
 
         // ── Resolve label references ────────────────────────────────────
 
@@ -111,7 +212,12 @@ public static class Lowering {
         if (result.Count == 0 || result[^1] is not (ReturnOp or ReturnFromCall))
             result.Add(new ReturnOp { SourceNodeId = root.Id });
 
-        return new LoweringResult(result);
+        // Read max locals depth from analysis metadata (set by UopGenerationPass).
+        // Add 1 for the FrameBase offset so the Registers array covers all slots.
+        int raw = analysis.GetMetadata<MaxLocalsDepthMetadata>(root)?.Depth ?? 0;
+        int maxDepth = Math.Max(1, raw + 1);
+
+        return new LoweringResult(result, maxDepth, sourceRanges);
     }
 
     private sealed class LowerCtx {

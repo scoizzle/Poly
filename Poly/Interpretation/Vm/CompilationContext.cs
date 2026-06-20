@@ -67,7 +67,8 @@ public sealed class CompilationContext {
     /// matches, the alternate producer is used instead of the primary.</summary>
     public Expression ResolveValue(Instruction op, int index) {
         var primary = ValueSlot(op.ConsumedFromPcs![index]);
-        if (op.PhiSourcePcs is { } srcs && op.PhiAltPcs is { } alts) {
+        if (op.PhiSourcePcs is { } srcs && op.PhiAltPcs is { } alts
+            && index < srcs.Length && srcs[index] >= 0) {
             var alt = ValueSlot(alts[index]);
             return Condition(Equal(ProgramCounter, Constant(srcs[index])), alt, primary);
         }

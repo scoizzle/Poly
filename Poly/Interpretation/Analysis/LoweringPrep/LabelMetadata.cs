@@ -39,3 +39,8 @@ public sealed record BreakTargetMetadata(int TargetLabel) : IAnalysisMetadata;
 /// <summary>Resolved label target for a ContinueStatement.</summary>
 /// <param name="TargetLabel">The ContLabel of the nearest enclosing loop.</param>
 public sealed record ContinueTargetMetadata(int TargetLabel) : IAnalysisMetadata;
+
+/// <summary>Signals that φ may be needed at the merge point between two labels.
+/// The assembly step compares the ring states at <c>ThenExitLabel</c> and
+/// <c>ElseExitLabel</c> and stamps φ on the merge consumer if they differ.</summary>
+public sealed record PhiPendingMetadata(int ThenExitLabel, int ElseExitLabel) : IAnalysisMetadata;

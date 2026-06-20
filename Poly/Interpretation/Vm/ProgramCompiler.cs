@@ -16,6 +16,9 @@ public static class ProgramCompiler {
         if (instructions.Count > 0 && instructions[0].ConsumedFromPcs is null)
             ResolveProducers(instructions);
 
+        // Use the depth computed during lowering if provided.
+        int maxDepth = Math.Max(maxActiveLocalDepth, input.MaxActiveLocalsDepth);
+
         var ctx = new CompilationContext();
         var body = new List<Expression>();
         int n = instructions.Count;
@@ -30,7 +33,7 @@ public static class ProgramCompiler {
         // Initialize Registers lazily so callers don't need to set it manually.
         // Preamble: runs before any µop, regardless of entry path.
         body.Add(Assign(ctx.Registers,
-            Coalesce(ctx.Registers, NewArrayBounds(typeof(long), Constant(maxActiveLocalDepth)))));
+            Coalesce(ctx.Registers, NewArrayBounds(typeof(long), Constant(maxDepth)))));
         // Initialize FrameBase to 0 for top-level execution (FrameBase = -1
         // causes LoadSlot/StoreSlot to access RawSlots[-1], which is OOB).
         body.Add(IfThen(
@@ -74,7 +77,7 @@ public static class ProgramCompiler {
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
 
-        return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], null, null, maxActiveLocalDepth);
+        return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], null, null, maxDepth);
     }
 
     private static void ResolveProducers(List<Instruction> instructions) {

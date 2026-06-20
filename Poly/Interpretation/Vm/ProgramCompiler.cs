@@ -112,8 +112,11 @@ public static class ProgramCompiler {
                 entryStack = [];
             }
             else {
-                // Use the last predecessor's exit stack (fallthrough path)
-                entryStack = exitStacks[preds[^1]] ?? [];
+                // Use the last predecessor's exit stack (fallthrough path).
+                // When the last predecessor is a back-edge Jump with null exit
+                // stack (during the linear pass), fall back to the first
+                // predecessor which will be available (the fallthrough entry).
+                entryStack = exitStacks[preds[^1]] ?? (preds.Count >= 2 ? exitStacks[preds[0]] : null) ?? [];
             }
 
             // Consume values from the entry stack

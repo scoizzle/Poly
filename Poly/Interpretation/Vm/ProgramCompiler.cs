@@ -13,7 +13,10 @@ public static class ProgramCompiler {
         var instructions = input.Instructions;
         // Only run producer tracking when the new lowering-prep pipeline
         // didn't already compute ConsumedFromPcs.
-        if (instructions.Count > 0 && instructions[0].ConsumedFromPcs is null)
+        bool alreadyResolved = false;
+        for (int i = 0; i < instructions.Count; i++)
+            if (instructions[i].PopCount > 0 && instructions[i].ConsumedFromPcs is not null) { alreadyResolved = true; break; }
+        if (!alreadyResolved)
             ResolveProducers(instructions);
 
         // Use the depth computed during lowering if provided.

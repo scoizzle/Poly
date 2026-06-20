@@ -329,6 +329,33 @@ expressions, compile delegate.
 5. **Assembly in `Lowering.Lower`** — implement the AST walk, backward scan,
    label resolution, merge-point φ. Replace the body of `Lowering.Lower`.
 
+### Pipeline gap tests
+
+`PipelineGapTests.cs` verifies the new assembly step produces identical
+results to the legacy pipeline for 15 patterns:
+
+| Pattern | Status | Notes |
+|---------|--------|-------|
+| Simple arithmetic (+, -, <) | ✅ | New matches legacy |
+| IfStatement (without else, with else) | ✅ | New matches legacy |
+| WhileLoop counter | ✅ | New matches legacy |
+| Nested WhileLoops 4x4 | ✅ | New matches legacy |
+| Conditional (true, false) | ✅ | New matches legacy |
+| Conditional as Add argument | ✅ | Both return same (wrong) value — pre-existing bug |
+| ForLoop / DoWhileLoop | ✅ | New matches legacy |
+| IfStatement inside WhileLoop | ✅ | New matches legacy |
+| CLR method calls (Math.Max, Math.Abs) | ✅ | New matches legacy |
+| Lambda identity | ✅ | New matches legacy |
+| Collatz steps | ✅ | New matches legacy |
+
+**Pre-existing bug confirmed:** `Conditional` used as an argument to `Add`
+produces wrong result in BOTH pipelines (3 instead of 8).  The legacy
+`ResolveProducers` predecessor graph does not emit φ at Conditional merge
+points.  The assembly step's φ detection stamps the correct `PhiSourcePcs`/
+`PhiAltPcs` on the merge consumer, but the deeper issue persists in both
+paths — neither pipeline's φ resolution actually selects the correct `_v{pc}`
+at runtime for expression-valued merge points.
+
 6. **Delete `ResolveProducers`** — `ProgramCompiler.Compile` no longer calls it.
    Remove the method and the predecessor-graph code.
 

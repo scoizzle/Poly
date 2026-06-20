@@ -18,7 +18,7 @@ namespace Poly.Syntax.Nodes;
 /// </remarks>
 /// <param name="Delegate">The method reference node, typically a <see cref="Member"/>.</param>
 /// <param name="Arguments">The arguments to pass to the method.</param>
-public sealed record Invoke(Node Delegate, params Node[] Arguments) : Operator {
+public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression {
     public override IEnumerable<Node?> Children => [Delegate, .. Arguments];
 
     public override string ToString() => $"{Delegate}({string.Join(", ", Arguments)})";

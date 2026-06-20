@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// Parameters are structural syntax nodes representing formal arguments to operations or functions.
 /// Type information and semantic resolution are determined by analysis passes specific to each interpretation context.
 /// </remarks>
-public sealed record Parameter(string Name, Node? TypeReference = null, Node? DefaultValue = null) : Node {
+public sealed record Parameter(string Name, Node? TypeReference = null, Node? DefaultValue = null) : Expression {
     public override IEnumerable<Node?> Children => [TypeReference, DefaultValue];
 
     /// <inheritdoc />

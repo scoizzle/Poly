@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// The finally block (if present) is guaranteed to execute regardless of normal or exceptional completion.
 /// At least one catch or finally clause must be present.
 /// </remarks>
-public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? CatchClauses = null, Node? FinallyBlock = null) : Operator {
+public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? CatchClauses = null, Node? FinallyBlock = null) : Node {
     public override IEnumerable<Node?> Children =>
         [TryBlock, .. (CatchClauses ?? new List<CatchClause>()).SelectMany(c => c.Children), FinallyBlock];
 

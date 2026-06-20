@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// Corresponds to the <c>&gt;=</c> operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record GreaterThanOrEqual(Node LeftHandValue, Node RightHandValue) : BooleanOperator {
+public sealed record GreaterThanOrEqual(Node LeftHandValue, Node RightHandValue) : Expression {
     /// <inheritdoc />
     public override IEnumerable<Node?> Children => [LeftHandValue, RightHandValue];
 

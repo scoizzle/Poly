@@ -96,7 +96,7 @@ public sealed class LoweringPrepIntegrationTests {
         var labels = MD<IfLabelMetadata>(r, iff);
         await Assert.That(depth).IsNotNull();
         await Assert.That(labels).IsNotNull();
-        await Assert.That(depth!.ExitDepth).IsEqualTo(1); // both branches push 1
+        await Assert.That(depth!.ExitDepth).IsEqualTo(0); // IfStatement is Statement, no net push
         await Assert.That(labels!.ElseLabel).IsNotNull();
     }
 
@@ -146,7 +146,7 @@ public sealed class LoweringPrepIntegrationTests {
         var uops = MD<LoweredUopMetadata>(r, iff)!.Uops;
 
         var bif = (BranchIfFalse)uops[1];
-        var jump = (Jump)uops[3];
+        var jump = (Jump)uops[4];
 
         await Assert.That(bif.Target).IsEqualTo(labels!.ElseLabel!.Value);
         await Assert.That(jump.Target).IsEqualTo(labels.EndLabel);
@@ -247,7 +247,7 @@ public sealed class LoweringPrepIntegrationTests {
 
         // Loop = net-zero, If = pushes 1 (max of 1,1)
         await Assert.That(loopDepth!.ExitDepth).IsEqualTo(0);
-        await Assert.That(ifDepth!.ExitDepth).IsEqualTo(1);
+        await Assert.That(ifDepth!.ExitDepth).IsEqualTo(0);
 
         // Labels are present for both
         await Assert.That(loopLabels).IsNotNull();

@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// Immediately transfers control to the next iteration of the innermost loop.
 /// An optional label allows continuing an outer named loop.
 /// </remarks>
-public sealed record ContinueStatement(string? Label = null) : Operator {
+public sealed record ContinueStatement(string? Label = null) : Statement {
     public override IEnumerable<Node?> Children => Enumerable.Empty<Node>();
 
     /// <inheritdoc />

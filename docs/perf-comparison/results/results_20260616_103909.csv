@@ -1,0 +1,12 @@
+benchmark,language,size_or_limit,result,time_ms
+collatz,C,1000000,837799:524,173.4
+collatz,C++,1000000,837799:524,186.859
+collatz,Rust,1000000,837799:524,118.7
+collatz,Python,1000000,837799:524,5853.4
+collatz,JS,1000000,837799:524,2114.2
+collatz,Bun,1000000,837799:524,422.8
+collatz,Deno,1000000,837799:524,688.5
+collatz,Python+NumPy,1000000,837799:524,5752.3
+collatz,C# native,1000000,837799:524,191
+collatz,C# vectorized,1000000,837799:524,197
+collatz,Poly VM,1000000,837799:524,4592

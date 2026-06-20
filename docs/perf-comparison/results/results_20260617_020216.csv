@@ -1,0 +1,12 @@
+benchmark,language,size_or_limit,result,time_ms
+nqueens,C,8,92,0.0
+nqueens,C++,8,92,0.015875
+nqueens,Rust,8,92,0.0
+nqueens,Python,8,92,0.6
+nqueens,JS,8,92,0.8
+nqueens,Bun,8,92,0.6
+nqueens,Deno,8,92,0.9
+nqueens,Python+NumPy,8,92,0.6
+nqueens,C# native,8,92,0
+nqueens,C# vectorized,8,92,0
+nqueens,Poly VM,8,92,37

@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// Immediately transfers control to the specified label.
 /// The target label must be defined within the same function scope.
 /// </remarks>
-public sealed record GotoStatement(string Target) : Operator {
+public sealed record GotoStatement(string Target) : Statement {
     public override IEnumerable<Node?> Children => Enumerable.Empty<Node>();
 
     /// <inheritdoc />

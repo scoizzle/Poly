@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// Corresponds to the <c>value is TargetType</c> operator in C#.
 /// The target type is specified by <see cref="TargetTypeReference"/>; semantic analysis passes resolve it to an ITypeDefinition.
 /// </remarks>
-public sealed record TypeIs : BooleanOperator {
+public sealed record TypeIs : Expression {
     public TypeIs(Node operand, Node targetTypeReference) {
         Operand = operand ?? throw new ArgumentNullException(nameof(operand));
         TargetTypeReference = targetTypeReference ?? throw new ArgumentNullException(nameof(targetTypeReference));

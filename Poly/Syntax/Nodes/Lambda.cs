@@ -14,7 +14,7 @@ namespace Poly.Syntax.Nodes;
 /// </remarks>
 /// <param name="Parameters">The parameters accepted by this lambda.</param>
 /// <param name="Body">The body expression evaluated when the lambda is invoked.</param>
-public sealed record Lambda(IReadOnlyList<Parameter> Parameters, Node Body) : Operator {
+public sealed record Lambda(IReadOnlyList<Parameter> Parameters, Node Body) : Expression {
     public override IEnumerable<Node?> Children {
         get {
             foreach (var p in Parameters) yield return p;

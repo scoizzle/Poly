@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// Corresponds to the <c>!</c> operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record Not(Node Value) : BooleanOperator {
+public sealed record Not(Node Value) : Expression {
     /// <inheritdoc />
     public override IEnumerable<Node?> Children => [Value];
     /// <inheritdoc />

@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// The <see cref="IsChecked"/> flag indicates whether overflow checking is enabled.
 /// The target type is specified by <see cref="TargetTypeReference"/>; semantic analysis passes resolve it to an ITypeDefinition.
 /// </remarks>
-public sealed record TypeCast : Operator {
+public sealed record TypeCast : Expression {
     public TypeCast(Node operand, Node targetTypeReference, bool isChecked = false) {
         Operand = operand ?? throw new ArgumentNullException(nameof(operand));
         TargetTypeReference = targetTypeReference ?? throw new ArgumentNullException(nameof(targetTypeReference));

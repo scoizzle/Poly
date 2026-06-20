@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// Corresponds to the <c>-</c> prefix operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record UnaryMinus(Node Operand) : Operator {
+public sealed record UnaryMinus(Node Operand) : Expression {
     /// <inheritdoc />
     public override IEnumerable<Node?> Children => [Operand];
 

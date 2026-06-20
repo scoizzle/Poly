@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// The destination must be an assignable expression (variable, parameter, member, etc.).
 /// Type information is resolved by semantic analysis passes (INodeAnalyzer implementations).
 /// </remarks>
-public sealed record Assignment(Node Destination, Node Value) : Operator {
+public sealed record Assignment(Node Destination, Node Value) : Expression {
     public override IEnumerable<Node?> Children => [Value, Destination];
 
     /// <inheritdoc />

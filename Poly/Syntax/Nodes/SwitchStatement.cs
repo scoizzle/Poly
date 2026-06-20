@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// A value is matched against one or more case patterns, and the corresponding case body is executed.
 /// A default case may be executed if no other cases match. All case bodies should have compatible types.
 /// </remarks>
-public sealed record SwitchStatement(Node Value, IReadOnlyList<SwitchCase> Cases, Node? DefaultCase = null) : Operator {
+public sealed record SwitchStatement(Node Value, IReadOnlyList<SwitchCase> Cases, Node? DefaultCase = null) : Node {
     public override IEnumerable<Node?> Children => [Value, .. Cases.SelectMany(c => c.Children), DefaultCase];
 
     /// <inheritdoc />

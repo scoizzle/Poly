@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// the resource is released (via cleanup operations specific to the implementation language).
 /// This pattern ensures deterministic resource management.
 /// </remarks>
-public sealed record UsingStatement(Node Resource, Node Body) : Operator {
+public sealed record UsingStatement(Node Resource, Node Body) : Statement {
     public override IEnumerable<Node?> Children => [Resource, Body];
 
     /// <inheritdoc />

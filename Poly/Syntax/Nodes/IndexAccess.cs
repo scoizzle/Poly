@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// This operator enables accessing indexed members of a value using bracket notation (e.g., <c>array[0]</c> or <c>dictionary["key"]</c>).
 /// Indexer resolution happens in semantic analysis passes (INodeAnalyzer implementations) using type information from the context.
 /// </remarks>
-public sealed record IndexAccess(Node Value, params Node[] Arguments) : Operator {
+public sealed record IndexAccess(Node Value, params Node[] Arguments) : Expression {
     public override IEnumerable<Node?> Children => [Value, .. Arguments];
 
     /// <inheritdoc />

@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// If the condition evaluates to true, the then-branch is executed; otherwise, the else-branch is executed (if present).
 /// The else branch is optional. When both branches are present, they should have compatible types.
 /// </remarks>
-public sealed record IfStatement(Node Condition, Node ThenBranch, Node? ElseBranch = null) : Operator {
+public sealed record IfStatement(Node Condition, Node ThenBranch, Node? ElseBranch = null) : Statement {
     public override IEnumerable<Node?> Children => [Condition, ThenBranch, ElseBranch];
 
     /// <inheritdoc />

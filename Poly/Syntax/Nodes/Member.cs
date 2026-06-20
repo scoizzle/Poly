@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// This operator enables accessing members of a value using dot notation (e.g., <c>person.Name</c>).
 /// Member resolution happens in semantic analysis passes (INodeAnalyzer implementations) using type information from the context.
 /// </remarks>
-public sealed record Member(Node Value, string MemberName) : Operator {
+public sealed record Member(Node Value, string MemberName) : Expression {
     public override IEnumerable<Node?> Children => [Value];
 
     /// <inheritdoc />

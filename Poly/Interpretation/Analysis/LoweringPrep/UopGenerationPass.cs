@@ -290,7 +290,7 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
 
         for (int i = 0; i < block.Nodes.Count; i++) {
             uops.AddRange(GetChildUops(context, block.Nodes[i]));
-            if (i < block.Nodes.Count - 1 && block.Nodes[i] is not WhileLoop)
+            if (i < block.Nodes.Count - 1 && block.Nodes[i] is Poly.Syntax.Nodes.Expression)
                 uops.Add(new PopOp { SourceNodeId = block.Id });
         }
 
@@ -309,14 +309,15 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         if (iff.ElseBranch is not null && labels.ElseLabel is { } elseLabel) {
             uops.Add(new BranchIfFalse(elseLabel) { SourceNodeId = iff.Id });
             uops.AddRange(GetChildUops(context, iff.ThenBranch));
+            uops.Add(new PopOp { SourceNodeId = iff.Id });
             uops.Add(new Jump(labels.EndLabel) { SourceNodeId = iff.Id });
-            // elseLabel position will be resolved by assembly
             uops.AddRange(GetChildUops(context, iff.ElseBranch));
-            // endLabel position will be resolved by assembly
+            uops.Add(new PopOp { SourceNodeId = iff.Id });
         }
         else {
             uops.Add(new BranchIfFalse(labels.EndLabel) { SourceNodeId = iff.Id });
             uops.AddRange(GetChildUops(context, iff.ThenBranch));
+            uops.Add(new PopOp { SourceNodeId = iff.Id });
         }
 
         return uops;

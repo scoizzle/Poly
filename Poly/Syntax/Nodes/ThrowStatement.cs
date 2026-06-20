@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// Immediately terminates normal execution and transfers control to exception handling.
 /// The exception expression provides the error information to propagate to callers or exception handlers.
 /// </remarks>
-public sealed record ThrowStatement(Node Exception) : Operator {
+public sealed record ThrowStatement(Node Exception) : Statement {
     public override IEnumerable<Node?> Children => [Exception];
 
     /// <inheritdoc />

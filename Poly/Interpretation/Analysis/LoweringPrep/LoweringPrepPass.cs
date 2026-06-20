@@ -160,7 +160,7 @@ internal sealed class LoweringPrepPass : INodeAnalyzer {
             if (depth is null) continue;
 
             int net = depth.ExitDepth - depth.EntryDepth;
-            if (i < block.Nodes.Count - 1 && child is not (WhileLoop or DoWhileLoop or ForLoop))
+            if (i < block.Nodes.Count - 1 && child is Poly.Syntax.Nodes.Expression)
                 net--;
 
             total += net;
@@ -169,14 +169,6 @@ internal sealed class LoweringPrepPass : INodeAnalyzer {
     }
 
     private static (int Entry, int Exit) ComputeIfStatement(AnalysisContext context, IfStatement ifs) {
-        var thenDepth = context.GetMetadata<StackDepthMetadata>(ifs.ThenBranch);
-        int thenNet = thenDepth?.ExitDepth ?? 0;
-
-        if (ifs.ElseBranch is not null) {
-            var elseDepth = context.GetMetadata<StackDepthMetadata>(ifs.ElseBranch);
-            int elseNet = elseDepth?.ExitDepth ?? 0;
-            return (0, Math.Max(thenNet, elseNet));
-        }
         return (0, 0);
     }
 

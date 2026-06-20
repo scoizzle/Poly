@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// Corresponds to the <c>%</c> operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record Modulo : Operator {
+public sealed record Modulo : Expression {
     public Modulo(Node leftHandValue, Node rightHandValue) {
         LeftHandValue = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
         RightHandValue = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));

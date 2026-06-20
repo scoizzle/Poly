@@ -9,7 +9,7 @@ namespace Poly.Syntax.Nodes;
 /// The block's type is determined by the type of the last expression in the sequence.
 /// Type information is resolved by semantic analysis passes (INodeAnalyzer implementations).
 /// </remarks>
-public sealed record Block : Operator {
+public sealed record Block : Node {
     /// <summary>
     /// Gets the sequence of expressions to execute.
     /// </summary>

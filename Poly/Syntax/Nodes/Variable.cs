@@ -10,7 +10,7 @@ namespace Poly.Syntax.Nodes;
 /// Variables support scope-based shadowing.
 /// Type information is resolved by semantic analysis passes (INodeAnalyzer implementations).
 /// </remarks>
-public sealed record Variable(string Name, Node? Value = null) : Node {
+public sealed record Variable(string Name, Node? Value = null) : Expression {
     /// <summary>
     /// Gets or sets the value this variable references.
     /// </summary>

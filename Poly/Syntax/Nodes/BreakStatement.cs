@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// Immediately terminates the current loop or switch block and transfers control to the statement following the block.
 /// An optional label allows breaking out of outer named loops or blocks.
 /// </remarks>
-public sealed record BreakStatement(string? Label = null) : Operator {
+public sealed record BreakStatement(string? Label = null) : Statement {
     public override IEnumerable<Node?> Children => Enumerable.Empty<Node>();
 
     /// <inheritdoc />

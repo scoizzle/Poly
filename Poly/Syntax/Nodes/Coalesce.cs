@@ -9,7 +9,7 @@ namespace Poly.Syntax.Nodes;
 /// Corresponds to the <c>??</c> operator in C#.
 /// Type information is resolved by semantic analysis middleware.
 /// </remarks>
-public sealed record Coalesce : Operator {
+public sealed record Coalesce : Expression {
     public Coalesce(Node leftHandValue, Node rightHandValue) {
         LeftHandValue = leftHandValue ?? throw new ArgumentNullException(nameof(leftHandValue));
         RightHandValue = rightHandValue ?? throw new ArgumentNullException(nameof(rightHandValue));

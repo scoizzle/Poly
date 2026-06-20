@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// This sealed record serves as a marker to distinguish constant values from mutable variables or parameters.
 /// Type information is resolved by semantic analysis passes (INodeAnalyzer implementations).
 /// </remarks>
-public sealed record Constant(object? Value) : Node {
+public sealed record Constant(object? Value) : Expression {
     /// <inheritdoc />
     public override string ToString() => Value?.ToString() ?? "null";
 }

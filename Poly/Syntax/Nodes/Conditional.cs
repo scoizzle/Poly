@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// Corresponds to the <c>condition ? trueValue : falseValue</c> operator in C#.
 /// Type information is resolved by semantic analysis passes (INodeAnalyzer implementations).
 /// </remarks>
-public sealed record Conditional(Node Condition, Node IfTrue, Node IfFalse) : Operator {
+public sealed record Conditional(Node Condition, Node IfTrue, Node IfFalse) : Expression {
     public override IEnumerable<Node?> Children => [Condition, IfTrue, IfFalse];
     /// <inheritdoc />
     public override string ToString() => $"({Condition} ? {IfTrue} : {IfFalse})";

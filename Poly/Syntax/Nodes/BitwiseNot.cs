@@ -1,6 +1,6 @@
 namespace Poly.Syntax.Nodes;
 
-public sealed record BitwiseNot(Node Operand) : Operator {
+public sealed record BitwiseNot(Node Operand) : Expression {
     public override IEnumerable<Node?> Children => [Operand];
     public override string ToString() => $"~{Operand}";
 }

@@ -7,7 +7,7 @@ namespace Poly.Syntax.Nodes;
 /// The body is executed repeatedly as long as the condition evaluates to true.
 /// Loop statements are executed for side effects rather than producing values.
 /// </remarks>
-public sealed record WhileLoop(Node Condition, Node Body) : Operator {
+public sealed record WhileLoop(Node Condition, Node Body) : Statement {
     public override IEnumerable<Node?> Children => [Condition, Body];
 
     /// <inheritdoc />

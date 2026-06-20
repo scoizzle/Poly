@@ -1,0 +1,12 @@
+benchmark,language,size_or_limit,result,time_ms
+mandelbrot,C,128,458080,0.8
+mandelbrot,C++,128,458080,0.788625
+mandelbrot,Rust,128,458080,0.8
+mandelbrot,Python,128,458080,51.2
+mandelbrot,JS,128,458080,3.3
+mandelbrot,Bun,128,458080,3.6
+mandelbrot,Deno,128,458080,3.2
+mandelbrot,Python+NumPy,128,458080,18.8
+mandelbrot,C# native,128,458080,1
+mandelbrot,C# vectorized,128,458080,1
+mandelbrot,Poly VM,128,458080,82

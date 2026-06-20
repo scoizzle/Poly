@@ -5,6 +5,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
+using Poly.Interpretation.Analysis.LoweringPrep;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Syntax;
@@ -29,6 +30,8 @@ public class UopRealWorldTests {
             .UseControlFlowAnalysis()
             .UseVariableScopeValidator()
             .UseDefiniteAssignmentAnalysis()
+            .UseLoweringPreparation()
+            .UseUopGeneration()
             .Build()
             .Analyze(node);
         return Lowering.Lower(node, analysis);

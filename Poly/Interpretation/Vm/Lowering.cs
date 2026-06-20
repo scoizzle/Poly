@@ -122,9 +122,14 @@ public static class Lowering {
         if (rootUops is not null)
             EmitFragmentWithRanges(rootUops);
 
-        // ── φ detection (runs BEFORE label resolution so BranchIfFalse targets are label IDs) ──
-        // Compare ring states at consecutive labels.  If depth-0 differs, the
-        // instruction after the later label is a merge consumer needing φ.
+        // ── Ensure ReturnOp ────────────────────────────────────────────
+
+        if (result.Count == 0 || result[^1] is not (ReturnOp or ReturnFromCall)) {
+            var consumed = ring.Count > 0 ? new[] { ring[^1] } : null;
+            result.Add(new ReturnOp { SourceNodeId = root.Id, ConsumedFromPcs = consumed });
+        }
+
+        // ── φ detection (runs AFTER ReturnOp, BEFORE label resolution) ──
         var sortedLabels = labelRings
             .Select(kv => (Label: kv.Key, Pos: labelPositions.GetValueOrDefault(kv.Key, -1), Ring: kv.Value))
             .Where(x => x.Pos >= 0)
@@ -135,23 +140,29 @@ public static class Lowering {
             var prev = sortedLabels[li - 1];
             var curr = sortedLabels[li];
 
-            int prevDepth0 = prev.Ring.Count > 0 ? prev.Ring[^1] : -1;  // then-exit PC
-            int currDepth0 = curr.Ring.Count > 0 ? curr.Ring[^1] : -1;  // else-exit PC
-            if (prevDepth0 < 0 || currDepth0 < 0 || prevDepth0 == currDepth0)
-                continue;
+            // Compare ring entries from the TOP (last pushed) downward.
+            int maxRingDepth = Math.Max(prev.Ring.Count, curr.Ring.Count);
+            int diffDepth = -1;
+            for (int offset = 0; offset < maxRingDepth; offset++) {
+                int pVal = (offset < prev.Ring.Count) ? prev.Ring[prev.Ring.Count - 1 - offset] : -1;
+                int cVal = (offset < curr.Ring.Count) ? curr.Ring[curr.Ring.Count - 1 - offset] : -1;
+                if (pVal != cVal && pVal >= 0 && cVal >= 0) { diffDepth = offset; break; }
+            }
+            if (diffDepth < 0) continue;
 
-            // Rings differ at depth 0 — find the BranchIfFalse that targets prev label.
-            int bifPc = -1;
-            for (int j = Math.Min(prev.Pos, result.Count - 1); j >= 0; j--) {
+            // Find the Jump that targets curr.Label (the end label).
+            // At the merge point, the then-path is identified by the Jump's PC.
+            int sourcePc = -1;
+            for (int j = Math.Min(curr.Pos, result.Count - 1); j >= 0; j--) {
                 if (result[j] is Instruction instr) {
                     var t = instr switch {
-                        var x when x.GetType().Name == "BranchIfFalse" => (int)((dynamic)x).Target,
+                        var x when x.GetType().Name == "Jump" => (int)((dynamic)x).Target,
                         _ => -1
                     };
-                    if (t == prev.Label) { bifPc = j; break; }
+                    if (t == curr.Label) { sourcePc = j; break; }
                 }
             }
-            if (bifPc < 0) continue;
+            if (sourcePc < 0) continue;
 
             // Find the merge consumer (first instruction after curr position that pops).
             for (int j = curr.Pos; j < result.Count; j++) {
@@ -159,25 +170,28 @@ public static class Lowering {
                     var old = result[j];
                     var consumed = old.ConsumedFromPcs;
                     if (consumed is not null && consumed.Length > 0) {
-                        // The differing entry is at ring depth 0 (first pushed, deepest).
-                        // In the consumed array, depth 0 maps to consumed[0].
-                        int consumedIdx = 0;
+                        // Count extra pushes between endLabel and this consumer.
+                        int pushesAfterEnd = 0;
+                        for (int k = curr.Pos; k < j; k++)
+                            pushesAfterEnd += result[k].PushCount;
+                        int adjustedDepth = diffDepth + pushesAfterEnd;
+                        int consumedIdx = old.PopCount - 1 - adjustedDepth;
+                        if (consumedIdx < 0 || consumedIdx >= consumed.Length) consumedIdx = consumed.Length - 1;
 
-                        // Swap: consumed should have then-exit PC (primary),
-                        // phiAlt gets the else-exit PC (alt when PC matches branch source).
-                        var newConsumed = (int[])consumed.Clone();
-                        newConsumed[consumedIdx] = prevDepth0;  // then-exit as primary
+                        int thenVal = diffDepth < prev.Ring.Count ? prev.Ring[prev.Ring.Count - 1 - diffDepth] : -1;
+                        int elseVal = diffDepth < curr.Ring.Count ? curr.Ring[curr.Ring.Count - 1 - diffDepth] : -1;
+                        if (thenVal < 0 || elseVal < 0) break;
 
-                        // Build full-length φ arrays (-1 sentinel for non-φ entries).
+                        // Primary (ring's current value) = else-exit.
+                        // Alt = then-exit, used when PC matches source (Jump).
                         var srcs = new int[consumed.Length];
                         var alts = new int[consumed.Length];
                         Array.Fill(srcs, -1);
                         Array.Fill(alts, -1);
-                        srcs[consumedIdx] = bifPc;
-                        alts[consumedIdx] = currDepth0;  // else-exit as alt
+                        srcs[consumedIdx] = sourcePc;
+                        alts[consumedIdx] = thenVal;
 
                         result[j] = old with {
-                            ConsumedFromPcs = newConsumed,
                             PhiSourcePcs = srcs,
                             PhiAltPcs = alts
                         };
@@ -192,7 +206,6 @@ public static class Lowering {
         foreach (var (instIdx, labelId) in labelRefs) {
             if (labelPositions.TryGetValue(labelId, out int pos)) {
                 var old = result[instIdx];
-                // Preserve ConsumedFromPcs when replacing.
                 result[instIdx] = old switch {
                     BranchIfFalse bif => new BranchIfFalse(pos) {
                         SourceNodeId = bif.SourceNodeId,
@@ -206,11 +219,6 @@ public static class Lowering {
                 };
             }
         }
-
-        // ── Ensure ReturnOp ────────────────────────────────────────────
-
-        if (result.Count == 0 || result[^1] is not (ReturnOp or ReturnFromCall))
-            result.Add(new ReturnOp { SourceNodeId = root.Id });
 
         // Read max locals depth from analysis metadata (set by UopGenerationPass).
         // Add 1 for the FrameBase offset so the Registers array covers all slots.

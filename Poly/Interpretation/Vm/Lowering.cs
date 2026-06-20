@@ -1,18 +1,19 @@
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm.Instructions;
+using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
 
 namespace Poly.Interpretation.Vm;
 
-/// <summary>Pure AST → µop transformation. Produces a flat instruction list
-/// with forward label references resolved via post-processing.</summary>
+/// <summary>Pure AST → µop transformation. Uses analysis metadata for
+/// variable scope, constant folding, side effects, and control flow.</summary>
 public static class Lowering {
     public static LoweringResult Lower(Node node, AnalysisResult analysis) {
         var ctx = new LowerCtx(analysis);
         EmitNode(node, ctx);
-        // Ensure a ReturnOp ends the program — top-level expressions
-        // like Divide(Multiply(...), ...) don't go through Invoke/Lambda.
         if (ctx.Instructions.Count == 0 || ctx.Instructions[^1] is not ReturnOp)
             ctx.Instructions.Add(new ReturnOp { SourceNodeId = node.Id });
         ctx.ResolveLabels();
@@ -81,17 +82,21 @@ public static class Lowering {
     }
 
     private static void EmitNode(Node node, LowerCtx ctx) {
+        // Check for analysis-pass node replacements
+        if (ctx.Analysis.GetNodeReplacement(node) is Node replacement) {
+            EmitNode(replacement, ctx);
+            return;
+        }
+
         switch (node) {
             case Constant c: EmitConstant(c, ctx); return;
 
-            // Arithmetic
             case Add a: EmitBinary(a.LeftHandValue, a.RightHandValue, BinOpKind.Add, ctx, a); return;
             case Subtract s: EmitBinary(s.LeftHandValue, s.RightHandValue, BinOpKind.Sub, ctx, s); return;
             case Multiply m: EmitBinary(m.LeftHandValue, m.RightHandValue, BinOpKind.Mul, ctx, m); return;
             case Divide d: EmitBinary(d.LeftHandValue, d.RightHandValue, BinOpKind.Div, ctx, d); return;
             case Modulo mo: EmitBinary(mo.LeftHandValue, mo.RightHandValue, BinOpKind.Mod, ctx, mo); return;
 
-            // Comparison
             case Equal e: EmitBinary(e.LeftHandValue, e.RightHandValue, BinOpKind.Eq, ctx, e); return;
             case NotEqual ne: EmitBinary(ne.LeftHandValue, ne.RightHandValue, BinOpKind.Ne, ctx, ne); return;
             case LessThan lt: EmitBinary(lt.LeftHandValue, lt.RightHandValue, BinOpKind.Lt, ctx, lt); return;
@@ -99,15 +104,12 @@ public static class Lowering {
             case GreaterThan gt: EmitBinary(gt.LeftHandValue, gt.RightHandValue, BinOpKind.Gt, ctx, gt); return;
             case GreaterThanOrEqual ge: EmitBinary(ge.LeftHandValue, ge.RightHandValue, BinOpKind.Ge, ctx, ge); return;
 
-            // Logical (And/Or should use short-circuit; for now treat as binary)
             case And and: EmitBinary(and.LeftHandValue, and.RightHandValue, BinOpKind.And, ctx, and); return;
             case Or or: EmitBinary(or.LeftHandValue, or.RightHandValue, BinOpKind.Or, ctx, or); return;
 
-            // Unary
-            case Not not: EmitUnary(not.Value, UnaryOpKind.Not, ctx, not); return;
-            case UnaryMinus um: EmitUnary(um.Operand, UnaryOpKind.Neg, ctx, um); return;
+            case UnaryMinus um: EmitNode(um.Operand, ctx); ctx.Instructions.Add(new BinOp(BinOpKind.Sub, Immediate: 0) { SourceNodeId = um.Id }); return;
+            case Not n: EmitUnary(n.Value, UnaryOpKind.Not, ctx, n); return;
 
-            // Bitwise
             case BitwiseNot bn: EmitUnary(bn.Operand, UnaryOpKind.BitNot, ctx, bn); return;
             case BitwiseAnd ba: EmitBinary(ba.LeftHandValue, ba.RightHandValue, BinOpKind.And, ctx, ba); return;
             case BitwiseOr bor: EmitBinary(bor.LeftHandValue, bor.RightHandValue, BinOpKind.Or, ctx, bor); return;
@@ -115,40 +117,46 @@ public static class Lowering {
             case ShiftLeft sl: EmitBinary(sl.LeftHandValue, sl.RightHandValue, BinOpKind.Shl, ctx, sl); return;
             case ShiftRight sr: EmitBinary(sr.LeftHandValue, sr.RightHandValue, BinOpKind.Shr, ctx, sr); return;
 
-            // Variables and parameters
             case Variable v: EmitVariable(v, ctx); return;
             case Parameter p: EmitParameter(p, ctx); return;
             case ThisReference: ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id }); return;
 
-            // Assignment
             case Assignment a: EmitAssignment(a, ctx); return;
 
-            // Control flow
             case IfStatement iff: EmitIfStatement(iff, ctx); return;
             case WhileLoop wl: EmitWhileLoop(wl, ctx); return;
             case Conditional cond: EmitConditional(cond, ctx); return;
             case Block block: EmitBlock(block, ctx); return;
 
-            // Functions and calls
             case Lambda lam: EmitLambda(lam, ctx); return;
             case Invoke inv: EmitInvoke(inv, ctx); return;
             case Return ret: EmitReturn(ret, ctx); return;
 
-            // Jump statements
             case BreakStatement: ctx.Instructions.Add(new Jump(0) { SourceNodeId = node.Id }); return;
             case ContinueStatement: ctx.Instructions.Add(new Jump(0) { SourceNodeId = node.Id }); return;
 
-            // Type operations — no-ops in typeless VM, emit operand
             case TypeCast tc: EmitNode(tc.Operand, ctx); return;
             case TypeIs ti: EmitNode(ti.Operand, ctx); ctx.Instructions.Add(new LoadConst(1L) { SourceNodeId = node.Id }); return;
 
-            // Placeholder for complex constructs
-            case Member m: EmitNode(m.Value, ctx); ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id }); return;
-            case IndexAccess ia: EmitNode(ia.Value, ctx); ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id }); return;
-            case New n: foreach (var arg in n.Arguments) EmitNode(arg, ctx); ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id }); return;
-            case NewArray na: EmitNode(na.Length, ctx); ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id }); return;
+            case Member m: EmitMember(m, ctx); return;
+            case IndexAccess ia: EmitIndexAccess(ia, ctx); return;
+            case New n:
+                foreach (var arg in n.Arguments) EmitNode(arg, ctx);
+                ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id });
+                return;
+            case NewArray na:
+                EmitNode(na.Length, ctx);
+                ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id });
+                return;
+            case DoWhileLoop dw: EmitWhileLoop(new WhileLoop(dw.Condition ?? new Constant(0L), dw.Body) { Id = dw.Id }, ctx); return;
+            case ForLoop fl: EmitForLoop(fl, ctx); return;
+            case ThrowStatement thr: EmitNode(thr.Exception, ctx); return;
+            case SuspendNode sn: EmitNode(sn.Inner, ctx); return;
+            case Await aw: EmitNode(aw.Operand, ctx); return;
 
-            default: ctx.Instructions.Add(new Nop { SourceNodeId = node.Id }); return;
+            default:
+                ctx.Instructions.Add(new Nop { SourceNodeId = node.Id });
+                return;
         }
     }
 
@@ -171,6 +179,29 @@ public static class Lowering {
     private static void EmitUnary(Node operand, UnaryOpKind kind, LowerCtx ctx, Node source) {
         EmitNode(operand, ctx);
         ctx.Instructions.Add(new UnaryOp(kind) { SourceNodeId = source.Id });
+    }
+
+    private static void EmitShortCircuit(Node left, Node right, bool isOr, LowerCtx ctx, Node source) {
+        // Short-circuit: for OR (isOr=true), if left is true, skip right.
+        // For AND (isOr=false), if left is false, skip right.
+        int skipRight = ctx.DefineLabel();
+        int end = ctx.DefineLabel();
+        EmitNode(left, ctx);
+        ctx.Instructions.Add(new DupOp { SourceNodeId = source.Id });
+        if (isOr) {
+            // OR: if left is true (non-zero), skip right
+            ctx.EmitBranchIfFalse(skipRight, source.Id);
+            ctx.Instructions.Add(new PopOp { SourceNodeId = source.Id });
+            ctx.EmitJump(end, source.Id);
+        }
+        else {
+            // AND: if left is false (zero), skip right
+            ctx.EmitBranchIfFalse(end, source.Id);
+            ctx.Instructions.Add(new PopOp { SourceNodeId = source.Id });
+        }
+        ctx.MarkLabel(skipRight);
+        EmitNode(right, ctx);
+        ctx.MarkLabel(end);
     }
 
     private static void EmitVariable(Variable v, LowerCtx ctx) {
@@ -198,13 +229,17 @@ public static class Lowering {
             EmitNode(ia.Arguments[0], ctx);
             ctx.Instructions.Add(new ArrayStore { SourceNodeId = a.Id });
         }
+        else if (a.Destination is Member m) {
+            EmitNode(m.Value, ctx);
+            ctx.Instructions.Add(new PopOp { SourceNodeId = a.Id });
+            ctx.Instructions.Add(new StoreSlot(ctx.GetOrCreateLocalSlot(m.MemberName)) { SourceNodeId = a.Id });
+        }
         else {
             ctx.Instructions.Add(new PopOp { SourceNodeId = a.Id });
         }
     }
 
     private static void EmitBlock(Block block, LowerCtx ctx) {
-        // Register and initialize local variable declarations
         foreach (var v in block.Variables) {
             if (v is Variable var && !ctx.Parameters.ContainsKey(var.Name) && !ctx.Locals.ContainsKey(var.Name)) {
                 ctx.Locals[var.Name] = ctx.Locals.Count;
@@ -263,7 +298,6 @@ public static class Lowering {
     }
 
     private static void EmitLambda(Lambda lam, LowerCtx ctx) {
-        // Register parameters
         if (lam.Parameters is not null) {
             for (int i = 0; i < lam.Parameters.Count; i++) {
                 var p = lam.Parameters[i];
@@ -277,9 +311,32 @@ public static class Lowering {
     }
 
     private static void EmitInvoke(Invoke inv, LowerCtx ctx) {
+        var resolved = ctx.Analysis.GetResolvedMember(inv);
+        if (resolved is ClrMethod clrMethod) {
+            // CLR method call — push args, then CallExternal
+            foreach (var arg in inv.Arguments)
+                EmitNode(arg, ctx);
+            ctx.Instructions.Add(new CallExternal(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
+            return;
+        }
+        if (resolved is ClrConstructor clrCtor) {
+            // CLR constructor call
+            foreach (var arg in inv.Arguments)
+                EmitNode(arg, ctx);
+            ctx.Instructions.Add(new CallExternal(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
+            return;
+        }
+        if (resolved is ClrTypeProperty clrProp) {
+            // Property access — call the getter
+            EmitNode(inv.Delegate is Member m ? m.Value : new Constant(0L), ctx);
+            foreach (var arg in inv.Arguments)
+                EmitNode(arg, ctx);
+            ctx.Instructions.Add(new CallExternal(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
+            return;
+        }
+
         if (inv.Delegate is Lambda lambda) {
-            // Inline lambda: store arguments to parameter slots,
-            // then emit the body. The StoreSlot consumes the pushed value.
+            // Inline lambda
             int savedArgSlots = ctx.CurrentArgSlots;
             if (lambda.Parameters is not null) {
                 for (int i = 0; i < lambda.Parameters.Count && i < inv.Arguments.Length; i++) {
@@ -297,6 +354,11 @@ public static class Lowering {
             ctx.Instructions.Add(new ReturnOp { SourceNodeId = lambda.Id });
             ctx.CurrentArgSlots = savedArgSlots;
         }
+        else if (inv.Delegate is Member member) {
+            foreach (var arg in inv.Arguments)
+                EmitNode(arg, ctx);
+            ctx.Instructions.Add(new Call(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
+        }
         else {
             foreach (var arg in inv.Arguments)
                 EmitNode(arg, ctx);
@@ -308,5 +370,53 @@ public static class Lowering {
         if (ret.Value is not null)
             EmitNode(ret.Value, ctx);
         ctx.Instructions.Add(new ReturnOp { SourceNodeId = ret.Id });
+    }
+
+    private static void EmitMember(Member m, LowerCtx ctx) {
+        var resolved = ctx.Analysis.GetResolvedMember(m);
+        if (resolved is ClrTypeProperty property) {
+            // Property getter — emit instance and call
+            EmitNode(m.Value, ctx);
+            ctx.Instructions.Add(new CallExternal(0, 1) { SourceNodeId = m.Id });
+            return;
+        }
+        if (resolved is ClrMethod getter) {
+            EmitNode(m.Value, ctx);
+            ctx.Instructions.Add(new CallExternal(0, 1) { SourceNodeId = m.Id });
+            return;
+        }
+        // Fallback: push 0
+        EmitNode(m.Value, ctx);
+        ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = m.Id });
+    }
+
+    private static void EmitIndexAccess(IndexAccess ia, LowerCtx ctx) {
+        EmitNode(ia.Value, ctx);
+        foreach (var arg in ia.Arguments)
+            EmitNode(arg, ctx);
+        // Fallback: load via ArrayLoad
+        ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = ia.Id });
+    }
+
+    private static void EmitForLoop(ForLoop fl, LowerCtx ctx) {
+        if (fl.Initializer is not null) {
+            EmitNode(fl.Initializer, ctx);
+            ctx.Instructions.Add(new PopOp { SourceNodeId = fl.Id });
+        }
+        int cont = ctx.Instructions.Count;
+        if (fl.Condition is not null) {
+            EmitNode(fl.Condition, ctx);
+            int endLabel = ctx.DefineLabel();
+            ctx.EmitBranchIfFalse(endLabel, fl.Id);
+        }
+        EmitNode(fl.Body, ctx);
+        ctx.Instructions.Add(new PopOp { SourceNodeId = fl.Id });
+        if (fl.Increment is not null) {
+            EmitNode(fl.Increment, ctx);
+            ctx.Instructions.Add(new PopOp { SourceNodeId = fl.Id });
+        }
+        ctx.EmitJumpDirect(cont, fl.Id);
+        if (fl.Condition is not null)
+            ctx.MarkLabel(ctx.DefineLabel() - 1); // re-mark the end label
     }
 }

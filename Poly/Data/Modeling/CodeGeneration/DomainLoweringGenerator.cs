@@ -287,7 +287,7 @@ public sealed class DomainLoweringGenerator {
                 if (publishEvent.PropertyBindings.TryGetValue(property.Name, out var source)) {
                     var value = source switch {
                         EventPropertyBindingSource.ActionParameter actionParam => parameterNames?.Contains(actionParam.ParameterName) == true
-                            ? (Node)new Parameter(actionParam.ParameterName, MapDomainTypeToNode(property.Type))
+                            ? new Parameter(actionParam.ParameterName, MapDomainTypeToNode(property.Type))
                             : new Member(entityInstance, actionParam.ParameterName),
                         EventPropertyBindingSource.EntityProperty entityProp => new Member(entityInstance, entityProp.PropertyName),
                         _ => GetDefaultNodeForType(eventPropertyType)
@@ -314,7 +314,7 @@ public sealed class DomainLoweringGenerator {
                 if (invokeAction.ParameterBindings.TryGetValue(param.Name, out var binding)) {
                     return MapDomainValueToNode(binding, entityInstance, parameterNames);
                 }
-                return (Node)Null;
+                return Null;
             })
             .ToArray();
 
@@ -1286,11 +1286,11 @@ public sealed class DomainImplementationLoweringPass {
                 var correlation = subscription.Correlations
                     .FirstOrDefault(c => string.Equals(c.ConsumerPropertyName, p.Name, StringComparison.Ordinal));
                 if (correlation is not null) {
-                    return (Node)new Member(
+                    return new Member(
                         new Parameter(subscription.EventParameterName),
                         correlation.EventPropertyName);
                 }
-                return (Node)new Member(eventParam, p.Name);
+                return new Member(eventParam, p.Name);
             })
             .ToArray();
 

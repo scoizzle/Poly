@@ -20,21 +20,21 @@ public class OpcodeBenchmarks {
 
     [GlobalSetup]
     public void Setup() {
-        _cPush = ProgramCompiler.Compile(new MicroOp[] { new PushOp(42L) });
-        _cAdd = ProgramCompiler.Compile(new MicroOp[] { new PushOp(10L), new PushOp(20L), new AddOp() });
-        _cSub = ProgramCompiler.Compile(new MicroOp[] { new PushOp(50L), new PushOp(20L), new SubOp() });
-        _cMul = ProgramCompiler.Compile(new MicroOp[] { new PushOp(7L), new PushOp(8L), new MulOp() });
-        _cEq = ProgramCompiler.Compile(new MicroOp[] { new PushOp(10L), new PushOp(10L), new EqOp() });
-        _cAddImm = ProgramCompiler.Compile(new MicroOp[] { new PushOp(10L), new AddImmOp(5L) });
-        _cNot = ProgramCompiler.Compile(new MicroOp[] { new PushOp(0L), new NotOp() });
-        _cNeg = ProgramCompiler.Compile(new MicroOp[] { new PushOp(42L), new NegOp() });
-        _cDup = ProgramCompiler.Compile(new MicroOp[] { new PushOp(42L), new DupOp() });
-        _cPop = ProgramCompiler.Compile(new MicroOp[] { new PushOp(10L), new PushOp(20L), new PopOp() });
+        _cPush = ProgramCompiler.Compile(new Instruction[] { new PushOp(42L) });
+        _cAdd = ProgramCompiler.Compile(new Instruction[] { new PushOp(10L), new PushOp(20L), new AddOp() });
+        _cSub = ProgramCompiler.Compile(new Instruction[] { new PushOp(50L), new PushOp(20L), new SubOp() });
+        _cMul = ProgramCompiler.Compile(new Instruction[] { new PushOp(7L), new PushOp(8L), new MulOp() });
+        _cEq = ProgramCompiler.Compile(new Instruction[] { new PushOp(10L), new PushOp(10L), new EqOp() });
+        _cAddImm = ProgramCompiler.Compile(new Instruction[] { new PushOp(10L), new AddImmOp(5L) });
+        _cNot = ProgramCompiler.Compile(new Instruction[] { new PushOp(0L), new NotOp() });
+        _cNeg = ProgramCompiler.Compile(new Instruction[] { new PushOp(42L), new NegOp() });
+        _cDup = ProgramCompiler.Compile(new Instruction[] { new PushOp(42L), new DupOp() });
+        _cPop = ProgramCompiler.Compile(new Instruction[] { new PushOp(10L), new PushOp(20L), new PopOp() });
 
-        _cLoadLocal = ProgramCompiler.Compile(new MicroOp[] { new LoadLocalOp(0) });
-        _cStoreLocal = ProgramCompiler.Compile(new MicroOp[] { new PushOp(42L), new StoreLocalOp(0) });
-        _cIncLocal = ProgramCompiler.Compile(new MicroOp[] { new PushOp(0L), new StoreLocalOp(0), new IncLocalOp(0, 1L) });
-        _cLoadArg = ProgramCompiler.Compile(new MicroOp[] { new LoadArgOp(1) });
+        _cLoadLocal = ProgramCompiler.Compile(new Instruction[] { new LoadLocalOp(0) });
+        _cStoreLocal = ProgramCompiler.Compile(new Instruction[] { new PushOp(42L), new StoreLocalOp(0) });
+        _cIncLocal = ProgramCompiler.Compile(new Instruction[] { new PushOp(0L), new StoreLocalOp(0), new IncLocalOp(0, 1L) });
+        _cLoadArg = ProgramCompiler.Compile(new Instruction[] { new LoadArgOp(1) });
     }
 
     private const int R = 5000;

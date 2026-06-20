@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.VirtualMachine;
 using Poly.Syntax.Analysis;
 using Poly.Tests.TestHelpers;
 

@@ -9,6 +9,7 @@
         <OutputType>Library</OutputType>
         <SynchReleaseVersion>false</SynchReleaseVersion>
         <RootNamespace>Poly</RootNamespace>
+        
         <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
         <PackageId>Poly</PackageId>
         <Authors>Scot 'Scoizzle' Murphy</Authors>
@@ -32,6 +33,10 @@
         <!-- Enables smoke / integration tests in Poly.Tests to reach internal RISC VM types during development and transition.
              No effect on public API surface or packaged consumers. -->
         <InternalsVisibleTo Include="Poly.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Remove="Interpretation/VmDebugger.cs" />
     </ItemGroup>
 
     <ItemGroup>

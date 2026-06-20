@@ -116,13 +116,13 @@ public sealed class VmDebugger {
     public int StackHeight => _state.Stack.SP;
 
     /// <summary>Read the µop at the given PC.</summary>
-    public MicroOp? GetMicroOp(int pc) {
+    public Instruction? GetInstruction(int pc) {
         if (pc < 0 || pc >= _program.CodeLength) return null;
-        return _program.MicroOps[pc];
+        return _program.Instructions[pc];
     }
 
     /// <summary>Get the current µop (at the suspended PC).</summary>
-    public MicroOp? CurrentMicroOp => GetMicroOp(_state.SavedPC);
+    public Instruction? CurrentInstruction => GetInstruction(_state.SavedPC);
 
     /// <summary>The program being debugged.</summary>
     public Bytecode Program => _program;

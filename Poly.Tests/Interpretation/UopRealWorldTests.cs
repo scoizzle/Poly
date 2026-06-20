@@ -6,7 +6,7 @@ using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.VirtualMachine;
+using Poly.Interpretation.Vm;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
@@ -20,7 +20,7 @@ namespace Poly.Tests.Interpretation;
 public class UopRealWorldTests {
     private static readonly TestTraceWriter? _traceWriter = Debugger.IsAttached ? new() : null;
 
-    private static Bytecode LowerWith(Node node) {
+    private static LoweringResult LowerWith(Node node) {
         var analysis = new AnalyzerBuilder()
             .UseTypeAndMemberResolver()
             .UseConstantFolding()
@@ -35,9 +35,14 @@ public class UopRealWorldTests {
     }
 
     private static InterpreterResult Execute(Node node) {
-        var prog = LowerWith(node);
-        using var state = new VmState { Program = prog, Trace = _traceWriter };
+        using var state = CompileState(node);
         return Vm.Execute(state);
+    }
+
+    private static VmState CompileState(Node node) {
+        var lowerResult = LowerWith(node);
+        var program = ProgramCompiler.Compile(lowerResult);
+        return new VmState(program) { Trace = _traceWriter };
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -343,15 +348,15 @@ public class UopRealWorldTests {
             new Lambda([new Parameter("x", TypeReference.To<int>())],
                 new Multiply(new Variable("x"), new Constant(2L))),
             new Constant(7)));
-        using var s1 = new VmState { Program = doubleProg, Trace = _traceWriter };
-        await Assert.That(Vm.Execute(s1).Value).IsEqualTo(14L);
+        await Assert.That(Execute(new Invoke(
+            new Lambda([new Parameter("x", TypeReference.To<int>())],
+                new Multiply(new Variable("x"), new Constant(2L))),
+            new Constant(7))).Value).IsEqualTo(14L);
 
-        var tripleProg = LowerWith(new Invoke(
+        await Assert.That(Execute(new Invoke(
             new Lambda([new Parameter("x", TypeReference.To<int>())],
                 new Multiply(new Variable("x"), new Constant(3L))),
-            new Constant(9)));
-        using var s2 = new VmState { Program = tripleProg, Trace = _traceWriter };
-        await Assert.That(Vm.Execute(s2).Value).IsEqualTo(27L);
+            new Constant(9))).Value).IsEqualTo(27L);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -527,18 +532,9 @@ public class UopRealWorldTests {
              total],
             [x, y, zx, zy, zx2, zy2, iter, total])));
 
-        var prog = LowerWith(body);
-        prog.EnsureCompiled();
-        {
-            using var file = File.OpenWrite("/tmp/poly_mandelbrot.txt");
-            using var writer = new StreamWriter(file);
-            prog.Dump(writer);
-        }
-        using var state = new VmState { Program = prog, Trace = _traceWriter };
+        using var state = CompileState(body);
         Vm.Execute(state);
         long result = (long)state.Stack.Pop();
-        File.AppendAllText("/tmp/poly_mandelbrot.txt",
-            $"Mandelbrot(128) = {result}\n");
         await Assert.That(result).IsEqualTo(458080L);
     }
 
@@ -591,18 +587,9 @@ public class UopRealWorldTests {
              total],
             [stack, sp, total, ld, cols, rd, avail, bit])));
 
-        var prog = LowerWith(body);
-        prog.EnsureCompiled();
-        {
-            using var file = File.OpenWrite("/tmp/poly_nqueens.txt");
-            using var writer = new StreamWriter(file);
-            prog.Dump(writer);
-        }
-        using var state = new VmState { Program = prog, Trace = _traceWriter };
+        using var state = CompileState(body);
         Vm.Execute(state);
         long result = (long)state.Stack.Pop();
-        File.AppendAllText("/tmp/poly_nqueens.txt",
-            $"NQueens({boardSize}) = {result}\n");
         await Assert.That(result).IsEqualTo(92L);
     }
 
@@ -640,20 +627,11 @@ public class UopRealWorldTests {
              new BitwiseOr(new ShiftLeft(bestN, new Constant(32L)), maxLen)],
             [n, i, len, maxLen, bestN])));
 
-        var prog = LowerWith(body);
-        prog.EnsureCompiled();
-        {
-            using var file = File.OpenWrite("/tmp/poly_collatz.txt");
-            using var writer = new StreamWriter(file);
-            prog.Dump(writer);
-        }
-        using var state = new VmState { Program = prog, Trace = _traceWriter };
+        using var state = CompileState(body);
         Vm.Execute(state);
         long packed = (long)state.Stack.Pop();
         long bestNResult = packed >> 32;
         long maxLenResult = packed & 0xFFFFFFFFL;
-        File.AppendAllText("/tmp/poly_collatz.txt",
-            $"Collatz({limit}) = {bestNResult}:{maxLenResult}\n");
         await Assert.That(bestNResult).IsEqualTo(6171L);
         await Assert.That(maxLenResult).IsEqualTo(261L);
     }

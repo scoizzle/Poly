@@ -4,7 +4,7 @@
 // the interpretive VM switch.  The VM now runs exclusively on the
 // compiled µop path.
 //
-// See MicroOperationTests.cs for µop-level tests.
+// See InstructionOpTests.cs for µop-level tests.
 //
 // Full-pipeline tests (AST → µops → execution) live in
 // LoweringTests.cs once lowering is ported to emit µops.

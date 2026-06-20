@@ -1,0 +1,41 @@
+using System.Linq.Expressions;
+using System.Reflection;
+
+using static System.Linq.Expressions.Expression;
+
+namespace Poly.Interpretation.Vm.Instructions;
+
+public sealed record CallClosure(NodeId? AstSource = null) : Instruction(AstSource) {
+    public override int PopCount => 2;
+    public override int PushCount => 1;
+
+    private static readonly MethodInfo HandleCallClosureMethod =
+        Ref<VmState>.Method(s => Vm.HandleCallClosure(s));
+
+    public override Expression? ToExpression(CompilationContext ctx) {
+        var state = ctx.State;
+        var slots = ctx.RawSlots;
+        var sp = Property(Property(state, "Stack"), "StackPointer");
+        var regs = ctx.Registers;
+
+        var payload = ctx.ResolveValue(this, 0);
+        var closure = ctx.ResolveValue(this, 1);
+
+        var body = new List<Expression>();
+        body.Add(Assign(ArrayAccess(slots, sp), closure));
+        body.Add(Call(Property(state, "Stack"), "SetStackPointer", null, Add(sp, Constant(1))));
+        body.Add(Assign(ArrayAccess(slots, sp), payload));
+        body.Add(Call(Property(state, "Stack"), "SetStackPointer", null, Add(sp, Constant(1))));
+
+        body.Add(Call.CtxPushRegisters(ctx));
+        body.Add(Assign(Property(state, "ProgramCounter"), Constant(ctx.CurrentLabelIndex)));
+        body.Add(Call(HandleCallClosureMethod, state));
+        body.Add(Call.CtxPopRegisters(ctx));
+
+        var rv = ctx.ValueSlot(ctx.CurrentLabelIndex);
+        body.Add(Assign(rv, ArrayAccess(slots,
+            Subtract(Property(Property(state, "Stack"), "StackPointer"), Constant(1)))));
+        body.Add(Goto(ctx.EntryLabel));
+        return Block(body);
+    }
+}

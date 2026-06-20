@@ -36,7 +36,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Remove="Interpretation/VmDebugger.cs" />
+
     </ItemGroup>
 
     <ItemGroup>

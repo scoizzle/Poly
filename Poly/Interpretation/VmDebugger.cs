@@ -1,34 +1,38 @@
-using Poly.Interpretation.VirtualMachine;
+using Poly.Interpretation.Vm;
+using Poly.Interpretation.Vm.Instructions;
+using Poly.Syntax;
 
 namespace Poly.Interpretation;
 
-/// <summary>PC-level debugger for the compiled µop VM.  Manages breakpoints
-/// and stepping without any AST dependency — all operations are at the µop
-/// PC level.  AST-level mapping (NodeId → PCs) is handled externally via
-/// <see cref="Bytecode.NodeRanges"/>.</summary>
+/// <summary>PC-level debugger for the compiled VM.  Works with programs
+/// that have <see cref="BreakpointCheck"/> instructions (inserted by
+/// lowering at Syntax Node boundaries).  The delegate runs once per
+/// <see cref="Vm.Execute"/> call — breakpoints are checked inline
+/// by BreakpointCheck instructions.</summary>
 public sealed class VmDebugger {
+    public VmProgram Program { get; }
     private readonly VmState _state;
-    private readonly Bytecode _program;
-
-    /// <summary>Breakpoints set by the user (not one-shot step breakpoints).</summary>
     private readonly HashSet<int> _userBreakpoints = [];
-
-    /// <summary>One-shot breakpoints set internally by step operations.</summary>
     private readonly HashSet<int> _stepBreakpoints = [];
 
-    public VmDebugger(VmState state, Bytecode program) {
+    public VmDebugger(VmState state, VmProgram program) {
         _state = state;
-        _program = program;
+        Program = program;
     }
 
-    public bool IsSuspended => _state.IsSuspended;
-    public int SuspendedPC => _state.SavedPC;
+    public bool IsSuspended => _state.Status == InterpreterStatus.Suspended;
+    public int SuspendedPC => _state.ProgramCounter;
 
-    // ── Breakpoint management ──
+    public bool HasBreakpoint(int pc) => _userBreakpoints.Contains(pc);
 
     public void SetBreakpoint(int pc) {
         _userBreakpoints.Add(pc);
         SyncBreakpoints();
+    }
+
+    public void SetBreakpoint(NodeId nodeId) {
+        if (Program.SourceRanges.TryGetValue(nodeId, out var range))
+            SetBreakpoint(range.FirstProgramCounter);
     }
 
     public void ClearBreakpoint(int pc) {
@@ -38,131 +42,90 @@ public sealed class VmDebugger {
 
     public void ClearAllBreakpoints() {
         _userBreakpoints.Clear();
+        _stepBreakpoints.Clear();
         SyncBreakpoints();
     }
 
-    public bool HasBreakpoint(int pc) =>
-        _userBreakpoints.Contains(pc);
+    // ── Execution control ──
 
-    // ── Stepping ──
-
-    /// <summary>Step to the next µop (regardless of node boundary).</summary>
+    /// <summary>Step to the next µop (next BreakpointCheck instruction).</summary>
     public void StepInto() {
         if (!IsSuspended) return;
-        // Run to the next µop
-        int nextPc = _state.SavedPC + 1;
-        if (nextPc < _program.CodeLength) {
-            _stepBreakpoints.Add(nextPc);
-            SyncBreakpoints();
-        }
-        Resume();
-    }
-
-    /// <summary>Step to the end of the current AST node (or the next µop
-    /// if this is the last µop of the current node).</summary>
-    public void StepOver() {
-        if (!IsSuspended) return;
-        // Find the end of the node that contains the current PC
-        int currentPc = _state.SavedPC;
-        int targetPc = FindNextNodeBoundary(currentPc);
-        _stepBreakpoints.Add(targetPc);
+        _stepBreakpoints.Add(_state.ProgramCounter + 1);  // next µop
         SyncBreakpoints();
         Resume();
     }
 
-    /// <summary>Run until the current function returns.</summary>
-    public void StepOut() {
+    /// <summary>Step to the end of the current source node.</summary>
+    public void StepOver() {
         if (!IsSuspended) return;
-        // Read the return PC from the frame metadata at Slot(FB + ArgSlots)
-        int fb = _state.FrameBase;
-        int argSlots = _state.CachedArgSlots;
-        if (fb >= 0) {
-            long packed = _state.Stack.RawSlots[fb + argSlots];
-            int retPc = (int)(packed >> 32);
-            if (retPc < _program.CodeLength) {
-                _stepBreakpoints.Add(retPc);
-                SyncBreakpoints();
-            }
-        }
+        int target = FindNextNodeBoundary(_state.ProgramCounter);
+        _stepBreakpoints.Add(target);
+        SyncBreakpoints();
         Resume();
     }
 
-    /// <summary>Resume execution from a suspended state.</summary>
     public void Resume() {
         _state.Status = InterpreterStatus.Running;
     }
 
+    /// <summary>Execute the program — delegate checks breakpoints
+    /// inline via <see cref="BreakpointCheck"/> and suspends if hit.</summary>
+    public InterpreterResult Execute() {
+        _state.Status = InterpreterStatus.Running;
+        Program.Delegate(_state);
+        if (_state.Status == InterpreterStatus.Suspended)
+            return InterpreterResult.Suspend();
+        int sp = _state.Stack.StackPointer;
+        if (sp <= 0) return InterpreterResult.Void;
+        long raw = _state.Stack.RawSlots[sp - 1];
+        _state.Status = InterpreterStatus.Completed;
+        return InterpreterResult.FromValue(raw);
+    }
+
     // ── State inspection ──
 
-    /// <summary>Read a local variable from the current frame by local index.</summary>
     public long ReadLocal(int localIndex) {
-        int slot = _state.FrameBase + _state.CachedArgSlots + 1 + localIndex;
-        return _state.Stack.RawSlots[slot];
+        return _state.Stack.RawSlots[_state.FrameBase + _state.CachedArgSlots + 1 + localIndex];
     }
 
-    /// <summary>Read a function argument from the current frame by argument index.</summary>
     public long ReadArg(int argIndex) {
-        int slot = _state.FrameBase + argIndex;
-        return _state.Stack.RawSlots[slot];
+        return _state.Stack.RawSlots[_state.FrameBase + argIndex];
     }
 
-    /// <summary>Read the current stack value at the given depth (0 = TOS).</summary>
     public long PeekStack(int depth = 0) {
-        int sp = _state.Stack.SP;
-        return _state.Stack.RawSlots[sp - 1 - depth];
+        return _state.Stack.RawSlots[_state.Stack.StackPointer - 1 - depth];
     }
 
-    /// <summary>Get the current stack height (number of values).</summary>
-    public int StackHeight => _state.Stack.SP;
+    public int StackHeight => _state.Stack.StackPointer;
 
-    /// <summary>Read the µop at the given PC.</summary>
     public Instruction? GetInstruction(int pc) {
-        if (pc < 0 || pc >= _program.CodeLength) return null;
-        return _program.Instructions[pc];
+        var instructions = Program.Instructions;
+        if (pc < 0 || pc >= instructions.Count) return null;
+        return instructions[pc];
     }
 
-    /// <summary>Get the current µop (at the suspended PC).</summary>
-    public Instruction? CurrentInstruction => GetInstruction(_state.SavedPC);
-
-    /// <summary>The program being debugged.</summary>
-    public Bytecode Program => _program;
-
-    /// <summary>The VM state (stack, heap, PC, etc.).</summary>
+    public Instruction? CurrentInstruction => GetInstruction(SuspendedPC);
     public VmState State => _state;
 
     // ── Internals ──
 
-    /// <summary>Sync the combined breakpoint set to VmState.</summary>
     private void SyncBreakpoints() {
-        if (_userBreakpoints.Count == 0 && _stepBreakpoints.Count == 0) {
-            _state.BreakpointPCs = null;
-            return;
-        }
         var combined = new HashSet<int>(_userBreakpoints);
         combined.UnionWith(_stepBreakpoints);
-        _state.BreakpointPCs = combined;
+        _state.Breakpoints = combined.Count > 0 ? combined.ToArray() : null;
     }
 
-    /// <summary>Find the first µop index that belongs to a different
-    /// source node than the one at <paramref name="pc"/>, or the next
-    /// µop if <paramref name="pc"/> is the last µop of its node.</summary>
     private int FindNextNodeBoundary(int pc) {
-        if (_program.NodeRanges is null)
-            return Math.Min(pc + 1, _program.CodeLength - 1);
-
-        // Find which node contains this PC
         NodeId? currentNodeId = null;
-        foreach (var (nodeId, (start, end)) in _program.NodeRanges) {
-            if (pc >= start && pc < end) {
-                currentNodeId = nodeId;
+        foreach (var (id, range) in Program.SourceRanges) {
+            if (pc >= range.FirstProgramCounter && pc <= range.LastProgramCounterInclusive) {
+                currentNodeId = id;
                 break;
             }
         }
-        if (currentNodeId is null)
-            return Math.Min(pc + 1, _program.CodeLength - 1);
-
-        // End of this node is the boundary
-        var range = _program.NodeRanges[currentNodeId.Value];
-        return Math.Min(range.EndPC, _program.CodeLength - 1);
+        if (currentNodeId is null || !Program.SourceRanges.TryGetValue(currentNodeId.Value, out var r))
+            return Math.Min(pc + 1, Program.Instructions.Count - 1);
+        return Math.Min(r.LastProgramCounterInclusive, Program.Instructions.Count - 1);
     }
 }

@@ -71,7 +71,7 @@ public static class ProgramCompiler {
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
 
-        return new VmProgram(del, new Dictionary<NodeId, SourceRange>(), [], null, null, maxActiveLocalDepth);
+        return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], null, null, maxActiveLocalDepth);
     }
 
     private static void ResolveProducers(List<Instruction> instructions) {

@@ -6,6 +6,6 @@ namespace Poly.Syntax.Nodes;
 /// <see cref="TypeDefinitionReference"/>).</param>
 /// <param name="Length">The length expression.</param>
 public sealed record NewArray(Node ElementType, Node Length) : Node {
-    public override IEnumerable<Node?> Children => [ElementType, Length];
+    public override IEnumerable<Node?> Children => [Length, ElementType];
     public override string ToString() => $"new {ElementType}[{Length}]";
 }

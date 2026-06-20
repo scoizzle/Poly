@@ -9,7 +9,7 @@ namespace Poly.Syntax.Nodes;
 /// Loop statements are executed for side effects rather than producing values.
 /// </remarks>
 public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment, Node Body) : Operator {
-    public override IEnumerable<Node?> Children => [Initializer, Condition, Increment, Body];
+    public override IEnumerable<Node?> Children => [Initializer, Condition, Body, Increment];
 
     /// <inheritdoc />
     public override string ToString() {

@@ -31,3 +31,11 @@ public sealed record ConditionalLabelMetadata(int FalseLabel, int EndLabel) : IA
 /// <param name="ContLabel">The continue target of the enclosing loop.</param>
 /// <param name="EndLabel">The exit target of the enclosing loop.</param>
 internal sealed record LoopScope(int ContLabel, int EndLabel);
+
+/// <summary>Resolved label target for a BreakStatement.</summary>
+/// <param name="TargetLabel">The EndLabel of the nearest enclosing loop.</param>
+public sealed record BreakTargetMetadata(int TargetLabel) : IAnalysisMetadata;
+
+/// <summary>Resolved label target for a ContinueStatement.</summary>
+/// <param name="TargetLabel">The ContLabel of the nearest enclosing loop.</param>
+public sealed record ContinueTargetMetadata(int TargetLabel) : IAnalysisMetadata;

@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// Type information is resolved by semantic analysis passes (INodeAnalyzer implementations).
 /// </remarks>
 public sealed record Assignment(Node Destination, Node Value) : Operator {
-    public override IEnumerable<Node?> Children => [Destination, Value];
+    public override IEnumerable<Node?> Children => [Value, Destination];
 
     /// <inheritdoc />
     public override string ToString() => $"{Destination} = {Value}";

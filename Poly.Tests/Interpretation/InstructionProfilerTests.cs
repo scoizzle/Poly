@@ -2,6 +2,7 @@ using System.IO;
 
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
+using Poly.Interpretation.Analysis.LoweringPrep;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Syntax.Analysis;
@@ -16,6 +17,8 @@ public class InstructionProfilerTests {
         var result = new AnalyzerBuilder()
             .UseTypeAndMemberResolver().UseConstantFolding().UseSideEffectAnalysis()
             .UseThisReferenceContext().UseControlFlowAnalysis().UseVariableScopeValidator()
+            .UseLoweringPreparation()
+            .UseUopGeneration()
             .Build().Analyze(node);
         return Lowering.Lower(node, result);
     }

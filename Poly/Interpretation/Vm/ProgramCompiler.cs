@@ -76,82 +76,107 @@ public static class ProgramCompiler {
 
     private static void ResolveProducers(List<Instruction> instructions) {
         int n = instructions.Count;
-        // Entry stacks: snapshot of producer stack at each µop's start
-        var entryStacks = new Stack<int>[n];
-        // Branch sources: for Jump/BranchIfFalse, record (targetPc, stackAtBranch)
-        var branchSaves = new List<(int TargetPc, int SrcPc, int[] Stack)>();
 
-        var producerStack = new Stack<int>();
+        // Step 1: Build predecessor graph
+        var predecessors = new List<int>[n];
+        for (int i = 0; i < n; i++) predecessors[i] = [];
 
         for (int pc = 0; pc < n; pc++) {
             var op = instructions[pc];
-            // Save entry stack
-            entryStacks[pc] = producerStack.Count > 0
-                ? new Stack<int>(producerStack.Reverse())
-                : new Stack<int>();
-
-            int popCount = op.PopCount;
-
-            // Record branch sources (stack BEFORE consumption)
-            if (op is Jump jmp) {
-                branchSaves.Add((jmp.Target, pc, producerStack.Reverse().ToArray()));
+            if (pc + 1 < n && op is not (Jump or ReturnOp or ReturnFromCall))
+                predecessors[pc + 1].Add(pc);
+            if (op is Jump jmp && jmp.Target >= 0 && jmp.Target < n)
+                predecessors[jmp.Target].Add(pc);
+            if (op is BranchIfFalse bif) {
+                if (bif.Target >= 0 && bif.Target < n)
+                    predecessors[bif.Target].Add(pc);
+                if (pc + 1 < n && !predecessors[pc + 1].Contains(pc))
+                    predecessors[pc + 1].Add(pc);
             }
-            else if (op is BranchIfFalse bif) {
-                branchSaves.Add((bif.Target, pc, producerStack.Reverse().ToArray()));
-                if (pc + 1 < n)
-                    branchSaves.Add((pc + 1, pc, producerStack.Reverse().ToArray()));
-            }
-
-            // Consume
-            var consumed = new int[popCount];
-            for (int i = popCount - 1; i >= 0 && producerStack.Count > 0; i--)
-                consumed[i] = producerStack.Pop();
-            if (popCount > 0)
-                instructions[pc] = op with { ConsumedFromPcs = consumed };
-
-            // Produce
-            for (int push = 0; push < op.PushCount; push++)
-                producerStack.Push(pc);
         }
 
-        // Pass 2: at each µop that has a branch source targeting it,
-        // compare the linear entry stack with the branch source stack.
-        // Where they differ after consuming PopCount values, set φ.
-        var targetsByPc = branchSaves.GroupBy(s => s.TargetPc)
-            .ToDictionary(g => g.Key, g => g.ToList());
+        // Step 2: For each µop, compute exit stacks per predecessor.
+        // exitStacks[predPc] = stack after processing µop at predPc
+        var exitStacks = new int[n][];
 
         for (int pc = 0; pc < n; pc++) {
-            if (!targetsByPc.TryGetValue(pc, out var incoming)) continue;
             var op = instructions[pc];
+            var preds = predecessors[pc];
             int popCount = op.PopCount;
-            if (popCount == 0 || op.ConsumedFromPcs is null) continue;
+            int pushCount = op.PushCount;
 
-            var linearStack = entryStacks[pc];
-            var primary = op.ConsumedFromPcs;
+            int[]? entryStack = null;
 
-            // Check saved stacks in reverse order (most recent branch first).
-            // Use the LAST differing stack for φ — it represents the most
-            // specific predecessor.
-            (int SrcPc, int[] Stack)? best = null;
-            for (int j = incoming.Count - 1; j >= 0; j--) {
-                var (_, srcPc, stackArr) = incoming[j];
-                var altStack = new Stack<int>(stackArr);
-                var alt = new int[popCount];
-                bool consistent = true;
-                for (int i = popCount - 1; i >= 0; i--) {
-                    int val = altStack.Count > 0 ? altStack.Pop() : 0;
-                    if (val != primary[i]) consistent = false;
-                    alt[i] = val;
+            if (preds.Count == 0) {
+                // No predecessors — entry point
+                entryStack = [];
+            }
+            else {
+                // Use the last predecessor's exit stack (fallthrough path)
+                entryStack = exitStacks[preds[^1]] ?? [];
+            }
+
+            // Consume values from the entry stack
+            var consumed = new int[popCount];
+            int entryDepth = entryStack.Length;
+            int toPop = Math.Min(popCount, entryDepth);
+            for (int i = 0; i < toPop; i++)
+                consumed[popCount - 1 - i] = entryStack[entryDepth - 1 - i];
+
+            // φ detection: compare consumed values across all predecessors
+            if (popCount > 0 && preds.Count >= 2) {
+                // Check each predecessor's entry stack
+                bool needsPhi = false;
+                int phiSrcPc = -1;
+                int[]? phiAlt = null;
+
+                foreach (var predPc in preds) {
+                    var predExit = exitStacks[predPc];
+                    if (predExit is null) continue;
+
+                    int predDepth = predExit.Length;
+                    int predToPop = Math.Min(popCount, predDepth);
+                    var predConsumed = new int[popCount];
+                    for (int i = 0; i < predToPop; i++)
+                        predConsumed[popCount - 1 - i] = predExit[predDepth - 1 - i];
+
+                    bool differs = false;
+                    for (int i = 0; i < popCount; i++)
+                        if (consumed[i] != predConsumed[i]) { differs = true; break; }
+
+                    if (differs) {
+                        needsPhi = true;
+                        phiSrcPc = predPc;
+                        phiAlt = predConsumed;
+                        break;
+                    }
                 }
-                if (!consistent) { best = (srcPc, alt); break; }
+
+                if (needsPhi && phiAlt is not null) {
+                    instructions[pc] = op with {
+                        ConsumedFromPcs = consumed,
+                        PhiSourcePcs = Enumerable.Repeat(phiSrcPc, popCount).ToArray(),
+                        PhiAltPcs = phiAlt
+                    };
+                }
+                else {
+                    instructions[pc] = op with { ConsumedFromPcs = consumed };
+                }
             }
-            if (best is { } phi) {
-                instructions[pc] = op with {
-                    ConsumedFromPcs = primary,
-                    PhiSourcePcs = Enumerable.Repeat(phi.SrcPc, popCount).ToArray(),
-                    PhiAltPcs = phi.Stack
-                };
+            else if (popCount > 0) {
+                instructions[pc] = op with { ConsumedFromPcs = consumed };
             }
+
+            // Compute exit stack: entry stack without consumed values, plus new producers
+            int copyCount = Math.Max(0, entryDepth - popCount);
+            int newDepth = copyCount + pushCount;
+            var exit = new int[newDepth];
+            for (int i = 0; i < copyCount; i++)
+                exit[i] = entryStack[i];
+            for (int i = 0; i < pushCount; i++)
+                exit[copyCount + i] = pc;
+
+            exitStacks[pc] = exit;
         }
     }
 }

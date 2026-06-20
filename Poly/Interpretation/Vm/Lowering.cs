@@ -313,25 +313,38 @@ public static class Lowering {
     private static void EmitInvoke(Invoke inv, LowerCtx ctx) {
         var resolved = ctx.Analysis.GetResolvedMember(inv);
         if (resolved is ClrMethod clrMethod) {
-            // CLR method call — push args, then CallExternal
+            // Direct CLR method call — no call site indirection
             foreach (var arg in inv.Arguments)
                 EmitNode(arg, ctx);
-            ctx.Instructions.Add(new CallExternal(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
+            bool isStatic = clrMethod.IsStatic;
+            int argCount = clrMethod.MethodInfo.GetParameters().Length + (isStatic ? 0 : 1);
+            ctx.Instructions.Add(new CallExternalDirect(
+                clrMethod.MethodInfo, argCount, isStatic) { SourceNodeId = inv.Id });
             return;
         }
         if (resolved is ClrConstructor clrCtor) {
-            // CLR constructor call
+            // CLR constructor call — use ConstructorInfo.Invoke
             foreach (var arg in inv.Arguments)
                 EmitNode(arg, ctx);
+            // Constructors return void in the VM — we emit them via MemberInit
             ctx.Instructions.Add(new CallExternal(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
             return;
         }
         if (resolved is ClrTypeProperty clrProp) {
-            // Property access — call the getter
-            EmitNode(inv.Delegate is Member m ? m.Value : new Constant(0L), ctx);
-            foreach (var arg in inv.Arguments)
-                EmitNode(arg, ctx);
-            ctx.Instructions.Add(new CallExternal(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
+            // Property getter access
+            bool isStatic = clrProp.IsStatic;
+            var getter = clrProp.PropertyInfo.GetGetMethod(nonPublic: true);
+            if (getter is not null) {
+                if (!isStatic)
+                    EmitNode(inv.Delegate is Member m ? m.Value : new Constant(0L), ctx);
+                int argCount = getter.GetParameters().Length + (isStatic ? 0 : 1);
+                ctx.Instructions.Add(new CallExternalDirect(
+                    getter, argCount, isStatic) { SourceNodeId = inv.Id });
+                return;
+            }
+            // Fallback
+            EmitNode(inv.Delegate is Member m2 ? m2.Value : new Constant(0L), ctx);
+            ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = inv.Id });
             return;
         }
 
@@ -375,14 +388,22 @@ public static class Lowering {
     private static void EmitMember(Member m, LowerCtx ctx) {
         var resolved = ctx.Analysis.GetResolvedMember(m);
         if (resolved is ClrTypeProperty property) {
-            // Property getter — emit instance and call
-            EmitNode(m.Value, ctx);
-            ctx.Instructions.Add(new CallExternal(0, 1) { SourceNodeId = m.Id });
-            return;
+            var getter = property.PropertyInfo.GetGetMethod(nonPublic: true);
+            if (getter is not null) {
+                bool isStatic = property.IsStatic;
+                if (!isStatic) EmitNode(m.Value, ctx);
+                int argCount = getter.GetParameters().Length + (isStatic ? 0 : 1);
+                ctx.Instructions.Add(new CallExternalDirect(
+                    getter, argCount, isStatic) { SourceNodeId = m.Id });
+                return;
+            }
         }
-        if (resolved is ClrMethod getter) {
-            EmitNode(m.Value, ctx);
-            ctx.Instructions.Add(new CallExternal(0, 1) { SourceNodeId = m.Id });
+        if (resolved is ClrMethod clrGetter) {
+            bool isStatic = clrGetter.IsStatic;
+            if (!isStatic) EmitNode(m.Value, ctx);
+            int argCount = clrGetter.MethodInfo.GetParameters().Length + (isStatic ? 0 : 1);
+            ctx.Instructions.Add(new CallExternalDirect(
+                clrGetter.MethodInfo, argCount, isStatic) { SourceNodeId = m.Id });
             return;
         }
         // Fallback: push 0

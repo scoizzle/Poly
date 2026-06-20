@@ -130,9 +130,9 @@ public sealed class LoweringPrepIntegrationTests {
         var labels = MD<WhileLoopLabelMetadata>(r, loop);
         var uops = MD<LoweredUopMetadata>(r, loop)!.Uops;
 
-        // Find BranchIfFalse and Jump, verify their targets = EndLabel and ContLabel
-        var bif = (BranchIfFalse)uops[1];
-        var jump = (Jump)uops[^1];
+        // Find BranchIfFalse and Jump in the fragment (LabelMarker at 0, condition at 1, Bif at 2)
+        var bif = (BranchIfFalse)uops[2];
+        var jump = (Jump)uops[^2];  // second-to-last (last is LabelMarker(end))
 
         await Assert.That(bif.Target).IsEqualTo(labels!.EndLabel);
         await Assert.That(jump.Target).IsEqualTo(labels.ContLabel);
@@ -192,8 +192,8 @@ public sealed class LoweringPrepIntegrationTests {
         var labels = MD<DoWhileLoopLabelMetadata>(r, dwl);
         var uops = MD<LoweredUopMetadata>(r, dwl)!.Uops;
 
-        var bif = (BranchIfFalse)uops[3];
-        var jump = (Jump)uops[4];
+        var bif = (BranchIfFalse)uops[4];  // LabelMarker at 0, so shift +1
+        var jump = (Jump)uops[5];
 
         await Assert.That(bif.Target).IsEqualTo(labels!.EndLabel);
         await Assert.That(jump.Target).IsEqualTo(labels.ContLabel);
@@ -225,9 +225,9 @@ public sealed class LoweringPrepIntegrationTests {
         await Assert.That(outerLabels.EndLabel).IsNotEqualTo(innerLabels.EndLabel);
 
         // Inner loop's µops are embedded in outer loop's body
-        // Outer: condition(1), BranchIfFalse(outerEnd), body(inner uops), PopOp, Jump(outerCont)
-        // Inner uops should appear in the outer uops at position 2..(2+innerCount-1)
-        int innerStart = 2;
+        // Outer: LabelMarker(cont), condition(1), BranchIfFalse(end), body(inner 7 uops), PopOp, Jump(cont), LabelMarker(end)
+        // Inner uops appear at position 3..(3+innerCount-1)
+        int innerStart = 3;
         for (int i = 0; i < innerUops.Count; i++)
             await Assert.That(outerUops[innerStart + i]).IsSameReferenceAs(innerUops[i]);
     }
@@ -253,8 +253,8 @@ public sealed class LoweringPrepIntegrationTests {
         await Assert.That(loopLabels).IsNotNull();
         await Assert.That(ifLabels).IsNotNull();
 
-        // The If's uops are embedded in the loop body (starting at position 2)
-        int ifStart = 2;
+        // The If's uops are embedded in the loop body (LabelMarker + cond + Bif at positions 0-2, body at 3)
+        int ifStart = 3;
         for (int i = 0; i < ifUops.Count; i++)
             await Assert.That(loopUops[ifStart + i]).IsSameReferenceAs(ifUops[i]);
     }

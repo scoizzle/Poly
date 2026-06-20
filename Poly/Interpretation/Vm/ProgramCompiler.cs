@@ -11,7 +11,10 @@ public enum CompilationMode { Normal, Profiling, Debug }
 public static class ProgramCompiler {
     public static VmProgram Compile(LoweringResult input, int maxActiveLocalDepth = 32, CompilationMode mode = CompilationMode.Normal) {
         var instructions = input.Instructions;
-        ResolveProducers(instructions);
+        // Only run producer tracking when the new lowering-prep pipeline
+        // didn't already compute ConsumedFromPcs.
+        if (instructions.Count > 0 && instructions[0].ConsumedFromPcs is null)
+            ResolveProducers(instructions);
 
         var ctx = new CompilationContext();
         var body = new List<Expression>();

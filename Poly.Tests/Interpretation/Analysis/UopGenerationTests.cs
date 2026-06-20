@@ -232,22 +232,22 @@ public sealed class UopGenerationTests {
     public async Task IfWithElse_EmitsBranchIfFalseAndJump() {
         var iff = new IfStatement(new Constant(1L), new Constant(10L), new Constant(20L));
         var uops = GetUops(iff);
-        // Condition (1), BranchIfFalse(else), then body (1), PopOp, Jump(end), else body (1), PopOp
+        // Condition (1), BranchIfFalse(else), then body (1), PopOp, Jump(end), LabelMarker(else), else body (1), PopOp, LabelMarker(end)
         await Assert.That(uops[0]).IsTypeOf<LoadConst>();
         await Assert.That(uops[1]).IsTypeOf<BranchIfFalse>();
         await Assert.That(uops[2]).IsTypeOf<LoadConst>();  // then = 10
         await Assert.That(uops[3]).IsTypeOf<PopOp>();
         await Assert.That(uops[4]).IsTypeOf<Jump>();
-        await Assert.That(uops[5]).IsTypeOf<LoadConst>();  // else = 20
-        await Assert.That(uops[6]).IsTypeOf<PopOp>();
+        await Assert.That(uops[6]).IsTypeOf<LoadConst>();  // else = 20 (after LabelMarker at 5)
+        await Assert.That(uops[7]).IsTypeOf<PopOp>();
     }
 
     [Test]
     public async Task IfWithoutElse_EmitsBranchIfFalseOnly() {
         var iff = new IfStatement(new Constant(1L), new Constant(10L));
         var uops = GetUops(iff);
-        // Condition (1), BranchIfFalse(end), then body (1), PopOp
-        await Assert.That(uops).Count().IsEqualTo(4);
+        // Condition (1), BranchIfFalse(end), then body (1), PopOp, LabelMarker(end)
+        await Assert.That(uops).Count().IsEqualTo(5);
         await Assert.That(uops[1]).IsTypeOf<BranchIfFalse>();
         await Assert.That(uops[2]).IsTypeOf<LoadConst>();
         await Assert.That(uops[3]).IsTypeOf<PopOp>();
@@ -259,13 +259,13 @@ public sealed class UopGenerationTests {
     public async Task WhileLoop_EmitsConditionBranchBodyPopJump() {
         var wl = new WhileLoop(new Constant(1L), new Constant(0L));
         var uops = GetUops(wl);
-        // condition(1), BranchIfFalse(end), body(1), PopOp, Jump(cont)
-        await Assert.That(uops).Count().IsEqualTo(5);
-        await Assert.That(uops[0]).IsTypeOf<LoadConst>();       // condition
-        await Assert.That(uops[1]).IsTypeOf<BranchIfFalse>();   // branch
-        await Assert.That(uops[2]).IsTypeOf<LoadConst>();       // body
-        await Assert.That(uops[3]).IsTypeOf<PopOp>();
-        await Assert.That(uops[4]).IsTypeOf<Jump>();
+        // LabelMarker(cont), condition(1), BranchIfFalse(end), body(1), PopOp, Jump(cont), LabelMarker(end)
+        await Assert.That(uops).Count().IsEqualTo(7);
+        await Assert.That(uops[1]).IsTypeOf<LoadConst>();       // condition
+        await Assert.That(uops[2]).IsTypeOf<BranchIfFalse>();   // branch
+        await Assert.That(uops[3]).IsTypeOf<LoadConst>();       // body
+        await Assert.That(uops[4]).IsTypeOf<PopOp>();
+        await Assert.That(uops[5]).IsTypeOf<Jump>();
     }
 
     // ── DoWhileLoop ────────────────────────────────────────────────────────
@@ -274,12 +274,13 @@ public sealed class UopGenerationTests {
     public async Task DoWhileLoop_EmitsBodyPopConditionBranchJump() {
         var dwl = new DoWhileLoop(new Constant(0L), new Constant(1L));
         var uops = GetUops(dwl);
-        await Assert.That(uops).Count().IsEqualTo(5);
-        await Assert.That(uops[0]).IsTypeOf<LoadConst>();       // body
-        await Assert.That(uops[1]).IsTypeOf<PopOp>();
-        await Assert.That(uops[2]).IsTypeOf<LoadConst>();       // condition
-        await Assert.That(uops[3]).IsTypeOf<BranchIfFalse>();
-        await Assert.That(uops[4]).IsTypeOf<Jump>();
+        // LabelMarker(cont), body(1), PopOp, condition(1), BranchIfFalse(end), Jump(cont), LabelMarker(end)
+        await Assert.That(uops).Count().IsEqualTo(7);
+        await Assert.That(uops[1]).IsTypeOf<LoadConst>();       // body
+        await Assert.That(uops[2]).IsTypeOf<PopOp>();
+        await Assert.That(uops[3]).IsTypeOf<LoadConst>();       // condition
+        await Assert.That(uops[4]).IsTypeOf<BranchIfFalse>();
+        await Assert.That(uops[5]).IsTypeOf<Jump>();
     }
 
     // ── ForLoop ────────────────────────────────────────────────────────────
@@ -305,10 +306,11 @@ public sealed class UopGenerationTests {
     public async Task Conditional_EmitsBranchAndJump() {
         var cond = new Conditional(new Constant(1L), new Constant(10L), new Constant(20L));
         var uops = GetUops(cond);
-        // cond(1), BranchIfFalse(false), ifTrue(1), Jump(end), ifFalse(1)
-        await Assert.That(uops).Count().IsEqualTo(5);
+        // cond(1), BranchIfFalse(false), ifTrue(1), Jump(end), LabelMarker(false), ifFalse(1), LabelMarker(end)
+        await Assert.That(uops).Count().IsEqualTo(7);
         await Assert.That(uops[1]).IsTypeOf<BranchIfFalse>();
         await Assert.That(uops[3]).IsTypeOf<Jump>();
+        await Assert.That(uops[5]).IsTypeOf<LoadConst>();       // ifFalse
     }
 
     // ── Return ─────────────────────────────────────────────────────────────

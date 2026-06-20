@@ -311,13 +311,16 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
             uops.AddRange(GetChildUops(context, iff.ThenBranch));
             uops.Add(new PopOp { SourceNodeId = iff.Id });
             uops.Add(new Jump(labels.EndLabel) { SourceNodeId = iff.Id });
+            uops.Add(new LabelMarker(elseLabel) { SourceNodeId = iff.Id });
             uops.AddRange(GetChildUops(context, iff.ElseBranch));
             uops.Add(new PopOp { SourceNodeId = iff.Id });
+            uops.Add(new LabelMarker(labels.EndLabel) { SourceNodeId = iff.Id });
         }
         else {
             uops.Add(new BranchIfFalse(labels.EndLabel) { SourceNodeId = iff.Id });
             uops.AddRange(GetChildUops(context, iff.ThenBranch));
             uops.Add(new PopOp { SourceNodeId = iff.Id });
+            uops.Add(new LabelMarker(labels.EndLabel) { SourceNodeId = iff.Id });
         }
 
         return uops;
@@ -330,11 +333,13 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         if (labels is null) return [new Nop { SourceNodeId = wl.Id }];
 
         var uops = new List<Instruction>();
+        uops.Add(new LabelMarker(labels.ContLabel) { SourceNodeId = wl.Id });
         uops.AddRange(GetChildUops(context, wl.Condition));
         uops.Add(new BranchIfFalse(labels.EndLabel) { SourceNodeId = wl.Id });
         uops.AddRange(GetChildUops(context, wl.Body));
         uops.Add(new PopOp { SourceNodeId = wl.Id });
         uops.Add(new Jump(labels.ContLabel) { SourceNodeId = wl.Id });
+        uops.Add(new LabelMarker(labels.EndLabel) { SourceNodeId = wl.Id });
         return uops;
     }
 
@@ -345,11 +350,13 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         if (labels is null) return [new Nop { SourceNodeId = dwl.Id }];
 
         var uops = new List<Instruction>();
+        uops.Add(new LabelMarker(labels.ContLabel) { SourceNodeId = dwl.Id });
         uops.AddRange(GetChildUops(context, dwl.Body));
         uops.Add(new PopOp { SourceNodeId = dwl.Id });
         uops.AddRange(GetChildUops(context, dwl.Condition));
         uops.Add(new BranchIfFalse(labels.EndLabel) { SourceNodeId = dwl.Id });
         uops.Add(new Jump(labels.ContLabel) { SourceNodeId = dwl.Id });
+        uops.Add(new LabelMarker(labels.EndLabel) { SourceNodeId = dwl.Id });
         return uops;
     }
 
@@ -389,9 +396,9 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         uops.Add(new BranchIfFalse(labels.FalseLabel) { SourceNodeId = cond.Id });
         uops.AddRange(GetChildUops(context, cond.IfTrue));
         uops.Add(new Jump(labels.EndLabel) { SourceNodeId = cond.Id });
-        // falseLabel position
+        uops.Add(new LabelMarker(labels.FalseLabel) { SourceNodeId = cond.Id });
         uops.AddRange(GetChildUops(context, cond.IfFalse));
-        // endLabel position
+        uops.Add(new LabelMarker(labels.EndLabel) { SourceNodeId = cond.Id });
         return uops;
     }
 

@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.LoweringPrep;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm.Instructions;
 using Poly.Introspection;
@@ -11,13 +12,106 @@ namespace Poly.Interpretation.Vm;
 /// <summary>Pure AST → µop transformation. Uses analysis metadata for
 /// variable scope, constant folding, side effects, and control flow.</summary>
 public static class Lowering {
+    // ── New assembly path ──────────────────────────────────────────────
+    // Reads per-node LoweredUopMetadata, flattens, resolves labels, computes
+    // ConsumedFromPcs via backward scan.  Falls back to legacy walk when the
+    // metadata isn't available.
+
     public static LoweringResult Lower(Node node, AnalysisResult analysis) {
+        // Check if the new lowering-prep pipeline produced metadata.
+        if (analysis.GetMetadata<Poly.Interpretation.Analysis.LoweringPrep.LoweredUopMetadata>(node) is not null)
+            return Assemble(node, analysis);
+
+        return LegacyLower(node, analysis);
+    }
+
+    private static LoweringResult LegacyLower(Node node, AnalysisResult analysis) {
         var ctx = new LowerCtx(analysis);
         EmitNode(node, ctx);
         if (ctx.Instructions.Count == 0 || ctx.Instructions[^1] is not ReturnOp)
             ctx.Instructions.Add(new ReturnOp { SourceNodeId = node.Id });
         ctx.ResolveLabels();
         return new LoweringResult(ctx.Instructions);
+    }
+
+    private static LoweringResult Assemble(Node root, AnalysisResult analysis) {
+        var result = new List<Instruction>();
+        var labelPositions = new Dictionary<int, int>();
+        var labelRefs = new List<(int Index, int LabelId)>();
+        var ring = new List<int>();
+
+        void EmitFragment(List<Instruction> fragment) {
+            foreach (var inst in fragment) {
+                // ── LabelMarker: record position, don't emit ──
+                if (inst is LabelMarker lm) {
+                    labelPositions[lm.LabelId] = result.Count;
+                    continue;
+                }
+
+                // ── Backward scan ──
+                var consumed = new int[inst.PopCount];
+                int entryDepth = ring.Count;
+                int toPop = Math.Min(inst.PopCount, entryDepth);
+                for (int i = 0; i < toPop; i++)
+                    consumed[inst.PopCount - 1 - i] = ring[entryDepth - 1 - i];
+
+                // ── Record label references ──
+                // Always add to refs — LabelMarker positions may be set before
+                // or after the reference, but post-walk resolution handles all.
+                if (inst is BranchIfFalse bif)
+                    labelRefs.Add((result.Count, bif.Target));
+                else if (inst is Jump jmp)
+                    labelRefs.Add((result.Count, jmp.Target));
+
+                // ── Add to flat result ──
+                int idx = result.Count;
+                result.Add(inst with {
+                    ConsumedFromPcs = consumed.Length > 0 ? consumed : null
+                });
+
+                // ── Update ring buffer ──
+                for (int i = 0; i < toPop && ring.Count > 0; i++)
+                    ring.RemoveAt(ring.Count - 1);
+                for (int i = 0; i < inst.PushCount; i++)
+                    ring.Add(idx);
+            }
+        }
+
+        // ── Walk the root ────────────────────────────────────────────────
+        // Emit the root's combined fragment.  All child fragments are included
+        // recursively from UopGeneration.  LabelMarkers inside fragments tell
+        // us where each label target lands.
+
+        var rootUops = analysis.GetMetadata<Poly.Interpretation.Analysis.LoweringPrep.LoweredUopMetadata>(root)?.Uops;
+        if (rootUops is not null)
+            EmitFragment(rootUops);
+
+        // ── Resolve label references ────────────────────────────────────
+
+        foreach (var (instIdx, labelId) in labelRefs) {
+            if (labelPositions.TryGetValue(labelId, out int pos)) {
+                var old = result[instIdx];
+                // Preserve ConsumedFromPcs when replacing.
+                result[instIdx] = old switch {
+                    BranchIfFalse bif => new BranchIfFalse(pos) {
+                        SourceNodeId = bif.SourceNodeId,
+                        ConsumedFromPcs = bif.ConsumedFromPcs
+                    },
+                    Jump jmp => new Jump(pos) {
+                        SourceNodeId = jmp.SourceNodeId,
+                        ConsumedFromPcs = jmp.ConsumedFromPcs
+                    },
+                    _ => old
+                };
+            }
+        }
+
+        // ── Ensure ReturnOp ────────────────────────────────────────────
+
+        if (result.Count == 0 || result[^1] is not (ReturnOp or ReturnFromCall))
+            result.Add(new ReturnOp { SourceNodeId = root.Id });
+
+        return new LoweringResult(result);
     }
 
     private sealed class LowerCtx {

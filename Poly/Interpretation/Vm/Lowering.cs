@@ -249,7 +249,7 @@ public static class Lowering {
         }
         for (int i = 0; i < block.Nodes.Count; i++) {
             EmitNode(block.Nodes[i], ctx);
-            if (i < block.Nodes.Count - 1 && block.Nodes[i] is not WhileLoop)
+            if (i < block.Nodes.Count - 1)
                 ctx.Instructions.Add(new PopOp { SourceNodeId = block.Id });
         }
     }

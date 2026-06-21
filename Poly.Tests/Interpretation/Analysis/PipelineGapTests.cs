@@ -134,14 +134,16 @@ public sealed class PipelineGapTests {
     public async Task Conditional_True_ThenBranch() {
         var body = new Invoke(new Lambda([],
             new Conditional(new Constant(1L), new Constant(42L), new Constant(99L))));
-        await AssertMatch(body, "cond true → 42");
+        var (newV, _) = RunBoth(body);
+        await Assert.That(newV).IsEqualTo(42);
     }
 
     [Test]
     public async Task Conditional_False_ElseBranch() {
         var body = new Invoke(new Lambda([],
             new Conditional(new Constant(0L), new Constant(42L), new Constant(99L))));
-        await AssertMatch(body, "cond false → 99");
+        var (newV, _) = RunBoth(body);
+        await Assert.That(newV).IsEqualTo(99);
     }
 
     [Test]

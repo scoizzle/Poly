@@ -11,13 +11,13 @@ public enum CompilationMode { Normal, Profiling, Debug }
 public static class ProgramCompiler {
     public static VmProgram Compile(LoweringResult input, int maxActiveLocalDepth = 32, CompilationMode mode = CompilationMode.Normal) {
         var instructions = input.Instructions;
-        // Only run producer tracking when the new lowering-prep pipeline
-        // didn't already compute ConsumedFromPcs.
+        // When the new lowering-prep pipeline already set ConsumedFromPcs, skip.
+        // For raw µop lists (tests, direct API callers), compute via backward scan.
         bool alreadyResolved = false;
         for (int i = 0; i < instructions.Count; i++)
             if (instructions[i].PopCount > 0 && instructions[i].ConsumedFromPcs is not null) { alreadyResolved = true; break; }
         if (!alreadyResolved)
-            ResolveProducers(instructions);
+            BackwardScan(instructions);
 
         // Use the depth computed during lowering if provided.
         int maxDepth = Math.Max(maxActiveLocalDepth, input.MaxActiveLocalsDepth);
@@ -83,10 +83,50 @@ public static class ProgramCompiler {
         return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], null, null, maxDepth);
     }
 
+    /// <summary>
+    /// Compute ConsumedFromPcs for raw µop lists (no analysis metadata).
+    /// Falls back to the predecessor-graph ResolveProducers when control
+    /// flow is detected (φ needed at merge points).
+    /// </summary>
+    private static void BackwardScan(List<Instruction> instructions) {
+        // Check if there's any control flow — if so, use the predecessor-graph approach.
+        bool hasControlFlow = false;
+        for (int i = 0; i < instructions.Count && !hasControlFlow; i++)
+            hasControlFlow = instructions[i] is BranchIfFalse or Jump;
+
+        if (hasControlFlow) {
+            ResolveProducers(instructions);
+            return;
+        }
+
+        // Simple linear backward scan for flat µop sequences.
+        var ring = new List<int>();
+        for (int pc = 0; pc < instructions.Count; pc++) {
+            var op = instructions[pc];
+            var consumed = new int[op.PopCount];
+            int entryDepth = ring.Count;
+            int toPop = Math.Min(op.PopCount, entryDepth);
+            for (int i = 0; i < toPop; i++)
+                consumed[op.PopCount - 1 - i] = ring[entryDepth - 1 - i];
+
+            if (op.PopCount > 0)
+                instructions[pc] = op with { ConsumedFromPcs = consumed };
+
+            for (int i = 0; i < toPop && ring.Count > 0; i++)
+                ring.RemoveAt(ring.Count - 1);
+            for (int i = 0; i < op.PushCount; i++)
+                ring.Add(pc);
+        }
+    }
+
+    /// <summary>
+    /// Predecessor-graph based producer resolution for raw µop lists with
+    /// control flow.  Computes ConsumedFromPcs and φ at merge points.
+    /// Kept for raw-µop tests (NewCompilerBasicTests, VmDebuggerTests).
+    /// </summary>
     private static void ResolveProducers(List<Instruction> instructions) {
         int n = instructions.Count;
 
-        // Step 1: Build predecessor graph
         var predecessors = new List<int>[n];
         for (int i = 0; i < n; i++) predecessors[i] = [];
 
@@ -104,8 +144,6 @@ public static class ProgramCompiler {
             }
         }
 
-        // Step 2: For each µop, compute exit stacks per predecessor.
-        // exitStacks[predPc] = stack after processing µop at predPc
         var exitStacks = new int[n][];
 
         for (int pc = 0; pc < n; pc++) {
@@ -114,30 +152,15 @@ public static class ProgramCompiler {
             int popCount = op.PopCount;
             int pushCount = op.PushCount;
 
-            int[]? entryStack = null;
+            var entryStack = preds.Count == 0 ? [] : (exitStacks[preds[^1]] ?? []);
 
-            if (preds.Count == 0) {
-                // No predecessors — entry point
-                entryStack = [];
-            }
-            else {
-                // Use the last predecessor's exit stack (fallthrough path).
-                // When the last predecessor is a back-edge Jump with null exit
-                // stack (during the linear pass), fall back to the first
-                // predecessor which will be available (the fallthrough entry).
-                entryStack = exitStacks[preds[^1]] ?? (preds.Count >= 2 ? exitStacks[preds[0]] : null) ?? [];
-            }
-
-            // Consume values from the entry stack
             var consumed = new int[popCount];
             int entryDepth = entryStack.Length;
             int toPop = Math.Min(popCount, entryDepth);
             for (int i = 0; i < toPop; i++)
                 consumed[popCount - 1 - i] = entryStack[entryDepth - 1 - i];
 
-            // φ detection: compare consumed values across all predecessors
             if (popCount > 0 && preds.Count >= 2) {
-                // Check each predecessor's entry stack
                 bool needsPhi = false;
                 int phiSrcPc = -1;
                 int[]? phiAlt = null;
@@ -164,30 +187,19 @@ public static class ProgramCompiler {
                     }
                 }
 
-                if (needsPhi && phiAlt is not null) {
-                    instructions[pc] = op with {
-                        ConsumedFromPcs = consumed,
-                        PhiSourcePcs = Enumerable.Repeat(phiSrcPc, popCount).ToArray(),
-                        PhiAltPcs = phiAlt
-                    };
-                }
-                else {
+                if (needsPhi && phiAlt is not null)
+                    instructions[pc] = op with { ConsumedFromPcs = consumed, PhiSourcePcs = Enumerable.Repeat(phiSrcPc, popCount).ToArray(), PhiAltPcs = phiAlt };
+                else
                     instructions[pc] = op with { ConsumedFromPcs = consumed };
-                }
             }
-            else if (popCount > 0) {
+            else if (popCount > 0)
                 instructions[pc] = op with { ConsumedFromPcs = consumed };
-            }
 
-            // Compute exit stack: entry stack without consumed values, plus new producers
             int copyCount = Math.Max(0, entryDepth - popCount);
             int newDepth = copyCount + pushCount;
             var exit = new int[newDepth];
-            for (int i = 0; i < copyCount; i++)
-                exit[i] = entryStack[i];
-            for (int i = 0; i < pushCount; i++)
-                exit[copyCount + i] = pc;
-
+            for (int i = 0; i < copyCount; i++) exit[i] = entryStack[i];
+            for (int i = 0; i < pushCount; i++) exit[copyCount + i] = pc;
             exitStacks[pc] = exit;
         }
     }

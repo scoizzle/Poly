@@ -4,8 +4,10 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
+using Poly.Interpretation.Analysis.LoweringPrep;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.VirtualMachine;
+using Poly.Interpretation.Vm;
+using Poly.Interpretation.Vm.Instructions;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
@@ -15,34 +17,36 @@ namespace Poly.Benchmarks;
 /// <summary>Micro-benchmarks for individual compiled µops (no lowering, no analysis).</summary>
 [MemoryDiagnoser]
 public class OpcodeBenchmarks {
-    private Action<VmState>? _cPush, _cAdd, _cSub, _cMul, _cEq, _cAddImm, _cNot, _cNeg, _cDup, _cPop;
-    private Action<VmState>? _cLoadLocal, _cStoreLocal, _cIncLocal, _cLoadArg;
+    private Action<VmState>? _cPush, _cAdd, _cSub, _cMul, _cEq, _cNot, _cNeg, _cDup, _cPop;
+    private Action<VmState>? _cLoadSlot, _cStoreSlot;
+
+    private static Action<VmState> CompileRaw(Instruction[] ops) {
+        return ProgramCompiler.Compile(new LoweringResult([.. ops])).Delegate;
+    }
+
+    private static VmProgram MakeVmProg() => new VmProgram(_ => { }, [], new Dictionary<NodeId, SourceRange>(), [], null, null, 32);
 
     [GlobalSetup]
     public void Setup() {
-        _cPush = ProgramCompiler.Compile(new Instruction[] { new PushOp(42L) });
-        _cAdd = ProgramCompiler.Compile(new Instruction[] { new PushOp(10L), new PushOp(20L), new AddOp() });
-        _cSub = ProgramCompiler.Compile(new Instruction[] { new PushOp(50L), new PushOp(20L), new SubOp() });
-        _cMul = ProgramCompiler.Compile(new Instruction[] { new PushOp(7L), new PushOp(8L), new MulOp() });
-        _cEq = ProgramCompiler.Compile(new Instruction[] { new PushOp(10L), new PushOp(10L), new EqOp() });
-        _cAddImm = ProgramCompiler.Compile(new Instruction[] { new PushOp(10L), new AddImmOp(5L) });
-        _cNot = ProgramCompiler.Compile(new Instruction[] { new PushOp(0L), new NotOp() });
-        _cNeg = ProgramCompiler.Compile(new Instruction[] { new PushOp(42L), new NegOp() });
-        _cDup = ProgramCompiler.Compile(new Instruction[] { new PushOp(42L), new DupOp() });
-        _cPop = ProgramCompiler.Compile(new Instruction[] { new PushOp(10L), new PushOp(20L), new PopOp() });
-
-        _cLoadLocal = ProgramCompiler.Compile(new Instruction[] { new LoadLocalOp(0) });
-        _cStoreLocal = ProgramCompiler.Compile(new Instruction[] { new PushOp(42L), new StoreLocalOp(0) });
-        _cIncLocal = ProgramCompiler.Compile(new Instruction[] { new PushOp(0L), new StoreLocalOp(0), new IncLocalOp(0, 1L) });
-        _cLoadArg = ProgramCompiler.Compile(new Instruction[] { new LoadArgOp(1) });
+        _cPush = CompileRaw([new LoadConst(42L), new ReturnOp()]);
+        _cAdd = CompileRaw([new LoadConst(10L), new LoadConst(20L), new BinOp(BinOpKind.Add), new ReturnOp()]);
+        _cSub = CompileRaw([new LoadConst(50L), new LoadConst(20L), new BinOp(BinOpKind.Sub), new ReturnOp()]);
+        _cMul = CompileRaw([new LoadConst(7L), new LoadConst(8L), new BinOp(BinOpKind.Mul), new ReturnOp()]);
+        _cEq = CompileRaw([new LoadConst(10L), new LoadConst(10L), new BinOp(BinOpKind.Eq), new ReturnOp()]);
+        _cNot = CompileRaw([new LoadConst(0L), new UnaryOp(UnaryOpKind.Not), new ReturnOp()]);
+        _cNeg = CompileRaw([new LoadConst(42L), new BinOp(BinOpKind.Sub, Immediate: 0), new ReturnOp()]);
+        _cDup = CompileRaw([new LoadConst(42L), new DupOp(), new ReturnOp()]);
+        _cPop = CompileRaw([new LoadConst(10L), new LoadConst(20L), new PopOp(), new ReturnOp()]);
+        _cLoadSlot = CompileRaw([new LoadSlot(0), new ReturnOp()]);
+        _cStoreSlot = CompileRaw([new LoadConst(42L), new StoreSlot(0), new ReturnOp()]);
     }
 
     private const int R = 5000;
 
     private static long RunCompiled(Action<VmState> del) {
-        using var s = new VmState();
+        using var s = new VmState(new VmProgram(del, [], new Dictionary<NodeId, SourceRange>(), [], null, null, 32));
         long r = 0;
-        for (int i = 0; i < R; i++) { s.Reset(); del(s); r += s.Stack.SP > 0 ? s.Stack.Pop() : 0; }
+        for (int i = 0; i < R; i++) { s.Reset(); del(s); r += s.Stack.StackPointer > 0 ? s.Stack.Pop() : 0; }
         return r;
     }
 
@@ -57,8 +61,6 @@ public class OpcodeBenchmarks {
     [Benchmark(OperationsPerInvoke = R)]
     public long Eq_Compiled() => RunCompiled(_cEq!);
     [Benchmark(OperationsPerInvoke = R)]
-    public long AddImm_Compiled() => RunCompiled(_cAddImm!);
-    [Benchmark(OperationsPerInvoke = R)]
     public long Not_Compiled() => RunCompiled(_cNot!);
     [Benchmark(OperationsPerInvoke = R)]
     public long Neg_Compiled() => RunCompiled(_cNeg!);
@@ -69,54 +71,34 @@ public class OpcodeBenchmarks {
 }
 
 /// <summary>Full-pipeline benchmarks: AST → Lowering → µops → execute.
-/// Measures real-world algorithmic patterns end-to-end.</summary>
+/// Measures real-world algorithmic patterns end-to-end through the new
+/// per-node lowering pipeline.</summary>
 [MemoryDiagnoser]
 public class UopBenchmarks {
     private VmState? _state;
+    private VmProgram? _prog;
 
     // Loop sum programs
-    private Bytecode _loopSum1000 = null!;
-    private Bytecode _loopSum10000 = null!;
-
-    // Fibonacci programs
-    private Bytecode _fib10 = null!;
-    private Bytecode _fib20 = null!;
-
-    // Factorial
-    private Bytecode _fact10 = null!;
-
-    // Deep balanced sum (no loops, pure arithmetic dispatch)
-    private Bytecode _deepSum1000 = null!;
-    private Bytecode _deepSum10000 = null!;
-
-    // CLR call chain
-    private Bytecode _clrChain100 = null!;
-
-    // String concatenation (uses CLR string.Concat)
-    private Bytecode _stringConcat = null!;
-
-    // Gcd
-    private Bytecode _gcd = null!;
-
-    // Prime sieve (trial division)
-    private Bytecode _countPrimes100 = null!;
-    private Bytecode _countPrimes1000 = null!;
-
-    // Sieve of Eratosthenes (BitArray)
-    private Bytecode _sieve100 = null!;
-    private Bytecode _sieve1M = null!;
-    private Bytecode _sieve1B = null!;
-
-    // Mandelbrot (fixed-point integer)
-    private Bytecode _mandelbrot = null!;
-    private Bytecode _nqueens = null!;
-
-    // Collatz max sequence length
-    private Bytecode _collatz = null!;
+    private LoweringResult _loopSum1000 = null!;
+    private LoweringResult _loopSum10000 = null!;
+    private LoweringResult _fib10 = null!;
+    private LoweringResult _fib20 = null!;
+    private LoweringResult _fact10 = null!;
+    private LoweringResult _deepSum1000 = null!;
+    private LoweringResult _deepSum10000 = null!;
+    private LoweringResult _clrChain100 = null!;
+    private LoweringResult _stringConcat = null!;
+    private LoweringResult _gcd = null!;
+    private LoweringResult _countPrimes100 = null!;
+    private LoweringResult _countPrimes1000 = null!;
+    private LoweringResult _mandelbrot = null!;
+    private LoweringResult _nqueens = null!;
+    private LoweringResult _collatz = null!;
 
     [GlobalSetup]
     public void Setup() {
-        _state = new VmState();
+        _state = new VmState(new VmProgram(_ => { }, [], new Dictionary<NodeId, SourceRange>(), [], null, null, 32));
+        _prog = null!;
 
         _loopSum1000 = Lower(BuildLoopSum(1000));
         _loopSum10000 = Lower(BuildLoopSum(10000));
@@ -130,19 +112,15 @@ public class UopBenchmarks {
         _gcd = Lower(BuildGcd(123456, 7890));
         _countPrimes100 = Lower(BuildCountPrimes(100));
         _countPrimes1000 = Lower(BuildCountPrimes(1000));
-        _sieve100 = Lower(BuildSieve(100000));
-        _sieve1M = Lower(BuildSieve(1000000));
-        _sieve1B = Lower(BuildSieve(1000000000));
         _mandelbrot = Lower(BuildMandelbrot(128));
         _nqueens = Lower(BuildNQueens(8));
         _collatz = Lower(BuildCollatz(1000));
-        // NQueens disabled — recursive Lambda has circular type resolution issues
     }
 
     [GlobalCleanup]
     public void Cleanup() => _state?.Dispose();
 
-    private static Bytecode Lower(Node node) {
+    private static LoweringResult Lower(Node node) {
         var result = new AnalyzerBuilder()
             .UseTypeAndMemberResolver()
             .UseConstantFolding()
@@ -150,15 +128,18 @@ public class UopBenchmarks {
             .UseThisReferenceContext()
             .UseControlFlowAnalysis()
             .UseVariableScopeValidator()
+            .UseLoweringPreparation()
+            .UseUopGeneration()
             .Build()
             .Analyze(node);
         return Lowering.Lower(node, result);
     }
 
-    private object? Exec(Bytecode prog) {
-        _state!.Program = prog;
-        _state.Reset();
-        return Vm.Execute(_state).Value;
+    private object? Exec(LoweringResult prog) {
+        var program = ProgramCompiler.Compile(prog);
+        _prog = program;
+        _state!.Reset();
+        return Vm.Execute(_state!).Value;
     }
 
     // ── Loop sum: Σ 1..n ──
@@ -207,15 +188,6 @@ public class UopBenchmarks {
 
     [Benchmark]
     public object? CountPrimes_1000() => Exec(_countPrimes1000);
-
-    [Benchmark]
-    public object? Sieve_100K() => Exec(_sieve100);
-
-    [Benchmark]
-    public object? Sieve_1M() => Exec(_sieve1M);
-
-    [Benchmark]
-    public object? Sieve_1B() => Exec(_sieve1B);
 
     [Benchmark]
     public object? Mandelbrot() => Exec(_mandelbrot);

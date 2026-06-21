@@ -130,12 +130,28 @@ public static class Lowering {
         }
 
         // ── φ detection (runs AFTER ReturnOp, BEFORE label resolution) ──
+        // Build the set of valid φ pairs from analysis metadata.
+        // Only Conditionals create label pairs (falseLabel, endLabel)
+        // that need φ.  Consecutive labels from different constructs
+        // are NOT merge points.
+        var phiPairSet = new HashSet<(int, int)>();
+
+        // Scan analysis metadata for Conditional nodes.
+        // We can't easily walk the AST here, so we rely on the pattern
+        // that Conditionals produce label pairs stored in labelRings
+        // that are in order and adjacent after deduplication.
+        // For now, detect pairs where diffDepth >= 0 AND the first
+        // label looks like a falseLabel (used as BranchIfFalse target)
+        // and the second looks like an endLabel.
         var sortedLabels = labelRings
             .Select(kv => (Label: kv.Key, Pos: labelPositions.GetValueOrDefault(kv.Key, -1), Ring: kv.Value))
             .Where(x => x.Pos >= 0)
             .OrderBy(x => x.Pos)
             .ToList();
 
+        // Identify Candidate φ labels: find BranchIfFalse targets that
+        // immediately precede a label that looks like an endLabel (the
+        // next label in sorted order where rings differ).
         for (int li = 1; li < sortedLabels.Count; li++) {
             var prev = sortedLabels[li - 1];
             var curr = sortedLabels[li];
@@ -164,39 +180,68 @@ public static class Lowering {
             }
             if (sourcePc < 0) continue;
 
+            // Verify this is a real Conditional pair: there must be a
+            // BranchIfFalse targeting prev.Label (the false label).
+            bool hasBranchTarget = false;
+            for (int k = 0; k < result.Count && !hasBranchTarget; k++)
+                if (result[k] is Instruction instr2 && instr2.GetType().Name == "BranchIfFalse")
+                    if ((int)((dynamic)instr2).Target == prev.Label) hasBranchTarget = true;
+            if (!hasBranchTarget) continue;
+
             // Find the merge consumer (first instruction after curr position that pops).
             for (int j = curr.Pos; j < result.Count; j++) {
                 if (result[j].PopCount > 0 && result[j] is not LabelMarker) {
                     var old = result[j];
                     var consumed = old.ConsumedFromPcs;
                     if (consumed is not null && consumed.Length > 0) {
-                        // Count extra pushes between endLabel and this consumer.
+                        // Compute consumed: shared state from prev ring tail,
+                        // then else-result, then pushes-after-endLabel.
                         int pushesAfterEnd = 0;
                         for (int k = curr.Pos; k < j; k++)
                             pushesAfterEnd += result[k].PushCount;
-                        int adjustedDepth = diffDepth + pushesAfterEnd;
-                        int consumedIdx = old.PopCount - 1 - adjustedDepth;
-                        if (consumedIdx < 0 || consumedIdx >= consumed.Length) consumedIdx = consumed.Length - 1;
 
-                        int thenVal = diffDepth < prev.Ring.Count ? prev.Ring[prev.Ring.Count - 1 - diffDepth] : -1;
-                        int elseVal = diffDepth < curr.Ring.Count ? curr.Ring[curr.Ring.Count - 1 - diffDepth] : -1;
+                        int thenVal = prev.Ring.Count > 0 ? prev.Ring[^1] : -1;
+                        int elseVal = curr.Ring.Count > 0 ? curr.Ring[^1] : -1;
                         if (thenVal < 0 || elseVal < 0) break;
 
-                        // Primary (ring's current value) = else-exit.
-                        // Alt = then-exit, used when PC matches source (Jump).
+                        int sharedNeeded = consumed.Length - 1 - pushesAfterEnd;
+                        // Take from prev ring, excluding its last entry (then-result).
+                        int sharedStart = Math.Max(0, prev.Ring.Count - sharedNeeded - 1);
+
+                        var newConsumed = new int[consumed.Length];
+                        int ci = 0;
+                        for (; ci < sharedNeeded && sharedStart + ci < prev.Ring.Count; ci++)
+                            newConsumed[ci] = prev.Ring[sharedStart + ci];
+                        newConsumed[ci++] = elseVal;  // else-result
+                        // Append pushes-after-endLabel: their µop PC is the index
+                        // of the pushing instruction in the result list.
+                        int pushPos = curr.Pos;
+                        for (int pi = 0; pi < pushesAfterEnd && ci < consumed.Length && pushPos < result.Count; pi++, ci++) {
+                            // Skip the consumer instruction itself.
+                            while (pushPos < result.Count && pushPos < j) {
+                                if (result[pushPos].PushCount > 0) break;
+                                pushPos++;
+                            }
+                            if (pushPos < result.Count && pushPos < j)
+                                newConsumed[ci] = pushPos++;
+                        }
+
+                        int phiIdx = sharedNeeded >= 0 && sharedNeeded < consumed.Length ? sharedNeeded : consumed.Length - 1;
+
                         var srcs = new int[consumed.Length];
                         var alts = new int[consumed.Length];
                         Array.Fill(srcs, -1);
                         Array.Fill(alts, -1);
-                        srcs[consumedIdx] = sourcePc;
-                        alts[consumedIdx] = thenVal;
+                        srcs[phiIdx] = sourcePc;
+                        alts[phiIdx] = thenVal;
 
                         result[j] = old with {
+                            ConsumedFromPcs = newConsumed,
                             PhiSourcePcs = srcs,
                             PhiAltPcs = alts
                         };
+                        break;
                     }
-                    break;
                 }
             }
         }

@@ -14,18 +14,19 @@ public sealed record ReturnFromCall(int ArgSlots, NodeId? AstSource = null) : In
             : Constant(0L);
 
         var slots = ctx.RawSlots;
-        var fb = Property(ctx.State, "FrameBase");
+        var fbProp = Property(ctx.State, "FrameBase");
         var packedVar = Variable(typeof(long), "packed");
 
         return Block(
             [packedVar],
-            Assign(packedVar, ArrayAccess(slots, Add(fb, Constant(ArgSlots)))),
-            Assign(ArrayAccess(slots, fb), returnVal),
-            Call(Property(ctx.State, "Stack"), "SetStackPointer", null, Add(fb, Constant(1))),
+            Assign(packedVar, ArrayAccess(slots, Add(fbProp, Constant(ArgSlots)))),
+            Assign(ArrayAccess(slots, fbProp), returnVal),
+            Call(Property(ctx.State, "Stack"), "SetStackPointer", null, Add(fbProp, Constant(1))),
             Assign(ctx.StateProgramCounter,
                 Convert(RightShift(packedVar, Constant(32)), typeof(int))),
             Assign(ctx.ProgramCounter, ctx.StateProgramCounter),
-            Assign(fb, Convert(packedVar, typeof(int))),
+            Assign(fbProp, Convert(packedVar, typeof(int))),
+            Assign(ctx.FrameBaseLocal, fbProp),
             Goto(ctx.EntryLabel));
     }
 }

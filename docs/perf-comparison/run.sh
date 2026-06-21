@@ -12,7 +12,7 @@ RESULTS="$RESULTS_DIR/results_$TIMESTAMP.csv"
 BENCH="${1:-all}"        # which benchmark: sieve, mandelbrot, nqueens, collatz, or all
 LIMIT="${2:-1000000}"    # default limit (used by sieve, collatz; ignored by mandelbrot/nqueens which are hardcoded)
 
-echo "benchmark,language,size_or_limit,result,time_ms" | tee "$RESULTS"
+echo "benchmark,language,size_or_limit,result,time_ms,prep_ms" | tee "$RESULTS"
 
 # ── Language definitions ──
 # Each entry: label,dockerfile,source_file (with BENCHMARK prefix)

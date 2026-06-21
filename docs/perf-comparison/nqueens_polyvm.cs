@@ -84,13 +84,16 @@ var analysisResult = new AnalyzerBuilder()
         ctx.SetResolvedType(bit, t.GetTypeDefinition(typeof(long)));
     });
 
-var sw = System.Diagnostics.Stopwatch.StartNew();
+var prepSw = System.Diagnostics.Stopwatch.StartNew();
 var lowered = Lowering.Lower(body, analysisResult);
 var program = ProgramCompiler.Compile(lowered);
+prepSw.Stop();
+
 using var state = new VmState(program);
 if (debug)
     state.Trace = Console.Error;
+var sw = System.Diagnostics.Stopwatch.StartNew();
 Vm.Execute(state);
 long result = state.Stack.Pop();
 sw.Stop();
-Console.WriteLine($"Poly VM,{boardSize},{result},{sw.ElapsedMilliseconds}");
+Console.WriteLine($"Poly VM,{boardSize},{result},{sw.ElapsedMilliseconds},{prepSw.ElapsedMilliseconds}");

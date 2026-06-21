@@ -28,6 +28,7 @@ public sealed record Call(int FuncIndex, int ArgSlots, NodeId? AstSource = null)
         body.Add(CtxPushRegisters(ctx));
         body.Add(Assign(ctx.StateProgramCounter, Constant(ctx.CurrentLabelIndex)));
         body.Add(Call(HandleCallMethod, state, Constant(FuncIndex), Constant(ArgSlots)));
+        body.Add(Assign(ctx.FrameBaseLocal, Property(ctx.State, "FrameBase")));
         body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
         body.Add(CtxPopRegisters(ctx));
 

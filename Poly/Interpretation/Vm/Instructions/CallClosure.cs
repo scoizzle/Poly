@@ -30,6 +30,7 @@ public sealed record CallClosure(NodeId? AstSource = null) : Instruction(AstSour
         body.Add(Call.CtxPushRegisters(ctx));
         body.Add(Assign(ctx.StateProgramCounter, Constant(ctx.CurrentLabelIndex)));
         body.Add(Call(HandleCallClosureMethod, state));
+        body.Add(Assign(ctx.FrameBaseLocal, Property(ctx.State, "FrameBase")));
         body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
         body.Add(Call.CtxPopRegisters(ctx));
 

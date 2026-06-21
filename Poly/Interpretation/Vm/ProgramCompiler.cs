@@ -51,6 +51,8 @@ public static class ProgramCompiler {
         body.Add(IfThen(
             Equal(Property(ctx.State, "FrameBase"), Constant(-1)),
             Assign(Property(ctx.State, "FrameBase"), Constant(0))));
+        // Cache FrameBase in a local so LoadSlot/StoreSlot don't re-read the property.
+        body.Add(Assign(ctx.FrameBaseLocal, ctx.FrameBaseInitExpression));
         if (mode == CompilationMode.Profiling) {
             body.Add(Assign(ctx.InstructionCounters, NewArrayBounds(typeof(long), Constant(n))));
         }

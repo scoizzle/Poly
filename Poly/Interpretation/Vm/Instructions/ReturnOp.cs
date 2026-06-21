@@ -14,8 +14,7 @@ public sealed record ReturnOp(NodeId? AstSource = null) : Instruction(AstSource)
             : Constant(0L);
 
         var slots = ctx.RawSlots;
-        var fb = Property(ctx.State, "FrameBase");
-        var targetSlot = Condition(Equal(fb, Constant(-1)), Constant(0), fb);
+        var targetSlot = Condition(Equal(ctx.FrameBase, Constant(-1)), Constant(0), ctx.FrameBase);
 
         return Block(
             Assign(ArrayAccess(slots, targetSlot), returnVal),

@@ -64,11 +64,14 @@ var analysisResult = new AnalyzerBuilder()
         ctx.SetResolvedType(bestN, t.GetTypeDefinition(typeof(long)));
     });
 
-var sw = System.Diagnostics.Stopwatch.StartNew();
+var prepSw = System.Diagnostics.Stopwatch.StartNew();
 var lowered = Lowering.Lower(body, analysisResult);
 var program = ProgramCompiler.Compile(lowered);
+prepSw.Stop();
+
 var state = new VmState(program);
 long result;
+var sw = System.Diagnostics.Stopwatch.StartNew();
 if (debug) {
     state.Trace = Console.Error;
     Vm.Execute(state);
@@ -80,4 +83,4 @@ if (debug) {
 sw.Stop();
 long bestNVal = result >> 32;
 long maxLenVal = result & 0xFFFFFFFFL;
-Console.WriteLine($"Poly VM,{limit},{bestNVal}:{maxLenVal},{sw.ElapsedMilliseconds}");
+Console.WriteLine($"Poly VM,{limit},{bestNVal}:{maxLenVal},{sw.ElapsedMilliseconds},{prepSw.ElapsedMilliseconds}");

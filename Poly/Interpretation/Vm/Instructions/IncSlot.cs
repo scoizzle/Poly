@@ -10,7 +10,7 @@ public sealed record IncSlot(int Offset, long Increment, NodeId? AstSource = nul
 
     public override Expression? ToExpression(CompilationContext ctx) {
         var access = ArrayAccess(ctx.RawSlots,
-            Add(Property(ctx.State, "FrameBase"), Constant(Offset)));
+            Add(ctx.FrameBase, Constant(Offset)));
         return Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), AddAssign(access, Constant(Increment)));
     }
 }

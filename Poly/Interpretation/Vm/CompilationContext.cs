@@ -47,6 +47,12 @@ public sealed class CompilationContext {
     public Expression HeapInitExpression { get; }
     /// <summary>Local <c>_heap</c> — cached <c>state.Heap</c> reference.</summary>
     public ParameterExpression HeapLocal { get; }
+    /// <summary>Local <c>_fb</c> — cached <c>state.FrameBase</c>.</summary>
+    public ParameterExpression FrameBaseLocal { get; }
+    /// <summary>Expression for the preamble: <c>state.FrameBase</c> to init <see cref="FrameBaseLocal"/>.</summary>
+    public Expression FrameBaseInitExpression { get; }
+    /// <summary>Convenience accessor — always reads from <c>_fb</c> local.</summary>
+    public Expression FrameBase => FrameBaseLocal;
     public Expression ValueStack { get; }
     public Expression Heap { get; }
     public Expression HeapRawSlots { get; }
@@ -82,6 +88,9 @@ public sealed class CompilationContext {
         HeapLocal = Variable(typeof(Heap), "_heap");
         _locals.Add(HeapLocal);
         HeapInitExpression = Property(State, StateHeapPropertyInfo);
+        FrameBaseLocal = Variable(typeof(int), "_fb");
+        _locals.Add(FrameBaseLocal);
+        FrameBaseInitExpression = Property(State, StateFrameBasePropertyInfo);
         ValueStack = Property(State, StateStackPropertyInfo);
         SlotsInitExpression = Property(ValueStack, ValueStackRawSlotsPropertyInfo);
         RawSlots = SlotsLocal;

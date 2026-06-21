@@ -6,7 +6,7 @@ using static System.Linq.Expressions.Expression;
 
 namespace Poly.Interpretation.Vm;
 
-public enum CompilationMode { NoDebug, Profiling, Normal }
+public enum CompilationMode { NoDebug, Normal, Profiling, TraceExpressions }
 
 public static class ProgramCompiler {
     public static VmProgram Compile(LoweringResult input, int maxActiveLocalDepth = 32, CompilationMode mode = CompilationMode.Normal) {
@@ -37,6 +37,9 @@ public static class ProgramCompiler {
 
         body.Add(Label(ctx.EntryLabel));
 
+        // Cache property references in locals so µops don't re-fetch them.
+        body.Add(Assign(ctx.SlotsLocal, ctx.SlotsInitExpression));
+        body.Add(Assign(ctx.HeapLocal, ctx.HeapInitExpression));
         // Initialize Registers lazily so callers don't need to set it manually.
         // Preamble: runs before any µop, regardless of entry path.
         body.Add(Assign(ctx.Registers,
@@ -99,6 +102,16 @@ public static class ProgramCompiler {
         body.Add(Label(ctx.ExitLabel));
 
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
+
+        if (mode == CompilationMode.TraceExpressions) {
+            var dbgView = typeof(Expression)
+                .GetProperty("DebugView", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?.GetValue(delegateExpr) as string;
+            Console.Error.WriteLine("// ── Compiled µop expression tree ──");
+            Console.Error.WriteLine(dbgView ?? delegateExpr.ToString());
+            Console.Error.WriteLine("// ── End expression tree ──");
+        }
+
         var del = delegateExpr.Compile();
 
         return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], null, null, maxDepth);

@@ -35,6 +35,14 @@ public sealed class CompilationContext {
     public ParameterExpression ProgramCounter { get; }
     /// <summary>Direct access to <c>state.ProgramCounter</c> for suspension flushing.</summary>
     public Expression StateProgramCounter { get; }
+    /// <summary>Local <c>_slots</c> — cached <c>state.Stack.RawSlots</c> array.</summary>
+    public ParameterExpression SlotsLocal { get; }
+    /// <summary>Expression for the preamble: <c>state.Stack.RawSlots</c> to init <see cref="SlotsLocal"/>.</summary>
+    public Expression SlotsInitExpression { get; }
+    /// <summary>Expression for the preamble: <c>state.Heap</c> to init <see cref="HeapLocal"/>.</summary>
+    public Expression HeapInitExpression { get; }
+    /// <summary>Local <c>_heap</c> — cached <c>state.Heap</c> reference.</summary>
+    public ParameterExpression HeapLocal { get; }
     public Expression ValueStack { get; }
     public Expression Heap { get; }
     public Expression HeapRawSlots { get; }
@@ -65,12 +73,18 @@ public sealed class CompilationContext {
         ProgramCounter = Variable(typeof(int), "_pc");
         StateProgramCounter = Property(State, StateProgramCounterPropertyInfo);
         _locals.Add(ProgramCounter);
+        SlotsLocal = Variable(typeof(long[]), "_slots");
+        _locals.Add(SlotsLocal);
+        HeapLocal = Variable(typeof(Heap), "_heap");
+        _locals.Add(HeapLocal);
+        HeapInitExpression = Property(State, StateHeapPropertyInfo);
         ValueStack = Property(State, StateStackPropertyInfo);
-        RawSlots = Property(ValueStack, ValueStackRawSlotsPropertyInfo);
+        SlotsInitExpression = Property(ValueStack, ValueStackRawSlotsPropertyInfo);
+        RawSlots = SlotsLocal;
         Registers = Property(State, StateRegistersPropertyInfo);
         InstructionCounters = Property(State, StateInstructionCountersPropertyInfo);
-        Heap = Property(State, StateHeapPropertyInfo);
-        HeapRawSlots = Property(Heap, StateHeapRawSlotsPropertyInfo);
+        Heap = HeapLocal;
+        HeapRawSlots = Property(HeapLocal, StateHeapRawSlotsPropertyInfo);
         LoopLimitActive = Variable(typeof(bool), "_loopLimitActive");
         LoopMaxIter = Variable(typeof(long), "_loopMaxIter");
         _locals.Add(LoopLimitActive);

@@ -26,8 +26,12 @@ public sealed class CompilationContext {
     private readonly List<ParameterExpression> _locals = new();
     private readonly Dictionary<int, LabelTarget> _labelTargets = new();
 
-    /// <summary>ParameterExpression for each µop's produced value. Indexed by µop PC.</summary>
-    private readonly List<ParameterExpression> _valueSlots = new();
+    // ── Ring-based µop value allocation ─────────────────────────────
+    // Instead of one _v{pc} per producer µop, each value is stored at
+    // _r{k} where k = its ring (eval-stack) depth at push time.
+    // This keeps locals = max ring depth (~10-20) regardless of µop count.
+    private readonly Dictionary<int, int> _pcToRingIdx = new();
+    private readonly List<ParameterExpression> _ringRegisters = new();
 
     public ParameterExpression State => _stateParam;
     /// <summary>Local <c>_pc</c> — fast local for the current µop index.
@@ -91,15 +95,42 @@ public sealed class CompilationContext {
         _locals.Add(LoopMaxIter);
     }
 
-    /// <summary>Get or create the ParameterExpression for _v{pc}.
-    /// All value slots are pre-created before the µop walk.</summary>
-    public ParameterExpression ValueSlot(int pc) {
-        while (_valueSlots.Count <= pc) {
-            var slot = Variable(typeof(long), $"_v{_valueSlots.Count}");
-            _valueSlots.Add(slot);
-            _locals.Add(slot);
+    private int _registerLimit;
+    private int _maxFrameDepth;
+    private static readonly PropertyInfo StateFrameBasePropertyInfo = Ref<VmState>.Property(e => e.FrameBase);
+
+    /// <summary>Configure ring-based µop value allocation.
+    /// <paramref name="ringMap"/> maps each producer PC → its ring depth index.
+    /// Creates <c>_r{0..limit-1}</c> locals; deeper indices spill to
+    /// <c>_slots[FB + maxFrameDepth + spillIdx]</c> on the value stack.</summary>
+    public void ConfigureRingAllocation(Dictionary<int, int> ringMap, int maxActiveLocalDepth, int maxFrameDepth) {
+        _registerLimit = maxActiveLocalDepth;
+        _maxFrameDepth = maxFrameDepth;
+        _pcToRingIdx.Clear();
+        _ringRegisters.Clear();
+        foreach (var kv in ringMap) {
+            _pcToRingIdx[kv.Key] = kv.Value;
         }
-        return _valueSlots[pc];
+
+        int regCount = Math.Min(maxActiveLocalDepth, ringMap.Count > 0 ? ringMap.Values.Max() + 1 : 0);
+        for (int i = 0; i < regCount; i++) {
+            var reg = Variable(typeof(long), $"_r{i}");
+            _ringRegisters.Add(reg);
+            _locals.Add(reg);
+        }
+    }
+
+    /// <summary>Return the expression for the value produced by µop at <paramref name="pc"/>.
+    /// Reads from <c>_r{k}</c> local (k &lt; limit) or
+    /// <c>_slots[FB + maxFrameDepth + k]</c> (spilled to value stack).</summary>
+    public Expression ValueSlot(int pc) {
+        if (!_pcToRingIdx.TryGetValue(pc, out int ringIdx))
+            throw new InvalidOperationException($"PC {pc} has no ring allocation");
+        if (ringIdx < _registerLimit)
+            return _ringRegisters[ringIdx];
+        int spillOffset = _maxFrameDepth + ringIdx;
+        var fb = Property(State, StateFrameBasePropertyInfo);
+        return ArrayAccess(RawSlots, Add(fb, Constant(spillOffset)));
     }
 
     /// <summary>Resolve a consumed value, applying φ when the value's source

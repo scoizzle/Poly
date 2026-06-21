@@ -30,10 +30,12 @@ public static class ProgramCompiler {
 
         ctx.LimitLoops = mode is CompilationMode.Normal or CompilationMode.Profiling;
 
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < n; i++)
             ctx.GetLabel(i);
-            ctx.ValueSlot(i);
-        }
+
+        // Ring-based allocation: compute µop value depths and create _r{k} pool.
+        var ringDepthMap = ComputeRingDepths(instructions);
+        ctx.ConfigureRingAllocation(ringDepthMap, maxActiveLocalDepth, input.MaxActiveLocalsDepth);
 
         body.Add(Label(ctx.EntryLabel));
 
@@ -115,6 +117,25 @@ public static class ProgramCompiler {
         var del = delegateExpr.Compile();
 
         return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], null, null, maxDepth);
+    }
+
+    /// <summary>Simulate the eval-stack ring to compute each producer µop's ring depth.
+    /// Returns a map: producer PC → ring index (<c>_r{index}</c>).</summary>
+    private static Dictionary<int, int> ComputeRingDepths(List<Instruction> instructions) {
+        var ring = new List<int>();
+        var map = new Dictionary<int, int>();
+        for (int pc = 0; pc < instructions.Count; pc++) {
+            var op = instructions[pc];
+            int entryDepth = ring.Count;
+            int toPop = Math.Min(op.PopCount, entryDepth);
+            for (int i = 0; i < toPop && ring.Count > 0; i++)
+                ring.RemoveAt(ring.Count - 1);
+            if (op.PushCount > 0) {
+                map[pc] = entryDepth - toPop;
+                ring.Add(pc);
+            }
+        }
+        return map;
     }
 
     /// <summary>Compute ConsumedFromPcs for raw µop lists via linear backward scan.

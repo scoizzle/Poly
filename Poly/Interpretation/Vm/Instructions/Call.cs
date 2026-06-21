@@ -26,8 +26,9 @@ public sealed record Call(int FuncIndex, int ArgSlots, NodeId? AstSource = null)
         }
 
         body.Add(CtxPushRegisters(ctx));
-        body.Add(Assign(Property(state, "ProgramCounter"), Constant(ctx.CurrentLabelIndex)));
+        body.Add(Assign(ctx.StateProgramCounter, Constant(ctx.CurrentLabelIndex)));
         body.Add(Call(HandleCallMethod, state, Constant(FuncIndex), Constant(ArgSlots)));
+        body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
         body.Add(CtxPopRegisters(ctx));
 
         var rv = ctx.ValueSlot(ctx.CurrentLabelIndex);

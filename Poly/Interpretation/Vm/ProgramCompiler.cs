@@ -86,7 +86,10 @@ public static class ProgramCompiler {
             var result = op.ToExpression(ctx);
             if (result is not null) {
                 // Set ProgramCounter before branches so φ can identify the
-                // predecessor path at convergence points.
+                // predecessor path at convergence points.  Only φ-relevant
+                // jumps need this; a future optimization could skip the
+                // write for loop back-edges (detected by checking whether
+                // any instruction's PhiSourcePcs references this PC).
                 if (op is Jump or BranchIfFalse)
                     body.Add(Assign(ctx.ProgramCounter, Constant(pc)));
                 body.Add(result);

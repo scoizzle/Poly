@@ -26,8 +26,9 @@ public sealed record CallExternal(int SiteIndex, int ArgSlots, NodeId? AstSource
         }
 
         body.Add(Call.CtxPushRegisters(ctx));
-        body.Add(Assign(Property(state, "ProgramCounter"), Constant(ctx.CurrentLabelIndex)));
+        body.Add(Assign(ctx.StateProgramCounter, Constant(ctx.CurrentLabelIndex)));
         body.Add(Call(HandleCallExternalMethod, state, Constant(SiteIndex)));
+        body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
         body.Add(Call.CtxPopRegisters(ctx));
 
         var rv = ctx.ValueSlot(ctx.CurrentLabelIndex);

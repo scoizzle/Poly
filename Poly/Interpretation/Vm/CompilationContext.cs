@@ -30,7 +30,11 @@ public sealed class CompilationContext {
     private readonly List<ParameterExpression> _valueSlots = new();
 
     public ParameterExpression State => _stateParam;
-    public Expression ProgramCounter { get; }
+    /// <summary>Local <c>_pc</c> — fast local for the current µop index.
+    /// Only flushed to <c>state.ProgramCounter</c> at suspension points.</summary>
+    public ParameterExpression ProgramCounter { get; }
+    /// <summary>Direct access to <c>state.ProgramCounter</c> for suspension flushing.</summary>
+    public Expression StateProgramCounter { get; }
     public Expression ValueStack { get; }
     public Expression Heap { get; }
     public Expression HeapRawSlots { get; }
@@ -58,7 +62,9 @@ public sealed class CompilationContext {
 
     public CompilationContext() {
         _stateParam = Parameter(typeof(VmState), "state");
-        ProgramCounter = Property(State, StateProgramCounterPropertyInfo);
+        ProgramCounter = Variable(typeof(int), "_pc");
+        StateProgramCounter = Property(State, StateProgramCounterPropertyInfo);
+        _locals.Add(ProgramCounter);
         ValueStack = Property(State, StateStackPropertyInfo);
         RawSlots = Property(ValueStack, ValueStackRawSlotsPropertyInfo);
         Registers = Property(State, StateRegistersPropertyInfo);

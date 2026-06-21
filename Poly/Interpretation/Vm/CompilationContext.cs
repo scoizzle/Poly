@@ -32,6 +32,11 @@ public sealed class CompilationContext {
     // This keeps locals = max ring depth (~10-20) regardless of µop count.
     private readonly Dictionary<int, int> _pcToRingIdx = new();
     private readonly List<ParameterExpression> _ringRegisters = new();
+    /// <summary>Ring depth (eval-stack item count) at each µop PC.
+    /// Used by <c>CtxPushRegisters</c>/<c>CtxPopRegisters</c> to save/restore
+    /// only the active ring values at call boundaries, instead of iterating
+    /// over all µop indices.</summary>
+    private readonly Dictionary<int, int> _ringDepthAtPC = new();
 
     public ParameterExpression State => _stateParam;
     /// <summary>Local <c>_pc</c> — fast local for the current µop index.
@@ -129,17 +134,35 @@ public sealed class CompilationContext {
         }
     }
 
+    /// <summary>Set the ring depth at each µop PC (computed by <c>ProgramCompiler.ComputeRingDepths</c>).</summary>
+    public void SetRingDepthMap(Dictionary<int, int> depthMap) {
+        _ringDepthAtPC.Clear();
+        foreach (var kv in depthMap)
+            _ringDepthAtPC[kv.Key] = kv.Value;
+    }
+
+    /// <summary>Return the ring depth (eval-stack item count) at the given µop PC.
+    /// Returns 0 if the PC is not in the map (e.g., past the end).</summary>
+    public int GetRingDepth(int pc) =>
+        _ringDepthAtPC.TryGetValue(pc, out int depth) ? depth : 0;
+
+    /// <summary>Return the expression for ring slot at index <paramref name="ringIdx"/>.
+    /// Reads from <c>_r{ringIdx}</c> local or spills to <c>_slots[FB + maxFrameDepth + ringIdx]</c>.</summary>
+    public Expression RingSlot(int ringIdx) {
+        if (ringIdx < _registerLimit)
+            return _ringRegisters[ringIdx];
+        int spillOffset = _maxFrameDepth + ringIdx;
+        var fb = Property(State, StateFrameBasePropertyInfo);
+        return ArrayAccess(RawSlots, Add(fb, Constant(spillOffset)));
+    }
+
     /// <summary>Return the expression for the value produced by µop at <paramref name="pc"/>.
     /// Reads from <c>_r{k}</c> local (k &lt; limit) or
     /// <c>_slots[FB + maxFrameDepth + k]</c> (spilled to value stack).</summary>
     public Expression ValueSlot(int pc) {
         if (!_pcToRingIdx.TryGetValue(pc, out int ringIdx))
             throw new InvalidOperationException($"PC {pc} has no ring allocation");
-        if (ringIdx < _registerLimit)
-            return _ringRegisters[ringIdx];
-        int spillOffset = _maxFrameDepth + ringIdx;
-        var fb = Property(State, StateFrameBasePropertyInfo);
-        return ArrayAccess(RawSlots, Add(fb, Constant(spillOffset)));
+        return RingSlot(ringIdx);
     }
 
     /// <summary>Resolve a consumed value, applying φ when the value's source

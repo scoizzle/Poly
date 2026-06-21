@@ -40,20 +40,20 @@ public sealed record Call(int FuncIndex, int ArgSlots, NodeId? AstSource = null)
     }
 
     internal static Expression CtxPushRegisters(CompilationContext ctx) {
-        int count = ctx.CurrentLabelIndex;
-        if (count < 0) return Empty();
-        var stmts = new Expression[count + 1];
-        for (int i = 0; i <= count; i++)
-            stmts[i] = Assign(ArrayAccess(ctx.Registers, Constant(i)), ctx.ValueSlot(i));
+        int depth = ctx.GetRingDepth(ctx.CurrentLabelIndex);
+        if (depth <= 0) return Empty();
+        var stmts = new Expression[depth];
+        for (int k = 0; k < depth; k++)
+            stmts[k] = Assign(ArrayAccess(ctx.Registers, Constant(k)), ctx.RingSlot(k));
         return Block(stmts);
     }
 
     internal static Expression CtxPopRegisters(CompilationContext ctx) {
-        int count = ctx.CurrentLabelIndex;
-        if (count < 0) return Empty();
-        var stmts = new Expression[count + 1];
-        for (int i = 0; i <= count; i++)
-            stmts[i] = Assign(ctx.ValueSlot(i), ArrayAccess(ctx.Registers, Constant(i)));
+        int depth = ctx.GetRingDepth(ctx.CurrentLabelIndex);
+        if (depth <= 0) return Empty();
+        var stmts = new Expression[depth];
+        for (int k = 0; k < depth; k++)
+            stmts[k] = Assign(ctx.RingSlot(k), ArrayAccess(ctx.Registers, Constant(k)));
         return Block(stmts);
     }
 }

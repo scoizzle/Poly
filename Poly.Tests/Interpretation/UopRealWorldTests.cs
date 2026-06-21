@@ -8,6 +8,7 @@ using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.LoweringPrep;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
+using Poly.Interpretation.Vm.Instructions;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
@@ -637,5 +638,120 @@ public class UopRealWorldTests {
         long maxLenResult = packed & 0xFFFFFFFFL;
         await Assert.That(bestNResult).IsEqualTo(6171L);
         await Assert.That(maxLenResult).IsEqualTo(261L);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  IncSlot emission (increment/decrement lowering)
+    // ═══════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task IncSlot_x_eq_x_plus_1() {
+        // x = x + 1  →  IncSlot
+        var x = new Variable("x");
+        var node = new Invoke(new Lambda([], new Block(
+            [new Assignment(x, new Constant(0L)),
+             new Assignment(x, new Add(x, new Constant(1L))),
+             x], [x])));
+        var result = Execute(node);
+        await Assert.That(result.Value).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task IncSlot_x_eq_1_plus_x() {
+        // x = 1 + x  →  IncSlot
+        var x = new Variable("x");
+        var node = new Invoke(new Lambda([], new Block(
+            [new Assignment(x, new Constant(0L)),
+             new Assignment(x, new Add(new Constant(1L), x)),
+             x], [x])));
+        var result = Execute(node);
+        await Assert.That(result.Value).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task IncSlot_x_eq_x_minus_1() {
+        // x = x - 1  →  IncSlot(x, -1)
+        var x = new Variable("x");
+        var node = new Invoke(new Lambda([], new Block(
+            [new Assignment(x, new Constant(10L)),
+             new Assignment(x, new Subtract(x, new Constant(1L))),
+             x], [x])));
+        var result = Execute(node);
+        await Assert.That(result.Value).IsEqualTo(9L);
+    }
+
+    [Test]
+    public async Task IncSlot_x_eq_x_plus_5_in_loop() {
+        // Loop: sum = sum + i  but i = i + 5 each iteration
+        var sum = new Variable("sum");
+        var i = new Variable("i");
+        var node = new Invoke(new Lambda([], new Block(
+            [new Assignment(sum, new Constant(0L)),
+             new Assignment(i, new Constant(0L)),
+             new WhileLoop(new LessThan(i, new Constant(20L)),
+                 new Block([
+                     new Assignment(sum, new Add(sum, i)),
+                     new Assignment(i, new Add(i, new Constant(5L)))
+                 ])),
+             sum], [sum, i])));
+        var result = Execute(node);
+        // i = 0, 5, 10, 15 → sum = 0 + 5 + 10 + 15 = 30
+        await Assert.That(result.Value).IsEqualTo(30L);
+    }
+
+    [Test]
+    public async Task IncSlot_for_loop_increment() {
+        // Verify for-loop increment uses IncSlot: i = i + 1
+        var i = new Variable("i");
+        var node = new Invoke(new Lambda([], new Block(
+            [new ForLoop(
+                 new Assignment(i, new Constant(0L)),
+                 new LessThan(i, new Constant(10L)),
+                 new Assignment(i, new Add(i, new Constant(1L))),
+                 new Block([new Constant(0L)])),
+             i], [i])));
+        var result = Execute(node);
+        await Assert.That(result.Value).IsEqualTo(10L);
+    }
+
+    [Test]
+    public async Task IncSlot_multiple_increments() {
+        var x = new Variable("x");
+        var node = new Invoke(new Lambda([], new Block(
+            [new Assignment(x, new Constant(0L)),
+             new Assignment(x, new Add(x, new Constant(2L))),
+             new Assignment(x, new Add(x, new Constant(3L))),
+             new Assignment(x, new Subtract(x, new Constant(1L))),
+             x], [x])));
+        // x = 0 + 2 + 3 - 1 = 4
+        var result = Execute(node);
+        await Assert.That(result.Value).IsEqualTo(4L);
+    }
+
+    [Test]
+    public async Task IncSlot_not_applied_to_non_const_increment() {
+        // x = x + y  should NOT use IncSlot (not a constant increment)
+        var x = new Variable("x");
+        var y = new Variable("y");
+        var node = new Invoke(new Lambda([], new Block(
+            [new Assignment(x, new Constant(5L)),
+             new Assignment(y, new Constant(3L)),
+             new Assignment(x, new Add(x, y)),
+             x], [x, y])));
+        var result = Execute(node);
+        await Assert.That(result.Value).IsEqualTo(8L);
+    }
+
+    [Test]
+    public async Task IncSlot_emitted_in_uop_stream() {
+        // Verify the µop stream contains an IncSlot instruction for x = x + 1
+        var x = new Variable("x");
+        var node = new Invoke(new Lambda([], new Block(
+            [new Assignment(x, new Constant(0L)),
+             new Assignment(x, new Add(x, new Constant(1L))),
+             x], [x])));
+        var lowerResult = LowerWith(node);
+        bool hasIncSlot = lowerResult.Instructions.Any(i => i is IncSlot);
+        await Assert.That(hasIncSlot).IsTrue();
     }
 }

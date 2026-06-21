@@ -34,8 +34,9 @@ public static class ProgramCompiler {
             ctx.GetLabel(i);
 
         // Ring-based allocation: compute µop value depths and create _r{k} pool.
-        var ringDepthMap = ComputeRingDepths(instructions);
+        var ringDepthMap = ComputeRingDepths(instructions, out var ringDepthAtPC);
         ctx.ConfigureRingAllocation(ringDepthMap, maxActiveLocalDepth, input.MaxActiveLocalsDepth);
+        ctx.SetRingDepthMap(ringDepthAtPC);
 
         body.Add(Label(ctx.EntryLabel));
 
@@ -122,13 +123,16 @@ public static class ProgramCompiler {
     }
 
     /// <summary>Simulate the eval-stack ring to compute each producer µop's ring depth.
-    /// Returns a map: producer PC → ring index (<c>_r{index}</c>).</summary>
-    private static Dictionary<int, int> ComputeRingDepths(List<Instruction> instructions) {
+    /// Returns a map: producer PC → ring index (<c>_r{index}</c>).
+    /// Also outputs a map: PC → ring depth (eval-stack item count) at each µop.</summary>
+    private static Dictionary<int, int> ComputeRingDepths(List<Instruction> instructions, out Dictionary<int, int> ringDepthAtPC) {
         var ring = new List<int>();
         var map = new Dictionary<int, int>();
+        ringDepthAtPC = new Dictionary<int, int>();
         for (int pc = 0; pc < instructions.Count; pc++) {
             var op = instructions[pc];
             int entryDepth = ring.Count;
+            ringDepthAtPC[pc] = entryDepth;
             int toPop = Math.Min(op.PopCount, entryDepth);
             for (int i = 0; i < toPop && ring.Count > 0; i++)
                 ring.RemoveAt(ring.Count - 1);

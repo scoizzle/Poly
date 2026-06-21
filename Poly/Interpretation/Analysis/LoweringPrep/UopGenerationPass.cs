@@ -262,6 +262,12 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
     // ── Assignment ──────────────────────────────────────────────────
 
     private List<Instruction> EmitAssignment(AnalysisContext context, Assignment a) {
+        // Detect increment/decrement: x = x +/- N  or  x = N + x
+        if (a.Destination is Variable destVar) {
+            var incResult = TryEmitIncSlot(context, destVar, a.Value, a.Id);
+            if (incResult is not null) return incResult;
+        }
+
         var uops = new List<Instruction>();
         uops.AddRange(GetChildUops(context, a.Value));
 
@@ -285,6 +291,69 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         }
 
         return uops;
+    }
+
+    /// <summary>Try to emit an <see cref="IncSlot"/> for increment/decrement patterns.
+    /// Matches <c>x = x + N</c>, <c>x = N + x</c>, and <c>x = x - N</c>.
+    /// Returns null if the pattern doesn't match.</summary>
+    private List<Instruction>? TryEmitIncSlot(AnalysisContext context, Variable destVar, Node value, NodeId sourceId) {
+        // Follow analysis replacements for the value node (constant folding, etc.)
+        var actual = context.GetNodeReplacement(value) ?? value;
+
+        if (actual is Add add) {
+            var left = GetActual(context, add.LeftHandValue);
+            var right = GetActual(context, add.RightHandValue);
+            if (IsVarRef(left, destVar) && IsConstantNode(right, out long inc)) {
+                int slot = GetOrCreateLocalSlot(destVar.Name);
+                return [new IncSlot(slot, inc) { SourceNodeId = sourceId }];
+            }
+            if (IsVarRef(right, destVar) && IsConstantNode(left, out inc)) {
+                int slot = GetOrCreateLocalSlot(destVar.Name);
+                return [new IncSlot(slot, inc) { SourceNodeId = sourceId }];
+            }
+            return null;
+        }
+
+        if (actual is Subtract sub) {
+            var left = GetActual(context, sub.LeftHandValue);
+            var right = GetActual(context, sub.RightHandValue);
+            if (IsVarRef(left, destVar) && IsConstantNode(right, out long inc)) {
+                // x - N  →  x + (-N)
+                int slot = GetOrCreateLocalSlot(destVar.Name);
+                return [new IncSlot(slot, -inc) { SourceNodeId = sourceId }];
+            }
+            // N - x  — cannot use IncSlot (different semantics)
+            return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>Get the effective node, following analysis replacements.</summary>
+    private static Node GetActual(AnalysisContext context, Node node) =>
+        context.GetNodeReplacement(node) ?? node;
+
+    /// <summary>Check if a node is (or resolves to) the same variable as <paramref name="destVar"/>.</summary>
+    private static bool IsVarRef(Node node, Variable destVar) {
+        return node is Variable v && v.Name == destVar.Name;
+    }
+
+    /// <summary>Check if a node is a constant and extract its value.</summary>
+    private static bool IsConstantNode(Node node, out long value) {
+        if (node is Constant c) {
+            value = c.Value switch {
+                long lv => lv,
+                int iv => iv,
+                short sv => sv,
+                byte bv => bv,
+                bool bvv => bvv ? 1L : 0L,
+                uint uiv => (long)uiv,
+                _ => 0L,
+            };
+            return true;
+        }
+        value = 0;
+        return false;
     }
 
     // ── CountBits ───────────────────────────────────────────────────

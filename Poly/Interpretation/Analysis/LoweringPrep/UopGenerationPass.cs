@@ -182,6 +182,8 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
 
             Member m => EmitMember(context, m),
             IndexAccess ia => EmitIndexAccess(context, ia),
+            PopCount pc => EmitPopCount(context, pc),
+            StridedSetBits ssb => EmitStridedSetBits(context, ssb),
 
             New n => [
                 .. n.Arguments.SelectMany(a => GetChildUops(context, a)),
@@ -283,6 +285,27 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         }
 
         return uops;
+    }
+
+    // ── CountBits ───────────────────────────────────────────────────
+
+    private List<Instruction> EmitPopCount(AnalysisContext context, PopCount pc) {
+        return [
+            .. GetChildUops(context, pc.Operand),
+            new Poly.Interpretation.Vm.Instructions.CountBits { SourceNodeId = pc.Id }
+        ];
+    }
+
+    // ── StridedSetBits ──────────────────────────────────────────────
+
+    private List<Instruction> EmitStridedSetBits(AnalysisContext context, StridedSetBits ssb) {
+        return [
+            .. GetChildUops(context, ssb.Array),
+            .. GetChildUops(context, ssb.StartValue),
+            .. GetChildUops(context, ssb.Step),
+            .. GetChildUops(context, ssb.Limit),
+            new StridedSetOp { SourceNodeId = ssb.Id }
+        ];
     }
 
     // ── Block ───────────────────────────────────────────────────────

@@ -13,7 +13,10 @@ public sealed record ArrayLoad(string? Alias = null, NodeId? AstSource = null) :
         var handle = ctx.ResolveValue(this, 0);
         var index = ctx.ResolveValue(this, 1);
 
-        var arr = Convert(ArrayAccess(rawSlots, Convert(handle, typeof(int))), typeof(long[]));
-        return Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), ArrayAccess(arr, Convert(index, typeof(int))));
+        var arrLocal = Variable(typeof(long[]), $"_arr_{ctx.CurrentLabelIndex}");
+        return Block(
+            new[] { arrLocal },
+            Assign(arrLocal, Convert(ArrayAccess(rawSlots, Convert(handle, typeof(int))), typeof(long[]))),
+            Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), ArrayAccess(arrLocal, Convert(index, typeof(int)))));
     }
 }

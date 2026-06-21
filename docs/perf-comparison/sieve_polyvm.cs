@@ -15,14 +15,13 @@ int limit = args.Length > 0 ? int.Parse(args[0]) : 1000000;
 int wordCnt = (limit + 64) / 64;
 var bits = new Variable("bits");
 var i = new Variable("i");
-var j = new Variable("j");
 var cnt = new Variable("cnt");
+var w = new Variable("w");
 
-Node Wi(Node x) => new ShiftRight(x, new Constant(6));
-Node Bi(Node x) => new BitwiseAnd(x, new Constant(63L));
-Node Bit(Node x) => new ShiftLeft(new Constant(1L), Bi(x));
 Node IsPrime(Node x) => new Equal(
-    new BitwiseAnd(new ShiftRight(new IndexAccess(bits, Wi(x)), Bi(x)), new Constant(1L)),
+    new BitwiseAnd(new ShiftRight(new IndexAccess(bits,
+        new ShiftRight(x, new Constant(6))),
+        new BitwiseAnd(x, new Constant(63L))), new Constant(1L)),
     new Constant(0L));
 
 var body = new Block(
@@ -32,26 +31,28 @@ var body = new Block(
          new Block([
              new IfStatement(IsPrime(i),
                  new Block([
-                     new Assignment(j, new Multiply(i, i)),
-                     new WhileLoop(new LessThanOrEqual(j, new Constant(limit)),
-                         new Block([
-                             new Assignment(new IndexAccess(bits, Wi(j)),
-                                 new BitwiseOr(new IndexAccess(bits, Wi(j)), Bit(j))),
-                             new Assignment(j, new Add(j, i))
-                         ]))
+                     new StridedSetBits(bits, new Multiply(i, i), i, new Constant(limit))
                  ])),
              new Assignment(i, new Add(i, new Constant(1)))
          ])),
+     // Count primes via word-level PopCount (hardware POPCNT)
      new Assignment(cnt, new Constant(0L)),
-     new Assignment(i, new Constant(2)),
-     new WhileLoop(new LessThanOrEqual(i, new Constant(limit)),
+     new Assignment(w, new Constant(0L)),
+     new WhileLoop(new LessThan(w, new Constant(wordCnt - 1)),
          new Block([
-             new Assignment(cnt, new Add(cnt, new Conditional(IsPrime(i),
-                 new Constant(1L), new Constant(0L)))),
-             new Assignment(i, new Add(i, new Constant(1)))
+             new Assignment(cnt, new Add(cnt, new PopCount(
+                 new BitwiseNot(new IndexAccess(bits, w))))),
+             new Assignment(w, new Add(w, new Constant(1L)))
          ])),
+     // Last word: mask out bits beyond limit
+     new Assignment(cnt, new Add(cnt, new PopCount(
+         new BitwiseAnd(
+             new BitwiseNot(new IndexAccess(bits, new Constant(wordCnt - 1))),
+             new Constant((limit % 64) == 63 ? -1L : (1L << ((limit & 63) + 1)) - 1L))))),
+     // Subtract phantom primes at positions 0 and 1
+     new Assignment(cnt, new Subtract(cnt, new Constant(2L))),
      cnt],
-    [bits, i, j, cnt]);
+    [bits, i, cnt, w]);
 
 var analysisResult = new AnalyzerBuilder()
     .UseTypeAndMemberResolver()
@@ -67,7 +68,6 @@ var analysisResult = new AnalyzerBuilder()
         var t = ctx.TypeDefinitions;
         ctx.SetResolvedType(bits, t.GetTypeDefinition(typeof(long[])));
         ctx.SetResolvedType(i, t.GetTypeDefinition(typeof(int)));
-        ctx.SetResolvedType(j, t.GetTypeDefinition(typeof(int)));
         ctx.SetResolvedType(cnt, t.GetTypeDefinition(typeof(long)));
     });
 

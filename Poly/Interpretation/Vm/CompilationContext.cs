@@ -134,6 +134,9 @@ public sealed class CompilationContext {
         }
     }
 
+    /// <summary>Number of <c>_r{k}</c> ring register locals created.</summary>
+    public int RingRegisterCount => _ringRegisters.Count;
+
     /// <summary>Set the ring depth at each µop PC (computed by <c>ProgramCompiler.ComputeRingDepths</c>).</summary>
     public void SetRingDepthMap(Dictionary<int, int> depthMap) {
         _ringDepthAtPC.Clear();

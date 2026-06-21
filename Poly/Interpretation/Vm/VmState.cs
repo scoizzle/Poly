@@ -19,6 +19,10 @@ public sealed class VmState : IDisposable {
     public long MaxLoopIterations { get; set; } = -1;
     public long[]? LoopCounters { get; set; }
 
+    // Breakpoint suspend/resume
+    public bool NeedsRingRestore { get; set; }
+    public int SavedRingDepth { get; set; }
+
     public VmState(VmProgram program) {
         Program = program;
     }
@@ -31,6 +35,7 @@ public sealed class VmState : IDisposable {
         Stack.Reset();
         Heap.Clear();
         LoopCounters = null;
+        NeedsRingRestore = false;
     }
 
     public void Dispose() => Stack.Dispose();

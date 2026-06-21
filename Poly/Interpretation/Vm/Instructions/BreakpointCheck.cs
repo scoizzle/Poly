@@ -22,10 +22,12 @@ public sealed record BreakpointCheck(NodeId? AstSource = null) : Instruction(Ast
         // Check breakpoints at THIS µop's PC (not ProgramCounter which
         // may be stale — no default advance updates it).
         var check = Call(HasBreakpointMethod, ctx.State, Constant(ctx.CurrentLabelIndex));
+        int depth = ctx.GetRingDepth(ctx.CurrentLabelIndex);
         var spill = Call.CtxPushRegisters(ctx);
         return IfThen(check, Block(spill,
-            // Advance PC past this BreakpointCheck so re-entry skips it
             Assign(Property(ctx.State, "ProgramCounter"), Constant(ctx.CurrentLabelIndex + 1)),
+            Assign(Property(ctx.State, nameof(VmState.SavedRingDepth)), Constant(depth)),
+            Assign(Property(ctx.State, nameof(VmState.NeedsRingRestore)), Constant(true)),
             Assign(Property(ctx.State, "Status"), Constant(InterpreterStatus.Suspended)),
             Goto(ctx.ExitLabel)));
     }

@@ -54,6 +54,32 @@ public static class ProgramCompiler {
             Assign(Property(ctx.State, "FrameBase"), Constant(0))));
         // Cache FrameBase in a local so LoadSlot/StoreSlot don't re-read the property.
         body.Add(Assign(ctx.FrameBaseLocal, ctx.FrameBaseInitExpression));
+
+        // Sync _pc from state.ProgramCounter on every entry.
+        // Fresh start: state.ProgramCounter = 0 → _pc = 0 → dispatch to µop 0.
+        // Call return: Call µop already set _pc → redundant but harmless.
+        // Breakpoint resume: BreakpointCheck set state.ProgramCounter → routes to correct µop.
+        body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
+
+        // Restore ring registers when resuming from breakpoint suspension.
+        // BreakpointCheck sets NeedsRingRestore=true + SavedRingDepth +
+        // saves ring to Registers before Goto(ExitLabel). On re-entry, we
+        // restore up to SavedRingDepth entries and clear the flag.
+        // For fresh starts and call returns the flag is false — zero overhead.
+        if (ctx.RingRegisterCount > 0) {
+            var savedDepth = Property(ctx.State, nameof(VmState.SavedRingDepth));
+            var restoreStmts = new List<Expression>(ctx.RingRegisterCount + 1);
+            for (int k = 0; k < ctx.RingRegisterCount; k++)
+                restoreStmts.Add(IfThen(
+                    GreaterThan(savedDepth, Constant(k)),
+                    Assign(ctx.RingSlot(k), ArrayAccess(ctx.Registers, Constant(k)))));
+            restoreStmts.Add(
+                Assign(Property(ctx.State, nameof(VmState.NeedsRingRestore)), Constant(false)));
+            body.Add(IfThen(
+                Property(ctx.State, nameof(VmState.NeedsRingRestore)),
+                Block(restoreStmts)));
+        }
+
         if (mode == CompilationMode.Profiling) {
             body.Add(Assign(ctx.InstructionCounters, NewArrayBounds(typeof(long), Constant(n))));
         }

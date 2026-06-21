@@ -1,32 +1,37 @@
 namespace Poly.Interpretation.Vm;
 
 public sealed class Heap {
-    private readonly List<object?> _objects = [];
+    private object?[] _objects = new object?[256];
+    private int _count;
     private readonly Stack<int> _freeSlots = [];
 
-    public int Count => _objects.Count;
+    public int Count => _count;
+    public object?[] RawSlots => _objects;
 
     public int Allocate(object? value) {
-        int handle;
         if (_freeSlots.TryPop(out int freeHandle)) {
-            handle = freeHandle;
-            _objects[handle] = value;
+            _objects[freeHandle] = value;
+            return freeHandle;
         }
-        else {
-            handle = _objects.Count;
-            _objects.Add(value);
+        int handle = _count;
+        if (handle >= _objects.Length) {
+            var newArr = new object?[_objects.Length * 2];
+            Array.Copy(_objects, newArr, _count);
+            _objects = newArr;
         }
+        _objects[handle] = value;
+        _count++;
         return handle;
     }
 
     public object? Get(int handle) {
-        if ((uint)handle >= (uint)_objects.Count)
+        if ((uint)handle >= (uint)_count)
             throw new ArgumentOutOfRangeException(nameof(handle), "Invalid heap handle");
         return _objects[handle];
     }
 
     public void Set(int handle, object? value) {
-        if ((uint)handle >= (uint)_objects.Count)
+        if ((uint)handle >= (uint)_count)
             throw new ArgumentOutOfRangeException(nameof(handle), "Invalid heap handle");
         _objects[handle] = value;
         if (value is null)
@@ -42,7 +47,8 @@ public sealed class Heap {
     }
 
     public void Clear() {
-        _objects.Clear();
+        Array.Clear(_objects, 0, _count);
+        _count = 0;
         _freeSlots.Clear();
     }
 }

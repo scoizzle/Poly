@@ -18,7 +18,9 @@ public sealed class CompilationContext {
     private static readonly PropertyInfo StateRegistersPropertyInfo = Ref<VmState>.Property(e => e.Registers);
     private static readonly PropertyInfo StateProgramCounterPropertyInfo = Ref<VmState>.Property(e => e.ProgramCounter);
     private static readonly PropertyInfo StateInstructionCountersPropertyInfo = Ref<VmState>.Property(e => e.InstructionCounters);
-    private static readonly PropertyInfo ValueStackRawSlotsPropertyInfo = Ref<ValueStack>.Property(s => (object)s.RawSlots);
+    private static readonly PropertyInfo StateHeapPropertyInfo = Ref<VmState>.Property(e => e.Heap);
+    private static readonly PropertyInfo StateHeapRawSlotsPropertyInfo = Ref<VmState>.Property(e => e.Heap.RawSlots);
+    private static readonly PropertyInfo ValueStackRawSlotsPropertyInfo = Ref<ValueStack>.Property(s => s.RawSlots);
 
     private readonly ParameterExpression _stateParam;
     private readonly List<ParameterExpression> _locals = new();
@@ -30,6 +32,8 @@ public sealed class CompilationContext {
     public ParameterExpression State => _stateParam;
     public Expression ProgramCounter { get; }
     public Expression ValueStack { get; }
+    public Expression Heap { get; }
+    public Expression HeapRawSlots { get; }
     public Expression RawSlots { get; }
     public Expression Registers { get; }
     public Expression InstructionCounters { get; }
@@ -59,7 +63,8 @@ public sealed class CompilationContext {
         RawSlots = Property(ValueStack, ValueStackRawSlotsPropertyInfo);
         Registers = Property(State, StateRegistersPropertyInfo);
         InstructionCounters = Property(State, StateInstructionCountersPropertyInfo);
-
+        Heap = Property(State, StateHeapPropertyInfo);
+        HeapRawSlots = Property(Heap, StateHeapRawSlotsPropertyInfo);
         LoopLimitActive = Variable(typeof(bool), "_loopLimitActive");
         LoopMaxIter = Variable(typeof(long), "_loopMaxIter");
         _locals.Add(LoopLimitActive);

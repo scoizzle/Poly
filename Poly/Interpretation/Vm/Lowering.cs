@@ -1,90 +1,61 @@
 using Poly.Interpretation.Analysis.LoweringPrep;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm.Instructions;
-using Poly.Introspection;
-using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
 
 namespace Poly.Interpretation.Vm;
 
-/// <summary>Pure AST → µop transformation. Uses analysis metadata for
-/// variable scope, constant folding, side effects, and control flow.</summary>
+/// <summary>Pure AST → µop transformation. Requires analysis metadata from
+/// LoweringPrep and UopGeneration passes (no legacy fallback).</summary>
 public static class Lowering {
-    // ── New assembly path ──────────────────────────────────────────────
-    // Reads per-node LoweredUopMetadata, flattens, resolves labels, computes
-    // ConsumedFromPcs via backward scan.  Falls back to legacy walk when the
-    // metadata isn't available.
-
     public static LoweringResult Lower(Node node, AnalysisResult analysis) {
-        // Check if the new lowering-prep pipeline produced metadata.
-        if (analysis.GetMetadata<Poly.Interpretation.Analysis.LoweringPrep.LoweredUopMetadata>(node) is not null)
-            return Assemble(node, analysis);
-
-        return LegacyLower(node, analysis);
+        var rootUops = analysis.GetMetadata<LoweredUopMetadata>(node)?.Uops;
+        if (rootUops is null)
+            throw new InvalidOperationException(
+                "Missing LoweredUopMetadata — register UseLoweringPreparation() and UseUopGeneration() on the AnalyzerBuilder.");
+        return Assemble(node, analysis, rootUops);
     }
 
-    private static LoweringResult LegacyLower(Node node, AnalysisResult analysis) {
-        var ctx = new LowerCtx(analysis);
-        EmitNode(node, ctx);
-        if (ctx.Instructions.Count == 0 || ctx.Instructions[^1] is not ReturnOp)
-            ctx.Instructions.Add(new ReturnOp { SourceNodeId = node.Id });
-        ctx.ResolveLabels();
-        return new LoweringResult(ctx.Instructions);
-    }
-
-    private static LoweringResult Assemble(Node root, AnalysisResult analysis) {
+    private static LoweringResult Assemble(Node root, AnalysisResult analysis, List<Instruction> rootUops) {
         var result = new List<Instruction>();
         var labelPositions = new Dictionary<int, int>();
         var labelRefs = new List<(int Index, int LabelId)>();
         var ring = new List<int>();
-
-        // ── Ring at each label position (for φ detection) ──
         var labelRings = new Dictionary<int, List<int>>();
 
         void EmitFragment(List<Instruction> fragment) {
             for (int fi = 0; fi < fragment.Count; fi++) {
                 var inst = fragment[fi];
 
-                // ── Peephole: dead post-push from Assignment(Variable).
-                // LoadSlot immediately followed by PopOp generates no
-                // useful code — the value was just stored and immediately
-                // discarded.  Skip both so the ring stays balanced.
                 if (inst is LoadSlot && fi + 1 < fragment.Count && fragment[fi + 1] is PopOp) {
                     fi++;
                     continue;
                 }
 
-                // ── LabelMarker: record ring, record position, don't emit ──
                 if (inst is LabelMarker lm) {
                     labelPositions[lm.LabelId] = result.Count;
                     labelRings[lm.LabelId] = new List<int>(ring);
                     continue;
                 }
 
-                // ── Backward scan ──
                 var consumed = new int[inst.PopCount];
                 int entryDepth = ring.Count;
                 int toPop = Math.Min(inst.PopCount, entryDepth);
                 for (int i = 0; i < toPop; i++)
                     consumed[inst.PopCount - 1 - i] = ring[entryDepth - 1 - i];
 
-                // ── Record label references ──
-                // Always add to refs — LabelMarker positions may be set before
-                // or after the reference, but post-walk resolution handles all.
                 if (inst is BranchIfFalse bif)
                     labelRefs.Add((result.Count, bif.Target));
                 else if (inst is Jump jmp)
                     labelRefs.Add((result.Count, jmp.Target));
 
-                // ── Add to flat result ──
                 int idx = result.Count;
                 result.Add(inst with {
                     ConsumedFromPcs = consumed.Length > 0 ? consumed : null
                 });
 
-                // ── Update ring buffer ──
                 for (int i = 0; i < toPop && ring.Count > 0; i++)
                     ring.RemoveAt(ring.Count - 1);
                 for (int i = 0; i < inst.PushCount; i++)
@@ -92,31 +63,25 @@ public static class Lowering {
             }
         }
 
-        // ── Source range tracking ──────────────────────────────────────────
         var sourceRanges = new Dictionary<NodeId, SourceRange>();
 
-        // Wrap EmitFragment to also track SourceNodeId index ranges.
         void EmitFragmentWithRanges(List<Instruction> fragment) {
             int before = result.Count;
             EmitFragment(fragment);
             int after = result.Count;
-
             if (before == after) return;
 
-            // Track the range of indices for each unique SourceNodeId in this fragment.
             var seenNodes = new HashSet<NodeId>();
             for (int i = before; i < after; i++) {
                 var src = result[i].SourceNodeId;
                 if (src is null || !seenNodes.Add(src.Value)) continue;
-                // Find last occurrence of this SourceNodeId within this fragment.
                 int last = i;
-                for (int j = i + 1; j < after; j++) {
+                for (int j = i + 1; j < after; j++)
                     if (result[j].SourceNodeId == src) last = j;
-                }
                 if (sourceRanges.TryGetValue(src.Value, out var existing)) {
-                    int f = Math.Min(existing.FirstProgramCounter, i);
-                    int l = Math.Max(existing.LastProgramCounterInclusive, last);
-                    sourceRanges[src.Value] = new SourceRange(root, f, l);
+                    sourceRanges[src.Value] = new SourceRange(root,
+                        Math.Min(existing.FirstProgramCounter, i),
+                        Math.Max(existing.LastProgramCounterInclusive, last));
                 }
                 else {
                     sourceRanges[src.Value] = new SourceRange(root, i, last);
@@ -124,50 +89,24 @@ public static class Lowering {
             }
         }
 
-        // ── Walk the root ────────────────────────────────────────────────
-        // Emit the root's combined fragment.  All child fragments are included
-        // recursively from UopGeneration.  LabelMarkers inside fragments tell
-        // us where each label target lands.
-
-        var rootUops = analysis.GetMetadata<Poly.Interpretation.Analysis.LoweringPrep.LoweredUopMetadata>(root)?.Uops;
-        if (rootUops is not null)
-            EmitFragmentWithRanges(rootUops);
-
-        // ── Ensure ReturnOp ────────────────────────────────────────────
+        EmitFragmentWithRanges(rootUops);
 
         if (result.Count == 0 || result[^1] is not (ReturnOp or ReturnFromCall)) {
             var consumed = ring.Count > 0 ? new[] { ring[^1] } : null;
             result.Add(new ReturnOp { SourceNodeId = root.Id, ConsumedFromPcs = consumed });
         }
 
-        // ── φ detection (runs AFTER ReturnOp, BEFORE label resolution) ──
-        // Build the set of valid φ pairs from analysis metadata.
-        // Only Conditionals create label pairs (falseLabel, endLabel)
-        // that need φ.  Consecutive labels from different constructs
-        // are NOT merge points.
-        var phiPairSet = new HashSet<(int, int)>();
-
-        // Scan analysis metadata for Conditional nodes.
-        // We can't easily walk the AST here, so we rely on the pattern
-        // that Conditionals produce label pairs stored in labelRings
-        // that are in order and adjacent after deduplication.
-        // For now, detect pairs where diffDepth >= 0 AND the first
-        // label looks like a falseLabel (used as BranchIfFalse target)
-        // and the second looks like an endLabel.
+        // ── φ detection ──
         var sortedLabels = labelRings
             .Select(kv => (Label: kv.Key, Pos: labelPositions.GetValueOrDefault(kv.Key, -1), Ring: kv.Value))
             .Where(x => x.Pos >= 0)
             .OrderBy(x => x.Pos)
             .ToList();
 
-        // Identify Candidate φ labels: find BranchIfFalse targets that
-        // immediately precede a label that looks like an endLabel (the
-        // next label in sorted order where rings differ).
         for (int li = 1; li < sortedLabels.Count; li++) {
             var prev = sortedLabels[li - 1];
             var curr = sortedLabels[li];
 
-            // Compare ring entries from the TOP (last pushed) downward.
             int maxRingDepth = Math.Max(prev.Ring.Count, curr.Ring.Count);
             int diffDepth = -1;
             for (int offset = 0; offset < maxRingDepth; offset++) {
@@ -177,8 +116,6 @@ public static class Lowering {
             }
             if (diffDepth < 0) continue;
 
-            // Find the Jump that targets curr.Label (the end label).
-            // At the merge point, the then-path is identified by the Jump's PC.
             int sourcePc = -1;
             for (int j = Math.Min(curr.Pos, result.Count - 1); j >= 0; j--) {
                 if (result[j] is Instruction instr) {
@@ -191,22 +128,17 @@ public static class Lowering {
             }
             if (sourcePc < 0) continue;
 
-            // Verify this is a real Conditional pair: there must be a
-            // BranchIfFalse targeting prev.Label (the false label).
             bool hasBranchTarget = false;
             for (int k = 0; k < result.Count && !hasBranchTarget; k++)
                 if (result[k] is Instruction instr2 && instr2.GetType().Name == "BranchIfFalse")
                     if ((int)((dynamic)instr2).Target == prev.Label) hasBranchTarget = true;
             if (!hasBranchTarget) continue;
 
-            // Find the merge consumer (first instruction after curr position that pops).
             for (int j = curr.Pos; j < result.Count; j++) {
                 if (result[j].PopCount > 0 && result[j] is not LabelMarker) {
                     var old = result[j];
                     var consumed = old.ConsumedFromPcs;
                     if (consumed is not null && consumed.Length > 0) {
-                        // Compute consumed: shared state from prev ring tail,
-                        // then else-result, then pushes-after-endLabel.
                         int pushesAfterEnd = 0;
                         for (int k = curr.Pos; k < j; k++)
                             pushesAfterEnd += result[k].PushCount;
@@ -216,19 +148,16 @@ public static class Lowering {
                         if (thenVal < 0 || elseVal < 0) break;
 
                         int sharedNeeded = consumed.Length - 1 - pushesAfterEnd;
-                        // Take from prev ring, excluding its last entry (then-result).
                         int sharedStart = Math.Max(0, prev.Ring.Count - sharedNeeded - 1);
 
                         var newConsumed = new int[consumed.Length];
                         int ci = 0;
                         for (; ci < sharedNeeded && sharedStart + ci < prev.Ring.Count; ci++)
                             newConsumed[ci] = prev.Ring[sharedStart + ci];
-                        newConsumed[ci++] = elseVal;  // else-result
-                        // Append pushes-after-endLabel: their µop PC is the index
-                        // of the pushing instruction in the result list.
+                        newConsumed[ci++] = elseVal;
+
                         int pushPos = curr.Pos;
                         for (int pi = 0; pi < pushesAfterEnd && ci < consumed.Length && pushPos < result.Count; pi++, ci++) {
-                            // Skip the consumer instruction itself.
                             while (pushPos < result.Count && pushPos < j) {
                                 if (result[pushPos].PushCount > 0) break;
                                 pushPos++;
@@ -238,7 +167,6 @@ public static class Lowering {
                         }
 
                         int phiIdx = sharedNeeded >= 0 && sharedNeeded < consumed.Length ? sharedNeeded : consumed.Length - 1;
-
                         var srcs = new int[consumed.Length];
                         var alts = new int[consumed.Length];
                         Array.Fill(srcs, -1);
@@ -257,8 +185,6 @@ public static class Lowering {
             }
         }
 
-        // ── Resolve label references ────────────────────────────────────
-
         foreach (var (instIdx, labelId) in labelRefs) {
             if (labelPositions.TryGetValue(labelId, out int pos)) {
                 var old = result[instIdx];
@@ -276,435 +202,8 @@ public static class Lowering {
             }
         }
 
-        // Read max locals depth from analysis metadata (set by UopGenerationPass).
-        // Add 1 for the FrameBase offset so the Registers array covers all slots.
         int raw = analysis.GetMetadata<MaxLocalsDepthMetadata>(root)?.Depth ?? 0;
         int maxDepth = Math.Max(1, raw + 1);
-
         return new LoweringResult(result, maxDepth, sourceRanges);
-    }
-
-    private sealed class LowerCtx {
-        public List<Instruction> Instructions { get; } = [];
-        public AnalysisResult Analysis { get; }
-
-        // Label resolution
-        private int _nextLabel;
-        private readonly Dictionary<int, int> _labelPositions = [];
-        private readonly List<(int InstIdx, bool IsBranch, int Label)> _forwardRefs = [];
-
-        // Variable scope
-        public Dictionary<string, int> Parameters { get; } = [];
-        public Dictionary<string, int> Locals { get; } = [];
-        public int CurrentArgSlots { get; set; }
-
-        public LowerCtx(AnalysisResult analysis) {
-            Analysis = analysis;
-        }
-
-        public int GetOrCreateLocalSlot(string name) {
-            if (Parameters.TryGetValue(name, out int pIdx)) return pIdx;
-            if (Locals.TryGetValue(name, out int lIdx)) return CurrentArgSlots + 1 + lIdx;
-            lIdx = Locals.Count;
-            Locals[name] = lIdx;
-            return CurrentArgSlots + 1 + lIdx;
-        }
-
-        public int DefineLabel() {
-            int label = _nextLabel++;
-            _labelPositions[label] = -1;
-            return label;
-        }
-
-        public void MarkLabel(int label) {
-            _labelPositions[label] = Instructions.Count;
-        }
-
-        public void EmitBranchIfFalse(int label, NodeId? source) {
-            _forwardRefs.Add((Instructions.Count, true, label));
-            Instructions.Add(new BranchIfFalse(-1) { SourceNodeId = source });
-        }
-
-        public void EmitJump(int label, NodeId? source) {
-            _forwardRefs.Add((Instructions.Count, false, label));
-            Instructions.Add(new Jump(-1) { SourceNodeId = source });
-        }
-
-        public void EmitJumpDirect(int target, NodeId? source) {
-            Instructions.Add(new Jump(target) { SourceNodeId = source });
-        }
-
-        public void ResolveLabels() {
-            foreach (var (instIdx, isBranch, label) in _forwardRefs) {
-                if (_labelPositions.TryGetValue(label, out int pos) && pos >= 0) {
-                    Instructions[instIdx] = isBranch
-                        ? new BranchIfFalse(pos) { SourceNodeId = Instructions[instIdx].SourceNodeId }
-                        : new Jump(pos) { SourceNodeId = Instructions[instIdx].SourceNodeId };
-                }
-            }
-        }
-    }
-
-    private static void EmitNode(Node node, LowerCtx ctx) {
-        // Check for analysis-pass node replacements
-        if (ctx.Analysis.GetNodeReplacement(node) is Node replacement) {
-            EmitNode(replacement, ctx);
-            return;
-        }
-
-        switch (node) {
-            case Constant c: EmitConstant(c, ctx); return;
-
-            case Add a: EmitBinary(a.LeftHandValue, a.RightHandValue, BinOpKind.Add, ctx, a); return;
-            case Subtract s: EmitBinary(s.LeftHandValue, s.RightHandValue, BinOpKind.Sub, ctx, s); return;
-            case Multiply m: EmitBinary(m.LeftHandValue, m.RightHandValue, BinOpKind.Mul, ctx, m); return;
-            case Divide d: EmitBinary(d.LeftHandValue, d.RightHandValue, BinOpKind.Div, ctx, d); return;
-            case Modulo mo: EmitBinary(mo.LeftHandValue, mo.RightHandValue, BinOpKind.Mod, ctx, mo); return;
-
-            case Equal e: EmitBinary(e.LeftHandValue, e.RightHandValue, BinOpKind.Eq, ctx, e); return;
-            case NotEqual ne: EmitBinary(ne.LeftHandValue, ne.RightHandValue, BinOpKind.Ne, ctx, ne); return;
-            case LessThan lt: EmitBinary(lt.LeftHandValue, lt.RightHandValue, BinOpKind.Lt, ctx, lt); return;
-            case LessThanOrEqual le: EmitBinary(le.LeftHandValue, le.RightHandValue, BinOpKind.Le, ctx, le); return;
-            case GreaterThan gt: EmitBinary(gt.LeftHandValue, gt.RightHandValue, BinOpKind.Gt, ctx, gt); return;
-            case GreaterThanOrEqual ge: EmitBinary(ge.LeftHandValue, ge.RightHandValue, BinOpKind.Ge, ctx, ge); return;
-
-            case And and: EmitBinary(and.LeftHandValue, and.RightHandValue, BinOpKind.And, ctx, and); return;
-            case Or or: EmitBinary(or.LeftHandValue, or.RightHandValue, BinOpKind.Or, ctx, or); return;
-
-            case UnaryMinus um: EmitNode(um.Operand, ctx); ctx.Instructions.Add(new UnaryOp(UnaryOpKind.Neg) { SourceNodeId = um.Id }); return;
-            case Not n: EmitUnary(n.Value, UnaryOpKind.Not, ctx, n); return;
-
-            case BitwiseNot bn: EmitUnary(bn.Operand, UnaryOpKind.BitNot, ctx, bn); return;
-            case BitwiseAnd ba: EmitBinary(ba.LeftHandValue, ba.RightHandValue, BinOpKind.And, ctx, ba); return;
-            case BitwiseOr bor: EmitBinary(bor.LeftHandValue, bor.RightHandValue, BinOpKind.Or, ctx, bor); return;
-            case BitwiseXor bx: EmitBinary(bx.LeftHandValue, bx.RightHandValue, BinOpKind.Xor, ctx, bx); return;
-            case ShiftLeft sl: EmitBinary(sl.LeftHandValue, sl.RightHandValue, BinOpKind.Shl, ctx, sl); return;
-            case ShiftRight sr: EmitBinary(sr.LeftHandValue, sr.RightHandValue, BinOpKind.Shr, ctx, sr); return;
-
-            case Variable v: EmitVariable(v, ctx); return;
-            case Parameter p: EmitParameter(p, ctx); return;
-            case ThisReference: ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id }); return;
-
-            case Assignment a: EmitAssignment(a, ctx); return;
-
-            case IfStatement iff: EmitIfStatement(iff, ctx); return;
-            case WhileLoop wl: EmitWhileLoop(wl, ctx); return;
-            case Conditional cond: EmitConditional(cond, ctx); return;
-            case Block block: EmitBlock(block, ctx); return;
-
-            case Lambda lam: EmitLambda(lam, ctx); return;
-            case Invoke inv: EmitInvoke(inv, ctx); return;
-            case Return ret: EmitReturn(ret, ctx); return;
-
-            case BreakStatement: ctx.Instructions.Add(new Jump(0) { SourceNodeId = node.Id }); return;
-            case ContinueStatement: ctx.Instructions.Add(new Jump(0) { SourceNodeId = node.Id }); return;
-
-            case TypeCast tc: EmitNode(tc.Operand, ctx); return;
-            case TypeIs ti: EmitNode(ti.Operand, ctx); ctx.Instructions.Add(new LoadConst(1L) { SourceNodeId = node.Id }); return;
-
-            case Member m: EmitMember(m, ctx); return;
-            case IndexAccess ia: EmitIndexAccess(ia, ctx); return;
-            case New n:
-                foreach (var arg in n.Arguments) EmitNode(arg, ctx);
-                ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id });
-                return;
-            case NewArray na:
-                EmitNode(na.Length, ctx);
-                ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = node.Id });
-                return;
-            case DoWhileLoop dw: EmitWhileLoop(new WhileLoop(dw.Condition ?? new Constant(0L), dw.Body) { Id = dw.Id }, ctx); return;
-            case ForLoop fl: EmitForLoop(fl, ctx); return;
-            case ThrowStatement thr: EmitNode(thr.Exception, ctx); return;
-            case SuspendNode sn: EmitNode(sn.Inner, ctx); return;
-            case Await aw: EmitNode(aw.Operand, ctx); return;
-
-            default:
-                ctx.Instructions.Add(new Nop { SourceNodeId = node.Id });
-                return;
-        }
-    }
-
-    private static void EmitConstant(Constant c, LowerCtx ctx) {
-        if (c.Value is long lv) { ctx.Instructions.Add(new LoadConst(lv) { SourceNodeId = c.Id }); return; }
-        if (c.Value is int iv) { ctx.Instructions.Add(new LoadConst(iv) { SourceNodeId = c.Id }); return; }
-        if (c.Value is short sv) { ctx.Instructions.Add(new LoadConst((long)sv) { SourceNodeId = c.Id }); return; }
-        if (c.Value is byte bv) { ctx.Instructions.Add(new LoadConst((long)bv) { SourceNodeId = c.Id }); return; }
-        if (c.Value is bool bvv) { ctx.Instructions.Add(new LoadConst(bvv ? 1L : 0L) { SourceNodeId = c.Id }); return; }
-        if (c.Value is uint uiv) { ctx.Instructions.Add(new LoadConst((long)uiv) { SourceNodeId = c.Id }); return; }
-        ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = c.Id });
-    }
-
-    private static void EmitBinary(Node left, Node right, BinOpKind kind, LowerCtx ctx, Node source) {
-        EmitNode(left, ctx);
-        EmitNode(right, ctx);
-        ctx.Instructions.Add(new BinOp(kind) { SourceNodeId = source.Id });
-    }
-
-    private static void EmitUnary(Node operand, UnaryOpKind kind, LowerCtx ctx, Node source) {
-        EmitNode(operand, ctx);
-        ctx.Instructions.Add(new UnaryOp(kind) { SourceNodeId = source.Id });
-    }
-
-    private static void EmitShortCircuit(Node left, Node right, bool isOr, LowerCtx ctx, Node source) {
-        // Short-circuit: for OR (isOr=true), if left is true, skip right.
-        // For AND (isOr=false), if left is false, skip right.
-        int skipRight = ctx.DefineLabel();
-        int end = ctx.DefineLabel();
-        EmitNode(left, ctx);
-        ctx.Instructions.Add(new DupOp { SourceNodeId = source.Id });
-        if (isOr) {
-            // OR: if left is true (non-zero), skip right
-            ctx.EmitBranchIfFalse(skipRight, source.Id);
-            ctx.Instructions.Add(new PopOp { SourceNodeId = source.Id });
-            ctx.EmitJump(end, source.Id);
-        }
-        else {
-            // AND: if left is false (zero), skip right
-            ctx.EmitBranchIfFalse(end, source.Id);
-            ctx.Instructions.Add(new PopOp { SourceNodeId = source.Id });
-        }
-        ctx.MarkLabel(skipRight);
-        EmitNode(right, ctx);
-        ctx.MarkLabel(end);
-    }
-
-    private static void EmitVariable(Variable v, LowerCtx ctx) {
-        ctx.Instructions.Add(new LoadSlot(ctx.GetOrCreateLocalSlot(v.Name)) { SourceNodeId = v.Id });
-    }
-
-    private static void EmitParameter(Parameter p, LowerCtx ctx) {
-        if (p.DefaultValue is not null) {
-            EmitNode(p.DefaultValue, ctx);
-        }
-        else {
-            ctx.Instructions.Add(new LoadSlot(ctx.GetOrCreateLocalSlot(p.Name ?? "")) { SourceNodeId = p.Id });
-        }
-    }
-
-    private static void EmitAssignment(Assignment a, LowerCtx ctx) {
-        EmitNode(a.Value, ctx);
-        if (a.Destination is Variable v) {
-            int slot = ctx.GetOrCreateLocalSlot(v.Name);
-            ctx.Instructions.Add(new StoreSlot(slot) { SourceNodeId = a.Id });
-            ctx.Instructions.Add(new LoadSlot(slot) { SourceNodeId = a.Id });
-        }
-        else if (a.Destination is IndexAccess ia) {
-            EmitNode(ia.Value, ctx);
-            EmitNode(ia.Arguments[0], ctx);
-            ctx.Instructions.Add(new ArrayStore { SourceNodeId = a.Id });
-        }
-        else if (a.Destination is Member m) {
-            EmitNode(m.Value, ctx);
-            ctx.Instructions.Add(new PopOp { SourceNodeId = a.Id });
-            ctx.Instructions.Add(new StoreSlot(ctx.GetOrCreateLocalSlot(m.MemberName)) { SourceNodeId = a.Id });
-        }
-        else {
-            ctx.Instructions.Add(new PopOp { SourceNodeId = a.Id });
-        }
-    }
-
-    private static void EmitBlock(Block block, LowerCtx ctx) {
-        foreach (var v in block.Variables) {
-            if (v is Variable var && !ctx.Parameters.ContainsKey(var.Name) && !ctx.Locals.ContainsKey(var.Name)) {
-                ctx.Locals[var.Name] = ctx.Locals.Count;
-                ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = var.Id });
-                ctx.Instructions.Add(new StoreSlot(ctx.GetOrCreateLocalSlot(var.Name)) { SourceNodeId = var.Id });
-            }
-        }
-        for (int i = 0; i < block.Nodes.Count; i++) {
-            EmitNode(block.Nodes[i], ctx);
-            if (i < block.Nodes.Count - 1 && block.Nodes[i] is Poly.Syntax.Nodes.Expression)
-                ctx.Instructions.Add(new PopOp { SourceNodeId = block.Id });
-        }
-    }
-
-    private static void EmitIfStatement(IfStatement iff, LowerCtx ctx) {
-        EmitNode(iff.Condition, ctx);
-        if (iff.ElseBranch is not null) {
-            int elseLabel = ctx.DefineLabel();
-            int endLabel = ctx.DefineLabel();
-            ctx.EmitBranchIfFalse(elseLabel, iff.Id);
-            EmitNode(iff.ThenBranch, ctx);
-            ctx.Instructions.Add(new PopOp { SourceNodeId = iff.Id });
-            ctx.EmitJump(endLabel, iff.Id);
-            ctx.MarkLabel(elseLabel);
-            EmitNode(iff.ElseBranch, ctx);
-            ctx.Instructions.Add(new PopOp { SourceNodeId = iff.Id });
-            ctx.MarkLabel(endLabel);
-        }
-        else {
-            int endLabel = ctx.DefineLabel();
-            ctx.EmitBranchIfFalse(endLabel, iff.Id);
-            EmitNode(iff.ThenBranch, ctx);
-            ctx.Instructions.Add(new PopOp { SourceNodeId = iff.Id });
-            ctx.MarkLabel(endLabel);
-        }
-    }
-
-    private static void EmitWhileLoop(WhileLoop wl, LowerCtx ctx) {
-        int cont = ctx.Instructions.Count;
-        EmitNode(wl.Condition, ctx);
-        int endLabel = ctx.DefineLabel();
-        ctx.EmitBranchIfFalse(endLabel, wl.Id);
-        EmitNode(wl.Body, ctx);
-        ctx.Instructions.Add(new PopOp { SourceNodeId = wl.Id });
-        ctx.EmitJumpDirect(cont, wl.Id);
-        ctx.MarkLabel(endLabel);
-    }
-
-    private static void EmitConditional(Conditional cond, LowerCtx ctx) {
-        EmitNode(cond.Condition, ctx);
-        int falseLabel = ctx.DefineLabel();
-        int endLabel = ctx.DefineLabel();
-        ctx.EmitBranchIfFalse(falseLabel, cond.Id);
-        EmitNode(cond.IfTrue, ctx);
-        ctx.EmitJump(endLabel, cond.Id);
-        ctx.MarkLabel(falseLabel);
-        EmitNode(cond.IfFalse, ctx);
-        ctx.MarkLabel(endLabel);
-    }
-
-    private static void EmitLambda(Lambda lam, LowerCtx ctx) {
-        if (lam.Parameters is not null) {
-            for (int i = 0; i < lam.Parameters.Count; i++) {
-                var p = lam.Parameters[i];
-                if (p.Name is { } name && !ctx.Parameters.ContainsKey(name))
-                    ctx.Parameters[name] = i;
-            }
-        }
-        ctx.CurrentArgSlots = lam.Parameters?.Count ?? 0;
-        EmitNode(lam.Body, ctx);
-        ctx.Instructions.Add(new ReturnOp { SourceNodeId = lam.Id });
-    }
-
-    private static void EmitInvoke(Invoke inv, LowerCtx ctx) {
-        var resolved = ctx.Analysis.GetResolvedMember(inv);
-        if (resolved is ClrMethod clrMethod) {
-            // Direct CLR method call — no call site indirection
-            foreach (var arg in inv.Arguments)
-                EmitNode(arg, ctx);
-            bool isStatic = clrMethod.IsStatic;
-            int argCount = clrMethod.MethodInfo.GetParameters().Length + (isStatic ? 0 : 1);
-            ctx.Instructions.Add(new CallExternalDirect(
-                clrMethod.MethodInfo, argCount, isStatic) { SourceNodeId = inv.Id });
-            return;
-        }
-        if (resolved is ClrConstructor clrCtor) {
-            // CLR constructor call — use ConstructorInfo.Invoke
-            foreach (var arg in inv.Arguments)
-                EmitNode(arg, ctx);
-            // Constructors return void in the VM — we emit them via MemberInit
-            ctx.Instructions.Add(new CallExternal(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
-            return;
-        }
-        if (resolved is ClrTypeProperty clrProp) {
-            // Property getter access
-            bool isStatic = clrProp.IsStatic;
-            var getter = clrProp.PropertyInfo.GetGetMethod(nonPublic: true);
-            if (getter is not null) {
-                if (!isStatic)
-                    EmitNode(inv.Delegate is Member m ? m.Value : new Constant(0L), ctx);
-                int argCount = getter.GetParameters().Length + (isStatic ? 0 : 1);
-                ctx.Instructions.Add(new CallExternalDirect(
-                    getter, argCount, isStatic) { SourceNodeId = inv.Id });
-                return;
-            }
-            // Fallback
-            EmitNode(inv.Delegate is Member m2 ? m2.Value : new Constant(0L), ctx);
-            ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = inv.Id });
-            return;
-        }
-
-        if (inv.Delegate is Lambda lambda) {
-            // Inline lambda
-            int savedArgSlots = ctx.CurrentArgSlots;
-            if (lambda.Parameters is not null) {
-                for (int i = 0; i < lambda.Parameters.Count && i < inv.Arguments.Length; i++) {
-                    var p = lambda.Parameters[i];
-                    if (p.Name is { } name) {
-                        if (!ctx.Parameters.ContainsKey(name))
-                            ctx.Parameters[name] = i;
-                        EmitNode(inv.Arguments[i], ctx);
-                        ctx.Instructions.Add(new StoreSlot(ctx.GetOrCreateLocalSlot(name)) { SourceNodeId = inv.Id });
-                    }
-                }
-            }
-            ctx.CurrentArgSlots = lambda.Parameters?.Count ?? 0;
-            EmitNode(lambda.Body, ctx);
-            ctx.Instructions.Add(new ReturnOp { SourceNodeId = lambda.Id });
-            ctx.CurrentArgSlots = savedArgSlots;
-        }
-        else if (inv.Delegate is Member member) {
-            foreach (var arg in inv.Arguments)
-                EmitNode(arg, ctx);
-            ctx.Instructions.Add(new Call(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
-        }
-        else {
-            foreach (var arg in inv.Arguments)
-                EmitNode(arg, ctx);
-            ctx.Instructions.Add(new Call(0, inv.Arguments.Length) { SourceNodeId = inv.Id });
-        }
-    }
-
-    private static void EmitReturn(Return ret, LowerCtx ctx) {
-        if (ret.Value is not null)
-            EmitNode(ret.Value, ctx);
-        ctx.Instructions.Add(new ReturnOp { SourceNodeId = ret.Id });
-    }
-
-    private static void EmitMember(Member m, LowerCtx ctx) {
-        var resolved = ctx.Analysis.GetResolvedMember(m);
-        if (resolved is ClrTypeProperty property) {
-            var getter = property.PropertyInfo.GetGetMethod(nonPublic: true);
-            if (getter is not null) {
-                bool isStatic = property.IsStatic;
-                if (!isStatic) EmitNode(m.Value, ctx);
-                int argCount = getter.GetParameters().Length + (isStatic ? 0 : 1);
-                ctx.Instructions.Add(new CallExternalDirect(
-                    getter, argCount, isStatic) { SourceNodeId = m.Id });
-                return;
-            }
-        }
-        if (resolved is ClrMethod clrGetter) {
-            bool isStatic = clrGetter.IsStatic;
-            if (!isStatic) EmitNode(m.Value, ctx);
-            int argCount = clrGetter.MethodInfo.GetParameters().Length + (isStatic ? 0 : 1);
-            ctx.Instructions.Add(new CallExternalDirect(
-                clrGetter.MethodInfo, argCount, isStatic) { SourceNodeId = m.Id });
-            return;
-        }
-        // Fallback: push 0
-        EmitNode(m.Value, ctx);
-        ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = m.Id });
-    }
-
-    private static void EmitIndexAccess(IndexAccess ia, LowerCtx ctx) {
-        EmitNode(ia.Value, ctx);
-        foreach (var arg in ia.Arguments)
-            EmitNode(arg, ctx);
-        // Fallback: load via ArrayLoad
-        ctx.Instructions.Add(new LoadConst(0L) { SourceNodeId = ia.Id });
-    }
-
-    private static void EmitForLoop(ForLoop fl, LowerCtx ctx) {
-        if (fl.Initializer is not null) {
-            EmitNode(fl.Initializer, ctx);
-            ctx.Instructions.Add(new PopOp { SourceNodeId = fl.Id });
-        }
-        int cont = ctx.Instructions.Count;
-        if (fl.Condition is not null) {
-            EmitNode(fl.Condition, ctx);
-            int endLabel = ctx.DefineLabel();
-            ctx.EmitBranchIfFalse(endLabel, fl.Id);
-        }
-        EmitNode(fl.Body, ctx);
-        ctx.Instructions.Add(new PopOp { SourceNodeId = fl.Id });
-        if (fl.Increment is not null) {
-            EmitNode(fl.Increment, ctx);
-            ctx.Instructions.Add(new PopOp { SourceNodeId = fl.Id });
-        }
-        ctx.EmitJumpDirect(cont, fl.Id);
-        if (fl.Condition is not null)
-            ctx.MarkLabel(ctx.DefineLabel() - 1); // re-mark the end label
     }
 }

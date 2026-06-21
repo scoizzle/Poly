@@ -65,11 +65,11 @@ public class NewCompilerBasicTests {
     public async Task Branch_Prog2() {
         var result = Run([
             new LoadConst(0),
-            new BranchIfFalse(4),
+            new BranchIfFalse(4) { ConsumedFromPcs = [0] },
             new LoadConst(1),
             new Jump(5),
             new LoadConst(2),
-            new ReturnOp(),
+            new ReturnOp() { ConsumedFromPcs = [2], PhiSourcePcs = [1], PhiAltPcs = [4] },
         ]);
         await Assert.That(result).IsEqualTo(2L);
     }
@@ -78,11 +78,11 @@ public class NewCompilerBasicTests {
     public async Task BranchTrue_Prog2() {
         var result = Run([
             new LoadConst(1),
-            new BranchIfFalse(4),
+            new BranchIfFalse(4) { ConsumedFromPcs = [0] },
             new LoadConst(10),
             new Jump(5),
             new LoadConst(20),
-            new ReturnOp(),
+            new ReturnOp() { ConsumedFromPcs = [2], PhiSourcePcs = [1], PhiAltPcs = [4] },
         ]);
         await Assert.That(result).IsEqualTo(10L);
     }

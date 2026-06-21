@@ -33,7 +33,7 @@ public class InstructionProfilerTests {
             return;
 
         // Dump profile info
-        var path = $"/tmp/poly_{name}.txt";
+        var path = Path.Combine(Path.GetTempPath(), $"poly_{name}.txt");
         using var w = new StreamWriter(path);
         w.WriteLine($"=== {name} PROFILE ===");
         long total = 0;

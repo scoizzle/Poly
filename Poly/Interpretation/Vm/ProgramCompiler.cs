@@ -101,23 +101,10 @@ public static class ProgramCompiler {
         return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], null, null, maxDepth);
     }
 
-    /// <summary>
-    /// Compute ConsumedFromPcs for raw µop lists (no analysis metadata).
-    /// Falls back to the predecessor-graph ResolveProducers when control
-    /// flow is detected (φ needed at merge points).
-    /// </summary>
+    /// <summary>Compute ConsumedFromPcs for raw µop lists via linear backward scan.
+    /// Callers that need φ at merge points should set ConsumedFromPcs, PhiSourcePcs,
+    /// and PhiAltPcs manually.</summary>
     private static void BackwardScan(List<Instruction> instructions) {
-        // Check if there's any control flow — if so, use the predecessor-graph approach.
-        bool hasControlFlow = false;
-        for (int i = 0; i < instructions.Count && !hasControlFlow; i++)
-            hasControlFlow = instructions[i] is BranchIfFalse or Jump;
-
-        if (hasControlFlow) {
-            ResolveProducers(instructions);
-            return;
-        }
-
-        // Simple linear backward scan for flat µop sequences.
         var ring = new List<int>();
         for (int pc = 0; pc < instructions.Count; pc++) {
             var op = instructions[pc];
@@ -134,91 +121,6 @@ public static class ProgramCompiler {
                 ring.RemoveAt(ring.Count - 1);
             for (int i = 0; i < op.PushCount; i++)
                 ring.Add(pc);
-        }
-    }
-
-    /// <summary>
-    /// Predecessor-graph based producer resolution for raw µop lists with
-    /// control flow.  Computes ConsumedFromPcs and φ at merge points.
-    /// Kept for raw-µop tests (NewCompilerBasicTests, VmDebuggerTests).
-    /// </summary>
-    private static void ResolveProducers(List<Instruction> instructions) {
-        int n = instructions.Count;
-
-        var predecessors = new List<int>[n];
-        for (int i = 0; i < n; i++) predecessors[i] = [];
-
-        for (int pc = 0; pc < n; pc++) {
-            var op = instructions[pc];
-            if (pc + 1 < n && op is not (Jump or ReturnOp or ReturnFromCall))
-                predecessors[pc + 1].Add(pc);
-            if (op is Jump jmp && jmp.Target >= 0 && jmp.Target < n)
-                predecessors[jmp.Target].Add(pc);
-            if (op is BranchIfFalse bif) {
-                if (bif.Target >= 0 && bif.Target < n)
-                    predecessors[bif.Target].Add(pc);
-                if (pc + 1 < n && !predecessors[pc + 1].Contains(pc))
-                    predecessors[pc + 1].Add(pc);
-            }
-        }
-
-        var exitStacks = new int[n][];
-
-        for (int pc = 0; pc < n; pc++) {
-            var op = instructions[pc];
-            var preds = predecessors[pc];
-            int popCount = op.PopCount;
-            int pushCount = op.PushCount;
-
-            var entryStack = preds.Count == 0 ? [] : (exitStacks[preds[^1]] ?? []);
-
-            var consumed = new int[popCount];
-            int entryDepth = entryStack.Length;
-            int toPop = Math.Min(popCount, entryDepth);
-            for (int i = 0; i < toPop; i++)
-                consumed[popCount - 1 - i] = entryStack[entryDepth - 1 - i];
-
-            if (popCount > 0 && preds.Count >= 2) {
-                bool needsPhi = false;
-                int phiSrcPc = -1;
-                int[]? phiAlt = null;
-
-                foreach (var predPc in preds) {
-                    var predExit = exitStacks[predPc];
-                    if (predExit is null) continue;
-
-                    int predDepth = predExit.Length;
-                    int predToPop = Math.Min(popCount, predDepth);
-                    var predConsumed = new int[popCount];
-                    for (int i = 0; i < predToPop; i++)
-                        predConsumed[popCount - 1 - i] = predExit[predDepth - 1 - i];
-
-                    bool differs = false;
-                    for (int i = 0; i < popCount; i++)
-                        if (consumed[i] != predConsumed[i]) { differs = true; break; }
-
-                    if (differs) {
-                        needsPhi = true;
-                        phiSrcPc = predPc;
-                        phiAlt = predConsumed;
-                        break;
-                    }
-                }
-
-                if (needsPhi && phiAlt is not null)
-                    instructions[pc] = op with { ConsumedFromPcs = consumed, PhiSourcePcs = Enumerable.Repeat(phiSrcPc, popCount).ToArray(), PhiAltPcs = phiAlt };
-                else
-                    instructions[pc] = op with { ConsumedFromPcs = consumed };
-            }
-            else if (popCount > 0)
-                instructions[pc] = op with { ConsumedFromPcs = consumed };
-
-            int copyCount = Math.Max(0, entryDepth - popCount);
-            int newDepth = copyCount + pushCount;
-            var exit = new int[newDepth];
-            for (int i = 0; i < copyCount; i++) exit[i] = entryStack[i];
-            for (int i = 0; i < pushCount; i++) exit[copyCount + i] = pc;
-            exitStacks[pc] = exit;
         }
     }
 }

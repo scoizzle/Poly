@@ -28,8 +28,8 @@ public class NewCompilerInvariantTests {
     public async Task Compile_BranchIfFalse_NotLastInstruction() {
         var result = Run([
             new LoadConst(0),
-            new BranchIfFalse(2),
-            new ReturnOp(),
+            new BranchIfFalse(2) { ConsumedFromPcs = [0] },
+            new ReturnOp() { ConsumedFromPcs = [0] },
         ]);
         await Assert.That(result).IsEqualTo(0L);
     }
@@ -72,11 +72,11 @@ public class NewCompilerInvariantTests {
     public async Task BranchValue_MergesCorrectly() {
         var result = Run([
             new LoadConst(1),
-            new BranchIfFalse(4),
+            new BranchIfFalse(4) { ConsumedFromPcs = [0] },
             new LoadConst(10),
             new Jump(5),
             new LoadConst(20),
-            new ReturnOp(),
+            new ReturnOp() { ConsumedFromPcs = [2], PhiSourcePcs = [1], PhiAltPcs = [4] },
         ]);
         await Assert.That(result).IsEqualTo(10L);
     }

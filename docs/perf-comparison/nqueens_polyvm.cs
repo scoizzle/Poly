@@ -8,7 +8,8 @@ using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Interpretation.VirtualMachine;
+using Poly.Interpretation.Analysis.LoweringPrep;
+using Poly.Interpretation.Vm;
 
 int boardSize = args.Length > 0 ? int.Parse(args[0]) : 8;
 bool debug = args.Length > 1 && args[1] == "--debug";
@@ -68,6 +69,8 @@ var analysisResult = new AnalyzerBuilder()
     .UseThisReferenceContext()
     .UseControlFlowAnalysis()
     .UseVariableScopeValidator()
+            .UseLoweringPreparation()
+            .UseUopGeneration()
     .Build()
     .Analyze(body, setup: ctx => {
         var t = ctx.TypeDefinitions;
@@ -82,15 +85,12 @@ var analysisResult = new AnalyzerBuilder()
     });
 
 var sw = System.Diagnostics.Stopwatch.StartNew();
-long result;
-if (debug) {
-    var compiler = new VmCompiler(analysisResult);
-    var fn = compiler.CompileAsTraceableDelegate<Func<System.IO.TextWriter, long>>(body);
-    result = fn(Console.Error);
-} else {
-    var compiler = new VmCompiler(analysisResult);
-    var fn = compiler.CompileAsDelegate<Func<long>>(body);
-    result = fn();
-}
+var lowered = Lowering.Lower(body, analysisResult);
+var program = ProgramCompiler.Compile(lowered);
+using var state = new VmState(program);
+if (debug)
+    state.Trace = Console.Error;
+Vm.Execute(state);
+long result = state.Stack.Pop();
 sw.Stop();
 Console.WriteLine($"Poly VM,{boardSize},{result},{sw.ElapsedMilliseconds}");

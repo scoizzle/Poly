@@ -8,7 +8,8 @@ using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Interpretation.VirtualMachine;
+using Poly.Interpretation.Analysis.LoweringPrep;
+using Poly.Interpretation.Vm;
 
 int limit = args.Length > 0 ? int.Parse(args[0]) : 1000000;
 int wordCnt = (limit + 64) / 64;
@@ -59,6 +60,8 @@ var analysisResult = new AnalyzerBuilder()
     .UseThisReferenceContext()
     .UseControlFlowAnalysis()
     .UseVariableScopeValidator()
+            .UseLoweringPreparation()
+            .UseUopGeneration()
     .Build()
     .Analyze(body, setup: ctx => {
         var t = ctx.TypeDefinitions;
@@ -68,10 +71,12 @@ var analysisResult = new AnalyzerBuilder()
         ctx.SetResolvedType(cnt, t.GetTypeDefinition(typeof(long)));
     });
 
-var compiler = new VmCompiler(analysisResult);
-var sieve = compiler.CompileAsDelegate<Func<long>>(body);
+var lowered = Lowering.Lower(body, analysisResult);
+var program = ProgramCompiler.Compile(lowered);
+var state = new VmState(program);
 
 var sw = System.Diagnostics.Stopwatch.StartNew();
-long result = sieve();
+Vm.Execute(state);
+long result = state.Stack.Pop();
 sw.Stop();
 Console.WriteLine($"Poly VM,{limit},{result},{sw.ElapsedMilliseconds}");

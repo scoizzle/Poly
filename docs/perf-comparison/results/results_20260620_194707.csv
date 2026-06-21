@@ -1,0 +1,33 @@
+benchmark,language,size_or_limit,result,time_ms
+sieve,C,100000,9592,0.4
+sieve,C++,100000,9592,1.02517
+sieve,Rust,100000,9592,0.4
+sieve,Python,100000,9592,109.6
+sieve,JS,100000,9592,11.3
+sieve,Bun,100000,9592,22.4
+sieve,Deno,100000,9592,11.1
+sieve,Python+NumPy,100000,9592,0.3
+sieve,C# native,100000,9592,0
+sieve,C# vectorized,100000,9592,4
+sieve,Poly VM,100000,1563,2
+mandelbrot,C,128,458080,0.8
+mandelbrot,C++,128,458080,0.83175
+mandelbrot,Rust,128,458080,0.8
+mandelbrot,Python,128,458080,49.4
+mandelbrot,JS,128,458080,3.5
+mandelbrot,Bun,128,458080,3.4
+mandelbrot,Deno,128,458080,3.4
+mandelbrot,Python+NumPy,128,458080,19.1
+mandelbrot,C# native,128,458080,1
+mandelbrot,C# vectorized,128,458080,1
+mandelbrot,Poly VM,128,458080,17
+nqueens,C,8,92,0.0
+nqueens,C++,8,92,0.0155
+nqueens,Rust,8,92,0.0
+nqueens,Python,8,92,0.6
+nqueens,JS,8,92,0.7
+nqueens,Bun,8,92,0.7
+nqueens,Deno,8,92,0.7
+nqueens,Python+NumPy,8,92,0.6
+nqueens,C# native,8,92,0
+nqueens,C# vectorized,8,92,0

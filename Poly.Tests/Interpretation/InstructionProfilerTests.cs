@@ -26,7 +26,7 @@ public class InstructionProfilerTests {
     private static void ProfileToFile(string name, Node node) {
         var lowerResult = Lower(node);
         var program = ProgramCompiler.Compile(lowerResult, mode: CompilationMode.Profiling);
-        var state = new VmState(program);
+        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
         program.Delegate(state);
 
         if (state.InstructionCounters == null)

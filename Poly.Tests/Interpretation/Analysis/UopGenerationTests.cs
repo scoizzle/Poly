@@ -135,12 +135,12 @@ public sealed class UopGenerationTests {
     // ── Unary ops ──────────────────────────────────────────────────────────
 
     [Test]
-    public async Task UnaryMinus_EmitsLoadConstThenBinOpSub() {
+    public async Task UnaryMinus_EmitsLoadConstThenUnaryOpNeg() {
         var uops = GetUopsNoFold(new UnaryMinus(new Constant(5L)));
         await Assert.That(uops).Count().IsEqualTo(2);
         await Assert.That(uops[0]).IsTypeOf<LoadConst>();
-        await Assert.That(uops[1]).IsTypeOf<BinOp>();
-        await Assert.That(((BinOp)uops[1]).Immediate).IsEqualTo(0);
+        await Assert.That(uops[1]).IsTypeOf<UnaryOp>();
+        await Assert.That(((UnaryOp)uops[1]).Kind).IsEqualTo(UnaryOpKind.Neg);
     }
 
     [Test]
@@ -294,8 +294,9 @@ public sealed class UopGenerationTests {
             new Assignment(v, new Add(v, new Constant(1L))),
             new Constant(0L));
         var uops = GetUops(fl);
-        // init(3), PopOp, cond(2), BranchIfFalse(end), body(1), PopOp, inc(3), PopOp, Jump(cond)
-        await Assert.That(uops[^1]).IsTypeOf<Jump>();            // last is Jump back
+        // init(3), PopOp, cond(2), BranchIfFalse(end), body(1), PopOp, inc(3), PopOp, Jump(cond), LabelMarker(end)
+        await Assert.That(uops[^2]).IsTypeOf<Jump>();            // second-to-last is Jump back
+        await Assert.That(uops[^1]).IsTypeOf<LabelMarker>();     // last is EndLabel marker
         // Has BranchIfFalse
         await Assert.That(uops.Exists(i => i is BranchIfFalse)).IsTrue();
     }

@@ -38,6 +38,17 @@ public sealed class CompilationContext {
     public int CurrentLabelIndex { get; set; }
     public int NextLabelIndex => CurrentLabelIndex + 1;
 
+    /// <summary>When true, Jump µops insert a loop-iteration counter and
+    /// throw <c>InvalidOperationException</c> if <c>state.MaxLoopIterations</c>
+    /// is exceeded.  Zero overhead when false (no expression generated).</summary>
+    public bool LimitLoops { get; set; }
+
+    /// <summary>Local boolean: true when <c>state.MaxLoopIterations != -1</c>.
+    /// Computed once in the preamble so Jump µops don't re-read the property.</summary>
+    public ParameterExpression LoopLimitActive { get; }
+    /// <summary>Local copy of <c>state.MaxLoopIterations</c> for fast access in Jump µops.</summary>
+    public ParameterExpression LoopMaxIter { get; }
+
     public LabelTarget EntryLabel { get; } = Label("entry");
     public LabelTarget ExitLabel { get; } = Label("exit");
 
@@ -48,6 +59,11 @@ public sealed class CompilationContext {
         RawSlots = Property(ValueStack, ValueStackRawSlotsPropertyInfo);
         Registers = Property(State, StateRegistersPropertyInfo);
         InstructionCounters = Property(State, StateInstructionCountersPropertyInfo);
+
+        LoopLimitActive = Variable(typeof(bool), "_loopLimitActive");
+        LoopMaxIter = Variable(typeof(long), "_loopMaxIter");
+        _locals.Add(LoopLimitActive);
+        _locals.Add(LoopMaxIter);
     }
 
     /// <summary>Get or create the ParameterExpression for _v{pc}.

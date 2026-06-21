@@ -178,11 +178,12 @@ public sealed class LoweringPrepIntegrationTests {
         var labels = MD<ForLoopLabelMetadata>(r, loop);
         var uops = MD<LoweredUopMetadata>(r, loop)!.Uops;
 
-        // Last µop should be Jump back to CondLabel
-        var jump = (Jump)uops[^1];
-        // There should be a BranchIfFalse targeting EndLabel
+        // Second-to-last µop should be Jump back to CondLabel (last is EndLabel marker)
+        var jump = (Jump)uops[^2];
         await Assert.That(jump.Target).IsEqualTo(labels!.CondLabel);
         await Assert.That(uops.Exists(u => u is BranchIfFalse bif && bif.Target == labels.EndLabel)).IsTrue();
+        // Verify EndLabel marker exists
+        await Assert.That(uops[^1]).IsTypeOf<LabelMarker>();
     }
 
     [Test]

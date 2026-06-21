@@ -7,7 +7,7 @@ namespace Poly.Tests.Interpretation;
 public class NewCompilerInvariantTests {
     static object? Run(Instruction[] instructions) {
         var loweringResult = new LoweringResult([.. instructions]);
-        var program = ProgramCompiler.Compile(loweringResult);
+        var program = ProgramCompiler.Compile(loweringResult, mode: CompilationMode.Normal);
         var state = new VmState(program);
         program.Delegate(state);
         return state.Stack.StackPointer > 0

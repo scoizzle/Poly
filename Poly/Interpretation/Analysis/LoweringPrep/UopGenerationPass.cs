@@ -150,7 +150,7 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
 
             UnaryMinus um => [
                 .. GetChildUops(context, um.Operand),
-                new BinOp(BinOpKind.Sub, Immediate: 0) { SourceNodeId = um.Id }
+                new UnaryOp(UnaryOpKind.Neg) { SourceNodeId = um.Id }
             ],
             Not n => EmitUnary(context, n.Value, UnaryOpKind.Not, n),
             BitwiseNot bn => EmitUnary(context, bn.Operand, UnaryOpKind.BitNot, bn),
@@ -189,7 +189,7 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
             ],
             NewArray na => [
                 .. GetChildUops(context, na.Length),
-                new LoadConst(0L) { SourceNodeId = na.Id }
+                new NewArrayOp { SourceNodeId = na.Id }
             ],
 
             ThrowStatement thr => GetChildUops(context, thr.Exception),
@@ -382,6 +382,7 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
             uops.AddRange(GetChildUops(context, fl.Initializer));
             uops.Add(new PopOp { SourceNodeId = fl.Id });
         }
+        uops.Add(new LabelMarker(labels.CondLabel) { SourceNodeId = fl.Id });
         if (fl.Condition is not null) {
             uops.AddRange(GetChildUops(context, fl.Condition));
             uops.Add(new BranchIfFalse(labels.EndLabel) { SourceNodeId = fl.Id });
@@ -393,6 +394,7 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
             uops.Add(new PopOp { SourceNodeId = fl.Id });
         }
         uops.Add(new Jump(labels.CondLabel) { SourceNodeId = fl.Id });
+        uops.Add(new LabelMarker(labels.EndLabel) { SourceNodeId = fl.Id });
         return uops;
     }
 
@@ -582,7 +584,7 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         return [
             .. GetChildUops(context, ia.Value),
             .. ia.Arguments.SelectMany(a => GetChildUops(context, a)),
-            new LoadConst(0L) { SourceNodeId = ia.Id }
+            new ArrayLoad { SourceNodeId = ia.Id }
         ];
     }
 }

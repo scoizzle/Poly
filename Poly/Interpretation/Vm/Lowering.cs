@@ -44,7 +44,18 @@ public static class Lowering {
         var labelRings = new Dictionary<int, List<int>>();
 
         void EmitFragment(List<Instruction> fragment) {
-            foreach (var inst in fragment) {
+            for (int fi = 0; fi < fragment.Count; fi++) {
+                var inst = fragment[fi];
+
+                // ── Peephole: dead post-push from Assignment(Variable).
+                // LoadSlot immediately followed by PopOp generates no
+                // useful code — the value was just stored and immediately
+                // discarded.  Skip both so the ring stays balanced.
+                if (inst is LoadSlot && fi + 1 < fragment.Count && fragment[fi + 1] is PopOp) {
+                    fi++;
+                    continue;
+                }
+
                 // ── LabelMarker: record ring, record position, don't emit ──
                 if (inst is LabelMarker lm) {
                     labelPositions[lm.LabelId] = result.Count;
@@ -360,7 +371,7 @@ public static class Lowering {
             case And and: EmitBinary(and.LeftHandValue, and.RightHandValue, BinOpKind.And, ctx, and); return;
             case Or or: EmitBinary(or.LeftHandValue, or.RightHandValue, BinOpKind.Or, ctx, or); return;
 
-            case UnaryMinus um: EmitNode(um.Operand, ctx); ctx.Instructions.Add(new BinOp(BinOpKind.Sub, Immediate: 0) { SourceNodeId = um.Id }); return;
+            case UnaryMinus um: EmitNode(um.Operand, ctx); ctx.Instructions.Add(new UnaryOp(UnaryOpKind.Neg) { SourceNodeId = um.Id }); return;
             case Not n: EmitUnary(n.Value, UnaryOpKind.Not, ctx, n); return;
 
             case BitwiseNot bn: EmitUnary(bn.Operand, UnaryOpKind.BitNot, ctx, bn); return;

@@ -7,8 +7,8 @@ namespace Poly.Tests.Interpretation;
 public class NewCompilerBasicTests {
     static object? Run(Instruction[] instructions) {
         var loweringResult = new LoweringResult([.. instructions]);
-        var program = ProgramCompiler.Compile(loweringResult);
-        var state = new VmState(program);
+        var program = ProgramCompiler.Compile(loweringResult, mode: CompilationMode.Normal);
+        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
 
         program.Delegate(state);
         var result = state.Stack.StackPointer > 0

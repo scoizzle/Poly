@@ -44,8 +44,8 @@ public class UopRealWorldTests {
 
     private static VmState CompileState(Node node) {
         var lowerResult = LowerWith(node);
-        var program = ProgramCompiler.Compile(lowerResult);
-        return new VmState(program) { Trace = _traceWriter };
+        var program = ProgramCompiler.Compile(lowerResult, mode: CompilationMode.Normal);
+        return new VmState(program) { Trace = _traceWriter, MaxLoopIterations = 100_000_000 };
     }
 
     // ═══════════════════════════════════════════════════════════════

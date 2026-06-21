@@ -15,6 +15,10 @@ public sealed class VmState : IDisposable {
     // Profiling
     public long[]? InstructionCounters { get; set; }
 
+    // Loop iteration limit safety (-1 = unlimited)
+    public long MaxLoopIterations { get; set; } = -1;
+    public long[]? LoopCounters { get; set; }
+
     public VmState(VmProgram program) {
         Program = program;
     }
@@ -26,6 +30,7 @@ public sealed class VmState : IDisposable {
         Status = InterpreterStatus.Running;
         Stack.Reset();
         Heap.Clear();
+        LoopCounters = null;
     }
 
     public void Dispose() => Stack.Dispose();

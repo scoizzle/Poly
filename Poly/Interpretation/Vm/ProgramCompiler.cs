@@ -6,10 +6,12 @@ using static System.Linq.Expressions.Expression;
 
 namespace Poly.Interpretation.Vm;
 
-public enum CompilationMode { Normal, Profiling, Debug }
+public enum CompilationMode { NoDebug, Profiling, Normal }
 
 public static class ProgramCompiler {
     public static VmProgram Compile(LoweringResult input, int maxActiveLocalDepth = 32, CompilationMode mode = CompilationMode.Normal) {
+        // Normal mode (default): loop limits enabled.
+        // Use CompilationMode.NoDebug to disable safety features for benchmarks.
         var instructions = input.Instructions;
         // When the new lowering-prep pipeline already set ConsumedFromPcs, skip.
         // For raw µop lists (tests, direct API callers), compute via backward scan.
@@ -25,6 +27,8 @@ public static class ProgramCompiler {
         var ctx = new CompilationContext();
         var body = new List<Expression>();
         int n = instructions.Count;
+
+        ctx.LimitLoops = mode is CompilationMode.Normal or CompilationMode.Profiling;
 
         for (int i = 0; i < n; i++) {
             ctx.GetLabel(i);
@@ -44,6 +48,20 @@ public static class ProgramCompiler {
             Assign(Property(ctx.State, "FrameBase"), Constant(0))));
         if (mode == CompilationMode.Profiling) {
             body.Add(Assign(ctx.InstructionCounters, NewArrayBounds(typeof(long), Constant(n))));
+        }
+        if (ctx.LimitLoops) {
+            // Cache MaxLoopIterations in a local and compute active flag once.
+            var maxIterProp = Property(ctx.State, nameof(VmState.MaxLoopIterations));
+            body.Add(Assign(ctx.LoopMaxIter, maxIterProp));
+            body.Add(Assign(ctx.LoopLimitActive,
+                NotEqual(ctx.LoopMaxIter, Constant(-1L))));
+            // Lazy-init LoopCounters when loop limiting is active.
+            body.Add(IfThen(
+                AndAlso(
+                    ctx.LoopLimitActive,
+                    Equal(Property(ctx.State, nameof(VmState.LoopCounters)), Constant(null, typeof(long[])))),
+                Assign(Property(ctx.State, nameof(VmState.LoopCounters)),
+                    NewArrayBounds(typeof(long), Constant(n)))));
         }
 
         if (n > 0) {

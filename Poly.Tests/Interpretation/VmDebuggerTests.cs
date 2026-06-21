@@ -8,8 +8,8 @@ public class VmDebuggerTests {
     [Test]
     public async Task Debugger_BreakpointSet_SyncsToState() {
         var instructions = new Instruction[] { new LoadConst(42), new ReturnOp() };
-        var program = ProgramCompiler.Compile(new LoweringResult([.. instructions]));
-        var state = new VmState(program);
+        var program = ProgramCompiler.Compile(new LoweringResult([.. instructions]), mode: CompilationMode.Normal);
+        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
         var dbg = new VmDebugger(state, program);
 
         dbg.SetBreakpoint(0);
@@ -23,8 +23,8 @@ public class VmDebuggerTests {
     [Test]
     public async Task Debugger_StepInto_AddsStepBreakpoint() {
         var instructions = new Instruction[] { new LoadConst(42), new ReturnOp() };
-        var program = ProgramCompiler.Compile(new LoweringResult([.. instructions]));
-        var state = new VmState(program);
+        var program = ProgramCompiler.Compile(new LoweringResult([.. instructions]), mode: CompilationMode.Normal);
+        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
         var dbg = new VmDebugger(state, program);
 
         // Simulate suspension at PC 0
@@ -40,8 +40,8 @@ public class VmDebuggerTests {
     [Test]
     public async Task Debugger_Execute_RunsDelegate() {
         var instructions = new Instruction[] { new LoadConst(42), new ReturnOp() };
-        var program = ProgramCompiler.Compile(new LoweringResult([.. instructions]));
-        var state = new VmState(program);
+        var program = ProgramCompiler.Compile(new LoweringResult([.. instructions]), mode: CompilationMode.Normal);
+        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
         var dbg = new VmDebugger(state, program);
 
         var result = dbg.Execute();
@@ -53,8 +53,8 @@ public class VmDebuggerTests {
         var instructions = new Instruction[] {
             new LoadConst(10), new LoadConst(20), new BinOp(BinOpKind.Add), new ReturnOp()
         };
-        var program = ProgramCompiler.Compile(new LoweringResult([.. instructions]));
-        var state = new VmState(program);
+        var program = ProgramCompiler.Compile(new LoweringResult([.. instructions]), mode: CompilationMode.Normal);
+        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
         var dbg = new VmDebugger(state, program);
 
         dbg.Execute();

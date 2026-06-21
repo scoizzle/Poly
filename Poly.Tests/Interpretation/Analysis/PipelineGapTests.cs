@@ -39,15 +39,15 @@ public sealed class PipelineGapTests {
     private static (long? New, long? Legacy) RunBoth(Node node) {
         var result = NewPipeline.Analyze(node);
         var lowered = Lowering.Lower(node, result);
-        var prog = ProgramCompiler.Compile(lowered);
-        var state = new VmState(prog);
+        var prog = ProgramCompiler.Compile(lowered, mode: CompilationMode.Normal);
+        var state = new VmState(prog) { MaxLoopIterations = 100_000_000 };
         Vm.Execute(state);
         long? newVal = state.Stack.StackPointer > 0 ? state.Stack.Pop() : null;
 
         var result2 = LegacyPipeline.Analyze(node);
         var lowered2 = Lowering.Lower(node, result2);
-        var prog2 = ProgramCompiler.Compile(lowered2);
-        var state2 = new VmState(prog2);
+        var prog2 = ProgramCompiler.Compile(lowered2, mode: CompilationMode.Normal);
+        var state2 = new VmState(prog2) { MaxLoopIterations = 100_000_000 };
         Vm.Execute(state2);
         long? legacyVal = state2.Stack.StackPointer > 0 ? state2.Stack.Pop() : null;
 

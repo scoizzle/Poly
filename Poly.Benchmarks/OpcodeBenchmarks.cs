@@ -34,7 +34,7 @@ public class OpcodeBenchmarks {
         _cMul = CompileRaw([new LoadConst(7L), new LoadConst(8L), new BinOp(BinOpKind.Mul), new ReturnOp()]);
         _cEq = CompileRaw([new LoadConst(10L), new LoadConst(10L), new BinOp(BinOpKind.Eq), new ReturnOp()]);
         _cNot = CompileRaw([new LoadConst(0L), new UnaryOp(UnaryOpKind.Not), new ReturnOp()]);
-        _cNeg = CompileRaw([new LoadConst(42L), new BinOp(BinOpKind.Sub, Immediate: 0), new ReturnOp()]);
+        _cNeg = CompileRaw([new LoadConst(42L), new UnaryOp(UnaryOpKind.Neg), new ReturnOp()]);
         _cDup = CompileRaw([new LoadConst(42L), new DupOp(), new ReturnOp()]);
         _cPop = CompileRaw([new LoadConst(10L), new LoadConst(20L), new PopOp(), new ReturnOp()]);
         _cLoadSlot = CompileRaw([new LoadSlot(0), new ReturnOp()]);

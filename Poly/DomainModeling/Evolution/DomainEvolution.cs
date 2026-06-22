@@ -30,11 +30,11 @@ public sealed class DomainEvolution {
     public EvolutionResult Apply(IReadOnlyList<DomainChange> changes, AnalysisResult? priorAnalysis = null) {
         var start = DateTime.UtcNow;
 
-        var proposed = ApplyChanges(_current, changes);
+        var (proposed, modifiedNodes) = ApplyChanges(_current, changes);
 
         var analysis = priorAnalysis is null
             ? DomainModelAnalyzer.Analyze(proposed)
-            : DomainModelAnalyzer.Analyze(proposed, priorAnalysis, GetAffectedNodes(proposed, changes));
+            : DomainModelAnalyzer.Analyze(proposed, priorAnalysis, modifiedNodes);
 
         // Integrate change history as first-class Information diagnostics *immediately*
         // after analysis, before any access to .Diagnostics. This ensures the EVOLUTION_STEP
@@ -77,9 +77,10 @@ public sealed class DomainEvolution {
     /// </summary>
     public EvolutionBuilder Evolve() => new(this, _current);
 
-    private Domain ApplyChanges(Domain current, IReadOnlyList<DomainChange> changes) {
+    private (Domain Domain, IReadOnlyList<Node> ModifiedNodes) ApplyChanges(
+        Domain current, IReadOnlyList<DomainChange> changes) {
         if (changes.Count == 0)
-            return current;
+            return (current, []);
 
         var context = new DomainMutationContext(current);
 
@@ -87,88 +88,7 @@ public sealed class DomainEvolution {
             change.ApplyTo(context);
         }
 
-        return context.ToDomain();
-    }
-
-    private IReadOnlyList<Node> GetAffectedNodes(Domain proposed, IReadOnlyList<DomainChange> changes) {
-        var nodes = new List<Node>();
-
-        foreach (var change in changes) {
-            switch (change) {
-                case AddEntityChange c: AddType(c.Name); break;
-                case RemoveEntityChange c: break; // removed — not in proposed
-                case AddPropertyToEntityChange c: AddEntity(c.EntityName); break;
-                case RemovePropertyFromEntityChange c: AddEntity(c.EntityName); break;
-                case AddStageChange c: AddEntity(c.EntityName); break;
-                case RemoveStageChange c: AddEntity(c.EntityName); break;
-                case AddActionChange c: AddEntity(c.EntityName); break;
-                case RemoveActionChange c: AddEntity(c.EntityName); break;
-                case AddActionToStageChange c: AddEntity(c.EntityName); break;
-                case RemoveActionFromStageChange c: AddEntity(c.EntityName); break;
-                case AddEffectToActionChange c: AddEntity(c.EntityName); break;
-                case RemoveEffectFromActionChange c: AddEntity(c.EntityName); break;
-                case AddPolicyToEntityChange c: AddEntity(c.EntityName); break;
-                case RemovePolicyFromEntityChange c: AddEntity(c.EntityName); break;
-                case AddPolicyToStageChange c: AddEntity(c.EntityName); break;
-                case RemovePolicyFromStageChange c: AddEntity(c.EntityName); break;
-                case AddPolicyToActionChange c: AddEntity(c.EntityName); break;
-                case RemovePolicyFromActionChange c: AddEntity(c.EntityName); break;
-                case AddParameterToActionChange c: AddEntity(c.EntityName); break;
-                case RemoveParameterFromActionChange c: AddEntity(c.EntityName); break;
-                case SetActionResultChange c: AddEntity(c.EntityName); break;
-                case AddOnEntryEffectToStageChange c: AddEntity(c.EntityName); break;
-                case RemoveOnEntryEffectFromStageChange c: AddEntity(c.EntityName); break;
-                case AddOnExitEffectToStageChange c: AddEntity(c.EntityName); break;
-                case RemoveOnExitEffectFromStageChange c: AddEntity(c.EntityName); break;
-                case AddEventReferenceToEntityChange c: AddEntity(c.EntityName); break;
-                case RemoveEventReferenceFromEntityChange c: AddEntity(c.EntityName); break;
-                case AddPrimitiveTypeChange c: AddType(c.Name); break;
-                case RemovePrimitiveTypeChange c: break;
-                case AddValueTypeChange c: AddType(c.Name); break;
-                case RemoveValueTypeChange c: break;
-                case AddEventChange c: AddType(c.Name); break;
-                case RemoveEventChange c: break;
-                case AddRelationshipChange c: break; // not in type tree
-                case RemoveRelationshipChange c: break;
-                case AddPropertyToRelationshipChange c: break;
-                case RemovePropertyFromRelationshipChange c: break;
-                case AddConstraintToPropertyChange c: AddEntity(c.EntityName); break;
-                case RemoveConstraintFromPropertyChange c: AddEntity(c.EntityName); break;
-                case AddConstraintToDomainTypeChange c: AddType(c.TypeName); break;
-                case RemoveConstraintFromDomainTypeChange c: AddType(c.TypeName); break;
-                case AddPropertyToEventChange c: AddType(c.EventName); break;
-                case RemovePropertyFromEventChange c: AddType(c.EventName); break;
-                case ChangePropertyTypeChange c: AddEntity(c.EntityName); break;
-                case SetRelationshipShapeChange c: break;
-                case SetPrimitiveTypeCategoryChange c: AddType(c.TypeName); break;
-                case AddEventSubscriptionChange c: AddEntity(c.EntityName); break;
-                case RemoveEventSubscriptionChange c: AddEntity(c.EntityName); break;
-                case AddEventSubscriptionCorrelationChange c: AddEntity(c.EntityName); break;
-                case RemoveEventSubscriptionCorrelationChange c: AddEntity(c.EntityName); break;
-                case SetEventSubscriptionRoutingModeChange c: AddEntity(c.EntityName); break;
-                case SetEventSubscriptionEventParameterChange c: AddEntity(c.EntityName); break;
-                case AddStageToRelationshipChange c: break;
-                case RemoveStageFromRelationshipChange c: break;
-                case AddPolicyToRelationshipChange c: break;
-                case RemovePolicyFromRelationshipChange c: break;
-                case SetEntityParentChange c: AddEntity(c.EntityName); break;
-                case SetDomainNameChange: nodes.Add(proposed); break;
-            }
-        }
-
-        return nodes;
-
-        void AddEntity(string entityName) {
-            var e = proposed.Types.OfType<Entity>().FirstOrDefault(et =>
-                string.Equals(et.Name, entityName, StringComparison.Ordinal));
-            if (e is not null) nodes.Add(e);
-        }
-
-        void AddType(string typeName) {
-            var t = proposed.Types.FirstOrDefault(tp =>
-                string.Equals(tp.Name, typeName, StringComparison.Ordinal));
-            if (t is not null) nodes.Add(t);
-        }
+        return (context.ToDomain(), context.ModifiedNodes);
     }
 
     private EvolutionTrace BuildTrace(

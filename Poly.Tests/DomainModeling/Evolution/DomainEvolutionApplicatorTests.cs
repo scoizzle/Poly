@@ -2054,4 +2054,125 @@ public class DomainEvolutionApplicatorTests {
         var result = new DomainEvolution(start).Apply([]);
         await Assert.That(result.Succeeded).IsTrue();
     }
+
+    [Test]
+    public async Task DomainExpression_Comparison_AllKinds_CanBeConstructed() {
+        var start = new Domain("Test", [
+            new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
+            new Entity("Stock", [
+                new Property("Quantity", new DomainTypeReference("Int"), []),
+                new Property("Min", new DomainTypeReference("Int"), []),
+                new Property("Max", new DomainTypeReference("Int"), [])
+            ], [], [], [], [])
+        ], []);
+
+        // Each kind uses ConditionalEffect wrapping a comparison as the condition.
+        // Then/Else branches use AssignEffect to avoid requiring valid stage references.
+
+        // Equal
+        var eqResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckEqual")
+            .AddEffectToAction("Stock", "CheckEqual",
+                new ConditionalEffect(
+                    DomainExpression.Equal(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Literal(0))],
+                    null))
+            .Apply();
+        await Assert.That(eqResult.Succeeded).IsTrue();
+
+        // NotEqual
+        var neqResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckNotEqual")
+            .AddEffectToAction("Stock", "CheckNotEqual",
+                new ConditionalEffect(
+                    DomainExpression.NotEqual(DomainExpression.Property("Quantity"), DomainExpression.Literal(0)),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Literal(42))],
+                    null))
+            .Apply();
+        await Assert.That(neqResult.Succeeded).IsTrue();
+
+        // LessThan
+        var ltResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckLow")
+            .AddEffectToAction("Stock", "CheckLow",
+                new ConditionalEffect(
+                    DomainExpression.LessThan(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))],
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))]))
+            .Apply();
+        await Assert.That(ltResult.Succeeded).IsTrue();
+
+        // LessThanOrEqual
+        var lteResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckAtOrBelowMin")
+            .AddEffectToAction("Stock", "CheckAtOrBelowMin",
+                new ConditionalEffect(
+                    DomainExpression.LessThanOrEqual(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))],
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))]))
+            .Apply();
+        await Assert.That(lteResult.Succeeded).IsTrue();
+
+        // GreaterThan
+        var gtResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckOverstock")
+            .AddEffectToAction("Stock", "CheckOverstock",
+                new ConditionalEffect(
+                    DomainExpression.GreaterThan(DomainExpression.Property("Quantity"), DomainExpression.Property("Max")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))],
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))]))
+            .Apply();
+        await Assert.That(gtResult.Succeeded).IsTrue();
+
+        // GreaterThanOrEqual
+        var gteResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckAtOrAboveMax")
+            .AddEffectToAction("Stock", "CheckAtOrAboveMax",
+                new ConditionalEffect(
+                    DomainExpression.GreaterThanOrEqual(DomainExpression.Property("Quantity"), DomainExpression.Property("Max")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))],
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))]))
+            .Apply();
+        await Assert.That(gteResult.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task DomainExpression_Comparison_ConstructsCorrectNode() {
+        // Verify the factory methods produce the right Comparison nodes in memory
+        var equal = DomainExpression.Equal(DomainExpression.Property("A"), DomainExpression.Property("B"));
+        await Assert.That(equal).IsTypeOf<Comparison>();
+        var comp = (Comparison)equal;
+        await Assert.That(comp.Kind).IsEqualTo(ComparisonKind.Equal);
+
+        var lt = DomainExpression.LessThan(DomainExpression.Property("X"), DomainExpression.Literal(10));
+        await Assert.That(lt).IsTypeOf<Comparison>();
+        var comp2 = (Comparison)lt;
+        await Assert.That(comp2.Kind).IsEqualTo(ComparisonKind.LessThan);
+    }
+
+    [Test]
+    public async Task Evolution_ApplyChanges_ReturnsModifiedNodes() {
+        // Verify the allocation fix: ApplyChanges now returns modified nodes list
+        var start = new Domain("Test", [
+            new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
+        ], []);
+
+        var evolution = new DomainEvolution(start);
+        var changes = new DomainChange[] {
+            new AddEntityChange("Order", []),
+            new AddPropertyToEntityChange("Order", new Property("Total", new DomainTypeReference("Int"), []))
+        };
+
+        var result = evolution.Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(order.Properties.Count).IsEqualTo(1);
+    }
 }

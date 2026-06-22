@@ -47,6 +47,26 @@ public abstract record DomainExpression : DomainObject {
 
     public static DomainExpression Not(DomainExpression operand) =>
         new Not(operand);
+
+    // --- Comparison operators ---
+
+    public static DomainExpression Equal(DomainExpression left, DomainExpression right) =>
+        new Comparison(left, right, ComparisonKind.Equal);
+
+    public static DomainExpression NotEqual(DomainExpression left, DomainExpression right) =>
+        new Comparison(left, right, ComparisonKind.NotEqual);
+
+    public static DomainExpression LessThan(DomainExpression left, DomainExpression right) =>
+        new Comparison(left, right, ComparisonKind.LessThan);
+
+    public static DomainExpression LessThanOrEqual(DomainExpression left, DomainExpression right) =>
+        new Comparison(left, right, ComparisonKind.LessThanOrEqual);
+
+    public static DomainExpression GreaterThan(DomainExpression left, DomainExpression right) =>
+        new Comparison(left, right, ComparisonKind.GreaterThan);
+
+    public static DomainExpression GreaterThanOrEqual(DomainExpression left, DomainExpression right) =>
+        new Comparison(left, right, ComparisonKind.GreaterThanOrEqual);
 }
 
 // === Concrete nodes (deliberately small set) ===
@@ -142,6 +162,16 @@ public sealed record RelationshipNavigation(
     DomainExpression TargetProperty
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => [TargetProperty];
+}
+
+public enum ComparisonKind { Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual }
+
+public sealed record Comparison(
+    DomainExpression Left,
+    DomainExpression Right,
+    ComparisonKind Kind
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Left, Right];
 }
 
 // Logical composition nodes

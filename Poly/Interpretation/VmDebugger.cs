@@ -48,12 +48,20 @@ public sealed class VmDebugger {
 
     // ── Execution control ──
 
-    /// <summary>Step to the next µop (next BreakpointCheck instruction).</summary>
+    /// <summary>Step to the next µop.</summary>
     public void StepInto() {
-        if (!IsSuspended) return;
-        _stepBreakpoints.Add(_state.ProgramCounter + 1);  // next µop
-        SyncBreakpoints();
-        Resume();
+        if (IsSuspended) {
+            int target = _state.ProgramCounter + 1;
+            if (target < Program.Instructions.Count) {
+                _stepBreakpoints.Add(target);
+                SyncBreakpoints();
+            }
+            Resume();
+        }
+        else if (_state.ProgramCounter == 0) {
+            _stepBreakpoints.Add(0);
+            SyncBreakpoints();
+        }
     }
 
     /// <summary>Step to the end of the current source node.</summary>

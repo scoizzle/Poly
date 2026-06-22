@@ -1,12 +1,13 @@
 using System.Linq.Expressions;
 
+using Poly.Interpretation;
 using Poly.Interpretation.Vm.Instructions;
 
 using static System.Linq.Expressions.Expression;
 
 namespace Poly.Interpretation.Vm;
 
-public enum CompilationMode { NoDebug, Normal, Profiling, TraceExpressions }
+public enum CompilationMode { NoDebug, Debug, Normal, Profiling, TraceExpressions }
 
 public static class ProgramCompiler {
     public static VmProgram Compile(LoweringResult input, int maxActiveLocalDepth = 32, CompilationMode mode = CompilationMode.Normal) {
@@ -112,6 +113,29 @@ public static class ProgramCompiler {
             ctx.CurrentLabelIndex = pc;
 
             body.Add(Label(ctx.GetLabel(pc)));
+
+            if (mode == CompilationMode.Debug) {
+                var interrupt = Property(ctx.State, nameof(VmState.DebugInterrupt));
+                var skipResume = Property(ctx.State, nameof(VmState.SuspendResume));
+                var status = Property(ctx.State, nameof(VmState.Status));
+                var spill = Instructions.Call.CtxPushRegisters(ctx);
+                int depth = ctx.GetRingDepth(pc);
+
+                body.Add(IfThen(
+                    AndAlso(
+                        NotEqual(interrupt, Constant(null, typeof(Action<VmState>))),
+                        Not(skipResume)),
+                    Block(
+                        Invoke(interrupt, ctx.State),
+                        IfThen(Equal(status, Constant(InterpreterStatus.Suspended)),
+                            Block(spill,
+                                Assign(Property(ctx.State, "ProgramCounter"), Constant(pc)),
+                                Assign(Property(ctx.State, nameof(VmState.SuspendResume)), Constant(true)),
+                                Assign(Property(ctx.State, nameof(VmState.SavedRingDepth)), Constant(depth)),
+                                Assign(Property(ctx.State, nameof(VmState.NeedsRingRestore)), Constant(true)),
+                                Goto(ctx.ExitLabel))))));
+                body.Add(Assign(skipResume, Constant(false)));
+            }
 
             if (mode == CompilationMode.Profiling) {
                 body.Add(PreIncrementAssign(ArrayAccess(ctx.InstructionCounters, Constant(pc))));

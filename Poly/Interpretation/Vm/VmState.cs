@@ -22,6 +22,8 @@ public sealed class VmState : IDisposable {
     // Breakpoint suspend/resume
     public bool NeedsRingRestore { get; set; }
     public int SavedRingDepth { get; set; }
+    public bool SuspendResume { get; set; }
+    public Action<VmState>? DebugInterrupt { get; set; }
 
     public VmState(VmProgram program) {
         Program = program;
@@ -36,6 +38,7 @@ public sealed class VmState : IDisposable {
         Heap.Clear();
         LoopCounters = null;
         NeedsRingRestore = false;
+        SuspendResume = false;
     }
 
     public void Dispose() => Stack.Dispose();

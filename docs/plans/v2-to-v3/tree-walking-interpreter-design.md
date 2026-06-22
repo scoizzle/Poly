@@ -1,4 +1,6 @@
-# Stack-Based Tree-Walking Virtual Machine — Design Plan
+# HISTORICAL: Stack-Based Tree-Walking Virtual Machine — Design Plan
+
+**Status: SUPERSEDED — June 2026. The TreeWalkingInterpreter was never fully implemented and has been removed. The VM (`Poly/Interpretation/Vm/`) is now the sole canonical execution engine. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.**
 
 **Core Architectural Tenet:** The interpreter must be **suspendable, introspectable, and re-analyzable by design**. 
 

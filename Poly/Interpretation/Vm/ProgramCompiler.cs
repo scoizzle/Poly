@@ -14,6 +14,12 @@ public static class ProgramCompiler {
         // Normal mode (default): loop limits enabled.
         // Use CompilationMode.NoDebug to disable safety features for benchmarks.
         var instructions = input.Instructions;
+
+        // Heap constants are pre-collected during UopGeneration and carried
+        // through the LoweringResult.  No instruction patching needed —
+        // LoadHeapConst already has the correct handle at emission time.
+        var heapConstants = input.HeapConstants;
+
         // When the new lowering-prep pipeline already set ConsumedFromPcs, skip.
         // For raw µop lists (tests, direct API callers), compute via backward scan.
         bool alreadyResolved = false;
@@ -169,7 +175,7 @@ public static class ProgramCompiler {
 
         var del = delegateExpr.Compile();
 
-        return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], null, null, maxDepth);
+        return new VmProgram(del, instructions, new Dictionary<NodeId, SourceRange>(), [], heapConstants, null, maxDepth);
     }
 
     /// <summary>Simulate the eval-stack ring to compute each producer µop's ring depth.

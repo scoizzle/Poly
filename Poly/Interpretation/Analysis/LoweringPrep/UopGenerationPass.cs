@@ -121,7 +121,7 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
 
     private List<Instruction> EmitThis(AnalysisContext context, Node node) {
         return node switch {
-            Constant c => EmitConstant(c),
+            Constant c => EmitConstant(context, c),
             Variable v => EmitVariable(v),
             Parameter p => EmitParameter(context, p),
             ThisReference => [new LoadConst(0L) { SourceNodeId = node.Id }],
@@ -206,17 +206,28 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
 
     // ── Constant ────────────────────────────────────────────────────
 
-    private static List<Instruction> EmitConstant(Constant c) {
-        long value = c.Value switch {
-            long lv => lv,
-            int iv => iv,
-            short sv => sv,
-            byte bv => bv,
-            bool bvv => bvv ? 1L : 0L,
-            uint uiv => (long)uiv,
-            _ => 0L,
+    private static List<Instruction> EmitConstant(AnalysisContext context, Constant c) {
+        return c.Value switch {
+            long lv => [new LoadConst(lv) { SourceNodeId = c.Id }],
+            int iv => [new LoadConst(iv) { SourceNodeId = c.Id }],
+            short sv => [new LoadConst(sv) { SourceNodeId = c.Id }],
+            byte bv => [new LoadConst(bv) { SourceNodeId = c.Id }],
+            bool bvv => [new LoadConst(bvv ? 1L : 0L) { SourceNodeId = c.Id }],
+            uint uiv => [new LoadConst((long)uiv) { SourceNodeId = c.Id }],
+            null => [new LoadConst(0L) { SourceNodeId = c.Id }],
+            // Non-numeric constants accumulate in the global heap-constant
+            // metadata (keyed under NodeId.Empty).  The index into the
+            // list is the heap handle, known at emission time.
+            var heapVal => EmitHeapConstant(context, heapVal, c.Id),
         };
-        return [new LoadConst(value) { SourceNodeId = c.Id }];
+    }
+
+    private static List<Instruction> EmitHeapConstant(AnalysisContext context, object value, NodeId sourceId) {
+        var meta = context.Metadata.GetOrAdd<HeapConstantMetadata>(null,
+            static () => new HeapConstantMetadata(new List<object?>()));
+        int handle = meta.Values.Count;
+        meta.Values.Add(value);
+        return [new LoadHeapConst(value, handle) { SourceNodeId = sourceId }];
     }
 
     // ── Variable / Parameter ────────────────────────────────────────

@@ -30,8 +30,10 @@ public static partial class Vm {
         var program = state.Program;
         state.Status = InterpreterStatus.Running;
 
-        // Pre-load constants into heap
+        // Pre-load constants into heap and track how many for auto-dereference
+        int constantCount = 0;
         if (program.Constants is { } constants) {
+            constantCount = constants.Count;
             for (int i = 0; i < constants.Count; i++)
                 state.Heap.Allocate(constants[i]);
         }
@@ -52,6 +54,20 @@ public static partial class Vm {
 
         long raw = state.Stack.RawSlots[sp - 1];
         state.Status = InterpreterStatus.Completed;
+
+        // If the result is a heap handle within the pre-loaded constant range
+        // AND is not a common boolean/numeric sentinel, dereference it so
+        // callers get the actual CLR object rather than an opaque handle.
+        // 0 and 1 are excluded as they're almost always boolean results.
+        int handle = (int)raw;
+        if (handle > 1 && handle < constantCount) {
+            var heapObj = state.Heap.Get(handle);
+            if (heapObj is not long && heapObj is not int
+                && heapObj is not short && heapObj is not byte
+                && heapObj is not double && heapObj is not float)
+                return InterpreterResult.FromValue(heapObj);
+        }
+
         return InterpreterResult.FromValue(raw);
     }
 

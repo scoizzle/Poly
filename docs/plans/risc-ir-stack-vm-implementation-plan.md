@@ -1,9 +1,9 @@
 # Implementation Plan: Bytecode VM for the Reference Interpreter
 
-**Status**: Active implementation — Phases 0–4 complete, Phase 5 in progress  
+**Status**: Active implementation — Phases 0–4 complete, Phase 5 in progress. **VM IS the canonical execution engine** (`Poly/Interpretation/Vm/`). The tree-walking interpreter it was designed to replace has been removed. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.  
 **Owner**: [To be assigned]  
 **Related**: 
-- `docs/plans/v2-to-v3/tree-walking-interpreter-design.md`
+- `docs/plans/v2-to-v3/tree-walking-interpreter-design.md` (historical — tree-walker removed)
 - `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md`
 - `docs/decisions/2026-06-post-lowering-insight-analysis.md`
 - `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`

@@ -204,6 +204,16 @@ public static class Lowering {
 
         int raw = analysis.GetMetadata<MaxLocalsDepthMetadata>(root)?.Depth ?? 0;
         int maxDepth = Math.Max(1, raw + 1);
-        return new LoweringResult(result, maxDepth, sourceRanges);
+
+        // Collect heap constants accumulated during UopGeneration
+        // (stored under NodeId.Empty as global metadata).
+        IReadOnlyList<object?>? heapConstants = null;
+        var heapMeta = analysis.GetMetadata<HeapConstantMetadata>(null);
+        if (heapMeta?.Values.Count > 0)
+            heapConstants = heapMeta.Values.AsReadOnly();
+
+        return new LoweringResult(result, maxDepth, sourceRanges) {
+            HeapConstants = heapConstants
+        };
     }
 }

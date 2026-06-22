@@ -2,9 +2,9 @@
 
 **Phase**: 1  
 **Priority**: High (validates the whole approach)  
-**Owner**: TBD  
-**Status**: In Progress (orchestrator-led kickoff after WS4 full-send simplification)  
-**Last Updated**: 2026-06 (WS5 kickoff: PersonLifecycle proof via evolution layer)
+**Owner**: Grok (orchestrator)  
+**Status**: Complete — both proofs pass (1253 tests). Comparison operators and allocation fix delivered.  
+**Last Updated**: 2026-06-22 (updated test counts, DomainChange count, resolved gaps noted)
 
 ## Goal
 Demonstrate that the new immutable core + evolution layer is not only theoretically better, but actually solves real problems the current demos and roadblocks have.
@@ -59,18 +59,19 @@ This is one of the most important validation points for the entire port. Strong 
 - Action-targeting change types (`AddParameterToActionChange`, etc.) only searched entity-level actions, not stage-level actions. All 7 types updated to fall back to stage-level search.
 - Test assertion was checking step3 diagnostics for step2's changes (fixed).
 
-**Known V3 gaps documented as Phase 4 input (from Library proof):**
-1. Cross-entity mutation — CheckoutBook/ReturnBook need to modify Book.AvailableCopies
-2. Dynamic calculation — RenewLoan needs arithmetic (increment, date extension)
-3. Conditional effects — ReportLost needs ConditionalEffect + InvokeAction
-4. Entity inheritance — No ParentEntity in V3 Entity
-5. InvokeAction parameter binding — FulfillReservation→CheckoutBook not supported
+**Documented gaps (most resolved during WS1** — see `ws7-v3-expressiveness-audit.md` for refreshed audit):
+1. ✅ Cross-entity mutation — `AssignEffect.cs` exists with `Target` + `Value` DomainExpression. RelationshipNav enables cross-entity references.
+2. ✅ Dynamic calculation — All arithmetic, DateOperation, RelationshipNavigation, and Comparison operators on DomainExpression.
+3. ✅ Conditional effects — `ConditionalEffect.cs` + `InvokeActionEffect.cs` both exist.
+4. ✅ Entity inheritance — `Entity.ParentEntityName` + `SetEntityParentChange` + full analyzer support.
+5. ✅ InvokeAction parameter binding — `InvokeActionEffect.cs` with PropertyBinding parameter bindings.
+Remaining: executable lowering path (Phase 2/WS8).
 
 **Milestone: Incremental Analysis (June 2026)**
-- `GetAffectedNodes` in `DomainEvolution.cs` now returns real affected nodes for all 40+ `DomainChange` subtypes.
-- Wired into `Apply(..., priorAnalysis)` overload so incremental analysis receives real affected-node lists.
-- 5 new `DomainChange` subtypes added covering relationship properties, property constraints, and domain rename.
-- Total test count: 1031 (all passing).
+- `GetAffectedNodes` replaced by `ModifiedNodes` from `DomainMutationContext` — eliminates 80-line switch over 66 `DomainChange` subtypes and redundant O(t) type scans.
+- Wired into `Apply(..., priorAnalysis)` overload so incremental analysis receives real modified-node lists from mutation context.
+- **66 concrete `DomainChange` subtypes** (all entity, value type, event, primitive, relationship, stage, action, policy, effect, parameter, constraint, event subscription, contract operations).
+- Total test count: **1253 (all passing)**.
 
 **Next targets:**
 - WS5 exit criteria are met (PersonLifecycle + ≥1 roadblock via evolution layer). Incremental analysis milestone achieved.

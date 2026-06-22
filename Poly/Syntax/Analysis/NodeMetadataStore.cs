@@ -8,6 +8,15 @@ namespace Poly.Syntax.Analysis;
 /// (linear scan, cache-friendly) and promotes to a dictionary only when that threshold is exceeded.
 /// <see cref="Set{TMetadata}"/> uses overwrite semantics so that incremental reruns of the same
 /// analysis pass are idempotent.
+///
+/// <para><b>Global (non-node) metadata.</b>
+/// Passing <c>null</c> for the <c>node</c> parameter stores the metadata under
+/// <see cref="NodeId.Empty"/>, which acts as a sentinel for pass-level or
+/// analysis-level data that isn't associated with any single AST node.
+/// <c>Get</c> falls back to the <c>NodeId.Empty</c> bucket when a per-node
+/// lookup misses.  This is used, for example, by the lowering pipeline to
+/// accumulate heap-allocated constant values during µop generation without
+/// attaching them to a particular AST node.</para>
 /// </summary>
 public sealed class NodeMetadataStore {
     private const int InlineCapacity = 4;

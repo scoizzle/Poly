@@ -43,6 +43,13 @@ public sealed record CallExternalDirect(MethodInfo Target, int ArgSlots, bool Is
             var instanceType = Target.DeclaringType;
             if (instanceType == typeof(int) || instanceType == typeof(long))
                 rawArgs[0] = Convert(rawArgs[0], instanceType);
+            else if (instanceType is not null && !instanceType.IsValueType) {
+                // Instance is a heap handle — load the actual object from
+                // state.Heap.RawSlots[handle] and cast to the declaring type.
+                var handle = Convert(rawArgs[0], typeof(int));
+                var obj = ArrayAccess(ctx.HeapRawSlots, handle);
+                rawArgs[0] = Convert(obj, instanceType);
+            }
         }
 
         Expression? instance = IsStatic ? null : rawArgs[0];
@@ -54,13 +61,33 @@ public sealed record CallExternalDirect(MethodInfo Target, int ArgSlots, bool Is
         if (Target.ReturnType == typeof(void))
             return call;
 
-        // Convert result to long for the VM's uniform type system
+        // Convert result to long for the VM's uniform type system.
+        // Reference-type results are stored on the heap and the handle (int)
+        // is sign-extended to long. Value types are direct-converted.
         Expression result = call;
-        if (Target.ReturnType == typeof(int)) result = Convert(result, typeof(long));
-        else if (Target.ReturnType == typeof(long)) { }
-        else if (Target.ReturnType == typeof(bool)) result = Condition(result, Constant(1L), Constant(0L));
-        else if (Target.ReturnType == typeof(double)) result = Convert(result, typeof(long));
-        else result = Convert(result, typeof(long));
+        var returnType = Target.ReturnType;
+        if (returnType == typeof(void)) { }
+        else if (returnType == typeof(long)) { }
+        else if (returnType == typeof(int)) result = Convert(result, typeof(long));
+        else if (returnType == typeof(short)) result = Convert(result, typeof(long));
+        else if (returnType == typeof(byte)) result = Convert(result, typeof(long));
+        else if (returnType == typeof(bool)) result = Condition(result, Constant(1L), Constant(0L));
+        else if (returnType == typeof(double)) result = Convert(result, typeof(long));
+        else if (returnType == typeof(float)) result = Convert(result, typeof(long));
+        else if (!returnType.IsValueType) {
+            // Reference type: allocate on heap, return handle
+            var allocateMethod = typeof(Heap).GetMethod(nameof(Heap.Allocate))!;
+            result = Convert(
+                Call(ctx.Heap, allocateMethod, Convert(result, typeof(object))),
+                typeof(long));
+        }
+        else {
+            // Other value type: box and store on heap
+            var allocateMethod = typeof(Heap).GetMethod(nameof(Heap.Allocate))!;
+            result = Convert(
+                Call(ctx.Heap, allocateMethod, Convert(result, typeof(object))),
+                typeof(long));
+        }
 
         return Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), result);
     }

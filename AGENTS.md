@@ -54,24 +54,35 @@ The expanded rationale, history, and examples of how these principles have been 
   - `Node.cs`, `NodeExtensions.cs` — base + fluent construction helpers
   - `Analysis/` — `AnalysisContext`, `AnalyzerBuilder`, `Analyzer`, diagnostics & metadata store
 - `Interpretation/`
-  - `Analysis/` — semantic passes (Semantics, ConstantFolding, ControlFlow)
-  - `LinqExpressions/` — `LinqExpressionGenerator`, `INodeCompiler`
+  - `Analysis/` — semantic passes (Semantics, ConstantFolding, ControlFlow, LoweringPrep, UopGeneration)
+  - `Vm/` — VM execution engine: `Vm.cs`, `VmState.cs`, `ProgramCompiler.cs`, `Lowering.cs` (µop assembly), `Instruction` types (26+ µop subtypes), `Heap.cs`, `Closure.cs`, `ValueStack.cs`
+  - `LinqExpressions/` — `LinqExpressionGenerator`, `INodeCompiler` (secondary — test reference only, may be removed)
+  - `CSharp/` — `CSharpGenerator.cs` (production codegen output)
   - `Mermaid/` — AST visualization
-  - `VirtualMachine/` — VM bytecode lowering (`Lowering.cs`), execution (`Vm.cs`), opcodes (`OpCode.cs`), state (`VmState.cs`), heap (`Heap.cs`), closures (`Closure.cs`)
 
-### Typical VM Pipeline
+**The TreeWalkingInterpreter has been removed.** The VM is the sole canonical execution engine. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
+
+### Canonical VM Pipeline
+
 ```csharp
+// 1. Analysis (produces µop metadata)
 var analyzer = new AnalyzerBuilder()
     .UseTypeResolver().UseMemberResolver().UseVariableScopeValidator()
+    .UseLoweringPreparation().UseUopGeneration()
     .Build();
 
 var result = analyzer.Analyze(node);
-var program = Lowering.Lower(node, result);
-using var state = new VmState { Program = program };
+
+// 2. Lowering assembly (resolves labels, φ, branch targets)
+var loweringResult = Lowering.Lower(node, result);
+
+// 3. Program compilation (generates compiled delegate)
+var program = ProgramCompiler.Compile(loweringResult);
+
+// 4. Execution
+using var state = new VmState(program);
 var output = Vm.Execute(state);
 ```
-
-The VM is the canonical semantics for lowered IR. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
 
 `AnalysisContext` holds type definitions, node metadata, and diagnostics. There is no `Operators/` directory.
 
@@ -172,6 +183,6 @@ AGENTS.md contains the *operational* rules. `docs/decisions/` contains the *rati
 **Before stylistic or structural edits:** Confirm against `docs/decisions/` where relevant.
 
 - Make **minimal changes**; match existing fluent API naming and chaining patterns.
-- `Expr` = `System.Linq.Expressions.Expression` (global alias — see `Poly/GlobalUsings.cs`).
+- `Expr` = `System.Linq.Expressions.Expression` (file-local alias in test files; `Poly/GlobalUsings.cs` uses `global using Expression = System.Linq.Expressions.Expression`).
 - No inline comments unless the logic is genuinely non-obvious.
 - No `#region` / `#endregion` directives in new code.

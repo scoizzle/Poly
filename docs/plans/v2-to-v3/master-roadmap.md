@@ -76,10 +76,12 @@ See:
 
 Phase 1 achievements:
 - **WS1 Foundation**: Thin evolution layer on immutable core, NodeId continuity, MVP operations, basic traces ✅
-- **WS7 Expressiveness Audit**: Comprehensive V2↔V3 gap catalog, roadblock mappings, Phase 4 prioritization ✅
-- **WS5 Proofs**: PersonLifecycle + Library Loan Lifecycle both proven end-to-end (1031 tests) ✅
-- **Incremental Analysis Muscle**: `GetAffectedNodes` returns real nodes for all 40+ `DomainChange` subtypes, wired into `Apply(..., priorAnalysis)` ✅
-- **DomainChange Coverage Expansion**: 5 new subtypes (SetDomainName, Relationship property management, Property constraint management) + 6 tests ✅
+- **WS7 Expressiveness Audit**: Comprehensive V2↔V3 gap catalog, roadblock mappings, Phase 4 prioritization ✅ (refreshed June 2026 — Live Audit Update applied)
+- **WS5 Proofs**: PersonLifecycle + Library Loan Lifecycle both proven end-to-end (1253 tests) ✅
+- **Comparison operators**: `Equal`, `NotEqual`, `LessThan`, `LessThanOrEqual`, `GreaterThan`, `GreaterThanOrEqual` added to `DomainExpression` — unlocks `ConditionalEffect` for real conditions ✅
+- **Allocation fix**: `GetAffectedNodes` (80-line switch over 66 subtypes) replaced by `ModifiedNodes` from `DomainMutationContext` — eliminates redundant O(t) type scan per change ✅
+- **Incremental Analysis**: `ModifiedNodes` wired into `Apply(..., priorAnalysis)` via mutation context (replacing manual switch) ✅
+- **DomainChange Coverage**: **66 concrete subtypes** (all entity, value type, event, primitive, relationship, stage, action, policy, effect, parameter, constraint, event subscription, contract, and relationship-scoped operations) ✅
 
 Remaining Phase 1 polish:
 1. **WS4 Trace Quality** — Serviceable per WS5 proofs. Remaining: ensure agents get excellent output from the unified diagnostic stream. Lower priority.
@@ -97,11 +99,13 @@ Remaining Phase 1 polish:
 - SideEffectAnalysisPass refactored as efficient DCE precursor: `AggregateChildren<T>` fusion (one-pass visitation + aggregation), flyweight singletons for metadata, sparse `SideEffectMetadata` (only emitted for pures; default "has effects"), direct indexed handling for high-fanout `Block`s, options hoisted, elision of unused pure intermediates + loop controls (initializer/increment), `CanElide` / `HasSideEffects` extensions.
 - ControlFlowAnalysisPass now owns advanced reachability: full migration of infinite loop detection (purity + no-mutation to cond vars), constant/pure condition pruning for If/Loops/Switch (edge pruning + specific diags + Elidable tagging), switch exhaustiveness + dead cases, exception/throw reachability in TryCatch (dead catch pruning), must-execute/post-dominance facts, labeled gotos + dead label detection, pure-vs-effectful infinite distinction via richer `InfiniteLoopMetadata`, deeper elision integration.
 - First-class `Mutability` [Flags] enum promoted to `ITypeMember` (replacing three separate booleans on ITypeField/ITypeProperty): `Mutable`, `ReadOnlyAfterInit`, `CompileTimeConst` (automatically implies ReadOnlyAfterInit), `VolatileAccess`. Clr impls make reflection-based assumptions (`IsLiteral` → CompileTimeConst, `IsInitOnly` → ReadOnlyAfterInit) with safe `Mutable` fallbacks for unknowable cases (properties, external types). Used in SideEffect (volatile forces side effects), CF mutation detection (consts don't count as runtime mutations; volatiles count as impact), emission, etc. Directly supports "is this mutable or does it cause mutations?" for elision, CF, and neurosymbolic insight.
-- Improved analysis-before-interpret discipline surfaced (e.g., `TreeWalkingInterpreter.Evaluate` auto-runs full `AnalyzeForEvaluation` (incl. CF + SideEffect + Folding) when no pre-result provided; contrast with lighter `BuildExpression` in some integration tests such as the arithmetic parser/evaluator). Full pipeline now consistently includes ConstantFolding → SideEffect → ControlFlow. Integration tests should make their chosen analysis policy explicit.
+- **VM is now the sole canonical execution engine.** The TreeWalkingInterpreter has been removed. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`. The VM pipeline: Syntax AST → LoweringPrep/UopGeneration analysis → µops → Lowering.Assemble → ProgramCompiler.Compile → Vm.Execute.
 - Soundness improvements to mutation detection (`HasMutationToVars`): now accounts for non-pure `Invoke`s, `SuspendNode`, member/index assigns, external parameters/references that can alias state.
-- **Fundamentals diagnostic review of the Syntax + Interpretation Analysis pipeline** (orchestrator-led, explicit user request): complete catalog of present (standard AnalyzeForEvaluation full pipeline vs lighter semantic profile in test helpers; sparse NodeMetadataStore + flyweights; AggregateChildren/AnyChild + direct-index Block precedent + hoisted opts; SideEffect DCE w/ elision of pures + controls; ControlFlow full CFG + const/infinite/switch/exception/dead-label pruning + richer Infinite + MustExecute + sound mutation via Mutability; ConstantFolding early-out + replacement; resolutions + scope; visit tracking + incremental; InsightAnalyzer + ExecutionInsight + Register hooks at suspend; 3 elision consumers; domain analyzers sharing the substrate via DomainObject:Node). Confirmed alignment to neurosymbolic (analysis for structural + DCE/insight; tree-walker behavioral), post-lowering (Proposed; hooks + some domain insight analyzers + live-state present, no auto layered + no Suggestion/Explanation severities yet), tree-walking design (explicit analysis policy documented), core principles (gated, working, first-consumer). See new agent-summary `orchestrator-fundamentals-analysis-pipeline-review-2026.md` for full present/gaps/impact. Key takeaway: the core IR analysis foundation is now solid and de-risks WS8 lowering work; advanced gaps (dataflow, alias/points-to, interprocedural summaries, const-value propagation from members, volatile memory model, demand-driven, richer must-execute consumers) are appropriately deferred absent first consumers.
+- **Fundamentals diagnostic review of the Syntax + Interpretation Analysis pipeline** (orchestrator-led, explicit user request): complete catalog of present (standard analysis pipeline vs lighter semantic profile in test helpers; sparse NodeMetadataStore + flyweights; AggregateChildren/AnyChild + direct-index Block precedent + hoisted opts; SideEffect DCE w/ elision of pures + controls; ControlFlow full CFG + const/infinite/switch/exception/dead-label pruning + richer Infinite + MustExecute + sound mutation via Mutability; ConstantFolding early-out + replacement; resolutions + scope; visit tracking + incremental; InsightAnalyzer + ExecutionInsight + Register hooks at suspend; 2 elision consumers; domain analyzers sharing the substrate via DomainObject:Node). Confirmed alignment to neurosymbolic (analysis for structural + DCE/insight), post-lowering (Proposed; hooks + some domain insight analyzers + live-state present, no auto layered + no Suggestion/Explanation severities yet), core principles (gated, working, first-consumer). See new agent-summary `orchestrator-fundamentals-analysis-pipeline-review-2026.md` for full present/gaps/impact. Key takeaway: the core IR analysis foundation is now solid and de-risks WS8 lowering work; advanced gaps (dataflow, alias/points-to, interprocedural summaries, const-value propagation from members, volatile memory model, demand-driven, richer must-execute consumers) are appropriately deferred absent first consumers.
 
-These directly advance the "re-analyzable lowered code", "analysis-driven execution (elision)", and "post-lowering insight" tenets from the neurosymbolic vision and tree-walking design. WS8 execution can now build on a much stronger shared `Syntax/Analysis` + introspection foundation. DomainExpression lowering and V3-specific passes remain as primary deliverables.
+These directly advance the "re-analyzable lowered code", "analysis-driven execution (elision)", and "post-lowering insight" tenets from the neurosymbolic vision. WS8 execution builds on a much stronger shared `Syntax/Analysis` + introspection foundation.
+
+**WS8 Deliverable A (DomainExpression→Syntax AST lowering pass) complete June 2026.** All 21 DomainExpression types lower to standard Syntax/Nodes. 29 tests passing. The VM (`Poly/Interpretation/Vm/`) is the sole canonical execution engine; the tree-walking interpreter has been removed. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
 
 **Phase 4 (Full Expressiveness) preparation now active.**
 - Dynamic calculation (arithmetic + DateOperation) and read-only RelationshipNavigation for policy rules — documented in `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`.
@@ -129,7 +133,7 @@ These directly advance the "re-analyzable lowered code", "analysis-driven execut
 | AGENTS.md + decisions properly reference this plan | ✅ | Strong links exist |
 | First Orchestrator has claimed a workstream | ✅ | Grok claimed merged WS1 (Evolution Layer Applicator + MVP Ops) |
 
-**Bottom line (June 2026)**: Phase 1 foundation complete. WS5 proofs pass (1031 tests). Incremental analysis and DomainChange coverage expansion delivered. **Phase 2 core analysis unification significantly advanced** (SideEffect DCE refactoring + full CF ownership of reachability/mutation/volatile+const modeling via first-class `Mutability` enum on `ITypeMember`; see detailed note above). Phase 4 (Full Expressiveness) design work started. Remaining Phase 1: WS4 trace polish + WS6 roadmap hygiene. WS8 now has a much stronger foundation to execute against.
+**Bottom line (June 2026)**: Phase 1 foundation complete. WS5 proofs pass (**1253 tests**). Comparison operators and allocation fix delivered. Incremental analysis and DomainChange coverage expansion delivered (66 subtypes). **Phase 2 core analysis unification significantly advanced** (SideEffect DCE refactoring + full CF ownership of reachability/mutation/volatile+const modeling via first-class `Mutability` enum on `ITypeMember`; see detailed note above). Phase 4 (Full Expressiveness) design work started. Remaining Phase 1: WS4 trace polish + WS6 roadmap hygiene. WS8 now has a much stronger foundation to execute against.
 
 **What is solid right now:**
 - Clear overall strategy and 5 phases
@@ -155,7 +159,7 @@ This requirement is a first-class driver starting in Phase 1.
 - WS8 Phase 2 (Analysis Unification + Lowering Parity) — Workstream file created and updated with core analysis + mutability progress; execution ready to leverage the stronger foundation for DomainExpression lowering and V3 parity.
 - Phase 4 design — Dynamic calculation + read-only RelationshipNavigation design complete (decision record `2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`, supersedes `2026-06-phase4-cross-entity-mutation-and-dynamic-calculation.md`).
 - Decision records — New records needed for Phase 2/4 design decisions.
-- Further DomainChange coverage — Remaining gaps (DomainType constraints, Event properties, Relationship shape, Property type changes).
+- DomainChange coverage — **Resolved**: All areas listed (DomainType constraints, Event properties, Relationship shape, Property type changes) now have dedicated DomainChange subtypes. Total: 66 concrete subtypes.
 
 See `00-bootstrap-and-ignition-plan.md` for the ignition sequence. The ownership plan (session plan.md) now drives the first 2–3 weeks of execution.
 
@@ -195,7 +199,7 @@ Future notes should be added as new dated sections. The original detailed recomm
 
 **Phase 1 Re-evaluation (June 2026)**: After WS1 delivered the thin evolution layer foundation, the plan was re-evaluated.
 
-**WS7 Complete (June 2026)**: The V3 Expressiveness Audit is now done (comprehensive table, roadblock mappings with Suggested Fixes, Phase 4 prioritization, orchestrator sign-off). This directly de-risks Phase 4 as intended per the immutable-core decision.
+**WS7 Complete (June 2026)**: The V3 Expressiveness Audit was delivered (comprehensive table, roadblock mappings, Phase 4 prioritization, orchestrator sign-off). **Refreshed June 2026-22** — code audit revealed significant Phase 1 implementation work had outpaced the original audit. All advanced effects (Composite, Conditional, InvokeAction, Assign, DeleteEntityInstance, Link/Unlink), Entity inheritance, Relationship-scoped stages/policies, EventSubscription, Comparison operators, and 17 analyzers all exist but were marked as missing. The refreshed audit corrects this. See `ws7-v3-expressiveness-audit.md`. This directly de-risks Phase 4 as intended per the immutable-core decision.
 
 Key shift post-WS1/WS7:
 - WS1 = Foundation Complete.
@@ -223,17 +227,15 @@ NodeId preservation for immutable records is a mechanical `with { Id = node.Id }
 
 ### 3. The workstream table should add a "V3 Expressiveness Gaps" workstream
 
-The plan has no workstream for cataloguing what V3 can't model that V2 can. Based on code analysis, known gaps include:
+The plan has no workstream for cataloguing what V3 can't model that V2 can. Based on code analysis, known gaps were identified. WS7 was created and delivered. **Most of the originally identified gaps have been resolved during WS1 implementation** (Entity inheritance, Event subscriptions, Relationship-scoped stages/policies, all advanced effects like Composite/Conditional/InvokeAction/Assign, DeleteEntityInstance, Link/UnlinkRelationship, and Comparison operators). See `ws7-v3-expressiveness-audit.md` for the refreshed audit table.
 
+**Remaining genuine gaps:**
 | Concept | V2 Status | V3 Status |
 |---------|-----------|-----------|
-| Entity inheritance (`ParentEntity`) | ✅ Entity.cs:47 | ❌ Not present |
-| Event subscriptions + correlation | ✅ `EventSubscription.cs` | ❌ Not present |
-| Relationship-scoped policies/stages | ✅ `Relationship.cs` has `_policies`, `_stages` | ❌ Relationship.cs has neither |
 | Actor entity subtype | ✅ `Actor.cs` | ❌ Not present |
 | Rule-composed policies | ✅ `Policy._rules` with 6+ rule subtypes | ❌ Policy uses `DomainExpression` only |
-
-**Recommended action**: Add a WS7 "V3 Expressiveness Audit" workstream for Phase 1. Its deliverable is a catalog document listing every V2 concept and whether V3 can model it, with notes on whether the gap is intentional (simplification) or a missing feature. This prevents Phase 4 from being a reactive scramble when roadblocks surface.
+| Lowering / Code Generation | ✅ Full pipeline | ❌ No DomainExpression→Syntax AST lowering yet |
+| Effect output wiring | ✅ `EffectResult`/`EffectValueRef` | ⚠️ Partial (`InvocationResult?` on Effect) |
 
 ### 4. Update WS1/WS3 dependency and status in the table
 

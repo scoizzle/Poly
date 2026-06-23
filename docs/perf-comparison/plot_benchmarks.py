@@ -4,21 +4,9 @@ import matplotlib.patches as mpatches
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CSV = os.path.join(ROOT, "docs/perf-comparison/results/results_20260621_114509.csv")
-OUT = os.path.join(ROOT, "docs/perf-comparison/results/benchmark_comparison.png")
+RESULTS_DIR = os.path.join(ROOT, "docs/perf-comparison/results")
 
-data = {}
-with open(CSV) as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        bm = row["benchmark"]
-        data.setdefault(bm, []).append(row)
-
-# Sort each benchmark by time_ms ascending
-for bm in data:
-    data[bm].sort(key=lambda r: float(r["time_ms"]))
-
-# Color palette
+# ── Palette & labels ──
 POLY_COLOR = "#e66101"
 POLY_PREP = "#fdb863"
 NATIVE_COLOR = "#5e3c99"
@@ -35,92 +23,110 @@ TITLES = {
     "collatz": "Collatz (1M limit) — 837,799:524, 524 steps",
 }
 
-DESCRIPTIONS = {
-    "sieve": [  # exec times for context
-        "Poly VM exec=3ms — tied #1 with C/Rust/C#",
-    ],
-}
 
-fig, axes = plt.subplots(2, 2, figsize=(16, 10))
-fig.suptitle("Poly VM Benchmark Comparison — Execution Time (ms, log scale, lower is better)",
-             fontsize=16, fontweight="bold", y=1.02)
+def plot_csv(csv_path):
+    base = os.path.splitext(csv_path)[0]
+    out_png = base + ".png"
 
-for ax, (bm_name, rows) in zip(axes.flat, data.items()):
-    labels = []
-    exec_times = []
-    prep_times = []
-    bar_colors = []
+    if (os.path.exists(out_png)):
+        print(f"Skipping {out_png[RESULTS_DIR.__len__() + 1:]}, already exists.")
+        return
 
-    for r in rows:
-        lang = r["language"]
-        label = lang
-        exec_ms = float(r["time_ms"])
-        prep_ms = float(r["prep_ms"]) if r["prep_ms"] else 0
+    data = {}
+    with open(csv_path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("result") == "FAILED":
+                continue
+            data.setdefault(row["benchmark"], []).append(row)
 
-        labels.append(label)
-        exec_times.append(max(exec_ms, 0.001))  # avoid log(0)
-        prep_times.append(prep_ms if prep_ms > 0 else 0)
+    for bm in data:
+        data[bm].sort(key=lambda r: float(r["time_ms"]))
 
-        if "Poly" in lang:
-            bar_colors.append(POLY_COLOR)
-        elif "native" in lang or "vectorized" in lang:
-            bar_colors.append(NATIVE_COLOR)
-        else:
-            idx = len(bar_colors) % len(OTHER_COLORS)
-            bar_colors.append(OTHER_COLORS[idx])
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+    fig.suptitle("Poly VM Benchmark Comparison — Execution Time (ms, log scale, lower is better)",
+                 fontsize=16, fontweight="bold", y=1.02)
 
-    y_pos = np.arange(len(labels))
+    for ax, (bm_name, rows) in zip(axes.flat, data.items()):
+        labels = []
+        exec_times = []
+        prep_times = []
+        bar_colors = []
 
-    # Plot exec time bars
-    bars_exec = ax.barh(y_pos, exec_times, height=0.6,
-                        color=bar_colors, zorder=3)
+        for r in rows:
+            lang = r["language"]
+            exec_ms = float(r["time_ms"])
+            prep_ms = float(r.get("prep_ms", "0") or "0")
 
-    # Overlay prep time segment for Poly VM
-    for i, (r, prep) in enumerate(zip(rows, prep_times)):
-        if prep > 0:
-            exec_ms = exec_times[i]
-            ax.barh(i, prep, left=exec_ms, height=0.6,
-                    color=POLY_PREP, zorder=3)
-            ax.text(exec_ms + prep, i, f"  {int(prep)}ms prep",
-                    va="center", fontsize=7, color="#666")
+            labels.append(lang)
+            exec_times.append(max(exec_ms, 0.001))
+            prep_times.append(prep_ms if prep_ms > 0 else 0)
 
-    # Annotate exec time values
-    for i, (bar, val) in enumerate(zip(bars_exec, exec_times)):
-        display = f"{val:.1f}" if val >= 1 else f"{val:.3f}"
-        # place text at end of bar
-        x_pos = val
-        ax.text(x_pos, i, f"  {display}",
-                va="center", fontsize=7,
-                color="white" if bar_colors[i] in (POLY_COLOR, NATIVE_COLOR) else "#333",
-                fontweight="bold" if bar_colors[i] == POLY_COLOR else "normal")
+            if "Poly" in lang:
+                bar_colors.append(POLY_COLOR)
+            elif "native" in lang or "vectorized" in lang:
+                bar_colors.append(NATIVE_COLOR)
+            else:
+                idx = len(bar_colors) % len(OTHER_COLORS)
+                bar_colors.append(OTHER_COLORS[idx])
 
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels, fontsize=9)
-    ax.set_xscale("log")
-    ax.set_xlabel("ms (log scale)", fontsize=9)
-    ax.set_title(TITLES.get(bm_name, bm_name), fontsize=11, fontweight="bold")
-    ax.invert_yaxis()
-    ax.axvline(x=1, color="#ccc", linewidth=0.5, zorder=0)
-    ax.grid(axis="x", alpha=0.3, zorder=0)
+        y_pos = np.arange(len(labels))
 
-    # Highlight Poly VM row with a bracket
-    for i, r in enumerate(rows):
-        if "Poly" in r["language"]:
-            ax.annotate("", xy=(0.001, i - 0.3), xytext=(0.001, i + 0.3),
-                        arrowprops=dict(arrowstyle="<->", color=POLY_COLOR, lw=2))
-            break
+        bars_exec = ax.barh(y_pos, exec_times, height=0.6,
+                            color=bar_colors, zorder=3)
 
-# Legend
-legend_elements = [
-    mpatches.Patch(color=POLY_COLOR, label="Poly VM (exec)"),
-    mpatches.Patch(color=POLY_PREP, label="Poly VM (compilation prep)"),
-    mpatches.Patch(color=NATIVE_COLOR, label="C# native / vectorized"),
-    mpatches.Patch(color="#b2b2b2", label="Other languages"),
-]
-fig.legend(handles=legend_elements, loc="lower center",
-           ncol=4, fontsize=10, frameon=True)
+        for i, (r, prep) in enumerate(zip(rows, prep_times)):
+            if prep > 0:
+                exec_ms = exec_times[i]
+                ax.barh(i, prep, left=exec_ms, height=0.6,
+                        color=POLY_PREP, zorder=3)
+                ax.text(exec_ms + prep, i, f"  {int(prep)}ms prep",
+                        va="center", fontsize=7, color="#666")
 
-plt.tight_layout()
-plt.savefig(OUT, dpi=150, bbox_inches="tight")
-plt.close()
-print(f"Saved: {OUT}")
+        for i, (bar, val) in enumerate(zip(bars_exec, exec_times)):
+            display = f"{val:.1f}" if val >= 1 else f"{val:.3f}"
+            ax.text(val, i, f"  {display}",
+                    va="center", fontsize=7,
+                    color="white" if bar_colors[i] in (POLY_COLOR, NATIVE_COLOR) else "#333",
+                    fontweight="bold" if bar_colors[i] == POLY_COLOR else "normal")
+
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(labels, fontsize=9)
+        ax.set_xscale("log")
+        ax.set_xlabel("ms (log scale)", fontsize=9)
+        ax.set_title(TITLES.get(bm_name, bm_name), fontsize=11, fontweight="bold")
+        ax.invert_yaxis()
+        ax.axvline(x=1, color="#ccc", linewidth=0.5, zorder=0)
+        ax.grid(axis="x", alpha=0.3, zorder=0)
+
+        for i, r in enumerate(rows):
+            if "Poly" in r["language"]:
+                ax.annotate("", xy=(0.001, i - 0.3), xytext=(0.001, i + 0.3),
+                            arrowprops=dict(arrowstyle="<->", color=POLY_COLOR, lw=2))
+                break
+
+    legend_elements = [
+        mpatches.Patch(color=POLY_COLOR, label="Poly VM (exec)"),
+        mpatches.Patch(color=POLY_PREP, label="Poly VM (compilation prep)"),
+        mpatches.Patch(color=NATIVE_COLOR, label="C# native / vectorized"),
+        mpatches.Patch(color="#b2b2b2", label="Other languages"),
+    ]
+    fig.legend(handles=legend_elements, loc="lower center",
+               ncol=4, fontsize=10, frameon=True)
+
+    plt.tight_layout()
+    plt.savefig(out_png, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  → {os.path.basename(out_png)}")
+
+
+# ── Main ──
+csv_files = sorted(f for f in os.listdir(RESULTS_DIR) if f.endswith(".csv"))
+if not csv_files:
+    print("No CSV files found in", RESULTS_DIR)
+    sys.exit(1)
+
+for fname in csv_files:
+    path = os.path.join(RESULTS_DIR, fname)
+    print(f"Plotting: {fname}")
+    plot_csv(path)

@@ -15,34 +15,42 @@ public sealed record CallExternalDirect(MethodInfo Target, int ArgSlots, bool Is
     public override int PopCount => ArgSlots;
     public override int PushCount => 1;
 
+    private static readonly MethodInfo HeapAllocate =
+        Ref<Heap>.Method(h => h.Allocate(null));
+
     public override Expression? ToExpression(CompilationContext ctx) {
         var rawArgs = new Expression[ArgSlots];
         for (int i = 0; i < ArgSlots; i++)
             rawArgs[i] = ctx.ResolveValue(this, i);
 
-        // Convert VM values (long) to the parameter types
+        // Convert VM values (long) to the parameter types.
+        // Stack-value types (numeric, bool) get direct Convert;
+        // reference types get dereferenced from heap handles.
         var paramInfos = Target.GetParameters();
         for (int i = 0; i < paramInfos.Length; i++) {
             int argIdx = IsStatic ? i : i + 1;
-            if (paramInfos[i].ParameterType == typeof(int))
-                rawArgs[argIdx] = Convert(rawArgs[argIdx], typeof(int));
-            else if (paramInfos[i].ParameterType == typeof(short))
-                rawArgs[argIdx] = Convert(rawArgs[argIdx], typeof(short));
-            else if (paramInfos[i].ParameterType == typeof(byte))
-                rawArgs[argIdx] = Convert(rawArgs[argIdx], typeof(byte));
-            else if (paramInfos[i].ParameterType == typeof(double))
-                rawArgs[argIdx] = Convert(rawArgs[argIdx], typeof(double));
-            else if (paramInfos[i].ParameterType == typeof(float))
-                rawArgs[argIdx] = Convert(rawArgs[argIdx], typeof(float));
-            else if (paramInfos[i].ParameterType == typeof(bool))
-                rawArgs[argIdx] = NotEqual(rawArgs[argIdx], Constant(0L));
+            var paramType = paramInfos[i].ParameterType;
+            var pt = paramType.GetPrimitiveType();
+            if (pt is not null && pt.Value.IsStackValue()) {
+                rawArgs[argIdx] = paramType == typeof(bool)
+                    ? NotEqual(rawArgs[argIdx], Constant(0L))
+                    : Convert(rawArgs[argIdx], paramType);
+            }
+            else if (!paramType.IsValueType) {
+                // Reference-type parameter — dereference heap handle
+                var handle = Convert(rawArgs[argIdx], typeof(int));
+                var obj = ArrayAccess(ctx.HeapRawSlots, handle);
+                rawArgs[argIdx] = Convert(obj, paramType);
+            }
         }
 
         // For instance methods, convert the instance parameter
         if (!IsStatic && ArgSlots > 0) {
             var instanceType = Target.DeclaringType;
-            if (instanceType == typeof(int) || instanceType == typeof(long))
-                rawArgs[0] = Convert(rawArgs[0], instanceType);
+            var instPt = instanceType?.GetPrimitiveType();
+            if (instPt is not null && instPt.Value.IsStackValue()) {
+                rawArgs[0] = Convert(rawArgs[0], instanceType!);
+            }
             else if (instanceType is not null && !instanceType.IsValueType) {
                 // Instance is a heap handle — load the actual object from
                 // state.Heap.RawSlots[handle] and cast to the declaring type.
@@ -62,31 +70,24 @@ public sealed record CallExternalDirect(MethodInfo Target, int ArgSlots, bool Is
             return call;
 
         // Convert result to long for the VM's uniform type system.
-        // Reference-type results are stored on the heap and the handle (int)
-        // is sign-extended to long. Value types are direct-converted.
         Expression result = call;
         var returnType = Target.ReturnType;
-        if (returnType == typeof(void)) { }
-        else if (returnType == typeof(long)) { }
-        else if (returnType == typeof(int)) result = Convert(result, typeof(long));
-        else if (returnType == typeof(short)) result = Convert(result, typeof(long));
-        else if (returnType == typeof(byte)) result = Convert(result, typeof(long));
-        else if (returnType == typeof(bool)) result = Condition(result, Constant(1L), Constant(0L));
-        else if (returnType == typeof(double)) result = Convert(result, typeof(long));
-        else if (returnType == typeof(float)) result = Convert(result, typeof(long));
-        else if (!returnType.IsValueType) {
-            // Reference type: allocate on heap, return handle
-            var allocateMethod = typeof(Heap).GetMethod(nameof(Heap.Allocate))!;
-            result = Convert(
-                Call(ctx.Heap, allocateMethod, Convert(result, typeof(object))),
-                typeof(long));
-        }
-        else {
-            // Other value type: box and store on heap
-            var allocateMethod = typeof(Heap).GetMethod(nameof(Heap.Allocate))!;
-            result = Convert(
-                Call(ctx.Heap, allocateMethod, Convert(result, typeof(object))),
-                typeof(long));
+        if (returnType != typeof(void)) {
+            var retPt = returnType.GetPrimitiveType();
+            if (retPt is not null && retPt.Value.IsStackValue()) {
+                // Stack-value types convert directly to long.
+                if (returnType == typeof(bool))
+                    result = Condition(result, Constant(1L), Constant(0L));
+                else if (returnType != typeof(long))
+                    result = Convert(result, typeof(long));
+            }
+            else {
+                // All other types (strings, CLR structs, domain entities):
+                // allocate on heap, return handle.
+                result = Convert(
+                    Call(ctx.Heap, HeapAllocate, Convert(result, typeof(object))),
+                    typeof(long));
+            }
         }
 
         return Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), result);

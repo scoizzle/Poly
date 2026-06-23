@@ -9,7 +9,7 @@ public sealed record NewArrayOp(string? Alias = null, int? Size = null, NodeId? 
     public override int PopCount => Size is null ? 1 : 0;
     public override int PushCount => 1;
 
-    private static readonly MethodInfo HeapAllocate = typeof(Heap).GetMethod(nameof(Heap.Allocate), [typeof(object)])!;
+    private static readonly MethodInfo HeapAllocate = Ref<Heap>.Method(h => h.Allocate(null));
     private static readonly ConstructorInfo LongArrayCtor = typeof(long[]).GetConstructor([typeof(int)])!;
 
     public override Expression? ToExpression(CompilationContext ctx) {

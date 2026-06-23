@@ -239,16 +239,41 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
     private List<Instruction> EmitParameter(AnalysisContext context, Parameter p) {
         if (p.DefaultValue is not null)
             return GetChildUops(context, p.DefaultValue);
-        return [new LoadSlot(GetOrCreateLocalSlot(p.Name ?? "")) { SourceNodeId = p.Id }];
+
+        // Top-level parameters (not inside a Lambda) never reach
+        // RegisterParameters — register them here so they use parameter
+        // slots starting at 0 instead of leaking into local slots.
+        var name = p.Name ?? "";
+        if (!_params.ContainsKey(name) && !_locals.ContainsKey(name)) {
+            int slot = _params.Count;
+            _params[name] = slot;
+            _currentArgSlots = Math.Max(_currentArgSlots, slot + 1);
+        }
+
+        return [new LoadSlot(GetOrCreateLocalSlot(name)) { SourceNodeId = p.Id }];
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────
+
+    /// <summary>Returns true when a type is stored on the VM heap (reference-type
+    /// semantics) rather than directly as a raw long on the eval stack.</summary>
+    private static bool IsHandleType(ITypeDefinition type, [MaybeNullWhen(false)] out Type clrType) {
+        clrType = type.TryGetRuntimeType(out var rt) ? rt : typeof(object);
+        return !type.IsStackValue();
     }
 
     // ── Binary / Unary ──────────────────────────────────────────────
 
     private List<Instruction> EmitBinary(AnalysisContext context, Node left, Node right, BinOpKind kind, Node source) {
+        System.Type? eqType = null;
+        bool isRefEq = kind is BinOpKind.Eq or BinOpKind.Ne
+            && context.GetResolvedType(left) is { } t
+            && IsHandleType(t, out eqType);
+
         return [
             .. GetChildUops(context, left),
             .. GetChildUops(context, right),
-            new BinOp(kind) { SourceNodeId = source.Id }
+            new BinOp(kind, IsReferenceEquality: isRefEq, EqualityType: eqType) { SourceNodeId = source.Id }
         ];
     }
 

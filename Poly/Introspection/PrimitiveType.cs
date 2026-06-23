@@ -115,6 +115,48 @@ public static class PrimitiveTypeExtensions {
     };
 
     /// <summary>
+    /// Returns true when this primitive type can be stored directly on an
+    /// evaluation-stack slot (e.g. a 64-bit register) without heap indirection.
+    /// For example, numeric primitives and booleans are stack values; strings
+    /// and structured types require heap handles.
+    /// </summary>
+    public static bool IsStackValue(this PrimitiveType id) => id switch {
+        PrimitiveType.Int64 or PrimitiveType.Int32 or PrimitiveType.Int16 or PrimitiveType.Int8
+        or PrimitiveType.UInt8 or PrimitiveType.UInt16 or PrimitiveType.UInt32
+        or PrimitiveType.Boolean or PrimitiveType.Float32 or PrimitiveType.Float64
+        => true,
+        _ => false
+    };
+
+    /// <summary>
+    /// Returns the <see cref="PrimitiveType"/> that corresponds to <paramref name="type"/>,
+    /// or null if the type is not a recognized primitive.
+    /// </summary>
+    public static PrimitiveType? GetPrimitiveType(this Type type) => type switch {
+        Type t when t == typeof(bool) => PrimitiveType.Boolean,
+        Type t when t == typeof(sbyte) => PrimitiveType.Int8,
+        Type t when t == typeof(short) => PrimitiveType.Int16,
+        Type t when t == typeof(int) => PrimitiveType.Int32,
+        Type t when t == typeof(long) => PrimitiveType.Int64,
+        Type t when t == typeof(byte) => PrimitiveType.UInt8,
+        Type t when t == typeof(ushort) => PrimitiveType.UInt16,
+        Type t when t == typeof(uint) => PrimitiveType.UInt32,
+        Type t when t == typeof(ulong) => PrimitiveType.UInt64,
+        Type t when t == typeof(float) => PrimitiveType.Float32,
+        Type t when t == typeof(double) => PrimitiveType.Float64,
+        Type t when t == typeof(decimal) => PrimitiveType.Decimal,
+        Type t when t == typeof(string) => PrimitiveType.String,
+        Type t when t == typeof(char) => PrimitiveType.Char,
+        Type t when t == typeof(DateTime) => PrimitiveType.DateTime,
+        Type t when t == typeof(DateOnly) => PrimitiveType.DateOnly,
+        Type t when t == typeof(TimeOnly) => PrimitiveType.TimeOnly,
+        Type t when t == typeof(TimeSpan) => PrimitiveType.TimeSpan,
+        Type t when t == typeof(Guid) => PrimitiveType.Guid,
+        Type t when t == typeof(byte[]) => PrimitiveType.ByteArray,
+        _ => null
+    };
+
+    /// <summary>
     /// Gets the corresponding CLR <see cref="Type"/> for this primitive type.
     /// Returns null for types without a direct CLR mapping.
     /// </summary>

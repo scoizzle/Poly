@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.Vm;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.LinqExpressions;
@@ -530,8 +531,7 @@ public sealed class LinqExpressionGenerator {
 
         // Handle string concatenation explicitly
         if (leftExpr.Type == typeof(string) && rightExpr.Type == typeof(string)) {
-            var concat = typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])
-                ?? throw new InvalidOperationException("string.Concat overload not found.");
+            var concat = Ref.Method(() => string.Concat(null!, null!));
             return Expression.Call(concat, leftExpr, rightExpr);
         }
 
@@ -911,9 +911,9 @@ public sealed class LinqExpressionGenerator {
         var enumeratorVar = Expression.Variable(typeof(IEnumerator), "enumerator");
         var getEnumeratorCall = Expression.Call(
             Expression.Convert(collection, typeof(IEnumerable)),
-            typeof(IEnumerable).GetMethod(nameof(IEnumerable.GetEnumerator))!);
+            Ref<IEnumerable>.Method(e => e.GetEnumerator()));
         var assignEnumerator = Expression.Assign(enumeratorVar, getEnumeratorCall);
-        var moveNextCall = Expression.Call(enumeratorVar, typeof(IEnumerator).GetMethod(nameof(IEnumerator.MoveNext))!);
+        var moveNextCall = Expression.Call(enumeratorVar, Ref<IEnumerator>.Method(e => e.MoveNext()));
         var currentProperty = Expression.Property(enumeratorVar, nameof(IEnumerator.Current));
 
         // Pre-register the loop variable PE before compiling the body so that the
@@ -939,7 +939,7 @@ public sealed class LinqExpressionGenerator {
             Expression.Loop(loopBody, breakLabel),
             Expression.IfThen(
                 Expression.TypeIs(enumeratorVar, typeof(IDisposable)),
-                Expression.Call(Expression.Convert(enumeratorVar, typeof(IDisposable)), typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose))!)));
+                Expression.Call(Expression.Convert(enumeratorVar, typeof(IDisposable)), Ref<IDisposable>.Method(d => d.Dispose()))));
 
         return Expression.Block(
             [enumeratorVar, loopVarPE],

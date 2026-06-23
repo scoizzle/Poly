@@ -1,3 +1,5 @@
+using System.Linq;
+
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation;
@@ -343,4 +345,88 @@ public class DomainExpressionVmExecutionTests {
         await Assert.That((long)result.Value!).IsEqualTo(1L);
     }
 
+    // ── Policy evaluation ───────────────────────────────────────────
+
+    [Test]
+    public async Task Policy_AdultAge_AcceptsOver18() {
+        var policy = new Policy("AdultAge",
+            DomainExpression.GreaterThan(
+                DomainExpression.Property(nameof(PersonRecord.Age)),
+                DomainExpression.Literal(18)));
+
+        var adult = policy.Evaluate(new PersonRecord("Alice", 25));
+        var minor = policy.Evaluate(new PersonRecord("Bob", 15));
+
+        await Assert.That(adult).IsTrue();
+        await Assert.That(minor).IsFalse();
+    }
+
+    [Test]
+    public async Task Policy_CompiledPredicate_FiltersCollection() {
+        var policy = new Policy("VotingAge",
+            DomainExpression.GreaterThanOrEqual(
+                DomainExpression.Property(nameof(PersonRecord.Age)),
+                DomainExpression.Literal(18)));
+
+        var predicate = policy.CompileLinqPredicate<PersonRecord>();
+
+        var people = new[] {
+            new PersonRecord("Alice", 25),
+            new PersonRecord("Bob", 15),
+            new PersonRecord("Charlie", 18),
+        };
+
+        var eligible = people.Where(predicate).ToList();
+
+        await Assert.That(eligible.Count).IsEqualTo(2);
+        await Assert.That(eligible[0].Name).IsEqualTo("Alice");
+        await Assert.That(eligible[1].Name).IsEqualTo("Charlie");
+    }
+
+    [Test]
+    public async Task Policy_CompositeGuard_EvaluatesCorrectly() {
+        var policy = new Policy("JuniorAdult",
+            DomainExpression.And(
+                DomainExpression.GreaterThanOrEqual(
+                    DomainExpression.Property(nameof(PersonRecord.Age)),
+                    DomainExpression.Literal(18)),
+                DomainExpression.LessThan(
+                    DomainExpression.Property(nameof(PersonRecord.Age)),
+                    DomainExpression.Literal(21))));
+
+        await Assert.That(policy.Evaluate(new PersonRecord("A", 17))).IsFalse();
+        await Assert.That(policy.Evaluate(new PersonRecord("B", 18))).IsTrue();
+        await Assert.That(policy.Evaluate(new PersonRecord("C", 20))).IsTrue();
+        await Assert.That(policy.Evaluate(new PersonRecord("D", 21))).IsFalse();
+    }
+
+    [Test]
+    public async Task Policy_NameBasedGuard_EvaluatesCorrectly() {
+        var policy = new Policy("NameStartsWithA",
+            DomainExpression.Equal(
+                DomainExpression.Property(nameof(PersonRecord.Name)),
+                DomainExpression.Literal("Alice")));
+
+        var alice = policy.Evaluate(new PersonRecord("Alice", 30));
+        var bob = policy.Evaluate(new PersonRecord("Bob", 25));
+
+        await Assert.That(alice).IsTrue();
+        await Assert.That(bob).IsFalse();
+    }
+
+    // ── LoadHeapConst ───────────────────────────────────────────
+
+    [Test]
+    public async Task LoadHeapConst_StringLiteral_AllocatesOnHeapAndReturnsHandle() {
+        var (result, state) = ExecuteWithState(Pass.Lower(
+            DomainExpression.Literal("hello"), Subject));
+
+        await Assert.That(result.HasValue).IsTrue();
+
+        var handle = (int)(long)result.Value!;
+        var heapObj = state.Heap.Get(handle);
+        await Assert.That(heapObj).IsNotNull();
+        await Assert.That(heapObj).IsTypeOf<string>();
+        await Assert.That((string)heapObj!).IsEqualTo("hello");
+    }
 }

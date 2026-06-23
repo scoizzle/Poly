@@ -139,16 +139,13 @@ internal static class CallSiteCompiler {
     }
 
     private static Expression ResolveArg(Expression rawInt, Type targetType, Expression s) {
-        if (targetType == typeof(int)) return rawInt;
-        if (targetType == typeof(long)) return Expression.Convert(rawInt, typeof(long));
-        if (targetType == typeof(short)) return Expression.Convert(rawInt, typeof(short));
-        if (targetType == typeof(byte)) return Expression.Convert(rawInt, typeof(byte));
-        if (targetType == typeof(bool)) return Expression.NotEqual(rawInt, Expression.Constant(0));
-        if (targetType == typeof(double)) return Expression.Convert(rawInt, typeof(double));
-        if (targetType == typeof(float)) return Expression.Convert(rawInt, typeof(float));
-        if (targetType == typeof(uint)) return Expression.Convert(rawInt, typeof(uint));
-        if (targetType == typeof(ushort)) return Expression.Convert(rawInt, typeof(ushort));
-        if (targetType == typeof(sbyte)) return Expression.Convert(rawInt, typeof(sbyte));
+        var pt = targetType.GetPrimitiveType();
+        if (pt is not null && pt.Value.IsStackValue()) {
+            if (targetType == typeof(int)) return rawInt;
+            if (targetType == typeof(long)) return Expression.Convert(rawInt, typeof(long));
+            if (targetType == typeof(bool)) return Expression.NotEqual(rawInt, Expression.Constant(0));
+            return Expression.Convert(rawInt, targetType);
+        }
 
         var heap = Expression.Property(s, HeapProp);
         var count = Expression.Property(heap, CountProp);
@@ -163,16 +160,12 @@ internal static class CallSiteCompiler {
     }
 
     private static Expression ConvertToStackInt(Expression value, Type returnType, Expression s) {
-        if (returnType == typeof(int)) return value;
-        if (returnType == typeof(long)) return Expression.Convert(value, typeof(int));
-        if (returnType == typeof(short)) return Expression.Convert(value, typeof(int));
-        if (returnType == typeof(byte)) return Expression.Convert(value, typeof(int));
-        if (returnType == typeof(sbyte)) return Expression.Convert(value, typeof(int));
-        if (returnType == typeof(uint)) return Expression.Convert(value, typeof(int));
-        if (returnType == typeof(ushort)) return Expression.Convert(value, typeof(int));
-        if (returnType == typeof(bool)) return Expression.Condition(value, Expression.Constant(1), Expression.Constant(0));
-        if (returnType == typeof(double)) return Expression.Convert(value, typeof(int));
-        if (returnType == typeof(float)) return Expression.Convert(value, typeof(int));
+        var pt = returnType.GetPrimitiveType();
+        if (pt is not null && pt.Value.IsStackValue()) {
+            if (returnType == typeof(int)) return value;
+            if (returnType == typeof(bool)) return Expression.Condition(value, Expression.Constant(1), Expression.Constant(0));
+            return Expression.Convert(value, typeof(int));
+        }
         var heap = Expression.Property(s, HeapProp);
         return Expression.Call(heap, AllocateMethod, Expression.Convert(value, typeof(object)));
     }

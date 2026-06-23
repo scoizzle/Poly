@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Performance comparison across languages: sieve, mandelbrot, nqueens, collatz
 # Uses Docker for consistent environments across platforms.
 # C# native, C# vectorized, and Poly VM run from the host (no Docker needed).
@@ -13,6 +13,51 @@ BENCH="${1:-all}"        # which benchmark: sieve, mandelbrot, nqueens, collatz,
 LIMIT="${2:-1000000}"    # default limit (used by sieve, collatz; ignored by mandelbrot/nqueens which are hardcoded)
 
 echo "benchmark,language,size_or_limit,result,time_ms,prep_ms" | tee "$RESULTS"
+
+# ── Expected results per benchmark ──
+expected_for() {
+    case "$1" in
+        sieve)     echo "78498" ;;
+        mandelbrot) echo "458080" ;;
+        nqueens)   echo "92" ;;
+        collatz)   echo "837799:524" ;;
+        *)         echo "" ;;
+    esac
+}
+
+# Validate the 3rd CSV field (result) against the expected value.
+# Usage: validate_result <benchmark> <csv_line>
+validate_result() {
+    local bench="$1"
+    local line="$2"
+    local expected=$(expected_for "$bench")
+    if [ -z "$expected" ]; then
+        echo "  ⚠  no expected value defined for '$bench'" >&2
+        return 0
+    fi
+    local actual
+    actual=$(echo "$line" | cut -d',' -f3)
+    if [ "$actual" != "$expected" ]; then
+        echo "  ✗ WRONG RESULT: expected $expected, got $actual" >&2
+        return 1
+    fi
+    echo "  ✓ result: $actual" >&2
+    return 0
+}
+
+# ── Docker status check ──
+if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: Docker is not running or not installed."
+    echo "  The Docker-based languages (C, C++, Rust, Python, JS, Bun, Deno, Py+NumPy)"
+    echo "  require a running Docker daemon.  C# native, C# vectorized, and Poly VM"
+    echo "  benchmarks run on the host and do not need Docker."
+    echo ""
+    echo "  To start Docker:"
+    echo "    macOS: open -a Docker"
+    echo "    Linux: sudo systemctl start docker"
+    echo "    WSL:   sudo service docker start"
+    exit 1
+fi
 
 # ── Language definitions ──
 # Each entry: label,dockerfile,source_file (with BENCHMARK prefix)
@@ -51,7 +96,11 @@ run_docker() {
     fi
     local first_line
     first_line=$(echo "$output" | head -1)
-    echo "$bench,$first_line" | tee -a "$RESULTS"
+    if validate_result "$bench" "$first_line"; then
+        echo "$bench,$first_line" | tee -a "$RESULTS"
+    else
+        echo "$bench,$(echo "$first_line" | cut -d',' -f1,2),FAILED" | tee -a "$RESULTS"
+    fi
 }
 
 run_cs_native() {
@@ -80,7 +129,11 @@ EOF
     fi
     local first_line
     first_line=$(echo "$output" | head -1)
-    echo "$bench,$first_line" | tee -a "$RESULTS"
+    if validate_result "$bench" "$first_line"; then
+        echo "$bench,$first_line" | tee -a "$RESULTS"
+    else
+        echo "$bench,$(echo "$first_line" | cut -d',' -f1,2),FAILED" | tee -a "$RESULTS"
+    fi
 }
 
 run_cs_vectorized() {
@@ -112,7 +165,11 @@ ENDPROJ
     fi
     local first_line
     first_line=$(echo "$output" | head -1)
-    echo "$bench,$first_line" | tee -a "$RESULTS"
+    if validate_result "$bench" "$first_line"; then
+        echo "$bench,$first_line" | tee -a "$RESULTS"
+    else
+        echo "$bench,$(echo "$first_line" | cut -d',' -f1,2),FAILED" | tee -a "$RESULTS"
+    fi
 }
 
 run_polyvm() {
@@ -145,7 +202,11 @@ ENDPROJ
     fi
     local first_line
     first_line=$(echo "$output" | head -1)
-    echo "$bench,$first_line" | tee -a "$RESULTS"
+    if validate_result "$bench" "$first_line"; then
+        echo "$bench,$first_line" | tee -a "$RESULTS"
+    else
+        echo "$bench,$(echo "$first_line" | cut -d',' -f1,2),FAILED" | tee -a "$RESULTS"
+    fi
 }
 
 # ── Run a single benchmark across all languages ──

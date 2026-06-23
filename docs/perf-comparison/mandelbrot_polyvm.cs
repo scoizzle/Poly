@@ -91,7 +91,7 @@ var analysisResult = new AnalyzerBuilder()
 
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
 var lowered = Lowering.Lower(body, analysisResult);
-var program = ProgramCompiler.Compile(lowered);
+var program = ProgramCompiler.Compile(lowered, mode: CompilationMode.NoDebug);
 prepSw.Stop();
 
 using var state = new VmState(program);

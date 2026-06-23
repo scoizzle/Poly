@@ -1,4 +1,0 @@
-benchmark,language,size_or_limit,result,time_ms
-collatz,C,10000,6171:261,1.1
-collatz,C++,10000,6171:261,1.06142
-collatz,Rust,10000,6171:261,0.8

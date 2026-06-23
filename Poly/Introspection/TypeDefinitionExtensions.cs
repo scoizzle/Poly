@@ -1,3 +1,5 @@
+using Poly.Introspection.CommonLanguageRuntime;
+
 namespace Poly.Introspection;
 
 public static class TypeDefinitionExtensions {
@@ -100,6 +102,8 @@ public static class TypeDefinitionExtensions {
         public bool IsAssignableFrom(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             if (typeDefinition == other) return true;
+            if (typeDefinition is ClrTypeDefinition clrTypeDef && other is ClrTypeDefinition otherClrTypeDef)
+                return clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType);
 
             var current = other.BaseType;
             while (current != null) {
@@ -119,6 +123,15 @@ public static class TypeDefinitionExtensions {
             ArgumentNullException.ThrowIfNull(other);
             return other.IsAssignableFrom(typeDefinition);
         }
+
+        /// <summary>
+        /// Returns true when values of this type are stored directly on an
+        /// evaluation stack slot without heap indirection (numeric types and
+        /// booleans).  Domain entities, strings, and structured types return false.
+        /// </summary>
+        public bool IsStackValue() => typeDefinition.PrimitiveType is { } pt
+            ? pt.IsStackValue()
+            : false;
 
         private static Type? GetGenericEnumerableType(Type type) {
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)) {

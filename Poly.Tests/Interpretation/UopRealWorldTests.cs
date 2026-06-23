@@ -598,6 +598,100 @@ public class UopRealWorldTests {
     }
 
     [Test]
+    public async Task Collatz_Chain_871_Has_179_Steps() {
+        var i = new Variable("i"); var len = new Variable("len");
+        var body = new Invoke(new Lambda([], new Block(
+             [new Assignment(len, new Constant(0L)),
+             new Assignment(i, new Constant(871L)),
+             new WhileLoop(new NotEqual(i, new Constant(1L)),
+                 new Block([
+                     new Assignment(i, new Conditional(
+                         new Equal(new Modulo(i, new Constant(2L)), new Constant(0L)),
+                         new ShiftRight(i, new Constant(1)),
+                         new Add(new Multiply(i, new Constant(3L)), new Constant(1L)))),
+                     new Assignment(len, new Add(len, new Constant(1L)))
+                 ])),
+             len],
+            [i, len])));
+        var analysis = new AnalyzerBuilder()
+            .UseTypeAndMemberResolver()
+            .UseConstantFolding()
+            .UseSideEffectAnalysis()
+            .UseThisReferenceContext()
+            .UseControlFlowAnalysis()
+            .UseVariableScopeValidator()
+            .UseDefiniteAssignmentAnalysis()
+            .UseLoweringPreparation()
+            .UseUopGeneration()
+            .Build()
+            .Analyze(body);
+        var lowered = Lowering.Lower(body, analysis);
+        var program = ProgramCompiler.Compile(lowered, mode: CompilationMode.Normal);
+        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
+        Vm.Execute(state);
+        long result = (long)state.Stack.Pop();
+        await Assert.That(result).IsEqualTo(178L);
+    }
+
+    [Test]
+    public async Task Collatz_1000000_Compare() {
+        const int limit = 871;
+        var n = new Variable("n"); var i = new Variable("i");
+        var len = new Variable("len"); var maxLen = new Variable("maxLen");
+        var bestN = new Variable("bestN");
+
+        var body = new Invoke(new Lambda([], new Block(
+            [new Assignment(maxLen, new Constant(0L)),
+             new Assignment(bestN, new Constant(0L)),
+             new Assignment(n, new Constant(1L)),
+             new WhileLoop(new LessThanOrEqual(n, new Constant(limit)),
+                 new Block([
+                     new Assignment(len, new Constant(0L)),
+                     new Assignment(i, n),
+                     new WhileLoop(new NotEqual(i, new Constant(1L)),
+                         new Block([
+                             new Assignment(i, new Conditional(
+                                 new Equal(new Modulo(i, new Constant(2L)), new Constant(0L)),
+                                 new ShiftRight(i, new Constant(1)),
+                                 new Add(new Multiply(i, new Constant(3L)), new Constant(1L)))),
+                             new Assignment(len, new Add(len, new Constant(1L)))
+                         ])),
+                     new IfStatement(
+                         new GreaterThan(len, maxLen),
+                         new Block([
+                             new Assignment(maxLen, len),
+                             new Assignment(bestN, n)
+                         ])),
+                     new Assignment(n, new Add(n, new Constant(1L)))
+                 ])),
+             new BitwiseOr(new ShiftLeft(bestN, new Constant(32L)), maxLen)],
+            [n, i, len, maxLen, bestN])));
+
+        var analysis = new AnalyzerBuilder()
+        .UseTypeAndMemberResolver()
+        .UseConstantFolding()
+        .UseSideEffectAnalysis()
+        .UseThisReferenceContext()
+        .UseControlFlowAnalysis()
+        .UseVariableScopeValidator()
+        .UseDefiniteAssignmentAnalysis()
+        .UseLoweringPreparation()
+        .UseUopGeneration()
+        .Build()
+        .Analyze(body);
+
+        var lowered = Lowering.Lower(body, analysis);
+        var program = ProgramCompiler.Compile(lowered, mode: CompilationMode.Normal);
+        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
+        Vm.Execute(state);
+        long packed = (long)state.Stack.Pop();
+        long bestNResult = packed >> 32;
+        long maxLenResult = packed & 0xFFFFFFFFL;
+        await Assert.That(bestNResult).IsEqualTo(871L);
+        await Assert.That(maxLenResult).IsEqualTo(178L);
+    }
+
+    [Test]
     public async Task Collatz_10000_Compare() {
         const int limit = 10000;
         var n = new Variable("n"); var i = new Variable("i");

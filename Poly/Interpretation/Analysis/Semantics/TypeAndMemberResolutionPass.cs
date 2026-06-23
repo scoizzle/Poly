@@ -27,9 +27,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
             Variable v => context.GetResolvedType(v)
-                ?? (v.Value is null
-                    ? context.TypeDefinitions.GetTypeDefinition(typeof(object))
-                    : ResolveNodeType(context, v.Value)),
+                ?? (v.Value is null ? null : ResolveNodeType(context, v.Value)),
             Add add => ResolveArithmeticType(context, add.LeftHandValue, add.RightHandValue),
             Subtract sub => ResolveArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
             Multiply mul => ResolveArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),

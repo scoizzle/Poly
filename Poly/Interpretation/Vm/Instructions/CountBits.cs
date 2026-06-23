@@ -12,8 +12,7 @@ public sealed record CountBits(string? Alias = null, NodeId? AstSource = null) :
     public override int PushCount => 1;
 
     internal static readonly MethodInfo PopCountMethod =
-        typeof(System.Numerics.BitOperations).GetMethod(nameof(System.Numerics.BitOperations.PopCount),
-            [typeof(ulong)])!;
+        Ref.Method(() => System.Numerics.BitOperations.PopCount(0UL));
 
     public override Expression? ToExpression(CompilationContext ctx) {
         var value = ctx.ResolveValue(this, 0);

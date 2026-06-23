@@ -18,6 +18,21 @@ public readonly record struct InterpreterResult {
         Signal = signal;
     }
 
+    /// <summary>Extracts the result as <typeparamref name="T"/>, converting
+    /// from the VM's uniform long representation as needed.</summary>
+    public T? GetValue<T>() {
+        if (!HasValue) return default!;
+        if (Value is T t) return t;
+        if (Value is long l) {
+            if (typeof(T) == typeof(bool)) return (T)(object)(l != 0L);
+            if (typeof(T) == typeof(int)) return (T)(object)(int)l;
+            if (typeof(T) == typeof(short)) return (T)(object)(short)l;
+            if (typeof(T) == typeof(byte)) return (T)(object)(byte)l;
+        }
+        if (typeof(T) == typeof(object)) return (T)Value!;
+        return (T)Convert.ChangeType(Value, typeof(T))!;
+    }
+
     public static InterpreterResult Void => new(ResultKind.Void, null);
     public static InterpreterResult None => Void;
     public static InterpreterResult Return(object? value) => FromSignal(InterpreterSignal.Return(value));

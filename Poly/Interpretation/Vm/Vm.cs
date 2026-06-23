@@ -24,12 +24,11 @@ namespace Poly.Interpretation.Vm;
 // FrameBase sentinel: -1 = "no active frame" (top-level execution).
 
 public static partial class Vm {
-    public static InterpreterResult Execute(VmState state) {
-        var program = state.Program;
+    public static InterpreterResult Execute(VmProgram program, params IEnumerable<object?> args) {
+        var state = CreateState(program);
         state.Status = InterpreterStatus.Running;
-
         state.Registers ??= new long[program.MaxActiveLocalsDepth];
-
+        state.SetArgs(args);
         program.Delegate(state);
 
         if (state.Status == InterpreterStatus.Suspended)
@@ -39,7 +38,46 @@ public static partial class Vm {
         if (sp <= 0)
             return InterpreterResult.Void;
 
-        return InterpreterResult.FromValue(state.Stack.RawSlots[sp - 1]);
+        long raw = state.Stack.RawSlots[sp - 1];
+        int handle = (int)raw;
+
+        // If the result is a heap handle, dereference to give callers
+        // the actual CLR object rather than an opaque handle.
+        // 0 and 1 are excluded as they're almost always boolean results.
+        if (handle > 1 && handle < state.Heap.Count) {
+            var heapObj = state.Heap.UnsafeGet(handle);
+            return InterpreterResult.FromValue(heapObj);
+        }
+
+        return InterpreterResult.FromValue(raw);
+    }
+
+    public static InterpreterResult Execute(VmState state, params IEnumerable<object?> args) {
+        var program = state.Program;
+        state.Status = InterpreterStatus.Running;
+        state.Registers ??= new long[program.MaxActiveLocalsDepth];
+        state.SetArgs(args);
+        program.Delegate(state);
+
+        if (state.Status == InterpreterStatus.Suspended)
+            return InterpreterResult.Suspend();
+
+        int sp = state.Stack.StackPointer;
+        if (sp <= 0)
+            return InterpreterResult.Void;
+
+        long raw = state.Stack.RawSlots[sp - 1];
+        int handle = (int)raw;
+
+        // If the result is a heap handle, dereference to give callers
+        // the actual CLR object rather than an opaque handle.
+        // 0 and 1 are excluded as they're almost always boolean results.
+        if (handle > 1 && handle < state.Heap.Count) {
+            var heapObj = state.Heap.UnsafeGet(handle);
+            return InterpreterResult.FromValue(heapObj);
+        }
+
+        return InterpreterResult.FromValue(raw);
     }
 
     // ── µop handler helpers ──

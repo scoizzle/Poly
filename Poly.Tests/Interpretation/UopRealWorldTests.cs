@@ -537,9 +537,8 @@ public class UopRealWorldTests {
             [x, y, zx, zy, zx2, zy2, iter, total])));
 
         using var state = CompileState(body);
-        Vm.Execute(state);
-        long result = (long)state.Stack.Pop();
-        await Assert.That(result).IsEqualTo(458080L);
+        var result = Vm.Execute(state);
+        await Assert.That(result.GetValue<long>()).IsEqualTo(458080L);
     }
 
     [Test]
@@ -592,9 +591,7 @@ public class UopRealWorldTests {
             [stack, sp, total, ld, cols, rd, avail, bit])));
 
         using var state = CompileState(body);
-        Vm.Execute(state);
-        long result = (long)state.Stack.Pop();
-        await Assert.That(result).IsEqualTo(92L);
+        await Assert.That(Vm.Execute(state).GetValue<long>()).IsEqualTo(92L);
     }
 
     [Test]
@@ -628,9 +625,8 @@ public class UopRealWorldTests {
         var lowered = Lowering.Lower(body, analysis);
         var program = ProgramCompiler.Compile(lowered, mode: CompilationMode.Normal);
         var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
-        Vm.Execute(state);
-        long result = (long)state.Stack.Pop();
-        await Assert.That(result).IsEqualTo(178L);
+        var result = Vm.Execute(state);
+        await Assert.That(result.GetValue<long>()).IsEqualTo(178L);
     }
 
     [Test]
@@ -683,8 +679,8 @@ public class UopRealWorldTests {
         var lowered = Lowering.Lower(body, analysis);
         var program = ProgramCompiler.Compile(lowered, mode: CompilationMode.Normal);
         var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
-        Vm.Execute(state);
-        long packed = (long)state.Stack.Pop();
+        var result = Vm.Execute(state);
+        long packed = result.GetValue<long>();
         long bestNResult = packed >> 32;
         long maxLenResult = packed & 0xFFFFFFFFL;
         await Assert.That(bestNResult).IsEqualTo(871L);
@@ -725,9 +721,8 @@ public class UopRealWorldTests {
              new BitwiseOr(new ShiftLeft(bestN, new Constant(32L)), maxLen)],
             [n, i, len, maxLen, bestN])));
 
-        using var state = CompileState(body);
-        Vm.Execute(state);
-        long packed = (long)state.Stack.Pop();
+        var result = Vm.Execute(CompileState(body));
+        long packed = (long)result.Value!;
         long bestNResult = packed >> 32;
         long maxLenResult = packed & 0xFFFFFFFFL;
         await Assert.That(bestNResult).IsEqualTo(6171L);

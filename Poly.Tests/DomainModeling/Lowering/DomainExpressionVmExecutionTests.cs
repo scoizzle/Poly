@@ -423,10 +423,16 @@ public class DomainExpressionVmExecutionTests {
 
         await Assert.That(result.HasValue).IsTrue();
 
-        var handle = (int)(long)result.Value!;
-        var heapObj = state.Heap.Get(handle);
-        await Assert.That(heapObj).IsNotNull();
-        await Assert.That(heapObj).IsTypeOf<string>();
-        await Assert.That((string)heapObj!).IsEqualTo("hello");
+        // Vm.Execute auto-dereferences heap handles.  If the result was
+        // already dereferenced, compare the string directly.
+        object? obj;
+        if (result.Value is long handle)
+            obj = state.Heap.Get((int)handle);
+        else
+            obj = result.Value;
+
+        await Assert.That(obj).IsNotNull();
+        await Assert.That(obj).IsTypeOf<string>();
+        await Assert.That((string)obj!).IsEqualTo("hello");
     }
 }

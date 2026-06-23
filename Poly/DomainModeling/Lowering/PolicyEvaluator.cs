@@ -58,10 +58,8 @@ public static class PolicyEvaluator {
         var compiled = Interpretation.Vm.ProgramCompiler.Compile(prog);
 
         return e => {
-            var state = Interpretation.Vm.Vm.CreateState(compiled);
-            state.SetArgs(e);
-            var result = Interpretation.Vm.Vm.Execute(state);
-            return result.HasValue && result.Value is long l && l == 1L;
+            var result = Interpretation.Vm.Vm.Execute(compiled, e);
+            return result.GetValue<bool>();
         };
     }
 

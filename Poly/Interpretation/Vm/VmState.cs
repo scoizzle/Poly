@@ -37,10 +37,9 @@ public sealed class VmState : IDisposable {
     /// been loaded (if any).  The number and order of arguments must match
     /// the compiled program's parameter layout.</para>
     /// </summary>
-    public void SetArgs(params object?[] args) {
+    public void SetArgs(params IEnumerable<object?> args) {
         var slots = Stack.RawSlots;
-        for (int i = 0; i < args.Length; i++) {
-            var arg = args[i];
+        foreach (var (i, arg) in args.Index()) {
             slots[i] = arg switch {
                 null => 0L,
                 long l => l,

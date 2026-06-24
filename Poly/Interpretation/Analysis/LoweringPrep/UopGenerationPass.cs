@@ -177,8 +177,8 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
             Invoke inv => EmitInvoke(context, inv),
             Return ret => EmitReturn(context, ret),
 
-            BreakStatement => [new Jump(0) { SourceNodeId = node.Id }],
-            ContinueStatement => [new Jump(0) { SourceNodeId = node.Id }],
+            BreakStatement => EmitBreak(context, node),
+            ContinueStatement => EmitContinue(context, node),
 
             Member m => EmitMember(context, m),
             IndexAccess ia => EmitIndexAccess(context, ia),
@@ -524,6 +524,22 @@ internal sealed class UopGenerationPass : INodeAnalyzer {
         uops.Add(new Jump(labels.CondLabel) { SourceNodeId = fl.Id });
         uops.Add(new LabelMarker(labels.EndLabel) { SourceNodeId = fl.Id });
         return uops;
+    }
+
+    // ── Break / Continue ──────────────────────────────────────────────
+
+    private List<Instruction> EmitBreak(AnalysisContext context, Node node) {
+        var target = context.GetMetadata<BreakTargetMetadata>(node);
+        return target is not null
+            ? [new Jump(target.TargetLabel) { SourceNodeId = node.Id }]
+            : [new Nop { SourceNodeId = node.Id }];
+    }
+
+    private List<Instruction> EmitContinue(AnalysisContext context, Node node) {
+        var target = context.GetMetadata<ContinueTargetMetadata>(node);
+        return target is not null
+            ? [new Jump(target.TargetLabel) { SourceNodeId = node.Id }]
+            : [new Nop { SourceNodeId = node.Id }];
     }
 
     // ── Conditional ─────────────────────────────────────────────────

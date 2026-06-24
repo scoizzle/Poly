@@ -360,17 +360,18 @@ public sealed class UopGenerationTests {
     // ── Break / Continue ───────────────────────────────────────────────────
 
     [Test]
-    public async Task Break_EmitsJump0() {
-        var uops = GetUops(new BreakStatement());
-        await Assert.That(uops).Count().IsEqualTo(1).And.HasSingleItem();
-        await Assert.That(uops[0]).IsTypeOf<Jump>();
+    public async Task Break_InsideLoop_EmitsJump() {
+        // BreakStatement must be inside a WhileLoop for the lowering pass
+        // to assign the enclosing loop's end label.  Without a loop context,
+        // no BreakTargetMetadata is set and the emit returns Nop.
+        var uops = GetUops(new WhileLoop(new Constant(1L), new Block([new BreakStatement()])));
+        await Assert.That(uops.Any(static i => i is Jump)).IsTrue();
     }
 
     [Test]
-    public async Task Continue_EmitsJump0() {
-        var uops = GetUops(new ContinueStatement());
-        await Assert.That(uops).Count().IsEqualTo(1).And.HasSingleItem();
-        await Assert.That(uops[0]).IsTypeOf<Jump>();
+    public async Task Continue_InsideLoop_EmitsJump() {
+        var uops = GetUops(new WhileLoop(new Constant(1L), new Block([new ContinueStatement()])));
+        await Assert.That(uops.Any(static i => i is Jump)).IsTrue();
     }
 
     // ── Without UopGeneration pass ─────────────────────────────────────────

@@ -3,8 +3,8 @@
 **Phase**: 2
 **Priority**: High (blocks consumer migration)
 **Owner**: TBD
-**Status**: In Progress (core shared analysis surface + member mutability modeling significantly advanced via orchestrator session; V3 analyzers now at 17 (near parity with V2). DomainExpression Lowering Pass (deliverable A) delivered June 2026.)
-**Last Updated**: 2026-06-22 (major update: VM is canonical execution engine, tree-walker is dead, DomainExpression Lowering Pass delivered, deliverables B/C/G re-targeted to VM pipeline)
+**Status**: In Progress (VM execution engine substantially hardened June 2026: lazy constant loading, clean argument passing, string equality via `IsReferenceEquality`, type system unification via `IsStackValue`, reflection consolidation via `Ref<T>`, `NoDebug` compilation mode, benchmark infrastructure. 1316 tests passing. Core shared analysis surface + member mutability modeling also advanced.)
+**Last Updated**: 2026-06-23 (VM execution engine hardened — argument passing, string comparison, type classification, reflection, benchmarks)
 
 ## Goal
 
@@ -37,6 +37,27 @@ Unify the V2 and V3 analysis surfaces on the shared `Syntax/Analysis` infrastruc
 **The VM (`Poly/Interpretation/Vm/`) IS the primary consumer of the unified analysis surface.** The "RISC IR + stack VM" (originally planned under `Poly/Interpretation/VirtualMachine/`) was delivered under `Poly/Interpretation/Vm/`. It is the sole canonical execution engine. The tree-walking interpreter has been removed. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
 
 The VM µop instruction set is fully implemented (30+ instruction types: LoadConst, LoadSlot/StoreSlot/IncSlot, BinOp, UnaryOp, Call/CallClosure/CallExternal/CallExternalDirect, BranchIfFalse, Jump, PhiMarker, Dup/Pop, NewArrayOp/ArrayLoad/ArrayStore, etc.). Analysis unification (this workstream) directly enables the "lower once after mature frontend, execute on VM" model: DomainExpression → Syntax AST → LoweringPrep/UopGeneration analysis → µops → Lowering.Assemble → ProgramCompiler.Compile → Vm.Execute.
+
+### Progress Achieved (VM Execution Engine — June 2026 Session)
+
+The VM execution pipeline was substantially hardened with the following deliverables completed in a single extended session:
+
+- **LoadHeapConst lazy allocation (`.rodata` model)** — `LoadHeapConst.ToExpression` now allocates constants on the heap at runtime via `Heap.Allocate(Value)` instead of pushing a pre-loaded handle index. Eliminates the entire constant pre-loading step from `Vm.Execute`. No more handle ordering conflicts between constants and arguments.
+- **Clean argument passing** — `VmState.SetArgs(params object?[])` seeds arguments on the value stack, allocating reference types on the heap and placing handles in the correct parameter slots. `PolicyEvaluator.CompileVMPredicate` simplified from `state.Heap.Allocate(e)` + unchecked `RawSlots[0]` to `state.SetArgs(e)`. The fragile pattern that relied on stale `ArrayPool` data (which returns non-zeroed arrays) is gone.
+- **String equality via `IsReferenceEquality`** — `BinOp` now has an `IsReferenceEquality` flag (set at compile time by `EmitBinary` based on resolved types). When true, `BinOp.ToExpression` dereferences heap handles via `ArrayAccess(ctx.HeapRawSlots, handle)`, casts to the CLR type via `EqualityType`, and uses `Expression.Equal` which resolves to `op_Equality` (value equality for strings/records, reference equality for entities). Fixed `Policy_NameBasedGuard_EvaluatesCorrectly`.
+- **Type system unification via `IsStackValue`** — `PrimitiveType.IsStackValue` property in `Introspection` returns true for numeric types that fit directly on the VM eval stack (int, long, short, byte, float, double, bool), false for heap-indirected types (string, DateTime, Guid, byte[], etc.). `ITypeDefinition.IsStackValue()` extension for domain entities. All 6 scattered type-check chains (`CallExternalDirect` param/return/instance, `CallSiteCompiler.ResolveArg`/`ConvertToStackInt`, `UopGenerationPass.IsHandleType`) consolidated to a single source.
+- **CLR Type → PrimitiveType mapping** — `GetPrimitiveType(this Type)` added to `PrimitiveTypeExtensions`, the reverse of the existing `GetClrType()`. Enables `type.GetPrimitiveType()?.IsStackValue() ?? false` in Interpretation layer code.
+- **Reflection consolidation via `Ref<T>`** — 8 `typeof(X).GetMethod(nameof(...))` calls replaced with type-safe `Ref<T>.Method(...)` or `Ref.Method(...)` helpers across `LoadHeapConst`, `CallExternalDirect`, `NewArrayOp`, `CountBits`, and `LinqExpressionGenerator` (string.Concat, GetEnumerator, MoveNext, Dispose). Eliminates runtime reflection in hot paths. One exception kept (`"DebugView"` — internal property, not accessible at compile time).
+- **`NoDebug` compilation mode** — Strips `_pc` sync preamble (initializes to 0 instead of reading `state.ProgramCounter`), ring register restore preamble, and loop limit checks from compiled delegates. `_pc` writes for `Jump`/`BranchIfFalse` kept (required for φ at convergence points). Benchmark results: Mandelbrot 2ms→1ms (2x), Collatz 391ms→342ms (~12%).
+- **`InterpreterResult.GetResult<T>()`** — Generic extraction method handling VM type conversions (long→bool, long→int, long→short, long→byte, `Convert.ChangeType` fallback). Combined with `Vm.Execute` auto-dereference of heap handles (handles > 1 and < Heap.Count return the CLR object directly).
+- **Parameter slot assignment fix** — `EmitParameter` now registers bare top-level `Parameter` nodes (not wrapped in a Lambda) at the next available parameter slot. Previously fell through to local slot path, getting `LoadSlot(1)` instead of `LoadSlot(0)`. `SetArgs` wrote to `_slots[0]` but the delegate read `_slots[1]` (stale `ArrayPool` data → `IndexOutOfRangeException`).
+- **1316 passing tests** (was 1282 at last count) — New Collatz chain test (871 chain, full benchmark comparison), `LoadHeapConst_StringLiteral_AllocatesOnHeapAndReturnsHandle`. Existing `CountPrimes` tests restored (had been corrupted by an earlier edit that accidentally changed `i = 2` to `i = 3`).
+- **Benchmark infrastructure** — `run.sh`: result validation against expected output (`validate_result`), Docker status check, bash 3.2 compat (replaced `declare -A` with `case`). `plot_benchmarks.py`: handles FAILED rows (skips them), handles missing `prep_ms` columns, renders each CSV to matching `.png` (sorted, latest first).
+- **Performance benchmark results (all validated correct)**:
+  - Sieve: 3ms (tied #1 with C, ahead of Rust 4.7ms, C# 4ms)
+  - Mandelbrot: 1ms (after NoDebug 2x improvement)
+  - NQueens: 0ms (tied for fastest)
+  - Collatz: 342ms (correct output `837799:524`, beats Python 5393ms)
 
 ### Progress Achieved (Core Analysis Unification + Introspection — Orchestrator Session)
 Significant strengthening of the *shared* `Syntax/Analysis` + introspection foundation that WS8 will rely on (even while DomainExpression lowering remains the main open deliverable):
@@ -107,6 +128,7 @@ DomainExpression lowering (A–C), V3 analyzer porting, policy/effect lowering, 
 ### D. V3 Domain Analyzer Passes
 - ✅ **COMPLETED (June 2026)** — V3 has 17 analyzers, near parity with V2
 - Type resolution for DomainExpression trees handled by existing `StructuralDomainAnalyzer`, `PolicyConstraintAnalyzer`, `ConstraintPropagationAnalyzer`
+- `PolicyEvaluator` Analyzer configured with `TypeAndMemberResolver` + `LoweringPreparation` + `UopGeneration` — correct pass pipeline for VM compilation
 - No additional analyzer work needed
 
 ### E. V3 Policy/Effect/Constraint Lowering
@@ -119,8 +141,9 @@ DomainExpression lowering (A–C), V3 analyzer porting, policy/effect lowering, 
 - Contract interface naming rules from AGENTS.md: `I{StageName}{EntityName}`, inheritance chain, action placement
 
 ### G. Integration Tests
-- 29 tests exist for the lowering pass itself (all passing, 1282 total)
-- **Still needed**: end-to-end test that lowers a DomainExpression tree and executes it through the full VM pipeline
+- 29 tests exist for the lowering pass itself (all passing, 1316 total)
+- **`PolicyEvaluator.CompileVMPredicate` + `Evaluate`** — End-to-end integration: DomainExpression → Syntax AST → analysis → µops → `ProgramCompiler.Compile` → `Vm.Execute` → `GetResult<bool>()`. Tests cover numeric comparisons (Age > 18), composite guards (Age >= 18 && Age < 21), string comparisons (Name == "Alice"), and full benchmark-style loops (Collatz chain, CountPrimes). All pass.
+- **Benchmark integration** — 4 real-world algorithms (Sieve, Mandelbrot, NQueens, Collatz) run through the full VM pipeline and produce correct results validated against expected output. Benchmark runner (`run.sh`) creates temporary projects, runs in Release mode, and validates results.
 - Test full pipeline: V3 Domain → evolution → DomainExpression lowering → Syntax AST → VM µops → execute
 
 ## Non-Goals (Explicitly Out of Scope for WS8)
@@ -133,10 +156,11 @@ DomainExpression lowering (A–C), V3 analyzer porting, policy/effect lowering, 
 ## Exit Criteria
 
 - ✅ **DomainExpression lowering to Syntax/Nodes** — complete (29 tests)
-- `DomainExpression` → Syntax AST trees can be executed through the VM pipeline (analysis → µops → ProgramCompiler → Vm.Execute)
+- ✅ **`DomainExpression` → Syntax AST trees can be executed through the VM pipeline** — complete. `PolicyEvaluator.CompileVMPredicate` + `Evaluate` provide the full pipeline: DomainExpression → LoweringPass → analysis → µops → ProgramCompiler → Vm.Execute. Validated with numeric, string, and composite guard expressions.
+- ✅ **Benchmark-level VM execution** — 4 real algorithms (Sieve, Mandelbrot, NQueens, Collatz) run through the full pipeline in `CompilationMode.NoDebug` with correct validated results.
+- ✅ **1316 tests passing** (was 1282).
 - `CSharpGenerator` can emit correct C# for DomainExpression-derived expressions (mostly automatic via lowered Syntax AST)
 - At least one end-to-end test: V3 Domain with policy/effect → lower → Syntax AST → VM µops → execute
-- All Phase 1 tests continue to pass (1282 passing)
 - Lowering parity for the core concepts listed in deliverables E, F
 
 ## Dependencies

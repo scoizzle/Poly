@@ -158,13 +158,19 @@ public sealed class EmissionContext {
 }
 ```
 
-### 4.4 `GenerationPass`
+### 4.4 `GenerationPass` — single pass, internal steps
 
-The pipeline entry point. Registered via `.UseIrGeneration()`:
+The `GenerationPass` is registered as one `INodeAnalyzer` but internally runs both IR emission and IR transform passes as ordered steps. This avoids splitting IR work across multiple `INodeAnalyzer` implementations (which would abuse metadata to pass the `Module` around) while keeping each step as a pure `Module → Module` function that can be tested in isolation.
 
 ```csharp
 public sealed class GenerationPass : INodeAnalyzer {
+    // Per-step toggles for testing and incremental compilation
+    public bool EnableSsa { get; init; } = true;
+    public bool EnableConstFolding { get; init; } = true;
+    public bool EnableInlining { get; init; } = true;
+
     public void Analyze(AnalysisContext context, Node node) {
+        // ── Step 1: Emit IR from AST via node.Emit(ctx) ──
         var module = new Module();
         var block = new BasicBlock("entry");
         module.Blocks.Add(block);
@@ -174,18 +180,58 @@ public sealed class GenerationPass : INodeAnalyzer {
 
         if (block.Terminator is null)
             block.Terminator = new Ret(result);
+
+        // ── Step 2: Transform passes on the Module ──
+        // Each step is a pure Module → Module function.
+        // Steps are ordered; backend-specific passes
+        // (e.g. RingAnalysis) are added later by the backend.
+        if (EnableSsa)         SsaTransform.Run(module);
+        if (EnableConstFolding) ConstantFolding.Run(module);
+        if (EnableInlining)    InlinePass.Run(module);
+
+        // ── Step 3: Stash Module for backend retrieval ──
+        context.SetMetadata(node, new ModuleMetadata(module));
     }
 }
 ```
 
-No `is` check. No interface. The method call `node.Emit(ctx)` dispatches polymorphically. All nodes have `Emit` — the base returns `null`, concrete types override.
+**Design rationale for the single-pass approach:**
 
-### 4.5 Full pipeline in one pass
+| Concern | How it's addressed |
+|---------|-------------------|
+| **Step ordering** | Steps are called in order within `Analyze()`. No external coordination needed. |
+| **Per-step control** | Boolean toggles (`EnableSsa`) allow tests to skip individual steps without modifying the pipeline. |
+| **Backend-specific steps** | `GenerationPass` runs the *canonical* passes. A backend that needs extra steps (e.g. `RingAnalysis` for the VM) either adds them as a separate `INodeAnalyzer` that runs *after* `GenerationPass`, or calls them on the `Module` in a wrapper. Only backend-specific passes need this treatment — the core passes (SSA, const-fold, inline) are universal. |
+| **Telemetry** | The analyzer's built-in telemetry treats `GenerationPass` as one entry. For more granular timing, the pass itself can emit `AnalysisTelemetry` events per step. This is a future concern — the current telemetry granularity is "pass-level" and that's sufficient. |
+| **Testing** | Each step (`SsaTransform.Run`, `ConstantFolding.Run`, `InlinePass.Run`) is a public static method on its class. Tests call them directly without any `INodeAnalyzer` infrastructure. |
+
+**Separate analyzers vs. single pass — when to revisit this decision:**
+
+If a future backend needs a substantially different pass order (e.g. a backend that inlines before constant folding), the canonical steps should be extracted into an `IrPassManager`:
+
+```csharp
+// Future — only when a second backend demands a different order
+public sealed class IrPassManager {
+    private readonly List<IIrPass> _passes = new();
+    public IrPassManager Add(IIrPass pass) { _passes.Add(pass); return this; }
+    public Module Run(Module module) {
+        foreach (var pass in _passes) pass.Transform(module);
+        return module;
+    }
+}
+```
+
+Until that need is concrete, the single-pass approach keeps things simpler.
+
+### 4.5 Full pipeline
 
 ```
 AST → [TypeResolve] → [ConstFold] → [SideEffect] → [GenerationPass] → Module
-                                                              ↑
-                                              node.Emit(ctx) per node
+                                                              │
+                                         node.Emit(ctx) per node (step 1)
+                                               SsaTransform (step 2)
+                                          ConstantFolding (step 2)
+                                              InlinePass (step 2)
 ```
 
 ### 4.6 Notable `Emit` implementations
@@ -205,23 +251,522 @@ AST → [TypeResolve] → [ConstFold] → [SideEffect] → [GenerationPass] → 
 
 ## 5. IR Passes
 
-Passes are simple `Module → Module` transforms. They run in order:
+IR passes are `Module → Module` transforms. They are not separate `INodeAnalyzer` implementations — they are called as internal steps within `GenerationPass.Analyze()`. This keeps the analyzer pipeline focused on AST-level analysis while IR transforms are pure functions on `Module`.
+
+The canonical pass order:
 
 ```
-AST → [GenerationPass] → Module → [ConstFold] → [SSA Build] → [Inline] → [Lower for Backend]
-                            ↑
-                node.Emit(ctx) per node
+[IrEmission]  node.Emit(ctx) per AST node  → Module
+     │
+     ▼
+[SsaTransform]       StoreLocal/LoadLocal → explicit Phi + SSA values
+     │
+     ▼
+[ConstantFolding]    BinOp(Const, Const) → Const
+     │
+     ▼
+[Inlining]           Call(inlinable) → inline body
 ```
+
+All passes run in `GenerationPass.Analyze()` (section 4.4). Backend-specific passes (e.g. `RingAnalysis` for the VM backend) run later, outside `GenerationPass`, as separate `INodeAnalyzer` instances or adapter steps.
 
 ### 5.1 SSA Construction Pass
 
-Operates on the `Module` CFG:
+The SSA pass is the most algorithmically significant transform in the pipeline. It takes the initial IR (which uses `LoadLocal`/`StoreLocal` for mutable slots) and converts it to pure SSA form where every `Value` has exactly one definition and an arbitrary number of uses.
 
-1. Builds the dominator tree from block adjacency (terminators reference `BasicBlock` directly, so CFG construction is a simple `foreach block → follow its terminator's targets`).
-2. Inserts `Phi` at dominance frontiers for each `StoreLocal`/`LoadLocal` pair.
-3. Renames `LoadLocal`/`StoreLocal` to direct `Value` references, replacing old instructions in-place.
+#### 5.1.1 Prerequisites
 
-Result**: no `LoadLocal` or `StoreLocal` remain (when the pass succeeds). The IR is pure SSA.
+The `Module` must be in a well-formed state before SSA runs:
+
+1. **Every `BasicBlock` has a terminator** — `Goto`, `CondBranch`, `Ret`, or `Throw`. Dead-end blocks (no terminator) are rejected.
+2. **All local slot accesses are explicit** — `LoadLocal(slot)` and `StoreLocal(slot, val)`. The slot indices are dense per `Module.MaxLocalSlots`.
+3. **No implicit dataflow** — all value dependencies are through `Value` references. The only mutable state is local variables via `LoadLocal`/`StoreLocal`.
+
+The pass never runs on the initial Poly IR after emission; it runs after constant folding and inlining, since those passes may introduce or eliminate `Const`/`BinOp` nodes that affect the def-use graph.
+
+#### 5.1.2 Algorithm overview (Cytron et al., 1991)
+
+The standard SSA construction proceeds in four steps:
+
+```
+Step 1: CFG construction        — build the control-flow graph from block terminators
+Step 2: Dominator tree          — compute immediate dominators (Lengauer-Tarjan)
+Step 3: Dominance frontiers     — compute DF(b) for every block
+Step 4: Phi insertion           — insert Phi at dominance frontiers for each local slot
+Step 5: Renaming               — replace LoadLocal/StoreLocal with SSA Value references
+```
+
+#### 5.1.3 Step 1: CFG construction
+
+Because terminators reference `BasicBlock` objects directly, CFG construction is a single pass:
+
+```csharp
+public sealed record Cfg(
+    BasicBlock Entry,
+    Dictionary<BasicBlock, List<BasicBlock>> Predecessors,
+    Dictionary<BasicBlock, List<BasicBlock>> Successors
+);
+
+public static Cfg BuildCfg(Module module) {
+    var preds = new Dictionary<BasicBlock, List<BasicBlock>>();
+    var succs = new Dictionary<BasicBlock, List<BasicBlock>>();
+
+    // Ensure every block has an entry in both maps
+    foreach (var block in module.Blocks) {
+        preds[block] = new List<BasicBlock>();
+        succs[block] = new List<BasicBlock>();
+    }
+
+    foreach (var block in module.Blocks) {
+        switch (block.Terminator) {
+            case Goto g:
+                succs[block].Add(g.Target);
+                preds[g.Target].Add(block);
+                break;
+            case CondBranch cb:
+                succs[block].Add(cb.ThenTarget);
+                succs[block].Add(cb.ElseTarget);
+                preds[cb.ThenTarget].Add(block);
+                preds[cb.ElseTarget].Add(block);
+                break;
+            case Ret or Throw:
+                // No successors — terminal block
+                break;
+        }
+    }
+
+    return new Cfg(module.Blocks[0], preds, succs);
+}
+```
+
+The result maps every block to its predecessors; successors are derivable from the terminator at any time but cached here for convenience.
+
+**Edges from `CondBranch` are always resolved here. There is no label indirection.** This is the fundamental improvement over the current `Lowering.Assemble()` which resolves labels via integer IDs and `labelPositions` dictionaries. Here the target is a `BasicBlock` reference — it cannot dangle, and the CFG is always consistent with the IR.
+
+#### 5.1.4 Step 2: Dominator tree (Lengauer-Tarjan)
+
+Lengauer-Tarjan finds immediate dominators in near-linear time (`O(E α(V))`). The standard implementation is ~60 lines:
+
+```csharp
+public static Dictionary<BasicBlock, BasicBlock> ComputeDominators(Cfg cfg) {
+    // ── DFS numbering ──
+    var semi = new Dictionary<BasicBlock, int>();
+    var parent = new Dictionary<BasicBlock, BasicBlock>();
+    var vertex = new List<BasicBlock>();
+    var bucket = new Dictionary<BasicBlock, List<BasicBlock>>();
+    var idom = new Dictionary<BasicBlock, BasicBlock>();
+
+    int counter = 0;
+    void Dfs(BasicBlock b, BasicBlock? p) {
+        semi[b] = counter++;
+        parent[b] = p!;
+        vertex.Add(b);
+        foreach (var s in cfg.Successors[b])
+            if (!semi.ContainsKey(s))
+                Dfs(s, b);
+    }
+    Dfs(cfg.Entry, null);
+
+    // ── Semi-dominator computation (compress/link) ──
+    var ancestor = new Dictionary<BasicBlock, BasicBlock>();
+    var best = new Dictionary<BasicBlock, BasicBlock>();
+    foreach (var b in vertex) { ancestor[b] = b; best[b] = b; }
+
+    BasicBlock Compress(BasicBlock v) { /* path compression */ }
+    BasicBlock Eval(BasicBlock v) { /* return vertex with minimal semi */ }
+    void Link(BasicBlock v, BasicBlock w) { ancestor[w] = v; }
+
+    for (int i = vertex.Count - 1; i > 0; i--) {
+        var w = vertex[i];
+        foreach (var p in cfg.Predecessors[w]) {
+            var u = Eval(p);
+            if (semi[u] < semi[w])
+                semi[w] = semi[u];  // using int field, repurpose for candidate
+        }
+        bucket[semi[w]] ??= new List<BasicBlock>();
+        bucket[semi[w]].Add(w);
+        if (parent[w] is { } p) {
+            Link(p, w);
+            foreach (var v in bucket.GetValueOrDefault(semi[p], [])) {
+                var u = Eval(v);
+                idom[v] = semi[u] < semi[p] ? u : p;
+            }
+            bucket[semi[p]]?.Clear();
+        }
+    }
+    for (int i = 1; i < vertex.Count; i++) {
+        var w = vertex[i];
+        if (idom[w] != parent[w])
+            idom[w] = idom[w];
+    }
+    idom[cfg.Entry] = cfg.Entry;
+
+    return idom;  // idom[b] = immediate dominator of b
+}
+```
+
+The output `idom` map gives the immediate dominator tree: `b`'s parent in the dominator tree is `idom[b]`. The entry block dominates itself by convention and has no parent.
+
+#### 5.1.5 Step 3: Dominance frontiers
+
+The dominance frontier `DF(b)` is the set of blocks `x` such that:
+- `b` dominates a predecessor of `x`, and
+- `b` does not strictly dominate `x`.
+
+```csharp
+public static Dictionary<BasicBlock, List<BasicBlock>> ComputeFrontiers(Cfg cfg, Dictionary<BasicBlock, BasicBlock> idom) {
+    var frontiers = new Dictionary<BasicBlock, List<BasicBlock>>();
+    foreach (var b in cfg.Successors.Keys)
+        frontiers[b] = new List<BasicBlock>();
+
+    bool Dominates(BasicBlock a, BasicBlock b) {
+        // Walk up the dominator tree
+        while (b != a && idom[b] != b) b = idom[b];
+        return b == a;
+    }
+
+    foreach (var b in cfg.Successors.Keys) {
+        if (cfg.Predecessors[b].Count < 2) continue;
+        foreach (var p in cfg.Predecessors[b]) {
+            var runner = p;
+            while (runner != idom[b]) {
+                frontiers[runner].Add(b);
+                runner = idom[runner];
+            }
+        }
+    }
+    return frontiers;
+}
+```
+
+Each entry `frontiers[b]` is the set of blocks where `b`'s dominance ends — where control flow from outside `b`'s domain converges. These are exactly the positions where `Phi` instructions are needed.
+
+#### 5.1.6 Step 4: Phi insertion
+
+For each mutable local slot, we find every block that writes to it (`StoreLocal(slot, _)`) and insert `Phi(slot)` at the dominance frontiers of those blocks.
+
+```csharp
+public static void InsertPhis(Module module, Cfg cfg, Dictionary<BasicBlock, List<BasicBlock>> frontiers) {
+    // Discover which slots are defined in which blocks
+    var defSites = new Dictionary<int, List<BasicBlock>>();  // slot → list of blocks
+    for (int bi = 0; bi < module.Blocks.Count; bi++) {
+        var block = module.Blocks[bi];
+        foreach (var instr in block.Instructions) {
+            if (instr is StoreLocal sl) {
+                defSites.GetOrAdd(sl.SlotIndex, _ => new()).Add(block);
+            }
+        }
+    }
+
+    // For each slot with multiple definitions, insert Phi at frontier blocks
+    foreach (var (slot, defBlocks) in defSites) {
+        if (defBlocks.Count < 2) continue;  // single-def slot needs no phi
+
+        var worklist = new Queue<BasicBlock>(defBlocks);
+        var visited = new HashSet<BasicBlock>();
+        var inserted = new HashSet<BasicBlock>();  // prevent double-phi per slot
+
+        while (worklist.Count > 0) {
+            var b = worklist.Dequeue();
+            foreach (var f in frontiers[b]) {
+                if (!inserted.Add(f)) continue;
+
+                // Insert Phi at the *start* of the frontier block
+                // (before any non-Phi instructions)
+                var phiInstrs = f.Instructions.TakeWhile(i => i is Phi).Count();
+                var incoming = cfg.Predecessors[f]
+                    .Select(p => (Value?)null)    // placeholder; filled during renaming
+                    .ToArray();
+                f.Instructions.Insert(phiInstrs, new Phi(incoming, null));
+
+                if (visited.Add(f))
+                    worklist.Enqueue(f);
+            }
+        }
+    }
+}
+```
+
+After this pass, every join point that merges multiple definitions of a local variable has an explicit `Phi` with placeholder incoming values. The number of operands equals the number of predecessor blocks.
+
+#### 5.1.7 Step 5: Renaming
+
+The renaming pass walks the dominator tree in DFS order, maintaining a stack of current SSA values per slot. Every `LoadLocal(slot)` is replaced with the top-of-stack value; every `StoreLocal(slot, val)` defines a new SSA version and pushes it.
+
+```csharp
+public static void Rename(Module module, Cfg cfg, Dictionary<BasicBlock, BasicBlock> idom) {
+    // ── Per-slot value stack ──
+    var stacks = new Dictionary<int, Stack<Value>>();
+    Value? CurrentValue(int slot) =>
+        stacks.TryGetValue(slot, out var s) && s.Count > 0 ? s.Peek() : null;
+
+    void Walk(BasicBlock block) {
+        // Save stack heights for restoration on backtrack
+        var savedHeights = stacks.ToDictionary(kv => kv.Key, kv => kv.Value.Count);
+
+        // Process Phi instructions: assign new SSA values
+        foreach (var instr in block.Instructions) {
+            if (instr is Phi phi) {
+                var newVal = new Value(phi, phi.Incoming[0]?.Kind ?? TypeKind.Int64, NextId());
+                // Replace placeholder incoming with itself as first approximation
+                phi.Incoming = phi.Incoming.Select((_, i) =>
+                    newVal).ToArray();  // filled by RenamePhiIncomings later
+                PushValue(instr, newVal);
+            }
+        }
+
+        // Process non-Phi instructions: replace LoadLocal, handle StoreLocal
+        var replacements = new List<(int Index, Instr Replacement)>();
+        for (int i = 0; i < block.Instructions.Count; i++) {
+            switch (block.Instructions[i]) {
+                case LoadLocal ll:
+                    var cur = CurrentValue(ll.SlotIndex);
+                    if (cur is not null) {
+                        // LoadLocal becomes a "use" — replace with current value.
+                        // We remove the instruction entirely; consumers reference
+                        // cur directly instead of through this instruction.
+                        replacements.Add((i, null));  // mark for removal
+                    }
+                    break;
+
+                case StoreLocal sl:
+                    var newSsaVal = new Value(sl.Val.Definition, sl.Val.Kind, NextId());
+                    stacks.GetOrAdd(sl.SlotIndex, _ => new()).Push(newSsaVal);
+                    replacements.Add((i, null));  // StoreLocal removed; side effect is now the SSA stack
+                    break;
+
+                case Phi:
+                    // Already handled above
+                    break;
+            }
+        }
+
+        // Apply replacements: remove LoadLocal/StoreLocal, leave Phi
+        foreach (var (idx, replacement) in replacements.OrderByDescending(r => r.Index)) {
+            if (replacement is null)
+                block.Instructions.RemoveAt(idx);
+            else
+                block.Instructions[idx] = replacement;
+        }
+
+        // Recurse into dominator-tree children (blocks dominated by this one)
+        foreach (var child in module.Blocks) {
+            if (idom.GetValueOrDefault(child) == block && child != block)
+                Walk(child);
+        }
+
+        // Restore stacks
+        foreach (var (slot, height) in savedHeights) {
+            var s = stacks[slot];
+            while (s.Count > height) s.Pop();
+        }
+    }
+
+    Walk(cfg.Entry);
+}
+```
+
+After renaming:
+- `LoadLocal` instructions are **removed**. All uses of that local now reference the appropriate SSA `Value` directly.
+- `StoreLocal` instructions are **removed**. The stored `Value` is now the defining instruction for the new SSA version.
+- `Phi` instructions remain, each producing a new `Value`.
+- The `Module.MaxLocalSlots` can be reset to 0 — no mutable slots remain.
+
+The final step fills in the `Phi.Incoming` arrays by matching predecessor blocks to their exiting SSA values at the point of the branch. This requires a second pass that walks each block's predecessors and records the current SSA value for each slot at the end of the predecessor:
+
+```csharp
+public static void FillPhiIncomings(Module module, Cfg cfg) {
+    // For each block, compute the SSA value for each slot at exit
+    var exitValues = new Dictionary<BasicBlock, Dictionary<int, Value>>();
+
+    // Walk blocks in topological order so predecessors are resolved
+    foreach (var block in module.Blocks) {
+        var exitMap = new Dictionary<int, Value>();
+
+        // Start with entry values (from dominator tree or initial LoadLocal)
+        foreach (var pred in cfg.Predecessors[block]) {
+            if (exitValues.TryGetValue(pred, out var predExit)) {
+                foreach (var kv in predExit)
+                    exitMap[kv.Key] = kv.Value;
+            }
+        }
+
+        // Process instructions to track definitions
+        foreach (var instr in block.Instructions) {
+            if (instr is StoreLocal sl)
+                exitMap[sl.SlotIndex] = sl.Val!;  // last stored value at exit
+        }
+
+        // Handle Phi: the Phi's incoming values come from predecessor exit states
+        foreach (var instr in block.Instructions) {
+            if (instr is Phi phi) {
+                var incoming = new Value[cfg.Predecessors[block].Count];
+                for (int pi = 0; pi < incoming.Length; pi++) {
+                    var pred = cfg.Predecessors[block][pi];
+                    if (exitValues.TryGetValue(pred, out var predExit)) {
+                        // Find which slot this Phi corresponds to by matching
+                        // the slot that was stored before reaching this block
+                        // Simplification: track slot per Phi via metadata
+                        incoming[pi] = predExit.GetValueOrDefault(phi.SlotIndex)!;
+                    }
+                }
+                phi.Incoming = incoming;
+            }
+        }
+
+        exitValues[block] = exitMap;
+    }
+}
+```
+
+#### 5.1.8 Tracing through the worked example
+
+Starting from the pre-SSA IR in section 7.2:
+
+```
+entry block:
+  %0 = LoadLocal(slot=0)              // load x
+  %1 = Const(0)
+  %2 = BinOp(Gt, %0, %1)
+  CondBranch(%2, then, else)
+
+then_block:
+  %3 = LoadLocal(slot=0)
+  %4 = Const(1)
+  %5 = BinOp(Add, %3, %4)
+  Goto(merge)
+
+else_block:
+  %6 = LoadLocal(slot=0)
+  %7 = Const(1)
+  %8 = BinOp(Sub, %6, %7)
+  Goto(merge)
+
+merge_block:
+  %9 = Ret(?)                           // placeholder; no result yet
+```
+
+**CFG:** entry → {then, else} → merge. Predecessors: then={entry}, else={entry}, merge={then, else}.
+
+**Dominator tree:** entry dominates all blocks. idom[then]=entry, idom[else]=entry, idom[merge]=entry.
+
+**Dominance frontiers:** DF(entry) = {merge} because entry dominates both predecessors of merge (then and else) but not merge itself. DF(then) = {merge}, DF(else) = {merge}.
+
+**Phi insertion:** slot 0 is stored or loaded in all three non-entry blocks. Its def sites include entry (the initial `LoadLocal` is a use, but we also track implicit def at entry as the argument). The dominance frontier of the definition blocks includes `merge`, so a `Phi(slot=0)` is inserted at the start of `merge_block`.
+
+**Renaming walk (DFS over dominator tree: entry → then → else → merge):**
+
+- **entry:** LoadLocal(slot=0) creates SSA value %0. Exits with slot=0→%0.
+- **then:** LoadLocal(slot=0) = use %0 (from entry). StoreLocal(slot=0) would create %3 but doesn't exist — x is only read here. Exits with slot=0→%0.
+- **else:** Same as then. Exits with slot=0→%0.
+- **merge:** Phi(slot=0) creates %9. Incoming[then]=%0, incoming[else]=%0. Since both predecessors push the same value, subsequent optimization (canonical SSA clean-up) could eliminate this Phi as redundant.
+
+**After renaming:**
+
+```
+entry block:
+  %0 = Const(x_value)         ; LoadLocal eliminated — %0 is the argument value
+  %1 = Const(0)
+  %2 = BinOp(Gt, %0, %1)
+  CondBranch(%2, then, else)
+
+then_block:
+  %3 = Const(1)
+  %4 = BinOp(Add, %0, %3)     ; LoadLocal eliminated — uses %0 directly
+  Goto(merge)
+
+else_block:
+  %5 = Const(1)
+  %6 = BinOp(Sub, %0, %5)     ; LoadLocal eliminated — uses %0 directly
+  Goto(merge)
+
+merge_block:
+  %7 = Phi([%4, %6])
+  %8 = Ret(%7)
+```
+
+This matches section 7.3 exactly. Note that `%0` flows directly into all three uses — the LoadLocal indirection is gone.
+
+#### 5.1.9 Edge cases
+
+| Edge case | Handling |
+|-----------|----------|
+| **Unreachable blocks** | Blocks not reachable from `cfg.Entry` via the successor walk are skipped. They are preserved in the `Module` (for diagnostics) but produce no SSA values. A separate `DeadBlockEliminationPass` can remove them. |
+| **Single-definition slots** | Slots with exactly one `StoreLocal` need no `Phi`. The single definition dominates all uses (by SSA property). |
+| **Phi with identical incoming values** | When all incoming values are the same `Phi` is redundant. A `TrivialPhiEliminationPass` can fold `%7 = Phi([%0, %0])` → `%0`. |
+| **Critical edges** | An edge from a block with multiple successors to a block with multiple predecessors "critical." The Phi insertion algorithm handles this naturally — each predecessor pair contributes one incoming value. No edge splitting is required for correctness, though edge splitting may improve optimization. |
+| **Uninitialized slots** | If a `LoadLocal(slot)` is reached without a preceding `StoreLocal`, the renaming pass finds an empty stack. In this case, `CurrentValue` returns `null`, and the `LoadLocal` remains — it's treated as reading an undefined value. A `UndefinedVariableEliminationPass` can replace these with `Const(0)` or error diagnostics. |
+| **Back-edges (loops)** | The dominance frontier of a loop header includes the header itself (because the back-edge predecessor is dominated by the header but the header is not). This causes a `Phi` to be inserted at the header, which is the standard loop-variant SSA pattern. The renaming pass handles this naturally: when visiting the header, the Phi's placeholder value is pushed; after visiting the loop body, the back-edge propagates the loop-carried value. |
+
+#### 5.1.10 Testing strategy for the SSA pass
+
+```csharp
+[Test]
+public async Task Ssa_StraightLine_NoPhis() {
+    var module = Emit(new Block([
+        new Assignment(new Variable("x"), new Constant(1)),
+        new Variable("x")
+    ]));
+    // One block, one slot, one store before the load — no join point
+    SsaTransform.Run(module);
+    await Assert.That(module.Blocks[0].Instructions.OfType<Phi>()).IsEmpty();
+    await Assert.That(module.Blocks[0].Instructions.OfType<LoadLocal>()).IsEmpty();
+}
+
+[Test]
+public async Task Ssa_IfElse_PhiAtMerge() {
+    // if (cond) x = 1 else x = 2; return x
+    var ast = /* ... */;
+    var module = Emit(ast);
+    SsaTransform.Run(module);
+    var merge = module.Blocks.Last();
+    var phis = merge.Instructions.OfType<Phi>().ToArray();
+    await Assert.That(phis).HasCount().EqualTo(1);
+    await Assert.That(phis[0].Incoming).HasCount().EqualTo(2);
+    // Incoming[0] = Const(1) from then_block
+    // Incoming[1] = Const(2) from else_block
+}
+
+[Test]
+public async Task Ssa_Loop_PhiAtHeader() {
+    // while (x < 10) x = x + 1; return x
+    var ast = /* ... */;
+    var module = Emit(ast);
+    SsaTransform.Run(module);
+    var header = module.Blocks[1];  // loop header
+    await Assert.That(header.Instructions.OfType<Phi>()).HasCount().EqualTo(1);
+}
+
+[Test]
+public async Task Ssa_CrossValidateWithVm() {
+    // Compile with and without SSA, execute both, compare results
+    var ast = /* complex expression with branches and loops */;
+    var module = Emit(ast);
+    SsaTransform.Run(module);
+
+    var lowered = new UopLoweringVisitor().Lower(module);
+    var program = ProgramCompiler.Compile(lowered);
+    var state = new VmState(program);
+    Vm.Execute(state);
+    var ssaResult = state.Stack.Pop();
+
+    // Compare against non-SSA pipeline (old or new without SSA)
+    // ...
+    await Assert.That(ssaResult).IsEqualTo(expectedResult);
+}
+```
+
+#### 5.1.11 Performance characteristics
+
+| Concern | Mitigation |
+|---------|-----------|
+| Lengauer-Tarjan complexity | O(E α(V)) — near-linear. For typical control flow (V ~ block count), this is faster than a sort. |
+| Phi insertion worklist | Each block is visited at most once per local variable. Worst case: O(S × B) where S = local slots and B = blocks. |
+| Renaming walk | Single DFS over the dominator tree. Each instruction is visited once. |
+| `FillPhiIncomings` second pass | Linear in the number of Phi instructions × predecessors. Typically small. |
+| Overall pass cost | Expected 1.5–3× the cost of a single tree walk, depending on CFG complexity. For a 100-block module, well under 1ms. |
+
+The SSA pass is designed to be **optional** for the VM backend (the `UopLoweringVisitor` can work with or without SSA, since `LoadLocal`/`StoreLocal` map directly to µop `LoadSlot`/`StoreSlot`). It becomes essential for passes that need def-use chains: constant propagation, dead code elimination, inlining, and vectorization.
 
 ### 5.2 Constant Folding Pass
 

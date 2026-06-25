@@ -25,28 +25,46 @@ The full rationale and history for these principles lives in `docs/decisions/202
 
 The expanded rationale, history, and examples of how these principles have been applied live in `docs/decisions/2026-core-engineering-principles.md`. Consult it when you need the deeper "why," but the six bullets above are the enforceable version.
 
+### Naming
+
+- **Name things for what they ARE, not what pattern they use.** Pattern names belong in design discussions and decision records, not in type and directory names. If a class compiles IR to µops, it's a `UopCompiler`, not a `UopLoweringPass` or a `UopLoweringVisitor`. If a directory holds backends, it's `Backends/`, not `Visitors/`. The name should answer "what does this thing do for the system?" — not "what GoF category does it happen to fall into?"
+- **A concrete thing IS a concept, not a pattern.** `CSharpCodeGenerator` IS a code generator. `Inliner` IS an inliner. `RingAnalyzer` IS an analyzer. The concept is the type's identity; the pattern is an implementation detail that may change.
+
 ## Overview & Architecture
 
 **Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in a symbolic IR, validated by the VM (canonical semantics), compiled to native backends. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` and `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
 
 **Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, VM design, and the neurosymbolic platform vision).
 
-- `Poly/` — core DSL: Syntax, Interpretation (VM), Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
+- `Poly/` — core DSL: Syntax, Ir (canonical IR), Interpretation (VM), Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
 - `Poly.Benchmarks/` — example entry point. (FluentApiExample.cs is fully commented out — do not treat it as a reference.)
 - `Poly.Tests/` — unit tests using **TUnit** (not xUnit/NUnit).
 
 **Module boundaries (enforced, one-way):**
-- `Interpretation` → `Introspection`
+- `Ir` → `Syntax` (IR types reference `NodeId` for source tracking; no other Poly dependency)
+- `Interpretation` → `Ir`, `Syntax`, `Introspection`
 - `Validation` → `Interpretation`
-- `Synthesis` → `Syntax`, `Interpretation` (VM for macro validation)
-- `Introspection` must not depend on `Interpretation`.
+- `Synthesis` → `Syntax`, `Ir`, `Interpretation` (VM for macro validation)
+- `DomainModeling` → `Syntax`, `Ir` (domain constructs lower to IR; no dependency on Interpretation)
+- `Introspection` must not depend on `Interpretation` or `Ir`.
 - No module may depend on `Synthesis` except `DomainModeling` (evolution loop).
 - Exception: CLR implementations under `Poly/Introspection/CommonLanguageRuntime` add concrete types without introducing reverse dependencies.
 - **Domain concepts lower to generic VM opcodes** (no domain-specific opcodes). See `docs/decisions/2026-06-08-domain-lowering-boundary.md`.
 
+## Ir — Canonical Intermediate Representation
+
+**Location:** `Poly/Ir/`
+
+The canonical IR is a block-structured CFG with SSA values. It is pure data (C# records with no logic beyond construction). Dependencies: `Syntax` for `NodeId` (the `Source` field on every `Instr`). No other Poly module dependency.
+
+- `Poly/Ir/` — IR data types: `Module`, `BasicBlock`, `Value`, `Instr` subtypes (16 instruction types), `Terminator` subtypes (5 types), `TypeKind`, `OpKind`
+- `Poly/Ir/Passes/` — pure `Module → Module` transforms: SSA construction, constant folding, inlining. No dependencies beyond `Poly/Ir/`.
+
 ## Interpretation
 
 **Before working in this area:** Review `docs/decisions/` for any architecture or analysis-related decisions.
+
+Interpretation contains the VM execution engine and the passes that bridge Ir ↔ µops. It does **not** define the IR — it consumes it.
 
 ### Structure
 - `Syntax/`
@@ -55,6 +73,9 @@ The expanded rationale, history, and examples of how these principles have been 
   - `Analysis/` — `AnalysisContext`, `AnalyzerBuilder`, `Analyzer`, diagnostics & metadata store
 - `Interpretation/`
   - `Analysis/` — semantic passes (Semantics, ConstantFolding, ControlFlow, LoweringPrep, UopGeneration)
+  - `Ir/` — IR bridge types: `GenerationPass` (AST→IR), `EmissionContext`, `ModuleMetadata`, `VmLoweringPass`, `GenerationPassExtensions`
+  - `Ir/Backends/` — IR → output backends: `UopCompiler` (→µops), `ExpressionCompiler` (→LINQ expressions), `CSharpCodeGenerator` (→C# text)
+  - `Ir/Passes/` — VM-backend-specific passes: `RingAnalyzer` (ring-depth computation)
   - `Vm/` — VM execution engine: `Vm.cs`, `VmState.cs`, `ProgramCompiler.cs`, `Lowering.cs` (µop assembly), `Instruction` types (26+ µop subtypes), `Heap.cs`, `Closure.cs`, `ValueStack.cs`
   - `LinqExpressions/` — `LinqExpressionGenerator`, `INodeCompiler` (secondary — test reference only, may be removed)
   - `CSharp/` — `CSharpGenerator.cs` (production codegen output)
@@ -62,7 +83,11 @@ The expanded rationale, history, and examples of how these principles have been 
 
 **The TreeWalkingInterpreter has been removed.** The VM is the sole canonical execution engine. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
 
-### Canonical VM Pipeline
+### Canonical VM Pipeline (post-IR)
+
+The pipeline is being refactored to a canonical AST → IR → µops flow. During migration, both pipelines coexist. For the migration plan, see `docs/experiments/interpretation-compiler-framework-plan.md`.
+
+**Current (pre-IR) pipeline:**
 
 ```csharp
 // 1. Analysis (produces µop metadata)
@@ -80,6 +105,28 @@ var loweringResult = Lowering.Lower(node, result);
 var program = ProgramCompiler.Compile(loweringResult);
 
 // 4. Execution
+using var state = new VmState(program);
+var output = Vm.Execute(state);
+```
+
+**Target (post-IR) pipeline:**
+
+```csharp
+// 1. Analysis + IR generation
+var analyzer = new AnalyzerBuilder()
+    .UseTypeResolver().UseMemberResolver().UseVariableScopeValidator()
+    .UseLoweringPreparation().UseIrGeneration()   // replaces .UseUopGeneration()
+    .Build();
+
+var result = analyzer.Analyze(node);
+
+// 2. VM lowering (IR → µops via VmLoweringPass, runs inside .UseIrGeneration())
+//    or accessed via result.GetMetadata<ModuleMetadata>(node) → UopCompiler
+
+// 3. Program compilation (unchanged)
+var program = ProgramCompiler.Compile(loweringResult);
+
+// 4. Execution (unchanged)
 using var state = new VmState(program);
 var output = Vm.Execute(state);
 ```

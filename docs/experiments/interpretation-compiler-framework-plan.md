@@ -15,25 +15,33 @@ A secondary concern: there are already two implicit backends (VM µops → expre
 - Establish a single canonical pipeline: **AST → IR → backend**. Every AST node emits exactly one IR fragment; every backend visits IR.
 - Replace the monolithic 700-line switch with a virtual `Emit` method on the `Node` base class, so every node type carries emit logic by default and override is opt-in at the type level.
 - Replace the ring-based φ heuristic with explicit `Phi` instructions inserted by an SSA construction pass.
-- Expose backends as **visitors** over the IR that never touch AST node code.
+- Expose backends as IR-to-output compilers that never touch AST node code.
 - Handle closures, heap constants, external call sites, and incremental compilation—all omitted from the previous plan.
 - Maintain full backwards compatibility during migration; co-exist with old pipeline until parity is proven.
 
 ## 3. Canonical IR Design
+
+### 3.0 Role in the Neurosymbolic Platform
+
+The IR is the structural layer between Poly's domain-level expression and its execution backends. It is the **lowest level that is semantically complete**: every IR `Module` has a deterministic execution result, but the model is not burdened with execution-model concerns (ring allocation, PC offsets, `ConsumedFromPcs` arrays). Models default to authoring at the domain level (`DomainModeling`); the IR is the compiler's lowering target and an opt-in escape hatch for performance-critical paths.
+
+For the full three-level expression model, deterministic lowering pipeline, and the neurosymbolic role of the IR, see `docs/ARCHITECTURE.md` §3. For the platform vision this serves, see `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md`.
+
+The remainder of this section (§3.1–§3.3) describes the IR's structural design. §4 describes how AST nodes lower to IR via `node.Emit(ctx)`. §5 describes the IR-level optimization passes. §6 describes the backends that project IR into executable or human-readable forms.
 
 ### 3.1 Guiding principles
 
 - **Single canonical pipeline**: AST → IR → backend. The IR is the only intermediate representation. Each AST node emits exactly one IR fragment. Backends never see AST nodes.
 - **Block-structured CFG**: every block has a label, an ordered list of instructions, and a terminator (branch, jump, return, throw). No flat instruction list with label markers.
 - **SSA values**: each instruction produces zero or one `Value`. Consumers reference that value directly—no implicit stack or ring. This makes dataflow explicit.
-- **Typed, but minimally**: IR types are a small enum (`Int64`, `Float64`, `Boolean`, `Handle`, `Void`), kept CLR-agnostic. The CLR adaptation layer maps Handle to `object?`.
+- **Typed, but minimally**: IR types are a small enum (`Word`, `Boolean`, `Handle`, `Void`), kept CLR-agnostic. `Word` represents one machine word (64-bit signed integer; maps to `long` in CLR, `i64` in WASM, etc.). Float and integer operations are distinguished via `OpKind`, not types. The CLR adaptation layer maps `Handle` to `object?`.
 - **Scoped locals fallback**: for variable reassignment (`x = x + 1`), the IR allows mutable local slots accessed via `LoadLocal`/`StoreLocal` as an escape from SSA purity. The SSA construction pass converts these to SSA values with φ nodes at join points.
 
 ### 3.2 Core types
 
 ```csharp
 // ── Values ──────────────────────────────────────────────────────────
-public enum TypeKind { Int64, Float64, Boolean, Handle, Void }
+public enum TypeKind { Word, Boolean, Handle, Void }
 
 /// <summary>Opaque handle to a value produced by an IR instruction.
 /// Carries its type and a reference back to the defining instruction.</summary>
@@ -49,11 +57,11 @@ public sealed record LoadLocal(int SlotIndex, TypeKind Kind, NodeId? Source) : I
 public sealed record StoreLocal(int SlotIndex, Value Val, NodeId? Source) : Instr(TypeKind.Void, Source);
 public sealed record Parameter(int SlotIndex, TypeKind Kind, NodeId? Source) : Instr(Kind, Source);  // entry-block function argument; defines initial SSA value for the slot
 public sealed record Call(Value Target, Value[] Args, int ArgCount, bool IsExternal, int CallSiteIndex, NodeId? Source)
-    : Instr(TypeKind.Int64 /* resolved from call-site table */, Source);
+    : Instr(TypeKind.Word /* resolved from call-site table */, Source);
 // CallSiteIndex: index into Module.CallSites (analogous to VmProgram.CallSites).
 // Resolved during IR generation from AnalysisResult.GetResolvedMember().
 public sealed record AllocClosure(int FuncIndex, Value[] Captures, NodeId? Source) : Instr(TypeKind.Handle, Source);
-public sealed record LoadUpvalue(int UpvalueIndex, NodeId? Source) : Instr(TypeKind.Int64, Source);
+public sealed record LoadUpvalue(int UpvalueIndex, NodeId? Source) : Instr(TypeKind.Word, Source);
 public sealed record StoreUpvalue(int UpvalueIndex, Value Val, NodeId? Source) : Instr(TypeKind.Void, Source);
 public sealed record AllocHeap(int HandleIndex, NodeId? Source) : Instr(TypeKind.Handle, Source);
 public sealed record Phi(int? SlotIndex, Value[] Incoming, NodeId? Source) : Instr(Incoming[0].Kind, Source);
@@ -94,7 +102,7 @@ public sealed record CallSite(string MethodName, TypeKind ReturnType, int ArgCou
 - **SSA by construction**: every `Instr` returns a `Value`. Consumers reference that value directly. No ring analysis, no `ConsumedFromPcs` metadata. The ring analysis becomes an optimization pass for the VM backend only.
 - **Heap constants as module-level sideband**: the current `HeapConstantMetadata` collected during `UopGeneration` (keyed under `NodeId.Empty`) becomes `Module.HeapConstants`. No instruction-level indirection needed.
 - **Phi explicit**: `Phi` selects among `Value[] Incoming`. No heuristic detection, no `PhiSourcePcs`/`PhiAltPcs` juggling.
-- **Result types from operators**: IR instruction result types are derived from their operands and operator kind where possible (`BinOp` resolves via `Op.ResultType(Left.Kind, Right.Kind)`, `UnaryOp` inherits `Operand.Kind`). For `Call`, the result type comes from the resolved member in the call-site table (section 9.2). `Op.ResultType` is a `static TypeKind OpKind.ResultType(TypeKind, TypeKind)` extension/helper on `OpKind`, defined alongside `OpKind` under `Poly/Interpretation/Ir/` at implementation time; the standard cases are: integer ops return `Int64`, floating ops return `Float64`, comparison ops return `Boolean`. This makes the IR self-describing without requiring a separate type environment.
+- **Result types from operators**: IR instruction result types are derived from their operands and operator kind where possible (`BinOp` resolves via `Op.ResultType(Left.Kind, Right.Kind)`, `UnaryOp` inherits `Operand.Kind`). For `Call`, the result type comes from the resolved member in the call-site table (section 9.2). `Op.ResultType` is a `static TypeKind OpKind.ResultType(TypeKind, TypeKind)` extension/helper on `OpKind`, defined alongside `OpKind` under `Poly/Ir/` at implementation time; the standard cases are: arithmetic ops return `Word`, comparison ops return `Boolean`. Float and integer operations are distinguished at the `OpKind` level (`Add` vs `FAdd` in future float support), not at the type level — the IR already maps both to `Word` because the VM stores everything in 64-bit slots. This makes the IR self-describing without requiring a separate type environment.
 
 ## 4. AST → IR (virtual method on Node base)
 
@@ -200,7 +208,7 @@ public sealed class GenerationPass : INodeAnalyzer {
         // (e.g. RingAnalysis) are added later by the backend.
         if (EnableSsa)         SsaTransform.Run(module);
         if (EnableConstFolding) ConstantFolding.Run(module);
-        if (EnableInlining)    InlinePass.Run(module);
+        if (EnableInlining)    Inliner.Run(module);
 
         // ── Step 3: Stash Module for backend retrieval ──
         context.SetMetadata(node, new ModuleMetadata(module));
@@ -216,7 +224,7 @@ public sealed class GenerationPass : INodeAnalyzer {
 | **Per-step control** | Boolean toggles (`EnableSsa`) allow tests to skip individual steps without modifying the pipeline. |
 | **Backend-specific steps** | `GenerationPass` runs the *canonical* passes. A backend that needs extra steps (e.g. `RingAnalysis` for the VM) either adds them as a separate `INodeAnalyzer` that runs *after* `GenerationPass`, or calls them on the `Module` in a wrapper. Only backend-specific passes need this treatment — the core passes (SSA, const-fold, inline) are universal. |
 | **Telemetry** | The analyzer's built-in telemetry treats `GenerationPass` as one entry. For more granular timing, the pass itself can emit `AnalysisTelemetry` events per step. This is a future concern — the current telemetry granularity is "pass-level" and that's sufficient. |
-| **Testing** | Each step (`SsaTransform.Run`, `ConstantFolding.Run`, `InlinePass.Run`) is a public static method on its class. Tests call them directly without any `INodeAnalyzer` infrastructure. |
+| **Testing** | Each step (`SsaTransform.Run`, `ConstantFolding.Run`, `Inliner.Run`) is a public static method on its class. Tests call them directly without any `INodeAnalyzer` infrastructure. |
 
 **Separate analyzers vs. single pass — when to revisit this decision:**
 
@@ -244,7 +252,7 @@ AST → [TypeResolve] → [ConstFold] → [SideEffect] → [GenerationPass] → 
                                          node.Emit(ctx) per node (step 1)
                                                SsaTransform (step 2)
                                           ConstantFolding (step 2)
-                                              InlinePass (step 2)
+                                              Inliner (step 2)
 ```
 
 ### 4.6 Notable `Emit` implementations
@@ -538,7 +546,7 @@ public static void Rename(Module module, Cfg cfg, Dictionary<BasicBlock, BasicBl
         // are left untouched; they already carry their incoming values from emission.
         foreach (var instr in block.Instructions) {
             if (instr is Phi phi && phi.SlotIndex is { } slotIdx) {
-                var newVal = new Value(phi, phi.Incoming[0]?.Kind ?? TypeKind.Int64, 0);
+                var newVal = new Value(phi, phi.Incoming[0]?.Kind ?? TypeKind.Word, 0);
                 // Incoming values are filled when each predecessor finishes its Walk
                 stacks.GetOrAdd(slotIdx, _ => new()).Push(newVal);
             }
@@ -631,7 +639,7 @@ Starting from the pre-SSA IR in section 7.2 (note the `Parameter` instruction in
 
 ```
 entry block:
-  %0 = Parameter(slot=0, Int64)       // function argument x
+  %0 = Parameter(slot=0, Word)       // function argument x
   %1 = LoadLocal(slot=0)
   %2 = Const(0)
   %3 = BinOp(Gt, %1, %2)
@@ -663,7 +671,7 @@ merge_block:
 
 For the example as written (no stores), the rename walk proceeds:
 
-**Step 0 (parameter seeding):** Walk the entry block. `Parameter(slot=0, Int64)` defines `%0`. Push `%0` onto `stacks[0]`. Remove the `Parameter` instruction from the entry block. `stacks[0] = [%0]`.
+**Step 0 (parameter seeding):** Walk the entry block. `Parameter(slot=0, Word)` defines `%0`. Push `%0` onto `stacks[0]`. Remove the `Parameter` instruction from the entry block. `stacks[0] = [%0]`.
 
 **Step 5 (rename walk, DFS over dominator tree: entry → then → else → merge):**
 
@@ -697,7 +705,7 @@ merge_block:
   Ret(%5)
 ```
 
-Note the parameter `%p0` flows into the condition and both branch bodies — the LoadLocal indirection is gone. The Phi at merge selects the value stored in the then-branch vs. the else-branch, which the back-end `UopLoweringVisitor` resolves via `PhiMarker` + `ConsumedFromPcs`.
+Note the parameter `%p0` flows into the condition and both branch bodies — the LoadLocal indirection is gone. The Phi at merge selects the value stored in the then-branch vs. the else-branch, which the back-end `UopCompiler` resolves via `PhiMarker` + `ConsumedFromPcs`.
 
 #### 5.1.9 Edge cases
 
@@ -757,7 +765,7 @@ public async Task Ssa_CrossValidateWithVm() {
     var module = Emit(ast);
     SsaTransform.Run(module);
 
-    var lowered = new UopLoweringVisitor().Lower(module);
+    var lowered = new UopCompiler().Lower(module);
     var program = ProgramCompiler.Compile(lowered);
     var state = new VmState(program);
     Vm.Execute(state);
@@ -779,7 +787,7 @@ public async Task Ssa_CrossValidateWithVm() {
 | Phi incoming filling (inline) | Each block iterates its successors' Phi instructions once. Linear in total Phi operands. Typically small. |
 | Overall pass cost | Expected 1.5–3× the cost of a single tree walk, depending on CFG complexity. For a 100-block module, well under 1ms. |
 
-The SSA pass is designed to be **optional** for the VM backend (the `UopLoweringVisitor` can work with or without SSA, since `LoadLocal`/`StoreLocal` map directly to µop `LoadSlot`/`StoreSlot`). It becomes essential for passes that need def-use chains: constant propagation, dead code elimination, inlining, and vectorization.
+The SSA pass is designed to be **optional** for the VM backend (the `UopCompiler` can work with or without SSA, since `LoadLocal`/`StoreLocal` map directly to µop `LoadSlot`/`StoreSlot`). It becomes essential for passes that need def-use chains: constant propagation, dead code elimination, inlining, and vectorization.
 
 ### 5.2 Constant Folding Pass
 
@@ -795,43 +803,35 @@ Takes the SSA IR and computes eval-stack ring depths for each block+instruction.
 
 ## 6. Backends (IR → Output)
 
-Backends are **visitors**, never a monolithic `IBackend.Compile()`.
+Backends are self-contained compilers that consume a `Module` and produce output. No shared base class — each backend owns its own traversal.
 
 ```csharp
-public abstract class Visitor {
-    protected Module Module { get; }
-
-    public virtual Value? VisitBlock(BasicBlock block, int index);
-    public abstract void VisitInstr(int blockIdx, int instrIdx, Instr instr);
-    public abstract void VisitTerminator(int blockIdx, Terminator term);
+public sealed class UopCompiler {
+    public LoweringResult Compile(Module module) { /* blocks → µops */ }
 }
 
-public sealed class UopLoweringVisitor : Visitor {
-    public LoweringResult Lower(Module module) { /* visit blocks → emit µops */ }
+public sealed class ExpressionCompiler {
+    public LambdaExpression Compile(Module module) { /* IR → Expression trees */ }
 }
 
-public sealed class ExpressionTreeVisitor : Visitor {
-    public LambdaExpression Compile(Module module) { /* emit Expression trees */ }
-}
-
-public sealed class CSharpSourceVisitor : Visitor {
-    public string Generate(Module module) { /* emit C# text */ }
+public sealed class CSharpCodeGenerator {
+    public string Generate(Module module) { /* IR → C# text */ }
 }
 ```
 
-### 6.1 VM Backend (`UopLoweringVisitor`)
+### 6.1 VM Backend (`UopCompiler`)
 
 This is the direct replacement for the current `Lowering.Lower()` + `ProgramCompiler.Compile()`:
 
 1. **Block ordering**: topologically sort blocks (dominator-tree order). Assign each block a contiguous range of µop PCs.
 2. **Instruction emission**: for each `Instr`, emit the corresponding µop (`BinOp` → `BinOp`, `Phi` → `PhiMarker` + resolved `ConsumedFromPcs` patch, `AllocHeap` → `LoadHeapConst`, etc.).
-3. **Ring analysis**: run `RingAnalysisPass` to compute `ConsumedFromPcs` and `PhiSourcePcs`/`PhiAltPcs`. Since φ is already explicit in the IR, the ring analysis is simpler than today's heuristic.
+3. **Ring analysis**: run `RingAnalyzer` to compute `ConsumedFromPcs` and `PhiSourcePcs`/`PhiAltPcs`. Since φ is already explicit in the IR, the ring analysis is simpler than today's heuristic.
 4. **Label resolution**: block-relative offsets become absolute µop PCs.
 5. Produces a `LoweringResult` that feeds into the existing `ProgramCompiler`.
 
 Result**: the existing VM pipeline (ring allocation, expression tree compilation, `VmProgram`) is preserved without modification. Only the input changes.
 
-### 6.2 Expression Tree Backend (`ExpressionTreeVisitor`)
+### 6.2 Expression Tree Backend (`ExpressionCompiler`)
 
 Replaces `LinqExpressionGenerator` in the long term (but does not need to replace it during migration). Walks the IR and emits `System.Linq.Expressions.Expression`:
 
@@ -842,7 +842,7 @@ Replaces `LinqExpressionGenerator` in the long term (but does not need to replac
 - `CondBranch` → `Expression.IfThenElse(cond, then, else)`
 - `Ret` → `Expression.Return(label, value)`
 
-### 6.3 C# Source Backend (`CSharpSourceVisitor`)
+### 6.3 C# Source Backend (`CSharpCodeGenerator`)
 
 Emits readable C# source files. Maps `TypeKind` to CLR types, `OpKind` to operators, blocks to labeled statements with `goto`. Useful for debugging, auditing, or ahead-of-time compilation for environments that don't support expression trees.
 
@@ -864,7 +864,7 @@ IfStatement {
 
 ```
 entry block:
-  %0 = Parameter(slot=0, Int64)       // function argument x
+  %0 = Parameter(slot=0, Word)       // function argument x
   %1 = LoadLocal(slot=0)
   %2 = Const(0)
   %3 = BinOp(Gt, %1, %2)
@@ -914,9 +914,9 @@ merge_block:
 
 Note**: `%p0` flows directly into all three blocks because the parameter-seeding step (Step 0 of `Rename`) defined it from the entry-block `Parameter` instruction and pushed it onto the rename stack before the walk began.
 
-### 7.4 VM µop output (after `UopLoweringVisitor`, SSA disabled)
+### 7.4 VM µop output (after `UopCompiler`, SSA disabled)
 
-The `UopLoweringVisitor` maps `LoadLocal → LoadSlot`, `Const → LoadConst`, `BinOp → BinOp`, etc. With SSA disabled (the default for the VM backend), `LoadLocal` instructions survive the pipeline and produce µop `LoadSlot`:
+The `UopCompiler` maps `LoadLocal → LoadSlot`, `Const → LoadConst`, `BinOp → BinOp`, etc. With SSA disabled (the default for the VM backend), `LoadLocal` instructions survive the pipeline and produce µop `LoadSlot`:
 
 ```
 pc0:  LoadSlot(0)           ; load x        ; entry block
@@ -986,7 +986,7 @@ ctx.Module.HeapConstants.Add("Alice");
 ctx.Emit(new AllocHeap(handle, node.Id));
 ```
 
-The `UopLoweringVisitor` maps `AllocHeap` to `LoadHeapConst` µops.
+The `UopCompiler` maps `AllocHeap` to `LoadHeapConst` µops.
 
 ### 9.2 External call sites
 
@@ -1007,16 +1007,16 @@ When profiling shows a function re-compile cost worth optimizing, revisit with a
 
 ### Phase 1: IR types + virtual `Emit` on `Node` base (parallel)
 
-- Add all IR types under `Poly/Interpretation/Ir/`.
+- Add all IR types under `Poly/Ir/`.
 - Add virtual `Emit` method to `Poly/Syntax/Node.cs` (base returns `null`).
 - Add `EmissionContext` and `GenerationPass` in `Poly/Interpretation/Ir/`, registered via `.UseIrGeneration()`.
 - Override `Emit` on `Add`. Write tests that produce IR from a standalone node and verify the IR structure.
 - **No existing code changes**. Old `UopGenerationPass` untouched.
 
-### Phase 2: UopLoweringVisitor (adapter)
+### Phase 2: UopCompiler (adapter)
 
-- Implement `UopLoweringVisitor` that walks a `Module` and produces a `LoweringResult`.
-- Test: AST → `Emit` → `UopLoweringVisitor` → `ProgramCompiler.Compile` → `Vm.Execute` → assert result equals old pipeline.
+- Implement `UopCompiler` that walks a `Module` and produces a `LoweringResult`.
+- Test: AST → `Emit` → `UopCompiler` → `ProgramCompiler.Compile` → `Vm.Execute` → assert result equals old pipeline.
 - This proves the IR can drive the existing VM.
 
 ### Phase 3: Override `Emit` on remaining nodes (incremental)
@@ -1038,15 +1038,15 @@ After each node, run the cross-validation test suite. A failure means the node's
 
 ### Phase 4: Flip default
 
-- Change `AnalyzerBuilder` extensions so `.UseUopGeneration()` runs `GenerationPass` + `UopLoweringVisitor`.
+- Change `AnalyzerBuilder` extensions so `.UseUopGeneration()` runs `GenerationPass` + `UopCompiler`.
 - Keep old `UopGenerationPass` behind a compatibility flag.
 - Run entire test suite. If green, mark old passes `[Obsolete]`.
 
 ### Phase 5: Backend expansion
 
-- Add `ExpressionTreeVisitor` → compare output to `LinqExpressionGenerator` on every expression type.
-- Add `CSharpSourceVisitor` → write golden-file tests.
-- Add `RingAnalysisPass` (optional, VM-backend-specific).
+- Add `ExpressionCompiler` → compare output to `LinqExpressionGenerator` on every expression type.
+- Add `CSharpCodeGenerator` → write golden-file tests.
+- Add `RingAnalyzer` (optional, VM-backend-specific).
 
 ## 12. Testing Strategy
 
@@ -1064,7 +1064,7 @@ public async Task BinaryAdd_CrossValidate() {
 
     // New pipeline
     var ir = IrPipeline.Emit(node);
-    var lowered = new UopLoweringVisitor().Lower(ir);
+    var lowered = new UopCompiler().Lower(ir);
     var program = ProgramCompiler.Compile(lowered);
     var state = new VmState(program);
     Vm.Execute(state);
@@ -1080,7 +1080,7 @@ public async Task BinaryAdd_CrossValidate() {
 [Test]
 public async Task IfStatement_ProducesCorrectBlocks() {
     var ast = /* if (x > 0) x + 1 else x - 1 */;
-    var module = EmitModule(ast);
+    var module = IrPipeline.Emit(ast);
 
     // The IR should have 2 branch terminators and 1 phi
     await Assert.That(module.Blocks.Count).IsEqualTo(4);  // entry, then, else, merge
@@ -1110,52 +1110,807 @@ Goal: verify the new pipeline's compile-time overhead is within 2× of the old s
 | SSA construction is O(n²) in pathological CFGs | Use standard dominance-frontier algorithm (O(n log n)). The CFG size equals the number of blocks, which is ≤ AST node count. |
 | Ring analysis is an extra pass | It's O(µops) and replaces the ring heuristic in `Lowering.Assemble()`. Net cost is approximately zero. |
 | Block-structured IR allocates many small objects | Object pooling for `BasicBlock`, `Instr`, and `Value`. But don't optimize prematurely—first measure. |
-| Backend visitors duplicate loop over instructions | Visitors share the same block traversal; only the per-instruction switch differs. This is comparable to the current per-backend compilation. |
+| Backend compilers iterate over instructions | Each backend owns its own block traversal; only the per-instruction dispatch differs. This is comparable to the current per-backend compilation. |
 
 ## 14. Risks & Mitigations
 
 | Risk | Mitigation |
 |------|-----------|
 | IR design constrains future features | Start small. Only add `TypeKind` variants when a concrete backend needs them. Extend via new `Instr` subtypes (open record hierarchy). |
-| φ handling in VM backend introduces regressions | The φ is already in the IR explicitly; the `UopLoweringVisitor` maps it to `PhiMarker` + resolved `ConsumedFromPcs`. Cross-validate against old pipeline for every test. |
+| φ handling in VM backend introduces regressions | The φ is already in the IR explicitly; the `UopCompiler` maps it to `PhiMarker` + resolved `ConsumedFromPcs`. Cross-validate against old pipeline for every test. |
 | Closure handling is fragile | Closures in the current system are well-tested (`Closure.cs`, `AllocClosure`/`LoadCapture`/`StoreCapture` µops). The IR preserves this exactly. |
 | Team doesn't adopt the new pipeline | Keep old pipeline working indefinitely. Only new `Emit` overrides see the new API. Migration is opt-in per node type. |
 
-## 15. Implementation Order (Recommended)
+## 15. Implementation Order (Detailed)
 
-1. Scaffold `Poly/Interpretation/Ir/` types and `Module`.
-2. Add virtual `Value? Emit(EmissionContext ctx)` to `Poly/Syntax/Node.cs`, implement `EmissionContext` and `GenerationPass`.
-3. Override `Emit` on `Add`. Cross-validate against existing µop output.
-4. Implement `UopLoweringVisitor` (IR → µops). Use existing `ProgramCompiler` unchanged.
-5. Override `Emit` on `Constant`, `Variable`, `Parameter`. Cross-validate.
-6. Override on `IfStatement` (introduces explicit φ). Cross-validate `BranchIfFalse`/`Jump`/φ output.
-7. Override on `Block`, `Assignment`. Cross-validate.
-8. Override on `WhileLoop`, `DoWhileLoop`, `ForLoop`. Cross-validate.
-9. Override on `Lambda`, `Invoke` + closure support. Cross-validate.
-10. Override on remaining nodes (member, index, throw, try-catch, operators, etc.).
-11. Run entire test suite. Flip default. Deprecate old passes.
-12. Add `ExpressionTreeVisitor` and `CSharpSourceVisitor` as optional backends.
+Each step maintains a passing test suite. The plan is designed so that any step can be deferred or reverted without breaking prior steps. Every section references the files and types listed in §16 (References).
 
-Each step maintains a passing test suite. The plan is designed so that any step can be deferred or reverted.
+---
+
+### Step 1: Scaffold IR types and `Module`
+
+**Goal:** The IR type hierarchy compiles and can be instantiated in tests. No existing code is modified.
+
+**Files to create:**
+
+| File | Contents |
+|------|----------|
+| `Poly/Ir/TypeKind.cs` | `enum TypeKind { Word, Boolean, Handle, Void }` |
+| `Poly/Ir/OpKind.cs` | `enum OpKind { Add, Sub, Mul, Div, Mod, Gt, Gte, Lt, Lte, Eq, Neq }` with `static TypeKind ResultType(TypeKind left, TypeKind right)` — returns `Word` for arithmetic, `Boolean` for comparisons |
+| `Poly/Ir/UnaryOpKind.cs` | `enum UnaryOpKind { Neg, Not }` |
+| `Poly/Ir/Value.cs` | `sealed record Value(Instr Definition, TypeKind Kind, int Index)` |
+| `Poly/Ir/Instr.cs` | `abstract record Instr(TypeKind ResultType, NodeId? Source)` |
+| `Poly/Ir/Instructions/Const.cs` | `sealed record Const(long Value, TypeKind Kind, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/BinOp.cs` | `sealed record BinOp(OpKind Op, Value Left, Value Right, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/UnaryOp.cs` | `sealed record UnaryOp(UnaryOpKind Op, Value Operand, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/LoadLocal.cs` | `sealed record LoadLocal(int SlotIndex, TypeKind Kind, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/StoreLocal.cs` | `sealed record StoreLocal(int SlotIndex, Value Val, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/Parameter.cs` | `sealed record Parameter(int SlotIndex, TypeKind Kind, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/Call.cs` | `sealed record Call(Value Target, Value[] Args, int ArgCount, bool IsExternal, int CallSiteIndex, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/AllocClosure.cs` | `sealed record AllocClosure(int FuncIndex, Value[] Captures, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/LoadUpvalue.cs` | `sealed record LoadUpvalue(int UpvalueIndex, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/StoreUpvalue.cs` | `sealed record StoreUpvalue(int UpvalueIndex, Value Val, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/AllocHeap.cs` | `sealed record AllocHeap(int HandleIndex, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Instructions/Phi.cs` | `sealed record Phi(int? SlotIndex, Value[] Incoming, NodeId? Source) : Instr(...)` |
+| `Poly/Ir/Terminators/Terminator.cs` | `abstract record Terminator(NodeId? Source)` |
+| `Poly/Ir/Terminators/Goto.cs` | `sealed record Goto(BasicBlock Target) : Terminator(null)` |
+| `Poly/Ir/Terminators/CondBranch.cs` | `sealed record CondBranch(Value Condition, BasicBlock ThenTarget, BasicBlock ElseTarget) : Terminator(null)` |
+| `Poly/Ir/Terminators/Ret.cs` | `sealed record Ret(Value? Result) : Terminator(null)` |
+| `Poly/Ir/Terminators/Throw.cs` | `sealed record Throw(Value Exception) : Terminator(null)` |
+| `Poly/Ir/BasicBlock.cs` | `sealed class BasicBlock { string Name; List<Instr> Instructions; Terminator? Terminator; }` |
+| `Poly/Ir/Module.cs` | `sealed class Module { List<BasicBlock> Blocks; List<BasicBlock> ExportedFunctions; List<object?> HeapConstants; List<CallSite> CallSites; int MaxLocalSlots; }` |
+| `Poly/Ir/CallSite.cs` | `sealed record CallSite(string MethodName, TypeKind ReturnType, int ArgCount)` |
+
+**Files to modify:** None.
+
+**Tests to write** (`Poly.Tests/Ir/IrTypeTests.cs`):
+
+```csharp
+[Test]
+public async Task CanCreateModule() {
+    var module = new Module();
+    var block = new BasicBlock("entry");
+    module.Blocks.Add(block);
+    await Assert.That(module.Blocks).HasCount().EqualTo(1);
+}
+
+[Test]
+public async Task CanCreateInstructions() {
+    var instr = new Const(42, TypeKind.Word, null);
+    await Assert.That(instr.Value).IsEqualTo(42);
+    await Assert.That(instr.ResultType).IsEqualTo(TypeKind.Word);
+}
+
+[Test]
+public async Task OpKindResultType_ComparisonsReturnBoolean() {
+    var result = OpKind.Gt.ResultType(TypeKind.Word, TypeKind.Word);
+    await Assert.That(result).IsEqualTo(TypeKind.Boolean);
+}
+
+[Test]
+public async Task OpKindResultType_ArithmeticReturnsWord() {
+    var result = OpKind.Add.ResultType(TypeKind.Word, TypeKind.Word);
+    await Assert.That(result).IsEqualTo(TypeKind.Word);
+}
+```
+
+**Success criteria:**
+- `dotnet build Poly/Poly.csproj` passes.
+- All IR type tests pass.
+- Existing test suite is unaffected (no old code changed).
+
+---
+
+### Step 2: Virtual `Emit` on `Node` + `EmissionContext` + `GenerationPass`
+
+**Goal:** The `Node` base carries a virtual `Emit` method. `GenerationPass` is registered as an `INodeAnalyzer` that calls `node.Emit(ctx)` and stashes the resulting `Module` in `AnalysisContext` metadata. No node overrides `Emit` yet — the pass produces an empty module for any AST.
+
+**Files to create:**
+
+| File | Contents |
+|------|----------|
+| `Poly/Interpretation/Ir/EmissionContext.cs` | `sealed class EmissionContext { Module Module; BasicBlock CurrentBlock; AnalysisResult Analysis; Scope Scope; Value? EmitChild(Node); Value Emit(Instr); BasicBlock SplitBlock(string); int DeclareLocal(string, TypeKind); }` |
+| `Poly/Interpretation/Ir/GenerationPass.cs` | `sealed class GenerationPass : INodeAnalyzer { bool EnableSsa, EnableConstFolding, EnableInlining; void Analyze(AnalysisContext, Node); }` — emits IR via `node.Emit(ctx)`, calls `SsaTransform.Run(module)` / `ConstantFolding.Run(module)` / `Inliner.Run(module)` if enabled, stashes `ModuleMetadata` |
+| `Poly/Interpretation/Ir/ModuleMetadata.cs` | `sealed record ModuleMetadata(Module Module) : IAnalysisMetadata` |
+| `Poly/Interpretation/Ir/GenerationPassExtensions.cs` | `static AnalyzerBuilder UseIrGeneration(this AnalyzerBuilder, GenerationPass? pass = null)` — registers `GenerationPass` in the analyzer pipeline |
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Syntax/Node.cs` | Add `public virtual Value? Emit(EmissionContext ctx) => null;` to the abstract `Node` record |
+
+**Tests to write** (`Poly.Tests/Ir/GenerationPassTests.cs`):
+
+```csharp
+[Test]
+public async Task GenerationPass_ProducesEmptyModule_ForUnknownNode() {
+    var node = new Constant(42);  // no Emit override yet — base returns null
+    var analyzer = new AnalyzerBuilder().UseIrGeneration().Build();
+    var result = analyzer.Analyze(node);
+    var module = result.GetMetadata<ModuleMetadata>(node).Module;
+    // Entry block has a Ret(null) because node.Emit returned null
+    await Assert.That(module.Blocks).HasCount().EqualTo(1);
+    await Assert.That(module.Blocks[0].Terminator).IsTypeOf<Ret>();
+}
+
+[Test]
+public async Task GenerationPass_DoesNotAffectOldPipeline() {
+    // Old UopGenerationPass still works; new pass is registered but not default
+    var node = new Add(new Constant(3), new Constant(4));
+    var oldAnalyzer = new AnalyzerBuilder()
+        .UseTypeResolver().UseMemberResolver().UseVariableScopeValidator()
+        .UseLoweringPreparation().UseUopGeneration()
+        .Build();
+    var oldResult = oldAnalyzer.Analyze(node);
+    // Old pipeline produces valid lowering result
+    // (verify by compiling & executing via existing test helpers)
+}
+```
+
+**Success criteria:**
+- `dotnet build` passes.
+- `GenerationPass` registers and runs without error.
+- No AST node overrides `Emit` yet; the pass produces an empty module for all nodes.
+- Old pipeline tests pass unchanged.
+
+---
+
+### Step 3: Override `Emit` on `Add` — first cross-validation
+
+**Goal:** The first real `Emit` override is working end-to-end: AST node → IR → `UopCompiler` → `LoweringResult` → `ProgramCompiler` → `Vm.Execute` → correct result.
+
+**Files to create:**
+
+| File | Contents |
+|------|----------|
+| `Poly/Interpretation/Ir/Backends/UopCompiler.cs` | Walks blocks in dominator-tree order, emits µops per instruction. Minimal implementation: `Const` → `LoadConst`, `BinOp` → `BinOp`, `Ret` → `ReturnOp`. Everything else throws `NotSupportedException` (added in later steps). |
+| `Poly.Tests/TestHelpers/IrPipeline.cs` | `static class IrPipeline { static Module Emit(Node node); static object Execute(Node node); }` — convenience wrappers: build analyzer with `.UseIrGeneration()`, extract `ModuleMetadata`, lower via `UopCompiler`, compile & execute via VM. Returns the result from the VM stack. |
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Syntax/Nodes/Add.cs` | Add `public override Value? Emit(EmissionContext ctx)`: emit children, emit `new BinOp(OpKind.Add, left!, right!, Id)` |
+
+**UopCompiler** minimal µop mapping for this step:
+
+| IR instruction | µop emitted |
+|---------------|-------------|
+| `Const` | `new LoadConst { Value = instr.Value, SourceNodeId = instr.Source }` |
+| `BinOp` | `new BinOp { Op = instr.Op.ToUopKind(), SourceNodeId = instr.Source }` with `ConsumedFromPcs` set from value references |
+| `Ret` | `new ReturnOp { SourceNodeId = term.Source }` with `ConsumedFromPcs` for the result value |
+
+The compiler maintains a `Dictionary<Value, int>` mapping each IR `Value` to the µop PC that produced it, used to compute `ConsumedFromPcs` arrays.
+
+**Tests to write** (`Poly.Tests/Ir/IrCrossValidationTests.cs`):
+
+```csharp
+[Test]
+public async Task Add_TwoIntegers_CrossValidate() {
+    var node = new Add(new Constant(3), new Constant(4));
+
+    // Old pipeline
+    var oldResult = OldPipeline.Execute(node);   // existing helper
+
+    // New pipeline
+    var newResult = IrPipeline.Execute(node);
+
+    await Assert.That(newResult).IsEqualTo(oldResult);  // both produce 7
+}
+
+[Test]
+public async Task Add_ProducesCorrectIr() {
+    var node = new Add(new Constant(3), new Constant(4));
+    var module = IrPipeline.Emit(node);
+
+    await Assert.That(module.Blocks).HasCount().EqualTo(1);
+    var instrs = module.Blocks[0].Instructions;
+    await Assert.That(instrs).HasCount().EqualTo(3);  // Const(3), Const(4), BinOp(Add)
+    await Assert.That(instrs[2]).IsTypeOf<BinOp>();
+}
+```
+
+**Success criteria:**
+- `Add(Const(3), Const(4))` produces correct result (7) via both old and new pipeline.
+- IR structure has 1 block with 3 instructions (2 `Const`, 1 `BinOp`).
+- `UopCompiler` produces a `LoweringResult` that `ProgramCompiler` accepts.
+- Only `Add` has an `Emit` override; all other node types still go through the old pipeline.
+
+---
+
+### Step 4: `UopCompiler` — complete µop mapping table + block ordering
+
+**Goal:** The `UopCompiler` has a dispatch entry for every IR instruction type defined in §3.2, even types not yet reachable (which throw `NotSupportedException`). This ensures that when later steps introduce `IfStatement` (Step 6), `Lambda` (Step 9), etc., the compiler is already structured to accept them — only the throwing stubs need to be replaced with real emission. Block ordering (dominator-tree DFS) and label resolution (PC assignment) are implemented and tested with a synthetic multi-block module.
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Interpretation/Ir/Backends/UopCompiler.cs` | Complete the µop mapping table for all instruction types defined in §3.2, even if they throw `NotSupportedException` for now. Add block-ordering logic: dominator-tree DFS determines block order; assign contiguous PC ranges per block; resolve `Goto.Target` and `CondBranch.ThenTarget`/`ElseTarget` to absolute PCs. |
+
+**Complete µop mapping table:**
+
+| IR instruction | µop emitted | Notes |
+|---------------|-------------|-------|
+| `Const` | `LoadConst` | |
+| `BinOp` | `BinOp` | Map `OpKind` to µop operator enum |
+| `UnaryOp` | `UnaryOp` (Neg/Not) | |
+| `LoadLocal` | `LoadSlot(slotIndex)` | |
+| `StoreLocal` | `StoreSlot(slotIndex)` + `ConsumedFromPcs` | |
+| `Parameter` | *skipped* (no µop) | SSA-only; VM loads params from frame |
+| `Call` (IsExternal=true) | `Call(callSiteIndex)` | Resolve from `CallSites` table |
+| `Call` (IsExternal=false) | `CallClosure` + closure dispatch | |
+| `AllocClosure` | `AllocClosure` µop | |
+| `LoadUpvalue` | `LoadCapture(upvalueIndex)` | |
+| `StoreUpvalue` | `StoreCapture(upvalueIndex)` | |
+| `AllocHeap` | `LoadHeapConst(handleIndex)` | |
+| `Phi` (slot-level) | `PhiMarker([altPcs], sourcePc)` | Resolved via ring analysis |
+| `Phi` (value-level) | `PhiMarker([altPcs], sourcePc)` | Same; the IR already gives incoming values |
+| `Goto` | `Jump(targetPc)` | |
+| `CondBranch` | `BranchIfFalse(targetPc)` | Condition on top of eval stack |
+| `Ret` | `ReturnOp` | |
+| `Throw` | `ThrowOp` | |
+
+**Tests to add:**
+
+```csharp
+[Test]
+public async Task UopCompiler_Const_EmitsLoadConst() {
+    var module = BuildModule(new Const(42, TypeKind.Word, null));
+    var result = new UopCompiler().Lower(module);
+    await Assert.That(result.Instructions[0]).IsTypeOf<LoadConst>();
+    await Assert.That(((LoadConst)result.Instructions[0]).Value).IsEqualTo(42);
+}
+
+[Test]
+public async Task UopCompiler_BlockOrdering_PreservesDominatorOrder() {
+    // Build a module with entry→then→merge, entry→else→merge
+    // Verify µop order is entry, then, else, merge (dominator-tree DFS)
+}
+```
+
+**Success criteria:**
+- All existing `Add` cross-validation tests still pass.
+- `UopCompiler` produces correct µop sequences for all currently-emitted instruction types.
+- Multi-block CFG ordering test passes.
+
+---
+
+### Step 5: Override `Emit` on `Constant`, `Variable`, `Parameter`
+
+**Goal:** The three leaf-node types emit correct IR. Numeric constants produce `Const`; non-numeric constants register in `HeapConstants` and produce `AllocHeap`. `Variable` produces `LoadLocal`. `Parameter` (function parameter declarations) produce `Parameter` instructions.
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Syntax/Nodes/Constant.cs` | `override Emit`: if value is numeric (`long`, `double`, `bool`), emit `Const`; otherwise register in `ctx.Module.HeapConstants` and emit `AllocHeap(handle, Id)` |
+| `Poly/Syntax/Nodes/Variable.cs` | `override Emit`: resolve slot index from `ctx` scope (or `AnalysisResult`), emit `LoadLocal(slot, kind, Id)` |
+| `Poly/Syntax/Nodes/Parameter.cs` (if separate) | `override Emit`: emit `Parameter(slot, kind, Id)` — defines the initial SSA value for this function argument |
+
+**EmissionContext additions:**
+
+- `DeclareLocal(string name, TypeKind kind)` → returns `int` slot index. Maintains a `Dictionary<string, int>` name→slot mapping and increments `Module.MaxLocalSlots`.
+- `Scope` must track slot bindings per scope level. On scope exit, slots are released.
+
+**Tests to write:**
+
+```csharp
+[Test]
+public async Task Constant_Integer_EmitsConst() {
+    var module = IrPipeline.Emit(new Constant(42));
+    await Assert.That(module.Blocks[0].Instructions[0]).IsTypeOf<Const>();
+}
+
+[Test]
+public async Task Constant_String_EmitsAllocHeap() {
+    var module = IrPipeline.Emit(new Constant("hello"));
+    var alloc = module.Blocks[0].Instructions[0];
+    await Assert.That(alloc).IsTypeOf<AllocHeap>();
+    await Assert.That(module.HeapConstants[(int)((AllocHeap)alloc).HandleIndex])
+        .IsEqualTo("hello");
+}
+
+[Test]
+public async Task Variable_CrossValidate() {
+    // Build a lambda: (x) => x + 1
+    // Old pipeline vs new pipeline — both return x+1 for a given x
+}
+
+[Test]
+public async Task Parameter_EmitsParameterInstruction() {
+    // Verify entry block contains Parameter(slot=0, Word)
+    var module = EmitFunction("(x) => x");
+    await Assert.That(module.Blocks[0].Instructions[0]).IsTypeOf<Parameter>();
+}
+```
+
+**Success criteria:**
+- Add, Constant, Variable, and Parameter all emit correct IR.
+- Cross-validation for expressions involving these node types passes.
+- Non-numeric constants round-trip through `HeapConstants`.
+
+---
+
+### Step 6: Override `Emit` on `IfStatement` — φ milestone
+
+**Goal:** Conditional branching works end-to-end. This is the most important step because it validates the block-structured IR, Phi insertion, and the φ handling in `UopCompiler`.
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Syntax/Nodes/IfStatement.cs` | `override Emit`: emit condition → `CondBranch` to then/else blocks; emit then body; emit else body (or skip if absent); create merge block; insert value-level `Phi(null, [thenResult, elseResult])` at merge if the if-statement is an expression |
+
+**EmissionContext additions:**
+
+- `SplitBlock(string suffix)` → creates a new `BasicBlock`, sets `CurrentBlock.Terminator = new Goto(newBlock)`, sets `CurrentBlock = newBlock`, adds newBlock to `Module.Blocks`, returns newBlock.
+- `CurrentBlock.Terminator` can be set directly by the emitter (for `CondBranch`, `Ret`, `Throw`).
+
+**Emit logic for `IfStatement`:**
+
+```
+// 1. Emit condition in current block
+var cond = ctx.EmitChild(Condition);
+
+// 2. Create then/else/merge blocks
+var thenBlock = ctx.SplitBlock("then");
+// emit ThenBody into thenBlock
+var thenResult = ctx.EmitChild(ThenBody);
+var elseBlock = ctx.SplitBlock("else");
+// emit ElseBody into elseBlock (if exists; else emit unit/null)
+var elseResult = ctx.EmitChild(ElseBody);
+var mergeBlock = ctx.SplitBlock("merge");
+
+// 3. Set terminators
+// entry block → CondBranch(cond, thenBlock, elseBlock)
+// thenBlock → Goto(mergeBlock)
+// elseBlock → Goto(mergeBlock)
+
+// 4. Emit Phi at merge if expression-valued
+var phi = new Phi(null, [thenResult!, elseResult!], Id);
+ctx.Emit(phi);
+```
+
+**UopCompiler additions:**
+
+- `CondBranch` → `BranchIfFalse(targetPc)`: condition is on eval stack; if false, branch to else target.
+- `Goto` → `Jump(targetPc)`.
+- `Phi` (value-level) → emit `PhiMarker([altPcs], sourcePc)` where `altPcs` are the PCs within the predecessor blocks that produce the incoming values, and `sourcePc` is the PC of the Phi instruction itself (so the ring allocator knows *which* branch's result to pop).
+
+**Tests to write:**
+
+```csharp
+[Test]
+public async Task IfStatement_Expression_CrossValidate() {
+    // if (x > 0) x + 1 else x - 1
+    // Compile with old pipeline, compile with new pipeline, compare results
+    var ast = new IfStatement(
+        new GreaterThan(new Variable("x"), new Constant(0)),
+        new Add(new Variable("x"), new Constant(1)),
+        new Subtract(new Variable("x"), new Constant(1))
+    );
+    // Cross-validate for x=5 (→ 6) and x=-3 (→ -4)
+}
+
+[Test]
+public async Task IfStatement_ProducesCorrectBlocks() {
+    var module = IrPipeline.Emit(ifAst);
+    await Assert.That(module.Blocks).HasCount().EqualTo(4);  // entry, then, else, merge
+    await Assert.That(module.Blocks[0].Terminator).IsTypeOf<CondBranch>();
+    await Assert.That(module.Blocks[3].Instructions).Any(i => i is Phi);
+}
+
+[Test]
+public async Task IfStatement_NoElse_EmitsUnitForElseBranch() {
+    // if (x > 0) x + 1   (no else clause; returns unit/void)
+    // Cross-validate: the merge Phi should use a unit/void value for the else path
+}
+```
+
+**Success criteria:**
+- `if`/`else` expressions produce correct results via both pipelines.
+- Block count is 4 (entry, then, else, merge).
+- `CondBranch`, `Goto`, `Phi` all appear in correct positions.
+- VM execution of the lowered output matches the old pipeline.
+
+---
+
+### Step 7: Override `Emit` on `Block`, `Assignment`
+
+**Goal:** Multi-statement blocks and variable mutation work. This step introduces scope management and `StoreLocal`.
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Syntax/Nodes/Block.cs` | `override Emit`: for each child, emit child; if child is a block-scoped variable declaration, call `ctx.DeclareLocal` and emit `StoreLocal`; if the block is an expression block, the last child's result is the block's result |
+| `Poly/Syntax/Nodes/Assignment.cs` | `override Emit`: emit RHS value; emit `StoreLocal(slot, value)` for the LHS variable; emit a `LoadLocal(slot)` to reload for expression value (or return the stored value directly if the backend supports it) |
+
+**EmissionContext additions:**
+
+- `Scope` — a stack of scope frames. `EnterScope()` / `ExitScope()`. Each frame tracks name → slot bindings. `DeclareLocal` adds to the current frame.
+- `ResolveLocal(string name)` → returns `(int slot, TypeKind kind)` by walking scope frames from innermost outward. Throws if undefined.
+
+**Tests to write:**
+
+```csharp
+[Test]
+public async Task Block_MultipleStatements_LastExpressionIsResult() {
+    // { x = 1; x + 2 }  → result is 3
+}
+
+[Test]
+public async Task Block_DeclaresLocalVariable() {
+    // { var y = 5; y * 2 }  → declares slot, stores 5, loads y, multiplies
+    var module = IrPipeline.Emit(blockAst);
+    await Assert.That(module.MaxLocalSlots).IsGreaterThan(0);
+}
+
+[Test]
+public async Task Assignment_CrossValidate() {
+    // x = 42; return x
+    // Both pipelines produce 42
+}
+
+[Test]
+public async Task Assignment_Chain_CrossValidate() {
+    // a = b = 10; return a + b
+    // Both pipelines produce 20
+}
+```
+
+**Success criteria:**
+- `Block` with multiple statements produces correct IR with `StoreLocal`/`LoadLocal`.
+- `Assignment` to variables works and cross-validates.
+- Scope nesting works: inner block shadows outer variable.
+
+---
+
+### Step 8: Override `Emit` on loop nodes
+
+**Goal:** All three loop constructs (`WhileLoop`, `DoWhileLoop`, `ForLoop`) produce correct block-structured IR with `Phi` at loop headers.
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Syntax/Nodes/WhileLoop.cs` | `override Emit`: create header/body/latch/exit blocks. Emit `CondBranch` at header. Body emits children. Latch jumps back to header. Exit is after the loop. |
+| `Poly/Syntax/Nodes/DoWhileLoop.cs` | `override Emit`: body block first, then condition block with `CondBranch` back to body. |
+| `Poly/Syntax/Nodes/ForLoop.cs` | `override Emit`: initializer in entry, then same as `WhileLoop` with increment block. |
+| `Poly/Syntax/Nodes/Break.cs` | `override Emit`: `Goto` to the exit block of the nearest enclosing loop (tracked via `EmissionContext.Scope`). |
+| `Poly/Syntax/Nodes/Continue.cs` | `override Emit`: `Goto` to the latch block of the nearest enclosing loop. |
+
+**EmissionContext additions:**
+
+- `Scope` tracks loop context: `LoopInfo? CurrentLoop` with `BasicBlock ExitBlock`, `BasicBlock LatchBlock`. Set when entering a loop, restored on exit. `Break`/`Continue` read from `CurrentLoop`.
+
+**Tests to write:**
+
+```csharp
+[Test]
+public async Task WhileLoop_CrossValidate() {
+    // var i = 0; while (i < 5) i = i + 1; return i
+    // Both pipelines produce 5
+}
+
+[Test]
+public async Task WhileLoop_ProducesCorrectBlocks() {
+    var module = IrPipeline.Emit(whileAst);
+    await Assert.That(module.Blocks).HasCount().EqualTo(4);  // entry, header, body, exit
+    await Assert.That(module.Blocks[1].Terminator).IsTypeOf<CondBranch>();
+}
+
+[Test]
+public async Task ForLoop_CrossValidate() {
+    // var sum = 0; for (var i = 0; i < 10; i = i + 1) sum = sum + i; return sum
+    // Both pipelines produce 45
+}
+
+[Test]
+public async Task Break_ExitsLoopEarly() {
+    // var i = 0; while (true) { if (i >= 5) break; i = i + 1; } return i
+    // Both pipelines produce 5
+}
+
+[Test]
+public async Task Continue_SkipsToNextIteration() {
+    // var sum = 0; for (var i = 0; i < 5; i = i + 1) { if (i == 2) continue; sum = sum + i; } return sum
+    // Both pipelines produce 1+3+4 = 8 (skips 2)
+}
+```
+
+**Success criteria:**
+- All loop constructs produce correct results.
+- `Break` and `Continue` correctly target the enclosing loop's exit/latch blocks.
+- Nested loops work (inner break only exits inner loop).
+- SSA pass correctly handles loop-carried variables (Phi at header).
+
+---
+
+### Step 9: Override `Emit` on `Lambda`, `Invoke` + closure support
+
+**Goal:** First-class functions and closures work. Lambdas allocate closures, invoke dispatches to the correct call target.
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Syntax/Nodes/Lambda.cs` | `override Emit`: record captures (variables from outer scopes referenced in body), emit `AllocClosure(funcIndex, captures)`, emit body into a new `Module` stored as a nested function |
+| `Poly/Syntax/Nodes/Invoke.cs` | `override Emit`: resolve target (either a known method → `Call` with `IsExternal=true` and `CallSiteIndex`, or a closure value → `Call` with `IsExternal=false`) |
+| `Poly/Syntax/Nodes/LoadUpvalue.cs` | (if exists as AST node; may be an internal lowering detail) → emit `LoadUpvalue(idx)` |
+| `Poly/Syntax/Nodes/StoreUpvalue.cs` | (if exists) → emit `StoreUpvalue(idx, val)` |
+
+**EmissionContext additions:**
+
+- `Module ExportedFunctions` — when a `Lambda` is emitted, its body module is added to `ExportedFunctions` and assigned an index.
+- `Capture tracking` — the `Scope` must track which variables from outer scopes are captured by inner lambdas. When a `Variable` in a lambda body references a variable from an outer scope, that variable is added to the lambda's capture list.
+
+**UopCompiler additions:**
+
+- `AllocClosure` → `AllocClosure` µop (maps to existing `Closure` class)
+- `Call` (IsExternal=false) → closure dispatch via `CallClosure` µop
+
+**Tests to write:**
+
+```csharp
+[Test]
+public async Task Lambda_Identity_CrossValidate() {
+    // var f = (x) => x; return f(42)
+    // Both pipelines produce 42
+}
+
+[Test]
+public async Task Lambda_CapturesOuterVariable() {
+    // var a = 10; var f = (x) => a + x; return f(5)
+    // Both pipelines produce 15
+}
+
+[Test]
+public async Task Lambda_Closure_AllocClosureGenerated() {
+    var module = IrPipeline.Emit(lambdaWithCaptureAst);
+    await Assert.That(module.Blocks[0].Instructions).Any(i => i is AllocClosure);
+}
+
+[Test]
+public async Task Invoke_ExternalCall_CrossValidate() {
+    // Invoke a built-in method (e.g., Math.Abs(-5))
+    // Both pipelines produce 5
+}
+```
+
+**Success criteria:**
+- Simple lambdas (no captures) work and cross-validate.
+- Lambdas with captured outer variables produce correct results.
+- `AllocClosure` appears in IR for closures.
+- Closure dispatch via `CallClosure` works in the VM.
+
+---
+
+### Step 10: Override `Emit` on all remaining nodes
+
+**Goal:** Every AST node type has an `Emit` override. The full node set is covered and cross-validated.
+
+**Files to modify** (one file per node type):
+
+| Batch | Nodes | Key considerations |
+|-------|-------|--------------------|
+| **Operators** | `Subtract`, `Multiply`, `Divide`, `Modulo`, `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`, `Equal`, `NotEqual`, `And`, `Or`, `Not`, `Negate` | All follow the `Add` pattern: emit children, emit `BinOp` or `UnaryOp` with correct `OpKind` |
+| **Member access** | `MemberAccess`, `ElementAccess` | Map to `LoadField` / `LoadIndex` µops via `Call` with resolved member metadata |
+| **Object creation** | `New`, `NewArray` | `Call` to constructor; `NewArray` uses `AllocArray` µop |
+| **Exception handling** | `Throw`, `TryCatchFinally` | `Throw` emits `Throw` terminator. `TryCatchFinally` creates try/catch/finally blocks; add implicit exception edges to the CFG (see §5.1.9) |
+| **Async/control flow** | `Await`, `SuspendNode`, `Break`, `Continue` | `Await` maps to existing `Await` handling (synchronous `GetAwaiter().GetResult()`). `Break`/`Continue` already done in Step 8. `SuspendNode` emits `SuspendOp`. |
+
+**EmissionContext additions (as needed):**
+
+- `EnterTryScope()` / `ExitTryScope()` — track active try regions for exception-edge generation.
+- `CurrentExceptionHandlers` — list of `(BasicBlock catchBlock, BasicBlock finallyBlock)` for implicit edges.
+
+**Tests to write:**
+
+- For each operator: `Operator_CrossValidate` test.
+- For `MemberAccess`: resolve a property of a known type, cross-validate.
+- For `New`: construct an object, cross-validate (if the old pipeline supports it).
+- For `Throw`: verify `Throw` terminator appears in IR.
+- For `TryCatchFinally`: verify catch block is reachable, exception edges exist.
+
+**Success criteria:**
+- Every AST node type has an `override Emit` implementation.
+- Cross-validation test exists for every node type.
+- Full `Poly.Tests` suite passes with both old and new pipelines.
+- No node type left without an `Emit` override (compiler warning enforced).
+
+---
+
+### Step 11: Flip default — new pipeline becomes the canonical path
+
+**Goal:** The new IR pipeline is the default. Old `UopGenerationPass` is deprecated but retained under a compatibility flag.
+
+**Files to modify:**
+
+| File | Change |
+|------|--------|
+| `Poly/Interpretation/Analysis/AnalyzerBuilder.cs` or equivalent extension file | Change `.UseUopGeneration()` to register `GenerationPass` instead of `UopGenerationPass`. Add `.UseLegacyUopGeneration()` extension that registers the old pass for compatibility. |
+| `Poly/Interpretation/Analysis/LoweringPrep/UopGenerationPass.cs` | Add `[Obsolete("Replaced by GenerationPass + UopCompiler. Use .UseLegacyUopGeneration() to opt into the old pipeline.")]` |
+| `Poly/Interpretation/Vm/Lowering.cs` | Add comment noting that `Assemble()` is preserved for the legacy path; new path uses `UopCompiler`. No code change. |
+
+**Files to create:**
+
+| File | Contents |
+|------|----------|
+| `Poly/Interpretation/Ir/VmLoweringPass.cs` | `sealed class VmLoweringPass : INodeAnalyzer` — registered after `GenerationPass`. Reads `ModuleMetadata` from `AnalysisContext`, calls `new UopCompiler().Lower(module)`, produces a `LoweringResult` and stashes it as `LoweringResultMetadata` (a new `IAnalysisMetadata` subtype) for `ProgramCompiler` to consume. This replaces the role that `UopGenerationPass` + `Lowering.Assemble()` play in the old pipeline. |
+
+**Actions:**
+
+1. Change the default analyzer builder registration: `.UseUopGeneration()` now registers `GenerationPass` followed by `VmLoweringPass` (instead of `UopGenerationPass`).
+2. Run full test suite: `dotnet run --project Poly.Tests/Poly.Tests.csproj`.
+3. If any test fails, fix the corresponding `Emit` override before proceeding. Do **not** proceed with failures.
+4. Once green, mark old passes `[Obsolete]`.
+5. Add a CI-compatible smoke test that verifies the legacy compatibility flag still works: `AnalyzerBuilder.UseLegacyUopGeneration()` compiles and executes correctly.
+
+**Success criteria:**
+- Full test suite passes with new pipeline as default.
+- No functionality regression.
+- Legacy pipeline still accessible via `.UseLegacyUopGeneration()`.
+- Old passes are `[Obsolete]` with a message pointing to the replacement.
+
+---
+
+### Step 12: Backend expansion — `ExpressionCompiler` + `CSharpCodeGenerator`
+
+**Goal:** Two additional backends exist and produce correct output. `ExpressionCompiler` replaces `LinqExpressionGenerator` long-term. `CSharpCodeGenerator` enables debugging and auditing.
+
+**Files to create:**
+
+| File | Contents |
+|------|----------|
+| `Poly/Interpretation/Ir/Backends/ExpressionCompiler.cs` | Walks `Module`, emits `System.Linq.Expressions.Expression` trees. Maps each `Instr` to expression-tree nodes (§6.2). Compiles to `LambdaExpression` via `Expression.Lambda().Compile()`. |
+| `Poly/Interpretation/Ir/Backends/CSharpCodeGenerator.cs` | Walks `Module`, emits C# source text (§6.3). Maps `TypeKind` → CLR types, `OpKind` → operators, blocks → labeled statements with `goto`. |
+| `Poly.Tests/Ir/ExpressionCompilerTests.cs` | Golden-file tests: compare output of `ExpressionCompiler` against `LinqExpressionGenerator` for every expression type. |
+| `Poly.Tests/Ir/CSharpCodeGeneratorTests.cs` | Golden-file tests: verify generated C# compiles (via Roslyn scripting or manual inspection). |
+| `Poly/Interpretation/Ir/Passes/RingAnalyzer.cs` | VM-backend-specific pass: computes eval-stack ring depths and attaches `RingMetadata` (§5.4). |
+
+**ExpressionCompiler** implementation notes:
+- `Const` → `Expression.Constant(value)`
+- `BinOp` → `Expression.Add(left, right)` etc. depending on `OpKind`
+- `Phi` → `Expression.Condition(conditionExpr, thenValue, elseValue)` for ternary merges
+- `Goto`/`CondBranch` → `Expression.Goto(label)` / `Expression.IfThenElse(cond, then, else)`
+- The `ExpressionCompiler` is a drop-in test reference; `LinqExpressionGenerator` is not removed during this step.
+
+**CSharpCodeGenerator** implementation notes:
+- Entry block becomes method body with `long` locals.
+- Each basic block becomes a labeled block: `block_0:`
+- Terminators become `goto block_N;` or `if (...) goto block_N;`
+- `Phi` becomes a ternary or switch expression selecting the correct incoming value based on which predecessor was taken.
+
+**Tests to write:**
+
+```csharp
+[Test]
+public async Task ExpressionCompiler_Add_MatchesLinqExpressionGenerator() {
+    var ast = new Add(new Constant(3), new Constant(4));
+    var module = IrPipeline.Emit(ast);
+
+    var exprResult = new ExpressionCompiler().Compile(module);
+    var linqResult = new LinqExpressionGenerator().Generate(ast);  // existing
+
+    // Both produce System.Linq.Expressions.Expression<Func<long>>
+    // Execute both and compare results
+    var exprValue = exprResult.Compile().DynamicInvoke();
+    var linqValue = linqResult.Compile().DynamicInvoke();
+    await Assert.That(exprValue).IsEqualTo(linqValue);
+}
+
+[Test]
+public async Task CSharpCodeGenerator_IfElse_GeneratesCompilableCode() {
+    var ast = /* if (x > 0) x + 1 else x - 1 */;
+    var module = IrPipeline.Emit(ast);
+    var source = new CSharpCodeGenerator().Generate(module);
+
+    // Verify the source contains expected keywords
+    await Assert.That(source).Contains("goto");
+    await Assert.That(source).Contains("if");
+    // Optionally: compile via Roslyn and execute
+}
+
+[Test]
+public async Task RingAnalysis_ComputesCorrectDepths() {
+    var module = IrPipeline.Emit(/* branching expression */);
+    RingAnalyzer.Run(module);
+    // Verify RingMetadata is attached to Module
+}
+```
+
+**Success criteria:**
+- `ExpressionCompiler` produces equivalent output to `LinqExpressionGenerator` for all expression types.
+- `CSharpCodeGenerator` generates syntactically valid C#.
+- `RingAnalyzer` computes correct ring depths for multi-block CFGs.
+- This step can be deferred indefinitely; it is additive, not a migration requirement.
+
+---
+
+**Cross-cutting rule for all steps:** After adding any `Emit` override, run `dotnet test` (or the TUnit equivalent). If a test fails, fix the `Emit` override before adding the next one. Never proceed to the next step with failing tests.
 
 ## 16. References
 
-- New files created:
-  - `Poly/Interpretation/Ir/*.cs` — IR types, `EmissionContext`, `GenerationPass`
-  - `Poly/Interpretation/Ir/Visitors/*.cs` — `Visitor` base, `UopLoweringVisitor`, `ExpressionTreeVisitor`, `CSharpSourceVisitor`
-  - `Poly/Interpretation/Ir/Passes/*.cs` — SSA construction, constant folding, inlining, ring analysis
-  - `Poly.Tests/Interpretation/IrCompilationTests.cs` — cross-validation tests
-- Files modified:
-  - `Poly/Syntax/Node.cs` — add virtual `Emit` method to base
-  - `Poly/Interpretation/Analysis/LoweringPrep/UopGenerationPass.cs` (700-line switch, target for replacement)
-  - `Poly/Interpretation/Vm/Lowering.cs` (ring-based φ heuristic in `Assemble()`)
-  - `Poly/Interpretation/Vm/ProgramCompiler.cs` (ring allocation and expression tree compilation, preserved)
-  - `Poly/Interpretation/Vm/CompilationContext.cs` (ring register locals, preserved)
-  - `Poly/Interpretation/LinqExpressions/LinqExpressionGenerator.cs` (Expression tree backend, eventually replaced by `ExpressionTreeVisitor`)
-  - `Poly/Interpretation/Vm/Closure.cs` (closure model, preserved)
-  - `Poly/Interpretation/Analysis/LoweringPrep/LoweringPrepPass.cs` (label assignment + depth computation, partially subsumed by block-structured IR)
-  - Every node under `Poly/Syntax/Nodes/*.cs` — add `override Emit` implementation to each
-- Test files:
-  - `Poly.Tests/Interpretation/VmCorrectnessTests.cs` (authoritative cross-validation source)
-  - `Poly.Tests/Interpretation/InstructionProfilerTests.cs`
-  - `Poly.Tests/Interpretation/VmDebuggerTests.cs`
+### New files created
+
+| Directory / file | Contents |
+|-----------------|----------|
+| `Poly/Ir/TypeKind.cs` | `enum TypeKind` |
+| `Poly/Ir/OpKind.cs` | `enum OpKind` with `static ResultType(TypeKind, TypeKind)` helper |
+| `Poly/Ir/UnaryOpKind.cs` | `enum UnaryOpKind` |
+| `Poly/Ir/Value.cs` | `sealed record Value` |
+| `Poly/Ir/Instr.cs` | `abstract record Instr` base class |
+| `Poly/Ir/BasicBlock.cs` | `sealed class BasicBlock` |
+| `Poly/Ir/Module.cs` | `sealed class Module` |
+| `Poly/Ir/CallSite.cs` | `sealed record CallSite` descriptor |
+| `Poly/Ir/Instructions/Const.cs` | `sealed record Const` |
+| `Poly/Ir/Instructions/BinOp.cs` | `sealed record BinOp` |
+| `Poly/Ir/Instructions/UnaryOp.cs` | `sealed record UnaryOp` |
+| `Poly/Ir/Instructions/LoadLocal.cs` | `sealed record LoadLocal` |
+| `Poly/Ir/Instructions/StoreLocal.cs` | `sealed record StoreLocal` |
+| `Poly/Ir/Instructions/Parameter.cs` | `sealed record Parameter` |
+| `Poly/Ir/Instructions/Call.cs` | `sealed record Call` |
+| `Poly/Ir/Instructions/AllocClosure.cs` | `sealed record AllocClosure` |
+| `Poly/Ir/Instructions/LoadUpvalue.cs` | `sealed record LoadUpvalue` |
+| `Poly/Ir/Instructions/StoreUpvalue.cs` | `sealed record StoreUpvalue` |
+| `Poly/Ir/Instructions/AllocHeap.cs` | `sealed record AllocHeap` |
+| `Poly/Ir/Instructions/Phi.cs` | `sealed record Phi` |
+| `Poly/Ir/Terminators/Terminator.cs` | `abstract record Terminator` base |
+| `Poly/Ir/Terminators/Goto.cs` | `sealed record Goto` |
+| `Poly/Ir/Terminators/CondBranch.cs` | `sealed record CondBranch` |
+| `Poly/Ir/Terminators/Ret.cs` | `sealed record Ret` |
+| `Poly/Ir/Terminators/Throw.cs` | `sealed record Throw` |
+| `Poly/Ir/EmissionContext.cs` | `sealed class EmissionContext` |
+| `Poly/Ir/GenerationPass.cs` | `sealed class GenerationPass : INodeAnalyzer` |
+| `Poly/Ir/GenerationPassExtensions.cs` | `.UseIrGeneration()` extension on `AnalyzerBuilder` |
+| `Poly/Ir/ModuleMetadata.cs` | `sealed record ModuleMetadata : IAnalysisMetadata` |
+| `Poly/Interpretation/Ir/VmLoweringPass.cs` | `sealed class VmLoweringPass : INodeAnalyzer` — wraps `UopCompiler` |
+| `Poly/Interpretation/Ir/Backends/UopCompiler.cs` | IR → µop `LoweringResult` |
+| `Poly/Interpretation/Ir/Backends/ExpressionCompiler.cs` | IR → `System.Linq.Expressions.Expression` (Step 12) |
+| `Poly/Interpretation/Ir/Backends/CSharpCodeGenerator.cs` | IR → C# source text (Step 12) |
+| `Poly/Ir/Passes/SsaTransform.cs` | SSA construction (§5.1) |
+| `Poly/Ir/Passes/ConstantFolding.cs` | Constant folding (§5.2) |
+| `Poly/Ir/Passes/Inliner.cs` | Inlining pass (§5.3) |
+| `Poly/Interpretation/Ir/Passes/RingAnalyzer.cs` | Ring-depth computation (VM-backend-specific, §5.4) |
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `Poly/Syntax/Node.cs` | Add `virtual Value? Emit(EmissionContext ctx)` to abstract base |
+| `Poly/Syntax/Nodes/Add.cs` | `override Emit` → `BinOp(OpKind.Add, left, right, Id)` |
+| `Poly/Syntax/Nodes/Subtract.cs` | `override Emit` → `BinOp(OpKind.Sub, ...)` |
+| `Poly/Syntax/Nodes/Multiply.cs` | `override Emit` → `BinOp(OpKind.Mul, ...)` |
+| `Poly/Syntax/Nodes/Divide.cs` | `override Emit` → `BinOp(OpKind.Div, ...)` |
+| `Poly/Syntax/Nodes/Constant.cs` | `override Emit` → `Const` or `AllocHeap` (non-numeric) |
+| `Poly/Syntax/Nodes/Variable.cs` | `override Emit` → `LoadLocal(slot, kind, Id)` |
+| `Poly/Syntax/Nodes/Assignment.cs` | `override Emit` → `StoreLocal` + reload |
+| `Poly/Syntax/Nodes/Block.cs` | `override Emit` → emit children, scope management |
+| `Poly/Syntax/Nodes/IfStatement.cs` | `override Emit` → `CondBranch` + then/else/merge blocks + `Phi` |
+| `Poly/Syntax/Nodes/WhileLoop.cs` | `override Emit` → header/body/latch/exit blocks |
+| `Poly/Syntax/Nodes/ForLoop.cs` | `override Emit` → init/cond/body/increment/exit blocks |
+| `Poly/Syntax/Nodes/Lambda.cs` | `override Emit` → `AllocClosure` + nested function |
+| `Poly/Syntax/Nodes/Invoke.cs` | `override Emit` → `Call` (external or closure) |
+| *(remaining node types under `Poly/Syntax/Nodes/`)* | `override Emit` per type |
+| `Poly/Interpretation/Analysis/LoweringPrep/UopGenerationPass.cs` | Deprecated after Step 11 (700-line switch replaced) |
+| `Poly/Interpretation/Analysis/LoweringPrep/LoweringPrepPass.cs` | Partially subsumed by block-structured IR |
+| `Poly/Interpretation/Vm/Lowering.cs` | Preserved for legacy path; ring heuristic superseded |
+| `Poly/Interpretation/Vm/ProgramCompiler.cs` | Preserved — unchanged API |
+| `Poly/Interpretation/Vm/CompilationContext.cs` | Preserved — ring register locals unchanged |
+| `Poly/Interpretation/Vm/Closure.cs` | Preserved — closure model unchanged |
+
+### Test files
+
+| File | Contents |
+|------|----------|
+| `Poly.Tests/TestHelpers/IrPipeline.cs` | `static class IrPipeline { static Module Emit(Node); static object Execute(Node); }` — test helpers for IR pipeline |
+| `Poly.Tests/Ir/IrTypeTests.cs` | Type creation and `OpKind.ResultType` tests (Step 1) |
+| `Poly.Tests/Ir/GenerationPassTests.cs` | `GenerationPass` smoke tests (Step 2) |
+| `Poly.Tests/Ir/IrCrossValidationTests.cs` | Cross-validation: old vs new pipeline per node type (Steps 3–10) |
+| `Poly.Tests/Ir/SsaTests.cs` | SSA construction tests (§5.1.10) |
+| `Poly.Tests/Ir/ExpressionCompilerTests.cs` | `ExpressionCompiler` vs `LinqExpressionGenerator` (Step 12) |
+| `Poly.Tests/Ir/CSharpCodeGeneratorTests.cs` | `CSharpCodeGenerator` golden-file tests (Step 12) |
+| `Poly.Tests/Interpretation/VmCorrectnessTests.cs` | Authoritative cross-validation source (existing, extended) |

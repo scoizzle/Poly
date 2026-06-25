@@ -1,7 +1,8 @@
 # ADR: Neurosymbolic Platform Vision — Codify, Execute, Evolve
 
-**Date:** 2026-05-31  
-**Status:** Accepted  
+**Date:** 2026-05-31
+**Amended:** 2026-06-25 — added Expression Levels & Canonical IR section; added IR to What Is New
+**Status:** Accepted
 **Deciders:** Primary author
 
 ## Context
@@ -108,6 +109,24 @@ Unix gave developers pipes to compose programs written by humans. This platform 
 
 Each tier catches failures before you pay the next tier's cost. The tree walker is the highest-leverage: cheapest to build, saves the most expensive operation (backend compilation) most often.
 
+### Expression Levels & the Canonical IR
+
+The evaluation tiers are projection targets, not authoring surfaces. Models express intent at one of three levels, with the Canonical IR (`Poly/Ir/`) as the pivot:
+
+| Level | Module | Who authors it |
+|-------|--------|---------------|
+| **Domain** | `DomainModeling` | Model (default), User |
+| **IR** | `Ir` | Compiler (lowering), Model (escape hatch) |
+| **µops** | `Interpretation/Vm` | Compiler only |
+
+The model defaults to the domain level because domain errors are meaningful ("`Order.Confirm` requires `Order` to be in `Pending` stage"), the lowering is deterministic, and the model can inspect the lowered IR to understand *why* its domain description behaves a certain way — without ever touching µops.
+
+The IR is the lowest level that is semantically complete: every IR `Module` has a deterministic execution result, but the model is not burdened with execution-model concerns (ring allocation, PC offsets, `ConsumedFromPcs` arrays). When the model needs finer control — performance-critical paths, custom algorithms — it drops to IR as an opt-in escape hatch.
+
+Once IR is verified by the VM, every backend is a **deterministic projection** of the same canonical representation (C# source, µop listing, CFG visualization, domain-level trace). The model never generates per-language code.
+
+For the full three-level architecture, the IR design, and the lowering pipeline, see `docs/ARCHITECTURE.md` §3 and `docs/experiments/interpretation-compiler-framework-plan.md`.
+
 ### Analysis ↔ Interpreter Boundary
 
 Analysis passes remain the right tool for:
@@ -135,6 +154,7 @@ This keeps analysis from over-investing in areas where running the program is ch
 
 ### What Is New
 
+- **Canonical IR** under `Poly/Ir/` — block-structured CFG with SSA values, the pivot between domain expression and all backends (see `docs/ARCHITECTURE.md` §3)
 - **Tree-walker interpreter** under `Poly.Interpretation` — canonical semantics, fast feedback, macro expansion
 - **Macro system** under `Poly.Synthesis` — macro library, expansion, storage, provenance
 - **Perception interface** (`IPerceptionModule`) — pluggable neural backends

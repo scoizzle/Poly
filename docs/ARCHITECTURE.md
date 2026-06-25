@@ -29,15 +29,24 @@ This document describes the architecture of the Poly system — a neurosymbolic 
                │
                ▼
 ┌──────────────────────────────────────────────────────────┐
-│                   Lowering (AST → µops)                   │
+│              Canonical IR (Poly/Ir/)       │
 │                                                          │
-│  EmitContext lowers AST nodes to flat MicroOp list,       │
-│  resolving variables, functions, lambdas, try/catch,     │
-│  loops, and CLR call sites.                              │
+│  Block-structured CFG, SSA values, explicit φ nodes.     │
+│  The pivot between domain-level expression and all       │
+│  execution backends. 16 instruction types.               │
 │                                                          │
-│  Consumes: VariableAnalysisMetadata,                      │
-│  DefiniteAssignmentMetadata, ConstantValueMetadata,       │
-│  TypeResolutionMetadata, MemberResolutionMetadata        │
+│  Produces: Module (blocks, instructions, terminators)     │
+└──────────────┬───────────────────────────────────────────┘
+               │
+               ▼
+┌──────────────────────────────────────────────────────────┐
+│                   Lowering (IR → µops)                   │
+│                                                          │
+│  UopCompiler walks IR blocks, emits flat µop      │
+│  list. Resolves CondBranch/Goto targets to absolute PCs, │
+│  maps Phi → PhiMarker with ConsumedFromPcs.              │
+│                                                          │
+│  Consumes: ModuleMetadata (blocks, values, terminators)   │
 └──────────────┬───────────────────────────────────────────┘
                │
                ▼
@@ -225,13 +234,101 @@ new AnalyzerBuilder()
 
 ---
 
-## 3. Lowering — AST → µops
+## 3. Canonical IR — The Neurosymbolic Pivot
 
-**Location:** `Poly/Interpretation/VirtualMachine/Lowering.cs`
+**Location:** `Poly/Ir/`
+
+The Canonical IR is the structural layer between AST/domain-level expression and all execution backends. It is the **pivot** of Poly's neurosymbolic architecture: models express intent at the domain level, the compiler lowers it deterministically through IR, the VM validates it, and every backend projects the same IR into its target form.
+
+### The Three Levels of Expression
+
+Poly provides three levels at which code can be expressed, each with a distinct role:
+
+| Level | Module | Role | Who authors it |
+|-------|--------|------|---------------|
+| **Domain** | `DomainModeling` | Entities, actions, stages, policies — the model's primary surface | Model (default), User |
+| **IR** | `Ir` | Blocks, instructions, phi nodes — semantically complete, execution-model-agnostic | Compiler (lowering), Model (escape hatch) |
+| **µops** | `Interpretation/Vm` | Stack-machine instructions with PC offsets, ring allocation | Compiler only (never model-authored) |
+
+The lowering pipeline is **deterministic and traceable** at every step:
+
+```
+Domain Modeling ──→ AST ──→ IR ──→ µops ──→ delegate
+     ↑                ↑       ↑        ↑
+  model authors   lowering  model     compiler
+  here (default)  pass      can       only
+                            inspect
+                            or inject
+```
+
+### Why the Model Defaults to the Domain Level
+
+Forcing models to work at the domain level — with strong analysis and diagnostics — is more effective than allowing them to operate at the IR or µop level by default:
+
+- **Domain errors are meaningful.** "`Order.Confirm` requires `Order` to be in `Pending` stage" is actionable. "Phi at block_3 has mismatched incoming values" is a compiler artifact the model shouldn't need to reason about.
+- **Deterministic lowering means the model doesn't author execution concerns.** Ring allocation, PC offsets, `ConsumedFromPcs` arrays, and `PhiMarker` placement are the compiler's job. The model describes *what* should happen; the compiler determines *how* the stack machine executes it.
+- **Iteration happens at the right level.** If a model's domain description produces incorrect behavior, the model inspects the lowered IR (not the µops) to understand *why* — and fixes the domain description, not the µop listing.
+
+### When the Model Drops to IR (the Escape Hatch)
+
+For performance-critical paths, custom data structures, or algorithms that don't map neatly to domain constructs, the model can inject IR directly:
+
+```
+Domain Modeling ──→ AST ──→ IR ──→ µops
+                              ↑
+                     model injects IR here
+                     (opt-in, not default)
+```
+
+The IR is the right escape hatch because it is the **lowest level that is still semantically complete** — every IR `Module` has a deterministic execution result — but the model is not burdened with execution-model concerns like ring allocation or PC offsets.
+
+### Projection, Not Generation
+
+Once the IR is verified by the VM, every backend is a deterministic projection. The model (or user) can request:
+
+- **C# source** (`CSharpCodeGenerator`) — idiomatic code for human review
+- **µop listing** (`UopCompiler`) — stack-machine trace for debugging
+- **CFG visualization** — Mermaid diagram with blocks, branches, and phi nodes
+- **Domain-level trace** — "`Order.Confirm` merge point: result is `confirmed_total` (from authorization branch) or `rejected_total` (from rejection branch)"
+
+Each projection is derived from the same canonical IR. The model never generates per-language code — it generates IR, and the compiler handles everything downstream.
+
+### Traceability as the Foundation
+
+Every `Instr` carries a `NodeId? Source` linking back to the AST node (and thus the domain construct) that produced it. This means:
+
+- **VM traces reference domain concepts**, not µop PCs. "At `Order.Confirm` merge point, `Phi` selects `confirmed_total`" instead of "pc12: PhiMarker([pc6], pc7)."
+- **The model can inspect lowering decisions.** "This `CondBranch` at block_2 corresponds to your `if (payment.Authorized)` check."
+- **Errors localize to the source.** A VM exception at a given µop PC can be traced back through IR → AST → the exact domain construct the model authored.
+
+### IR Design Summary
+
+The IR is a **block-structured CFG with SSA values**:
+
+- **16 instruction types**: `Const`, `BinOp`, `UnaryOp`, `LoadLocal`, `StoreLocal`, `Parameter`, `Call`, `AllocClosure`, `LoadUpvalue`, `StoreUpvalue`, `AllocHeap`, `Phi`
+- **5 terminator types**: `Goto`, `CondBranch`, `Ret`, `Throw`
+- **4 type kinds**: `Word`, `Boolean`, `Handle`, `Void`
+- **Explicit φ nodes** replace the ring-based heuristic in `Lowering.Assemble()`
+- **SSA optional**: the VM backend can work with or without SSA; optimization passes enable it as needed
+
+Each AST node lowers to IR via a `virtual Value? Emit(EmissionContext ctx)` method on the `Node` base class, replacing the monolithic 700-line `UopGenerationPass` switch.
+
+For the full IR design, see `docs/experiments/interpretation-compiler-framework-plan.md`.
+
+---
+
+## 4. Lowering — IR → µops
+
+**Location:** `Poly/Interpretation/Ir/Backends/UopCompiler.cs`
 
 ### Architecture
 
-The `Lowering.Lower(Node, AnalysisResult)` static method walks the analyzed AST and emits a flat list of `MicroOp` records. The `EmitContext` class (nested in `Lowering`, a `sealed class` — not `ref struct`) holds all mutable state during emission. All `Emit*` methods are instance methods on `EmitContext` rather than static methods receiving `ref EmitContext`.
+The `UopCompiler` walks IR blocks (not AST nodes) and emits a flat list of `MicroOp` records. It replaces the combined `UopGenerationPass` + `Lowering.Assemble()` pipeline:
+
+1. **Block ordering**: topologically sort blocks (dominator-tree DFS). Assign contiguous PC ranges per block.
+2. **Instruction emission**: for each `Instr`, emit the corresponding µop (`Const` → `LoadConst`, `BinOp` → `BinOp`, `Phi` → `PhiMarker` + resolved `ConsumedFromPcs`, etc.)
+3. **Ring analysis**: `RingAnalyzer` computes eval-stack ring depths from the IR's explicit `Phi` nodes — simpler than the current heuristic because φ is already explicit.
+4. **Label resolution**: `Goto.Target` and `CondBranch.ThenTarget`/`ElseTarget` are `BasicBlock` references (not integer IDs) — they cannot dangle. Resolved to absolute PCs during emission.
 
 ### What Lowering Consumes from Analysis
 
@@ -282,7 +379,7 @@ Carries `ParameterExpression`s for the compiled delegate: `State` (VmState), `Sl
 
 ---
 
-## 4. Code Generation — µops → Compiled Delegate
+## 5. Code Generation — µops → Compiled Delegate
 
 **Location:** `Poly/Interpretation/VirtualMachine/ProgramCompiler.cs`
 
@@ -308,7 +405,7 @@ Compiles CLR method calls into `CallSiteDelegate(VmState)` instances. Bridges th
 
 ---
 
-## 5. VM Execution
+## 6. VM Execution
 
 **Location:** `Poly/Interpretation/VirtualMachine/Vm.cs`
 
@@ -357,7 +454,7 @@ PC-level debugger managing breakpoints and stepping. Integrates with `VmState.Br
 
 ---
 
-## 6. Metadata Flow
+## 7. Metadata Flow
 
 ### What Gets Produced Where
 
@@ -399,7 +496,7 @@ Lowering ──► Bytecode (µops + function table + constants + metadata)
 
 ---
 
-## 7. Execution Backends
+## 8. Execution Backends
 
 ### VM Backend (µops)
 
@@ -429,7 +526,7 @@ Generates C# source code as `string`. Supports:
 
 ---
 
-## 8. Introspection — Type System Abstraction
+## 9. Introspection — Type System Abstraction
 
 **Location:** `Poly/Introspection/`
 
@@ -461,7 +558,7 @@ A provider-based type abstraction decoupled from CLR reflection. Consumers work 
 
 ---
 
-## 9. Domain Modeling
+## 10. Domain Modeling
 
 Poly has two domain modeling subsystems:
 
@@ -483,7 +580,7 @@ Mutable directed acyclic graph with transactional mutation support. Used for int
 
 ---
 
-## 10. Key Design Principles
+## 11. Key Design Principles
 
 1. **Nodes are pure data records** — no semantics, no type info. All semantic resolution is the job of analysis passes (`INodeAnalyzer`).
 

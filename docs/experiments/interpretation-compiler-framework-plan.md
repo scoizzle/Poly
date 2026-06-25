@@ -27,7 +27,7 @@ A secondary concern: there are already two implicit backends (VM µops → expre
 - **Block-structured CFG**: every block has a label, an ordered list of instructions, and a terminator (branch, jump, return, throw). No flat instruction list with label markers.
 - **SSA values**: each instruction produces zero or one `Value`. Consumers reference that value directly—no implicit stack or ring. This makes dataflow explicit.
 - **Typed, but minimally**: IR types are a small enum (`Int64`, `Float64`, `Boolean`, `Handle`, `Void`), kept CLR-agnostic. The CLR adaptation layer maps Handle to `object?`.
-- **Scoped locals fallback**: for variable reassignment (`x = x + 1`), the IR allows mutable `IrLocal` slots as an escape from SSA purity. The SSA construction pass converts these to SSA values with φ nodes at join points.
+- **Scoped locals fallback**: for variable reassignment (`x = x + 1`), the IR allows mutable local slots accessed via `LoadLocal`/`StoreLocal` as an escape from SSA purity. The SSA construction pass converts these to SSA values with φ nodes at join points.
 
 ### 3.2 Core types
 
@@ -43,16 +43,24 @@ public sealed record Value(Instr Definition, TypeKind Kind, int Index);
 public abstract record Instr(TypeKind ResultType, NodeId? Source);
 
 public sealed record Const(long Value, TypeKind Kind, NodeId? Source) : Instr(Kind, Source);
-public sealed record BinOp(OpKind Op, Value Left, Value Right, NodeId? Source) : Instr(TypeKind.Int64, Source);
-public sealed record UnaryOp(UnaryOpKind Op, Value Operand, NodeId? Source) : Instr(TypeKind.Int64, Source);
+public sealed record BinOp(OpKind Op, Value Left, Value Right, NodeId? Source) : Instr(Op.ResultType(Left.Kind, Right.Kind), Source);
+public sealed record UnaryOp(UnaryOpKind Op, Value Operand, NodeId? Source) : Instr(Operand.Kind, Source);
 public sealed record LoadLocal(int SlotIndex, TypeKind Kind, NodeId? Source) : Instr(Kind, Source);
 public sealed record StoreLocal(int SlotIndex, Value Val, NodeId? Source) : Instr(TypeKind.Void, Source);
-public sealed record Call(Value Target, Value[] Args, int ArgCount, bool IsExternal, NodeId? Source) : Instr(TypeKind.Int64, Source);
+public sealed record Parameter(int SlotIndex, TypeKind Kind, NodeId? Source) : Instr(Kind, Source);  // entry-block function argument; defines initial SSA value for the slot
+public sealed record Call(Value Target, Value[] Args, int ArgCount, bool IsExternal, int CallSiteIndex, NodeId? Source)
+    : Instr(TypeKind.Int64 /* resolved from call-site table */, Source);
+// CallSiteIndex: index into Module.CallSites (analogous to VmProgram.CallSites).
+// Resolved during IR generation from AnalysisResult.GetResolvedMember().
 public sealed record AllocClosure(int FuncIndex, Value[] Captures, NodeId? Source) : Instr(TypeKind.Handle, Source);
 public sealed record LoadUpvalue(int UpvalueIndex, NodeId? Source) : Instr(TypeKind.Int64, Source);
 public sealed record StoreUpvalue(int UpvalueIndex, Value Val, NodeId? Source) : Instr(TypeKind.Void, Source);
 public sealed record AllocHeap(int HandleIndex, NodeId? Source) : Instr(TypeKind.Handle, Source);
-public sealed record Phi(Value[] Incoming, NodeId? Source) : Instr(Incoming[0].Kind, Source);
+public sealed record Phi(int? SlotIndex, Value[] Incoming, NodeId? Source) : Instr(Incoming[0].Kind, Source);
+// SlotIndex is null for value-level Phis (emitted by IfStatement.Emit, WhileLoop.Emit —
+// they select between expression values rather than a named local variable).
+// SlotIndex is non-null for slot-level Phis (inserted by InsertPhis during SSA construction
+// — they merge the current SSA value of a named mutable slot).
 
 // ── Terminators ─────────────────────────────────────────────────────
 public abstract record Terminator(NodeId? Source);
@@ -72,8 +80,12 @@ public sealed class Module {
     public List<BasicBlock> Blocks { get; } = new();
     public List<BasicBlock> ExportedFunctions { get; } = new(); // entry points
     public List<object?> HeapConstants { get; } = new();     // indexed by handle
+    public List<CallSite> CallSites { get; } = new();        // indexed by CallSiteIndex; mirrors VmProgram.CallSites
     public int MaxLocalSlots { get; set; }
 }
+
+// Minimal call-site descriptor — expanded during lowering
+public sealed record CallSite(string MethodName, TypeKind ReturnType, int ArgCount);
 ```
 
 ### 3.3 Why this design
@@ -82,6 +94,7 @@ public sealed class Module {
 - **SSA by construction**: every `Instr` returns a `Value`. Consumers reference that value directly. No ring analysis, no `ConsumedFromPcs` metadata. The ring analysis becomes an optimization pass for the VM backend only.
 - **Heap constants as module-level sideband**: the current `HeapConstantMetadata` collected during `UopGeneration` (keyed under `NodeId.Empty`) becomes `Module.HeapConstants`. No instruction-level indirection needed.
 - **Phi explicit**: `Phi` selects among `Value[] Incoming`. No heuristic detection, no `PhiSourcePcs`/`PhiAltPcs` juggling.
+- **Result types from operators**: IR instruction result types are derived from their operands and operator kind where possible (`BinOp` resolves via `Op.ResultType(Left.Kind, Right.Kind)`, `UnaryOp` inherits `Operand.Kind`). For `Call`, the result type comes from the resolved member in the call-site table (section 9.2). `Op.ResultType` is a `static TypeKind OpKind.ResultType(TypeKind, TypeKind)` extension/helper on `OpKind`, defined alongside `OpKind` under `Poly/Interpretation/Ir/` at implementation time; the standard cases are: integer ops return `Int64`, floating ops return `Float64`, comparison ops return `Boolean`. This makes the IR self-describing without requiring a separate type environment.
 
 ## 4. AST → IR (virtual method on Node base)
 
@@ -282,7 +295,7 @@ The `Module` must be in a well-formed state before SSA runs:
 2. **All local slot accesses are explicit** — `LoadLocal(slot)` and `StoreLocal(slot, val)`. The slot indices are dense per `Module.MaxLocalSlots`.
 3. **No implicit dataflow** — all value dependencies are through `Value` references. The only mutable state is local variables via `LoadLocal`/`StoreLocal`.
 
-The pass never runs on the initial Poly IR after emission; it runs after constant folding and inlining, since those passes may introduce or eliminate `Const`/`BinOp` nodes that affect the def-use graph.
+The pass runs **immediately after IR emission**, before constant folding and inlining. The canonical pass order is `IrEmission → SsaTransform → ConstantFolding → Inlining` (see section 5). SSA runs first so the subsequent optimization passes can rely on explicit def-use chains and `Phi` nodes rather than walking mutable slot writes. Constant folding and inlining then operate on SSA form, producing equivalent but smaller SSA for downstream consumers.
 
 #### 5.1.2 Algorithm overview (Cytron et al., 1991)
 
@@ -397,7 +410,7 @@ public static Dictionary<BasicBlock, BasicBlock> ComputeDominators(Cfg cfg) {
     for (int i = 1; i < vertex.Count; i++) {
         var w = vertex[i];
         if (idom[w] != parent[w])
-            idom[w] = idom[w];
+            idom[w] = idom[idom[w]];
     }
     idom[cfg.Entry] = cfg.Entry;
 
@@ -477,7 +490,7 @@ public static void InsertPhis(Module module, Cfg cfg, Dictionary<BasicBlock, Lis
                 var incoming = cfg.Predecessors[f]
                     .Select(p => (Value?)null)    // placeholder; filled during renaming
                     .ToArray();
-                f.Instructions.Insert(phiInstrs, new Phi(incoming, null));
+                f.Instructions.Insert(phiInstrs, new Phi(slot, incoming, null));
 
                 if (visited.Add(f))
                     worklist.Enqueue(f);
@@ -500,18 +513,34 @@ public static void Rename(Module module, Cfg cfg, Dictionary<BasicBlock, BasicBl
     Value? CurrentValue(int slot) =>
         stacks.TryGetValue(slot, out var s) && s.Count > 0 ? s.Peek() : null;
 
+    // ── Step 0: Seed parameter bindings from the entry block ──
+    // `Parameter(slot, kind)` defines the initial SSA value for a function
+    // argument. We register it before walking so the first LoadLocal(slot)
+    // in the entry block resolves to the parameter's Value — and so the
+    // parameter's value is available to fill successor Phi incomings.
+    // We then *remove* the Parameter instruction from the entry block: it
+    // has served its purpose (defining %0) and backends do not emit µops
+    // for it; the VM loads parameters directly from the frame.
+    foreach (var instr in cfg.Entry.Instructions) {
+        if (instr is Parameter p) {
+            var val = new Value(p, p.Kind, 0);
+            stacks.GetOrAdd(p.SlotIndex, _ => new()).Push(val);
+        }
+    }
+    cfg.Entry.Instructions.RemoveAll(i => i is Parameter);
+
     void Walk(BasicBlock block) {
         // Save stack heights for restoration on backtrack
         var savedHeights = stacks.ToDictionary(kv => kv.Key, kv => kv.Value.Count);
 
-        // Process Phi instructions: assign new SSA values
+        // Process Phi instructions: assign new SSA values for *slot-level* Phis.
+        // Value-level Phis (SlotIndex=null, emitted by IfStatement/WhileLoop)
+        // are left untouched; they already carry their incoming values from emission.
         foreach (var instr in block.Instructions) {
-            if (instr is Phi phi) {
-                var newVal = new Value(phi, phi.Incoming[0]?.Kind ?? TypeKind.Int64, NextId());
-                // Replace placeholder incoming with itself as first approximation
-                phi.Incoming = phi.Incoming.Select((_, i) =>
-                    newVal).ToArray();  // filled by RenamePhiIncomings later
-                PushValue(instr, newVal);
+            if (instr is Phi phi && phi.SlotIndex is { } slotIdx) {
+                var newVal = new Value(phi, phi.Incoming[0]?.Kind ?? TypeKind.Int64, 0);
+                // Incoming values are filled when each predecessor finishes its Walk
+                stacks.GetOrAdd(slotIdx, _ => new()).Push(newVal);
             }
         }
 
@@ -530,13 +559,13 @@ public static void Rename(Module module, Cfg cfg, Dictionary<BasicBlock, BasicBl
                     break;
 
                 case StoreLocal sl:
-                    var newSsaVal = new Value(sl.Val.Definition, sl.Val.Kind, NextId());
-                    stacks.GetOrAdd(sl.SlotIndex, _ => new()).Push(newSsaVal);
+                    stacks.GetOrAdd(sl.SlotIndex, _ => new()).Push(sl.Val);
                     replacements.Add((i, null));  // StoreLocal removed; side effect is now the SSA stack
                     break;
 
                 case Phi:
-                    // Already handled above
+                    // Slot-level Phis already handled above;
+                    // value-level Phis (SlotIndex=null) are left untouched.
                     break;
             }
         }
@@ -555,6 +584,18 @@ public static void Rename(Module module, Cfg cfg, Dictionary<BasicBlock, BasicBl
                 Walk(child);
         }
 
+        // Fill Phi incoming values for successor blocks
+        // At this point the stacks hold the current SSA value for each slot
+        foreach (var succ in cfg.Successors[block]) {
+            foreach (var instr in succ.Instructions) {
+                if (instr is Phi phi && phi.SlotIndex is { } slotIdx && phi.Incoming.Length > 0) {
+                    var predIndex = cfg.Predecessors[succ].IndexOf(block);
+                    if (predIndex >= 0)
+                        phi.Incoming[predIndex] = CurrentValue(slotIdx)!;
+                }
+            }
+        }
+
         // Restore stacks
         foreach (var (slot, height) in savedHeights) {
             var s = stacks[slot];
@@ -566,126 +607,97 @@ public static void Rename(Module module, Cfg cfg, Dictionary<BasicBlock, BasicBl
 }
 ```
 
+> **Implementation note: value-rewriting.** When a `LoadLocal` is removed above, other instructions that held a `Value` referencing that `LoadLocal`'s definition must be updated to reference the current SSA value from the rename stack (the `cur` in `CurrentValue`). This requires either:
+> - **Use-lists**: maintain a `Dictionary<Value, List<(Instr, int operandIndex)>>` side-table on `Module` mapping each `Value` to every instruction+operand-index that references it. After `LoadLocal` removal, walk the use-list and rewrite each consumer's operand to the replacement `Value`. (Recommended for the first implementation.)
+> - **Identity instructions**: keep `LoadLocal` as a "mov" identity that simply passes through the current SSA value. A later copy-propagation pass (`BinOp(Identity, x)` → `BinOp(x)` folds them away. Simpler to implement but leaves noise in the IR that downstream passes must skip. (Acceptable fallback.)
+>
+> The pseudocode above shows the *intent* (remove LoadLocal, consumers reference the renamed Value directly); the use-list machinery is ≈30 lines of code in practice and does not change the algorithm's structure.
+
 After renaming:
 - `LoadLocal` instructions are **removed**. All uses of that local now reference the appropriate SSA `Value` directly.
 - `StoreLocal` instructions are **removed**. The stored `Value` is now the defining instruction for the new SSA version.
-- `Phi` instructions remain, each producing a new `Value`.
+- **Slot-level** `Phi` instructions (`SlotIndex != null`, inserted by `InsertPhis`) remain and produce a new `Value` for the renamed slot. Their `Incoming` arrays are filled inline during `Walk`.
+- **Value-level** `Phi` instructions (`SlotIndex == null`, emitted by `IfStatement.Emit` / `WhileLoop.Emit`) are **untouched** by the SSA pass; their `Incoming` values were filled at emission time and remain valid because the instructions those Values reference (`BinOp`, etc.) are not removed.
 - The `Module.MaxLocalSlots` can be reset to 0 — no mutable slots remain.
 
-The final step fills in the `Phi.Incoming` arrays by matching predecessor blocks to their exiting SSA values at the point of the branch. This requires a second pass that walks each block's predecessors and records the current SSA value for each slot at the end of the predecessor:
-
-```csharp
-public static void FillPhiIncomings(Module module, Cfg cfg) {
-    // For each block, compute the SSA value for each slot at exit
-    var exitValues = new Dictionary<BasicBlock, Dictionary<int, Value>>();
-
-    // Walk blocks in topological order so predecessors are resolved
-    foreach (var block in module.Blocks) {
-        var exitMap = new Dictionary<int, Value>();
-
-        // Start with entry values (from dominator tree or initial LoadLocal)
-        foreach (var pred in cfg.Predecessors[block]) {
-            if (exitValues.TryGetValue(pred, out var predExit)) {
-                foreach (var kv in predExit)
-                    exitMap[kv.Key] = kv.Value;
-            }
-        }
-
-        // Process instructions to track definitions
-        foreach (var instr in block.Instructions) {
-            if (instr is StoreLocal sl)
-                exitMap[sl.SlotIndex] = sl.Val!;  // last stored value at exit
-        }
-
-        // Handle Phi: the Phi's incoming values come from predecessor exit states
-        foreach (var instr in block.Instructions) {
-            if (instr is Phi phi) {
-                var incoming = new Value[cfg.Predecessors[block].Count];
-                for (int pi = 0; pi < incoming.Length; pi++) {
-                    var pred = cfg.Predecessors[block][pi];
-                    if (exitValues.TryGetValue(pred, out var predExit)) {
-                        // Find which slot this Phi corresponds to by matching
-                        // the slot that was stored before reaching this block
-                        // Simplification: track slot per Phi via metadata
-                        incoming[pi] = predExit.GetValueOrDefault(phi.SlotIndex)!;
-                    }
-                }
-                phi.Incoming = incoming;
-            }
-        }
-
-        exitValues[block] = exitMap;
-    }
-}
-```
+`Phi.Incoming` arrays for slot-level Phis are filled **during** the rename walk. When `Walk(block)` finishes processing a block (including its dominated children), it iterates over each successor block and, for each slot-level Phi in that successor, sets the incoming value corresponding to the `block` predecessor. This works because:
+1. The `stacks` hold the current SSA value for every slot at the block's exit point.
+2. The successor's predecessor list includes the current block, giving the correct index into `Phi.Incoming`.
+3. The dominator-tree DFS traversal ensures that when a join block is visited, all its predecessors have already filled their contributions (since a join block's predecessors are visited before the join in DFS order over the dominator tree).
 
 #### 5.1.8 Tracing through the worked example
 
-Starting from the pre-SSA IR in section 7.2:
+Starting from the pre-SSA IR in section 7.2 (note the `Parameter` instruction in the entry block):
 
 ```
 entry block:
-  %0 = LoadLocal(slot=0)              // load x
-  %1 = Const(0)
-  %2 = BinOp(Gt, %0, %1)
-  CondBranch(%2, then, else)
+  %0 = Parameter(slot=0, Int64)       // function argument x
+  %1 = LoadLocal(slot=0)
+  %2 = Const(0)
+  %3 = BinOp(Gt, %1, %2)
+  CondBranch(%3, then, else)
 
 then_block:
-  %3 = LoadLocal(slot=0)
-  %4 = Const(1)
-  %5 = BinOp(Add, %3, %4)
+  %4 = LoadLocal(slot=0)
+  %5 = Const(1)
+  %6 = BinOp(Add, %4, %5)
   Goto(merge)
 
 else_block:
-  %6 = LoadLocal(slot=0)
-  %7 = Const(1)
-  %8 = BinOp(Sub, %6, %7)
+  %7 = LoadLocal(slot=0)
+  %8 = Const(1)
+  %9 = BinOp(Sub, %7, %8)
   Goto(merge)
 
 merge_block:
-  %9 = Ret(?)                           // placeholder; no result yet
+  %10 = Ret(?)                        // placeholder; no result yet
 ```
 
 **CFG:** entry → {then, else} → merge. Predecessors: then={entry}, else={entry}, merge={then, else}.
 
 **Dominator tree:** entry dominates all blocks. idom[then]=entry, idom[else]=entry, idom[merge]=entry.
 
-**Dominance frontiers:** DF(entry) = {merge} because entry dominates both predecessors of merge (then and else) but not merge itself. DF(then) = {merge}, DF(else) = {merge}.
+**Dominance frontiers:** DF(entry) = {merge}, DF(then) = {merge}, DF(else) = {merge}.
 
-**Phi insertion:** slot 0 is stored or loaded in all three non-entry blocks. Its def sites include entry (the initial `LoadLocal` is a use, but we also track implicit def at entry as the argument). The dominance frontier of the definition blocks includes `merge`, so a `Phi(slot=0)` is inserted at the start of `merge_block`.
+**Phi insertion:** slot 0 is *loaded* in then/else but never *stored* anywhere (x is read-only in this example). A `Phi` is therefore **not** inserted at merge — `InsertPhis` only triggers on slots with 2+ `StoreLocal` def sites. In the more general case where x is assigned in both branches, a `Phi(slot=0)` would be inserted at the start of `merge_block`. We'll trace that variant below by assuming each branch assigns x.
 
-**Renaming walk (DFS over dominator tree: entry → then → else → merge):**
+For the example as written (no stores), the rename walk proceeds:
 
-- **entry:** LoadLocal(slot=0) creates SSA value %0. Exits with slot=0→%0.
-- **then:** LoadLocal(slot=0) = use %0 (from entry). StoreLocal(slot=0) would create %3 but doesn't exist — x is only read here. Exits with slot=0→%0.
-- **else:** Same as then. Exits with slot=0→%0.
-- **merge:** Phi(slot=0) creates %9. Incoming[then]=%0, incoming[else]=%0. Since both predecessors push the same value, subsequent optimization (canonical SSA clean-up) could eliminate this Phi as redundant.
+**Step 0 (parameter seeding):** Walk the entry block. `Parameter(slot=0, Int64)` defines `%0`. Push `%0` onto `stacks[0]`. Remove the `Parameter` instruction from the entry block. `stacks[0] = [%0]`.
 
-**After renaming:**
+**Step 5 (rename walk, DFS over dominator tree: entry → then → else → merge):**
+
+- **entry:** The `LoadLocal(slot=0)` at index 0 resolves to `CurrentValue(0) = %0` (from the seeded stack). It's marked for removal; all uses (the `BinOp(Gt)`) now reference `%0` directly. Exits with `stacks[0] = [%0]`.
+- **then:** `LoadLocal(slot=0)` resolves to `%0`. Marked for removal. `BinOp(Add)` references `%0`. Exits with `stacks[0] = [%0]`.
+- **else:** Same as then. `BinOp(Sub)` references `%0`. Exits with `stacks[0] = [%0]`.
+- **merge:** No *slot-level* Phi is inserted by `InsertPhis` (slot 0 has no stores). The *value-level* `Phi(null, [%6, %9])` emitted by `IfStatement.Emit()` (see section 7.2) is untouched by the SSA pass — it already carries the correct incoming values (`%6` from then, `%9` from else) and those Values (`BinOp(Add)`, `BinOp(Sub)`) are not removed during renaming.
+
+For the **store-bearing variant** (`if (x > 0) x = x+1 else x = x-1`), slot 0 is stored in then and else, so a `Phi(slot=0)` is inserted at merge. The rename walk produces:
 
 ```
 entry block:
-  %0 = Const(x_value)         ; LoadLocal eliminated — %0 is the argument value
-  %1 = Const(0)
-  %2 = BinOp(Gt, %0, %1)
-  CondBranch(%2, then, else)
+  %0 = BinOp(Gt, %p0, %c0)        ; Parameter seeded as %p0; LoadLocal eliminated
+  CondBranch(%0, then_block, else_block)
+  ; %p0 is the function argument, referenced directly in all uses below
 
 then_block:
-  %3 = Const(1)
-  %4 = BinOp(Add, %0, %3)     ; LoadLocal eliminated — uses %0 directly
+  %1 = Const(1)
+  %2 = BinOp(Add, %p0, %1)        ; LoadLocal eliminated — uses %p0 directly
+  ; (StoreLocal(slot=0, %2) would be removed; %2 becomes the new stack top)
   Goto(merge)
 
 else_block:
-  %5 = Const(1)
-  %6 = BinOp(Sub, %0, %5)     ; LoadLocal eliminated — uses %0 directly
+  %3 = Const(1)
+  %4 = BinOp(Sub, %p0, %3)        ; LoadLocal eliminated — uses %p0 directly
+  ; (StoreLocal(slot=0, %4) would be removed; %4 becomes the new stack top)
   Goto(merge)
 
 merge_block:
-  %7 = Phi([%4, %6])
-  %8 = Ret(%7)
+  %5 = Phi(0, [%2, %4])           ; slot-level Phi (SlotIndex=0) filled inline during rename walk
+  Ret(%5)
 ```
 
-This matches section 7.3 exactly. Note that `%0` flows directly into all three uses — the LoadLocal indirection is gone.
+Note the parameter `%p0` flows into the condition and both branch bodies — the LoadLocal indirection is gone. The Phi at merge selects the value stored in the then-branch vs. the else-branch, which the back-end `UopLoweringVisitor` resolves via `PhiMarker` + `ConsumedFromPcs`.
 
 #### 5.1.9 Edge cases
 
@@ -697,6 +709,7 @@ This matches section 7.3 exactly. Note that `%0` flows directly into all three u
 | **Critical edges** | An edge from a block with multiple successors to a block with multiple predecessors "critical." The Phi insertion algorithm handles this naturally — each predecessor pair contributes one incoming value. No edge splitting is required for correctness, though edge splitting may improve optimization. |
 | **Uninitialized slots** | If a `LoadLocal(slot)` is reached without a preceding `StoreLocal`, the renaming pass finds an empty stack. In this case, `CurrentValue` returns `null`, and the `LoadLocal` remains — it's treated as reading an undefined value. A `UndefinedVariableEliminationPass` can replace these with `Const(0)` or error diagnostics. |
 | **Back-edges (loops)** | The dominance frontier of a loop header includes the header itself (because the back-edge predecessor is dominated by the header but the header is not). This causes a `Phi` to be inserted at the header, which is the standard loop-variant SSA pattern. The renaming pass handles this naturally: when visiting the header, the Phi's placeholder value is pushed; after visiting the loop body, the back-edge propagates the loop-carried value. |
+| **Exception-handling edges** | `TryCatchFinally` / `TryBody` nodes generate implicit control-flow edges: any instruction in a `try` body can transfer control to a `catch` or `finally` block. These edges must be added to the CFG **before** SSA construction (otherwise phi placement will miss definitions reaching catch blocks). The `Emit` for `TryCatchFinally` should create these edges explicitly as additional successor relationships on each instruction block within the try body, or add them as a pre-pass over the `Module` before `SsaTransform.Run()`. |
 
 #### 5.1.10 Testing strategy for the SSA pass
 
@@ -763,7 +776,7 @@ public async Task Ssa_CrossValidateWithVm() {
 | Lengauer-Tarjan complexity | O(E α(V)) — near-linear. For typical control flow (V ~ block count), this is faster than a sort. |
 | Phi insertion worklist | Each block is visited at most once per local variable. Worst case: O(S × B) where S = local slots and B = blocks. |
 | Renaming walk | Single DFS over the dominator tree. Each instruction is visited once. |
-| `FillPhiIncomings` second pass | Linear in the number of Phi instructions × predecessors. Typically small. |
+| Phi incoming filling (inline) | Each block iterates its successors' Phi instructions once. Linear in total Phi operands. Typically small. |
 | Overall pass cost | Expected 1.5–3× the cost of a single tree walk, depending on CFG complexity. For a 100-block module, well under 1ms. |
 
 The SSA pass is designed to be **optional** for the VM backend (the `UopLoweringVisitor` can work with or without SSA, since `LoadLocal`/`StoreLocal` map directly to µop `LoadSlot`/`StoreSlot`). It becomes essential for passes that need def-use chains: constant propagation, dead code elimination, inlining, and vectorization.
@@ -851,56 +864,59 @@ IfStatement {
 
 ```
 entry block:
-  %0 = LoadLocal(slot=0)              // load x
-  %1 = Const(0)
-  %2 = BinOp(Gt, %0, %1)
-  CondBranch(%2, then_block, else_block)
+  %0 = Parameter(slot=0, Int64)       // function argument x
+  %1 = LoadLocal(slot=0)
+  %2 = Const(0)
+  %3 = BinOp(Gt, %1, %2)
+  CondBranch(%3, then_block, else_block)
 
 then_block:
-  %3 = LoadLocal(slot=0)
-  %4 = Const(1)
-  %5 = BinOp(Add, %3, %4)
+  %4 = LoadLocal(slot=0)
+  %5 = Const(1)
+  %6 = BinOp(Add, %4, %5)
   Goto(merge_block)
 
 else_block:
-  %6 = LoadLocal(slot=0)
-  %7 = Const(1)
-  %8 = BinOp(Sub, %6, %7)
+  %7 = LoadLocal(slot=0)
+  %8 = Const(1)
+  %9 = BinOp(Sub, %7, %8)
   Goto(merge_block)
 
 merge_block:
-  ; φ selects %5 (from then) or %8 (from else)
-  %9 = Phi([%5, %8])
-  %10 = Ret(%9)
+  ; φ selects %6 (from then) or %9 (from else)
+  ; This is a value-level Phi (SlotIndex=null) emitted by IfStatement.Emit().
+  %10 = Phi(null, [%6, %9])
+  %11 = Ret(%10)
 ```
 
 ### 7.3 IR after SSA pass
 
 ```
 entry block:
-  %0 = Const(x_value)        ; from SSA renaming; no more LoadLocal
-  %1 = Const(0)
-  %2 = BinOp(Gt, %0, %1)
-  CondBranch(%2, then_block, else_block)
+  %0 = BinOp(Gt, %p0, %c0)       ; Parameter %p0 was seeded and removed; %c0 = Const(0)
+  CondBranch(%0, then_block, else_block)
+  ; %p0 is the function-argument value, referenced directly in uses below
 
 then_block:
-  %3 = Const(1)
-  %4 = BinOp(Add, %0, %3)
+  %1 = Const(1)
+  %2 = BinOp(Add, %p0, %1)       ; LoadLocal eliminated — uses %p0 directly
   Goto(merge_block)
 
 else_block:
-  %5 = Const(1)
-  %6 = BinOp(Sub, %0, %5)
+  %3 = Const(1)
+  %4 = BinOp(Sub, %p0, %3)       ; LoadLocal eliminated — uses %p0 directly
   Goto(merge_block)
 
 merge_block:
-  %7 = Phi([%4, %6])
-  Ret(%7)
+  %5 = Phi(null, [%2, %4])       ; value-level Phi from emission — Incoming filled at emission time
+  Ret(%5)
 ```
 
-Note**: `%0` is used in all three blocks—no reload is needed because SSA gave every definition a unique name.
+Note**: `%p0` flows directly into all three blocks because the parameter-seeding step (Step 0 of `Rename`) defined it from the entry-block `Parameter` instruction and pushed it onto the rename stack before the walk began.
 
-### 7.4 VM µop output (after `UopLoweringVisitor`)
+### 7.4 VM µop output (after `UopLoweringVisitor`, SSA disabled)
+
+The `UopLoweringVisitor` maps `LoadLocal → LoadSlot`, `Const → LoadConst`, `BinOp → BinOp`, etc. With SSA disabled (the default for the VM backend), `LoadLocal` instructions survive the pipeline and produce µop `LoadSlot`:
 
 ```
 pc0:  LoadSlot(0)           ; load x        ; entry block
@@ -978,13 +994,14 @@ The `UopLoweringVisitor` maps `AllocHeap` to `LoadHeapConst` µops.
 
 ## 10. Incremental Compilation
 
-The `Analyzer` already supports incremental analysis (`Analyzer.Analyze(Node root, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes)`). The IR pipeline extends this:
+**Deferred.** `GenerationPass` re-runs end-to-end per function on every analysis cycle. The `Analyzer`'s existing incremental analysis API (`Analyzer.Analyze(Node root, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes)`) still skips AST-level analysis passes for unchanged subtrees, but once the IR for a function is invalidated, the entire function's `Module` is rebuilt and SSA / const-fold / inline passes re-run from scratch.
 
-1. Add a `priorModule` parameter to `GenerationPass`. If provided, and if no AST node in a function's subtree was invalidated, reuse the prior IR blocks for that function.
-2. The IR blocks carry a `SourceNodeId` range. On recompilation, only blocks whose source range overlaps an invalidated node are rebuilt.
-3. Downstream passes (SSA, const-fold, ring analysis) only need to re-run on changed blocks and their affected successors (reached via CFG reachability).
+Reasons to defer incremental SSA:
 
-This avoids full recompilation when editing a single expression.
+- SSA construction is a **whole-function** property (dominator tree, dominance frontiers, phi placement all depend on the entire CFG). Partial SSA on "only changed blocks and their affected successors" requires dominator-tree invalidation and phi-fixup logic that is roughly the complexity of the SSA pass itself, with no clear first consumer.
+- The `Module.HeapConstants` table and `SourceNodeId` ranges referenced by the previous draft of this section do not yet exist as fields on `BasicBlock` / `Module`; introducing them now would be speculative.
+
+When profiling shows a function re-compile cost worth optimizing, revisit with a concrete target (e.g. "make a single-expression edit in a >1k-block function compile in <2ms"). Implementation order: (a) add `SourceNodeId` ranges to `BasicBlock`; (b) reuse unchanged `BasicBlock`s when no AST node in the function subtree was invalidated; (c) re-run SSA / const-fold / inline only for functions whose `Module` was rebuilt; (d) consider dominator-tree invalidation only if (c) is still too slow.
 
 ## 11. Migration Strategy
 

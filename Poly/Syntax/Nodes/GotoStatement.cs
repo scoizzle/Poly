@@ -12,4 +12,10 @@ public sealed record GotoStatement(string Target) : Statement {
 
     /// <inheritdoc />
     public override string ToString() => $"goto {Target};";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        // A goto/label pair within the same function; uses a named label
+        yield return new Poly.Syntax.Primitives.Goto(new Poly.Syntax.Primitives.Label(Target));
+    }
 }

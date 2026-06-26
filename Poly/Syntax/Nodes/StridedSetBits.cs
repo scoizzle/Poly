@@ -8,4 +8,13 @@ namespace Poly.Syntax.Nodes;
 public sealed record StridedSetBits(Node Array, Node StartValue, Node Step, Node Limit) : Statement {
     public override IEnumerable<Node?> Children => [Array, StartValue, Step, Limit];
     public override string ToString() => $"StridedSetBits({Array}, {StartValue}, {Step}, {Limit})";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        foreach (var p in Array.ToPrimitives(context)) yield return p;
+        foreach (var p in StartValue.ToPrimitives(context)) yield return p;
+        foreach (var p in Step.ToPrimitives(context)) yield return p;
+        foreach (var p in Limit.ToPrimitives(context)) yield return p;
+        yield return new Poly.Syntax.Primitives.StridedSet();
+    }
 }

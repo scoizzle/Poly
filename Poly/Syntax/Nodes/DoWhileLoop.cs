@@ -12,4 +12,37 @@ public sealed record DoWhileLoop(Node Body, Node Condition) : Statement {
 
     /// <inheritdoc />
     public override string ToString() => $"do {{ {Body} }} while ({Condition})";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        if (env is null)
+            throw new System.InvalidOperationException("ExpandEnv not set");
+
+        var bodyLabel = new Poly.Syntax.Primitives.Label("dowhile_body");
+        var condLabel = new Poly.Syntax.Primitives.Label("dowhile_cond");
+        var exit = new Poly.Syntax.Primitives.Label("dowhile_exit");
+
+        env.Loops.Push(new Poly.Syntax.Primitives.LoopBoundary(exit, condLabel));
+
+        // Body (executes at least once)
+        yield return bodyLabel;
+        foreach (var p in Body.ToPrimitives(context))
+            yield return p;
+        yield return new Poly.Syntax.Primitives.Discard();
+
+        // Condition — CondGoto jumps when condition is 0 (false), exited by Goto(bodyLabel) below
+        yield return condLabel;
+        foreach (var p in Condition.ToPrimitives(context))
+            yield return p;
+        yield return new Poly.Syntax.Primitives.CondGoto(exit);
+
+        // Back to body
+        yield return new Poly.Syntax.Primitives.Goto(bodyLabel);
+
+        // Exit
+        yield return exit;
+
+        env.Loops.Pop();
+    }
 }

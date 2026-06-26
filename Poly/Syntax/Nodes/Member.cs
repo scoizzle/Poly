@@ -12,4 +12,12 @@ public sealed record Member(Node Value, string MemberName) : Expression {
 
     /// <inheritdoc />
     public override string ToString() => $"{Value}.{MemberName}";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        // Member access resolves to a slot or heap dereference via analysis.
+        // Without resolved member metadata, passthrough the value.
+        foreach (var p in Value.ToPrimitives(context)) yield return p;
+        yield return new Poly.Syntax.Primitives.PushConstant(0L);
+    }
 }

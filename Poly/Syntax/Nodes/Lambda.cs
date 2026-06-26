@@ -26,4 +26,27 @@ public sealed record Lambda(IReadOnlyList<Parameter> Parameters, Node Body) : Ex
         var paramList = string.Join(", ", Parameters);
         return $"({paramList}) => {Body}";
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        if (env is null) {
+            env = new Poly.Syntax.Primitives.ExpandEnv();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+        }
+
+        // Assign slots to parameters in the lambda's scope
+        foreach (var param in Parameters) {
+            if (!env.Slots.ContainsKey(param))
+                env.Slots[param] = env.NextSlot++;
+        }
+
+        // Emit body (uses Parameter primitives that resolve to slots)
+        foreach (var p in Body.ToPrimitives(context))
+            yield return p;
+
+        // Placeholder: AllocClosure would be emitted here with upvalue tracking.
+        // For now, push 0 as a closure handle placeholder.
+        yield return new Poly.Syntax.Primitives.PushConstant(0L);
+    }
 }

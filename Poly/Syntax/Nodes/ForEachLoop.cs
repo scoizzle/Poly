@@ -13,4 +13,15 @@ public sealed record ForEachLoop(Variable LoopVariable, Node Collection, Node Bo
     public override string ToString() {
         return $"foreach (var {LoopVariable.Name} in {Collection}) {{ {Body} }}";
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        // ForEachLoop requires enumerator pattern support (GetEnumerator/MoveNext/Current).
+        // For now, emit collection (for side effects) then body.
+        foreach (var p in Collection.ToPrimitives(context))
+            yield return p;
+        yield return new Poly.Syntax.Primitives.Discard();
+        foreach (var p in Body.ToPrimitives(context))
+            yield return p;
+    }
 }

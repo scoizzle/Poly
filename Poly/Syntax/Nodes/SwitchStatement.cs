@@ -16,6 +16,42 @@ public sealed record SwitchStatement(Node Value, IReadOnlyList<SwitchCase> Cases
         var defaultStr = DefaultCase is not null ? $" default: {DefaultCase}" : "";
         return $"switch ({Value}) {{ {cases}{defaultStr} }}";
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        var endLabel = new Poly.Syntax.Primitives.Label("switch_end");
+        var caseLabels = Cases.Select(_ => new Poly.Syntax.Primitives.Label("case")).ToList();
+
+        // Emit value once; dup it for each comparison
+        foreach (var p in Value.ToPrimitives(context)) yield return p;
+
+        for (int i = 0; i < Cases.Count; i++) {
+            yield return new Poly.Syntax.Primitives.Dup();
+
+            foreach (var p in Cases[i].Pattern.ToPrimitives(context)) yield return p;
+            yield return new Poly.Syntax.Primitives.BinaryOp(Poly.Syntax.Primitives.OpKind.Eq);
+            yield return new Poly.Syntax.Primitives.CondGoto(caseLabels[i]);
+        }
+
+        // No case matched
+        yield return new Poly.Syntax.Primitives.Discard(); // discard original value
+        if (DefaultCase is not null) {
+            foreach (var p in DefaultCase.ToPrimitives(context)) yield return p;
+        }
+        yield return new Poly.Syntax.Primitives.Goto(endLabel);
+
+        // Case bodies (each enters with value on stack, discards it)
+        for (int i = 0; i < Cases.Count; i++) {
+            yield return caseLabels[i];
+            yield return new Poly.Syntax.Primitives.Discard(); // discard original value
+            foreach (var p in Cases[i].Body.ToPrimitives(context)) yield return p;
+            // Prevent fallthrough to next case
+            if (i < Cases.Count - 1 || DefaultCase is not null)
+                yield return new Poly.Syntax.Primitives.Goto(endLabel);
+        }
+
+        yield return endLabel;
+    }
 }
 
 /// <summary>

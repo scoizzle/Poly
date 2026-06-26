@@ -8,4 +8,13 @@ namespace Poly.Syntax.Nodes;
 public sealed record NewArray(Node ElementType, Node Length) : Expression {
     public override IEnumerable<Node?> Children => [Length, ElementType];
     public override string ToString() => $"new {ElementType}[{Length}]";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        // Discard element type (metadata only), emit length, allocate
+        foreach (var p in ElementType.ToPrimitives(context)) yield return p;
+        yield return new Poly.Syntax.Primitives.Discard();
+        foreach (var p in Length.ToPrimitives(context)) yield return p;
+        yield return new Poly.Syntax.Primitives.NewArray();
+    }
 }

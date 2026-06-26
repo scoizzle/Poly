@@ -7,4 +7,10 @@ namespace Poly.Syntax.Nodes;
 public sealed record PopCount(Node Operand) : Expression {
     public override IEnumerable<Node?> Children => [Operand];
     public override string ToString() => $"CountBits({Operand})";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        foreach (var p in Operand.ToPrimitives(context)) yield return p;
+        yield return new Poly.Syntax.Primitives.CountBits();
+    }
 }

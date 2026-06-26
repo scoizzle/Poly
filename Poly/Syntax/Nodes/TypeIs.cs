@@ -20,4 +20,9 @@ public sealed record TypeIs : Expression {
     public override IEnumerable<Node?> Children => [Operand, TargetTypeReference];
 
     public override string ToString() => $"({Operand} is {TargetTypeReference})";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        foreach (var p in Operand.ToPrimitives(context)) yield return p;
+    }
 }

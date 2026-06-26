@@ -7,4 +7,10 @@ namespace Poly.Syntax.Nodes;
 /// </summary>
 public sealed record ParameterReference : Node {
     public override string ToString() => "(parameter)";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        // Parameter references are resolved by analysis; placeholder
+        yield return new Poly.Syntax.Primitives.PushConstant(0L);
+    }
 }

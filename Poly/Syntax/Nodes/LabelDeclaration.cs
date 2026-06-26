@@ -12,4 +12,10 @@ public sealed record LabelDeclaration(string Name, Node Statement) : Statement {
 
     /// <inheritdoc />
     public override string ToString() => $"{Name}: {Statement}";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        yield return new Poly.Syntax.Primitives.Label(Name);
+        foreach (var p in Statement.ToPrimitives(context)) yield return p;
+    }
 }

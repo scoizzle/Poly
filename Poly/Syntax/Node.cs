@@ -24,4 +24,14 @@ public abstract record Node {
     /// Override to provide a shorter description than <see cref="object.ToString"/>.
     /// </summary>
     public virtual string ToTraceString() => ToString() ?? GetType().Name;
+
+    /// <summary>
+    /// Convert this node into its primitive instruction sequence.
+    /// This is the canonical reduction of structured AST nodes onto the
+    /// universal primitive substrate (Label, Goto, CondGoto, PushConstant, …).
+    /// </summary>
+    /// <param name="context">The analysis context with resolved metadata.</param>
+    /// <returns>A sequence of primitive nodes representing this node in executable form.</returns>
+    public virtual IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context)
+        => throw new NotImplementedException($"ToPrimitives not implemented for {GetType().Name}");
 }

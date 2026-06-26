@@ -18,6 +18,13 @@ public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? 
         var finallyStr = FinallyBlock is not null ? $" finally {{ {FinallyBlock} }}" : "";
         return $"try {{ {TryBlock} }} {catches}{finallyStr}";
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        // Exception handling not yet supported at the primitive level.
+        // Lower to the try block's body for now.
+        foreach (var p in TryBlock.ToPrimitives(context)) yield return p;
+    }
 }
 
 /// <summary>

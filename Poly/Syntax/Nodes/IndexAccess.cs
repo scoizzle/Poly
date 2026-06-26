@@ -12,4 +12,12 @@ public sealed record IndexAccess(Node Value, params Node[] Arguments) : Expressi
 
     /// <inheritdoc />
     public override string ToString() => $"{Value}[{string.Join(", ", Arguments)}]";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        foreach (var p in Value.ToPrimitives(context)) yield return p;
+        foreach (var arg in Arguments)
+            foreach (var p in arg.ToPrimitives(context)) yield return p;
+        yield return new Poly.Syntax.Primitives.ArrayLoad();
+    }
 }

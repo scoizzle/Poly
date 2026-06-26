@@ -24,4 +24,12 @@ public sealed record Variable(string Name, Node? Value = null) : Expression {
 
     /// <inheritdoc />
     public override string ToString() => Name;
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        if (env is null || !env.Slots.TryGetValue(this, out var slot))
+            throw new InvalidOperationException($"Variable '{Name}' has no slot assigned");
+        yield return new Poly.Syntax.Primitives.LoadLocal(slot);
+    }
 }

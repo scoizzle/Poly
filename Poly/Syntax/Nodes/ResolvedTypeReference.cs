@@ -5,4 +5,10 @@ namespace Poly.Syntax.Nodes;
 /// type name resolution.  Created during analysis passes (e.g., constant
 /// folding) to indicate the target type of a <see cref="TypeCast"/>
 /// without requiring the type name to be re-resolved.</summary>
-public sealed record ResolvedTypeReference(ITypeDefinition TypeDefinition) : Node;
+public sealed record ResolvedTypeReference(ITypeDefinition TypeDefinition) : Node {
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        // Resolved type references are compile-time metadata; no runtime effect
+        yield return new Poly.Syntax.Primitives.PushConstant(0L);
+    }
+}

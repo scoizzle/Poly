@@ -11,4 +11,9 @@ namespace Poly.Syntax.Nodes;
 public sealed record Constant(object? Value) : Expression {
     /// <inheritdoc />
     public override string ToString() => Value?.ToString() ?? "null";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        yield return new Poly.Syntax.Primitives.PushConstant(Value);
+    }
 }

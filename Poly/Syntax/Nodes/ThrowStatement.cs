@@ -12,4 +12,10 @@ public sealed record ThrowStatement(Node Exception) : Statement {
 
     /// <inheritdoc />
     public override string ToString() => $"throw {Exception};";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        foreach (var p in Exception.ToPrimitives(context)) yield return p;
+        yield return new Poly.Syntax.Primitives.Throw();
+    }
 }

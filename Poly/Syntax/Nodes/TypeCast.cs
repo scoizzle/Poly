@@ -23,4 +23,9 @@ public sealed record TypeCast : Expression {
 
     /// <inheritdoc />
     public override string ToString() => $"(({TargetTypeReference}){Operand})";
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        foreach (var p in Operand.ToPrimitives(context)) yield return p;
+    }
 }

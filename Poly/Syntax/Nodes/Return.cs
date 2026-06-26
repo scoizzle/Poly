@@ -17,4 +17,16 @@ public sealed record Return(Node? Value = null) : Statement {
     public static Return False => new(new Constant(false));
     public static Return True => new(new Constant(true));
     public static Return Null => new(new Constant(null));
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        if (Value is not null) {
+            foreach (var p in Value.ToPrimitives(context))
+                yield return p;
+        }
+        else {
+            yield return new Poly.Syntax.Primitives.PushConstant(0L);
+        }
+        yield return new Poly.Syntax.Primitives.Return();
+    }
 }

@@ -62,5 +62,30 @@ public sealed record Block : Node {
         return $"{{ {string.Join("; ", Nodes)} }}";
     }
 
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        if (env is null) {
+            env = new Poly.Syntax.Primitives.ExpandEnv();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+        }
+
+        // Assign slots to declared variables
+        foreach (var v in Variables) {
+            if (v is not null && !env.Slots.ContainsKey(v)) {
+                env.Slots[v] = env.NextSlot++;
+            }
+        }
+
+        // Emit children; discard all but the last
+        for (int i = 0; i < Nodes.Count; i++) {
+            foreach (var p in Nodes[i].ToPrimitives(context))
+                yield return p;
+
+            if (i < Nodes.Count - 1)
+                yield return new Poly.Syntax.Primitives.Discard();
+        }
+    }
+
     private static bool IsVariableNode(Node node) => node is Variable or Parameter;
 }

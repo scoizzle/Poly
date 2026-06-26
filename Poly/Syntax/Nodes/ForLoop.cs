@@ -18,4 +18,56 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
         var incr = Increment?.ToString() ?? "";
         return $"for ({init}; {cond}; {incr}) {{ {Body} }}";
     }
+
+    /// <inheritdoc />
+    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        if (env is null)
+            throw new System.InvalidOperationException("ExpandEnv not set");
+
+        var header = new Poly.Syntax.Primitives.Label("for_header");
+        var bodyLabel = new Poly.Syntax.Primitives.Label("for_body");
+        var exit = new Poly.Syntax.Primitives.Label("for_exit");
+
+        env.Loops.Push(new Poly.Syntax.Primitives.LoopBoundary(exit, header));
+
+        // Initializer (executed once before loop)
+        if (Initializer is not null) {
+            foreach (var p in Initializer.ToPrimitives(context))
+                yield return p;
+            yield return new Poly.Syntax.Primitives.Discard();
+        }
+
+        // Jump to header
+        yield return new Poly.Syntax.Primitives.Goto(header);
+
+        // Body
+        yield return bodyLabel;
+        foreach (var p in Body.ToPrimitives(context))
+            yield return p;
+        yield return new Poly.Syntax.Primitives.Discard();
+
+        // Increment (after body, before condition check)
+        if (Increment is not null) {
+            foreach (var p in Increment.ToPrimitives(context))
+                yield return p;
+            yield return new Poly.Syntax.Primitives.Discard();
+        }
+
+        // Header: condition check — CondGoto jumps when condition is 0 (false)
+        yield return header;
+        if (Condition is not null) {
+            foreach (var p in Condition.ToPrimitives(context))
+                yield return p;
+            yield return new Poly.Syntax.Primitives.CondGoto(exit);
+        }
+
+        // Back to body (or fall through if no condition)
+        yield return new Poly.Syntax.Primitives.Goto(bodyLabel);
+
+        // Exit
+        yield return exit;
+
+        env.Loops.Pop();
+    }
 }

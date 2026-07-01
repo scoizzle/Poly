@@ -1,3 +1,5 @@
+using Poly.Interpretation.Analysis.Semantics;
+
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -15,8 +17,30 @@ public sealed record Member(Node Value, string MemberName) : Expression {
 
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        // Member access resolves to a slot or heap dereference via analysis.
-        // Without resolved member metadata, passthrough the value.
+        // Check if the member resolves to a CLR property getter or method
+        var resolved = context.GetResolvedMember(this);
+        if (resolved is Poly.Introspection.CommonLanguageRuntime.ClrTypeProperty prop) {
+            var getter = prop.PropertyInfo.GetGetMethod(nonPublic: true);
+            if (getter is not null) {
+                if (!prop.IsStatic) {
+                    foreach (var p in Value.ToPrimitives(context)) yield return p;
+                }
+                int argCount = getter.GetParameters().Length + (prop.IsStatic ? 0 : 1);
+                yield return new Poly.Syntax.Primitives.CallExternal(getter, argCount, prop.IsStatic);
+                yield break;
+            }
+        }
+
+        if (resolved is Poly.Introspection.CommonLanguageRuntime.ClrMethod method) {
+            if (!method.IsStatic) {
+                foreach (var p in Value.ToPrimitives(context)) yield return p;
+            }
+            int argCount = method.MethodInfo.GetParameters().Length + (method.IsStatic ? 0 : 1);
+            yield return new Poly.Syntax.Primitives.CallExternal(method.MethodInfo, argCount, method.IsStatic);
+            yield break;
+        }
+
+        // Unresolved member: passthrough the value with a zero placeholder
         foreach (var p in Value.ToPrimitives(context)) yield return p;
         yield return new Poly.Syntax.Primitives.PushConstant(0L);
     }

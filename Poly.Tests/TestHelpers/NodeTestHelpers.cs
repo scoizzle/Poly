@@ -1,8 +1,13 @@
+using Poly.Interpretation;
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Interpretation.Vm;
 
 using Expr = System.Linq.Expressions.Expression;
 using Exprs = System.Linq.Expressions;
+using Prim = Poly.Syntax.Primitives;
+using SN = Poly.Syntax.Nodes;
 
 namespace Poly.Tests.TestHelpers;
 
@@ -18,6 +23,13 @@ public static class AnalyzerBuilderExtensions {
             .UseLambdaReturnTypeResolution()
             .UseDefiniteAssignmentAnalysis()
             ;
+
+        /// <summary>
+        /// Adds the <see cref="Poly.Interpretation.Analysis.ExpansionPass"/> to the pipeline.
+        /// This enables the new primitive-based compilation path.
+        /// </summary>
+        public AnalyzerBuilder UsePrimitiveExpansion() => builder
+            .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass());
     }
 }
 
@@ -50,7 +62,7 @@ public static class NodeTestHelpers {
     /// <returns>Tuple of expression and generated parameter expressions.</returns>
     public static (Expr Expression, Exprs.ParameterExpression[] Parameters) BuildExpressionWithParameters(
         this Node node,
-        params (Parameter param, Type clrType)[] parameters) {
+        params (SN.Parameter param, Type clrType)[] parameters) {
 
         // Pre-register parameter types with a setup action before analysis
         var analysisResult = _analyzer.Analyze(node, setup: ctx => {
@@ -92,9 +104,33 @@ public static class NodeTestHelpers {
     /// <summary>
     /// Compiles a node into a delegate, registering provided parameters and using emitted parameter expressions.
     /// </summary>
-    public static TDelegate CompileLambda<TDelegate>(this Node node, params (Parameter param, Type clrType)[] parameters)
+    public static TDelegate CompileLambda<TDelegate>(this Node node, params (SN.Parameter param, Type clrType)[] parameters)
         where TDelegate : Delegate {
         var (expression, parameterExpressions) = node.BuildExpressionWithParameters(parameters);
         return (TDelegate)System.Linq.Expressions.Expression.Lambda(expression, parameterExpressions).Compile();
+    }
+
+    // ── New primitive pipeline helpers ──────────────────────────────
+
+    /// <summary>
+    /// Compile a node using the new primitive pipeline:
+    /// ToPrimitives → PrimitiveLinker → ProgramCompiler.CompilePrimitives.
+    /// </summary>
+    public static VmProgram CompileWithPrimitives(this Node node, CompilationMode mode = CompilationMode.Normal) {
+        var ctx = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
+        var primitives = node.ToPrimitives(ctx);
+        var primsList = primitives.ToList();
+        primsList.Add(new Prim.Return());
+        var linked = PrimitiveLinker.Link(primsList);
+        return ProgramCompiler.CompilePrimitives(linked, mode: mode);
+    }
+
+    /// <summary>
+    /// Execute a node via the new primitive pipeline end-to-end, returning the result.
+    /// </summary>
+    public static InterpreterResult ExecWithPrimitives(this Node node) {
+        var program = node.CompileWithPrimitives();
+        using var state = new VmState(program) { MaxLoopIterations = 10_000 };
+        return Vm.Execute(state);
     }
 }

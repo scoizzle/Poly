@@ -12,8 +12,7 @@ public class PrimitiveExpandTests {
         var primsList = primitives.ToList();
         primsList.Add(new Prim.Return());
         var linked = PrimitiveLinker.Link(primsList);
-        var loweringResult = PrimitiveAdapter.ToLoweringResult(linked);
-        var program = ProgramCompiler.Compile(loweringResult, mode: CompilationMode.Normal);
+        var program = ProgramCompiler.CompilePrimitives(linked, mode: CompilationMode.Normal);
         using var state = new VmState(program) { MaxLoopIterations = 10_000 };
         var result = Vm.Execute(state);
         if (!result.HasValue)

@@ -39,7 +39,9 @@ public sealed record StoreLocal(int SlotIndex) : PrimitiveNode {
 
 /// <summary>Pop two values, apply a binary operation, push the result.</summary>
 /// <param name="Op">The binary operation kind.</param>
-public sealed record BinaryOp(OpKind Op) : PrimitiveNode {
+/// <param name="ComparisonType">When non-null for Eq/Neq ops, indicates both operands are heap handles
+/// that should be dereferenced and compared as the given CLR type (reference-type value equality).</param>
+public sealed record BinaryOp(OpKind Op, System.Type? ComparisonType = null) : PrimitiveNode {
     public override (int Pop, int Push) StackEffect => (2, 1);
 }
 
@@ -104,6 +106,15 @@ public sealed record StridedSet : PrimitiveNode {
 /// <param name="SlotCount">Number of local slots the callee requires.</param>
 public sealed record Call(int ArgCount, int SlotCount) : PrimitiveNode {
     public override (int Pop, int Push) StackEffect => (ArgCount + 1, 1);
+}
+
+
+/// <summary>Call an external CLR method directly (resolved at compile time).</summary>
+/// <param name="Target">The MethodInfo to invoke.</param>
+/// <param name="ArgCount">Total argument count (including instance for instance methods).</param>
+/// <param name="IsStatic">True if the method is static.</param>
+public sealed record CallExternal(System.Reflection.MethodInfo Target, int ArgCount, bool IsStatic) : PrimitiveNode {
+    public override (int Pop, int Push) StackEffect => (ArgCount, 1);
 }
 
 /// <summary>Load a heap-allocated constant by handle.</summary>

@@ -24,8 +24,15 @@ public sealed record Parameter(string Name, Node? TypeReference = null, Node? De
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
         var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
-        if (env is null || !env.Slots.TryGetValue(this, out var slot))
-            throw new InvalidOperationException($"Parameter '{Name}' has no slot assigned");
+        if (env is null) {
+            env = new Poly.Syntax.Primitives.ExpandEnv();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+        }
+        if (!env.Slots.TryGetValue(this, out var slot)) {
+            // Auto-assign a slot on first use
+            slot = env.NextSlot++;
+            env.Slots[this] = slot;
+        }
         yield return new Poly.Syntax.Primitives.Parameter(slot);
     }
 }

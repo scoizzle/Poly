@@ -16,21 +16,35 @@ public sealed record Conditional(Node Condition, Node IfTrue, Node IfFalse) : Ex
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
         var elseLabel = new Poly.Syntax.Primitives.Label("ternary_else");
+        var mergeLabel = new Poly.Syntax.Primitives.Label("ternary_merge");
+
+        // Use a temp slot to store the result (avoids PHI)
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        if (env is null) {
+            env = new Poly.Syntax.Primitives.ExpandEnv();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+        }
+        int tempSlot = env.NextSlot++;
 
         // Condition
         foreach (var p in Condition.ToPrimitives(context))
             yield return p;
         yield return new Poly.Syntax.Primitives.CondGoto(elseLabel);
 
-        // True branch (returns directly)
+        // True branch
         foreach (var p in IfTrue.ToPrimitives(context))
             yield return p;
-        yield return new Poly.Syntax.Primitives.Return();
+        yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
+        yield return new Poly.Syntax.Primitives.Goto(mergeLabel);
 
-        // False branch (returns directly)
+        // False branch
         yield return elseLabel;
         foreach (var p in IfFalse.ToPrimitives(context))
             yield return p;
-        yield return new Poly.Syntax.Primitives.Return();
+        yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
+
+        // Merge: read result from temp slot
+        yield return mergeLabel;
+        yield return new Poly.Syntax.Primitives.LoadLocal(tempSlot);
     }
 }

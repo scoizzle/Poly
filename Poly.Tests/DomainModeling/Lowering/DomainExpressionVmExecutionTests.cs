@@ -6,7 +6,6 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Interpretation.Analysis.LoweringPrep;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
@@ -30,14 +29,8 @@ public class DomainExpressionVmExecutionTests {
     private static AnalysisResult Analyze(Node node) {
         return new AnalyzerBuilder()
             .UseTypeAndMemberResolver()
-            .UseConstantFolding()
-            .UseSideEffectAnalysis()
-            .UseThisReferenceContext()
-            .UseControlFlowAnalysis()
             .UseVariableScopeValidator()
-            .UseDefiniteAssignmentAnalysis()
-            .UseLoweringPreparation()
-            .UseUopGeneration()
+            .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass())
             .Build()
             .Analyze(node);
     }
@@ -49,8 +42,18 @@ public class DomainExpressionVmExecutionTests {
 
     private static (InterpreterResult Result, VmState State) ExecuteWithState(Node node) {
         var analysis = Analyze(node);
-        var lowerResult = Poly.Interpretation.Vm.Lowering.Lower(node, analysis);
-        var program = ProgramCompiler.Compile(lowerResult, mode: CompilationMode.Normal);
+        var meta = analysis.GetMetadata<Poly.Interpretation.Analysis.PrimitiveExpansionMetadata>(node);
+        Poly.Syntax.Primitives.PrimitiveNode[] primitives;
+        if (meta is not null)
+            primitives = meta.Primitives.ToArray();
+        else {
+            var ctx = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
+            primitives = node.ToPrimitives(ctx).ToArray();
+        }
+        var primsList = primitives.ToList();
+        primsList.Add(new Poly.Syntax.Primitives.Return());
+        var linked = Poly.Interpretation.Vm.PrimitiveLinker.Link(primsList);
+        var program = Poly.Interpretation.Vm.ProgramCompiler.CompilePrimitives(linked, mode: CompilationMode.Normal);
         var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
         var result = Vm.Execute(state);
         return (result, state);

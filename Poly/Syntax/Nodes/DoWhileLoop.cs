@@ -42,7 +42,5 @@ public sealed record DoWhileLoop(Node Body, Node Condition) : Statement {
 
         // Exit
         yield return exit;
-
-        env.Loops.Pop();
     }
 }

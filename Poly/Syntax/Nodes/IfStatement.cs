@@ -22,27 +22,40 @@ public sealed record IfStatement(Node Condition, Node ThenBranch, Node? ElseBran
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
         var elseLabel = new Poly.Syntax.Primitives.Label("else");
+        var mergeLabel = new Poly.Syntax.Primitives.Label("merge");
+
+        // Use a temp slot to store the result (avoids PHI)
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        if (env is null) {
+            env = new Poly.Syntax.Primitives.ExpandEnv();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+        }
+        int tempSlot = env.NextSlot++;
 
         // Condition — CondGoto jumps when the value is 0 (false)
         foreach (var p in Condition.ToPrimitives(context))
             yield return p;
         yield return new Poly.Syntax.Primitives.CondGoto(elseLabel);
 
-        // Then branch (returns directly — no merge to avoid PHI)
+        // Then branch: store result to temp slot
         foreach (var p in ThenBranch.ToPrimitives(context))
             yield return p;
-        yield return new Poly.Syntax.Primitives.Return();
+        yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
+        yield return new Poly.Syntax.Primitives.Goto(mergeLabel);
 
-        // Else branch (returns directly)
+        // Else branch: store result to temp slot
         yield return elseLabel;
         if (ElseBranch is not null) {
             foreach (var p in ElseBranch.ToPrimitives(context))
                 yield return p;
         }
         else {
-            // No else: push 0 as a default return value
             yield return new Poly.Syntax.Primitives.PushConstant(0L);
         }
-        yield return new Poly.Syntax.Primitives.Return();
+        yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
+
+        // Merge: read result from temp slot
+        yield return mergeLabel;
+        yield return new Poly.Syntax.Primitives.LoadLocal(tempSlot);
     }
 }

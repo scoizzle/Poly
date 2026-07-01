@@ -67,7 +67,5 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
 
         // Exit
         yield return exit;
-
-        env.Loops.Pop();
     }
 }

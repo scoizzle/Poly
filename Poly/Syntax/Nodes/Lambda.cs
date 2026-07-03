@@ -37,8 +37,7 @@ public sealed record Lambda(IReadOnlyList<Parameter> Parameters, Node Body) : Ex
 
         // Assign slots to parameters in the lambda's scope
         foreach (var param in Parameters) {
-            if (!env.Slots.ContainsKey(param))
-                env.Slots[param] = env.NextSlot++;
+            env.GetOrAssignSlot(param);
         }
 
         // Emit body (uses Parameter primitives that resolve to slots)

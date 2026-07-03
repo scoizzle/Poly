@@ -28,10 +28,8 @@ public sealed record Parameter(string Name, Node? TypeReference = null, Node? De
             env = new Poly.Syntax.Primitives.ExpandEnv();
             context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
         }
-        if (!env.Slots.TryGetValue(this, out var slot)) {
-            // Auto-assign a slot on first use
-            slot = env.NextSlot++;
-            env.Slots[this] = slot;
+        if (!env.TryGetSlot(this, out var slot)) {
+            slot = env.GetOrAssignSlot(this);
         }
         yield return new Poly.Syntax.Primitives.Parameter(slot);
     }

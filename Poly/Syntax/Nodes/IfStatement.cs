@@ -30,7 +30,7 @@ public sealed record IfStatement(Node Condition, Node ThenBranch, Node? ElseBran
             env = new Poly.Syntax.Primitives.ExpandEnv();
             context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
         }
-        int tempSlot = env.NextSlot++;
+        int tempSlot = env.AllocateTempSlot();
 
         // Condition — CondGoto jumps when the value is 0 (false)
         foreach (var p in Condition.ToPrimitives(context))

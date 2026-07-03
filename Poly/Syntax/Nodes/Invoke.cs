@@ -74,8 +74,7 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
 
             // Map lambda parameters to slots
             foreach (var param in lambda.Parameters) {
-                if (!env.Slots.ContainsKey(param))
-                    env.Slots[param] = env.NextSlot++;
+                env.GetOrAssignSlot(param);
             }
 
             // Emit arguments and store each into its parameter slot.
@@ -86,7 +85,7 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
                 foreach (var p in Arguments[i].ToPrimitives(context))
                     yield return p;
                 var paramNode = lambda.Parameters[i];
-                if (env.Slots.TryGetValue(paramNode, out var paramSlot)) {
+                if (env.TryGetSlot(paramNode, out var paramSlot)) {
                     yield return new Poly.Syntax.Primitives.StoreLocal(paramSlot);
                     yield return new Poly.Syntax.Primitives.Discard();
                 }

@@ -23,7 +23,7 @@ public sealed record WhileLoop(Node Condition, Node Body) : Statement {
         var bodyLabel = new Poly.Syntax.Primitives.Label("while_body");
         var exit = new Poly.Syntax.Primitives.Label("while_exit");
 
-        env.Loops.Push(new Poly.Syntax.Primitives.LoopBoundary(exit, header));
+        env.PushLoop(new Poly.Syntax.Primitives.LoopBoundary(exit, header));
 
         // Jump to header (skip past first entry to avoid re-executing sibling code)
         yield return new Poly.Syntax.Primitives.Goto(header);

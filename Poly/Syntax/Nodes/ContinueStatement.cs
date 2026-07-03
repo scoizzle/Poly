@@ -16,8 +16,8 @@ public sealed record ContinueStatement(string? Label = null) : Statement {
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
         var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
-        if (env is null || env.Loops.Count == 0)
+        if (env is null || !env.IsInLoop)
             throw new System.InvalidOperationException("continue outside loop");
-        yield return new Poly.Syntax.Primitives.Goto(env.Loops.Peek().Latch);
+        yield return new Poly.Syntax.Primitives.Goto(env.CurrentLoop.Latch);
     }
 }

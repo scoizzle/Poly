@@ -5,20 +5,16 @@ using Poly.Syntax.Primitives;
 
 using static System.Linq.Expressions.Expression;
 
-using PrimAllocClosure = Poly.Syntax.Primitives.AllocClosure;
 using PrimArrayLoad = Poly.Syntax.Primitives.ArrayLoad;
 using PrimArrayStore = Poly.Syntax.Primitives.ArrayStore;
 using PrimCall = Poly.Syntax.Primitives.Call;
 using PrimCountBits = Poly.Syntax.Primitives.CountBits;
 using PrimExternalCall = Poly.Syntax.Primitives.CallExternal;
-using PrimHeapConst = Poly.Syntax.Primitives.LoadHeapConstant;
 using PrimLabel = Poly.Syntax.Primitives.Label;
-using PrimLoadUpvalue = Poly.Syntax.Primitives.LoadUpvalue;
 using PrimNewArray = Poly.Syntax.Primitives.NewArray;
 using PrimOpKind = Poly.Syntax.Primitives.OpKind;
 using PrimParameter = Poly.Syntax.Primitives.Parameter;
 using PrimReturn = Poly.Syntax.Primitives.Return;
-using PrimStoreUpvalue = Poly.Syntax.Primitives.StoreUpvalue;
 using PrimStridedSet = Poly.Syntax.Primitives.StridedSet;
 using PrimThrow = Poly.Syntax.Primitives.Throw;
 using PrimUnaryOp = Poly.Syntax.Primitives.UnaryOp;
@@ -132,10 +128,6 @@ public static class ProgramCompiler {
                 PrimThrow => null,
                 PrimCall c => EmitPrimitiveCall(c, pcs, ctx, idx, functions),
                 PrimExternalCall ec => EmitCallExternalDirect(ec.Target, ec.ArgCount, ec.IsStatic, pcs, ctx, idx),
-                PrimHeapConst lhc => EmitLoadHeapConstant(lhc.Handle, ctx, idx),
-                PrimAllocClosure ac => EmitAllocClosure(ac.LambdaIndex, ac.UpvalueCount, pcs, ctx, idx),
-                PrimLoadUpvalue lu => EmitLoadCapture(lu.UpvalueIndex, ctx, idx),
-                PrimStoreUpvalue su => EmitStoreCapture(su.UpvalueIndex, pcs, ctx),
                 _ => throw new NotSupportedException($"Primitive not supported: {prim.GetType().Name}")
             };
 
@@ -265,54 +257,8 @@ public static class ProgramCompiler {
                 Label(done)));
     }
 
-    private static Expression EmitLoadHeapConstant(int handle, CompilationContext ctx, int idx) {
-        // Heap constants are allocated at runtime — the handle indexes into
-        // the heap constant pool which is populated during compilation.
-        return Assign(ctx.ValueSlot(idx),
-            Convert(Call(ctx.Heap, HeapAllocate, Constant(handle)), typeof(long)));
-    }
-
-    private static readonly MethodInfo HandleAllocClosureMethod =
-        Ref<VmState>.Method(s => Vm.HandleAllocClosure(s, default, default));
-
-    private static Expression EmitAllocClosure(int funcIndex, int captureCount, int[] consumedPcs, CompilationContext ctx, int idx) {
-        var state = ctx.State;
-        var slots = ctx.RawSlots;
-        var sp = Property(Property(state, "Stack"), "StackPointer");
-        var body = new List<Expression>();
-        for (int i = 0; i < consumedPcs.Length; i++) {
-            var cap = ctx.ValueSlot(consumedPcs[i]);
-            body.Add(Assign(ArrayAccess(slots, sp), cap));
-            body.Add(Call(Property(state, "Stack"), SetStackPointer, Add(sp, Constant(1))));
-        }
-        body.Add(CtxPushRegisters(ctx));
-        body.Add(Assign(ctx.StateProgramCounter, Constant(idx)));
-        body.Add(Call(HandleAllocClosureMethod, state, Constant(funcIndex), Constant(captureCount)));
-        body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
-        body.Add(CtxPopRegisters(ctx));
-        var rv = ctx.ValueSlot(idx);
-        body.Add(Assign(rv, ArrayAccess(slots, Subtract(sp, Constant(1)))));
-        return Block(body);
-    }
-
-    internal static MethodInfo HandleLoadUpvalueMethod =
-        Ref.Method(() => Vm.HandleLoadUpvalue(null!, 0));
-
     private static readonly MethodInfo SetStackPointer =
         Ref<ValueStack>.Method(s => s.SetStackPointer(0));
-
-    private static Expression EmitLoadCapture(int upvalueIndex, CompilationContext ctx, int idx) {
-        return Assign(ctx.ValueSlot(idx),
-            Call(HandleLoadUpvalueMethod, ctx.State, Constant(upvalueIndex)));
-    }
-
-    internal static MethodInfo HandleStoreUpvalueMethod =
-        Ref.Method(() => Vm.HandleStoreUpvalue(null!, 0, 0));
-
-    private static Expression EmitStoreCapture(int upvalueIndex, int[] consumedPcs, CompilationContext ctx) {
-        var value = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
-        return Call(HandleStoreUpvalueMethod, ctx.State, Constant(upvalueIndex), value);
-    }
 
     internal static MethodInfo PopCountMethod =
         Ref.Method(() => System.Numerics.BitOperations.PopCount(0UL));

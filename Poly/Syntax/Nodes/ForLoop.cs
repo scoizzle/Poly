@@ -29,7 +29,7 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
         var bodyLabel = new Poly.Syntax.Primitives.Label("for_body");
         var exit = new Poly.Syntax.Primitives.Label("for_exit");
 
-        env.Loops.Push(new Poly.Syntax.Primitives.LoopBoundary(exit, header));
+        env.PushLoop(new Poly.Syntax.Primitives.LoopBoundary(exit, header));
 
         // Initializer (executed once before loop)
         if (Initializer is not null) {

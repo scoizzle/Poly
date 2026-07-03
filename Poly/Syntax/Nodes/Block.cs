@@ -72,8 +72,8 @@ public sealed record Block : Node {
 
         // Assign slots to declared variables
         foreach (var v in Variables) {
-            if (v is not null && !env.Slots.ContainsKey(v)) {
-                env.Slots[v] = env.NextSlot++;
+            if (v is not null && !env.HasSlot(v)) {
+                env.GetOrAssignSlot(v);
             }
         }
 

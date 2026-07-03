@@ -23,7 +23,7 @@ public sealed record DoWhileLoop(Node Body, Node Condition) : Statement {
         var condLabel = new Poly.Syntax.Primitives.Label("dowhile_cond");
         var exit = new Poly.Syntax.Primitives.Label("dowhile_exit");
 
-        env.Loops.Push(new Poly.Syntax.Primitives.LoopBoundary(exit, condLabel));
+        env.PushLoop(new Poly.Syntax.Primitives.LoopBoundary(exit, condLabel));
 
         // Body (executes at least once)
         yield return bodyLabel;

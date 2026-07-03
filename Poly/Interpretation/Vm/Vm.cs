@@ -111,23 +111,6 @@ public static partial class Vm {
         state.Stack.SetStackPointer(newFrameBase + argSlots + entry.LocalCount + 1);
     }
 
-    internal static int HandleCallClosure(VmState state) {
-        var prog = state.Program;
-        int sp = state.Stack.StackPointer;
-        int closureHandle = (int)state.Stack.RawSlots[sp - state.CachedArgSlots];
-        var closure = (Closure)state.Heap.Get(closureHandle)!;
-        var entry = prog.Functions[closure.FuncIndex];
-        int argSlots = entry.ArgSlots;
-        int newFrameBase = sp - argSlots;
-        state.Stack.RawSlots[sp++] = ((long)(state.ProgramCounter + 1) << 32)
-            | (uint)state.FrameBase;
-        state.Stack.SetStackPointer(sp);
-        state.FrameBase = newFrameBase;
-        state.CachedArgSlots = argSlots;
-        state.Stack.SetStackPointer(newFrameBase + argSlots + entry.LocalCount + 1);
-        return entry.PC;
-    }
-
     internal static void HandleCallExternal(VmState state, int siteIndex) {
         var prog = state.Program;
         var callSites = prog.CallSites;
@@ -136,45 +119,6 @@ public static partial class Vm {
         callSites[siteIndex](state);
     }
 
-    internal static void HandleAllocClosure(VmState state, int funcIdx, int capCnt) {
-        var c = new Closure(funcIdx, capCnt);
-        var slots = state.Stack.RawSlots;
-        int sp = state.Stack.StackPointer;
-        for (int i = capCnt - 1; i >= 0; i--)
-            c.Captures[i] = slots[--sp];
-        state.Stack.SetStackPointer(sp);
-        slots[sp] = state.Heap.Allocate(c);
-        state.Stack.SetStackPointer(sp + 1);
-    }
-
-    internal static long HandleLoadUpvalue(VmState state, int upi) {
-        var slots = state.Stack.RawSlots;
-        int handle = (int)slots[state.FrameBase];
-        var closure = state.Heap.Get(handle) as Closure
-            ?? throw new InvalidOperationException("LoadUpvalue: no closure at arg 0");
-        return closure.Captures is not null && upi < closure.Captures.Length
-            && closure.Captures[upi] is long lv ? lv : 0;
-    }
-
-    internal static void HandleStoreUpvalue(VmState state, int upi, long value) {
-        var slots = state.Stack.RawSlots;
-        int handle = (int)slots[state.FrameBase];
-        var closure = state.Heap.Get(handle) as Closure
-            ?? throw new InvalidOperationException("StoreUpvalue: no closure at arg 0");
-        if (closure.Captures is null || upi >= closure.Captures.Length)
-            throw new InvalidOperationException($"StoreUpvalue: index {upi} out of range");
-        closure.Captures[upi] = value;
-    }
-
     /// <summary>Public factory for VmState so expression trees can create instances.</summary>
     public static VmState CreateState(VmProgram program) => new(program);
-
-    /// <summary>Checks whether <paramref name="pc"/> is in the breakpoints array.
-    /// Used by <see cref="Instructions.BreakpointCheck"/> — factored here so
-    /// the compiled delegate calls a simple CLR method instead of emitting
-    /// complex expression tree logic.</summary>
-    internal static bool HasBreakpoint(VmState state, int pc) {
-        var bps = state.Breakpoints;
-        return bps != null && Array.IndexOf(bps, pc) >= 0;
-    }
 }

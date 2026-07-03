@@ -24,7 +24,7 @@ public sealed record Conditional(Node Condition, Node IfTrue, Node IfFalse) : Ex
             env = new Poly.Syntax.Primitives.ExpandEnv();
             context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
         }
-        int tempSlot = env.NextSlot++;
+        int tempSlot = env.AllocateTempSlot();
 
         // Condition
         foreach (var p in Condition.ToPrimitives(context))

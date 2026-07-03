@@ -1,13 +1,33 @@
 # Poly Interpretation
 
-`Poly.Interpretation` provides semantic analysis passes and LINQ expression generation for the AST types in `Poly.Syntax`.
+`Poly.Interpretation` provides semantic analysis passes and the VM execution engine for the AST types in `Poly.Syntax`.
 
 ## Overview
 
-Interpretation has two main responsibilities:
+Interpretation has three main responsibilities:
 
-1. Analyze AST nodes and attach semantic metadata (resolved types, members, control flow facts, diagnostics).
-2. Compile analyzed trees into `System.Linq.Expressions` via `LinqExpressionGenerator`.
+1. **Analyze** AST nodes and attach semantic metadata (resolved types, members, control flow facts, diagnostics).
+2. **Compile** analyzed trees via the VM pipeline (AST → primitives → compiled delegate).
+3. **Execute** programs in the stack-based VM.
+
+## Architecture
+
+The canonical execution path uses the **primitive expansion system** (`Node.ToPrimitives`) to lower AST nodes to a sequence of `PrimitiveNode` instructions, which are then compiled into a LINQ Expression delegate and executed by the VM.
+
+```
+AnalyzerBuilder → AnalysisResult → Node.ToPrimitives() → PrimitiveNode[]
+    → ProgramCompiler.CompilePrimitives() → VmProgram → Vm.Execute()
+```
+
+## Core Directories
+
+| Directory | Purpose |
+|-----------|---------|
+| `Vm/` | VM execution engine: `Vm.cs`, `VmState.cs`, `ProgramCompiler.cs`, `ValueStack`, `Heap`, `Closure`, `PrimitiveLinker` |
+| `Analysis/` | Semantic analysis passes: constant folding, control flow, type/member resolution, side-effect analysis |
+| `CSharp/` | C# code generation from AST nodes |
+| `LinqExpressions/` | LINQ Expression tree generation (secondary — testing and PolicyEvaluator) |
+| `Mermaid/` | Mermaid flowchart visualization of AST structure |
 
 ## Analysis Pipeline
 
@@ -29,11 +49,17 @@ var analyzer = new AnalyzerBuilder()
     .Build();
 
 var result = analyzer.Analyze(ast);
-if (result.HasErrors) {
-    foreach (var diagnostic in result.Diagnostics) {
-        Console.WriteLine($"[{diagnostic.Severity}] {diagnostic.Message}");
-    }
-}
+```
+
+## Execution
+
+```csharp
+using Poly.Interpretation.Vm;
+
+// After analysis and primitive expansion + linking
+var program = ProgramCompiler.CompilePrimitives(linkedPrimitives);
+using var state = new VmState(program);
+var result = Vm.Execute(state);
 ```
 
 ## Available Pass Extensions
@@ -45,38 +71,10 @@ if (result.HasErrors) {
 - `UseControlFlowAnalysis()`
 - `UseConstantFolding()`
 
-## Generation
-
-```csharp
-using Poly.Interpretation.LinqExpressions;
-
-var generator = new LinqExpressionGenerator(result);
-var compilation = generator.Compile(ast);
-```
-
-## Common AST Types Used with Interpretation
+## Common AST Types
 
 - Core: `Constant`, `Parameter`, `Variable`, `Block`
 - Member/invocation: `Member`, `Invoke`, `IndexAccess`, `New`
 - Operators: `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `Equal`, `GreaterThan`, `And`, `Or`, `Not`
-- Control flow: `Conditional`, `IfStatement`, `WhileLoop`, `ForLoop`, `ReturnStatement`, `TryCatchFinally`
+- Control flow: `Conditional`, `IfStatement`, `WhileLoop`, `ForLoop`, `Return`, `TryCatchFinally`
 - Type operations: `TypeCast`, `TypeIs`, `TypeAs`, `TypeReference`
-
-## Minimal Example
-
-```csharp
-using Poly.Syntax.Nodes;
-using Poly.Syntax.Analysis;
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.LinqExpressions;
-
-var ast = new Add(new Constant(10), new Constant(20));
-
-var analysis = new AnalyzerBuilder()
-    .UseTypeResolver()
-    .Build()
-    .Analyze(ast);
-
-var generator = new LinqExpressionGenerator(analysis);
-var compilation = generator.Compile(ast);
-```

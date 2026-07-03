@@ -4,22 +4,31 @@ namespace Poly.Interpretation.Vm;
 //
 // Call frame layout (one long slot of metadata):
 // Before a Call* the N argument slots are on the stack:
-//   [...stuff...][arg_0][arg_1]...[arg_N-1]
+//   [...stuff...][arg0][arg1]...[argN-1]
 //                                      ^ SP
 // The Call* handler pushes one metadata long:
-//   Slot(sp++) = ((returnPC << 32) | (uint)(int)savedFrameBase)
+//   Slot[sp++] = ((returnPC << 32) | (uint)(int)savedFrameBase)
 //
 // After call setup (0-relative to FB):
-//   Slot[0]:               arg[0]            ← FB
-//   Slot[1 .. ArgSlots-1]: arg[1..N-1]
+//   Slot[0]:               arg0            ← FB
+//   Slot[1 .. ArgSlots-1]: arg1..argN-1
 //   Slot[ArgSlots]:        metadata
-//   Slot[ArgSlots+1]:      local[0]
+//   Slot[ArgSlots+1]:      local0
 //   Slot[ArgSlots+LocalCount]:  last local
 //   Slot[ArgSlots+LocalCount+1]: first eval  ← SP
 //
-// Return convention:
-//   ReturnFromCallOp reads packed at Slot(FB + ArgSlots), writes result to
-//   Slot(FB), sets SP = FB + 1, restores FB/PC.
+// Return convention (current — simplified since old pipeline deletion):
+//   HandleCall and HandleCallClosure return the target function's entry PC.
+//   EmitPrimitiveCall writes this directly to _pc, restores ring registers,
+//   and jumps to EntryLabel. The dispatch switch then routes to the
+//   function-body label at that PC. This avoids a state.ProgramCounter
+//   round-trip.
+//
+//   EmitReturnOp writes the result to Slot[FB], sets SP = FB + 1, and jumps
+//   to the compiled delegate's ExitLabel (ends program execution).
+//   A proper frame-return primitive (restore caller PC/FB from metadata
+//   via the packed metadata slot) will be added when cross-function calls
+//   need to return to the caller.
 //
 // FrameBase sentinel: -1 = "no active frame" (top-level execution).
 
@@ -82,14 +91,15 @@ public static partial class Vm {
 
     // ── µop handler helpers ──
 
-    internal static void HandleCall(VmState state, int funcIndex, int argSlots) {
+    internal static int HandleCall(VmState state, int funcIndex, int argSlots) {
         var prog = state.Program;
         if ((uint)funcIndex >= (uint)prog.Functions.Count) {
             // No function — push a dummy 0 so the caller's
-            // RawSlots[SP-1] access doesn't crash.
+            // RawSlots[SP-1] access doesn't crash. Return 0 (entry dispatch)
+            // — the switch will route correctly.
             state.Stack.SetStackPointer(1);
             state.Stack.RawSlots[0] = 0;
-            return;
+            return 0;
         }
         var entry = prog.Functions[funcIndex];
         int newFrameBase = state.Stack.StackPointer - argSlots;
@@ -100,10 +110,10 @@ public static partial class Vm {
         state.FrameBase = newFrameBase;
         state.CachedArgSlots = argSlots;
         state.Stack.SetStackPointer(newFrameBase + argSlots + entry.LocalCount + 1);
-        state.ProgramCounter = entry.PC;
+        return entry.PC;
     }
 
-    internal static void HandleCallClosure(VmState state) {
+    internal static int HandleCallClosure(VmState state) {
         var prog = state.Program;
         int sp = state.Stack.StackPointer;
         int closureHandle = (int)state.Stack.RawSlots[sp - state.CachedArgSlots];
@@ -117,7 +127,7 @@ public static partial class Vm {
         state.FrameBase = newFrameBase;
         state.CachedArgSlots = argSlots;
         state.Stack.SetStackPointer(newFrameBase + argSlots + entry.LocalCount + 1);
-        state.ProgramCounter = entry.PC;
+        return entry.PC;
     }
 
     internal static void HandleCallExternal(VmState state, int siteIndex) {

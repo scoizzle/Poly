@@ -149,6 +149,8 @@ public static class ProgramCompiler {
         return new VmProgram(del, new Dictionary<NodeId, SourceRange>(), [], null, null, 32);
     }
 
+    private static readonly MethodInfo HandleCallMethod = Ref.Method(() => Vm.HandleCall(null!, 0, 0));
+
     private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc) {
         var state = ctx.State;
         var slots = ctx.RawSlots;
@@ -161,12 +163,12 @@ public static class ProgramCompiler {
             body.Add(Call(Property(state, "Stack"), SetStackPointer, Add(sp, Constant(1))));
         }
         body.Add(CtxPushRegisters(ctx));
-        body.Add(Assign(ctx.StateProgramCounter, Constant(pc)));
-        body.Add(Call(
-            Ref<VmState>.Method(s => Vm.HandleCall(s, default, default)),
-            state, Constant(0), Constant(call.ArgCount + 1)));
+        // HandleCall now returns the function's entry PC directly.
+        // Set _pc to the target and jump to EntryLabel; the dispatch
+        // switch routes to the correct body label.
+        body.Add(Assign(ctx.ProgramCounter,
+            Call(HandleCallMethod, state, Constant(0), Constant(call.ArgCount + 1))));
         body.Add(Assign(ctx.FrameBaseLocal, Property(ctx.State, "FrameBase")));
-        body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
         body.Add(CtxPopRegisters(ctx));
         var rv = ctx.ValueSlot(pc);
         body.Add(Assign(rv, ArrayAccess(slots,

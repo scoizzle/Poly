@@ -101,6 +101,7 @@ public static class ProgramCompiler {
         }
 
         // Emit each primitive
+        var functions = new List<FunctionEntry>();
         for (int idx = 0; idx < n; idx++) {
             var prim = primitives[idx];
             ctx.CurrentLabelIndex = idx;
@@ -129,7 +130,7 @@ public static class ProgramCompiler {
                 PrimNewArray => EmitNewArray(pcs, ctx, idx),
                 PrimStridedSet => EmitStridedSet(pcs, ctx),
                 PrimThrow => null,
-                PrimCall c => EmitPrimitiveCall(c, pcs, ctx, idx),
+                PrimCall c => EmitPrimitiveCall(c, pcs, ctx, idx, functions),
                 PrimExternalCall ec => EmitCallExternalDirect(ec.Target, ec.ArgCount, ec.IsStatic, pcs, ctx, idx),
                 PrimHeapConst lhc => EmitLoadHeapConstant(lhc.Handle, ctx, idx),
                 PrimAllocClosure ac => EmitAllocClosure(ac.LambdaIndex, ac.UpvalueCount, pcs, ctx, idx),
@@ -146,12 +147,12 @@ public static class ProgramCompiler {
 
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
-        return new VmProgram(del, new Dictionary<NodeId, SourceRange>(), [], null, null, 32);
+        return new VmProgram(del, new Dictionary<NodeId, SourceRange>(), functions, null, null, 32);
     }
 
     private static readonly MethodInfo HandleCallMethod = Ref.Method(() => Vm.HandleCall(null!, 0, 0));
 
-    private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc) {
+    private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc, List<FunctionEntry> functions) {
         var state = ctx.State;
         var slots = ctx.RawSlots;
         var sp = Property(Property(state, "Stack"), "StackPointer");
@@ -163,17 +164,26 @@ public static class ProgramCompiler {
             body.Add(Call(Property(state, "Stack"), SetStackPointer, Add(sp, Constant(1))));
         }
         body.Add(CtxPushRegisters(ctx));
-        // HandleCall now returns the function's entry PC directly.
-        // Set _pc to the target and jump to EntryLabel; the dispatch
-        // switch routes to the correct body label.
-        body.Add(Assign(ctx.ProgramCounter,
-            Call(HandleCallMethod, state, Constant(0), Constant(call.ArgCount + 1))));
+
+        // Ensure a function entry exists for this index
+        var entryPc = call.FuncIndex < functions.Count ? functions[call.FuncIndex].PC : 0;
+        if (call.FuncIndex >= functions.Count) {
+            functions.Add(new FunctionEntry(entryPc, call.ArgCount + 1));
+        }
+
+        // HandleCall sets up the call frame (metadata, FrameBase).
+        // The function entry PC is known at compile time — Goto it directly.
+        body.Add(Call(HandleCallMethod, state, Constant(call.FuncIndex), Constant(call.ArgCount + 1)));
         body.Add(Assign(ctx.FrameBaseLocal, Property(ctx.State, "FrameBase")));
         body.Add(CtxPopRegisters(ctx));
+
+        // Read return value from the value stack into our ring slot
         var rv = ctx.ValueSlot(pc);
         body.Add(Assign(rv, ArrayAccess(slots,
             Subtract(Property(Property(state, "Stack"), "StackPointer"), Constant(1)))));
-        body.Add(Goto(ctx.EntryLabel));
+
+        // Goto the function body directly — no dispatch switch needed
+        body.Add(Goto(ctx.GetLabel(entryPc)));
         return Block(body);
     }
 

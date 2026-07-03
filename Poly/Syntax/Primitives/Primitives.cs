@@ -103,8 +103,8 @@ public sealed record StridedSet : PrimitiveNode {
 /// <summary>Call a function or method with the specified number of arguments.
 /// The target and arguments are already on the stack.</summary>
 /// <param name="ArgCount">Number of arguments (excluding the target/callee).</param>
-/// <param name="SlotCount">Number of local slots the callee requires.</param>
-public sealed record Call(int ArgCount, int SlotCount) : PrimitiveNode {
+/// <param name="FuncIndex">Index into the program's Functions table for the callee.</param>
+public sealed record Call(int ArgCount, int FuncIndex = 0) : PrimitiveNode {
     public override (int Pop, int Push) StackEffect => (ArgCount + 1, 1);
 }
 

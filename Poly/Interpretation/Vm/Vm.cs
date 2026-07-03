@@ -91,15 +91,14 @@ public static partial class Vm {
 
     // ── µop handler helpers ──
 
-    internal static int HandleCall(VmState state, int funcIndex, int argSlots) {
+    internal static void HandleCall(VmState state, int funcIndex, int argSlots) {
         var prog = state.Program;
         if ((uint)funcIndex >= (uint)prog.Functions.Count) {
             // No function — push a dummy 0 so the caller's
-            // RawSlots[SP-1] access doesn't crash. Return 0 (entry dispatch)
-            // — the switch will route correctly.
+            // RawSlots[SP-1] access doesn't crash.
             state.Stack.SetStackPointer(1);
             state.Stack.RawSlots[0] = 0;
-            return 0;
+            return;
         }
         var entry = prog.Functions[funcIndex];
         int newFrameBase = state.Stack.StackPointer - argSlots;
@@ -110,7 +109,6 @@ public static partial class Vm {
         state.FrameBase = newFrameBase;
         state.CachedArgSlots = argSlots;
         state.Stack.SetStackPointer(newFrameBase + argSlots + entry.LocalCount + 1);
-        return entry.PC;
     }
 
     internal static int HandleCallClosure(VmState state) {

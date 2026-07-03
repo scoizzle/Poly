@@ -20,7 +20,7 @@ public sealed record Assignment(Node Destination, Node Value) : Expression {
             yield return p;
 
         if (Destination is Poly.Syntax.Nodes.Variable destVar) {
-            var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+            var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
             if (env is null || !env.TryGetSlot(destVar, out var slot))
                 throw new InvalidOperationException($"Variable '{destVar.Name}' has no slot assigned");
             yield return new Poly.Syntax.Primitives.StoreLocal(slot);

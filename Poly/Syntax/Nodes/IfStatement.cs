@@ -25,10 +25,10 @@ public sealed record IfStatement(Node Condition, Node ThenBranch, Node? ElseBran
         var mergeLabel = new Poly.Syntax.Primitives.Label("merge");
 
         // Use a temp slot to store the result (avoids PHI)
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
         if (env is null) {
-            env = new Poly.Syntax.Primitives.ExpandEnv();
-            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+            env = new Poly.Syntax.Primitives.ExpansionEnvironment();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
         }
         int tempSlot = env.AllocateTempSlot();
 

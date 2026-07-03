@@ -64,10 +64,10 @@ public sealed record Block : Node {
 
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
         if (env is null) {
-            env = new Poly.Syntax.Primitives.ExpandEnv();
-            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+            env = new Poly.Syntax.Primitives.ExpansionEnvironment();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
         }
 
         // Assign slots to declared variables

@@ -21,9 +21,9 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
 
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
         if (env is null)
-            throw new System.InvalidOperationException("ExpandEnv not set");
+            throw new System.InvalidOperationException("ExpansionEnvironment not set");
 
         var header = new Poly.Syntax.Primitives.Label("for_header");
         var bodyLabel = new Poly.Syntax.Primitives.Label("for_body");

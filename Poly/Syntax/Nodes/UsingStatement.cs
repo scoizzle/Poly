@@ -18,10 +18,10 @@ public sealed record UsingStatement(Node Resource, Node Body) : Statement {
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
         // Using: evaluate resource, execute body, then call Dispose via finally pattern.
         // Without exception handling primitives, we emit: resource, discard, body.
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
         if (env is null) {
-            env = new Poly.Syntax.Primitives.ExpandEnv();
-            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+            env = new Poly.Syntax.Primitives.ExpansionEnvironment();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
         }
 
         foreach (var p in Resource.ToPrimitives(context)) yield return p;

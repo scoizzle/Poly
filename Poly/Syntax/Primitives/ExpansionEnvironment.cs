@@ -10,7 +10,7 @@ namespace Poly.Syntax.Primitives;
 /// Slots are keyed by <see cref="NodeId"/> so that expansion is robust
 /// across node identity transformations.
 /// </summary>
-internal sealed class ExpandEnv : IAnalysisMetadata {
+internal sealed class ExpansionEnvironment : IAnalysisMetadata {
     private readonly Dictionary<NodeId, int> _slots = new();
     private int _nextSlot;
     private readonly Stack<LoopBoundary> _loops = new();

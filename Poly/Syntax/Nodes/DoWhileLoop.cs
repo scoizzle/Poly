@@ -15,9 +15,9 @@ public sealed record DoWhileLoop(Node Body, Node Condition) : Statement {
 
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
         if (env is null)
-            throw new System.InvalidOperationException("ExpandEnv not set");
+            throw new System.InvalidOperationException("ExpansionEnvironment not set");
 
         var bodyLabel = new Poly.Syntax.Primitives.Label("dowhile_body");
         var condLabel = new Poly.Syntax.Primitives.Label("dowhile_cond");

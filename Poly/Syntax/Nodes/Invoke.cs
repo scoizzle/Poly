@@ -66,10 +66,10 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
 
         // Lambda: inline body with arguments stored to parameter slots
         if (Delegate is Lambda lambda) {
-            var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+            var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
             if (env is null) {
-                env = new Poly.Syntax.Primitives.ExpandEnv();
-                context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+                env = new Poly.Syntax.Primitives.ExpansionEnvironment();
+                context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
             }
 
             // Map lambda parameters to slots

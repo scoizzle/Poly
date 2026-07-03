@@ -23,10 +23,10 @@ public sealed record Parameter(string Name, Node? TypeReference = null, Node? De
 
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null);
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
         if (env is null) {
-            env = new Poly.Syntax.Primitives.ExpandEnv();
-            context.SetMetadata<Poly.Syntax.Primitives.ExpandEnv>(null, env);
+            env = new Poly.Syntax.Primitives.ExpansionEnvironment();
+            context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
         }
         if (!env.TryGetSlot(this, out var slot)) {
             slot = env.GetOrAssignSlot(this);

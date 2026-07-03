@@ -3,8 +3,9 @@ using System.Reflection;
 
 namespace Poly.Interpretation.Vm;
 
-/// <summary>Compile-time-safe <see cref="MethodInfo"/> and <see cref="PropertyInfo"/>
-/// lookups via expression tree lambdas.  The typed overloads let you write
+/// <summary>Compile-time-safe <see cref="MethodInfo"/>, <see cref="PropertyInfo"/>,
+/// and <see cref="ConstructorInfo"/> lookups via expression tree lambdas.
+/// The typed overloads let you write
 /// <c>Ref&lt;VmState&gt;.Method(s =&gt; Vm.HandleCall(s, 0, 0))</c> and
 /// <c>Ref&lt;VmState&gt;.Property(s =&gt; s.Stack)</c> without reflection strings
 /// or BindingFlags — dead-member analysis can discover the references.</summary>
@@ -18,6 +19,11 @@ internal static class Ref {
         expr.Body is MethodCallExpression mce
             ? mce.Method
             : ((MethodCallExpression)((UnaryExpression)expr.Body).Operand).Method;
+
+    /// <summary>Constructor via <c>() => new T(args)</c>, e.g. <c>Ref.Constructor(() => new InvalidOperationException(""))</c>.
+    /// Extract the <see cref="ConstructorInfo"/> from the <c>new</c> expression.</summary>
+    public static ConstructorInfo Constructor(Expression<Func<object>> expr) =>
+        ((NewExpression)expr.Body).Constructor!;
 }
 
 /// <summary>Compile-time-safe member lookups for type <typeparamref name="T"/>.

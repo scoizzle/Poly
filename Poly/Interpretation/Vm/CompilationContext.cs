@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
-using Poly.Interpretation.Vm.Instructions;
 using Poly.Syntax;
 
 using static System.Linq.Expressions.Expression;
@@ -10,8 +9,8 @@ namespace Poly.Interpretation.Vm;
 
 /// <summary>
 /// Compilation context: labels, expression references, and per-µop local storage.
-/// No eval stack, no TempVar tracking — producer relationships are carried by
-/// <see cref="Instruction.ConsumedFromPcs"/> set during lowering.
+/// Producer relationships are carried by consumed-PC arrays set during
+/// <see cref="ProgramCompiler.ComputePrimitiveConsumedPcs"/>.
 /// </summary>
 public sealed class CompilationContext {
     private static readonly PropertyInfo StateStackPropertyInfo = Ref<VmState>.Property(e => e.Stack);
@@ -166,20 +165,6 @@ public sealed class CompilationContext {
         if (!_pcToRingIdx.TryGetValue(pc, out int ringIdx))
             throw new InvalidOperationException($"PC {pc} has no ring allocation");
         return RingSlot(ringIdx);
-    }
-
-    /// <summary>Resolve a consumed value, applying φ when the value's source
-    /// differs across predecessor paths.  The secondary path is identified by
-    /// <see cref="Instruction.PhiSourcePcs"/> — when <c>state.ProgramCounter</c>
-    /// matches, the alternate producer is used instead of the primary.</summary>
-    public Expression ResolveValue(Instruction op, int index) {
-        var primary = ValueSlot(op.ConsumedFromPcs![index]);
-        if (op.PhiSourcePcs is { } srcs && op.PhiAltPcs is { } alts
-            && index < srcs.Length && srcs[index] >= 0) {
-            var alt = ValueSlot(alts[index]);
-            return Condition(Equal(ProgramCounter, Constant(srcs[index])), alt, primary);
-        }
-        return primary;
     }
 
     // ── Label management ──

@@ -1167,20 +1167,24 @@ public sealed class LinqExpressionGenerator {
     /// evaluated once, the body executes normally, and <c>Dispose()</c> is called in the finally
     /// block when the compiled resource type exposes a disposable cleanup method.
     /// </summary>
+    // AOT-safe reference to IDisposable.Dispose, resolved at compile time.
+    private static readonly System.Reflection.MethodInfo DisposeMethod =
+        Ref<IDisposable>.Method(d => d.Dispose());
+
     private Expression CompileUsingStatement(UsingStatement usingStmt, CompilationContext context) {
         var resource = CompileNode(usingStmt.Resource, context);
         var resourceType = resource.Type;
         var body = CompileNode(usingStmt.Body, context);
 
         // using statement is: try { body } finally { resource.Dispose() }
-        var disposeMethod = resourceType.GetMethod(nameof(IDisposable.Dispose));
-        if (disposeMethod != null) {
-            // Call Dispose on the compiled resource expression
-            var disposeCall = Expression.Call(resource, disposeMethod);
+        if (typeof(IDisposable).IsAssignableFrom(resourceType)) {
+            var disposeCall = Expression.Call(
+                Expression.TypeAs(resource, typeof(IDisposable)),
+                DisposeMethod);
             return Expression.TryFinally(body, disposeCall);
         }
 
-        // Fallback: if no Dispose method found, just execute the body
+        // Fallback: if resource doesn't implement IDisposable, just execute the body
         return body;
     }
 

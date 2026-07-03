@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
+using System.Reflection;
 
-using Poly.Interpretation;
-using Poly.Interpretation.Vm.Instructions;
 using Poly.Syntax.Primitives;
 
 using static System.Linq.Expressions.Expression;
@@ -108,34 +107,34 @@ public static class ProgramCompiler {
 
             body.Add(Label(ctx.GetLabel(idx)));
 
-            var pc = consumedPcs[idx];
-            Expression Resolve(int i) => ctx.ValueSlot(pc[i]);
+            var pcs = consumedPcs[idx];
+            Expression Resolve(int i) => ctx.ValueSlot(pcs[i]);
 
             Expression? result = prim switch {
-                ResolvedGoto rg => new Jump(rg.TargetPc).ToExpression(ctx),
-                ResolvedCondGoto rcg => new BranchIfFalse(rcg.TargetPc) { ConsumedFromPcs = pc.Length > 0 ? [pc[0]] : [] }.ToExpression(ctx),
-                PrimReturn => EmitReturnOp(pc, ctx),
+                ResolvedGoto rg => EmitJump(rg.TargetPc, ctx),
+                ResolvedCondGoto rcg => EmitBranchIfFalse(rcg.TargetPc, pcs, ctx),
+                PrimReturn => EmitReturnOp(pcs, ctx),
                 PushConstant pv => EmitPushConstant(pv.Value, ctx),
                 LoadLocal ll => Assign(ctx.ValueSlot(idx), ArrayAccess(ctx.RawSlots, Add(ctx.FrameBase, Constant(ll.SlotIndex)))),
-                StoreLocal sl => EmitStoreLocal(sl.SlotIndex, pc, ctx),
-                BinaryOp bo => EmitBinaryOp(bo.Op, pc, ctx, bo.ComparisonType),
-                PrimUnaryOp uo => EmitUnaryOp(uo.Op, pc, ctx),
+                StoreLocal sl => EmitStoreLocal(sl.SlotIndex, pcs, ctx),
+                BinaryOp bo => EmitBinaryOp(bo.Op, pcs, ctx, bo.ComparisonType),
+                PrimUnaryOp uo => EmitUnaryOp(uo.Op, pcs, ctx),
                 PrimLabel => null,
                 Discard => null,
                 Dup => Assign(ctx.ValueSlot(idx), Resolve(0)),
-                PrimCountBits => EmitCountBits(pc, ctx),
+                PrimCountBits => EmitCountBits(pcs, ctx),
                 PrimParameter p => Assign(ctx.ValueSlot(idx), ArrayAccess(ctx.RawSlots, Add(ctx.FrameBase, Constant(p.SlotIndex)))),
-                PrimArrayLoad => new Instructions.ArrayLoad { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimArrayStore => new Instructions.ArrayStore { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimNewArray => new NewArrayOp { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimStridedSet => new StridedSetOp { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimThrow => new Instructions.Throw { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimCall c => EmitPrimitiveCall(c, pc, ctx, idx),
-                PrimExternalCall ec => new Instructions.CallExternalDirect(ec.Target, ec.ArgCount, ec.IsStatic) { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimHeapConst lhc => new Instructions.LoadHeapConst(0L, lhc.Handle) { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimAllocClosure ac => new Instructions.AllocClosure(ac.LambdaIndex, ac.UpvalueCount) { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimLoadUpvalue lu => new Instructions.LoadCapture(lu.UpvalueIndex) { ConsumedFromPcs = pc }.ToExpression(ctx),
-                PrimStoreUpvalue su => new Instructions.StoreCapture(su.UpvalueIndex) { ConsumedFromPcs = pc }.ToExpression(ctx),
+                PrimArrayLoad => EmitArrayLoad(pcs, ctx, idx),
+                PrimArrayStore => EmitArrayStore(pcs, ctx),
+                PrimNewArray => EmitNewArray(pcs, ctx, idx),
+                PrimStridedSet => EmitStridedSet(pcs, ctx),
+                PrimThrow => null,
+                PrimCall c => EmitPrimitiveCall(c, pcs, ctx, idx),
+                PrimExternalCall ec => EmitCallExternalDirect(ec.Target, ec.ArgCount, ec.IsStatic, pcs, ctx, idx),
+                PrimHeapConst lhc => EmitLoadHeapConstant(lhc.Handle, ctx, idx),
+                PrimAllocClosure ac => EmitAllocClosure(ac.LambdaIndex, ac.UpvalueCount, pcs, ctx, idx),
+                PrimLoadUpvalue lu => EmitLoadCapture(lu.UpvalueIndex, ctx, idx),
+                PrimStoreUpvalue su => EmitStoreCapture(su.UpvalueIndex, pcs, ctx),
                 _ => throw new NotSupportedException($"Primitive not supported: {prim.GetType().Name}")
             };
 
@@ -147,34 +146,236 @@ public static class ProgramCompiler {
 
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
-        return new VmProgram(del, new List<Instruction>(), new Dictionary<NodeId, SourceRange>(), [], null, null, 32);
+        return new VmProgram(del, new Dictionary<NodeId, SourceRange>(), [], null, null, 32);
     }
 
     private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc) {
         var state = ctx.State;
         var slots = ctx.RawSlots;
         var sp = Property(Property(state, "Stack"), "StackPointer");
-        var regs = ctx.Registers;
 
         var body = new List<Expression>();
         for (int i = 0; i < consumedPcs.Length; i++) {
             var arg = ctx.ValueSlot(consumedPcs[i]);
             body.Add(Assign(ArrayAccess(slots, sp), arg));
-            body.Add(Call(Property(state, "Stack"), "SetStackPointer", null, Add(sp, Constant(1))));
+            body.Add(Call(Property(state, "Stack"), SetStackPointer, Add(sp, Constant(1))));
         }
-        body.Add(Instructions.Call.CtxPushRegisters(ctx));
+        body.Add(CtxPushRegisters(ctx));
         body.Add(Assign(ctx.StateProgramCounter, Constant(pc)));
         body.Add(Call(
             Ref<VmState>.Method(s => Vm.HandleCall(s, default, default)),
             state, Constant(0), Constant(call.ArgCount + 1)));
         body.Add(Assign(ctx.FrameBaseLocal, Property(ctx.State, "FrameBase")));
         body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
-        body.Add(Instructions.Call.CtxPopRegisters(ctx));
+        body.Add(CtxPopRegisters(ctx));
         var rv = ctx.ValueSlot(pc);
         body.Add(Assign(rv, ArrayAccess(slots,
             Subtract(Property(Property(state, "Stack"), "StackPointer"), Constant(1)))));
         body.Add(Goto(ctx.EntryLabel));
         return Block(body);
+    }
+
+    // ── Inline emit helpers (replacing old Instruction.ToExpression) ─────
+
+    private static readonly ConstructorInfo InvalidOpCtor = Ref.Constructor(() => new InvalidOperationException(""));
+
+    private static Expression EmitJump(int target, CompilationContext ctx) {
+        if (!ctx.LimitLoops)
+            return Goto(ctx.GetLabel(target));
+        var loopCtr = Property(ctx.State, nameof(VmState.LoopCounters));
+        var counter = ArrayAccess(loopCtr, Constant(target));
+        return Block(
+            IfThen(
+                AndAlso(ctx.LoopLimitActive,
+                    GreaterThanOrEqual(PreIncrementAssign(counter), ctx.LoopMaxIter)),
+                Throw(New(InvalidOpCtor,
+                    Constant($"Infinite loop detected: iteration limit exceeded at PC={target}")))),
+            Goto(ctx.GetLabel(target)));
+    }
+
+    private static Expression EmitBranchIfFalse(int target, int[] consumedPcs, CompilationContext ctx) {
+        var cond = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
+        return IfThen(Equal(cond, Constant(0L)), Goto(ctx.GetLabel(target)));
+    }
+
+    private static readonly MethodInfo HeapAllocate = Ref<Heap>.Method(h => h.Allocate(null));
+
+    private static Expression EmitArrayLoad(int[] consumedPcs, CompilationContext ctx, int idx) {
+        var handle = ctx.ValueSlot(consumedPcs[0]);
+        var index = ctx.ValueSlot(consumedPcs[1]);
+        var arrLocal = Variable(typeof(long[]), $"_arr_{idx}");
+        return Block(
+            [arrLocal],
+            Assign(arrLocal, Convert(ArrayAccess(ctx.HeapRawSlots, Convert(handle, typeof(int))), typeof(long[]))),
+            Assign(ctx.ValueSlot(idx), ArrayAccess(arrLocal, Convert(index, typeof(int)))));
+    }
+
+    private static Expression EmitArrayStore(int[] consumedPcs, CompilationContext ctx) {
+        var value = ctx.ValueSlot(consumedPcs[0]);
+        var handle = ctx.ValueSlot(consumedPcs[1]);
+        var index = ctx.ValueSlot(consumedPcs[2]);
+        var arrLocal = Variable(typeof(long[]), $"_arr_{ctx.CurrentLabelIndex}");
+        return Block(
+            [arrLocal],
+            Assign(arrLocal, Convert(ArrayAccess(ctx.HeapRawSlots, Convert(handle, typeof(int))), typeof(long[]))),
+            Assign(ArrayAccess(arrLocal, Convert(index, typeof(int))), Convert(value, typeof(long))));
+    }
+
+    private static Expression EmitNewArray(int[] consumedPcs, CompilationContext ctx, int idx) {
+        var sizeExpr = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
+        var longArr = NewArrayBounds(typeof(long), Convert(sizeExpr, typeof(int)));
+        var handle = Call(ctx.Heap, HeapAllocate, Convert(longArr, typeof(object)));
+        return Assign(ctx.ValueSlot(idx), Convert(handle, typeof(long)));
+    }
+
+    private static Expression EmitStridedSet(int[] consumedPcs, CompilationContext ctx) {
+        var handle = ctx.ValueSlot(consumedPcs[0]);
+        var start = ctx.ValueSlot(consumedPcs[1]);
+        var step = ctx.ValueSlot(consumedPcs[2]);
+        var limit = ctx.ValueSlot(consumedPcs[3]);
+        var arrLocal = Variable(typeof(long[]), "_arr");
+        var j = Variable(typeof(long), "_j");
+        var loop = Label("_loop");
+        var done = Label("_done");
+        return Block(
+            [arrLocal, j],
+            Assign(arrLocal, Convert(ArrayAccess(ctx.HeapRawSlots, Convert(handle, typeof(int))), typeof(long[]))),
+            Assign(j, start),
+            Label(loop),
+            IfThenElse(
+                LessThanOrEqual(j, limit),
+                Block(
+                    Assign(ArrayAccess(arrLocal, Convert(RightShift(j, Constant(6)), typeof(int))),
+                        Or(ArrayAccess(arrLocal, Convert(RightShift(j, Constant(6)), typeof(int))),
+                            LeftShift(Constant(1L), Convert(And(j, Constant(63L)), typeof(int))))),
+                    Assign(j, Add(j, step)),
+                    Goto(loop)),
+                Label(done)));
+    }
+
+    private static Expression EmitLoadHeapConstant(int handle, CompilationContext ctx, int idx) {
+        // Heap constants are allocated at runtime — the handle indexes into
+        // the heap constant pool which is populated during compilation.
+        return Assign(ctx.ValueSlot(idx),
+            Convert(Call(ctx.Heap, HeapAllocate, Constant(handle)), typeof(long)));
+    }
+
+    private static readonly MethodInfo HandleAllocClosureMethod =
+        Ref<VmState>.Method(s => Vm.HandleAllocClosure(s, default, default));
+
+    private static Expression EmitAllocClosure(int funcIndex, int captureCount, int[] consumedPcs, CompilationContext ctx, int idx) {
+        var state = ctx.State;
+        var slots = ctx.RawSlots;
+        var sp = Property(Property(state, "Stack"), "StackPointer");
+        var body = new List<Expression>();
+        for (int i = 0; i < consumedPcs.Length; i++) {
+            var cap = ctx.ValueSlot(consumedPcs[i]);
+            body.Add(Assign(ArrayAccess(slots, sp), cap));
+            body.Add(Call(Property(state, "Stack"), SetStackPointer, Add(sp, Constant(1))));
+        }
+        body.Add(CtxPushRegisters(ctx));
+        body.Add(Assign(ctx.StateProgramCounter, Constant(idx)));
+        body.Add(Call(HandleAllocClosureMethod, state, Constant(funcIndex), Constant(captureCount)));
+        body.Add(Assign(ctx.ProgramCounter, ctx.StateProgramCounter));
+        body.Add(CtxPopRegisters(ctx));
+        var rv = ctx.ValueSlot(idx);
+        body.Add(Assign(rv, ArrayAccess(slots, Subtract(sp, Constant(1)))));
+        return Block(body);
+    }
+
+    internal static MethodInfo HandleLoadUpvalueMethod =
+        Ref.Method(() => Vm.HandleLoadUpvalue(null!, 0));
+
+    private static readonly MethodInfo SetStackPointer =
+        Ref<ValueStack>.Method(s => s.SetStackPointer(0));
+
+    private static Expression EmitLoadCapture(int upvalueIndex, CompilationContext ctx, int idx) {
+        return Assign(ctx.ValueSlot(idx),
+            Call(HandleLoadUpvalueMethod, ctx.State, Constant(upvalueIndex)));
+    }
+
+    internal static MethodInfo HandleStoreUpvalueMethod =
+        Ref.Method(() => Vm.HandleStoreUpvalue(null!, 0, 0));
+
+    private static Expression EmitStoreCapture(int upvalueIndex, int[] consumedPcs, CompilationContext ctx) {
+        var value = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
+        return Call(HandleStoreUpvalueMethod, ctx.State, Constant(upvalueIndex), value);
+    }
+
+    internal static MethodInfo PopCountMethod =
+        Ref.Method(() => System.Numerics.BitOperations.PopCount(0UL));
+
+    private static Expression EmitCallExternalDirect(MethodInfo target, int argCount, bool isStatic, int[] consumedPcs, CompilationContext ctx, int idx) {
+        var rawArgs = new Expression[consumedPcs.Length];
+        for (int i = 0; i < consumedPcs.Length; i++)
+            rawArgs[i] = ctx.ValueSlot(consumedPcs[i]);
+
+        var paramInfos = target.GetParameters();
+        for (int i = 0; i < paramInfos.Length; i++) {
+            int argIdx = isStatic ? i : i + 1;
+            if (argIdx >= rawArgs.Length) break;
+            var paramType = paramInfos[i].ParameterType;
+            var pt = paramType.GetPrimitiveType();
+            if (pt is not null && pt.Value.IsStackValue()) {
+                rawArgs[argIdx] = paramType == typeof(bool)
+                    ? NotEqual(rawArgs[argIdx], Constant(0L))
+                    : Convert(rawArgs[argIdx], paramType);
+            }
+            else if (!paramType.IsValueType) {
+                var handle = Convert(rawArgs[argIdx], typeof(int));
+                rawArgs[argIdx] = Convert(ArrayAccess(ctx.HeapRawSlots, handle), paramType);
+            }
+        }
+
+        if (!isStatic && consumedPcs.Length > 0) {
+            var instanceType = target.DeclaringType;
+            var instPt = instanceType?.GetPrimitiveType();
+            if (instPt is not null && instPt.Value.IsStackValue())
+                rawArgs[0] = Convert(rawArgs[0], instanceType!);
+            else if (instanceType is not null && !instanceType.IsValueType) {
+                var handle = Convert(rawArgs[0], typeof(int));
+                rawArgs[0] = Convert(ArrayAccess(ctx.HeapRawSlots, handle), instanceType);
+            }
+        }
+
+        Expression? instance = isStatic ? null : rawArgs[0];
+        var callArgs = isStatic ? rawArgs : rawArgs.Skip(1).ToArray();
+        var call = Call(instance, target, callArgs);
+
+        if (target.ReturnType == typeof(void)) return call;
+
+        Expression result = call;
+        var returnType = target.ReturnType;
+        if (returnType != typeof(void)) {
+            var retPt = returnType.GetPrimitiveType();
+            if (retPt is not null && retPt.Value.IsStackValue()) {
+                result = returnType == typeof(bool)
+                    ? Condition(result, Constant(1L), Constant(0L))
+                    : returnType != typeof(long) ? Convert(result, typeof(long)) : result;
+            }
+            else {
+                result = Convert(Call(ctx.Heap, HeapAllocate, Convert(result, typeof(object))), typeof(long));
+            }
+        }
+        return Assign(ctx.ValueSlot(idx), result);
+    }
+
+    internal static Expression CtxPushRegisters(CompilationContext ctx) {
+        int depth = ctx.GetRingDepth(ctx.CurrentLabelIndex);
+        if (depth <= 0) return Empty();
+        var stmts = new Expression[depth];
+        for (int k = 0; k < depth; k++)
+            stmts[k] = Assign(ArrayAccess(ctx.Registers, Constant(k)), ctx.RingSlot(k));
+        return Block(stmts);
+    }
+
+    internal static Expression CtxPopRegisters(CompilationContext ctx) {
+        int depth = ctx.GetRingDepth(ctx.CurrentLabelIndex);
+        if (depth <= 0) return Empty();
+        var stmts = new Expression[depth];
+        for (int k = 0; k < depth; k++)
+            stmts[k] = Assign(ctx.RingSlot(k), ArrayAccess(ctx.Registers, Constant(k)));
+        return Block(stmts);
     }
 
     /// <summary>Simulate the eval-stack ring for a primitive sequence.</summary>
@@ -231,7 +432,7 @@ public static class ProgramCompiler {
         var targetSlot = Condition(Equal(ctx.FrameBase, Constant(-1)), Constant(0), ctx.FrameBase);
         return Block(
             Assign(ArrayAccess(slots, targetSlot), returnVal),
-            Call(Property(ctx.State, "Stack"), "SetStackPointer", null, Add(targetSlot, Constant(1))),
+            Call(Property(ctx.State, "Stack"), SetStackPointer, Add(targetSlot, Constant(1))),
             Goto(ctx.ExitLabel));
     }
 
@@ -319,7 +520,7 @@ public static class ProgramCompiler {
 
     private static Expression EmitCountBits(int[] consumedPcs, CompilationContext ctx) {
         var value = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
-        var result = Call(null, Instructions.CountBits.PopCountMethod, Convert(value, typeof(ulong)));
+        var result = Call(null, PopCountMethod, Convert(value, typeof(ulong)));
         return Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), Convert(result, typeof(long)));
     }
 

@@ -64,6 +64,10 @@ public sealed class ClrContractImportRecipe : IContractImportRecipe {
                     continue;
                 }
 
+                // AOT note: handlerType is a dynamic delegate type (EventInfo.EventHandlerType)
+                // at runtime, so we can't use Ref<T> here. GetMethod("Invoke") on a delegate
+                // type is the standard AOT-compatible pattern — the runtime resolves it
+                // via the known delegate type layout.
                 var invokeMethod = handlerType.GetMethod("Invoke");
                 if (invokeMethod is null) {
                     continue;

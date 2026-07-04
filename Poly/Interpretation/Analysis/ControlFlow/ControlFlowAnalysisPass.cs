@@ -80,10 +80,23 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     private sealed class CfgState {
         public ControlFlowGraph Cfg = new();
         public BasicBlock? CurrentBlock;
+
+        // String-keyed dictionaries for goto → label resolution.
+        // TODO: Replace with NodeId-keyed lookup once node-locator infra exists.
         public Dictionary<string, BasicBlock> LabeledBlocks = [];
         public Dictionary<string, LabelDeclaration> LabelDecls = [];
         public List<(GotoStatement Goto, string Label)> PendingGotos = [];
+
+        /// <summary>Stack used only for break-in-switch resolution
+        /// (switches don't get ResolvedJumpTarget metadata yet).
+        /// Loop break/continue uses <see cref="LoopTargets"/> instead.</summary>
         public Stack<(BasicBlock Continue, BasicBlock Break)> LoopContexts = new();
+
+        /// <summary>Maps a loop's NodeId to its continue/break blocks.
+        /// Populated by loop builders, consumed by break/continue handlers
+        /// via <see cref="ResolvedJumpTarget"/> metadata.
+        /// Key is the WhileLoop/ForLoop/etc. node's <see cref="Node.Id"/>.</summary>
+        public Dictionary<NodeId, (BasicBlock Continue, BasicBlock Break)> LoopTargets = new();
     }
 
     private void BuildCfg(AnalysisContext context, Node node, CfgState state) {
@@ -129,8 +142,10 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             case BreakStatement breakStmt:
                 AddStatement(breakStmt, state);
                 state.CurrentBlock.SetTerminator(breakStmt);
-                if (state.LoopContexts.TryPeek(out var loopCtx)) {
-                    state.CurrentBlock.AddSuccessor(loopCtx.Break);
+                if (!TryResolveBreak(breakStmt, context, state)) {
+                    // Fallback: break inside a switch (no ResolvedJumpTarget yet).
+                    if (state.LoopContexts.TryPeek(out var loopCtx))
+                        state.CurrentBlock.AddSuccessor(loopCtx.Break);
                 }
                 state.CurrentBlock = null;
                 break;
@@ -138,8 +153,10 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             case ContinueStatement continueStmt:
                 AddStatement(continueStmt, state);
                 state.CurrentBlock.SetTerminator(continueStmt);
-                if (state.LoopContexts.TryPeek(out var continueCtx)) {
-                    state.CurrentBlock.AddSuccessor(continueCtx.Continue);
+                if (!TryResolveContinue(continueStmt, context, state)) {
+                    // Fallback: continue inside a switch (unusual but handled).
+                    if (state.LoopContexts.TryPeek(out var continueCtx))
+                        state.CurrentBlock.AddSuccessor(continueCtx.Continue);
                 }
                 state.CurrentBlock = null;
                 break;
@@ -294,7 +311,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             conditionBlock.AddSuccessor(exitBlock);
         }
 
-        state.LoopContexts.Push((Continue: conditionBlock, Break: exitBlock));
+        state.LoopTargets[whileLoop.Id] = (conditionBlock, exitBlock);
         state.CurrentBlock = bodyBlock;
         if (!constFalse) {
             BuildCfg(context, whileLoop.Body, state);
@@ -304,7 +321,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             state.CurrentBlock.AddSuccessor(conditionBlock);
         }
 
-        state.LoopContexts.Pop();
         state.CurrentBlock = exitBlock;
     }
 
@@ -318,7 +334,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
         preLoop.AddSuccessor(bodyBlock);
 
-        state.LoopContexts.Push((Continue: conditionBlock, Break: exitBlock));
+        state.LoopTargets[doWhileLoop.Id] = (conditionBlock, exitBlock);
         state.CurrentBlock = bodyBlock;
         BuildCfg(context, doWhileLoop.Body, state);
 
@@ -337,7 +353,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             context.ReportDiagnostic(doWhileLoop, DiagnosticSeverity.Information, "Infinite loop detected", "CF0003");
         }
 
-        state.LoopContexts.Pop();
         state.CurrentBlock = exitBlock;
     }
 
@@ -377,7 +392,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             conditionBlock.AddSuccessor(exitBlock);
         }
 
-        state.LoopContexts.Push((Continue: iteratorBlock, Break: exitBlock));
+        state.LoopTargets[forLoop.Id] = (iteratorBlock, exitBlock);
         state.CurrentBlock = bodyBlock;
         if (!constFalse) {
             BuildCfg(context, forLoop.Body, state);
@@ -394,7 +409,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             iteratorBlock.AddSuccessor(conditionBlock);
         }
 
-        state.LoopContexts.Pop();
         state.CurrentBlock = exitBlock;
     }
 
@@ -413,7 +427,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         conditionBlock.AddSuccessor(bodyBlock);
         conditionBlock.AddSuccessor(exitBlock);
 
-        state.LoopContexts.Push((Continue: conditionBlock, Break: exitBlock));
+        state.LoopTargets[forEachLoop.Id] = (conditionBlock, exitBlock);
         state.CurrentBlock = bodyBlock;
         BuildCfg(context, forEachLoop.Body, state);
 
@@ -421,7 +435,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             state.CurrentBlock.AddSuccessor(conditionBlock);
         }
 
-        state.LoopContexts.Pop();
         state.CurrentBlock = exitBlock;
     }
 
@@ -713,6 +726,54 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         foreach (var child in node.Children) {
             if (child != null) MarkSubtreeElidable(ctx, child, code, message);
         }
+    }
+
+    // ── Metadata-driven jump resolution ────────────────────────
+
+    /// <summary>
+    /// Resolves a break statement via <see cref="ResolvedJumpTarget"/> metadata.
+    /// Returns true if the metadata was present and the target loop was found
+    /// in <see cref="CfgState.LoopTargets"/>.
+    /// </summary>
+    private static bool TryResolveBreak(
+        BreakStatement breakStmt,
+        AnalysisContext context,
+        CfgState state) {
+        var target = context.GetMetadata<ResolvedJumpTarget>(breakStmt);
+        if (target is null)
+            return false;
+
+        if (state.CurrentBlock is not null &&
+            state.LoopTargets.TryGetValue(target.TargetNodeId, out var blocks)) {
+            state.CurrentBlock.AddSuccessor(blocks.Break);
+            return true;
+        }
+
+        // Metadata points to a loop node — if that loop isn't in the dictionary
+        // something is wrong; fall through to fallback.
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves a continue statement via <see cref="ResolvedJumpTarget"/> metadata.
+    /// Returns true if the metadata was present and the target loop was found
+    /// in <see cref="CfgState.LoopTargets"/>.
+    /// </summary>
+    private static bool TryResolveContinue(
+        ContinueStatement continueStmt,
+        AnalysisContext context,
+        CfgState state) {
+        var target = context.GetMetadata<ResolvedJumpTarget>(continueStmt);
+        if (target is null)
+            return false;
+
+        if (state.CurrentBlock is not null &&
+            state.LoopTargets.TryGetValue(target.TargetNodeId, out var blocks)) {
+            state.CurrentBlock.AddSuccessor(blocks.Continue);
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

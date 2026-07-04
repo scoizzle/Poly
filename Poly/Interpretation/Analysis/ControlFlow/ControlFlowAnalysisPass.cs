@@ -621,7 +621,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         var fromChildren = this.AggregateChildren(
             context,
             node,
-            (ctx, ch) => CollectVariables(ctx, ch),
+            CollectVariables,
             (a, b) => { a.UnionWith(b); return a; },
             new HashSet<string>()
         );

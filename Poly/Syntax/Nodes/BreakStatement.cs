@@ -15,9 +15,10 @@ public sealed record BreakStatement(string? Label = null) : Statement {
 
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
-        if (env is null || !env.IsInLoop)
+        var target = context.GetMetadata<Poly.Interpretation.Analysis.Semantics.ResolvedJumpTarget>(this);
+        if (target is null)
             throw new System.InvalidOperationException("break outside loop");
-        yield return new Poly.Syntax.Primitives.Goto(env.CurrentLoop.Exit);
+        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null)!;
+        yield return new Poly.Syntax.Primitives.Goto(env.GetLoopBoundary(target.TargetNodeId).Exit);
     }
 }

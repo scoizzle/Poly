@@ -23,7 +23,7 @@ public sealed record WhileLoop(Node Condition, Node Body) : Statement {
         var bodyLabel = new Poly.Syntax.Primitives.Label("while_body");
         var exit = new Poly.Syntax.Primitives.Label("while_exit");
 
-        env.PushLoop(new Poly.Syntax.Primitives.LoopBoundary(exit, header));
+        env.RegisterLoopBoundary(this.Id, new Poly.Syntax.Primitives.LoopBoundary(exit, header));
 
         // Header: condition check — CondGoto jumps when condition is 0 (false).
         // Entry falls through from the previous sibling; no initial Goto needed.

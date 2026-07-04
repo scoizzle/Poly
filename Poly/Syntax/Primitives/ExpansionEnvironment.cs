@@ -13,7 +13,7 @@ namespace Poly.Syntax.Primitives;
 internal sealed class ExpansionEnvironment : IAnalysisMetadata {
     private readonly Dictionary<NodeId, int> _slots = new();
     private int _nextSlot;
-    private readonly Stack<LoopBoundary> _loops = new();
+    private readonly Dictionary<NodeId, LoopBoundary> _loopBoundaries = new();
 
     // ── Slot management ─────────────────────────────────────────
 
@@ -72,13 +72,23 @@ internal sealed class ExpansionEnvironment : IAnalysisMetadata {
         public void Dispose() => _env.StatementDepth--;
     }
 
-    // ── Loop boundary stack ─────────────────────────────────────
+    // ── Loop boundary registry (NodeId-keyed) ───────────────────
 
-    public bool IsInLoop => _loops.Count > 0;
+    /// <summary>
+    /// Registers a loop's exit/latch labels keyed by its <see cref="Node.Id"/>.
+    /// Replaces the old monotonic <c>PushLoop</c> stack — consumers resolve
+    /// targets via <see cref="Analysis.ResolvedJumpTarget"/> metadata.
+    /// </summary>
+    public void RegisterLoopBoundary(NodeId loopNodeId, LoopBoundary boundary) {
+        _loopBoundaries[loopNodeId] = boundary;
+    }
 
-    public LoopBoundary CurrentLoop => _loops.Peek();
-
-    public void PushLoop(LoopBoundary boundary) => _loops.Push(boundary);
+    /// <summary>
+    /// Retrieves the boundary for the loop identified by <paramref name="loopNodeId"/>.
+    /// The loop must have been registered via <see cref="RegisterLoopBoundary"/>.
+    /// </summary>
+    public LoopBoundary GetLoopBoundary(NodeId loopNodeId) =>
+        _loopBoundaries[loopNodeId];
 }
 
 /// <summary>Labels for a loop's exit and latch targets.</summary>

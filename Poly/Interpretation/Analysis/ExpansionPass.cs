@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Primitives;
@@ -29,9 +30,14 @@ public sealed class ExpansionPass : INodeAnalyzer {
             return;
 
         // Expand this node first (pre-order) — parent nodes like Block set up
-        // expansion environments (slot assignment, loop tracking) that children
-        // depend on during their own expansion.
+        // expansion environments (slot assignment, loop boundary registration)
+        // that children depend on during their own expansion.
         var actual = context.GetNodeReplacement(node) ?? node;
+
+        // Skip expansion of dead/unreachable code — CFG analysis stamps
+        // ElisionMetadata on unreachable subtrees.  No µops needed.
+        if (context.GetMetadata<ElisionMetadata>(actual)?.CanElide == true)
+            return;
 
         if (context.GetMetadata<PrimitiveExpansionMetadata>(actual) is null) {
             var primitives = actual.ToPrimitives(context).ToArray();

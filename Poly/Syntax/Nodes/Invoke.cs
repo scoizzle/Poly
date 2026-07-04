@@ -78,16 +78,14 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
             }
 
             // Emit arguments and store each into its parameter slot.
-            // StoreLocal re-pushes the value (StackEffect = (1,1)),
-            // so we discard it — the body's Parameter primitives
-            // will load from the slots directly.
+            // StoreLocal (1,0) consumes the value — no Discard needed since
+            // the body's Parameter primitives load from the slots directly.
             for (int i = 0; i < Arguments.Length; i++) {
                 foreach (var p in Arguments[i].ToPrimitives(context))
                     yield return p;
                 var paramNode = lambda.Parameters[i];
                 if (env.TryGetSlot(paramNode, out var paramSlot)) {
                     yield return new Poly.Syntax.Primitives.StoreLocal(paramSlot);
-                    yield return new Poly.Syntax.Primitives.Discard();
                 }
             }
 

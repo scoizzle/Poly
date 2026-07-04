@@ -36,6 +36,16 @@ internal sealed class ExpansionEnvironment : IAnalysisMetadata {
     /// associating it with a particular AST node.</summary>
     public int AllocateTempSlot() => _nextSlot++;
 
+    // ── Statement context depth ─────────────────────────────────
+
+    /// <summary>
+    /// Tracks how many statement-context ancestors this node is nested within.
+    /// 0 means expression context — the node's result is consumed.
+    /// &gt;0 means statement context — the node's result will be discarded.
+    /// Set by Block, WhileLoop, ForLoop, DoWhileLoop before expanding children.
+    /// </summary>
+    public int StatementDepth { get; set; }
+
     // ── Loop boundary stack ─────────────────────────────────────
 
     public bool IsInLoop => _loops.Count > 0;

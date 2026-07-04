@@ -23,9 +23,14 @@ public sealed record Assignment(Node Destination, Node Value) : Expression {
             var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
             if (env is null || !env.TryGetSlot(destVar, out var slot))
                 throw new InvalidOperationException($"Variable '{destVar.Name}' has no slot assigned");
+            // StoreLocal (1,0) consumes the RHS value from the ring.
+            // In expression context (StatementDepth == 0) the value must be
+            // preserved — Dup before StoreLocal keeps a copy on the ring.
+            // In statement context the result is discarded, so a bare
+            // StoreLocal suffices.
+            if (env.StatementDepth == 0)
+                yield return new Poly.Syntax.Primitives.Dup();
             yield return new Poly.Syntax.Primitives.StoreLocal(slot);
-            // StoreLocal already pushes the stored value back (StackEffect = 1,1),
-            // so the result is on the ring — no LoadLocal needed.
         }
         else if (Destination is Poly.Syntax.Nodes.IndexAccess indexAccess) {
             // arr[i] = value: emit array handle, index, then ArrayStore

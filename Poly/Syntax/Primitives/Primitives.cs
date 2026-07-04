@@ -31,10 +31,12 @@ public sealed record LoadLocal(int SlotIndex) : PrimitiveNode {
     public override (int Pop, int Push) StackEffect => (0, 1);
 }
 
-/// <summary>Pop a value from the stack and store it into a local variable slot. Pushes the value back (expression semantics).</summary>
+/// <summary>Pop a value from the stack and store it into a local variable slot.
+/// Does NOT push the value back — use <see cref="Dup"/> before StoreLocal when
+/// the value must remain on the ring (expression semantics).</summary>
 /// <param name="SlotIndex">The local variable slot index.</param>
 public sealed record StoreLocal(int SlotIndex) : PrimitiveNode {
-    public override (int Pop, int Push) StackEffect => (1, 1);
+    public override (int Pop, int Push) StackEffect => (1, 0);
 }
 
 /// <summary>Pop two values, apply a binary operation, push the result.</summary>

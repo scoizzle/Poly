@@ -390,7 +390,8 @@ public static class ProgramCompiler {
                 ring.RemoveAt(ring.Count - 1);
             if (push > 0) {
                 map[pc] = entryDepth - toPop;
-                ring.Add(pc);
+                for (int i = 0; i < push; i++)
+                    ring.Add(pc);
             }
         }
         return map;
@@ -460,9 +461,10 @@ public static class ProgramCompiler {
     private static Expression EmitStoreLocal(int slotIndex, int[] consumedPcs, CompilationContext ctx) {
         var value = ctx.ValueSlot(consumedPcs[0]);
         var index = Add(ctx.FrameBase, Constant(slotIndex));
-        return Block(
-            Assign(ArrayAccess(ctx.RawSlots, index), value),
-            Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), value));
+        // StoreLocal (1,0) is a pure store — no ring write needed because
+        // the value is consumed, not pushed back.  Callers that need expression
+        // semantics emit a Dup before the StoreLocal.
+        return Assign(ArrayAccess(ctx.RawSlots, index), value);
     }
 
     private static Expression EmitBinaryOp(PrimOpKind op, int[] consumedPcs, CompilationContext ctx, System.Type? comparisonType = null) {

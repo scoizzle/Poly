@@ -33,8 +33,10 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
 
         // Initializer (executed once before loop)
         if (Initializer is not null) {
+            env.StatementDepth++;
             foreach (var p in Initializer.ToPrimitives(context))
                 yield return p;
+            env.StatementDepth--;
             yield return new Poly.Syntax.Primitives.Discard();
         }
 
@@ -43,14 +45,18 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
 
         // Body
         yield return bodyLabel;
+        env.StatementDepth++;
         foreach (var p in Body.ToPrimitives(context))
             yield return p;
+        env.StatementDepth--;
         yield return new Poly.Syntax.Primitives.Discard();
 
         // Increment (after body, before condition check)
         if (Increment is not null) {
+            env.StatementDepth++;
             foreach (var p in Increment.ToPrimitives(context))
                 yield return p;
+            env.StatementDepth--;
             yield return new Poly.Syntax.Primitives.Discard();
         }
 

@@ -50,7 +50,7 @@ var body = new Block(
     [bits, i, cnt, w]);
 
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
-var program = InterpretationAnalyzer.Compile(body, CompilationMode.NoDebug);
+var program = Interpreter.Compile(body, CompilationMode.NoDebug);
 prepSw.Stop();
 
 var sw = System.Diagnostics.Stopwatch.StartNew();

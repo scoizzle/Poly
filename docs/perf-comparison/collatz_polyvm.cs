@@ -41,7 +41,7 @@ var body = new Invoke(new Lambda([], new Block(
     [n, i, len, maxLen, bestN])));
 
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
-var program = InterpretationAnalyzer.Compile(body, CompilationMode.NoDebug);
+var program = Interpreter.Compile(body, CompilationMode.NoDebug);
 prepSw.Stop();
 
 long result;

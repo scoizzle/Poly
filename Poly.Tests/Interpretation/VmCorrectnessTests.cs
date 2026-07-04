@@ -36,7 +36,7 @@ public class VmCorrectnessTests {
     }
 
     private static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) =>
-        InterpretationAnalyzer.Compile(node, mode);
+        Interpreter.Compile(node, mode);
 
     private static (VmState State, long Result) ExecVm(Node node, Action<VmState>? setup = null) {
         var prog = Compile(node);

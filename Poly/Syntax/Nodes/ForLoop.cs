@@ -8,7 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// with the increment executed after each iteration. All components are optional.
 /// Loop statements are executed for side effects rather than producing values.
 /// </remarks>
-public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment, Node Body) : Statement {
+public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment, Node Body, string? Label = null) : Statement {
     public override IEnumerable<Node?> Children => [Initializer, Condition, Body, Increment];
 
     /// <inheritdoc />

@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;

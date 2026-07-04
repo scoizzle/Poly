@@ -36,102 +36,83 @@ The expanded rationale, history, and examples of how these principles have been 
 
 **Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, VM design, and the neurosymbolic platform vision).
 
-- `Poly/` — core DSL: Syntax, Ir (canonical IR), Interpretation (VM), Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
+- `Poly/` — core DSL: Syntax, Interpretation (VM), Synthesis (macros), Introspection, Validation, Data/Modeling, Text. (Canonical IR at `Ir/` is a planned migration — see `docs/experiments/interpretation-compiler-framework-plan.md`.)
 - `Poly.Benchmarks/` — example entry point. (FluentApiExample.cs is fully commented out — do not treat it as a reference.)
 - `Poly.Tests/` — unit tests using **TUnit** (not xUnit/NUnit).
 
 **Module boundaries (enforced, one-way):**
-- `Ir` → `Syntax` (IR types reference `NodeId` for source tracking; no other Poly dependency)
-- `Interpretation` → `Ir`, `Syntax`, `Introspection`
+- `Interpretation` → `Syntax`, `Introspection`
 - `Validation` → `Interpretation`
-- `Synthesis` → `Syntax`, `Ir`, `Interpretation` (VM for macro validation)
-- `DomainModeling` → `Syntax`, `Ir` (domain constructs lower to IR; no dependency on Interpretation)
-- `Introspection` must not depend on `Interpretation` or `Ir`.
+- `Synthesis` → `Syntax`, `Interpretation` (VM for macro validation)
+- `DomainModeling` → `Syntax` (domain constructs lower to generic VM opcodes; no dependency on Interpretation)
+- `Introspection` must not depend on `Interpretation`.
 - No module may depend on `Synthesis` except `DomainModeling` (evolution loop).
 - Exception: CLR implementations under `Poly/Introspection/CommonLanguageRuntime` add concrete types without introducing reverse dependencies.
 - **Domain concepts lower to generic VM opcodes** (no domain-specific opcodes). See `docs/decisions/2026-06-08-domain-lowering-boundary.md`.
+- **Planned:** `Ir` will sit between `Syntax` and `Interpretation` once the canonical IR is implemented. See `docs/experiments/interpretation-compiler-framework-plan.md`.
 
-## Ir — Canonical Intermediate Representation
+## Ir — Canonical Intermediate Representation (Planned)
 
-**Location:** `Poly/Ir/`
+The canonical block-structured CFG IR with SSA values is a planned migration target.
+See `docs/experiments/interpretation-compiler-framework-plan.md` for the full design.
 
-The canonical IR is a block-structured CFG with SSA values. It is pure data (C# records with no logic beyond construction). Dependencies: `Syntax` for `NodeId` (the `Source` field on every `Instr`). No other Poly module dependency.
-
-- `Poly/Ir/` — IR data types: `Module`, `BasicBlock`, `Value`, `Instr` subtypes (16 instruction types), `Terminator` subtypes (5 types), `TypeKind`, `OpKind`
-- `Poly/Ir/Passes/` — pure `Module → Module` transforms: SSA construction, constant folding, inlining. No dependencies beyond `Poly/Ir/`.
+**Status:** `Poly/Ir/` does not yet exist. The current pipeline lowers AST nodes directly
+to `PrimitiveNode` sequences (see `Poly/Syntax/Primitives/README.md`).
 
 ## Interpretation
 
 **Before working in this area:** Review `docs/decisions/` for any architecture or analysis-related decisions.
 
-Interpretation contains the VM execution engine and the passes that bridge Ir ↔ µops. It does **not** define the IR — it consumes it.
+Interpretation contains the VM execution engine and semantic analysis passes. It does **not** define the IR — it consumes it.
+
+**The TreeWalkingInterpreter has been removed.** The VM is the sole canonical execution engine.
+See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
 
 ### Structure
-- `Syntax/`
-  - `Nodes/` — AST node types (pure records)
-  - `Node.cs`, `NodeExtensions.cs` — base + fluent construction helpers
-  - `Analysis/` — `AnalysisContext`, `AnalyzerBuilder`, `Analyzer`, diagnostics & metadata store
-- `Interpretation/`
-  - `Analysis/` — semantic passes (Semantics, ConstantFolding, ControlFlow, LoweringPrep, UopGeneration)
-  - `Ir/` — IR bridge types: `GenerationPass` (AST→IR), `EmissionContext`, `ModuleMetadata`, `VmLoweringPass`, `GenerationPassExtensions`
-  - `Ir/Backends/` — IR → output backends: `UopCompiler` (→µops), `ExpressionCompiler` (→LINQ expressions), `CSharpCodeGenerator` (→C# text)
-  - `Ir/Passes/` — VM-backend-specific passes: `RingAnalyzer` (ring-depth computation)
-  - `Vm/` — VM execution engine: `Vm.cs`, `VmState.cs`, `ProgramCompiler.cs`, `Lowering.cs` (µop assembly), `Instruction` types (26+ µop subtypes), `Heap.cs`, `Closure.cs`, `ValueStack.cs`
-  - `LinqExpressions/` — `LinqExpressionGenerator`, `INodeCompiler` (secondary — test reference only, may be removed)
-  - `CSharp/` — `CSharpGenerator.cs` (production codegen output)
-  - `Mermaid/` — AST visualization
 
-**The TreeWalkingInterpreter has been removed.** The VM is the sole canonical execution engine. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
+The Interpretation module is organized into sub-systems. See `Poly/Interpretation/README.md`
+for the full directory map, and the individual READMEs in each sub-directory for details:
+- `Poly/Interpretation/Vm/README.md` — VM execution engine
+- `Poly/Interpretation/Analysis/README.md` — Semantic analysis passes
+- `Poly/Interpretation/CSharp/README.md` — C# code generation
+- `Poly/Interpretation/LinqExpressions/README.md` — LINQ expression generation (test reference)
+- `Poly/Interpretation/Mermaid/README.md` — AST visualization
 
-### Canonical VM Pipeline (post-IR)
+Syntax definitions are in `Poly/Syntax/`:
+- `Poly/Syntax/Nodes/` — AST node types (pure records)
+- `Poly/Syntax/Analysis/` — `AnalysisContext`, `AnalyzerBuilder`, `Analyzer`, diagnostics & metadata store
+- `Poly/Syntax/Primitives/README.md` — PrimitiveNode taxonomy and conventions
 
-The pipeline is being refactored to a canonical AST → IR → µops flow. During migration, both pipelines coexist. For the migration plan, see `docs/experiments/interpretation-compiler-framework-plan.md`.
-
-**Current (pre-IR) pipeline:**
+### Pipeline
 
 ```csharp
-// 1. Analysis (produces µop metadata)
+// 1. Analysis (runs all passes in order)
 var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver().UseMemberResolver().UseVariableScopeValidator()
-    .UseLoweringPreparation().UseUopGeneration()
+    .UseTypeAndMemberResolver()
+    .UseVariableScopeValidator()
+    .UseSideEffectAnalysis()
+    .UseThisReferenceContext()
+    .UseJumpTargetResolution()
+    .UseControlFlowAnalysis()
+    .UseConstantFolding()
+    .UseDefiniteAssignmentAnalysis()
+    .UseLambdaReturnTypeResolution()
+    .UsePrimitiveExpansion()
     .Build();
 
 var result = analyzer.Analyze(node);
 
-// 2. Lowering assembly (resolves labels, φ, branch targets)
-var loweringResult = Lowering.Lower(node, result);
+// 2. Compile primitives to executable delegate
+var primitives = result.GetMetadata<PrimitiveExpansionMetadata>(node)!.Primitives;
+var program = ProgramCompiler.CompilePrimitives(primitives);
 
-// 3. Program compilation (generates compiled delegate)
-var program = ProgramCompiler.Compile(loweringResult);
-
-// 4. Execution
+// 3. Execute
 using var state = new VmState(program);
 var output = Vm.Execute(state);
 ```
 
-**Target (post-IR) pipeline:**
-
-```csharp
-// 1. Analysis + IR generation
-var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver().UseMemberResolver().UseVariableScopeValidator()
-    .UseLoweringPreparation().UseIrGeneration()   // replaces .UseUopGeneration()
-    .Build();
-
-var result = analyzer.Analyze(node);
-
-// 2. VM lowering (IR → µops via VmLoweringPass, runs inside .UseIrGeneration())
-//    or accessed via result.GetMetadata<ModuleMetadata>(node) → UopCompiler
-
-// 3. Program compilation (unchanged)
-var program = ProgramCompiler.Compile(loweringResult);
-
-// 4. Execution (unchanged)
-using var state = new VmState(program);
-var output = Vm.Execute(state);
-```
-
-`AnalysisContext` holds type definitions, node metadata, and diagnostics. There is no `Operators/` directory.
+See `docs/experiments/interpretation-compiler-framework-plan.md` for the planned
+canonical AST → IR → µops migration.
 
 ## Validation
 
@@ -204,10 +185,10 @@ The full rationale for these exact rules lives in (or should be added to) `docs/
 | What                        | Where |
 |-----------------------------|-------|
 | Shared abstractions         | `Introspection` |
-| Analysis passes             | `Interpretation/Analysis/` |
+| Analysis passes             | `Interpretation/Analysis/` — see `Poly/Interpretation/Analysis/README.md` |
 | AST node types              | `Syntax/Nodes/` |
-| VM bytecode lowering        | `Interpretation/VirtualMachine/Lowering.cs` |
-| VM execution engine         | `Interpretation/VirtualMachine/Vm.cs` |
+| VM execution engine         | `Interpretation/Vm/` — see `Poly/Interpretation/Vm/README.md` |
+| Primitive instruction set   | `Syntax/Primitives/` — see `Poly/Syntax/Primitives/README.md` |
 | Validation rules            | `Validation/Rules/` (register in `Validation/Rule.cs`) |
 | Data-model constraints      | `Data/Modeling/Validation/` |
 | Shared helpers              | `Extensions/` |

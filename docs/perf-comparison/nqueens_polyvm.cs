@@ -58,7 +58,7 @@ var body = new Invoke(new Lambda([], new Block(
     [stack, sp, total, ld, cols, rd, avail, bit])));
 
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
-var program = InterpretationAnalyzer.Compile(body, CompilationMode.NoDebug);
+var program = Interpreter.Compile(body, CompilationMode.NoDebug);
 prepSw.Stop();
 
 var sw = System.Diagnostics.Stopwatch.StartNew();

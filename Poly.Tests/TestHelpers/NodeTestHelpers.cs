@@ -116,7 +116,7 @@ public static class NodeTestHelpers {
     /// Compile a node using the standard VM interpretation pipeline.
     /// </summary>
     public static VmProgram CompileWithPrimitives(this Node node, CompilationMode mode = CompilationMode.Normal) =>
-        InterpretationAnalyzer.Compile(node, mode);
+        Interpreter.Compile(node, mode);
 
     /// <summary>
     /// Execute a node via the standard VM interpretation pipeline end-to-end,

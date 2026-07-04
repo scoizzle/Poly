@@ -31,7 +31,7 @@ namespace Poly.Interpretation;
 ///
 /// The <see cref="Analyzer"/> is built once and cached; subsequent calls reuse it.
 /// </summary>
-public static class InterpretationAnalyzer {
+public static class Interpreter {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
@@ -95,6 +95,12 @@ public static class InterpretationAnalyzer {
         else {
             // Fallback: expand directly if the pass didn't capture metadata
             // (e.g. when the root node was replaced during analysis).
+            // This should not happen in normal usage — ExpansionPass should
+            // have stamped metadata during analysis. We fall back so the
+            // system doesn't crash, but the oversight is surfaced.
+            System.Diagnostics.Debug.WriteLine(
+                "[Interpreter] Warning: PrimitiveExpansionMetadata not found; " +
+                "ExpansionPass may not have run. Falling back to direct expansion.");
             var ctx = new AnalysisContext(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
             primitives = node.ToPrimitives(ctx).ToArray();
         }

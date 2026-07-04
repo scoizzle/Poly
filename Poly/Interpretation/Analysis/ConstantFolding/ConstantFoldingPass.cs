@@ -75,6 +75,14 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             // Coalesce with non-null left
             Coalesce coalesce => FoldCoalesce(context, coalesce, parameterValues),
 
+            // Bitwise operations
+            BitwiseAnd ba => FoldBitwiseBinary(context, ba.LeftHandValue, ba.RightHandValue, (a, b) => (long)a & (long)b, parameterValues),
+            BitwiseOr bor => FoldBitwiseBinary(context, bor.LeftHandValue, bor.RightHandValue, (a, b) => (long)a | (long)b, parameterValues),
+            BitwiseXor bx => FoldBitwiseBinary(context, bx.LeftHandValue, bx.RightHandValue, (a, b) => (long)a ^ (long)b, parameterValues),
+            ShiftLeft sl => FoldBitwiseBinary(context, sl.LeftHandValue, sl.RightHandValue, (a, b) => (long)a << (int)(long)b, parameterValues),
+            ShiftRight sr => FoldBitwiseBinary(context, sr.LeftHandValue, sr.RightHandValue, (a, b) => (long)a >> (int)(long)b, parameterValues),
+            BitwiseNot bn => FoldBitwiseUnary(context, bn.Operand, a => ~(long)a, parameterValues),
+
             // Lambda invocation with constant arguments
             Invoke invoke => FoldInvocation(context, invoke, parameterValues),
 
@@ -178,6 +186,25 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         catch {
             return FoldResult.NotFoldable;
         }
+    }
+
+    private FoldResult FoldBitwiseBinary(AnalysisContext context, Node left, Node right, Func<object, object, object> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var leftValue = GetConstantValue(context, left, parameterValues);
+        var rightValue = GetConstantValue(context, right, parameterValues);
+
+        if (!leftValue.HasValue || !rightValue.HasValue)
+            return FoldResult.NotFoldable;
+
+        if (leftValue.Value is long lv && rightValue.Value is long rv)
+            return FoldResult.Success(operation(lv, rv));
+        return FoldResult.NotFoldable;
+    }
+
+    private FoldResult FoldBitwiseUnary(AnalysisContext context, Node operand, Func<object, object> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var operandResult = GetConstantValue(context, operand, parameterValues);
+        if (operandResult.HasValue && operandResult.Value is long ov)
+            return FoldResult.Success(operation(ov));
+        return FoldResult.NotFoldable;
     }
 
     private FoldResult FoldBinaryBoolean(AnalysisContext context, Node left, Node right, Func<bool, bool, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {

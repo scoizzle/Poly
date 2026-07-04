@@ -25,15 +25,15 @@ public class DomainExpressionVmExecutionTests {
     private static readonly SN.ParameterReference Subject = new();
 
     private static AnalysisResult Analyze(Node node) =>
-        InterpretationAnalyzer.Analyzer.Analyze(node);
+        Interpreter.Analyzer.Analyze(node);
 
     private static InterpreterResult Execute(Node node) {
-        using var exec = Vm.Execute(InterpretationAnalyzer.Compile(node, CompilationMode.Normal));
+        using var exec = Vm.Execute(Interpreter.Compile(node, CompilationMode.Normal));
         return exec.Result;
     }
 
     private static (InterpreterResult Result, VmState State) ExecuteWithState(Node node) {
-        var program = InterpretationAnalyzer.Compile(node, CompilationMode.Normal);
+        var program = Interpreter.Compile(node, CompilationMode.Normal);
         var exec = Vm.Execute(program, s => s.MaxLoopIterations = 100_000_000);
         return (exec.Result, exec.State);
     }

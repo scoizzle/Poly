@@ -93,12 +93,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
 
             // Mark loop control subexpressions (initializer, increment for ForLoop) as elidable
             // if they are pure and their value is unused in the loop context.
-            // This enables more aggressive intra-loop DCE even when the whole loop node is kept
-            // (e.g. because it is the last expression in its enclosing Block, or the loop
-            // "produces" a value from its body).
-            var opts = context.Settings.Get<SideEffectAnalysisOptions>() ?? SideEffectAnalysisOptions.Default;
-            bool emitDiags = opts.EmitElisionDiagnostics;
-
             if (node is ForLoop forLoop) {
                 var initMeta = forLoop.Initializer is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Initializer) : null;
                 if (initMeta is not null && (initMeta.Kind == SideEffectKind.Pure || initMeta.Kind == SideEffectKind.Read)) {

@@ -58,7 +58,7 @@ public static class PolicyEvaluator {
         var lowered = pass.Lower(policy.Expression, entityParam);
 
         // Standard VM interpretation pipeline
-        var compiled = InterpretationAnalyzer.Compile(lowered);
+        var compiled = Interpreter.Compile(lowered);
 
         return e => {
             using var exec = Vm.Execute(compiled, s => s.SetArgs(new object?[] { e }));

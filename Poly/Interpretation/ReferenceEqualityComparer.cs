@@ -3,6 +3,8 @@ namespace Poly.Interpretation;
 /// <summary>
 /// Equality comparer that uses reference equality (ReferenceEquals) instead of value equality.
 /// Useful for caching keyed on node references where identity matters, not value.
+/// NOTE: Not available via BCL in all target frameworks; kept as a local implementation
+/// to avoid assembly reference dependencies.
 /// </summary>
 public sealed class ReferenceEqualityComparer : IEqualityComparer<object> {
     /// <summary>

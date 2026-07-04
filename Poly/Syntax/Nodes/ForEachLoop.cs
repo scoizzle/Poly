@@ -6,7 +6,7 @@ namespace Poly.Syntax.Nodes;
 /// <param name="LoopVariable">The loop variable that will hold each element of the collection during iteration.</param>
 /// <param name="Collection">The collection to iterate over.</param>
 /// <param name="Body">The body of the loop that will be executed for each element.</param>
-public sealed record ForEachLoop(Variable LoopVariable, Node Collection, Node Body) : Statement {
+public sealed record ForEachLoop(Variable LoopVariable, Node Collection, Node Body, string? Label = null) : Statement {
     public override IEnumerable<Node?> Children => [Collection, Body];
 
     /// <inheritdoc />

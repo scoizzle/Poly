@@ -56,6 +56,46 @@ internal sealed class DefiniteAssignmentAnalyzer : INodeAnalyzer {
                 AnalyzeTry(context, tcf, scopeStack, ref assigned);
                 return;
 
+            case DoWhileLoop dwl:
+                var beforeDo = new HashSet<string>(assigned);
+                AnalyzeChildrenImpl(context, dwl.Body, scopeStack, ref assigned);
+                AnalyzeChildrenImpl(context, dwl.Condition, scopeStack, ref assigned);
+                assigned = beforeDo;
+                return;
+
+            case ForEachLoop fel:
+                AnalyzeChildrenImpl(context, fel.Collection, scopeStack, ref assigned);
+                if (fel.LoopVariable.Name is not null)
+                    assigned.Add(fel.LoopVariable.Name);
+                AnalyzeChildrenImpl(context, fel.Body, scopeStack, ref assigned);
+                return;
+
+            case SwitchStatement swt:
+                var beforeSwitch = new HashSet<string>(assigned);
+                HashSet<string>? merged = null;
+                foreach (var sc in swt.Cases) {
+                    assigned = [.. beforeSwitch];
+                    AnalyzeChildrenImpl(context, sc.Body, scopeStack, ref assigned);
+                    if (merged is null)
+                        merged = [.. assigned];
+                    else
+                        merged.IntersectWith(assigned);
+                }
+                if (swt.DefaultCase is not null) {
+                    assigned = [.. beforeSwitch];
+                    AnalyzeChildrenImpl(context, swt.DefaultCase, scopeStack, ref assigned);
+                    if (merged is null)
+                        merged = [.. assigned];
+                    else
+                        merged.IntersectWith(assigned);
+                }
+                assigned = merged ?? [.. beforeSwitch];
+                return;
+
+            case UsingStatement us:
+                AnalyzeChildrenImpl(context, us, scopeStack, ref assigned);
+                return;
+
             case BreakStatement or ContinueStatement or GotoStatement or Return or ThrowStatement:
                 return;
 

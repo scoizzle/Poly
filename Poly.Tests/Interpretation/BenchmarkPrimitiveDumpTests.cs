@@ -207,7 +207,7 @@ public class BenchmarkPrimitiveDumpTests {
     /// </summary>
     private static async Task DumpAndVerify(string name, Node body, long expectedResult) {
         // 1. Analyze and compile
-        var analysis = InterpretationAnalyzer.Analyzer.Analyze(body);
+        var analysis = Interpreter.Analyzer.Analyze(body);
         var meta = analysis.GetMetadata<PrimitiveExpansionMetadata>(body);
         await Assert.That(meta).IsNotNull();
 

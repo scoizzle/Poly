@@ -16,7 +16,6 @@ public sealed class CompilationContext {
     private static readonly PropertyInfo StateStackPropertyInfo = Ref<VmState>.Property(e => e.Stack);
     private static readonly PropertyInfo StateRegistersPropertyInfo = Ref<VmState>.Property(e => e.Registers);
     private static readonly PropertyInfo StateProgramCounterPropertyInfo = Ref<VmState>.Property(e => e.ProgramCounter);
-    private static readonly PropertyInfo StateInstructionCountersPropertyInfo = Ref<VmState>.Property(e => e.InstructionCounters);
     private static readonly PropertyInfo StateHeapPropertyInfo = Ref<VmState>.Property(e => e.Heap);
     private static readonly PropertyInfo StateHeapRawSlotsPropertyInfo = Ref<VmState>.Property(e => e.Heap.RawSlots);
     private static readonly PropertyInfo ValueStackRawSlotsPropertyInfo = Ref<ValueStack>.Property(s => s.RawSlots);
@@ -62,7 +61,6 @@ public sealed class CompilationContext {
     public Expression HeapRawSlots { get; }
     public Expression RawSlots { get; }
     public Expression Registers { get; }
-    public Expression InstructionCounters { get; }
     public IReadOnlyList<ParameterExpression> Locals => _locals;
 
     public int CurrentLabelIndex { get; set; }
@@ -99,7 +97,6 @@ public sealed class CompilationContext {
         SlotsInitExpression = Property(ValueStack, ValueStackRawSlotsPropertyInfo);
         RawSlots = SlotsLocal;
         Registers = Property(State, StateRegistersPropertyInfo);
-        InstructionCounters = Property(State, StateInstructionCountersPropertyInfo);
         Heap = HeapLocal;
         HeapRawSlots = Property(HeapLocal, StateHeapRawSlotsPropertyInfo);
         LoopLimitActive = Variable(typeof(bool), "_loopLimitActive");

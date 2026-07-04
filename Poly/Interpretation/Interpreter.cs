@@ -111,7 +111,15 @@ public static class Interpreter {
     // ── Shared implementation ─────────────────────────────────────
 
     /// <summary>
-    /// Execute or resume on an existing <see cref="VmState"/>.
+    /// Execute a pre-configured <see cref="VmState"/> inline (no new state
+    /// created). Internal — tests and resumption scenarios only.
+    /// </summary>
+    internal static void Execute(VmState state) {
+        state.Program.Delegate(state);
+    }
+
+    /// <summary>
+    /// Execute or resume on an existing <see cref="VmState"/> with new arguments.
     /// Internal — calling code should generally prefer the state-owning
     /// <see cref="ExecutionResult"/> API via the <c>Execute</c> overloads.
     /// </summary>

@@ -7,9 +7,8 @@ LINQ Expression delegates for fast execution.
 
 | File | Purpose |
 |------|---------|
-| `Vm.cs` | Entry point: `Vm.Execute()`, result interpretation, status management |
 | `VmState.cs` | Per-execution state: stack, heap, registers, breakpoints, trace, loop limits |
-| `VmProgram.cs` | Compiled program record (delegate + source ranges + function table) |
+| `VmProgram.cs` | Compiled program record (delegate + max local depth) |
 | `ProgramCompiler.cs` | `PrimitiveNode[]` → compiled `Action<VmState>` delegate via LINQ Expressions |
 | `CompilationContext.cs` | Ring-based µop value allocation, label management, local variable caching |
 | `ValueStack.cs` | Pooled `long[]` stack backed by `ArrayPool<long>.Shared` |
@@ -20,13 +19,12 @@ LINQ Expression delegates for fast execution.
 | `FunctionEntry.cs` | Function metadata (start PC, arg slots, local count) |
 | `VmTrace.cs` | µop-level tracing infrastructure (gated by `state.Trace != null`) |
 | `Ref.cs` | Safe reflection helpers using expression-tree-based MemberInfo lookups |
-| `SourceRange.cs` | Mapping from PC ranges to AST `Node` references |
 
 ## Pipeline
 
 ```
 PrimitiveNode[] → PrimitiveLinker.Link() → ProgramCompiler.CompilePrimitives()
-    → VmProgram → Vm.Execute() → ExecutionResult
+    → VmProgram → Interpreter.Execute() → ExecutionResult
 ```
 
 ## Adding a New Primitive
@@ -45,3 +43,37 @@ PrimitiveNode[] → PrimitiveLinker.Link() → ProgramCompiler.CompilePrimitives
 - **Compiled delegates**: The `ProgramCompiler` emits LINQ Expressions and compiles
   them to `Action<VmState>` delegates. µop dispatch is via `Switch` on `_pc` in
   Debug/Normal mode, or straight-through `GotoExpression` branches in NoDebug mode.
+
+## VM ABI: Call Frame Layout
+
+Call frame layout (one long slot of metadata):
+
+Before a `Call*` the N argument slots are on the stack:
+```
+[...stuff...][arg0][arg1]...[argN-1]
+                                    ^ SP
+```
+
+The `Call*` handler pushes one metadata long:
+```
+Slot[sp++] = ((returnPC << 32) | (uint)(int)savedFrameBase)
+```
+
+After call setup (0-relative to FB):
+```
+Slot[0]:               arg0            ← FB
+Slot[1 .. ArgSlots-1]: arg1..argN-1
+Slot[ArgSlots]:        metadata
+Slot[ArgSlots+1]:      local0
+Slot[ArgSlots+LocalCount]:  last local
+Slot[ArgSlots+LocalCount+1]: first eval  ← SP
+```
+
+Return convention:
+- `EmitPrimitiveCall` saves the current FrameBase and return PC into a metadata slot,
+  sets up the new frame, and jumps directly to the function-body label.
+- `EmitReturnOp` writes the result to `Slot[FB]`, sets `SP = FB + 1`, and jumps
+  to the compiled delegate's `ExitLabel` (ends program execution).
+- Frame-return (restore caller PC/FB from metadata) will be added when cross-function
+  calls need to return to the caller.
+- FrameBase sentinel: `-1` = "no active frame" (top-level execution).

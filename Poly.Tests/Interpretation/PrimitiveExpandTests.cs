@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -13,7 +14,7 @@ public class PrimitiveExpandTests {
         primsList.Add(new Prim.Return());
         var linked = PrimitiveLinker.Link(primsList);
         var program = ProgramCompiler.CompilePrimitives(linked, mode: CompilationMode.Normal);
-        using var exec = Vm.Execute(program, s => s.MaxLoopIterations = 10_000);
+        using var exec = Interpreter.Execute(program, s => s.MaxLoopIterations = 10_000);
         if (!exec.Result.HasValue)
             throw new InvalidOperationException($"VM returned void, kind={exec.Result.Kind}, status={exec.State.Status}");
         return (long)(exec.Result.Value ?? 0);

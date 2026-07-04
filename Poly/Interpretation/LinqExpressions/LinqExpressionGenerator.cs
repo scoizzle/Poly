@@ -17,7 +17,6 @@ namespace Poly.Interpretation.LinqExpressions;
 /// </remarks>
 public sealed class LinqExpressionGenerator {
     private readonly AnalysisResult _analysisResult;
-    private readonly List<INodeCompiler> _customCompilers = new();
 
     public sealed record CompilationResult(Expression Expression, IReadOnlyList<ParameterExpression> Parameters);
 
@@ -160,17 +159,6 @@ public sealed class LinqExpressionGenerator {
     }
 
     /// <summary>
-    /// Registers a custom compiler for handling domain-specific node types.
-    /// </summary>
-    /// <param name="compiler">The compiler to register.</param>
-    /// <returns>This generator for fluent chaining.</returns>
-    public LinqExpressionGenerator RegisterCompiler(INodeCompiler compiler) {
-        ArgumentNullException.ThrowIfNull(compiler);
-        _customCompilers.Add(compiler);
-        return this;
-    }
-
-    /// <summary>
     /// Compiles an AST node to a LINQ Expression.
     /// </summary>
     /// <param name="node">The AST node to compile.</param>
@@ -306,13 +294,6 @@ public sealed class LinqExpressionGenerator {
         var replacement = _analysisResult.GetNodeReplacement(node);
         if (replacement != null) {
             node = replacement;
-        }
-
-        // Try custom compilers (allows external systems to handle their node types)
-        foreach (var compiler in _customCompilers) {
-            if (compiler.TryCompile(node, child => CompileNode(child, context), out var customExpr)) {
-                return customExpr!;
-            }
         }
 
         return node switch {

@@ -47,10 +47,10 @@ prepSw.Stop();
 long result;
 var sw = System.Diagnostics.Stopwatch.StartNew();
 if (debug) {
-    using var exec = Vm.Execute(program, s => s.Trace = Console.Error);
+    using var exec = Interpreter.Execute(program, s => s.Trace = Console.Error);
     result = exec.RawValue;
 } else {
-    using var exec = Vm.Execute(program);
+    using var exec = Interpreter.Execute(program);
     result = exec.RawValue;
 }
 sw.Stop();

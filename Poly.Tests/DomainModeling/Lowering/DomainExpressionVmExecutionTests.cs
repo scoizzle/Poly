@@ -18,7 +18,7 @@ public record PersonRecord(string Name, int Age);
 
 /// <summary>
 /// End-to-end tests: DomainExpression → lowering pass → Syntax AST
-/// → VM analysis pipeline → µops → Vm.Execute.
+/// → VM analysis pipeline → µops → Interpreter.Execute.
 /// </summary>
 public class DomainExpressionVmExecutionTests {
     private static readonly DomainExpressionLoweringPass Pass = new();
@@ -28,13 +28,13 @@ public class DomainExpressionVmExecutionTests {
         Interpreter.Analyzer.Analyze(node);
 
     private static InterpreterResult Execute(Node node) {
-        using var exec = Vm.Execute(Interpreter.Compile(node, CompilationMode.Normal));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, CompilationMode.Normal));
         return exec.Result;
     }
 
     private static (InterpreterResult Result, VmState State) ExecuteWithState(Node node) {
         var program = Interpreter.Compile(node, CompilationMode.Normal);
-        var exec = Vm.Execute(program, s => s.MaxLoopIterations = 100_000_000);
+        var exec = Interpreter.Execute(program, s => s.MaxLoopIterations = 100_000_000);
         return (exec.Result, exec.State);
     }
 
@@ -405,7 +405,7 @@ public class DomainExpressionVmExecutionTests {
 
         await Assert.That(result.HasValue).IsTrue();
 
-        // Vm.Execute auto-dereferences heap handles.  If the result was
+        // Interpreter.Execute auto-dereferences heap handles.  If the result was
         // already dereferenced, compare the string directly.
         object? obj;
         if (result.Value is long handle)

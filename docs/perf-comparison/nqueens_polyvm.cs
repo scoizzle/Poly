@@ -62,7 +62,7 @@ var program = Interpreter.Compile(body, CompilationMode.NoDebug);
 prepSw.Stop();
 
 var sw = System.Diagnostics.Stopwatch.StartNew();
-using var exec = Vm.Execute(program);
+using var exec = Interpreter.Execute(program);
 long result = exec.RawValue;
 sw.Stop();
 Console.WriteLine($"Poly VM,{boardSize},{result},{sw.ElapsedMilliseconds},{prepSw.ElapsedMilliseconds}");

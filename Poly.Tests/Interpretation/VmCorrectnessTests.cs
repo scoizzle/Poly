@@ -40,7 +40,7 @@ public class VmCorrectnessTests {
 
     private static (VmState State, long Result) ExecVm(Node node, Action<VmState>? setup = null) {
         var prog = Compile(node);
-        var exec = Vm.Execute(prog, s => {
+        var exec = Interpreter.Execute(prog, s => {
             s.MaxLoopIterations = 100_000_000;
             setup?.Invoke(s);
         });
@@ -98,7 +98,7 @@ public class VmCorrectnessTests {
         var d = new VmState(prog);
         d.Stack.RawSlots[0] = 999;
         d.Dispose();
-        using var s = Vm.Execute(prog, s => s.SetArgs(42));
+        using var s = Interpreter.Execute(prog, s => s.SetArgs(42));
         await Assert.That(s.RawValue).IsEqualTo(42L);
     }
 
@@ -157,7 +157,7 @@ public class VmCorrectnessTests {
     public async Task BinOp_MixedTypes_StringAndLong_NoCrash() {
         var body = new Equal(new Constant(0L), new Constant("hello"));
         var prog = Compile(body);
-        using var exec = Vm.Execute(prog);
+        using var exec = Interpreter.Execute(prog);
         await Assert.That(exec.State.Stack.StackPointer).IsEqualTo(1);
     }
 
@@ -215,7 +215,7 @@ public class VmCorrectnessTests {
         var e = new Parameter("entity");  // NO TypeReference
         var body = new Member(e, "Age");
         var prog = Compile(body);
-        using var exec = Vm.Execute(prog, s => s.SetArgs(new PersonRecord("Test", 25)));
+        using var exec = Interpreter.Execute(prog, s => s.SetArgs(new PersonRecord("Test", 25)));
         // The Member access may emit a Nop (no resolved type), return 0, or
         // leave the stack in an unexpected state.  The important contract is
         // that the VM does not crash — the caller is responsible for providing
@@ -378,13 +378,13 @@ public class VmCorrectnessTests {
     private static async Task AssertVmMatchesLinqComposite(Node body) {
         // VM path
         var vmProg = Compile(body);
-        using var exec20 = Vm.Execute(vmProg, s => {
+        using var exec20 = Interpreter.Execute(vmProg, s => {
             s.MaxLoopIterations = 100_000_000;
             s.SetArgs(new PersonRecord("Test", 20));
         });
         long vm20Result = exec20.RawValue;
 
-        using var exec17 = Vm.Execute(vmProg, s => {
+        using var exec17 = Interpreter.Execute(vmProg, s => {
             s.MaxLoopIterations = 100_000_000;
             s.SetArgs(new PersonRecord("Test", 17));
         });
@@ -428,7 +428,7 @@ public class VmCorrectnessTests {
         var body = new Invoke(new Lambda([x], x));
         var prog = Compile(body);
         for (int i = 0; i < 100; i++) {
-            using var s = Vm.Execute(prog, s => s.SetArgs(i));
+            using var s = Interpreter.Execute(prog, s => s.SetArgs(i));
             await Assert.That(s.RawValue).IsEqualTo((long)i);
         }
     }
@@ -439,9 +439,9 @@ public class VmCorrectnessTests {
         var add = Compile(new Invoke(new Lambda([x], new SN.Add(x, new Constant(1L)))));
         var mul = Compile(new Invoke(new Lambda([x], new SN.Multiply(x, new Constant(2L)))));
         for (int i = 0; i < 50; i++) {
-            using var s1 = Vm.Execute(add, s => s.SetArgs(i));
+            using var s1 = Interpreter.Execute(add, s => s.SetArgs(i));
             await Assert.That(s1.RawValue).IsEqualTo(i + 1L);
-            using var s2 = Vm.Execute(mul, s => s.SetArgs(i));
+            using var s2 = Interpreter.Execute(mul, s => s.SetArgs(i));
             await Assert.That(s2.RawValue).IsEqualTo(i * 2L);
         }
     }
@@ -475,10 +475,10 @@ public class VmCorrectnessTests {
              c], [c]);
 
         var norm = Compile(body, mode: CompilationMode.Normal);
-        using var sn = Vm.Execute(norm, s => s.MaxLoopIterations = 100_000_000);
+        using var sn = Interpreter.Execute(norm, s => s.MaxLoopIterations = 100_000_000);
 
         var nd = Compile(body, mode: CompilationMode.NoDebug);
-        using var sd = Vm.Execute(nd);
+        using var sd = Interpreter.Execute(nd);
 
         await Assert.That(sd.RawValue).IsEqualTo(sn.RawValue);
     }
@@ -564,7 +564,7 @@ public class VmCorrectnessTests {
             [arr]);
         var prog = Compile(body);
         var state = new VmState(prog);
-        await Assert.That(() => Vm.Execute(state)).Throws<IndexOutOfRangeException>();
+        await Assert.That(() => Interpreter.Execute(state)).Throws<IndexOutOfRangeException>();
     }
 
     // ── Function call edge cases ─────────────────────────────────
@@ -697,7 +697,7 @@ public class VmCorrectnessTests {
         for (int i = 0; i < 10; i++) {
             state.Reset();
             state.SetArgs(i * 10);
-            Vm.Execute(state);
+            Interpreter.Execute(state);
             await Assert.That(state.Stack.Pop()).IsEqualTo((long)i * 10);
         }
         state.Dispose();
@@ -711,12 +711,12 @@ public class VmCorrectnessTests {
 
         var state = new VmState(prog) { MaxLoopIterations = 100_000_000 };
         state.SetArgs(new PersonRecord("A", 10));
-        Vm.Execute(state);
+        Interpreter.Execute(state);
         await Assert.That(state.Stack.Pop()).IsEqualTo(10L);
 
         state.Reset();
         state.SetArgs(new PersonRecord("B", 20));
-        Vm.Execute(state);
+        Interpreter.Execute(state);
         await Assert.That(state.Stack.Pop()).IsEqualTo(20L);
 
         state.Dispose();
@@ -787,7 +787,7 @@ public class VmCorrectnessTests {
         var vmProg = Compile(lowered);
         var state = new VmState(vmProg);
         state.SetArgs(new PersonRecord("Alice", 25));
-        Vm.Execute(state);
+        Interpreter.Execute(state);
         var vmVal = state.Stack.Pop();
 
         await Assert.That(vmVal).IsEqualTo(linqVal);
@@ -815,7 +815,7 @@ public class VmCorrectnessTests {
         // host process.  The exception is thrown from the compiled delegate.
         // VM doesn't catch CLR DivideByZeroException — just verify the
         // process doesn't crash (the exception propagates to the host).
-        try { using var _ = Vm.Execute(prog); } catch (DivideByZeroException) { }
+        try { using var _ = Interpreter.Execute(prog); } catch (DivideByZeroException) { }
         // Reaching here means no crash even if exception was thrown.
     }
 
@@ -839,7 +839,7 @@ public class VmCorrectnessTests {
 
     private static long ExecNew(Node node) {
         var prog = CompileNew(node);
-        using var exec = Vm.Execute(prog, s => s.MaxLoopIterations = 10_000);
+        using var exec = Interpreter.Execute(prog, s => s.MaxLoopIterations = 10_000);
         return (long)(exec.Result.Value ?? 0);
     }
 

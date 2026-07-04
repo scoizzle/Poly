@@ -220,7 +220,7 @@ public class BenchmarkPrimitiveDumpTests {
 
         // 4. Compile and execute
         var program = ProgramCompiler.CompilePrimitives(linked, CompilationMode.NoDebug);
-        using var exec = Vm.Execute(program);
+        using var exec = Interpreter.Execute(program);
         long result = exec.RawValue;
 
         // 5. Build human-readable listing (before validation — dump even on failure)

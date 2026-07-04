@@ -123,7 +123,7 @@ public static class NodeTestHelpers {
     /// returning the result.
     /// </summary>
     public static InterpreterResult ExecWithPrimitives(this Node node) {
-        using var exec = Vm.Execute(node.CompileWithPrimitives());
+        using var exec = Interpreter.Execute(node.CompileWithPrimitives());
         return exec.Result;
     }
 }

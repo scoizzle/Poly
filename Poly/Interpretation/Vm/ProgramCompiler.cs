@@ -22,7 +22,7 @@ using PrimUnaryOpKind = Poly.Syntax.Primitives.UnaryOpKind;
 
 namespace Poly.Interpretation.Vm;
 
-public enum CompilationMode { NoDebug, Debug, Normal, Profiling, TraceExpressions }
+public enum CompilationMode { NoDebug, Debug, Normal }
 
 public static class ProgramCompiler {
     // ── Primitive-based compilation (new canonical path) ────────────
@@ -46,7 +46,7 @@ public static class ProgramCompiler {
         var body = new List<Expression>();
         int n = primitives.Count;
 
-        ctx.LimitLoops = mode is CompilationMode.Normal or CompilationMode.Profiling;
+        ctx.LimitLoops = mode is CompilationMode.Normal;
 
         // Pre-register all labels
         for (int i = 0; i < n; i++)
@@ -77,9 +77,6 @@ public static class ProgramCompiler {
         else
             body.Add(Assign(ctx.ProgramCounter, Constant(0)));
 
-        if (mode == CompilationMode.Profiling)
-            body.Add(Assign(ctx.InstructionCounters, NewArrayBounds(typeof(long), Constant(n))));
-
         if (ctx.LimitLoops) {
             var maxIterProp = Property(ctx.State, nameof(VmState.MaxLoopIterations));
             body.Add(Assign(ctx.LoopMaxIter, maxIterProp));
@@ -91,7 +88,7 @@ public static class ProgramCompiler {
                     NewArrayBounds(typeof(long), Constant(n)))));
         }
 
-        // In Debug/Normal/Profiling mode the _pc variable tracks the current
+        // In Debug/Normal mode the _pc variable tracks the current
         // PC so that external breakpoints can resume at a specific position.
         // NoDebug mode runs straight through (direct GotoExpression branches)
         // and never reads _pc, so the switch dispatch is pure dead weight.
@@ -147,7 +144,7 @@ public static class ProgramCompiler {
 
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
-        return new VmProgram(del, new Dictionary<NodeId, SourceRange>(), functions, null, 32);
+        return new VmProgram(del, 32);
     }
 
     private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc, List<FunctionEntry> functions) {
@@ -198,7 +195,7 @@ public static class ProgramCompiler {
                     Convert(fbProp, typeof(long)))));
             body.Add(Call(stack, SetStackPointer, Add(savedSp, Constant(1))));
             body.Add(Assign(fbProp, newFb));
-            body.Add(Assign(Property(state, nameof(VmState.CachedArgSlots)), Constant(argSlots)));
+
             body.Add(Assign(ctx.FrameBaseLocal, newFb));
             body.Add(Call(stack, SetStackPointer,
                 Add(Add(newFb, Constant(argSlots + localCount)), Constant(1))));

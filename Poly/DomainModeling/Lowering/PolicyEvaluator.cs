@@ -61,7 +61,7 @@ public static class PolicyEvaluator {
         var compiled = Interpreter.Compile(lowered);
 
         return e => {
-            using var exec = Vm.Execute(compiled, s => s.SetArgs(new object?[] { e }));
+            using var exec = Interpreter.Execute(compiled, s => s.SetArgs(new object?[] { e }));
             return exec.Result.GetValue<bool>();
         };
     }

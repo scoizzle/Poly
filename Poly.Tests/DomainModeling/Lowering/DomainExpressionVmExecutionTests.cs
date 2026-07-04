@@ -3,13 +3,11 @@ using System.Linq;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
-using Poly.Syntax;
 using Poly.Syntax.Analysis;
 
 using SN = Poly.Syntax.Nodes;
@@ -26,37 +24,18 @@ public class DomainExpressionVmExecutionTests {
     private static readonly DomainExpressionLoweringPass Pass = new();
     private static readonly SN.ParameterReference Subject = new();
 
-    private static AnalysisResult Analyze(Node node) {
-        return new AnalyzerBuilder()
-            .UseTypeAndMemberResolver()
-            .UseVariableScopeValidator()
-            .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass())
-            .Build()
-            .Analyze(node);
-    }
+    private static AnalysisResult Analyze(Node node) =>
+        InterpretationAnalyzer.Analyzer.Analyze(node);
 
     private static InterpreterResult Execute(Node node) {
-        var (result, _) = ExecuteWithState(node);
-        return result;
+        using var exec = Vm.Execute(InterpretationAnalyzer.Compile(node, CompilationMode.Normal));
+        return exec.Result;
     }
 
     private static (InterpreterResult Result, VmState State) ExecuteWithState(Node node) {
-        var analysis = Analyze(node);
-        var meta = analysis.GetMetadata<Poly.Interpretation.Analysis.PrimitiveExpansionMetadata>(node);
-        Poly.Syntax.Primitives.PrimitiveNode[] primitives;
-        if (meta is not null)
-            primitives = meta.Primitives.ToArray();
-        else {
-            var ctx = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
-            primitives = node.ToPrimitives(ctx).ToArray();
-        }
-        var primsList = primitives.ToList();
-        primsList.Add(new Poly.Syntax.Primitives.Return());
-        var linked = Poly.Interpretation.Vm.PrimitiveLinker.Link(primsList);
-        var program = Poly.Interpretation.Vm.ProgramCompiler.CompilePrimitives(linked, mode: CompilationMode.Normal);
-        var state = new VmState(program) { MaxLoopIterations = 100_000_000 };
-        var result = Vm.Execute(state);
-        return (result, state);
+        var program = InterpretationAnalyzer.Compile(node, CompilationMode.Normal);
+        var exec = Vm.Execute(program, s => s.MaxLoopIterations = 100_000_000);
+        return (exec.Result, exec.State);
     }
 
     private InterpreterResult ExecuteDomain(DomainExpression expr) {

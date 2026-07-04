@@ -37,25 +37,46 @@ public sealed record IfStatement(Node Condition, Node ThenBranch, Node? ElseBran
             yield return p;
         yield return new Poly.Syntax.Primitives.CondGoto(elseLabel);
 
-        // Then branch: store result to temp slot
-        foreach (var p in ThenBranch.ToPrimitives(context))
+        // Then branch: compute net push; only emit StoreLocal when the branch
+        // actually produces a value (statements like StridedSetBits don't).
+        var thenPrims = ThenBranch.ToPrimitives(context).ToList();
+        int thenNetPush = 0;
+        foreach (var p in thenPrims) {
+            var (pop, push) = p.StackEffect;
+            thenNetPush += push - pop;
+        }
+        foreach (var p in thenPrims)
             yield return p;
-        yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
-        yield return new Poly.Syntax.Primitives.Goto(mergeLabel);
+        if (thenNetPush > 0) {
+            yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
+            yield return new Poly.Syntax.Primitives.Goto(mergeLabel);
+        }
 
-        // Else branch: store result to temp slot
+        // Else branch: compute net push; skip StoreLocal for statements.
         yield return elseLabel;
+        List<Poly.Syntax.Primitives.PrimitiveNode> elsePrims;
+        int elseNetPush;
         if (ElseBranch is not null) {
-            foreach (var p in ElseBranch.ToPrimitives(context))
-                yield return p;
+            var ep = ElseBranch.ToPrimitives(context).ToList();
+            elsePrims = ep;
+            elseNetPush = 0;
+            foreach (var p in ep) {
+                var (pop, push) = p.StackEffect;
+                elseNetPush += push - pop;
+            }
         }
         else {
-            yield return new Poly.Syntax.Primitives.PushConstant(0L);
+            elsePrims = [new Poly.Syntax.Primitives.PushConstant(0L)];
+            elseNetPush = 1;
         }
-        yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
+        foreach (var p in elsePrims)
+            yield return p;
+        if (elseNetPush > 0)
+            yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
 
-        // Merge: read result from temp slot
+        // Merge: load result when one branch stored one.
         yield return mergeLabel;
-        yield return new Poly.Syntax.Primitives.LoadLocal(tempSlot);
+        if (thenNetPush > 0 || elseNetPush > 0)
+            yield return new Poly.Syntax.Primitives.LoadLocal(tempSlot);
     }
 }

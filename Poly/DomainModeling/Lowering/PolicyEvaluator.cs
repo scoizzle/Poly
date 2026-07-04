@@ -1,12 +1,10 @@
 using Poly.Data.Modeling;
+using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
-using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Syntax.Analysis;
-
-using PrimReturn = Poly.Syntax.Primitives.Return;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -59,33 +57,12 @@ public static class PolicyEvaluator {
         var pass = new DomainExpressionLoweringPass();
         var lowered = pass.Lower(policy.Expression, entityParam);
 
-        // New pipeline: ExpansionPass → CompilePrimitives
-        var analysis = new AnalyzerBuilder()
-            .UseTypeAndMemberResolver()
-            .UseVariableScopeValidator()
-            .AddAnalyzer(new ExpansionPass())
-            .Build()
-            .Analyze(lowered);
-
-        var meta = analysis.GetMetadata<Poly.Interpretation.Analysis.PrimitiveExpansionMetadata>(lowered);
-        System.Collections.Generic.IReadOnlyList<Poly.Syntax.Primitives.PrimitiveNode> primitives;
-        if (meta is not null) {
-            primitives = meta.Primitives;
-        }
-        else {
-            // Fallback: call ToPrimitives directly if ExpansionPass didn't run
-            var ctx = new AnalysisContext(ClrTypeDefinitionRegistry.Shared);
-            primitives = lowered.ToPrimitives(ctx).ToArray();
-        }
-
-        var primsList = primitives.ToList();
-        primsList.Add(new PrimReturn());
-        var linked = Poly.Interpretation.Vm.PrimitiveLinker.Link(primsList);
-        var compiled = ProgramCompiler.CompilePrimitives(linked);
+        // Standard VM interpretation pipeline
+        var compiled = InterpretationAnalyzer.Compile(lowered);
 
         return e => {
-            var result = Vm.Execute(compiled, e);
-            return result.GetValue<bool>();
+            using var exec = Vm.Execute(compiled, s => s.SetArgs(new object?[] { e }));
+            return exec.Result.GetValue<bool>();
         };
     }
 

@@ -77,13 +77,32 @@ public sealed record Block : Node {
             }
         }
 
-        // Emit children; discard all but the last
+        // Emit children; discard all but the last.
+        // Loop types (WhileLoop, ForLoop, DoWhileLoop) manage their own ring
+        // effect via body-net cleanup Discards.  Other children may leave
+        // more than one value on the ring (e.g. Assignments with LoadLocal),
+        // so compute the child's net push and emit that many Discards.
         for (int i = 0; i < Nodes.Count; i++) {
-            foreach (var p in Nodes[i].ToPrimitives(context))
-                yield return p;
-
-            if (i < Nodes.Count - 1)
-                yield return new Poly.Syntax.Primitives.Discard();
+            if (i < Nodes.Count - 1 && Nodes[i] is WhileLoop or ForLoop or DoWhileLoop) {
+                foreach (var p in Nodes[i].ToPrimitives(context))
+                    yield return p;
+            }
+            else if (i < Nodes.Count - 1) {
+                var childPrims = Nodes[i].ToPrimitives(context).ToList();
+                int childNetPush = 0;
+                foreach (var p in childPrims) {
+                    var (pop, push) = p.StackEffect;
+                    childNetPush += push - pop;
+                }
+                foreach (var p in childPrims)
+                    yield return p;
+                for (int j = 0; j < childNetPush; j++)
+                    yield return new Poly.Syntax.Primitives.Discard();
+            }
+            else {
+                foreach (var p in Nodes[i].ToPrimitives(context))
+                    yield return p;
+            }
         }
     }
 

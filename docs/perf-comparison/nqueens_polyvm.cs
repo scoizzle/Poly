@@ -1,14 +1,9 @@
 using System;
 using System.Linq;
 using Poly.Syntax;
-using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.Analysis.ConstantFolding;
-using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Interpretation.Analysis.LoweringPrep;
+using Prim = Poly.Syntax.Primitives;
 using Poly.Interpretation.Vm;
 
 int boardSize = args.Length > 0 ? int.Parse(args[0]) : 8;
@@ -62,38 +57,12 @@ var body = new Invoke(new Lambda([], new Block(
      total],
     [stack, sp, total, ld, cols, rd, avail, bit])));
 
-var analysisResult = new AnalyzerBuilder()
-    .UseTypeAndMemberResolver()
-    .UseConstantFolding()
-    .UseSideEffectAnalysis()
-    .UseThisReferenceContext()
-    .UseControlFlowAnalysis()
-    .UseVariableScopeValidator()
-            .UseLoweringPreparation()
-            .UseUopGeneration()
-    .Build()
-    .Analyze(body, setup: ctx => {
-        var t = ctx.TypeDefinitions;
-        ctx.SetResolvedType(stack, t.GetTypeDefinition(typeof(long[])));
-        ctx.SetResolvedType(sp, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(total, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(ld, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(cols, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(rd, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(avail, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(bit, t.GetTypeDefinition(typeof(long)));
-    });
-
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
-var lowered = Lowering.Lower(body, analysisResult);
-var program = ProgramCompiler.Compile(lowered, mode: CompilationMode.NoDebug);
+var program = InterpretationAnalyzer.Compile(body, CompilationMode.NoDebug);
 prepSw.Stop();
 
-using var state = new VmState(program);
-if (debug)
-    state.Trace = Console.Error;
 var sw = System.Diagnostics.Stopwatch.StartNew();
-Vm.Execute(state);
-long result = state.Stack.Pop();
+using var exec = Vm.Execute(program);
+long result = exec.RawValue;
 sw.Stop();
 Console.WriteLine($"Poly VM,{boardSize},{result},{sw.ElapsedMilliseconds},{prepSw.ElapsedMilliseconds}");

@@ -42,3 +42,16 @@ public sealed class ExpansionPass : INodeAnalyzer {
         this.AnalyzeChildren(context, node);
     }
 }
+
+public static class ExpansionPassExtensions {
+    extension(AnalyzerBuilder builder) {
+        /// <summary>
+        /// Adds the <see cref="ExpansionPass"/> to the analysis pipeline,
+        /// enabling primitive expansion (AST → <see cref="PrimitiveNode"/> sequence)
+        /// during analysis.  Expanded primitives are available via
+        /// <c>analysis.GetMetadata&lt;PrimitiveExpansionMetadata&gt;(node)</c>.
+        /// </summary>
+        public AnalyzerBuilder UsePrimitiveExpansion() => builder
+            .AddAnalyzer(new ExpansionPass());
+    }
+}

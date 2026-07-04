@@ -13,11 +13,10 @@ public class PrimitiveExpandTests {
         primsList.Add(new Prim.Return());
         var linked = PrimitiveLinker.Link(primsList);
         var program = ProgramCompiler.CompilePrimitives(linked, mode: CompilationMode.Normal);
-        using var state = new VmState(program) { MaxLoopIterations = 10_000 };
-        var result = Vm.Execute(state);
-        if (!result.HasValue)
-            throw new InvalidOperationException($"VM returned void, kind={result.Kind}, status={state.Status}");
-        return (long)(result.Value ?? 0);
+        using var exec = Vm.Execute(program, s => s.MaxLoopIterations = 10_000);
+        if (!exec.Result.HasValue)
+            throw new InvalidOperationException($"VM returned void, kind={exec.Result.Kind}, status={exec.State.Status}");
+        return (long)(exec.Result.Value ?? 0);
     }
 
     [Test, Timeout(10_000)] public async Task Expand_Constant_ReturnsValue(CancellationToken ct) => await Assert.That(ExecExpand(new Constant(42))).IsEqualTo(42);

@@ -24,8 +24,8 @@ public sealed record Assignment(Node Destination, Node Value) : Expression {
             if (env is null || !env.TryGetSlot(destVar, out var slot))
                 throw new InvalidOperationException($"Variable '{destVar.Name}' has no slot assigned");
             yield return new Poly.Syntax.Primitives.StoreLocal(slot);
-            // Re-load so assignment is an expression
-            yield return new Poly.Syntax.Primitives.LoadLocal(slot);
+            // StoreLocal already pushes the stored value back (StackEffect = 1,1),
+            // so the result is on the ring — no LoadLocal needed.
         }
         else if (Destination is Poly.Syntax.Nodes.IndexAccess indexAccess) {
             // arr[i] = value: emit array handle, index, then ArrayStore

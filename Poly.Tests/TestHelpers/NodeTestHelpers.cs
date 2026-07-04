@@ -113,24 +113,17 @@ public static class NodeTestHelpers {
     // ── New primitive pipeline helpers ──────────────────────────────
 
     /// <summary>
-    /// Compile a node using the new primitive pipeline:
-    /// ToPrimitives → PrimitiveLinker → ProgramCompiler.CompilePrimitives.
+    /// Compile a node using the standard VM interpretation pipeline.
     /// </summary>
-    public static VmProgram CompileWithPrimitives(this Node node, CompilationMode mode = CompilationMode.Normal) {
-        var ctx = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
-        var primitives = node.ToPrimitives(ctx);
-        var primsList = primitives.ToList();
-        primsList.Add(new Prim.Return());
-        var linked = PrimitiveLinker.Link(primsList);
-        return ProgramCompiler.CompilePrimitives(linked, mode: mode);
-    }
+    public static VmProgram CompileWithPrimitives(this Node node, CompilationMode mode = CompilationMode.Normal) =>
+        InterpretationAnalyzer.Compile(node, mode);
 
     /// <summary>
-    /// Execute a node via the new primitive pipeline end-to-end, returning the result.
+    /// Execute a node via the standard VM interpretation pipeline end-to-end,
+    /// returning the result.
     /// </summary>
     public static InterpreterResult ExecWithPrimitives(this Node node) {
-        var program = node.CompileWithPrimitives();
-        using var state = new VmState(program) { MaxLoopIterations = 10_000 };
-        return Vm.Execute(state);
+        using var exec = Vm.Execute(node.CompileWithPrimitives());
+        return exec.Result;
     }
 }

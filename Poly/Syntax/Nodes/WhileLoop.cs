@@ -28,11 +28,20 @@ public sealed record WhileLoop(Node Condition, Node Body) : Statement {
         // Jump to header (skip past first entry to avoid re-executing sibling code)
         yield return new Poly.Syntax.Primitives.Goto(header);
 
-        // Body block
+        // Body block — drain the body's net ring effect so each
+        // iteration is ring-neutral.  Body primitives are cached so we
+        // can compute netPush without iterating twice.
         yield return bodyLabel;
-        foreach (var p in Body.ToPrimitives(context))
+        var bodyPrims = Body.ToPrimitives(context).ToList();
+        int bodyNetPush = 0;
+        foreach (var p in bodyPrims) {
+            var (pop, push) = p.StackEffect;
+            bodyNetPush += push - pop;
+        }
+        foreach (var p in bodyPrims)
             yield return p;
-        yield return new Poly.Syntax.Primitives.Discard();
+        for (int i = 0; i < bodyNetPush; i++)
+            yield return new Poly.Syntax.Primitives.Discard();
 
         // Header: condition check — CondGoto jumps when condition is 0 (false)
         yield return header;

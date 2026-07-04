@@ -1,15 +1,10 @@
 using System;
 using System.Linq;
-using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
-using Poly.Interpretation.Analysis.ConstantFolding;
-using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Interpretation.Analysis.LoweringPrep;
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.Vm;
 using Poly.Syntax;
-using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
+using Poly.Interpretation;
+using Prim = Poly.Syntax.Primitives;
+using Poly.Interpretation.Vm;
 
 int limit = args.Length > 0 ? int.Parse(args[0]) : 1000;
 bool debug = args.Length > 1 && args[1] == "--debug";
@@ -45,40 +40,18 @@ var body = new Invoke(new Lambda([], new Block(
       new BitwiseOr(new ShiftLeft(bestN, new Constant(32L)), maxLen)],
     [n, i, len, maxLen, bestN])));
 
-var analysisResult = new AnalyzerBuilder()
-    .UseTypeAndMemberResolver()
-    .UseConstantFolding()
-    .UseSideEffectAnalysis()
-    .UseThisReferenceContext()
-    .UseControlFlowAnalysis()
-    .UseVariableScopeValidator()
-    .UseLoweringPreparation()
-    .UseUopGeneration()
-    .Build()
-    .Analyze(body, setup: ctx => {
-        var t = ctx.TypeDefinitions;
-        ctx.SetResolvedType(n, t.GetTypeDefinition(typeof(int)));
-        ctx.SetResolvedType(i, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(len, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(maxLen, t.GetTypeDefinition(typeof(long)));
-        ctx.SetResolvedType(bestN, t.GetTypeDefinition(typeof(long)));
-    });
-
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
-var lowered = Lowering.Lower(body, analysisResult);
-var program = ProgramCompiler.Compile(lowered, mode: CompilationMode.NoDebug);
+var program = InterpretationAnalyzer.Compile(body, CompilationMode.NoDebug);
 prepSw.Stop();
 
-var state = new VmState(program);
 long result;
 var sw = System.Diagnostics.Stopwatch.StartNew();
 if (debug) {
-    state.Trace = Console.Error;
-    Vm.Execute(state);
-    result = state.Stack.Pop();
+    using var exec = Vm.Execute(program, s => s.Trace = Console.Error);
+    result = exec.RawValue;
 } else {
-    Vm.Execute(state);
-    result = state.Stack.Pop();
+    using var exec = Vm.Execute(program);
+    result = exec.RawValue;
 }
 sw.Stop();
 long bestNVal = result >> 32;

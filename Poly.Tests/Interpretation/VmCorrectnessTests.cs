@@ -35,35 +35,16 @@ public class VmCorrectnessTests {
             .Analyze(node);
     }
 
-    private static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) {
-        // Run expansion through the analysis pipeline so metadata is available
-        var analysis = new AnalyzerBuilder()
-            .UseTypeAndMemberResolver()
-            .UseVariableScopeValidator()
-            .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass())
-            .Build()
-            .Analyze(node);
-        var meta = analysis.GetMetadata<Poly.Interpretation.Analysis.PrimitiveExpansionMetadata>(node);
-        Poly.Syntax.Primitives.PrimitiveNode[] primitives;
-        if (meta is not null) {
-            primitives = meta.Primitives.ToArray();
-        }
-        else {
-            var ctx = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
-            primitives = node.ToPrimitives(ctx).ToArray();
-        }
-        var primsList = primitives.ToList();
-        primsList.Add(new Poly.Syntax.Primitives.Return());
-        var linked = Poly.Interpretation.Vm.PrimitiveLinker.Link(primsList);
-        return Poly.Interpretation.Vm.ProgramCompiler.CompilePrimitives(linked, mode: mode);
-    }
+    private static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) =>
+        InterpretationAnalyzer.Compile(node, mode);
 
     private static (VmState State, long Result) ExecVm(Node node, Action<VmState>? setup = null) {
         var prog = Compile(node);
-        var state = new VmState(prog) { MaxLoopIterations = 100_000_000 };
-        setup?.Invoke(state);
-        Vm.Execute(state);
-        return (state, state.Stack.Pop());
+        var exec = Vm.Execute(prog, s => {
+            s.MaxLoopIterations = 100_000_000;
+            setup?.Invoke(s);
+        });
+        return (exec.State, exec.RawValue);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -117,10 +98,8 @@ public class VmCorrectnessTests {
         var d = new VmState(prog);
         d.Stack.RawSlots[0] = 999;
         d.Dispose();
-        var s = new VmState(prog);
-        s.SetArgs(42);
-        Vm.Execute(s);
-        await Assert.That(s.Stack.Pop()).IsEqualTo(42L);
+        using var s = Vm.Execute(prog, s => s.SetArgs(42));
+        await Assert.That(s.RawValue).IsEqualTo(42L);
     }
 
     [Test]
@@ -178,9 +157,8 @@ public class VmCorrectnessTests {
     public async Task BinOp_MixedTypes_StringAndLong_NoCrash() {
         var body = new Equal(new Constant(0L), new Constant("hello"));
         var prog = Compile(body);
-        var state = new VmState(prog);
-        Vm.Execute(state);
-        await Assert.That(state.Stack.StackPointer).IsEqualTo(1);
+        using var exec = Vm.Execute(prog);
+        await Assert.That(exec.State.Stack.StackPointer).IsEqualTo(1);
     }
 
     [Test]
@@ -237,14 +215,12 @@ public class VmCorrectnessTests {
         var e = new Parameter("entity");  // NO TypeReference
         var body = new Member(e, "Age");
         var prog = Compile(body);
-        var state = new VmState(prog);
-        state.SetArgs(new PersonRecord("Test", 25));
+        using var exec = Vm.Execute(prog, s => s.SetArgs(new PersonRecord("Test", 25)));
         // The Member access may emit a Nop (no resolved type), return 0, or
         // leave the stack in an unexpected state.  The important contract is
         // that the VM does not crash — the caller is responsible for providing
         // type info.
-        Vm.Execute(state);
-        await Assert.That(state.Stack.StackPointer).IsGreaterThan(0);
+        await Assert.That(exec.State.Stack.StackPointer).IsGreaterThan(0);
     }
 
     [Test]
@@ -402,15 +378,17 @@ public class VmCorrectnessTests {
     private static async Task AssertVmMatchesLinqComposite(Node body) {
         // VM path
         var vmProg = Compile(body);
-        var vm20 = new VmState(vmProg) { MaxLoopIterations = 100_000_000 };
-        vm20.SetArgs(new PersonRecord("Test", 20));
-        Vm.Execute(vm20);
-        long vm20Result = vm20.Stack.Pop();
+        using var exec20 = Vm.Execute(vmProg, s => {
+            s.MaxLoopIterations = 100_000_000;
+            s.SetArgs(new PersonRecord("Test", 20));
+        });
+        long vm20Result = exec20.RawValue;
 
-        var vm17 = new VmState(vmProg) { MaxLoopIterations = 100_000_000 };
-        vm17.SetArgs(new PersonRecord("Test", 17));
-        Vm.Execute(vm17);
-        long vm17Result = vm17.Stack.Pop();
+        using var exec17 = Vm.Execute(vmProg, s => {
+            s.MaxLoopIterations = 100_000_000;
+            s.SetArgs(new PersonRecord("Test", 17));
+        });
+        long vm17Result = exec17.RawValue;
 
         await Assert.That(vm20Result).IsEqualTo(1L);
         await Assert.That(vm17Result).IsEqualTo(0L);
@@ -450,11 +428,8 @@ public class VmCorrectnessTests {
         var body = new Invoke(new Lambda([x], x));
         var prog = Compile(body);
         for (int i = 0; i < 100; i++) {
-            var s = new VmState(prog);
-            s.SetArgs(i);
-            Vm.Execute(s);
-            await Assert.That(s.Stack.Pop()).IsEqualTo(i);
-            s.Dispose();
+            using var s = Vm.Execute(prog, s => s.SetArgs(i));
+            await Assert.That(s.RawValue).IsEqualTo((long)i);
         }
     }
 
@@ -464,12 +439,10 @@ public class VmCorrectnessTests {
         var add = Compile(new Invoke(new Lambda([x], new SN.Add(x, new Constant(1L)))));
         var mul = Compile(new Invoke(new Lambda([x], new SN.Multiply(x, new Constant(2L)))));
         for (int i = 0; i < 50; i++) {
-            var s1 = new VmState(add); s1.SetArgs(i); Vm.Execute(s1);
-            await Assert.That(s1.Stack.Pop()).IsEqualTo(i + 1L);
-            s1.Dispose();
-            var s2 = new VmState(mul); s2.SetArgs(i); Vm.Execute(s2);
-            await Assert.That(s2.Stack.Pop()).IsEqualTo(i * 2L);
-            s2.Dispose();
+            using var s1 = Vm.Execute(add, s => s.SetArgs(i));
+            await Assert.That(s1.RawValue).IsEqualTo(i + 1L);
+            using var s2 = Vm.Execute(mul, s => s.SetArgs(i));
+            await Assert.That(s2.RawValue).IsEqualTo(i * 2L);
         }
     }
 
@@ -502,14 +475,12 @@ public class VmCorrectnessTests {
              c], [c]);
 
         var norm = Compile(body, mode: CompilationMode.Normal);
-        var sn = new VmState(norm) { MaxLoopIterations = 100_000_000 };
-        Vm.Execute(sn);
+        using var sn = Vm.Execute(norm, s => s.MaxLoopIterations = 100_000_000);
 
         var nd = Compile(body, mode: CompilationMode.NoDebug);
-        var sd = new VmState(nd);
-        Vm.Execute(sd);
+        using var sd = Vm.Execute(nd);
 
-        await Assert.That(sd.Stack.Pop()).IsEqualTo(sn.Stack.Pop());
+        await Assert.That(sd.RawValue).IsEqualTo(sn.RawValue);
     }
 
     [Test]
@@ -840,12 +811,11 @@ public class VmCorrectnessTests {
     public async Task Fuzz_BinOp_DivideByZero_NoCrash() {
         var body = new SN.Divide(new Constant(10L), new Constant(0L));
         var prog = Compile(body);
-        var state = new VmState(prog);
         // DivideByZeroException at runtime — the VM should not crash the
         // host process.  The exception is thrown from the compiled delegate.
         // VM doesn't catch CLR DivideByZeroException — just verify the
         // process doesn't crash (the exception propagates to the host).
-        try { Vm.Execute(state); } catch (DivideByZeroException) { }
+        try { using var _ = Vm.Execute(prog); } catch (DivideByZeroException) { }
         // Reaching here means no crash even if exception was thrown.
     }
 
@@ -869,9 +839,8 @@ public class VmCorrectnessTests {
 
     private static long ExecNew(Node node) {
         var prog = CompileNew(node);
-        using var state = new VmState(prog) { MaxLoopIterations = 10_000 };
-        var result = Vm.Execute(state);
-        return (long)(result.Value ?? 0);
+        using var exec = Vm.Execute(prog, s => s.MaxLoopIterations = 10_000);
+        return (long)(exec.Result.Value ?? 0);
     }
 
     // ═══════════════════════════════════════════════════════════════

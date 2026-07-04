@@ -38,6 +38,10 @@ public static class ProgramCompiler {
     public static VmProgram CompilePrimitives(
         IReadOnlyList<PrimitiveNode> primitives,
         CompilationMode mode = CompilationMode.Normal) {
+        // Link resolves Label → PC offset for Goto/CondGoto.
+        // Safe to call on already-linked lists (Goto/CondGoto won't match).
+        primitives = PrimitiveLinker.Link(primitives);
+
         var ctx = new CompilationContext();
         var body = new List<Expression>();
         int n = primitives.Count;
@@ -87,7 +91,11 @@ public static class ProgramCompiler {
                     NewArrayBounds(typeof(long), Constant(n)))));
         }
 
-        if (n > 0) {
+        // In Debug/Normal/Profiling mode the _pc variable tracks the current
+        // PC so that external breakpoints can resume at a specific position.
+        // NoDebug mode runs straight through (direct GotoExpression branches)
+        // and never reads _pc, so the switch dispatch is pure dead weight.
+        if (mode != CompilationMode.NoDebug && n > 0) {
             var swCases = new System.Linq.Expressions.SwitchCase[n];
             for (int i = 0; i < n; i++)
                 swCases[i] = SwitchCase(Goto(ctx.GetLabel(i)), Constant(i));
@@ -139,10 +147,8 @@ public static class ProgramCompiler {
 
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
-        return new VmProgram(del, new Dictionary<NodeId, SourceRange>(), functions, null, null, 32);
+        return new VmProgram(del, new Dictionary<NodeId, SourceRange>(), functions, null, 32);
     }
-
-    private static readonly MethodInfo HandleCallMethod = Ref.Method(() => Vm.HandleCall(null!, 0, 0));
 
     private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc, List<FunctionEntry> functions) {
         var state = ctx.State;
@@ -150,6 +156,8 @@ public static class ProgramCompiler {
         var sp = Property(Property(state, "Stack"), "StackPointer");
 
         var body = new List<Expression>();
+
+        // 1. Push arguments onto the value stack
         for (int i = 0; i < consumedPcs.Length; i++) {
             var arg = ctx.ValueSlot(consumedPcs[i]);
             body.Add(Assign(ArrayAccess(slots, sp), arg));
@@ -157,25 +165,55 @@ public static class ProgramCompiler {
         }
         body.Add(CtxPushRegisters(ctx));
 
-        // Ensure a function entry exists for this index
-        var entryPc = call.FuncIndex < functions.Count ? functions[call.FuncIndex].PC : 0;
+        // 2. Ensure a function entry exists and resolve compile-time constants
+        int argSlots = call.ArgCount + 1;
         if (call.FuncIndex >= functions.Count) {
-            functions.Add(new FunctionEntry(entryPc, call.ArgCount + 1));
+            functions.Add(new FunctionEntry(0, argSlots));
+        }
+        var entry = functions[call.FuncIndex];
+        int localCount = entry.LocalCount;
+
+        // 3. Inlined call frame setup (formerly HandleCall):
+        //    newFrameBase = SP - argSlots
+        //    packed = ((returnPC << 32) | (uint)FrameBase)
+        //    RawSlots[SP] = packed; SP++
+        //    FrameBase = newFrameBase; CachedArgSlots = argSlots
+        //    SP = newFrameBase + argSlots + localCount + 1
+        {
+            var stack = Property(state, "Stack");
+            var spProp = Property(stack, "StackPointer");
+            var raw = Property(stack, "RawSlots");
+            var newFb = Variable(typeof(int), "_callFb");
+            var savedSp = Variable(typeof(int), "_callSp");
+
+            // returnPC = ProgramCounter + 1 (always 1 in NoDebug since _pc = 0)
+            var returnPC = Add(Property(state, nameof(VmState.ProgramCounter)), Constant(1));
+            var fbProp = Property(state, nameof(VmState.FrameBase));
+
+            body.Add(Assign(newFb, Subtract(spProp, Constant(argSlots))));
+            body.Add(Assign(savedSp, spProp));
+            // RawSlots[SP] = ((long)(returnPC << 32) | (uint)FrameBase)
+            body.Add(Assign(ArrayAccess(raw, savedSp),
+                Add(LeftShift(Convert(returnPC, typeof(long)), Constant(32)),
+                    Convert(fbProp, typeof(long)))));
+            body.Add(Call(stack, SetStackPointer, Add(savedSp, Constant(1))));
+            body.Add(Assign(fbProp, newFb));
+            body.Add(Assign(Property(state, nameof(VmState.CachedArgSlots)), Constant(argSlots)));
+            body.Add(Assign(ctx.FrameBaseLocal, newFb));
+            body.Add(Call(stack, SetStackPointer,
+                Add(Add(newFb, Constant(argSlots + localCount)), Constant(1))));
+            body.AddRange(new Expression[] { newFb, savedSp });
         }
 
-        // HandleCall sets up the call frame (metadata, FrameBase).
-        // The function entry PC is known at compile time — Goto it directly.
-        body.Add(Call(HandleCallMethod, state, Constant(call.FuncIndex), Constant(call.ArgCount + 1)));
-        body.Add(Assign(ctx.FrameBaseLocal, Property(ctx.State, "FrameBase")));
         body.Add(CtxPopRegisters(ctx));
 
-        // Read return value from the value stack into our ring slot
+        // 4. Read return value from the value stack into our ring slot
         var rv = ctx.ValueSlot(pc);
         body.Add(Assign(rv, ArrayAccess(slots,
             Subtract(Property(Property(state, "Stack"), "StackPointer"), Constant(1)))));
 
-        // Goto the function body directly — no dispatch switch needed
-        body.Add(Goto(ctx.GetLabel(entryPc)));
+        // 5. Goto the function body directly — no dispatch switch needed
+        body.Add(Goto(ctx.GetLabel(entry.PC)));
         return Block(body);
     }
 

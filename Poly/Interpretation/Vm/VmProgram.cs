@@ -7,6 +7,5 @@ public sealed record VmProgram(
     IReadOnlyDictionary<NodeId, SourceRange> SourceRanges,
     IReadOnlyList<FunctionEntry> Functions,
     IReadOnlyList<object?>? Constants,
-    IReadOnlyList<CallSiteDelegate>? CallSites,
     int MaxActiveLocalsDepth
 );

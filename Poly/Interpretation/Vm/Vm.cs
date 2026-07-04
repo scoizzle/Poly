@@ -17,28 +17,58 @@ namespace Poly.Interpretation.Vm;
 //   Slot[ArgSlots+LocalCount]:  last local
 //   Slot[ArgSlots+LocalCount+1]: first eval  ← SP
 //
-// Return convention (current — simplified since old pipeline deletion):
-//   HandleCall and HandleCallClosure return the target function's entry PC.
-//   EmitPrimitiveCall writes this directly to _pc, restores ring registers,
-//   and jumps to EntryLabel. The dispatch switch then routes to the
-//   function-body label at that PC. This avoids a state.ProgramCounter
-//   round-trip.
+// Return convention:
+//   EmitPrimitiveCall (inlined in the compiled delegate body) saves the
+//   current FrameBase and return PC into a metadata slot, sets up the new
+//   frame, and jumps directly to the function-body label.
 //
 //   EmitReturnOp writes the result to Slot[FB], sets SP = FB + 1, and jumps
 //   to the compiled delegate's ExitLabel (ends program execution).
-//   A proper frame-return primitive (restore caller PC/FB from metadata
-//   via the packed metadata slot) will be added when cross-function calls
-//   need to return to the caller.
+//
+//   Frame-return (restore caller PC/FB from metadata) will be added when
+//   cross-function calls need to return to the caller.
 //
 // FrameBase sentinel: -1 = "no active frame" (top-level execution).
 
 public static partial class Vm {
-    public static InterpreterResult Execute(VmProgram program, params IEnumerable<object?> args) {
-        var state = CreateState(program);
+    /// <summary>
+    /// Execute <paramref name="program"/>, constructing a <see cref="VmState"/>
+    /// internally and returning an <see cref="ExecutionResult"/> that owns the
+    /// state.  The result carries both the <see cref="InterpreterResult"/> and
+    /// the <see cref="VmState"/> for inspection or resumption.
+    /// </summary>
+    public static ExecutionResult Execute(VmProgram program, params IEnumerable<object?> args) =>
+        Execute(program, s => s.SetArgs(args));
+
+    /// <summary>
+    /// Execute <paramref name="program"/> with state configuration before the
+    /// compiled delegate runs.  The <paramref name="configure"/> callback can
+    /// set state properties (e.g. <c>Trace</c>, <c>MaxLoopIterations</c>) and
+    /// call <c>state.SetArgs(...)</c> to seed arguments.
+    /// </summary>
+    public static ExecutionResult Execute(VmProgram program, Action<VmState> configure) {
+        var state = new VmState(program);
+        configure(state);
         state.Status = InterpreterStatus.Running;
-        state.Registers ??= new long[program.MaxActiveLocalsDepth];
+        state.Registers ??= new long[state.Program.MaxActiveLocalsDepth];
+        state.Program.Delegate(state);
+        return new ExecutionResult(state, InterpretResult(state));
+    }
+
+    /// <summary>
+    /// Execute or resume on an existing <see cref="VmState"/>.  This overload
+    /// is <c>internal</c> because calling code should generally prefer the
+    /// state-owning <see cref="ExecutionResult"/> API.
+    /// </summary>
+    internal static InterpreterResult Execute(VmState state, params IEnumerable<object?> args) {
+        state.Status = InterpreterStatus.Running;
+        state.Registers ??= new long[state.Program.MaxActiveLocalsDepth];
         state.SetArgs(args);
-        program.Delegate(state);
+        state.Program.Delegate(state);
+        return InterpretResult(state);
+    }
+
+    private static InterpreterResult InterpretResult(VmState state) {
 
         if (state.Status == InterpreterStatus.Suspended)
             return InterpreterResult.Suspend();
@@ -61,64 +91,4 @@ public static partial class Vm {
         return InterpreterResult.FromValue(raw);
     }
 
-    public static InterpreterResult Execute(VmState state, params IEnumerable<object?> args) {
-        var program = state.Program;
-        state.Status = InterpreterStatus.Running;
-        state.Registers ??= new long[program.MaxActiveLocalsDepth];
-        state.SetArgs(args);
-        program.Delegate(state);
-
-        if (state.Status == InterpreterStatus.Suspended)
-            return InterpreterResult.Suspend();
-
-        int sp = state.Stack.StackPointer;
-        if (sp <= 0)
-            return InterpreterResult.Void;
-
-        long raw = state.Stack.RawSlots[sp - 1];
-        int handle = (int)raw;
-
-        // If the result is a heap handle, dereference to give callers
-        // the actual CLR object rather than an opaque handle.
-        // 0 and 1 are excluded as they're almost always boolean results.
-        if (handle > 1 && handle < state.Heap.Count) {
-            var heapObj = state.Heap.UnsafeGet(handle);
-            return InterpreterResult.FromValue(heapObj);
-        }
-
-        return InterpreterResult.FromValue(raw);
-    }
-
-    // ── µop handler helpers ──
-
-    internal static void HandleCall(VmState state, int funcIndex, int argSlots) {
-        var prog = state.Program;
-        if ((uint)funcIndex >= (uint)prog.Functions.Count) {
-            // No function — push a dummy 0 so the caller's
-            // RawSlots[SP-1] access doesn't crash.
-            state.Stack.SetStackPointer(1);
-            state.Stack.RawSlots[0] = 0;
-            return;
-        }
-        var entry = prog.Functions[funcIndex];
-        int newFrameBase = state.Stack.StackPointer - argSlots;
-        int sp = state.Stack.StackPointer;
-        state.Stack.RawSlots[sp] = ((long)(state.ProgramCounter + 1) << 32)
-            | (uint)state.FrameBase;
-        state.Stack.SetStackPointer(sp + 1);
-        state.FrameBase = newFrameBase;
-        state.CachedArgSlots = argSlots;
-        state.Stack.SetStackPointer(newFrameBase + argSlots + entry.LocalCount + 1);
-    }
-
-    internal static void HandleCallExternal(VmState state, int siteIndex) {
-        var prog = state.Program;
-        var callSites = prog.CallSites;
-        if (callSites is null || (uint)siteIndex >= (uint)callSites.Count || callSites[siteIndex] is null)
-            throw new InvalidOperationException($"CallExternal: no target at site {siteIndex}");
-        callSites[siteIndex](state);
-    }
-
-    /// <summary>Public factory for VmState so expression trees can create instances.</summary>
-    public static VmState CreateState(VmProgram program) => new(program);
 }

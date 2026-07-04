@@ -5,6 +5,12 @@ namespace Poly.Syntax.Analysis;
 /// </summary>
 public sealed class AnalysisContext : INodeMetadataProvider {
     /// <summary>
+    /// Creates a default AnalysisContext using the shared CLR type definition registry.
+    /// </summary>
+    public static AnalysisContext CreateDefault() =>
+        new(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
+
+    /// <summary>
     /// Initializes a new instance with type definitions.
     /// </summary>
     public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisSettings? settings = null) {

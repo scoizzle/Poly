@@ -21,6 +21,7 @@ namespace Poly.Interpretation;
 ///     <item><see cref="Semantics.UseVariableScopeValidator"/></item>
 ///     <item><see cref="Semantics.UseSideEffectAnalysis"/></item>
 ///     <item><see cref="Semantics.UseThisReferenceContext"/></item>
+///     <item><see cref="Semantics.UseJumpTargetResolution"/></item>
 ///     <item><see cref="ControlFlow.UseControlFlowAnalysis"/></item>
 ///     <item><see cref="ConstantFolding.UseConstantFolding"/></item>
 ///     <item><see cref="Semantics.UseDefiniteAssignmentAnalysis"/></item>
@@ -36,6 +37,7 @@ public static class InterpretationAnalyzer {
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
         .UseThisReferenceContext()
+        .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseConstantFolding()
         .UseDefiniteAssignmentAnalysis()

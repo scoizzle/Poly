@@ -153,7 +153,7 @@ Async support is **minimal by design**. `Task<T>` is merely the return type of t
 
 For simulation purposes, `Await` nodes extract results synchronously via `GetAwaiter().GetResult()`.
 
-**Breakpoints** reuse the `Int`/`Iret` interrupt mechanism (vector=1). See `docs/decisions/2026-06-08-breakpoint-architecture.md`.
+**Breakpoints** use `VmState.DebugInterrupt` — a callback invoked before each µop in Debug/Normal compilation mode, giving external code full control over breakpoint policy, inspection, and single-stepping. See `docs/decisions/2026-06-08-breakpoint-architecture.md`.
 
 **µop-level tracing:** `Lowering.cs` attaches `SourceName` to each µop via `EmitOp(ref ctx, op, source)`. At compile time `TraceBefore` generates a `VmTrace.LogUop(pc, text, sp, fb, state)` call insider each µop's expression, gated at runtime by `state.Trace != null` — ~1 ns when `state.Trace` is null (default). `CommentOp` markers (`; text`) alias section boundaries in the µop list for readability and generate zero code. Test files set `state.Trace = TestTraceWriter` which routes to `Console.Error` — visible in TUnit via `--show-stderr`.  Active in all build configurations.
 

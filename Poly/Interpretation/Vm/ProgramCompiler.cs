@@ -88,8 +88,7 @@ public static class ProgramCompiler {
                     NewArrayBounds(typeof(long), Constant(n)))));
         }
 
-        // In Debug/Normal mode the _pc variable tracks the current
-        // PC so that external breakpoints can resume at a specific position.
+        // In Debug/Normal mode the _pc variable tracks the current PC.
         // NoDebug mode runs straight through (direct GotoExpression branches)
         // and never reads _pc, so the switch dispatch is pure dead weight.
         if (mode != CompilationMode.NoDebug && n > 0) {
@@ -103,11 +102,26 @@ public static class ProgramCompiler {
 
         // Emit each primitive
         var functions = new List<FunctionEntry>();
+        var debugInterruptProp = mode != CompilationMode.NoDebug
+            ? Property(ctx.State, nameof(VmState.DebugInterrupt))
+            : null;
+
         for (int idx = 0; idx < n; idx++) {
             var prim = primitives[idx];
             ctx.CurrentLabelIndex = idx;
 
             body.Add(Label(ctx.GetLabel(idx)));
+
+            // In Debug/Normal mode, flush PC and invoke DebugInterrupt before each µop,
+            // but only if a handler is actually registered — null check avoids the
+            // overhead of flushing _pc on every µop when no debugger is attached.
+            if (debugInterruptProp is not null) {
+                body.Add(IfThen(
+                    NotEqual(debugInterruptProp, Constant(null, typeof(Action<VmState>))),
+                    Block(
+                        Assign(ctx.StateProgramCounter, Constant(idx)),
+                        Invoke(debugInterruptProp, ctx.State))));
+            }
 
             var pcs = consumedPcs[idx];
             Expression Resolve(int i) => ctx.ValueSlot(pcs[i]);

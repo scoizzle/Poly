@@ -7,7 +7,7 @@ LINQ Expression delegates for fast execution.
 
 | File | Purpose |
 |------|---------|
-| `VmState.cs` | Per-execution state: stack, heap, registers, breakpoints, trace, loop limits |
+| `VmState.cs` | Per-execution state: stack, heap, registers, debug interrupt, trace, loop limits |
 | `VmProgram.cs` | Compiled program record (delegate + max local depth) |
 | `ProgramCompiler.cs` | `PrimitiveNode[]` → compiled `Action<VmState>` delegate via LINQ Expressions |
 | `CompilationContext.cs` | Ring-based µop value allocation, label management, local variable caching |

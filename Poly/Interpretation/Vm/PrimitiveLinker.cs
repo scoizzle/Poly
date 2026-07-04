@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-
 using Poly.Syntax.Primitives;
 
 namespace Poly.Interpretation.Vm;

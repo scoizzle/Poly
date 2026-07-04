@@ -7,9 +7,14 @@ public sealed class VmState : IDisposable {
     public int ProgramCounter { get; set; }
     public int FrameBase { get; set; } = -1;
     public InterpreterStatus Status { get; set; } = InterpreterStatus.Running;
-    public int[]? Breakpoints { get; set; }
     public Heap Heap { get; } = new();
     public TextWriter? Trace { get; set; }
+
+    /// <summary>Debug interrupt callback.  When set, the compiled delegate
+    /// invokes this <em>before</em> each µop in Debug/Normal compilation mode,
+    /// with <see cref="ProgramCounter"/> set to the current PC.  The callback
+    /// can inspect state, set breakpoints externally, single-step, etc.</summary>
+    public Action<VmState>? DebugInterrupt { get; set; }
 
     // Loop iteration limit safety (-1 = unlimited)
     public long MaxLoopIterations { get; set; } = -1;
@@ -24,7 +29,7 @@ public sealed class VmState : IDisposable {
     /// are allocated on the heap and their handles placed in the parameter
     /// slots so <c>LoadSlot</c> / <c>CallExternalDirect</c> resolve correctly.
     /// <para>Call <em>before</em> <c>Interpreter.Execute</c>, after the program
-    /// been loaded (if any).  The number and order of arguments must match
+    /// has been loaded (if any).  The number and order of arguments must match
     /// the compiled program's parameter layout.</para>
     /// </summary>
     public void SetArgs(params IEnumerable<object?> args) {

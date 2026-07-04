@@ -27,10 +27,10 @@ public sealed record DoWhileLoop(Node Body, Node Condition) : Statement {
 
         // Body (executes at least once)
         yield return bodyLabel;
-        env.StatementDepth++;
-        foreach (var p in Body.ToPrimitives(context))
-            yield return p;
-        env.StatementDepth--;
+        using (env.EnterStatementContext()) {
+            foreach (var p in Body.ToPrimitives(context))
+                yield return p;
+        }
         yield return new Poly.Syntax.Primitives.Discard();
 
         // Condition — CondGoto jumps when condition is 0 (false), exited by Goto(bodyLabel) below

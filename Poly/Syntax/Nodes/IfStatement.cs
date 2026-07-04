@@ -35,7 +35,7 @@ public sealed record IfStatement(Node Condition, Node ThenBranch, Node? ElseBran
             yield return p;
         yield return new Poly.Syntax.Primitives.CondGoto(elseLabel);
 
-        if (env.StatementDepth > 0) {
+        if (env.IsInStatementContext) {
             // Statement context — result not needed, just execute branches
             // for side effects. No temp-slot, no LoadLocal at merge.
             foreach (var p in ThenBranch.ToPrimitives(context))

@@ -32,9 +32,10 @@ public sealed record WhileLoop(Node Condition, Node Body) : Statement {
         // iteration is ring-neutral.  Body primitives are cached so we
         // can compute netPush without iterating twice.
         yield return bodyLabel;
-        env.StatementDepth++;
-        var bodyPrims = Body.ToPrimitives(context).ToList();
-        env.StatementDepth--;
+        var bodyPrims = default(List<Poly.Syntax.Primitives.PrimitiveNode>)!;
+        using (env.EnterStatementContext()) {
+            bodyPrims = Body.ToPrimitives(context).ToList();
+        }
         int bodyNetPush = 0;
         foreach (var p in bodyPrims) {
             var (pop, push) = p.StackEffect;

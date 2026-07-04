@@ -86,17 +86,18 @@ public sealed record Block : Node {
             if (i < Nodes.Count - 1 && Nodes[i] is WhileLoop or ForLoop or DoWhileLoop) {
                 // Loops handle their own body ring cleanup, but their non-last
                 // position means their body is in statement context.
-                env.StatementDepth++;
-                var loopPrims = Nodes[i].ToPrimitives(context).ToList();
-                env.StatementDepth--;
-                foreach (var p in loopPrims)
+                using var _ = env.EnterStatementContext();
+                foreach (var p in Nodes[i].ToPrimitives(context))
                     yield return p;
             }
             else if (i < Nodes.Count - 1) {
-                // Statement position — child result will be discarded
-                env.StatementDepth++;
-                var childPrims = Nodes[i].ToPrimitives(context).ToList();
-                env.StatementDepth--;
+                // Statement position — child result will be discarded.
+                // Collect eagerly inside the using scope so the child
+                // sees statement context during expansion.
+                var childPrims = default(List<Poly.Syntax.Primitives.PrimitiveNode>)!;
+                using (env.EnterStatementContext()) {
+                    childPrims = Nodes[i].ToPrimitives(context).ToList();
+                }
                 int childNetPush = 0;
                 foreach (var p in childPrims) {
                     var (pop, push) = p.StackEffect;

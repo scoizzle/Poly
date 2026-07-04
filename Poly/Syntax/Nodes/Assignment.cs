@@ -24,11 +24,10 @@ public sealed record Assignment(Node Destination, Node Value) : Expression {
             if (env is null || !env.TryGetSlot(destVar, out var slot))
                 throw new InvalidOperationException($"Variable '{destVar.Name}' has no slot assigned");
             // StoreLocal (1,0) consumes the RHS value from the ring.
-            // In expression context (StatementDepth == 0) the value must be
-            // preserved — Dup before StoreLocal keeps a copy on the ring.
-            // In statement context the result is discarded, so a bare
-            // StoreLocal suffices.
-            if (env.StatementDepth == 0)
+            // In expression context the value must be preserved — Dup
+            // before StoreLocal keeps a copy on the ring.  In statement
+            // context the result is discarded, so a bare StoreLocal suffices.
+            if (env.IsInExpressionContext)
                 yield return new Poly.Syntax.Primitives.Dup();
             yield return new Poly.Syntax.Primitives.StoreLocal(slot);
         }

@@ -42,9 +42,35 @@ internal sealed class ExpansionEnvironment : IAnalysisMetadata {
     /// Tracks how many statement-context ancestors this node is nested within.
     /// 0 means expression context — the node's result is consumed.
     /// &gt;0 means statement context — the node's result will be discarded.
-    /// Set by Block, WhileLoop, ForLoop, DoWhileLoop before expanding children.
     /// </summary>
-    public int StatementDepth { get; set; }
+    public int StatementDepth { get; private set; }
+
+    /// <summary>True when the current node is inside statement context
+    /// (its result will be discarded by a parent).</summary>
+    public bool IsInStatementContext => StatementDepth > 0;
+
+    /// <summary>True when the current node is inside expression context
+    /// (its result will be consumed by a parent).</summary>
+    public bool IsInExpressionContext => StatementDepth == 0;
+
+    /// <summary>
+    /// Enter a statement context scope.  Child primitives expanded while
+    /// the returned guard is alive see <see cref="IsInStatementContext"/> = true
+    /// and may elide result-capture primitives.
+    /// Call with <c>using var _ = env.EnterStatementContext();</c>.
+    /// </summary>
+    public StatementGuard EnterStatementContext() {
+        StatementDepth++;
+        return new StatementGuard(this);
+    }
+
+    /// <summary>RAII guard that restores <see cref="StatementDepth"/> on dispose.
+    /// Returned by <see cref="EnterStatementContext"/>.</summary>
+    public readonly struct StatementGuard : IDisposable {
+        private readonly ExpansionEnvironment _env;
+        internal StatementGuard(ExpansionEnvironment env) { _env = env; }
+        public void Dispose() => _env.StatementDepth--;
+    }
 
     // ── Loop boundary stack ─────────────────────────────────────
 

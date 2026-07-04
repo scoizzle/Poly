@@ -1,5 +1,3 @@
-using Poly.Interpretation.Vm;
-
 namespace Poly.Interpretation;
 
 /// <summary>
@@ -8,13 +6,13 @@ namespace Poly.Interpretation;
 ///
 /// Typical usage:
 /// <code>
-/// using var result = Vm.Execute(program);
+/// using var result = Interpreter.Execute(program);
 /// Console.WriteLine(result.GetValue&lt;int&gt;());
 /// </code>
 ///
 /// For resumption after suspension:
 /// <code>
-/// using var result = Vm.Execute(program);
+/// using var result = Interpreter.Execute(program);
 /// if (result.IsSuspended)
 ///     using var resumed = result.Resume();
 /// </code>
@@ -58,7 +56,7 @@ public sealed class ExecutionResult : IDisposable {
         // Transfer ownership — the new result owns the state
         _disposed = true;
 
-        var result = Poly.Interpretation.Vm.Vm.Execute(state, args);
+        var result = Interpreter.Resume(state, args);
         return new ExecutionResult(state, result);
     }
 

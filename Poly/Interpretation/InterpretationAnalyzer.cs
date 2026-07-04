@@ -31,7 +31,7 @@ namespace Poly.Interpretation;
 ///
 /// The <see cref="Analyzer"/> is built once and cached; subsequent calls reuse it.
 /// </summary>
-public static class Interpreter {
+public static class InterpretationAnalyzer {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
@@ -80,70 +80,11 @@ public static class Interpreter {
     /// top-of-stack value.
     /// </summary>
     public static long Execute(Node node) {
-        using var result = Execute(Compile(node, CompilationMode.Normal));
+        using var result = Vm.Vm.Execute(Compile(node, CompilationMode.Normal));
         return result.RawValue;
     }
 
-    /// <summary>
-    /// Execute a pre-compiled <paramref name="program"/>, constructing a
-    /// <see cref="VmState"/> internally and returning an <see cref="ExecutionResult"/>
-    /// that owns the state.  The result carries both the <see cref="InterpreterResult"/>
-    /// and the <see cref="VmState"/> for inspection or resumption.
-    /// </summary>
-    public static ExecutionResult Execute(VmProgram program, params IEnumerable<object?> args) =>
-        Execute(program, s => s.SetArgs(args));
-
-    /// <summary>
-    /// Execute a pre-compiled <paramref name="program"/> with state configuration
-    /// before the compiled delegate runs.  The <paramref name="configure"/> callback
-    /// can set state properties (e.g. <c>Trace</c>, <c>MaxLoopIterations</c>) and
-    /// call <c>state.SetArgs(...)</c> to seed arguments.
-    /// </summary>
-    public static ExecutionResult Execute(VmProgram program, Action<VmState> configure) {
-        var state = new VmState(program);
-        configure(state);
-        state.Status = InterpreterStatus.Running;
-        state.Registers ??= new long[state.Program.MaxActiveLocalsDepth];
-        state.Program.Delegate(state);
-        return new ExecutionResult(state, InterpretResult(state));
-    }
-
     // ── Shared implementation ─────────────────────────────────────
-
-    /// <summary>
-    /// Execute or resume on an existing <see cref="VmState"/>.
-    /// Internal — calling code should generally prefer the state-owning
-    /// <see cref="ExecutionResult"/> API via the <c>Execute</c> overloads.
-    /// </summary>
-    internal static InterpreterResult Resume(VmState state, params IEnumerable<object?> args) {
-        state.Status = InterpreterStatus.Running;
-        state.Registers ??= new long[state.Program.MaxActiveLocalsDepth];
-        state.SetArgs(args);
-        state.Program.Delegate(state);
-        return InterpretResult(state);
-    }
-
-    private static InterpreterResult InterpretResult(VmState state) {
-        if (state.Status == InterpreterStatus.Suspended)
-            return InterpreterResult.Suspend();
-
-        int sp = state.Stack.StackPointer;
-        if (sp <= 0)
-            return InterpreterResult.Void;
-
-        long raw = state.Stack.RawSlots[sp - 1];
-        int handle = (int)raw;
-
-        // If the result is a heap handle, dereference to give callers
-        // the actual CLR object rather than an opaque handle.
-        // 0 and 1 are excluded as they're almost always boolean results.
-        if (handle > 1 && handle < state.Heap.Count) {
-            var heapObj = state.Heap.UnsafeGet(handle);
-            return InterpreterResult.FromValue(heapObj);
-        }
-
-        return InterpreterResult.FromValue(raw);
-    }
 
     private static VmProgram CompileCore(Node node, AnalysisResult analysis, CompilationMode mode) {
         var meta = analysis.GetMetadata<PrimitiveExpansionMetadata>(node);
@@ -158,7 +99,7 @@ public static class Interpreter {
             // have stamped metadata during analysis. We fall back so the
             // system doesn't crash, but the oversight is surfaced.
             System.Diagnostics.Debug.WriteLine(
-                "[Interpreter] Warning: PrimitiveExpansionMetadata not found; " +
+                "[InterpretationAnalyzer] Warning: PrimitiveExpansionMetadata not found; " +
                 "ExpansionPass may not have run. Falling back to direct expansion.");
             var ctx = new AnalysisContext(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
             primitives = node.ToPrimitives(ctx).ToArray();

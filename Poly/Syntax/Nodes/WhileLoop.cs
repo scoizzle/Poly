@@ -25,8 +25,12 @@ public sealed record WhileLoop(Node Condition, Node Body) : Statement {
 
         env.PushLoop(new Poly.Syntax.Primitives.LoopBoundary(exit, header));
 
-        // Jump to header (skip past first entry to avoid re-executing sibling code)
-        yield return new Poly.Syntax.Primitives.Goto(header);
+        // Header: condition check — CondGoto jumps when condition is 0 (false).
+        // Entry falls through from the previous sibling; no initial Goto needed.
+        yield return header;
+        foreach (var p in Condition.ToPrimitives(context))
+            yield return p;
+        yield return new Poly.Syntax.Primitives.CondGoto(exit);
 
         // Body block — drain the body's net ring effect so each
         // iteration is ring-neutral.  Body primitives are cached so we
@@ -46,14 +50,8 @@ public sealed record WhileLoop(Node Condition, Node Body) : Statement {
         for (int i = 0; i < bodyNetPush; i++)
             yield return new Poly.Syntax.Primitives.Discard();
 
-        // Header: condition check — CondGoto jumps when condition is 0 (false)
-        yield return header;
-        foreach (var p in Condition.ToPrimitives(context))
-            yield return p;
-        yield return new Poly.Syntax.Primitives.CondGoto(exit);
-
-        // Back to body
-        yield return new Poly.Syntax.Primitives.Goto(bodyLabel);
+        // Back to header (condition check)
+        yield return new Poly.Syntax.Primitives.Goto(header);
 
         // Exit
         yield return exit;

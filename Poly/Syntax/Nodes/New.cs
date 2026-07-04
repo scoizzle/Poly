@@ -17,9 +17,7 @@ public sealed record New(Node Type, params Node[] Arguments) : Expression {
 
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        // Discard type reference (metadata only), emit args, call constructor
-        foreach (var p in Type.ToPrimitives(context)) yield return p;
-        yield return new Poly.Syntax.Primitives.Discard();
+        // Type reference is compile-time metadata — no runtime µops needed
         foreach (var arg in Arguments)
             foreach (var p in arg.ToPrimitives(context)) yield return p;
         // Constructor call: arg count, 0 slots

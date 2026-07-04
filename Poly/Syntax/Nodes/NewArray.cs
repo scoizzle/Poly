@@ -11,9 +11,7 @@ public sealed record NewArray(Node ElementType, Node Length) : Expression {
 
     /// <inheritdoc />
     public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        // Discard element type (metadata only), emit length, allocate
-        foreach (var p in ElementType.ToPrimitives(context)) yield return p;
-        yield return new Poly.Syntax.Primitives.Discard();
+        // Element type is compile-time metadata — no runtime µops needed
         foreach (var p in Length.ToPrimitives(context)) yield return p;
         yield return new Poly.Syntax.Primitives.NewArray();
     }

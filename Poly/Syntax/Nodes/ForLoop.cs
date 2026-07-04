@@ -39,26 +39,8 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
             yield return new Poly.Syntax.Primitives.Discard();
         }
 
-        // Jump to header
-        yield return new Poly.Syntax.Primitives.Goto(header);
-
-        // Body
-        yield return bodyLabel;
-        using (env.EnterStatementContext()) {
-            foreach (var p in Body.ToPrimitives(context))
-                yield return p;
-        }
-        yield return new Poly.Syntax.Primitives.Discard();
-
-        // Increment (after body, before condition check)
-        if (Increment is not null) {
-            using var _1 = env.EnterStatementContext();
-            foreach (var p in Increment.ToPrimitives(context))
-                yield return p;
-            yield return new Poly.Syntax.Primitives.Discard();
-        }
-
-        // Header: condition check — CondGoto jumps when condition is 0 (false)
+        // Header: condition check — CondGoto jumps when condition is 0 (false).
+        // Entry falls through from initializer; no initial Goto needed.
         yield return header;
         if (Condition is not null) {
             foreach (var p in Condition.ToPrimitives(context))
@@ -66,8 +48,24 @@ public sealed record ForLoop(Node? Initializer, Node? Condition, Node? Increment
             yield return new Poly.Syntax.Primitives.CondGoto(exit);
         }
 
-        // Back to body (or fall through if no condition)
-        yield return new Poly.Syntax.Primitives.Goto(bodyLabel);
+        // Body — fall through from condition when true
+        yield return bodyLabel;
+        using (env.EnterStatementContext()) {
+            foreach (var p in Body.ToPrimitives(context))
+                yield return p;
+        }
+        yield return new Poly.Syntax.Primitives.Discard();
+
+        // Increment (after body, before next condition check)
+        if (Increment is not null) {
+            using var _1 = env.EnterStatementContext();
+            foreach (var p in Increment.ToPrimitives(context))
+                yield return p;
+            yield return new Poly.Syntax.Primitives.Discard();
+        }
+
+        // Back to header (condition check)
+        yield return new Poly.Syntax.Primitives.Goto(header);
 
         // Exit
         yield return exit;

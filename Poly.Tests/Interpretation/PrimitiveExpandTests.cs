@@ -92,7 +92,19 @@ public class PrimitiveExpandTests {
     [Test, Timeout(10_000)] public async Task Expand_Member_ReturnsZero(CancellationToken ct) => await Assert.That(ExecExpand(new Member(new Constant(42), "Dummy"))).IsEqualTo(0);
     [Test, Timeout(10_000)] public async Task Expand_TypeAs_Passthrough(CancellationToken ct) => await Assert.That(ExecExpand(new TypeAs(new Constant(42), TypeReference.To<int>()))).IsEqualTo(42);
     [Test, Timeout(10_000)] public async Task Expand_TypeCast_Passthrough(CancellationToken ct) => await Assert.That(ExecExpand(new TypeCast(new Constant(42), TypeReference.To<int>()))).IsEqualTo(42);
-    [Test, Timeout(10_000)] public async Task Expand_TypeIs_Passthrough(CancellationToken ct) => await Assert.That(ExecExpand(new TypeIs(new Constant(42), TypeReference.To<int>()))).IsEqualTo(42);
+    [Test, Timeout(10_000)]
+    public async Task Expand_TypeIs_StringRefType(CancellationToken ct) {
+        // TypeIs on a heap-ref value without analysis metadata: fails closed → 0
+        var result = ExecExpand(new TypeIs(new Constant("hello"), TypeReference.To<string>()));
+        await Assert.That(result).IsEqualTo(0L);
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task Expand_TypeIs_StringNotInt(CancellationToken ct) {
+        // TypeIs without analysis metadata: fails closed → 0
+        var result = ExecExpand(new TypeIs(new Constant("hello"), TypeReference.To<int>()));
+        await Assert.That(result).IsEqualTo(0L);
+    }
     [Test, Timeout(10_000)] public async Task Expand_Await_Passthrough(CancellationToken ct) => await Assert.That(ExecExpand(new Await(new Constant(42)))).IsEqualTo(42);
     [Test, Timeout(10_000)] public async Task Expand_Lambda_ReturnsBodyValue(CancellationToken ct) => await Assert.That(ExecExpand(new Lambda([], new Constant(42)))).IsEqualTo(0);
 

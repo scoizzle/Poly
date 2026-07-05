@@ -1,3 +1,5 @@
+using Poly.Interpretation.Analysis.Semantics;
+
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -21,9 +23,50 @@ public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? 
 
     /// <inheritdoc />
     public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        // Exception handling not yet supported at the primitive level.
-        // Lower to the try block's body for now.
-        foreach (var p in TryBlock.ToPrimitives(context)) yield return p;
+        // Read ExceptionRegionMetadata to bracket try/catch/finally bodies.
+        // Placeholder markers until INT-018 implements real EH µops.
+        var regions = context.Analysis.GetExceptionRegions();
+        List<(ExceptionRegionEntry entry, int idx)>? ourRegions = null;
+        if (regions is not null) {
+            ourRegions = new List<(ExceptionRegionEntry, int)>();
+            for (int i = 0; i < regions.Count; i++) {
+                if (regions[i].AnchorNodeId == Id)
+                    ourRegions.Add((regions[i], i));
+            }
+        }
+
+        if (ourRegions is not null && ourRegions.Count > 0) {
+            // Emit Try region marker
+            yield return new Primitives.RegionMarker(ourRegions[0].idx, "EnterTry");
+
+            // Expand the try block body
+            foreach (var p in TryBlock.ToPrimitives(context)) yield return p;
+
+            // Expand catch clauses
+            if (CatchClauses is not null) {
+                foreach (var clause in CatchClauses) {
+                    var catchRegion = ourRegions.Find(r => r.entry.Kind == ExceptionRegionKind.Catch
+                        && r.entry.CatchVariableName == clause.VariableName);
+                    if (catchRegion.entry is not null) {
+                        yield return new Primitives.RegionMarker(catchRegion.idx, "EnterCatch");
+                    }
+                    foreach (var p in clause.Body.ToPrimitives(context)) yield return p;
+                }
+            }
+
+            // Expand finally block
+            if (FinallyBlock is not null) {
+                var finallyRegion = ourRegions.Find(r => r.entry.Kind == ExceptionRegionKind.Finally);
+                if (finallyRegion.entry is not null) {
+                    yield return new Primitives.RegionMarker(finallyRegion.idx, "EnterFinally");
+                }
+                foreach (var p in FinallyBlock.ToPrimitives(context)) yield return p;
+            }
+        }
+        else {
+            // No metadata available — fall back to try-body only (backward compatible)
+            foreach (var p in TryBlock.ToPrimitives(context)) yield return p;
+        }
     }
 }
 

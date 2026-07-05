@@ -268,14 +268,11 @@ public class DomainExpressionVmExecutionTests {
         var subject = new SN.Constant(person);
 
         var node = Pass.Lower(DomainExpression.Property("Name"), subject);
-        var (result, state) = ExecuteWithState(node);
+        var result = ExecuteDomain(DomainExpression.Property("Name"), subject);
 
-        // Name returns a string stored on the VM heap. The result is a heap handle (int).
-        // Dereference it to get the actual string.
+        // Name returns a string — InterpretResult dereferences heap refs automatically
         await Assert.That(result.HasValue).IsTrue();
-        var handle = (int)(long)result.Value!;
-        await Assert.That(state.Heap.Get(handle)).IsEqualTo("Alice");
-        state.Dispose();
+        await Assert.That(result.Value).IsEqualTo("Alice");
     }
 
     [Test]

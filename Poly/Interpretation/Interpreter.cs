@@ -8,6 +8,7 @@ using Poly.Syntax.Analysis;
 using Poly.Syntax.Primitives;
 
 using PrimReturn = Poly.Syntax.Primitives.Return;
+using PrimValueKind = Poly.Interpretation.Analysis.Semantics.ValueRepresentationKind;
 
 namespace Poly.Interpretation;
 
@@ -23,9 +24,12 @@ namespace Poly.Interpretation;
 ///     <item><see cref="Semantics.UseThisReferenceContext"/></item>
 ///     <item><see cref="Semantics.UseJumpTargetResolution"/></item>
 ///     <item><see cref="ControlFlow.UseControlFlowAnalysis"/></item>
+///     <item><see cref="Semantics.UseValueRepresentationAnalysis"/></item>
+///     <item><see cref="Semantics.UseCallSiteCatalog"/></item>
 ///     <item><see cref="ConstantFolding.UseConstantFolding"/></item>
 ///     <item><see cref="Semantics.UseDefiniteAssignmentAnalysis"/></item>
 ///     <item><see cref="Semantics.UseLambdaReturnTypeResolution"/></item>
+///     <item><see cref="Semantics.UseExceptionRegionAnalysis"/></item>
 ///     <item><see cref="Analysis.UsePrimitiveExpansion"/></item>
 ///   </list>
 ///
@@ -39,9 +43,12 @@ public static class Interpreter {
         .UseThisReferenceContext()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
+        .UseValueRepresentationAnalysis()
+        .UseCallSiteCatalog()
         .UseConstantFolding()
         .UseDefiniteAssignmentAnalysis()
         .UseLambdaReturnTypeResolution()
+        .UseExceptionRegionAnalysis()
         .UsePrimitiveExpansion()
         .Build();
 
@@ -142,10 +149,29 @@ public static class Interpreter {
         long raw = state.Stack.RawSlots[sp - 1];
         int handle = (int)raw;
 
-        // If the result is a heap handle, dereference to give callers
-        // the actual CLR object rather than an opaque handle.
-        // 0 and 1 are excluded as they're almost always boolean results.
-        if (handle > 1 && handle < state.Heap.Count) {
+        // Use ValueRepresentationMetadata from analysis when available to
+        // correctly distinguish heap handles from raw scalars (fixes INT-002).
+        var rootKind = state.Program.RootValueKind;
+
+        if (rootKind == PrimValueKind.StackScalar || rootKind == PrimValueKind.Bool)
+            return InterpreterResult.FromValue(raw);
+
+        if (rootKind == PrimValueKind.HeapRef) {
+            if (handle >= 0 && handle < state.Heap.Count) {
+                var heapObj = state.Heap.UnsafeGet(handle);
+                return InterpreterResult.FromValue(heapObj);
+            }
+            return InterpreterResult.FromValue(raw);
+        }
+
+        // Fallback heuristic (void, unknown, or no metadata):
+        // Only dereference when the handle looks like a valid heap index.
+        // Handle 0 is never a valid heap entry (first alloc starts at 0 but
+        // is freed on null; 0 and 1 are always bool/scalar results).
+        // After ANA-FIX-003, the standard pipeline always provides
+        // RootValueKind for expression roots, so this path is only hit
+        // for void-program terminations or external caller paths.
+        if (handle >= 2 && handle < state.Heap.Count) {
             var heapObj = state.Heap.UnsafeGet(handle);
             return InterpreterResult.FromValue(heapObj);
         }
@@ -166,15 +192,25 @@ public static class Interpreter {
             expansionCtx = analysis.GetMetadata<ExpansionContext>(null);
         }
         else {
-            // Fallback: expand directly if the pass didn't capture metadata
-            // (e.g. when the root node was replaced during analysis).
+            // Fallback: expand directly if the pass didn't capture metadata.
+            // In release builds, this indicates a missing pipeline registration.
+#if DEBUG
             System.Diagnostics.Debug.WriteLine(
                 "[Interpreter] Warning: PrimitiveExpansionMetadata not found; " +
                 "ExpansionPass may not have run. Falling back to direct expansion.");
             var ac = new AnalysisContext(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
             expansionCtx = new ExpansionContext(ac);
             primitives = node.ToPrimitives(expansionCtx).ToArray();
+#else
+            throw new InvalidOperationException(
+                "PrimitiveExpansionMetadata not found on root node. " +
+                "The analysis pipeline must include UsePrimitiveExpansion().");
+#endif
         }
+
+        var callSites = analysis.GetCallSiteCatalog() is { Count: > 0 } sites
+            ? sites
+            : null;
 
         // Extract pending functions from the expansion context
         pendingFunctions = expansionCtx?.Env.ExtractPendingFunctions();
@@ -193,14 +229,30 @@ public static class Interpreter {
                 // Ensure the function ends with a Return
                 if (funcPrims.Count == 0 || funcPrims[^1] is not PrimReturn)
                     funcPrims.Add(new PrimReturn());
-                var funcProgram = ProgramCompiler.CompilePrimitives(funcPrims, mode, traceExpressions);
+                var funcProgram = ProgramCompiler.CompilePrimitives(funcPrims, mode, traceExpressions, callSites: callSites);
                 functionTable[pf.LambdaIndex] = funcProgram.Delegate;
             }
         }
 
+        // Read ValueRepresentationMetadata from the root node to inform
+        // InterpretResult about the root value's representation (fixes INT-002).
+        var rootKind = analysis.GetMetadata<ValueRepresentationMetadata>(node)?.Kind;
+
+#if DEBUG
+        // The standard analysis pipeline always stamps ValueRepresentationMetadata
+        // on every expression root. If this fires, the analyzer was built without
+        // UseValueRepresentationAnalysis (or metadata was stripped/corrupted).
+        if (meta is not null && rootKind is null) {
+            System.Diagnostics.Debug.WriteLine(
+                "[Interpreter] Warning: standard pipeline ran but RootValueKind is null; " +
+                "ValueRepresentationAnalysis may not be registered in the pipeline.");
+        }
+#endif
+
         var primsList = primitives.ToList();
         primsList.Add(new PrimReturn());
-        var program = ProgramCompiler.CompilePrimitives(primsList, mode, traceExpressions, functionTable);
+        var program = ProgramCompiler.CompilePrimitives(primsList, mode, traceExpressions, functionTable, callSites);
+        program = program with { RootValueKind = rootKind, CallSites = callSites };
         return functionTable is not null
             ? program with { Functions = functionTable }
             : program;

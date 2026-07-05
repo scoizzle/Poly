@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Syntax.Primitives;
 
 using static System.Linq.Expressions.Expression;
@@ -17,6 +18,8 @@ using PrimParameter = Poly.Syntax.Primitives.Parameter;
 using PrimReturn = Poly.Syntax.Primitives.Return;
 using PrimStridedSet = Poly.Syntax.Primitives.StridedSet;
 using PrimThrow = Poly.Syntax.Primitives.Throw;
+using PrimThrowProtected = Poly.Syntax.Primitives.ThrowProtected;
+using PrimTypeCheck = Poly.Syntax.Primitives.TypeCheck;
 using PrimUnaryOp = Poly.Syntax.Primitives.UnaryOp;
 using PrimUnaryOpKind = Poly.Syntax.Primitives.UnaryOpKind;
 
@@ -39,11 +42,13 @@ public static class ProgramCompiler {
         IReadOnlyList<PrimitiveNode> primitives,
         CompilationMode mode = CompilationMode.Normal,
         TextWriter? traceExpressions = null,
-        Action<VmState>[]? functionTable = null) {
+        Action<VmState>[]? functionTable = null,
+        IReadOnlyList<CallSiteEntry>? callSites = null) {
         // Link resolves Label → PC offset for Goto/CondGoto.
         primitives = PrimitiveLinker.Link(primitives);
 
         var ctx = new CompilationContext();
+        ctx.CallSites = callSites;
         ctx.TraceExpressions = traceExpressions;
         var body = new List<Expression>();
         int n = primitives.Count;
@@ -152,8 +157,11 @@ public static class ProgramCompiler {
                 StoreUpvalue su => EmitStoreUpvalue(su, pcs, ctx),
                 LoadHeapConstant lhc => Assign(ctx.ValueSlot(idx), EmitLoadHeapConstant(lhc, ctx)),
                 PrimThrow => null,
+                PrimThrowProtected => null,
+                PrimTypeCheck tc => EmitTypeCheckOp(tc, pcs, ctx, idx),
+                RegionMarker => null,        // No-op placeholder (INT-018)
                 PrimCall c => EmitPrimitiveCall(c, pcs, ctx, idx, functionsExpr),
-                PrimExternalCall ec => EmitCallExternalDirect(ec.Target, ec.ArgCount, ec.IsStatic, pcs, ctx, idx),
+                PrimExternalCall ec => EmitCallExternalDirect(ec.Target, ec.ArgCount, ec.IsStatic, pcs, ctx, idx, ec.SiteIndex, ctx.CallSites),
                 _ => throw new NotSupportedException($"Primitive not supported: {prim.GetType().Name}")
             };
 
@@ -284,6 +292,41 @@ public static class ProgramCompiler {
     private static Expression EmitBranchIfFalse(int target, int[] consumedPcs, CompilationContext ctx) {
         var cond = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
         return IfThen(Equal(cond, Constant(0L)), Goto(ctx.GetLabel(target)));
+    }
+
+    private static Expression EmitTypeCheckOp(PrimTypeCheck tc, int[] consumedPcs, CompilationContext ctx, int idx) {
+        // Pop a heap handle, check if the object is an instance of tc.TargetType.
+        // Push 1 (true) or 0 (false).
+        if (consumedPcs.Length == 0)
+            return Assign(ctx.ValueSlot(idx), Expression.Constant(0L));
+
+        var handleExpr = Expression.Convert(ctx.ValueSlot(consumedPcs[0]), typeof(int));
+        var valueExpr = Expression.ArrayAccess(ctx.HeapRawSlots, handleExpr);
+
+        var isNullCheck = Expression.ReferenceEqual(valueExpr, Expression.Constant(null));
+        var isInstanceCall = Expression.Call(
+            Expression.Constant(tc.TargetType),
+            typeof(Type).GetMethod("IsInstanceOfType", [typeof(object)])!,
+            valueExpr);
+        var resultExpr = Expression.Condition(isNullCheck,
+            Expression.Constant(0L),
+            Expression.Condition(isInstanceCall,
+                Expression.Constant(1L),
+                Expression.Constant(0L)));
+        return Assign(ctx.ValueSlot(idx), resultExpr);
+    }
+
+    private static Expression EmitThrowOp(int[] consumedPcs, CompilationContext ctx) {
+        // Pop the exception heap handle, dereference it to the CLR Exception object, and throw.
+        // The exception value is a heap handle on the stack (consumedPcs[0]).
+        if (consumedPcs.Length == 0)
+            return Expression.Throw(Expression.Constant(new InvalidOperationException("Throw with no operand")));
+
+        var handleExpr = Expression.Convert(ctx.ValueSlot(consumedPcs[0]), typeof(int));
+        var exceptionExpr = Expression.Convert(
+            Expression.ArrayAccess(ctx.HeapRawSlots, handleExpr),
+            typeof(Exception));
+        return Expression.Throw(exceptionExpr);
     }
 
     private static Expression EmitReturnOp(int[] consumedPcs, CompilationContext ctx) {
@@ -417,12 +460,43 @@ public static class ProgramCompiler {
     internal static MethodInfo PopCountMethod =
         Ref.Method(() => System.Numerics.BitOperations.PopCount(0UL));
 
-    private static Expression EmitCallExternalDirect(MethodInfo target, int argCount, bool isStatic, int[] consumedPcs, CompilationContext ctx, int idx) {
+    private static Expression EmitCallExternalDirect(MethodBase target, int argCount, bool isStatic, int[] consumedPcs, CompilationContext ctx, int idx, int? siteIndex = null, IReadOnlyList<CallSiteEntry>? callSites = null) {
+        if (siteIndex.HasValue && callSites is not null) {
+            if (siteIndex.Value < 0 || siteIndex.Value >= callSites.Count)
+                throw new InvalidOperationException($"Call site index {siteIndex.Value} out of range (catalog size {callSites.Count})");
+            target = callSites[siteIndex.Value].Target;
+        }
+
+        System.Diagnostics.Debug.Assert(consumedPcs.Length == argCount);
+
+        if (target is ConstructorInfo ctor) {
+            var ctorArgs = new Expression[consumedPcs.Length];
+            for (int i = 0; i < consumedPcs.Length; i++)
+                ctorArgs[i] = ctx.ValueSlot(consumedPcs[i]);
+            for (int i = 0; i < ctor.GetParameters().Length; i++) {
+                var paramType = ctor.GetParameters()[i].ParameterType;
+                var pt = paramType.GetPrimitiveType();
+                if (pt is not null && pt.Value.IsStackValue()) {
+                    ctorArgs[i] = paramType == typeof(bool)
+                        ? NotEqual(ctorArgs[i], Constant(0L))
+                        : Convert(ctorArgs[i], paramType);
+                }
+                else if (!paramType.IsValueType) {
+                    var handle = Convert(ctorArgs[i], typeof(int));
+                    ctorArgs[i] = Convert(ArrayAccess(ctx.HeapRawSlots, handle), paramType);
+                }
+            }
+            var newObj = New(ctor, ctorArgs);
+            var heapHandle = Convert(Call(ctx.Heap, HeapAllocate, Convert(newObj, typeof(object))), typeof(long));
+            return Assign(ctx.ValueSlot(idx), heapHandle);
+        }
+
+        var method = (MethodInfo)target;
         var rawArgs = new Expression[consumedPcs.Length];
         for (int i = 0; i < consumedPcs.Length; i++)
             rawArgs[i] = ctx.ValueSlot(consumedPcs[i]);
 
-        var paramInfos = target.GetParameters();
+        var paramInfos = method.GetParameters();
         for (int i = 0; i < paramInfos.Length; i++) {
             int argIdx = isStatic ? i : i + 1;
             if (argIdx >= rawArgs.Length) break;
@@ -440,7 +514,7 @@ public static class ProgramCompiler {
         }
 
         if (!isStatic && consumedPcs.Length > 0) {
-            var instanceType = target.DeclaringType;
+            var instanceType = method.DeclaringType;
             var instPt = instanceType?.GetPrimitiveType();
             if (instPt is not null && instPt.Value.IsStackValue())
                 rawArgs[0] = Convert(rawArgs[0], instanceType!);
@@ -452,12 +526,12 @@ public static class ProgramCompiler {
 
         Expression? instance = isStatic ? null : rawArgs[0];
         var callArgs = isStatic ? rawArgs : rawArgs.Skip(1).ToArray();
-        var call = Call(instance, target, callArgs);
+        var call = Call(instance, method, callArgs);
 
-        if (target.ReturnType == typeof(void)) return call;
+        if (method.ReturnType == typeof(void)) return call;
 
         Expression result = call;
-        var returnType = target.ReturnType;
+        var returnType = method.ReturnType;
         if (returnType != typeof(void)) {
             var retPt = returnType.GetPrimitiveType();
             if (retPt is not null && retPt.Value.IsStackValue()) {

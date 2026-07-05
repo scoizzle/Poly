@@ -30,6 +30,9 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
         // Check resolved member metadata for CLR method dispatch
         var resolved = context.Analysis.GetResolvedMember(this);
 
+        // Check for CallSiteIndexMetadata from ANA-004 for portable serialization.
+        var siteIndex = context.Analysis.GetCallSiteIndex(this);
+
         if (resolved is Introspection.CommonLanguageRuntime.ClrMethod clrMethod) {
             // CLR method call: emit instance (if non-static) then args, then CallExternal
             if (!clrMethod.IsStatic) {
@@ -46,7 +49,7 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
             foreach (var arg in Arguments)
                 foreach (var p in arg.ToPrimitives(context)) yield return p;
             int argCount = clrMethod.MethodInfo.GetParameters().Length + (clrMethod.IsStatic ? 0 : 1);
-            yield return new Primitives.CallExternal(clrMethod.MethodInfo, argCount, clrMethod.IsStatic);
+            yield return new Primitives.CallExternal(clrMethod.MethodInfo, argCount, clrMethod.IsStatic, SiteIndex: siteIndex);
             yield break;
         }
 
@@ -59,7 +62,7 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
                         yield return p;
                 }
                 int argCount = getter.GetParameters().Length + (clrProp.IsStatic ? 0 : 1);
-                yield return new Primitives.CallExternal(getter, argCount, clrProp.IsStatic);
+                yield return new Primitives.CallExternal(getter, argCount, clrProp.IsStatic, SiteIndex: siteIndex);
                 yield break;
             }
         }

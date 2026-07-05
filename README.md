@@ -1,6 +1,17 @@
 # Poly
 
-Poly is a strongly-typed .NET toolkit for building and analyzing abstract syntax trees, validating models through rule composition, and compiling analyzed trees into LINQ expressions.
+Poly is a **neurosymbolic platform** — deterministic code generation from non-deterministic sources.
+
+Domain models, discovered heuristics, natural-language specifications — these all express *what could be*. Poly's analysis, lowering, and VM pipeline determines *what actually happens*: validating constraints, resolving ambiguities, expanding macros, and producing executable code through a canonical stack VM. The source is the ground truth; the pipeline turns intention into provably correct behavior.
+
+The platform is organized around a few core ideas:
+
+- **Domain model first.** The DSL primitives, actors, policies, and events are the ground truth. Tools, languages, and infrastructure are evaluated by how faithfully they express the domain — not by familiarity or fashion.
+- **Composable macros.** Algorithms and heuristics are written as symbolic macros that expand into an intermediate representation. Macros compose, introspect, and evolve.
+- **Canonical VM semantics.** Every macro's meaning is determined by execution on a stack VM — the single source of truth for program behavior. Analysis passes validate, optimize, and prepare IR before it reaches the VM.
+- **Multiple backends.** The same IR compiles to LINQ Expressions, C# source, or the VM itself — whichever the use case demands.
+
+**The interpreter wasn't the starting point — it's what the problem demanded.** A tree-walker proved the concept; a proper stack VM with semantic analysis passes is what correct deterministic code generation requires. Proving that the generated code matches the model's intent before committing it anywhere is the critical path from research to shipped capability. That VM is now the highest-quality interpreter we can build. Framework completeness isn't the goal — making the platform produce correct, observable, debuggable execution is.
 
 ## Repository Layout
 

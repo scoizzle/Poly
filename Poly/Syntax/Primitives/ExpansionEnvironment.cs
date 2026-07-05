@@ -11,6 +11,7 @@ namespace Poly.Syntax.Primitives;
 /// </summary>
 public sealed class ExpansionEnvironment {
     private readonly Dictionary<NodeId, int> _slots = new();
+    private readonly Dictionary<string, int> _lambdaParameterSlots = new(StringComparer.Ordinal);
     private int _nextSlot;
     private int _nextLambdaIndex;
     private readonly Dictionary<NodeId, LoopBoundary> _loopBoundaries = new();
@@ -64,6 +65,20 @@ public sealed class ExpansionEnvironment {
         slot = _nextSlot++;
         _slots[node.Id] = slot;
         return slot;
+    }
+
+    /// <summary>Maps a lambda parameter name to its assigned slot in this child scope.</summary>
+    public void RegisterLambdaParameter(string name, int slot) {
+        _lambdaParameterSlots[name] = slot;
+    }
+
+    /// <summary>Resolves a body parameter by name to a declared lambda parameter slot.</summary>
+    public bool TryGetLambdaParameterSlot(string name, out int slot) =>
+        _lambdaParameterSlots.TryGetValue(name, out slot);
+
+    /// <summary>Aliases <paramref name="node"/> to an existing slot without advancing <see cref="LocalSlotCount"/>.</summary>
+    public void AliasSlot(Node node, int slot) {
+        _slots[node.Id] = slot;
     }
 
     /// <summary>Allocate a temp slot without associating it with a node.</summary>

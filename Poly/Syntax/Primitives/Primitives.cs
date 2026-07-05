@@ -111,12 +111,31 @@ public sealed record Call(int ArgCount, int FuncIndex = 0) : PrimitiveNode {
 }
 
 
-/// <summary>Call an external CLR method directly (resolved at compile time).</summary>
-/// <param name="Target">The MethodInfo to invoke.</param>
+/// <summary>Call an external CLR method or constructor directly (resolved at compile time).</summary>
+/// <param name="Target">The MethodInfo or ConstructorInfo to invoke.</param>
 /// <param name="ArgCount">Total argument count (including instance for instance methods).</param>
 /// <param name="IsStatic">True if the method is static.</param>
-public sealed record CallExternal(System.Reflection.MethodInfo Target, int ArgCount, bool IsStatic) : PrimitiveNode {
+/// <param name="SiteIndex">Optional stable index into the module's CallSiteCatalog for serialization/portability.</param>
+public sealed record CallExternal(System.Reflection.MethodBase Target, int ArgCount, bool IsStatic, int? SiteIndex = null) : PrimitiveNode {
     public override (int Pop, int Push) StackEffect => (ArgCount, 1);
+}
+
+/// <summary>
+/// EH region marker — emitted by lowering when ExceptionRegionMetadata is present.
+/// No-op in the current ProgramCompiler; placeholder for INT-018 implementation.
+/// </summary>
+/// <param name="RegionIndex">Index into the module's ExceptionRegion table.</param>
+/// <param name="Kind">The kind of region marker (EnterTry, LeaveTry, EnterCatch, EnterFinally, EnterUsingDispose).</param>
+public sealed record RegionMarker(int RegionIndex, string Kind) : PrimitiveNode {
+    public override (int Pop, int Push) StackEffect => (0, 0);
+}
+
+/// <summary>
+/// Marker emitted for ThrowStatement nodes inside protected (try) regions.
+/// Distinguishable from an unprotected throw. No-op placeholder until INT-018.
+/// </summary>
+public sealed record ThrowProtected : PrimitiveNode {
+    public override (int Pop, int Push) StackEffect => (1, 0);
 }
 
 /// <summary>Load a heap-allocated constant by handle.</summary>

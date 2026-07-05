@@ -16,6 +16,13 @@ public sealed record PrimitiveExpansionMetadata(
 ) : IAnalysisMetadata;
 
 /// <summary>
+/// Per-traversal depth tracker for <see cref="ExpansionPass"/>.
+/// </summary>
+internal sealed class ExpansionPassState : IAnalysisMetadata {
+    public int Depth { get; set; }
+}
+
+/// <summary>
 /// Analysis pass that drives <see cref="Node.ToPrimitives"/> for every node
 /// in the AST, storing the resulting <see cref="PrimitiveExpansionMetadata"/>.
 ///
@@ -29,27 +36,38 @@ public sealed class ExpansionPass : INodeAnalyzer {
         if (!context.TryBeginAnalyzerVisit<ExpansionPass>(node))
             return;
 
-        // Expand this node first (pre-order) — parent nodes like Block set up
-        // expansion environments (slot assignment, loop boundary registration)
-        // that children depend on during their own expansion.
         var actual = context.GetNodeReplacement(node) ?? node;
 
-        // Skip expansion of dead/unreachable code — CFG analysis stamps
-        // ElisionMetadata on unreachable subtrees.  No µops needed.
         if (context.GetMetadata<ElisionMetadata>(actual)?.CanElide == true)
             return;
 
-        if (context.GetMetadata<PrimitiveExpansionMetadata>(actual) is null) {
-            var pCtx = new ExpansionContext(context);
-            // Store the context so Interpreter.CompileCore can extract pending
-            // function bodies compiled from child lambdas.
+        var state = context.GetMetadata<ExpansionPassState>(null);
+        if (state is null) {
+            state = new ExpansionPassState();
+            context.SetMetadata<ExpansionPassState>(null, state);
+        }
+
+        bool isRootEntry = state.Depth == 0;
+        state.Depth++;
+
+        ExpansionContext pCtx;
+        if (isRootEntry) {
+            pCtx = new ExpansionContext(context);
             context.SetMetadata<ExpansionContext>(null, pCtx);
+        }
+        else {
+            pCtx = context.GetMetadata<ExpansionContext>(null)
+                ?? throw new InvalidOperationException("ExpansionContext missing during traversal.");
+        }
+
+        if (context.GetMetadata<PrimitiveExpansionMetadata>(actual) is null) {
             var primitives = actual.ToPrimitives(pCtx).ToArray();
             context.SetMetadata(actual, new PrimitiveExpansionMetadata(primitives));
         }
 
-        // Recurse into children
         this.AnalyzeChildren(context, node);
+
+        state.Depth--;
     }
 }
 

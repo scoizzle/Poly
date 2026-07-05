@@ -1,89 +1,188 @@
-# Poly Interpretation
+# Poly.Interpretation
 
-`Poly.Interpretation` provides semantic analysis passes and the VM execution engine
-for the AST types in `Poly.Syntax`.
+Semantic analysis and VM execution for programs expressed as `Poly.Syntax.Nodes` ASTs.
 
-## Responsibilities
+The module turns a syntax tree into a runnable program: analysis passes attach metadata, expansion lowers the tree to primitive IR, and the VM compiles and runs that IR. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior** for the platform — not the legacy LINQ expression generator or removed tree-walker.
 
-1. **Analyze** AST nodes and attach semantic metadata (resolved types, members, control flow, diagnostics)
-2. **Compile** analyzed trees via the VM pipeline (AST → primitives → compiled delegate)
-3. **Execute** programs in the stack-based VM
+Primitives are the canonical IR ([ADR](../../docs/decisions/2026-07-04-primitives-as-canonical-ir.md)); Interpretation consumes them but does not define the instruction set (see `Poly/Syntax/Primitives/`).
 
-## Architecture
+---
 
-The canonical execution path lowers AST nodes to a `PrimitiveNode` sequence via
-`Node.ToPrimitives()`, then compiles them into a LINQ Expression delegate for VM execution.
+## Module boundaries
+
+| Direction | Module | Relationship |
+|-----------|--------|--------------|
+| In | `Poly.Syntax` | AST node types, `Analyzer` / `AnalysisContext`, primitive definitions |
+| In | `Poly.Introspection` | CLR type definitions, member resolution helpers |
+| Out | `Poly.Validation` | May depend on Interpretation for rule evaluation |
+| Out | `Poly.Synthesis` | Uses VM to validate macros |
+| No | `Poly.Synthesis` | Interpretation must not depend on Synthesis |
+
+Domain-specific constructs lower to generic primitives and VM opcodes — no domain opcodes in this module ([domain-lowering boundary](../../docs/decisions/2026-06-08-domain-lowering-boundary.md)).
+
+---
+
+## What this module does
+
+1. **Analyze** — Run ordered `INodeAnalyzer` passes; produce `AnalysisResult` (metadata + diagnostics).
+2. **Expand** — `ExpansionPass` drives `Node.ToPrimitives()`; store `PrimitiveExpansionMetadata` per node.
+3. **Compile** — `ProgramCompiler` lowers primitives to a compiled `Action<VmState>` delegate (`VmProgram`).
+4. **Execute** — Run the delegate on `VmState`; `InterpretResult` applies value-representation rules at the API boundary.
+
+---
+
+## Canonical pipeline
 
 ```
-AnalyzerBuilder → AnalysisResult
-    → PrimitiveExpansionMetadata.Primitives (from ExpansionPass)
-    → ProgramCompiler.CompilePrimitives() → VmProgram → Vm.Execute()
+  AST (Syntax/Nodes)
+       │
+       ▼
+  AnalyzerBuilder  ──►  AnalysisResult
+  (13 passes)            metadata + diagnostics
+       │
+       ▼
+  ExpansionPass  ──►  PrimitiveExpansionMetadata
+       │              (linear PrimitiveNode[])
+       ▼
+  ProgramCompiler  ──►  VmProgram
+  + PrimitiveLinker      (delegate, Functions[], RootValueKind, CallSites)
+       │
+       ▼
+  Interpreter.Execute  ──►  ExecutionResult / InterpretResult
 ```
 
-## Sub-directories
+The cached standard pipeline lives in `Interpreter.cs`. Pass order and metadata contracts are documented in [`Analysis/README.md`](Analysis/README.md).
 
-| Directory | Purpose |
-|-----------|---------|
-| `Vm/` | VM execution engine: `Vm.cs`, `VmState.cs`, `ProgramCompiler.cs`, `ValueStack`, `Heap`, `Closure`, `PrimitiveLinker` — see `Vm/README.md` |
-| `Analysis/` | Semantic analysis passes: constant folding, control flow, type/member resolution, side-effect analysis — see `Analysis/README.md` |
-| `CSharp/` | C# code generation from AST nodes |
-| `LinqExpressions/` | LINQ Expression tree generation (secondary — testing and PolicyEvaluator) |
-| `Mermaid/` | Mermaid flowchart visualization of AST structure |
+---
 
-## Standard Pipeline
+## Entry point: `Interpreter`
 
-The default analysis + compilation pipeline is assembled in `Interpreter`:
+`Interpreter` is the supported façade for analyze → compile → execute. It owns a singleton `Analyzer` with the full pass list.
 
 ```csharp
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 
-// 1. Analyze (runs all passes in order)
-var analysis = Interpreter.Analyze(node);
+var node = /* Syntax.Nodes.Expression or Block */;
 
-// 2. Compile
-var program = Interpreter.Compile(node, analysis);
+// Analyze only
+AnalysisResult analysis = Interpreter.Analyze(node);
 
-// 3. Execute
-using var result = Vm.Execute(program);
-var value = result.GetValue<long>();
+// Analyze + compile (reuses cached analyzer)
+VmProgram program = Interpreter.Compile(node);
+
+// Or compile from a prior analysis (no re-analysis)
+VmProgram program2 = Interpreter.Compile(node, analysis);
+
+// One-shot: analyze, compile, execute; returns raw long on stack
+long raw = Interpreter.Execute(node);
+
+// Full control: configure VmState (trace, heap, args) before run
+using ExecutionResult exec = Interpreter.Execute(program, state => {
+    state.MaxLoopIterations = 100_000_000;
+    state.Trace = myTraceWriter;  // optional µop trace
+});
+int value = exec.GetValue<int>();   // uses RootValueKind — heap vs scalar
+long handle = exec.RawValue;
 ```
 
-Or in one step:
-```csharp
-var value = Interpreter.Execute(node); // analyze + compile + execute
+`VmProgram` carries optional `RootValueKind` (from value-representation analysis) and `CallSites` (portable call catalog). Lambda bodies compile to separate delegates in `VmProgram.Functions`.
+
+---
+
+## Directory map
+
+| Directory | Role | Detail |
+|-----------|------|--------|
+| [`Analysis/`](Analysis/) | Semantic passes + expansion | [`Analysis/README.md`](Analysis/README.md) — pass registry, ordering, diagnostics |
+| [`Vm/`](Vm/) | Compile primitives → delegate; runtime state | [`Vm/README.md`](Vm/README.md) — `ProgramCompiler`, stack/heap ABI |
+| [`CSharp/`](CSharp/) | C# source emission from AST | Secondary backend; not canonical semantics |
+| [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Test/reference path; migration to VM ongoing (see tracker INT-003) |
+| [`Mermaid/`](Mermaid/) | Mermaid diagrams from AST | Visualization only |
+
+Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`.
+
+---
+
+## Standard analysis pipeline (13 passes)
+
+Registered in `Interpreter._analyzer` in this order. **Do not reorder** without updating [`Analysis/README.md`](Analysis/README.md) and tests.
+
+| # | Extension | Purpose |
+|---|-----------|---------|
+| 1 | `.UseTypeAndMemberResolver()` | Resolved types and members |
+| 2 | `.UseVariableScopeValidator()` | Scopes and variable lifetime |
+| 3 | `.UseSideEffectAnalysis()` | Purity, elision, assignment-use |
+| 4 | `.UseThisReferenceContext()` | `this` type in member bodies |
+| 5 | `.UseJumpTargetResolution()` | Break / continue / goto targets |
+| 6 | `.UseControlFlowAnalysis()` | CFG, reachability, loop metadata |
+| 7 | `.UseValueRepresentationAnalysis()` | Stack scalar / bool / heap ref / void |
+| 8 | `.UseCallSiteCatalog()` | Module call-site table + per-node indices |
+| 9 | `.UseConstantFolding()` | Constant propagation and folding |
+| 10 | `.UseDefiniteAssignmentAnalysis()` | Definite assignment |
+| 11 | `.UseLambdaReturnTypeResolution()` | Lambda return types |
+| 12 | `.UseExceptionRegionAnalysis()` | Try/catch/using region table |
+| 13 | `.UsePrimitiveExpansion()` | AST → `PrimitiveExpansionMetadata` |
+
+Custom pipelines: build your own `Analyzer` via `AnalyzerBuilder` (same extensions). `Interpreter.Compile` expects expansion metadata on the root when using the standard expansion pass.
+
+---
+
+## Primitive IR
+
+Instruction definitions live under `Poly/Syntax/Primitives/` (`PrimitiveNode`, `StackEffect`, linking, `Phi`, `CallExternal`, EH placeholders). See [`Poly/Syntax/Primitives/README.md`](../Syntax/Primitives/README.md).
+
+Lowering is implemented on each AST node as `ToPrimitives(ExpansionContext)`; `ExpansionPass` invokes it and caches the sequence.
+
+---
+
+## Secondary backends
+
+These read the **AST directly** and are not the conformance target for new features:
+
+- **LINQ** — `LinqExpressionGenerator`; parity tests still exist for some scenarios.
+- **C#** — `CSharpGenerator`; codegen and pretty-printing.
+- **Mermaid** — `MermaidAstGenerator`; docs and debugging.
+
+New language semantics should land in analysis → primitives → `ProgramCompiler` first.
+
+---
+
+## Testing and docs
+
+| Resource | Use |
+|----------|-----|
+| `Poly.Tests/Interpretation/` | VM correctness, expansion, integration tests |
+| [`docs/plans/interpretation-system-issues.md`](../../docs/plans/interpretation-system-issues.md) | Tracked gaps (INT-*, ANA-*) |
+| [`docs/interpretation-system-architecture-review.md`](../../docs/interpretation-system-architecture-review.md) | Holistic architecture review (living doc) |
+| [`docs/decisions/`](../../docs/decisions/) | ADRs: VM, primitives-as-IR, EH, serialization, sandboxing |
+
+Build and test (from repo root):
+
+```bash
+dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj
+dotnet run --project Poly.Tests/Poly.Tests.csproj
 ```
 
-## Available Pass Extensions
+---
 
-All registered via `AnalyzerBuilder` extension methods in their respective files:
+## Common AST surface
 
-| Extension | Pass | Defined In |
-|-----------|------|-----------|
-| `.UseTypeAndMemberResolver()` | Type resolution + member resolution | `Semantics/TypeAndMemberResolutionPass.cs` |
-| `.UseVariableScopeValidator()` | Scope and variable lifetime | `Semantics/VariableLifetimePass.cs` |
-| `.UseSideEffectAnalysis()` | Purity and dead-code elision | `Semantics/SideEffectAnalysisPass.cs` |
-| `.UseThisReferenceContext()` | `this` resolution in member bodies | `Semantics/ThisReferenceContextPass.cs` |
-| `.UseJumpTargetResolution()` | Break/continue/goto target resolution | `Semantics/JumpTargetPass.cs` |
-| `.UseControlFlowAnalysis()` | CFG construction and reachability | `ControlFlow/ControlFlowAnalysisPass.cs` |
-| `.UseConstantFolding()` | Constant expression evaluation | `ConstantFolding/ConstantFoldingPass.cs` |
-| `.UseDefiniteAssignmentAnalysis()` | Definite assignment tracking | `Semantics/DefiniteAssignmentAnalyzer.cs` |
-| `.UseLambdaReturnTypeResolution()` | Lambda return type refinement | `Semantics/LambdaReturnTypeAnalyzer.cs` |
-| `.UsePrimitiveExpansion()` | AST → PrimitiveNode expansion | `ExpansionPass.cs` |
+Syntax types Interpretation most often compiles:
 
-## Pipeline Ordering
+- **Core:** `Constant`, `Parameter`, `Variable`, `Block`
+- **Calls:** `Member`, `Invoke`, `IndexAccess`, `New`, `Lambda`
+- **Operators:** `Add`, `Subtract`, `Multiply`, `Divide`, `Equal`, comparisons, `And` / `Or` / `Not`, bitwise/shift
+- **Control flow:** `Conditional`, `IfStatement`, loops, `Return`, `BreakStatement`, `ContinueStatement`, `GotoStatement`, `TryCatchFinally`, `UsingStatement`, `SwitchStatement`
+- **Types:** `TypeCast`, `TypeIs`, `TypeAs`, `TypeReference`
 
-Pass ordering is critical. See `Analysis/README.md` for the full ordering constraints.
+Full taxonomy: `Poly/Syntax/Nodes/`.
 
-## Primitive Nodes
+---
 
-The instruction set for the VM is defined in `Poly/Syntax/Primitives/`. See
-`Poly/Syntax/Primitives/README.md` for the taxonomy and conventions.
+## Before changing this module
 
-## Common AST Types
-
-- Core: `Constant`, `Parameter`, `Variable`, `Block`
-- Member/invocation: `Member`, `Invoke`, `IndexAccess`, `New`
-- Operators: `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `Equal`, `GreaterThan`, `And`, `Or`, `Not`, `BitwiseAnd`, `BitwiseOr`, `ShiftLeft`, `ShiftRight`
-- Control flow: `Conditional`, `IfStatement`, `WhileLoop`, `ForLoop`, `Return`, `TryCatchFinally`, `SwitchStatement`
-- Type operations: `TypeCast`, `TypeIs`, `TypeAs`, `TypeReference`
+1. Read relevant entries in [`docs/decisions/`](../../docs/decisions/) (especially VM, primitives IR, domain lowering).
+2. If you change pass order in `Interpreter.cs`, update [`Analysis/README.md`](Analysis/README.md).
+3. If you add a primitive, follow [`Vm/README.md`](Vm/README.md) “Adding a New Primitive” and extend `Poly/Syntax/Primitives/`.
+4. Keep `AGENTS.md` Interpretation section aligned when pipeline or boundaries shift.

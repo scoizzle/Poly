@@ -40,9 +40,12 @@ public sealed record Lambda(IReadOnlyList<Parameter> Parameters, Node Body) : Ex
         // own 0-based slot space; references to outer-scope slots become captures.
         var bodyCtx = context.CreateChildScope();
 
-        // Assign parameter slots in the child's space
-        foreach (var param in Parameters)
-            bodyCtx.Env.GetOrAssignSlot(param);
+        // Assign parameter slots in the child's space; register names so body
+        // Parameter nodes with the same name (distinct instances) share a slot.
+        foreach (var param in Parameters) {
+            var slot = bodyCtx.Env.GetOrAssignSlot(param);
+            bodyCtx.Env.RegisterLambdaParameter(param.Name, slot);
+        }
 
         // Expand body — captures detected automatically via IsUpvalue
         var bodyPrims = new List<Primitives.PrimitiveNode>();

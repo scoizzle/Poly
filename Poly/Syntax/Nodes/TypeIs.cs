@@ -1,3 +1,6 @@
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection.CommonLanguageRuntime;
+
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -24,5 +27,39 @@ public sealed record TypeIs : Expression {
     /// <inheritdoc />
     public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         foreach (var p in Operand.ToPrimitives(context)) yield return p;
+
+        if (TargetTypeReference is not ClrTypeReference clrRef) {
+            yield return new Primitives.PushConstant(0L);
+            yield break;
+        }
+
+        var repr = context.Analysis.GetValueRepresentation(Operand);
+        var operandMeta = context.Analysis.GetMetadata<ValueRepresentationMetadata>(Operand);
+        var operandType = operandMeta?.ClrType;
+
+        if (repr == ValueRepresentationKind.HeapRef) {
+            yield return new Primitives.TypeCheck(clrRef.RuntimeType);
+        }
+        else if (repr is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool) {
+            var matches = StaticTypeIsMatch(operandType, clrRef.RuntimeType);
+            yield return new Primitives.PushConstant(matches ? 1L : 0L);
+        }
+        else {
+            yield return new Primitives.PushConstant(0L);
+        }
+    }
+
+    internal static bool StaticTypeIsMatch(Type? operandType, Type targetType) {
+        if (operandType is null)
+            return false;
+        if (operandType == targetType)
+            return true;
+        if (operandType.IsValueType && targetType == typeof(object))
+            return true;
+        if (!operandType.IsValueType && targetType.IsAssignableFrom(operandType))
+            return true;
+        if (operandType.IsValueType && targetType.IsInterface && targetType.IsAssignableFrom(operandType))
+            return true;
+        return false;
     }
 }

@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Syntax;
 
 using static System.Linq.Expressions.Expression;
@@ -13,6 +14,8 @@ namespace Poly.Interpretation.Vm;
 /// <see cref="ProgramCompiler.ComputePrimitiveConsumedPcs"/>.
 /// </summary>
 public sealed class CompilationContext {
+    /// <summary>Optional call site catalog for portable index resolution in EmitCallExternalDirect.</summary>
+    public IReadOnlyList<CallSiteEntry>? CallSites { get; set; }
     private static readonly PropertyInfo StateStackPropertyInfo = Ref<VmState>.Property(e => e.Stack);
     private static readonly PropertyInfo StateRegistersPropertyInfo = Ref<VmState>.Property(e => e.Registers);
     private static readonly PropertyInfo StateProgramCounterPropertyInfo = Ref<VmState>.Property(e => e.ProgramCounter);

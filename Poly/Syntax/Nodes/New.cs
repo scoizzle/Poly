@@ -1,3 +1,5 @@
+using Poly.Interpretation.Analysis.Semantics;
+
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -17,10 +19,26 @@ public sealed record New(Node Type, params Node[] Arguments) : Expression {
 
     /// <inheritdoc />
     public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        // Type reference is compile-time metadata — no runtime µops needed
+        // Check for CallSiteIndexMetadata from ANA-004 for portable serialization
+        var siteIndex = context.Analysis.GetCallSiteIndex(this);
+
+        if (siteIndex.HasValue) {
+            // Catalog entry available: emit CallExternal with indexed constructor.
+            // The catalog stores the resolved MethodInfo; the compiler will resolve
+            // from the catalog at compile time.
+            var resolved = context.Analysis.GetResolvedMember(this);
+            if (resolved is Introspection.CommonLanguageRuntime.ClrConstructor ctor) {
+                foreach (var arg in Arguments)
+                    foreach (var p in arg.ToPrimitives(context)) yield return p;
+                int argCount = ctor.ConstructorInfo.GetParameters().Length;
+                yield return new Primitives.CallExternal(ctor.ConstructorInfo, argCount, false, siteIndex);
+                yield break;
+            }
+        }
+
+        // Fallback (no catalog metadata): emit Call(argCount, funcIndex: 0)
         foreach (var arg in Arguments)
             foreach (var p in arg.ToPrimitives(context)) yield return p;
-        // Constructor call: arg count, 0 slots
         yield return new Primitives.Call(Arguments.Length, 0);
     }
 }

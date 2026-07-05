@@ -1,3 +1,5 @@
+using Poly.Interpretation.Analysis.Semantics;
+
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -16,10 +18,32 @@ public sealed record UsingStatement(Node Resource, Node Body) : Statement {
 
     /// <inheritdoc />
     public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        // Using: evaluate resource, execute body, then call Dispose via finally pattern.
-        // Without exception handling primitives, we emit: resource, discard, body.
-        foreach (var p in Resource.ToPrimitives(context)) yield return p;
-        yield return new Primitives.Discard();
-        foreach (var p in Body.ToPrimitives(context)) yield return p;
+        // Read ExceptionRegionMetadata for UsingDispose entries.
+        var regions = context.Analysis.GetExceptionRegions();
+        var usingRegion = regions?.FirstOrDefault(r => r.AnchorNodeId == Id && r.Kind == ExceptionRegionKind.UsingDispose);
+
+        if (usingRegion is not null) {
+            // Find the index of this region in the table
+            int regionIdx = -1;
+            for (int i = 0; i < regions!.Count; i++) {
+                if (regions[i].AnchorNodeId == usingRegion.AnchorNodeId
+                    && regions[i].Kind == usingRegion.Kind
+                    && regions[i].CatchVariableName == usingRegion.CatchVariableName) {
+                    regionIdx = i;
+                    break;
+                }
+            }
+
+            // Emit resource, body, then dispose placeholder (dispose after body signals cleanup for INT-018)
+            foreach (var p in Resource.ToPrimitives(context)) yield return p;
+            foreach (var p in Body.ToPrimitives(context)) yield return p;
+            yield return new Primitives.RegionMarker(regionIdx >= 0 ? regionIdx : 0, "LeaveUsingDispose");
+        }
+        else {
+            // No metadata — fall back to: resource, discard, body (backward compatible)
+            foreach (var p in Resource.ToPrimitives(context)) yield return p;
+            yield return new Primitives.Discard();
+            foreach (var p in Body.ToPrimitives(context)) yield return p;
+        }
     }
 }

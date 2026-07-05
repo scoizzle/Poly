@@ -17,6 +17,9 @@ public sealed record Member(Node Value, string MemberName) : Expression {
 
     /// <inheritdoc />
     public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
+        // Check for CallSiteIndexMetadata from ANA-004 for portable serialization.
+        var siteIndex = context.Analysis.GetCallSiteIndex(this);
+
         // Check if the member resolves to a CLR property getter or method
         var resolved = context.Analysis.GetResolvedMember(this);
         if (resolved is Introspection.CommonLanguageRuntime.ClrTypeProperty prop) {
@@ -26,7 +29,7 @@ public sealed record Member(Node Value, string MemberName) : Expression {
                     foreach (var p in Value.ToPrimitives(context)) yield return p;
                 }
                 int argCount = getter.GetParameters().Length + (prop.IsStatic ? 0 : 1);
-                yield return new Primitives.CallExternal(getter, argCount, prop.IsStatic);
+                yield return new Primitives.CallExternal(getter, argCount, prop.IsStatic, SiteIndex: siteIndex);
                 yield break;
             }
         }
@@ -36,7 +39,7 @@ public sealed record Member(Node Value, string MemberName) : Expression {
                 foreach (var p in Value.ToPrimitives(context)) yield return p;
             }
             int argCount = method.MethodInfo.GetParameters().Length + (method.IsStatic ? 0 : 1);
-            yield return new Primitives.CallExternal(method.MethodInfo, argCount, method.IsStatic);
+            yield return new Primitives.CallExternal(method.MethodInfo, argCount, method.IsStatic, SiteIndex: siteIndex);
             yield break;
         }
 

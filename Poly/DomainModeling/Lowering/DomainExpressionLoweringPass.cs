@@ -4,7 +4,7 @@ namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
 /// Lowers a DomainExpression tree into the shared Syntax AST
-/// (<see cref="Poly.Syntax.Nodes"/>), making it compilable through
+/// (<see cref="Syntax.Nodes"/>), making it compilable through
 /// the existing LinqExpressionGenerator and CSharpGenerator.
 /// </summary>
 /// <remarks>
@@ -39,15 +39,15 @@ public sealed class DomainExpressionLoweringPass {
 
     private Node LowerCore(DomainExpression expr, Node currentSubject) {
         return expr switch {
-            PropertyAccess p => new SN.Member(currentSubject, p.Name),
-            ParameterAccess p => _parameters.TryGetValue(p.Name, out var param) ? param : new SN.Parameter(p.Name),
-            Literal l => new SN.Constant(l.Value),
+            PropertyAccess p => new Member(currentSubject, p.Name),
+            ParameterAccess p => _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name),
+            Literal l => new Constant(l.Value),
 
-            OwnedAccess oa => LowerCore(oa.Inner, new SN.Member(currentSubject, oa.OwnedName)),
-            RelationshipNavigation rn => LowerCore(rn.TargetProperty, new SN.Member(currentSubject, rn.RelationshipName)),
+            OwnedAccess oa => LowerCore(oa.Inner, new Member(currentSubject, oa.OwnedName)),
+            RelationshipNavigation rn => LowerCore(rn.TargetProperty, new Member(currentSubject, rn.RelationshipName)),
 
-            Exists e => new SN.NotEqual(LowerCore(e.Target, currentSubject), new SN.Constant(null)),
-            NotExists ne => new SN.Equal(LowerCore(ne.Target, currentSubject), new SN.Constant(null)),
+            Exists e => new NotEqual(LowerCore(e.Target, currentSubject), new Constant(null)),
+            NotExists ne => new Equal(LowerCore(ne.Target, currentSubject), new Constant(null)),
 
             Add a => new SN.Add(LowerCore(a.Left, currentSubject), LowerCore(a.Right, currentSubject)),
             Subtract s => new SN.Subtract(LowerCore(s.Left, currentSubject), LowerCore(s.Right, currentSubject)),
@@ -59,24 +59,24 @@ public sealed class DomainExpressionLoweringPass {
             Not n => new SN.Not(LowerCore(n.Operand, currentSubject)),
 
             Comparison c => c.Kind switch {
-                ComparisonKind.Equal => new SN.Equal(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.NotEqual => new SN.NotEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.LessThan => new SN.LessThan(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.LessThanOrEqual => new SN.LessThanOrEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.GreaterThan => new SN.GreaterThan(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.GreaterThanOrEqual => new SN.GreaterThanOrEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
+                ComparisonKind.Equal => new Equal(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
+                ComparisonKind.NotEqual => new NotEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
+                ComparisonKind.LessThan => new LessThan(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
+                ComparisonKind.LessThanOrEqual => new LessThanOrEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
+                ComparisonKind.GreaterThan => new GreaterThan(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
+                ComparisonKind.GreaterThanOrEqual => new GreaterThanOrEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
                 _ => throw new NotSupportedException($"Comparison kind '{c.Kind}' is not supported."),
             },
 
             DateOperation d => d.Kind switch {
-                DateOperationKind.AddDays => new SN.Invoke(
-                    new SN.Member(LowerCore(d.Date, currentSubject), "AddDays"),
+                DateOperationKind.AddDays => new Invoke(
+                    new Member(LowerCore(d.Date, currentSubject), "AddDays"),
                     LowerCore(d.Offset, currentSubject)),
-                DateOperationKind.AddMonths => new SN.Invoke(
-                    new SN.Member(LowerCore(d.Date, currentSubject), "AddMonths"),
+                DateOperationKind.AddMonths => new Invoke(
+                    new Member(LowerCore(d.Date, currentSubject), "AddMonths"),
                     LowerCore(d.Offset, currentSubject)),
-                DateOperationKind.DiffDays => new SN.Invoke(
-                    new SN.Member(LowerCore(d.Date, currentSubject), "Subtract"),
+                DateOperationKind.DiffDays => new Invoke(
+                    new Member(LowerCore(d.Date, currentSubject), "Subtract"),
                     LowerCore(d.Offset, currentSubject)),
                 _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
             },

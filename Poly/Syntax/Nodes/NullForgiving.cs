@@ -6,7 +6,7 @@ public sealed record NullForgiving(Node Operand) : Expression {
     public override string ToString() => $"{Operand}!";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // Null-forgiving ! is a compile-time hint; at runtime it's a no-op passthrough
         foreach (var p in Operand.ToPrimitives(context)) yield return p;
     }

@@ -25,7 +25,7 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
         _declaringType = declaringType;
         FieldInfo = fieldInfo;
 
-        _isVolatile = fieldInfo.GetRequiredCustomModifiers().Any(t => t == typeof(System.Runtime.CompilerServices.IsVolatile));
+        _isVolatile = fieldInfo.GetRequiredCustomModifiers().Any(t => t == typeof(IsVolatile));
 
         Read = BuildFieldGetter(fieldInfo);
 

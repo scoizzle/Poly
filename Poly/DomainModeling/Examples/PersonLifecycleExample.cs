@@ -84,7 +84,7 @@ public static class PersonLifecycleExample {
                     ],
                     OnEntryEffects:
                     [
-                        new Effects.PublishEventEffect(
+                        new PublishEventEffect(
                             new DomainTypeReference("Born"),
                             [
                                 new PropertyBinding(
@@ -112,7 +112,7 @@ public static class PersonLifecycleExample {
                     ],
                     OnEntryEffects:
                     [
-                        new Effects.PublishEventEffect(
+                        new PublishEventEffect(
                             new DomainTypeReference("Died"),
                             [
                                 new PropertyBinding(

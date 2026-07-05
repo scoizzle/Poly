@@ -282,7 +282,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     }
                 }
                 break;
-            case Effects.Composite composite:
+            case Composite composite:
                 foreach (var childEffect in composite.ChildEffects) {
                     if (!ValidateEffect(context, action, ownerEntity, childEffect)) {
                         return false;

@@ -15,12 +15,12 @@ public sealed record ForEachLoop(Variable LoopVariable, Node Collection, Node Bo
     }
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // ForEachLoop requires enumerator pattern support (GetEnumerator/MoveNext/Current).
         // For now, emit collection (for side effects) then body.
         foreach (var p in Collection.ToPrimitives(context))
             yield return p;
-        yield return new Poly.Syntax.Primitives.Discard();
+        yield return new Primitives.Discard();
         foreach (var p in Body.ToPrimitives(context))
             yield return p;
     }

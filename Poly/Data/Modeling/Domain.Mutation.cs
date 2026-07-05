@@ -167,20 +167,20 @@ public sealed partial record Domain {
         public Mutation AddEffect(Effects.Conditional conditional, Effect effect) =>
             AddStep(new Effects.Conditional.AddEffectCommand(conditional, effect));
 
-        public Mutation AddEffect(Effects.Composite composite, Effect effect) =>
-            AddStep(new Effects.Composite.AddEffectCommand(composite, effect));
+        public Mutation AddEffect(Composite composite, Effect effect) =>
+            AddStep(new Composite.AddEffectCommand(composite, effect));
 
-        public Mutation SetEffectOutput(Effects.Effect effect, string outputName, DomainType type) =>
-            AddStep(new Effects.Effect.SetOutputCommand(effect, outputName, type));
+        public Mutation SetEffectOutput(Effect effect, string outputName, DomainType type) =>
+            AddStep(new Effect.SetOutputCommand(effect, outputName, type));
 
-        public Mutation BindOutputTo(Effects.Effect sourceEffect, string outputName, Effects.Effect targetEffect, string targetParamName) =>
-            AddStep(new Effects.Effect.BindOutputToCommand(sourceEffect, outputName, targetEffect, targetParamName));
+        public Mutation BindOutputTo(Effect sourceEffect, string outputName, Effect targetEffect, string targetParamName) =>
+            AddStep(new Effect.BindOutputToCommand(sourceEffect, outputName, targetEffect, targetParamName));
 
-        public Mutation BindParameter(Effects.InvokeAction effect, Property targetParameter, DomainValue value) =>
-            AddStep(new Effects.InvokeAction.BindParameterCommand(effect, targetParameter, value));
+        public Mutation BindParameter(InvokeAction effect, Property targetParameter, DomainValue value) =>
+            AddStep(new InvokeAction.BindParameterCommand(effect, targetParameter, value));
 
-        public Mutation BindParameterFrom(Effects.InvokeAction effect, string targetParamName, Effects.Effect sourceEffect, string sourceOutputName) =>
-            AddStep(new Effects.InvokeAction.BindParameterFromCommand(effect, targetParamName, sourceEffect, sourceOutputName));
+        public Mutation BindParameterFrom(InvokeAction effect, string targetParamName, Effect sourceEffect, string sourceOutputName) =>
+            AddStep(new InvokeAction.BindParameterFromCommand(effect, targetParamName, sourceEffect, sourceOutputName));
 
         public Mutation SetEventPropertyBinding(Action action, PublishEvent effect, string propertyName, EventPropertyBindingSource source) =>
             AddStep(new Action.SetEventPropertyBindingCommand(action, effect, propertyName, source));

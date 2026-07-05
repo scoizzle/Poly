@@ -7,8 +7,8 @@ using Poly.Syntax.Nodes;
 
 namespace Poly.Data.Modeling.Analysis;
 
-using Conditional = Poly.Data.Modeling.Effects.Conditional;
-using SysConditional = Poly.Syntax.Nodes.Conditional;
+using Conditional = Effects.Conditional;
+using SysConditional = Syntax.Nodes.Conditional;
 
 internal sealed record DownstreamConstraintsMetadata(IReadOnlyList<Constraint> Constraints) : IAnalysisMetadata;
 

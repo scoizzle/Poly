@@ -9,7 +9,7 @@ namespace Poly.Data.Modeling;
 /// <remarks>
 /// <para>
 /// <see cref="ActorSubject"/> is a Poly.Syntax <see cref="Node"/> that resolves to the
-/// current principal at evaluation time — typically a <see cref="Poly.Syntax.Nodes.Member"/>
+/// current principal at evaluation time — typically a <see cref="Member"/>
 /// off a generated runtime context parameter. <see cref="ExecutionContext"/> resolves to that
 /// runtime context so actor-role checks can target runtime helpers rather than assuming members
 /// exist on every actor type.

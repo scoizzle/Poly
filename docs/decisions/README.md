@@ -32,3 +32,4 @@ These documents exist so that:
 - [2026-06-08: VM Sandboxing](2026-06-08-sandboxing-approach.md) — Permission table checked at CallExternal entry. Deny by default, allow overrides.
 - [2026-06-08: Domain-Lowering Boundary](2026-06-08-domain-lowering-boundary.md) — No domain-specific VM opcodes. Domain concepts lower to existing generic ops.
 - [2026-06-09: Comparison Fusion Encoding](2026-06-09-comparison-fusion-encoding.md) — Why comparison+branch fusion lives in lowering, not in the comparison opcodes. Signed overflow rules out the subtraction trick.
+- [2026-07-04: Primitives as Canonical IR](2026-07-04-primitives-as-canonical-ir.md) — The PrimitiveNode instruction set IS the canonical intermediate representation, superseding the planned separate Poly/Ir/. Adds ValueSlot, Phi, BasicBlock, Module to the primitive format.

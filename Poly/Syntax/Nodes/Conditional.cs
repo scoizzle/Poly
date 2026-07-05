@@ -1,3 +1,5 @@
+using Poly.Syntax.Primitives;
+
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -14,37 +16,27 @@ public sealed record Conditional(Node Condition, Node IfTrue, Node IfFalse) : Ex
     public override string ToString() => $"({Condition} ? {IfTrue} : {IfFalse})";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var elseLabel = new Poly.Syntax.Primitives.Label("ternary_else");
-        var mergeLabel = new Poly.Syntax.Primitives.Label("ternary_merge");
-
-        // Use a temp slot to store the result (avoids PHI)
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
-        if (env is null) {
-            env = new Poly.Syntax.Primitives.ExpansionEnvironment();
-            context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
-        }
-        int tempSlot = env.AllocateTempSlot();
+    public override IEnumerable<PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
+        var elseLabel = new Label("ternary_else");
+        var mergeLabel = new Label("ternary_merge");
 
         // Condition
         foreach (var p in Condition.ToPrimitives(context))
             yield return p;
-        yield return new Poly.Syntax.Primitives.CondGoto(elseLabel);
+        yield return new CondGoto(elseLabel);
 
         // True branch
         foreach (var p in IfTrue.ToPrimitives(context))
             yield return p;
-        yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
-        yield return new Poly.Syntax.Primitives.Goto(mergeLabel);
+        yield return new Goto(mergeLabel);
 
         // False branch
         yield return elseLabel;
         foreach (var p in IfFalse.ToPrimitives(context))
             yield return p;
-        yield return new Poly.Syntax.Primitives.StoreLocal(tempSlot);
 
-        // Merge: read result from temp slot
+        // Merge: Phi annotation.
         yield return mergeLabel;
-        yield return new Poly.Syntax.Primitives.LoadLocal(tempSlot);
+        yield return new Phi();
     }
 }

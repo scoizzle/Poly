@@ -14,29 +14,27 @@ public sealed record WhileLoop(Node Condition, Node Body, string? Label = null) 
     public override string ToString() => $"while ({Condition}) {{ {Body} }}";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
-        if (env is null)
-            throw new System.InvalidOperationException("ExpansionEnvironment not set");
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
+        var env = context.Env;
 
-        var header = new Poly.Syntax.Primitives.Label("while_header");
-        var bodyLabel = new Poly.Syntax.Primitives.Label("while_body");
-        var exit = new Poly.Syntax.Primitives.Label("while_exit");
+        var header = new Primitives.Label("while_header");
+        var bodyLabel = new Primitives.Label("while_body");
+        var exit = new Primitives.Label("while_exit");
 
-        env.RegisterLoopBoundary(this.Id, new Poly.Syntax.Primitives.LoopBoundary(exit, header));
+        env.RegisterLoopBoundary(Id, new Primitives.LoopBoundary(exit, header));
 
         // Header: condition check — CondGoto jumps when condition is 0 (false).
         // Entry falls through from the previous sibling; no initial Goto needed.
         yield return header;
         foreach (var p in Condition.ToPrimitives(context))
             yield return p;
-        yield return new Poly.Syntax.Primitives.CondGoto(exit);
+        yield return new Primitives.CondGoto(exit);
 
         // Body block — drain the body's net ring effect so each
         // iteration is ring-neutral.  Body primitives are cached so we
         // can compute netPush without iterating twice.
         yield return bodyLabel;
-        var bodyPrims = default(List<Poly.Syntax.Primitives.PrimitiveNode>)!;
+        var bodyPrims = default(List<Primitives.PrimitiveNode>)!;
         using (env.EnterStatementContext()) {
             bodyPrims = Body.ToPrimitives(context).ToList();
         }
@@ -48,10 +46,10 @@ public sealed record WhileLoop(Node Condition, Node Body, string? Label = null) 
         foreach (var p in bodyPrims)
             yield return p;
         for (int i = 0; i < bodyNetPush; i++)
-            yield return new Poly.Syntax.Primitives.Discard();
+            yield return new Primitives.Discard();
 
         // Back to header (condition check)
-        yield return new Poly.Syntax.Primitives.Goto(header);
+        yield return new Primitives.Goto(header);
 
         // Exit
         yield return exit;

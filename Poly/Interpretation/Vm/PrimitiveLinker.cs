@@ -29,7 +29,7 @@ internal static class PrimitiveLinker {
             var prim = flat[i];
 
             if (prim is Label) {
-                result.Add(prim); // Keep as a no-op marker
+                result.Add(prim);
             }
             else if (prim is Goto g) {
                 result.Add(new ResolvedGoto(labelToIdx[g.Target]) { Id = prim.Id });

@@ -155,7 +155,7 @@ public static class DomainMutationExtensions {
     public static AnalysisResult AddEffect(this Effects.Conditional conditional, Effect effect) =>
         conditional.Domain.CreateMutation().AddEffect(conditional, effect).Apply();
 
-    public static AnalysisResult AddEffect(this Effects.Composite composite, Effect effect) =>
+    public static AnalysisResult AddEffect(this Composite composite, Effect effect) =>
         composite.Domain.CreateMutation().AddEffect(composite, effect).Apply();
 
     public static AnalysisResult Produces(this Effect effect, string outputName, DomainType type) =>

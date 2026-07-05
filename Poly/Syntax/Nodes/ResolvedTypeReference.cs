@@ -7,8 +7,8 @@ namespace Poly.Syntax.Nodes;
 /// without requiring the type name to be re-resolved.</summary>
 public sealed record ResolvedTypeReference(ITypeDefinition TypeDefinition) : Node {
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // Resolved type references are compile-time metadata; no runtime effect
-        yield return new Poly.Syntax.Primitives.PushConstant(0L);
+        yield return new Primitives.PushConstant(0L);
     }
 }

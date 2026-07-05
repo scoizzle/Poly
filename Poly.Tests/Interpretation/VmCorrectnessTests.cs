@@ -978,7 +978,8 @@ public class VmCorrectnessTests {
     [Test, Timeout(10_000)]
     public async Task New_StringConstant_PushesHeapHandle(CancellationToken ct) {
         var ctx = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
-        var prims = new Constant("hello").ToPrimitives(ctx).ToArray();
+        var pCtx = new Poly.Syntax.Primitives.ExpansionContext(ctx);
+        var prims = new Constant("hello").ToPrimitives(pCtx).ToArray();
         await Assert.That(prims.Length).IsEqualTo(1);
         await Assert.That(prims[0]).IsTypeOf<Poly.Syntax.Primitives.PushConstant>();
         var pc = (Poly.Syntax.Primitives.PushConstant)prims[0];

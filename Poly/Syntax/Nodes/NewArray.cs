@@ -10,9 +10,9 @@ public sealed record NewArray(Node ElementType, Node Length) : Expression {
     public override string ToString() => $"new {ElementType}[{Length}]";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // Element type is compile-time metadata — no runtime µops needed
         foreach (var p in Length.ToPrimitives(context)) yield return p;
-        yield return new Poly.Syntax.Primitives.NewArray();
+        yield return new Primitives.NewArray();
     }
 }

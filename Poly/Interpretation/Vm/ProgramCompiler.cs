@@ -37,12 +37,14 @@ public static class ProgramCompiler {
     /// </summary>
     public static VmProgram CompilePrimitives(
         IReadOnlyList<PrimitiveNode> primitives,
-        CompilationMode mode = CompilationMode.Normal) {
+        CompilationMode mode = CompilationMode.Normal,
+        TextWriter? traceExpressions = null,
+        Action<VmState>[]? functionTable = null) {
         // Link resolves Label → PC offset for Goto/CondGoto.
-        // Safe to call on already-linked lists (Goto/CondGoto won't match).
         primitives = PrimitiveLinker.Link(primitives);
 
         var ctx = new CompilationContext();
+        ctx.TraceExpressions = traceExpressions;
         var body = new List<Expression>();
         int n = primitives.Count;
 
@@ -101,7 +103,7 @@ public static class ProgramCompiler {
         }
 
         // Emit each primitive
-        var functions = new List<FunctionEntry>();
+        var functionsExpr = functionTable is not null ? Constant(functionTable) : null;
         var debugInterruptProp = mode != CompilationMode.NoDebug
             ? Property(ctx.State, nameof(VmState.DebugInterrupt))
             : null;
@@ -144,14 +146,33 @@ public static class ProgramCompiler {
                 PrimArrayStore => EmitArrayStore(pcs, ctx),
                 PrimNewArray => EmitNewArray(pcs, ctx, idx),
                 PrimStridedSet => EmitStridedSet(pcs, ctx),
+                Phi ph => EmitPhi(ph, pcs, ctx, idx),
+                AllocClosure ac => EmitAllocClosure(ac, pcs, ctx, idx),
+                LoadUpvalue lu => Assign(ctx.ValueSlot(idx), EmitLoadUpvalue(lu, ctx)),
+                StoreUpvalue su => EmitStoreUpvalue(su, pcs, ctx),
+                LoadHeapConstant lhc => Assign(ctx.ValueSlot(idx), EmitLoadHeapConstant(lhc, ctx)),
                 PrimThrow => null,
-                PrimCall c => EmitPrimitiveCall(c, pcs, ctx, idx, functions),
+                PrimCall c => EmitPrimitiveCall(c, pcs, ctx, idx, functionsExpr),
                 PrimExternalCall ec => EmitCallExternalDirect(ec.Target, ec.ArgCount, ec.IsStatic, pcs, ctx, idx),
                 _ => throw new NotSupportedException($"Primitive not supported: {prim.GetType().Name}")
             };
 
             if (result is not null)
                 body.Add(result);
+
+            // Trace dump: compact one-liner per µop, empty line for void µops.
+            // Indexed by PC — line N always corresponds to µop N.
+            if (ctx.TraceExpressions is not null) {
+                if (result is null) {
+                    ctx.TraceExpressions.WriteLine();
+                }
+                else if (result is BlockExpression block) {
+                    ctx.TraceExpressions.WriteLine(string.Join(" ; ", block.Expressions));
+                }
+                else {
+                    ctx.TraceExpressions.WriteLine(result.ToString());
+                }
+            }
         }
 
         body.Add(Label(ctx.ExitLabel));
@@ -161,74 +182,88 @@ public static class ProgramCompiler {
         return new VmProgram(del, 32);
     }
 
-    private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc, List<FunctionEntry> functions) {
+    private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc, Expression? functionsExpr) {
+        if (functionsExpr is null || call.FuncIndex < 0) {
+            // No function table or negative index — CLR delegate path: push to stack as-is.
+            var slots = ctx.RawSlots;
+            var sp = Property(Property(ctx.State, "Stack"), "StackPointer");
+            var body = new List<Expression>();
+            for (int i = 0; i < consumedPcs.Length; i++) {
+                var arg = ctx.ValueSlot(consumedPcs[i]);
+                body.Add(Assign(ArrayAccess(slots, sp), arg));
+                body.Add(Call(Property(ctx.State, "Stack"), SetStackPointer, Add(sp, Constant(1))));
+            }
+            var rv = ctx.ValueSlot(pc);
+            body.Add(Assign(rv, ArrayAccess(slots, Subtract(sp, Constant(1)))));
+            return Block(body);
+        }
+
+        // ── Closure/function call: dispatch to compiled VmProgram.Functions ──
+        // consumedPcs[0] = closure handle
+        // consumedPcs[1..ArgCount] = arguments
         var state = ctx.State;
-        var slots = ctx.RawSlots;
-        var sp = Property(Property(state, "Stack"), "StackPointer");
+        var rawSlots = ctx.RawSlots;
+        var spProp = Property(Property(state, "Stack"), "StackPointer");
+        var fbProp = Property(state, nameof(VmState.FrameBase));
+        var bodyExprs = new List<Expression>();
 
-        var body = new List<Expression>();
+        // 1. Save caller's ring to state.Registers
+        bodyExprs.Add(CtxPushRegisters(ctx));
 
-        // 1. Push arguments onto the value stack
-        for (int i = 0; i < consumedPcs.Length; i++) {
-            var arg = ctx.ValueSlot(consumedPcs[i]);
-            body.Add(Assign(ArrayAccess(slots, sp), arg));
-            body.Add(Call(Property(state, "Stack"), SetStackPointer, Add(sp, Constant(1))));
-        }
-        body.Add(CtxPushRegisters(ctx));
-
-        // 2. Ensure a function entry exists and resolve compile-time constants
-        int argSlots = call.ArgCount + 1;
-        if (call.FuncIndex >= functions.Count) {
-            functions.Add(new FunctionEntry(0, argSlots));
-        }
-        var entry = functions[call.FuncIndex];
-        int localCount = entry.LocalCount;
-
-        // 3. Inlined call frame setup (formerly HandleCall):
-        //    newFrameBase = SP - argSlots
-        //    packed = ((returnPC << 32) | (uint)FrameBase)
-        //    RawSlots[SP] = packed; SP++
-        //    FrameBase = newFrameBase; CachedArgSlots = argSlots
-        //    SP = newFrameBase + argSlots + localCount + 1
+        // 2. Save closure handle → state.ClosureHandle
         {
-            var stack = Property(state, "Stack");
-            var spProp = Property(stack, "StackPointer");
-            var raw = Property(stack, "RawSlots");
-            var newFb = Variable(typeof(int), "_callFb");
-            var savedSp = Variable(typeof(int), "_callSp");
-
-            // returnPC = ProgramCounter + 1 (always 1 in NoDebug since _pc = 0)
-            var returnPC = Add(Property(state, nameof(VmState.ProgramCounter)), Constant(1));
-            var fbProp = Property(state, nameof(VmState.FrameBase));
-
-            body.Add(Assign(newFb, Subtract(spProp, Constant(argSlots))));
-            body.Add(Assign(savedSp, spProp));
-            // RawSlots[SP] = ((long)(returnPC << 32) | (uint)FrameBase)
-            body.Add(Assign(ArrayAccess(raw, savedSp),
-                Add(LeftShift(Convert(returnPC, typeof(long)), Constant(32)),
-                    Convert(fbProp, typeof(long)))));
-            body.Add(Call(stack, SetStackPointer, Add(savedSp, Constant(1))));
-            body.Add(Assign(fbProp, newFb));
-
-            body.Add(Assign(ctx.FrameBaseLocal, newFb));
-            body.Add(Call(stack, SetStackPointer,
-                Add(Add(newFb, Constant(argSlots + localCount)), Constant(1))));
-            body.AddRange(new Expression[] { newFb, savedSp });
+            var handle = ctx.ValueSlot(consumedPcs[0]);
+            // Convert the ring value (long) to int handle
+            bodyExprs.Add(Assign(
+                Property(state, nameof(VmState.ClosureHandle)),
+                Convert(handle, typeof(int))));
         }
 
-        body.Add(CtxPopRegisters(ctx));
+        // 3. Push argument values to value stack (the function reads from its frame)
+        int argCount = call.ArgCount;
+        var savedSp = Variable(typeof(int), "_callSp");
+        bodyExprs.Add(Assign(savedSp, spProp));  // snapshot caller's SP
+        for (int i = 1; i < consumedPcs.Length; i++) {
+            var arg = ctx.ValueSlot(consumedPcs[i]);
+            bodyExprs.Add(Assign(ArrayAccess(rawSlots, spProp), arg));
+            bodyExprs.Add(Call(Property(state, "Stack"), SetStackPointer, Add(spProp, Constant(1))));
+        }
 
-        // 4. Read return value from the value stack into our ring slot
-        var rv = ctx.ValueSlot(pc);
-        body.Add(Assign(rv, ArrayAccess(slots,
-            Subtract(Property(Property(state, "Stack"), "StackPointer"), Constant(1)))));
+        // 4. Save caller frame info
+        bodyExprs.Add(Assign(
+            Property(state, nameof(VmState.ReturnPC)),
+            Add(Property(state, nameof(VmState.ProgramCounter)), Constant(1))));
+        bodyExprs.Add(Assign(
+            Property(state, nameof(VmState.OldFrameBase)),
+            fbProp));
 
-        // 5. Goto the function body directly — no dispatch switch needed
-        body.Add(Goto(ctx.GetLabel(entry.PC)));
-        return Block(body);
+        // 5. Set new FrameBase to point at first argument
+        bodyExprs.Add(Assign(fbProp, savedSp));
+
+        // 6. Invoke the compiled function delegate: Functions[funcIndex](state)
+        {
+            var funcExpr = ArrayAccess(functionsExpr, Constant(call.FuncIndex));
+            bodyExprs.Add(Invoke(funcExpr, state));
+        }
+
+        // 7. The function stored return value at slots[state.FrameBase] and
+        //    set SP = state.FrameBase + 1.  Read it from there.
+        var returnVal = ArrayAccess(rawSlots, fbProp);
+
+        // 8. Restore caller's ring (relies on function NOT touching state.Registers)
+        bodyExprs.Add(CtxPopRegisters(ctx));
+
+        // 9. Write return value to the ring slot for this µop
+        var resultSlot = ctx.ValueSlot(pc);
+        bodyExprs.Add(Assign(resultSlot, returnVal));
+
+        // 10. Restore caller's FrameBase
+        bodyExprs.Add(Assign(
+            fbProp,
+            Property(state, nameof(VmState.OldFrameBase))));
+
+        return Block(new[] { savedSp }, bodyExprs);
     }
-
-    // ── Inline emit helpers (replacing old Instruction.ToExpression) ─────
 
     private static readonly ConstructorInfo InvalidOpCtor = Ref.Constructor(() => new InvalidOperationException(""));
 
@@ -249,6 +284,76 @@ public static class ProgramCompiler {
     private static Expression EmitBranchIfFalse(int target, int[] consumedPcs, CompilationContext ctx) {
         var cond = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
         return IfThen(Equal(cond, Constant(0L)), Goto(ctx.GetLabel(target)));
+    }
+
+    private static Expression EmitReturnOp(int[] consumedPcs, CompilationContext ctx) {
+        var returnVal = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
+        var slots = ctx.RawSlots;
+        var targetSlot = Condition(Equal(ctx.FrameBase, Constant(-1)), Constant(0), ctx.FrameBase);
+        return Block(
+            Assign(ArrayAccess(slots, targetSlot), returnVal),
+            Call(Property(ctx.State, "Stack"), SetStackPointer, Add(targetSlot, Constant(1))),
+            Goto(ctx.ExitLabel));
+    }
+
+    private static Expression EmitStoreLocal(int slotIndex, int[] consumedPcs, CompilationContext ctx) {
+        var value = ctx.ValueSlot(consumedPcs[0]);
+        var index = Add(ctx.FrameBase, Constant(slotIndex));
+        return Assign(ArrayAccess(ctx.RawSlots, index), value);
+    }
+
+    private static Expression EmitAllocClosure(AllocClosure ac, int[] consumedPcs, CompilationContext ctx, int idx) {
+        // Allocate an object[] on the heap for captured values.
+        int captureCount = ac.UpvalueCount;
+        var capArray = NewArrayBounds(typeof(object), Constant(captureCount));
+        var body = new List<Expression>();
+
+        // Copy each captured value from the ring into the array
+        for (int i = 0; i < consumedPcs.Length; i++) {
+            body.Add(Assign(
+                ArrayAccess(capArray, Constant(i)),
+                Convert(ctx.ValueSlot(consumedPcs[i]), typeof(object))));
+        }
+
+        // Allocate closure on heap (the array becomes the closure's capture storage).
+        // Caller is responsible for nulling out capture slots after invocation
+        // (Heap.Set with null triggers free-list recycling).
+        body.Add(Assign(ctx.ValueSlot(idx),
+            Convert(Call(ctx.Heap, HeapAllocate, Convert(capArray, typeof(object))), typeof(long))));
+        return Block(body);
+    }
+
+    private static Expression EmitLoadUpvalue(LoadUpvalue lu, CompilationContext ctx) {
+        // Closure handle comes from state.ClosureHandle (set by caller before
+        // invoking a function delegate, or from the ring in the inline path).
+        // Dereference the heap handle, cast to object[], read by index.
+        var handle = Property(ctx.State, nameof(VmState.ClosureHandle));
+        var arr = Convert(ArrayAccess(ctx.HeapRawSlots, handle), typeof(object[]));
+        return Convert(ArrayAccess(arr, Constant(lu.UpvalueIndex)), typeof(long));
+    }
+
+    private static Expression EmitStoreUpvalue(StoreUpvalue su, int[] consumedPcs, CompilationContext ctx) {
+        // Store into the current closure's capture array via state.ClosureHandle.
+        var value = ctx.ValueSlot(consumedPcs[0]);
+        var upvalueArray = Convert(
+            ArrayAccess(ctx.HeapRawSlots,
+                Property(ctx.State, nameof(VmState.ClosureHandle))),
+            typeof(object[]));
+        return Assign(
+            ArrayAccess(upvalueArray, Constant(su.UpvalueIndex)),
+            Convert(value, typeof(object)));
+    }
+
+    private static Expression EmitLoadHeapConstant(LoadHeapConstant lhc, CompilationContext ctx) {
+        // Load a pre-allocated heap constant by handle index.
+        return Convert(ArrayAccess(ctx.HeapRawSlots, Constant(lhc.Handle)), typeof(long));
+    }
+
+    private static Expression? EmitPhi(Phi phi, int[] consumedPcs, CompilationContext ctx, int idx) {
+        // Phi is a merge annotation — no runtime code generated.
+        // The branch-aware ring analysis ensures both predecessors left
+        // the merged value at the same ring depth.
+        return null;
     }
 
     private static readonly MethodInfo HeapAllocate = Ref<Heap>.Method(h => h.Allocate(null));
@@ -385,14 +490,26 @@ public static class ProgramCompiler {
         return Block(stmts);
     }
 
-    /// <summary>Simulate the eval-stack ring for a primitive sequence.</summary>
+    /// <summary>Simulate the eval-stack ring for a primitive sequence.
+    /// Branch-aware: when a <c>CondGoto</c> or <c>Goto</c> targets a label,
+    /// the ring depth at that label is restored to what the predecessor
+    /// expects — not the linear fallthrough depth.  This lets both arms of
+    /// a branch leave values at the same ring depth for <c>Phi</c> to merge.</summary>
     private static Dictionary<int, int> ComputePrimitiveRingDepths(
         IReadOnlyList<PrimitiveNode> primitives,
         out Dictionary<int, int> ringDepthAtPC) {
+        // Pre-compute expected depths at branch targets via local simulation
+        var targetDepth = BuildTargetDepth(primitives);
+
         var ring = new List<int>();
         var map = new Dictionary<int, int>();
         ringDepthAtPC = new Dictionary<int, int>();
         for (int pc = 0; pc < primitives.Count; pc++) {
+            // At a branch-target label, restore ring to expected predecessor depth
+            if (targetDepth.TryGetValue(pc, out int expectDepth) && expectDepth < ring.Count) {
+                ring.RemoveRange(expectDepth, ring.Count - expectDepth);
+            }
+
             var (pop, push) = primitives[pc].StackEffect;
             int entryDepth = ring.Count;
             ringDepthAtPC[pc] = entryDepth;
@@ -411,12 +528,19 @@ public static class ProgramCompiler {
     /// <summary>One-pass backward-scan equivalent for primitives.
     /// Returns an array parallel to <paramref name="primitives"/> where each
     /// entry is the consumed-from-PC list for that primitive.
-    /// Identical algorithm to <see cref="BackwardScan"/> but for
-    /// <see cref="PrimitiveNode.StackEffect"/> instead of Instruction PopCount/PushCount.</summary>
+    /// Branch-aware: restores ring depth at branch-target labels so both
+    /// arms of a conditional leave values at the same depth for Phi.</summary>
     private static int[][] ComputePrimitiveConsumedPcs(IReadOnlyList<PrimitiveNode> primitives) {
+        var targetDepth = BuildTargetDepth(primitives);
+
         var ring = new List<int>();
         var result = new int[primitives.Count][];
         for (int pc = 0; pc < primitives.Count; pc++) {
+            // At a branch-target label, restore ring to expected predecessor depth
+            if (targetDepth.TryGetValue(pc, out int expectDepth) && expectDepth < ring.Count) {
+                ring.RemoveRange(expectDepth, ring.Count - expectDepth);
+            }
+
             var (pop, push) = primitives[pc].StackEffect;
             int entryDepth = ring.Count;
             int toPop = Math.Min(pop, entryDepth);
@@ -432,17 +556,37 @@ public static class ProgramCompiler {
         return result;
     }
 
-    // ── Primitive emit helpers ──────────────────────────────────────
+    /// <summary>Build a map from branch-target PC → expected ring depth.
+    /// For ResolvedCondGoto: the depth after popping the condition (same as fallthrough).
+    /// For ResolvedGoto: the depth at the Goto site (no stack effect).</summary>
+    private static Dictionary<int, int> BuildTargetDepth(IReadOnlyList<PrimitiveNode> primitives) {
+        var result = new Dictionary<int, int>();
+        var sim = new List<int>();
+        for (int pc = 0; pc < primitives.Count; pc++) {
+            // Advance sim BEFORE recording — CondGoto target expects depth
+            // AFTER the condition was popped (same as fallthrough), and
+            // Goto target expects depth at the Goto (no stack effect).
+            var (pop, push) = primitives[pc].StackEffect;
+            int toPop = Math.Min(pop, sim.Count);
+            if (toPop > 0) sim.RemoveRange(sim.Count - toPop, toPop);
+            int afterDepth = sim.Count;
+            for (int j = 0; j < push; j++) sim.Add(pc);
 
-    private static Expression EmitReturnOp(int[] consumedPcs, CompilationContext ctx) {
-        var returnVal = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
-        var slots = ctx.RawSlots;
-        var targetSlot = Condition(Equal(ctx.FrameBase, Constant(-1)), Constant(0), ctx.FrameBase);
-        return Block(
-            Assign(ArrayAccess(slots, targetSlot), returnVal),
-            Call(Property(ctx.State, "Stack"), SetStackPointer, Add(targetSlot, Constant(1))),
-            Goto(ctx.ExitLabel));
+            if (primitives[pc] is ResolvedCondGoto cg) {
+                // Record the depth AFTER popping the condition value
+                if (!result.ContainsKey(cg.TargetPc))
+                    result[cg.TargetPc] = afterDepth;
+            }
+            if (primitives[pc] is ResolvedGoto g) {
+                // Record the depth at the Goto (which has no stack effect)
+                if (!result.ContainsKey(g.TargetPc))
+                    result[g.TargetPc] = afterDepth;
+            }
+        }
+        return result;
     }
+
+    // ── Primitive emit helpers ──────────────────────────────────────
 
     private static Expression EmitPushConstant(object? value, CompilationContext ctx) {
         // Numeric/primitive values: inline directly
@@ -469,16 +613,7 @@ public static class ProgramCompiler {
                 typeof(long)));
     }
 
-    private static Expression EmitStoreLocal(int slotIndex, int[] consumedPcs, CompilationContext ctx) {
-        var value = ctx.ValueSlot(consumedPcs[0]);
-        var index = Add(ctx.FrameBase, Constant(slotIndex));
-        // StoreLocal (1,0) is a pure store — no ring write needed because
-        // the value is consumed, not pushed back.  Callers that need expression
-        // semantics emit a Dup before the StoreLocal.
-        return Assign(ArrayAccess(ctx.RawSlots, index), value);
-    }
-
-    private static Expression EmitBinaryOp(PrimOpKind op, int[] consumedPcs, CompilationContext ctx, System.Type? comparisonType = null) {
+    private static Expression EmitBinaryOp(PrimOpKind op, int[] consumedPcs, CompilationContext ctx, Type? comparisonType = null) {
         var lhs = ctx.ValueSlot(consumedPcs[0]);
         var rhs = consumedPcs.Length > 1 ? ctx.ValueSlot(consumedPcs[1]) : Constant(0L);
 
@@ -532,6 +667,4 @@ public static class ProgramCompiler {
         var result = Call(null, PopCountMethod, Convert(value, typeof(ulong)));
         return Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), Convert(result, typeof(long)));
     }
-
-
 }

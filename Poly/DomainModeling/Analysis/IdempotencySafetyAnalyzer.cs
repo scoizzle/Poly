@@ -13,7 +13,7 @@ public sealed class IdempotencySafetyAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) return;
 
-        if (node is Poly.DomainModeling.Action action && action.Name.Contains("Create", StringComparison.OrdinalIgnoreCase)) {
+        if (node is Action action && action.Name.Contains("Create", StringComparison.OrdinalIgnoreCase)) {
             context.ReportHint(
                 action,
                 $"Action '{action.Name}' creates data. Consider whether it should have explicit validation or idempotency guarantees.",

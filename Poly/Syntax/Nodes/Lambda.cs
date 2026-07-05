@@ -15,6 +15,10 @@ namespace Poly.Syntax.Nodes;
 /// <param name="Parameters">The parameters accepted by this lambda.</param>
 /// <param name="Body">The body expression evaluated when the lambda is invoked.</param>
 public sealed record Lambda(IReadOnlyList<Parameter> Parameters, Node Body) : Expression {
+
+    /// <summary>Index assigned during expansion, used by <see cref="Invoke"/>
+    /// to reference the body function entry.  Set during <c>ToPrimitives()</c>.</summary>
+    public int LambdaIndex { get; set; } = -1;
     public override IEnumerable<Node?> Children {
         get {
             foreach (var p in Parameters) yield return p;
@@ -28,24 +32,35 @@ public sealed record Lambda(IReadOnlyList<Parameter> Parameters, Node Body) : Ex
     }
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
-        if (env is null) {
-            env = new Poly.Syntax.Primitives.ExpansionEnvironment();
-            context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
+        // Assign a unique lambda index for Call dispatch before expanding body.
+        LambdaIndex = context.Env.AllocateLambdaIndex();
+
+        // Create a child context for lambda body expansion. The child has its
+        // own 0-based slot space; references to outer-scope slots become captures.
+        var bodyCtx = context.CreateChildScope();
+
+        // Assign parameter slots in the child's space
+        foreach (var param in Parameters)
+            bodyCtx.Env.GetOrAssignSlot(param);
+
+        // Expand body — captures detected automatically via IsUpvalue
+        var bodyPrims = new List<Primitives.PrimitiveNode>();
+        using (bodyCtx.Env.EnterStatementContext()) {
+            foreach (var p in Body.ToPrimitives(bodyCtx))
+                bodyPrims.Add(p);
         }
 
-        // Assign slots to parameters in the lambda's scope
-        foreach (var param in Parameters) {
-            env.GetOrAssignSlot(param);
-        }
+        // Collect captured info: for each upvalue, map child slot → parent slot
+        var captures = bodyCtx.Env.GetCaptures();
 
-        // Emit body (uses Parameter primitives that resolve to slots)
-        foreach (var p in Body.ToPrimitives(context))
-            yield return p;
+        // Register as pending function in parent scope
+        context.Env.AddPendingFunction(LambdaIndex, bodyPrims, captures,
+            Parameters.Count, bodyCtx.Env.LocalSlotCount);
 
-        // Placeholder: AllocClosure would be emitted here with upvalue tracking.
-        // For now, push 0 as a closure handle placeholder.
-        yield return new Poly.Syntax.Primitives.PushConstant(0L);
+        // Emit capture loads (read from outer frame slots) + AllocClosure
+        foreach (var (parentSlot, _) in captures)
+            yield return new Primitives.LoadLocal(parentSlot);
+        yield return new Primitives.AllocClosure(LambdaIndex, captures.Count);
     }
 }

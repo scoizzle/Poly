@@ -71,6 +71,12 @@ public sealed class CompilationContext {
     /// is exceeded.  Zero overhead when false (no expression generated).</summary>
     public bool LimitLoops { get; set; }
 
+    /// <summary>Optional writer for dumping generated LINQ Expressions during
+    /// compilation.  When set, each expression node is rendered to this writer
+    /// before being emitted.  Useful for debugging new primitives without
+    /// attaching a debugger.</summary>
+    public TextWriter? TraceExpressions { get; set; }
+
     /// <summary>Local boolean: true when <c>state.MaxLoopIterations != -1</c>.
     /// Computed once in the preamble so Jump µops don't re-read the property.</summary>
     public ParameterExpression LoopLimitActive { get; }

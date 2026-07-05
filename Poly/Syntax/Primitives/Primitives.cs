@@ -43,7 +43,7 @@ public sealed record StoreLocal(int SlotIndex) : PrimitiveNode {
 /// <param name="Op">The binary operation kind.</param>
 /// <param name="ComparisonType">When non-null for Eq/Neq ops, indicates both operands are heap handles
 /// that should be dereferenced and compared as the given CLR type (reference-type value equality).</param>
-public sealed record BinaryOp(OpKind Op, System.Type? ComparisonType = null) : PrimitiveNode {
+public sealed record BinaryOp(OpKind Op, Type? ComparisonType = null) : PrimitiveNode {
     public override (int Pop, int Push) StackEffect => (2, 1);
 }
 

@@ -16,11 +16,11 @@ public sealed record New(Node Type, params Node[] Arguments) : Expression {
     public override string ToString() => $"new {Type}({string.Join(", ", Arguments)})";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // Type reference is compile-time metadata — no runtime µops needed
         foreach (var arg in Arguments)
             foreach (var p in arg.ToPrimitives(context)) yield return p;
         // Constructor call: arg count, 0 slots
-        yield return new Poly.Syntax.Primitives.Call(Arguments.Length, 0);
+        yield return new Primitives.Call(Arguments.Length, 0);
     }
 }

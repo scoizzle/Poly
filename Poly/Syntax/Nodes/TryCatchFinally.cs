@@ -20,7 +20,7 @@ public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? 
     }
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // Exception handling not yet supported at the primitive level.
         // Lower to the try block's body for now.
         foreach (var p in TryBlock.ToPrimitives(context)) yield return p;

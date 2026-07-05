@@ -28,7 +28,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
             // Process declared variables (they may contain expressions that need analysis).
             foreach (var v in block.Variables) {
                 if (v != null && context.ShouldAnalyze(v)) {
-                    this.Analyze(context, v);
+                    Analyze(context, v);
                 }
             }
 
@@ -43,7 +43,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 var child = nodes[i];
                 if (child is null || !context.ShouldAnalyze(child)) continue;
 
-                this.Analyze(context, child);
+                Analyze(context, child);
                 var childMeta = context.GetMetadata<SideEffectMetadata>(child);
                 var childKind = childMeta?.Kind ?? SideEffectKind.External;
                 blockKind = ClassifyWorst(blockKind, childKind);

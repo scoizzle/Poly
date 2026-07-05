@@ -22,7 +22,7 @@ public sealed record TypeAs : Expression {
     public override string ToString() => $"({Operand} as {TargetTypeReference})";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         foreach (var p in Operand.ToPrimitives(context)) yield return p;
     }
 }

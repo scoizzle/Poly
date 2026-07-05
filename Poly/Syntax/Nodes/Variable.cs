@@ -26,10 +26,19 @@ public sealed record Variable(string Name, Node? Value = null) : Expression {
     public override string ToString() => Name;
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
-        if (env is null || !env.TryGetSlot(this, out var slot))
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
+        var env = context.Env;
+        if (!env.TryResolveSlot(this, out var slot))
             throw new InvalidOperationException($"Variable '{Name}' has no slot assigned");
-        yield return new Poly.Syntax.Primitives.LoadLocal(slot);
+
+        // When inside a child (lambda) scope and this variable belongs
+        // to a parent scope, emit LoadUpvalue instead of LoadLocal.
+        if (env.IsUpvalue(this)) {
+            int upvIdx = env.GetOrAssignUpvalueIndex(this);
+            yield return new Primitives.LoadUpvalue(upvIdx);
+        }
+        else {
+            yield return new Primitives.LoadLocal(slot);
+        }
     }
 }

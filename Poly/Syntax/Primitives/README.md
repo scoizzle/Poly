@@ -1,8 +1,20 @@
 # Primitive Nodes (Syntax/Primitives/)
 
-Primitives are the irreducibile instruction set that structured AST nodes decompose to
-via `Node.ToPrimitives()`. Each primitive declares its `StackEffect` — how many values
+Primitives are the **canonical intermediate representation** for Poly. They are the
+irreducibile instruction set that structured AST nodes decompose to via
+`Node.ToPrimitives()`. Each primitive declares its `StackEffect` — how many values
 it pops and pushes on the eval stack — which drives the ring allocator in `ProgramCompiler`.
+
+Primitives MAY also carry explicit dataflow information via `InputSlots`/`ResultSlot`
+(see `ValueSlot` below), making them a full SSA IR with explicit value edges.
+
+## Canonical IR Types
+
+| Type | Purpose |
+|------|---------|
+| `ValueSlot` | Lightweight value identity (index into the program's value table) |
+| `PrimitiveNode` | Base record for all instructions; carries `StackEffect`, optional `InputSlots`/`ResultSlot` |
+| `Phi` | SSA merge primitive — merge-point annotation at control-flow joins |
 
 ## Primitive Taxonomy
 
@@ -32,13 +44,22 @@ it pops and pushes on the eval stack — which drives the ring allocator in `Pro
 | `AllocClosure` | (N,1) | Allocate a closure with N captured upvalues |
 | `LoadUpvalue` | (0,1) | Load a captured upvalue from current closure |
 | `StoreUpvalue` | (1,1) | Store a captured upvalue (pushes value back) |
+| `IncLocal` | (0,0) | Increment a local variable by a constant delta |
+| `DecLocal` | (0,0) | Decrement a local variable by a constant delta |
+| `Phi` | (0,1) | SSA merge — selects among incoming `ValueSlot[]` at control-flow join |
+| `ValueSlot` | — | Lightweight value identity for explicit dataflow edges |
 
 ## Design
 
 - `PrimitiveNode` extends `Node` and seals `ToPrimitives()` — primitives are terminal
   and don't expand further.
 - `StackEffect` is an abstract property — each primitive self-describes its dataflow.
+  Primitives can also override `InputSlots`/`ResultSlot` for explicit SSA edges.
 - `PrimitiveLinker` resolves `Label` references to absolute PC offsets, producing
   `ResolvedGoto`/`ResolvedCondGoto`.
 - Labels are kept as no-op markers in the final array so forward branch references
   resolve correctly.
+- `Module.Build()` groups a flat linked primitive list into `BasicBlock`s by scanning
+  for label/terminator boundaries — creating a block-structured CFG from the flat IR.
+- See `docs/decisions/2026-07-04-primitives-as-canonical-ir.md` for the rationale
+  behind making the primitive instruction set the canonical IR.

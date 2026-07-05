@@ -49,15 +49,17 @@ The expanded rationale, history, and examples of how these principles have been 
 - No module may depend on `Synthesis` except `DomainModeling` (evolution loop).
 - Exception: CLR implementations under `Poly/Introspection/CommonLanguageRuntime` add concrete types without introducing reverse dependencies.
 - **Domain concepts lower to generic VM opcodes** (no domain-specific opcodes). See `docs/decisions/2026-06-08-domain-lowering-boundary.md`.
-- **Planned:** `Ir` will sit between `Syntax` and `Interpretation` once the canonical IR is implemented. See `docs/experiments/interpretation-compiler-framework-plan.md`.
+- **The primitive instruction set is the canonical IR** — see `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`.
 
-## Ir — Canonical Intermediate Representation (Planned)
+## Primitive IR — Canonical Intermediate Representation
 
-The canonical block-structured CFG IR with SSA values is a planned migration target.
-See `docs/experiments/interpretation-compiler-framework-plan.md` for the full design.
+The `PrimitiveNode` instruction set (defined in `Poly/Syntax/Primitives/`) is the canonical
+intermediate representation. The planned separate `Poly/Ir/` module has been superseded —
+the primitives themselves carry the IR's semantics, enhanced with explicit dataflow slots
+(`ValueSlot`, `InputSlots`, `ResultSlot`) and a `Phi` primitive for SSA merge points.
 
-**Status:** `Poly/Ir/` does not yet exist. The current pipeline lowers AST nodes directly
-to `PrimitiveNode` sequences (see `Poly/Syntax/Primitives/README.md`).
+See `Poly/Syntax/Primitives/README.md` for the taxonomy and `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`
+for the full rationale.
 
 ## Interpretation
 
@@ -111,8 +113,8 @@ using var state = new VmState(program);
 var output = Vm.Execute(state);
 ```
 
-See `docs/experiments/interpretation-compiler-framework-plan.md` for the planned
-canonical AST → IR → µops migration.
+See `Poly/Syntax/Primitives/README.md` for the primitive taxonomy and
+`Poly/Syntax/Primitives/Module.cs` for the block-structured SSA container.
 
 ## Validation
 
@@ -188,7 +190,7 @@ The full rationale for these exact rules lives in (or should be added to) `docs/
 | Analysis passes             | `Interpretation/Analysis/` — see `Poly/Interpretation/Analysis/README.md` |
 | AST node types              | `Syntax/Nodes/` |
 | VM execution engine         | `Interpretation/Vm/` — see `Poly/Interpretation/Vm/README.md` |
-| Primitive instruction set   | `Syntax/Primitives/` — see `Poly/Syntax/Primitives/README.md` |
+| Primitive IR (canonical)    | `Syntax/Primitives/` — see `Poly/Syntax/Primitives/README.md` |
 | Validation rules            | `Validation/Rules/` (register in `Validation/Rule.cs`) |
 | Data-model constraints      | `Data/Modeling/Validation/` |
 | Shared helpers              | `Extensions/` |

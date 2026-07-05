@@ -1,19 +1,52 @@
-using Poly.Syntax.Analysis;
-
 namespace Poly.Syntax.Primitives;
 
 /// <summary>
 /// Mutable expansion environment stored as pass-level metadata
 /// (NodeId.Empty) during ToPrimitives().  Coordinates variable slot
-/// assignment and loop boundary tracking across parent/child AST nodes.
+/// assignment, loop boundary tracking, and closure capture detection.
 ///
-/// Slots are keyed by <see cref="NodeId"/> so that expansion is robust
-/// across node identity transformations.
+/// Supports child environments for lambda body expansion — each lambda
+/// gets its own 0-based slot space, and slots that aren't found in the
+/// child's dictionary are automatically outer captures.
 /// </summary>
-internal sealed class ExpansionEnvironment : IAnalysisMetadata {
+public sealed class ExpansionEnvironment {
     private readonly Dictionary<NodeId, int> _slots = new();
     private int _nextSlot;
+    private int _nextLambdaIndex;
     private readonly Dictionary<NodeId, LoopBoundary> _loopBoundaries = new();
+
+    // ── Child environments (closure scopes) ─────────────────────
+
+    /// <summary>Parent environment, or null for the root.</summary>
+    private readonly ExpansionEnvironment? _parent;
+
+    /// <summary>Creates a root environment.</summary>
+    public ExpansionEnvironment() { }
+
+    /// <summary>Creates a child environment for a lambda body.
+    /// The child has an independent 0-based slot space.  Slots not
+    /// found in the child's dictionary belong to the parent (captures).</summary>
+    private ExpansionEnvironment(ExpansionEnvironment parent) {
+        _parent = parent;
+        // Inherit loop boundaries so break/continue inside a lambda
+        // inside a loop resolves correctly.
+        _loopBoundaries = parent._loopBoundaries;
+        StatementDepth = parent.StatementDepth;
+    }
+
+    /// <summary>Create a child environment for a lambda body expansion.
+    /// The child gets its own slot space; references to outer-scope slots
+    /// become upvalue captures.</summary>
+    public ExpansionEnvironment CreateChildScope() => new(this);
+
+    /// <summary>Number of slots allocated in THIS environment (excludes parent).</summary>
+    public int LocalSlotCount => _nextSlot;
+
+    /// <summary>Number of slots in the full parent chain (for parameter slot assignment).</summary>
+    public int TotalSlotDepth => _parent?.TotalSlotDepth ?? 0;
+
+    /// <summary>Allocate a sequential lambda index for closure call dispatch.</summary>
+    public int AllocateLambdaIndex() => _nextLambdaIndex++;
 
     // ── Slot management ─────────────────────────────────────────
 
@@ -23,7 +56,8 @@ internal sealed class ExpansionEnvironment : IAnalysisMetadata {
         _slots.TryGetValue(node.Id, out slot);
 
     /// <summary>Returns the existing slot for <paramref name="node"/>,
-    /// or assigns and returns a new one.</summary>
+    /// or assigns and returns a new one.  In a child environment, the
+    /// slot is allocated in the child's space (never walks up to parent).</summary>
     public int GetOrAssignSlot(Node node) {
         if (_slots.TryGetValue(node.Id, out var slot))
             return slot;
@@ -32,9 +66,82 @@ internal sealed class ExpansionEnvironment : IAnalysisMetadata {
         return slot;
     }
 
-    /// <summary>Allocate a temp slot (e.g. for φ merge) without
-    /// associating it with a particular AST node.</summary>
+    /// <summary>Allocate a temp slot without associating it with a node.</summary>
     public int AllocateTempSlot() => _nextSlot++;
+
+    /// <summary>True if <paramref name="node"/> has a slot in this
+    /// environment or any parent.  In child scopes, this detects captures
+    /// — if it's true in the parent but not in the child, it's an upvalue.</summary>
+    public bool ExistsInScope(Node node) =>
+        _slots.ContainsKey(node.Id) || (_parent?.ExistsInScope(node) ?? false);
+
+    /// <summary>Returns the slot index for <paramref name="node"/>,
+    /// walking up to parent environments.  The returned value includes
+    /// the parent's slot offset.  Used by <c>LoadLocal</c>/<c>StoreLocal</c>
+    /// when the variable is in THIS scope (not captured).</summary>
+    public bool TryResolveSlot(Node node, out int slot) {
+        if (_slots.TryGetValue(node.Id, out slot))
+            return true;
+        if (_parent is not null)
+            return _parent.TryResolveSlot(node, out slot);
+        return false;
+    }
+
+    // ── Capture detection ───────────────────────────────────────
+
+    /// <summary>Returns true when <paramref name="node"/> is declared
+    /// in an ancestor environment (not the current child).</summary>
+    public bool IsUpvalue(Node node) =>
+        _parent is not null && _parent.ExistsInScope(node) && !_slots.ContainsKey(node.Id);
+
+    /// <summary>Returns the parent-scope slot index for an upvalue node.
+    /// The node must be an upvalue (IsUpvalue returns true).</summary>
+    public int GetParentSlot(Node node) {
+        if (_parent is not null && _parent.TryResolveSlot(node, out var slot))
+            return slot;
+        throw new InvalidOperationException("Cannot resolve parent slot for non-upvalue node.");
+    }
+
+    /// <summary>Upvalue index mapping (child-slots by upvalue sequence).</summary>
+    private readonly Dictionary<NodeId, int> _upvalueIndices = new();
+
+    /// <summary>Returns the upvalue index for <paramref name="node"/>,
+    /// allocating a new one if needed.  The index is sequential within
+    /// this child environment (0, 1, 2, ...).</summary>
+    public int GetOrAssignUpvalueIndex(Node node) {
+        if (_upvalueIndices.TryGetValue(node.Id, out var idx))
+            return idx;
+        idx = _upvalueIndices.Count;
+        _upvalueIndices[node.Id] = idx;
+        return idx;
+    }
+
+    /// <summary>Returns all captured node → parent-slot-info pairs in
+    /// upvalue index order.  Used by Lambda.ToPrimitives to build the
+    /// capture list for AllocClosure.</summary>
+    public List<(int ParentSlot, int UpvalueIndex)> GetCaptures() {
+        var result = new List<(int ParentSlot, int UpvalueIndex)>(_upvalueIndices.Count);
+        foreach (var kv in _upvalueIndices.OrderBy(kv => kv.Value)) {
+            var node = kv.Key; // This is NodeId — need the actual slot index
+            // We need NodeId → slot index mapping from the parent
+            // Store NodeId and resolve later
+            if (_parent is not null && _parent.TryResolveSlotByNodeId(kv.Key, out var parentSlot))
+                result.Add((parentSlot, kv.Value));
+        }
+        return result;
+    }
+
+    /// <summary>Resolve a slot by NodeId from parent scope. Returns
+    /// the slot index assigned in the current or ancestor environment.</summary>
+    private bool TryResolveSlotByNodeId(NodeId nodeId, out int slot) {
+        foreach (var kv in _slots) {
+            if (kv.Key == nodeId) { slot = kv.Value; return true; }
+        }
+        if (_parent is not null)
+            return _parent.TryResolveSlotByNodeId(nodeId, out slot);
+        slot = 0;
+        return false;
+    }
 
     // ── Statement context depth ─────────────────────────────────
 
@@ -72,12 +179,35 @@ internal sealed class ExpansionEnvironment : IAnalysisMetadata {
         public void Dispose() => _env.StatementDepth--;
     }
 
+    // ── Pending function bodies (lambda closure support) ─────────
+    // When a lambda expands, its body is expanded in a child environment.
+    // The child produces its own primitive list with 0-based slot indices.
+    // ProgramCompiler collects these and compiles them as standalone
+    // delegates, with a function table in VmProgram.
+    private readonly List<PendingFunction> _pendingFunctions = [];
+
+    /// <summary>Register a lambda body for separate compilation.
+    /// <paramref name="body"> is the expanded primitive list from the
+    /// child environment (0-based slot indices).
+    /// <paramref name="capturedInfo"> maps each child slot index to its
+    /// parent (outer-scope) slot index.
+    public void AddPendingFunction(int lambdaIndex, List<PrimitiveNode> body,
+        IReadOnlyList<(int ChildSlot, int ParentSlot)> capturedInfo,
+        int paramCount, int localCount) {
+        _pendingFunctions.Add(new PendingFunction(lambdaIndex, body, capturedInfo, paramCount, localCount));
+    }
+
+    /// <summary>Returns all pending function bodies and clears the list.</summary>
+    public List<PendingFunction> ExtractPendingFunctions() {
+        var result = new List<PendingFunction>(_pendingFunctions);
+        _pendingFunctions.Clear();
+        return result;
+    }
+
     // ── Loop boundary registry (NodeId-keyed) ───────────────────
 
     /// <summary>
     /// Registers a loop's exit/latch labels keyed by its <see cref="Node.Id"/>.
-    /// Replaces the old monotonic <c>PushLoop</c> stack — consumers resolve
-    /// targets via <see cref="Analysis.ResolvedJumpTarget"/> metadata.
     /// </summary>
     public void RegisterLoopBoundary(NodeId loopNodeId, LoopBoundary boundary) {
         _loopBoundaries[loopNodeId] = boundary;
@@ -85,11 +215,15 @@ internal sealed class ExpansionEnvironment : IAnalysisMetadata {
 
     /// <summary>
     /// Retrieves the boundary for the loop identified by <paramref name="loopNodeId"/>.
-    /// The loop must have been registered via <see cref="RegisterLoopBoundary"/>.
     /// </summary>
     public LoopBoundary GetLoopBoundary(NodeId loopNodeId) =>
         _loopBoundaries[loopNodeId];
 }
 
+/// <summary>A lambda body pending compilation.</summary>
+public sealed record PendingFunction(int LambdaIndex, List<PrimitiveNode> Body,
+    IReadOnlyList<(int ChildSlot, int ParentSlot)> CapturedInfo,
+    int ParamCount, int LocalCount);
+
 /// <summary>Labels for a loop's exit and latch targets.</summary>
-internal sealed record LoopBoundary(Label Exit, Label Latch);
+public sealed record LoopBoundary(Label Exit, Label Latch);

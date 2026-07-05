@@ -18,15 +18,15 @@ public sealed record Equal(Node LeftHandValue, Node RightHandValue) : Expression
     public override string ToString() => $"{LeftHandValue} == {RightHandValue}";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         foreach (var p in LeftHandValue.ToPrimitives(context)) yield return p;
         foreach (var p in RightHandValue.ToPrimitives(context)) yield return p;
 
         // Check if comparing heap-backed reference types (string, etc).
-        System.Type? eqType = null;
-        if (context.GetResolvedType(LeftHandValue) is Poly.Introspection.CommonLanguageRuntime.IClrTypeDefinition clrL && !clrL.RuntimeType.IsValueType)
+        Type? eqType = null;
+        if (context.Analysis.GetResolvedType(LeftHandValue) is Introspection.CommonLanguageRuntime.IClrTypeDefinition clrL && !clrL.RuntimeType.IsValueType)
             eqType = clrL.RuntimeType;
-        else if (context.GetResolvedType(RightHandValue) is Poly.Introspection.CommonLanguageRuntime.IClrTypeDefinition clrR && !clrR.RuntimeType.IsValueType)
+        else if (context.Analysis.GetResolvedType(RightHandValue) is Introspection.CommonLanguageRuntime.IClrTypeDefinition clrR && !clrR.RuntimeType.IsValueType)
             eqType = clrR.RuntimeType;
 
         if (eqType is null) {
@@ -35,6 +35,6 @@ public sealed record Equal(Node LeftHandValue, Node RightHandValue) : Expression
                 eqType = typeof(string);
         }
 
-        yield return new Poly.Syntax.Primitives.BinaryOp(Poly.Syntax.Primitives.OpKind.Eq, eqType);
+        yield return new Primitives.BinaryOp(Poly.Syntax.Primitives.OpKind.Eq, eqType);
     }
 }

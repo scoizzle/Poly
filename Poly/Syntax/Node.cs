@@ -30,8 +30,8 @@ public abstract record Node {
     /// This is the canonical reduction of structured AST nodes onto the
     /// universal primitive substrate (Label, Goto, CondGoto, PushConstant, …).
     /// </summary>
-    /// <param name="context">The analysis context with resolved metadata.</param>
+    /// <param name="context">The expansion context with analysis metadata and env state.</param>
     /// <returns>A sequence of primitive nodes representing this node in executable form.</returns>
-    public virtual IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context)
+    public virtual IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context)
         => throw new NotImplementedException($"ToPrimitives not implemented for {GetType().Name}");
 }

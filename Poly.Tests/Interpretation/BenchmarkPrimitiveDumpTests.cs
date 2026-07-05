@@ -211,34 +211,43 @@ public class BenchmarkPrimitiveDumpTests {
         var meta = analysis.GetMetadata<PrimitiveExpansionMetadata>(body);
         await Assert.That(meta).IsNotNull();
 
-        // 2. Get expanded primitives and append Return (required by VM)
-        var primsList = meta!.Primitives.ToList();
-        primsList.Add(new Prim.Return());
+        // 2. Get expanded primitives and append Return (required by VM).
+        var primsRaw = meta!.Primitives.ToList();
+        primsRaw.Add(new Prim.Return());
 
-        // 3. Link to resolve label → PC offsets
-        var linked = PrimitiveLinker.Link(primsList);
+        // Build PC → Label name map for ResolvedGoto/CondGoto display.
+        // Do this BEFORE linking so Label names are visible.
+        var pcToLabel = new Dictionary<int, string>();
+        for (int i = 0; i < primsRaw.Count; i++) {
+            if (primsRaw[i] is Prim.Label l)
+                pcToLabel[i] = l.Name ?? $"L{i}";
+        }
 
-        // 4. Compile and execute
-        var program = ProgramCompiler.CompilePrimitives(linked, CompilationMode.NoDebug);
+        // Link for display and execution.
+        var linked = PrimitiveLinker.Link(primsRaw);
+
+        // 3. Compile using the standard pipeline (handles pending function compilation)
+        //    and capture trace for the listing.
+        var traceSb = new StringBuilder();
+        var traceWriter = new StringWriter(traceSb);
+        var program = Interpreter.Compile(body, CompilationMode.NoDebug, traceExpressions: traceWriter);
         using var exec = Interpreter.Execute(program);
         long result = exec.RawValue;
 
-        // 5. Build human-readable listing (before validation — dump even on failure)
+        // 4. Parse trace output: one line per µop, line index = PC.
+        var traceLines = traceSb.ToString().Split('\n', StringSplitOptions.None);
+        var traceExprs = new string[linked.Count];
+        for (int i = 0; i < linked.Count && i < traceLines.Length; i++)
+            traceExprs[i] = traceLines[i].TrimEnd('\r');
+
+        // 5. Build human-readable listing with expression column
         var sb = new StringBuilder();
         sb.AppendLine($"; {name}.polyvm — {linked.Count} primitives");
         sb.AppendLine($"; Stack effect: (Pop, Push)");
         sb.AppendLine($"; Exec result: {result} (expected {expectedResult})");
         sb.AppendLine($";");
-        sb.AppendLine($"   PC   | Instruction                 | Effect");
-        sb.AppendLine($"  ------+-----------------------------+--------");
-
-        // Build PC → Label name map for ResolvedGoto/CondGoto display.
-        // Use pre-link primitives so Label names are still visible.
-        var pcToLabel = new Dictionary<int, string>();
-        for (int i = 0; i < primsList.Count; i++) {
-            if (primsList[i] is Prim.Label l)
-                pcToLabel[i] = l.Name ?? $"L{i}";
-        }
+        sb.AppendLine($"   PC   | Instruction                 | Stack | Expression");
+        sb.AppendLine($"  ------+-----------------------------+-------+-----------");
 
         for (int idx = 0; idx < linked.Count; idx++) {
             var prim = linked[idx];
@@ -253,14 +262,15 @@ public class BenchmarkPrimitiveDumpTests {
             }
 
             string markerCol = string.IsNullOrEmpty(marker) ? "   " : $" {marker} ";
-            sb.AppendLine($"{idx,5}{markerCol}| {detail,-28}| ({pop},{push}) |");
+            var expr = idx < traceExprs.Length ? traceExprs[idx] : "";
+            sb.AppendLine($"{idx,5}{markerCol}| {detail,-28}| ({pop},{push}) | {expr}");
         }
 
-        // 7. Write to temp file
+        // 6. Write primitive listing to temp file
         var outputPath = $"/tmp/{name}.polyvm";
         await File.WriteAllTextAsync(outputPath, sb.ToString());
 
-        // 6. Validate correctness
+        // 7. Validate correctness
         await Assert.That(result).IsEqualTo(expectedResult);
     }
 
@@ -288,6 +298,7 @@ public class BenchmarkPrimitiveDumpTests {
             Prim.Call c => $"Call args={c.ArgCount} func={c.FuncIndex}",
             Prim.CallExternal ce => $"CallExternal {ce.Target.Name}",
             Throw => "Throw",
+            Phi => "Phi",
             _ => prim.GetType().Name
         };
     }

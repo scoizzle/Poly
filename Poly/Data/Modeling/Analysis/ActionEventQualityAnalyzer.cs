@@ -6,7 +6,7 @@ using Poly.Data.Modeling.Validation.Constraints;
 
 namespace Poly.Data.Modeling;
 
-using EffectConditional = Poly.Data.Modeling.Effects.Conditional;
+using EffectConditional = Effects.Conditional;
 
 internal sealed class ActionEventQualityAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {

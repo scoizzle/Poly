@@ -1,5 +1,19 @@
 # Interpretation → Extensible Compiler Framework (Revised)
 
+**Status: SUPERSEDED by `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`.**
+
+The primitive instruction set (`Poly/Syntax/Primitives/`) is now the canonical IR.
+The separate `Poly/Ir/` module and `EmissionContext`/`GenerationPass` infrastructure
+described below are not being created. Instead, the primitive format is being enhanced
+with explicit dataflow slots (`ValueSlot`, `InputSlots`, `ResultSlot`) and a `Phi`
+primitive to achieve the same goals without a second instruction set.
+
+This document is retained for reference — the IR design principles (§3), pass structure
+(§5), and backend architecture (§6) are still valid, but applied to the primitive format
+rather than a separate type system.
+
+---
+
 Date: 2026-06-24
 Author: GitHub Copilot (assistant), incorporating code review of existing pipeline
 

@@ -14,11 +14,11 @@ public sealed record BreakStatement(string? Label = null) : Statement {
     public override string ToString() => Label is not null ? $"break {Label};" : "break;";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var target = context.GetMetadata<Poly.Interpretation.Analysis.Semantics.ResolvedJumpTarget>(this);
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
+        var target = context.GetMetadata<Interpretation.Analysis.Semantics.ResolvedJumpTarget>(this);
         if (target is null)
-            throw new System.InvalidOperationException("break outside loop");
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null)!;
-        yield return new Poly.Syntax.Primitives.Goto(env.GetLoopBoundary(target.TargetNodeId).Exit);
+            throw new InvalidOperationException("break outside loop");
+        var env = context.Env;
+        yield return new Primitives.Goto(env.GetLoopBoundary(target.TargetNodeId).Exit);
     }
 }

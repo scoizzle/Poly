@@ -40,7 +40,11 @@ public sealed class ExpansionPass : INodeAnalyzer {
             return;
 
         if (context.GetMetadata<PrimitiveExpansionMetadata>(actual) is null) {
-            var primitives = actual.ToPrimitives(context).ToArray();
+            var pCtx = new ExpansionContext(context);
+            // Store the context so Interpreter.CompileCore can extract pending
+            // function bodies compiled from child lambdas.
+            context.SetMetadata<ExpansionContext>(null, pCtx);
+            var primitives = actual.ToPrimitives(pCtx).ToArray();
             context.SetMetadata(actual, new PrimitiveExpansionMetadata(primitives));
         }
 

@@ -7,8 +7,8 @@ public record TypeReference(string TypeName) : Node {
     public override string ToString() => TypeName;
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // Type references are compile-time metadata only
-        yield return new Poly.Syntax.Primitives.PushConstant(0L);
+        yield return new Primitives.PushConstant(0L);
     }
 };

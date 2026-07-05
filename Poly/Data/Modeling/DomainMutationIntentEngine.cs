@@ -314,7 +314,7 @@ public sealed class DomainMutationIntentEngine {
                         var actorPropPolicy = ResolvePolicy(domain, addActorPropRule.Target, addActorPropRule.PolicyName);
                         var actor = domain.RequireActor(addActorPropRule.ActorTypeName);
                         var actorProperty = actor.RequireProperty(addActorPropRule.ActorPropertyName);
-                        var constraint = new Poly.Data.Modeling.Validation.Constraints.EqualityConstraint(addActorPropRule.ConstraintValue);
+                        var constraint = new Validation.Constraints.EqualityConstraint(addActorPropRule.ConstraintValue);
                         _ = mutation.AddRule(actorPropPolicy, new ActorPropertyRule(domain, addActorPropRule.RuleName, actorProperty, constraint));
                         break;
                     }

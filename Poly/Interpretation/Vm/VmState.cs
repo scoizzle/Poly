@@ -20,6 +20,22 @@ public sealed class VmState : IDisposable {
     public long MaxLoopIterations { get; set; } = -1;
     public long[]? LoopCounters { get; set; }
 
+    // ── Closure/function call frame state ────────────────────────
+
+    /// <summary>Closure handle active during a compiled function body.
+    /// Set by the caller before invoking a function delegate; read by
+    /// <c>LoadUpvalue</c>/<c>StoreUpvalue</c> to access captures.</summary>
+    public int ClosureHandle { get; set; }
+
+    /// <summary>Return PC saved by the caller at a call site.  Used by
+    /// the invoked function to return to the correct µop (following the
+    /// Call primitive).</summary>
+    public int ReturnPC { get; set; }
+
+    /// <summary>Caller's <see cref="FrameBase"/> saved before invoking a
+    /// function.  Restored by the caller after the function returns.</summary>
+    public int OldFrameBase { get; set; }
+
     public VmState(VmProgram program) {
         Program = program;
     }

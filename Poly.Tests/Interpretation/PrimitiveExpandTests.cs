@@ -8,7 +8,7 @@ namespace Poly.Tests.Interpretation;
 
 public class PrimitiveExpandTests {
     internal static long ExecExpand(Node node) {
-        var ctx = new AnalysisContext(ClrTypeDefinitionRegistry.Shared);
+        var ctx = new Poly.Syntax.Primitives.ExpansionContext(new AnalysisContext(ClrTypeDefinitionRegistry.Shared));
         var primitives = node.ToPrimitives(ctx);
         var primsList = primitives.ToList();
         primsList.Add(new Prim.Return());
@@ -99,7 +99,7 @@ public class PrimitiveExpandTests {
     [Test, Timeout(10_000)]
     public async Task Expand_StridedSetBits_Expands(CancellationToken ct) {
         var result = new StridedSetBits(new Constant(0), new Constant(0), new Constant(0), new Constant(0));
-        var ctx = new AnalysisContext(ClrTypeDefinitionRegistry.Shared);
+        var ctx = new Poly.Syntax.Primitives.ExpansionContext(new AnalysisContext(ClrTypeDefinitionRegistry.Shared));
         var prims = result.ToPrimitives(ctx).ToList();
         await Assert.That(prims.Count).IsEqualTo(5); // 4 operands + StridedSet
     }

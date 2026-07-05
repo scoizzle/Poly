@@ -26,11 +26,11 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
     public override string ToString() => $"{Delegate}({string.Join(", ", Arguments)})";
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // Check resolved member metadata for CLR method dispatch
-        var resolved = context.GetResolvedMember(this);
+        var resolved = context.Analysis.GetResolvedMember(this);
 
-        if (resolved is Poly.Introspection.CommonLanguageRuntime.ClrMethod clrMethod) {
+        if (resolved is Introspection.CommonLanguageRuntime.ClrMethod clrMethod) {
             // CLR method call: emit instance (if non-static) then args, then CallExternal
             if (!clrMethod.IsStatic) {
                 // Delegate is a Member node — emit the instance value
@@ -46,11 +46,11 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
             foreach (var arg in Arguments)
                 foreach (var p in arg.ToPrimitives(context)) yield return p;
             int argCount = clrMethod.MethodInfo.GetParameters().Length + (clrMethod.IsStatic ? 0 : 1);
-            yield return new Poly.Syntax.Primitives.CallExternal(clrMethod.MethodInfo, argCount, clrMethod.IsStatic);
+            yield return new Primitives.CallExternal(clrMethod.MethodInfo, argCount, clrMethod.IsStatic);
             yield break;
         }
 
-        if (resolved is Poly.Introspection.CommonLanguageRuntime.ClrTypeProperty clrProp) {
+        if (resolved is Introspection.CommonLanguageRuntime.ClrTypeProperty clrProp) {
             // Property getter: emit instance, then CallExternal for getter
             var getter = clrProp.PropertyInfo.GetGetMethod(nonPublic: true);
             if (getter is not null) {
@@ -59,38 +59,26 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
                         yield return p;
                 }
                 int argCount = getter.GetParameters().Length + (clrProp.IsStatic ? 0 : 1);
-                yield return new Poly.Syntax.Primitives.CallExternal(getter, argCount, clrProp.IsStatic);
+                yield return new Primitives.CallExternal(getter, argCount, clrProp.IsStatic);
                 yield break;
             }
         }
 
-        // Lambda: inline body with arguments stored to parameter slots
+        // Lambda: emit delegate closure (via Lambda.ToPrimitives — handles captures,
+        // pending function registration, and AllocClosure), then arguments, then Call.
         if (Delegate is Lambda lambda) {
-            var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
-            if (env is null) {
-                env = new Poly.Syntax.Primitives.ExpansionEnvironment();
-                context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
-            }
+            // Lambda.ToPrimitives expands in a child scope, registers the body as
+            // a pending function, and emits capture loads + AllocClosure on the ring.
+            foreach (var p in Delegate.ToPrimitives(context))
+                yield return p;
 
-            // Map lambda parameters to slots
-            foreach (var param in lambda.Parameters) {
-                env.GetOrAssignSlot(param);
-            }
-
-            // Emit arguments and store each into its parameter slot.
-            // StoreLocal (1,0) consumes the value — no Discard needed since
-            // the body's Parameter primitives load from the slots directly.
-            for (int i = 0; i < Arguments.Length; i++) {
-                foreach (var p in Arguments[i].ToPrimitives(context))
+            // Emit arguments onto the ring
+            foreach (var arg in Arguments)
+                foreach (var p in arg.ToPrimitives(context))
                     yield return p;
-                var paramNode = lambda.Parameters[i];
-                if (env.TryGetSlot(paramNode, out var paramSlot)) {
-                    yield return new Poly.Syntax.Primitives.StoreLocal(paramSlot);
-                }
-            }
 
-            // Emit body
-            foreach (var p in lambda.Body.ToPrimitives(context)) yield return p;
+            // Dispatch via the compiled function table
+            yield return new Primitives.Call(Arguments.Length, lambda.LambdaIndex);
             yield break;
         }
 
@@ -98,6 +86,6 @@ public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression
         foreach (var p in Delegate.ToPrimitives(context)) yield return p;
         foreach (var arg in Arguments)
             foreach (var p in arg.ToPrimitives(context)) yield return p;
-        yield return new Poly.Syntax.Primitives.Call(Arguments.Length, 0);
+        yield return new Primitives.Call(Arguments.Length, 0);
     }
 }

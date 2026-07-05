@@ -62,9 +62,9 @@ public static class Interpreter {
     /// Analyze <paramref name="node"/> through the standard VM pipeline and compile
     /// the expanded primitives into a <see cref="VmProgram"/>.
     /// </summary>
-    public static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) {
+    public static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal, TextWriter? traceExpressions = null) {
         var analysis = _analyzer.Analyze(node);
-        return CompileCore(node, analysis, mode);
+        return CompileCore(node, analysis, mode, traceExpressions);
     }
 
     /// <summary>
@@ -72,8 +72,8 @@ public static class Interpreter {
     /// the standard pipeline) into a <see cref="VmProgram"/>.  Unlike <see cref="Compile(Node, CompilationMode)"/>,
     /// this does not re-run the analysis passes.
     /// </summary>
-    public static VmProgram Compile(Node node, AnalysisResult analysis, CompilationMode mode = CompilationMode.Normal) =>
-        CompileCore(node, analysis, mode);
+    public static VmProgram Compile(Node node, AnalysisResult analysis, CompilationMode mode = CompilationMode.Normal, TextWriter? traceExpressions = null) =>
+        CompileCore(node, analysis, mode, traceExpressions);
 
     /// <summary>
     /// Analyze, compile, and execute <paramref name="node"/>, returning the
@@ -153,27 +153,56 @@ public static class Interpreter {
         return InterpreterResult.FromValue(raw);
     }
 
-    private static VmProgram CompileCore(Node node, AnalysisResult analysis, CompilationMode mode) {
+    private static VmProgram CompileCore(Node node, AnalysisResult analysis, CompilationMode mode, TextWriter? traceExpressions = null) {
         var meta = analysis.GetMetadata<PrimitiveExpansionMetadata>(node);
         IReadOnlyList<PrimitiveNode> primitives;
+        List<PendingFunction>? pendingFunctions = null;
+        ExpansionContext? expansionCtx = null;
         if (meta is not null) {
             primitives = meta.Primitives;
+
+            // The expansion pass stored the ExpansionContext as metadata so we
+            // can extract pending function bodies compiled from child lambdas.
+            expansionCtx = analysis.GetMetadata<ExpansionContext>(null);
         }
         else {
             // Fallback: expand directly if the pass didn't capture metadata
             // (e.g. when the root node was replaced during analysis).
-            // This should not happen in normal usage — ExpansionPass should
-            // have stamped metadata during analysis. We fall back so the
-            // system doesn't crash, but the oversight is surfaced.
             System.Diagnostics.Debug.WriteLine(
                 "[Interpreter] Warning: PrimitiveExpansionMetadata not found; " +
                 "ExpansionPass may not have run. Falling back to direct expansion.");
-            var ctx = new AnalysisContext(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
-            primitives = node.ToPrimitives(ctx).ToArray();
+            var ac = new AnalysisContext(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
+            expansionCtx = new ExpansionContext(ac);
+            primitives = node.ToPrimitives(expansionCtx).ToArray();
+        }
+
+        // Extract pending functions from the expansion context
+        pendingFunctions = expansionCtx?.Env.ExtractPendingFunctions();
+
+        // ── Compile pending function bodies as standalone delegates ──
+        Action<VmState>[]? functionTable = null;
+        if (pendingFunctions is not null && pendingFunctions.Count > 0) {
+            int maxIdx = pendingFunctions.Max(pf => pf.LambdaIndex);
+            functionTable = new Action<VmState>[maxIdx + 1];
+            foreach (var pf in pendingFunctions) {
+                // Each function body uses 0-based slot indices relative to FrameBase.
+                // FrameBase is set by the caller before invoking this delegate.
+                // Slot 0..ParamCount-1 are parameter slots (args passed by caller).
+                // LoadUpvalue/StoreUpvalue use state.ClosureHandle (set by caller).
+                var funcPrims = new List<PrimitiveNode>(pf.Body);
+                // Ensure the function ends with a Return
+                if (funcPrims.Count == 0 || funcPrims[^1] is not PrimReturn)
+                    funcPrims.Add(new PrimReturn());
+                var funcProgram = ProgramCompiler.CompilePrimitives(funcPrims, mode, traceExpressions);
+                functionTable[pf.LambdaIndex] = funcProgram.Delegate;
+            }
         }
 
         var primsList = primitives.ToList();
         primsList.Add(new PrimReturn());
-        return ProgramCompiler.CompilePrimitives(primsList, mode: mode);
+        var program = ProgramCompiler.CompilePrimitives(primsList, mode, traceExpressions, functionTable);
+        return functionTable is not null
+            ? program with { Functions = functionTable }
+            : program;
     }
 }

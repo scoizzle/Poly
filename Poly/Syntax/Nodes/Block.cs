@@ -63,12 +63,8 @@ public sealed record Block : Node {
     }
 
     /// <inheritdoc />
-    public override IEnumerable<Poly.Syntax.Primitives.PrimitiveNode> ToPrimitives(Analysis.AnalysisContext context) {
-        var env = context.GetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null);
-        if (env is null) {
-            env = new Poly.Syntax.Primitives.ExpansionEnvironment();
-            context.SetMetadata<Poly.Syntax.Primitives.ExpansionEnvironment>(null, env);
-        }
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
+        var env = context.Env;
 
         // Assign slots to declared variables
         foreach (var v in Variables) {
@@ -94,7 +90,7 @@ public sealed record Block : Node {
                 // Statement position — child result will be discarded.
                 // Collect eagerly inside the using scope so the child
                 // sees statement context during expansion.
-                var childPrims = default(List<Poly.Syntax.Primitives.PrimitiveNode>)!;
+                var childPrims = default(List<Primitives.PrimitiveNode>)!;
                 using (env.EnterStatementContext()) {
                     childPrims = Nodes[i].ToPrimitives(context).ToList();
                 }
@@ -106,7 +102,7 @@ public sealed record Block : Node {
                 foreach (var p in childPrims)
                     yield return p;
                 for (int j = 0; j < childNetPush; j++)
-                    yield return new Poly.Syntax.Primitives.Discard();
+                    yield return new Primitives.Discard();
             }
             else {
                 // Expression position — last child result is kept

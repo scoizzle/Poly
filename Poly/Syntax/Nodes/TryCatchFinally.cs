@@ -63,8 +63,17 @@ public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? 
             // Expand catch clauses (dispatched on exceptional exit)
             if (hasCatches) {
                 foreach (var clause in CatchClauses!) {
-                    var catchRegion = ourRegions.Find(r => r.entry.Kind == ExceptionRegionKind.Catch
-                        && r.entry.CatchVariableName == clause.VariableName);
+                    // Resolve the catch type name to disambiguate multiple
+                    // unnamed catch clauses (all have null VariableName).
+                    string? clauseTypeName = null;
+                    if (clause.ExceptionType is not null) {
+                        var resolvedType = context.Analysis.GetResolvedType(clause.ExceptionType);
+                        clauseTypeName = resolvedType?.FullName;
+                    }
+                    var catchRegion = ourRegions.Find(r =>
+                        r.entry.Kind == ExceptionRegionKind.Catch
+                        && r.entry.CatchVariableName == clause.VariableName
+                        && r.entry.CatchTypeName == clauseTypeName);
                     if (catchRegion.entry is not null) {
                         yield return new Primitives.RegionMarker(catchRegion.idx, "EnterCatch");
                     }

@@ -37,6 +37,26 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 11. LambdaReturnTypeAnalyzer      (post-type-resolution for lambda return type refinement)
 12. ExceptionRegionAnalyzer       (EH region table — depends on CFG + definite assignment)
 13. ExpansionPass                 (final step — depends on all other metadata)
+
+### Dependency table (implicit — not enforced)
+
+| # | Pass | Produces | Reads from earlier passes | Optional |
+|---|------|----------|--------------------------|----------|
+| 1 | `TypeAndMemberResolver` | `TypeResolutionMetadata`, `MemberResolutionMetadata` | — | — |
+| 2 | `ScopeValidator` | `VariableAnalysisMetadata` | 1 (types) | — |
+| 3 | `SideEffectAnalyzer` | `SideEffectMetadata`, `ElisionMetadata` | 1 (types), 2 (scopes) | — |
+| 4 | `ThisReferenceContext` | (stamps `this` type) | 1 (types) | — |
+| 5 | `JumpTargetAnalyzer` | `ResolvedJumpTarget` | — | — |
+| 6 | `ControlFlowAnalysisPass` | `ControlFlowMetadata`, `MustExecuteMetadata` | 1, 3, 5 | 9 (const folding — branch pruning) |
+| 7 | `ValueRepresentationAnalyzer` | `ValueRepresentationMetadata` | 1 (types), 6 (CFG) | — |
+| 8 | `CallSiteCatalogAnalyzer` | `CallSiteCatalogMetadata`, `CallSiteIndexMetadata` | 1 (members), 7 (value repr) | — |
+| 9 | `ConstantFoldingPass` | `ConstantValueMetadata` | 1, 3 | — |
+| 10 | `DefiniteAssignmentAnalyzer` | `DefiniteAssignmentMetadata` | 6 (CFG) | — |
+| 11 | `LambdaReturnTypeAnalyzer` | Lambda resolved types | 1 (types) | — |
+| 12 | `ExceptionRegionAnalyzer` | `ExceptionRegionMetadata` | 1, 6 | — |
+| 13 | `ExpansionPass` | `PrimitiveExpansionMetadata` | All prior passes | — |
+
+See §4.14 of the architecture review for risks and analysis of the convention-based ordering model.
 ```
 
 The standard pipeline is assembled in `Interpreter.cs`.

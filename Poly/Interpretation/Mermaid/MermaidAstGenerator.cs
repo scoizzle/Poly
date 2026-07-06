@@ -508,6 +508,24 @@ public sealed class MermaidAstGenerator {
             Return ret => ret.Value != null ? [(ret.Value, "")] : Array.Empty<(Node, string)>(),
             ThrowStatement throw_ => [(throw_.Exception, "")],
 
+            // Exception handling
+            TryCatchFinally tcf => new[] {
+                (tcf.TryBlock, "try")
+            }.Concat(tcf.CatchClauses?.Select((c, i) => ((Node)c.Body, $"catch{i}")) ?? [])
+             .Concat(tcf.FinallyBlock is not null ? [(tcf.FinallyBlock, "finally")] : []),
+
+            // Switch
+            SwitchStatement switchStmt => new[] {
+                (switchStmt.Value, "value")
+            }.Concat(switchStmt.Cases.SelectMany((c, i) => new[] { (c.Pattern, $"case{i}_pattern"), (c.Body, $"case{i}_body") }))
+             .Concat(switchStmt.DefaultCase is not null ? [(switchStmt.DefaultCase, "default")] : []),
+
+            // Using
+            UsingStatement usingStmt => new[] {
+                (usingStmt.Resource, "resource"),
+                (usingStmt.Body, "body")
+            },
+
             // Default: no children
             _ => Array.Empty<(Node, string)>()
         };

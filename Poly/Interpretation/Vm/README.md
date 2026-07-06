@@ -18,6 +18,31 @@ LINQ Expression delegates for fast execution.
 | `Closure.cs` | Closure representation (function index + captured values) |
 | `FunctionEntry.cs` | Function metadata (start PC, arg slots, local count) |
 | `VmTrace.cs` | µop-level tracing infrastructure (gated by `state.Trace != null`) |
+
+## Exception handling (Strategy B)
+
+Structured EH uses the side-table dispatch model (Strategy B) per
+docs/decisions/2026-07-05-vm-exception-handling-strategy-b.md.
+`ExceptionRegionTable` on `VmProgram` maps PC ranges to handler
+function indices. The main delegate is wrapped in a CLR `try/catch`
+that dispatches to handler functions via `ProgramCompiler.DispatchException`.
+
+**Status:** `PrimThrow` wired. Try-catch with handler dispatch working.
+Try-finally, using, and nested EH not yet implemented.
+
+## Ring vs ValueStack — ghost stack model
+
+The compiled delegate never calls `ValueStack.Push`/`Pop`/`Drop` during normal
+µop execution. All values flow through ring registers (`_r0`..`_rN`) allocated
+at compile time via `ComputePrimitiveRingDepths`. The `Stack.StackPointer` is
+**stale** throughout execution — it is only updated by `EmitReturnOp`.
+
+This is an intentional optimization: the ring replaces the eval-stack with
+local-variable access, which the CLR JIT can enregister. The tradeoff is that
+any runtime feature needing stack depth (exception handler dispatch, stack
+traces, debugger inspection) must reconstruct logical depth from compile-time
+information. The `PcToRingDepth` side table (see `PcToRingDepth.cs`) provides
+the PC→ring-depth mapping for these scenarios.
 | `Ref.cs` | Safe reflection helpers using expression-tree-based MemberInfo lookups |
 
 ## Pipeline

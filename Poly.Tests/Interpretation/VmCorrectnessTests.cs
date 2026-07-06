@@ -388,10 +388,10 @@ public class VmCorrectnessTests {
             new SN.And(
                 new GreaterThanOrEqual(new Member(e, "Age"), new Constant(18L)),
                 new LessThan(new Member(e, "Age"), new Constant(21L)))));
-        await AssertVmMatchesLinqComposite(body);
+        await AssertVmMatchesLinqMultiCase(body);
     }
 
-    private static async Task AssertVmMatchesLinqComposite(Node body) {
+    private static async Task AssertVmMatchesLinqMultiCase(Node body) {
         // VM path
         var vmProg = Compile(body);
         using var exec20 = Interpreter.Execute(vmProg, s => {
@@ -504,6 +504,18 @@ public class VmCorrectnessTests {
         var linqVal = NormalizeLongResult(linqRaw);
 
         var (_, vmVal) = ExecVm(lowered, s => s.SetArgs(new PersonRecord("Alice", 25)));
+        await Assert.That(vmVal).IsEqualTo(linqVal);
+    }
+
+    [Test]
+    public async Task MatchLinq_Lambda_NoCapture() {
+        var lambda = new Lambda([], new Constant(42));
+        var invoke = new Invoke(lambda);
+        var analysis = LinqAnalyze(invoke);
+        var gen = new LinqExpressionGenerator(analysis);
+        var result = gen.Compile(invoke);
+        var linqVal = NormalizeLongResult(Expr.Lambda(result.Expression).Compile().DynamicInvoke());
+        var (_, vmVal) = ExecVm(invoke);
         await Assert.That(vmVal).IsEqualTo(linqVal);
     }
 

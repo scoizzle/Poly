@@ -8,5 +8,6 @@ public sealed record VmProgram(
     IReadOnlyList<Action<VmState>>? Functions = null,
     ValueRepresentationKind? RootValueKind = null,
     IReadOnlyList<CallSiteEntry>? CallSites = null,
-    ExceptionRegionTable? Regions = null
+    ExceptionRegionTable? Regions = null,
+    PcToRingDepth? PcDepthMap = null
 );

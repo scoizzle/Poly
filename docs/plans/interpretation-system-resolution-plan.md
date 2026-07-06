@@ -392,10 +392,9 @@ flowchart TD
 
 #### P2-D — Short-circuit (blocked on Q4)
 
-- [ ] **P2-040** **blocked — Q4** If VM fix: in `EmitBinaryOp`, emit `Expression.AndAlso`/`OrElse` for `BinaryOperator.And`/`Or` when operands are boolean logic (not bitwise).
-  - **Files:** `ProgramCompiler.cs`
+- [x] **P2-040** **Q4=AndAlso/OrElse primitives** Added new `OpKind.AndAlso` and `OpKind.OrElse` values. `And`/`Or` nodes emit new primitives; `EmitBinaryOp` produces `Expression.AndAlso`/`OrElse`. Bitwise ops remain `OpKind.And`/`Or` with `Expression.And`/`Or`. Moved short-circuit from VM distinction problem (no type info at µop level) to primitive-level distinction.
+  - **Files:** `ProgramCompiler.cs`, `Poly/Syntax/Primitives/Primitives.cs`, `And.cs`, `Or.cs`, `BitwiseAnd.cs`, `BitwiseOr.cs`
   - **Maps:** K-042
-  - **Alt:** expansion lowers `&&`/`||` to `CondGoto` chain — document in ADR
 
 - [ ] **P2-041** `MatchLinq_And_ShortCircuit_SideEffect` — second operand not evaluated when first false
   - **Depends:** P2-040
@@ -405,8 +404,9 @@ flowchart TD
 - [ ] **P2-050** Add "Backend oracle matrix" table to `Poly/Interpretation/Vm/README.md`: per feature — VM / Linq / C# / cross-validated / VM-only.
   - **Maps:** K-043, K-049, §4.11
 
-- [ ] **P2-051** Document 8 VM-only features as intentional (no Linq oracle): bitwise, shifts, NewArray, PopCount, StridedSetBits.
-  - **blocked — Q10** if wiring Linq instead
+- [ ] **P2-051** **Q10=wire into Linq** Add `CompileNode` cases to `LinqExpressionGenerator` for BitwiseAnd/Or/Xor/Not, ShiftLeft/Right, NewArray, PopCount, StridedSetBits. Add cross-validation tests.
+  - **Files:** `LinqExpressionGenerator.cs`
+  - **Maps:** K-043, K-049
 
 #### P2-F — Type promotion / DCE (lower priority)
 
@@ -530,7 +530,7 @@ flowchart TD
 
 #### P4-A — CallSiteCompiler decision
 
-- [ ] **P4-001** **blocked — Q5** Decision record: delete `CallSiteCompiler` OR keep for deserialization with ring ABI bridge.
+- [x] **P4-001** **Q5=delete** `CallSiteCompiler` deleted. No deserialization consumer exists; `EmitCallExternalDirect` handles all external calls. Updated `2026-06-08-bytecode-serialization.md` to remove `CallSiteCompiler` references.
   - **Files:** `Poly/Interpretation/Vm/CallSiteCompiler.cs`, `docs/decisions/2026-06-08-bytecode-serialization.md`
   - **Maps:** C-013, C-006, K-020
 
@@ -582,7 +582,7 @@ flowchart TD
 
 #### P4-E — Catalog gaps
 
-- [ ] **P4-040** **blocked — Q7** Either extend `ProcessMember` for `ClrMethod` standalone `Member` nodes OR document omission in `CallSiteCatalogPass` + ADR.
+- [ ] **P4-040** **Q7=document** Add comment in `CallSiteCatalogPass.cs` at `ProcessMember` (~line 122–135): "Standalone `Member`→`ClrMethod` references (method groups) intentionally unindexed — rare in DSL code."
   - **Files:** `CallSiteCatalogPass.cs` 122–135
   - **Maps:** C-008
 
@@ -600,7 +600,7 @@ flowchart TD
 - [ ] **P5-002** Copy V3 lowering 14-file plan status into `docs/plans/v2-to-v3/workstreams/` with checkboxes (1 done: `DomainExpressionLoweringPass`).
   - **Maps:** K-036
 
-- [ ] **P5-003** **blocked — Q8** Decision record: action bodies — C#-only forever vs future VM path.
+- [ ] **P5-003** **Q8=future VM path** Add note to architecture review §4.4 or domain-lowering ADR: "Action bodies planned to flow through Interpreter post-transition for canonical execution semantics."
   - **Maps:** K-031, C-020, architecture review Q12
 
 - [ ] **P5-004** When next V3 lowering file lands: add matching test in `DomainExpressionVmExecutionTests.cs`.
@@ -666,7 +666,7 @@ flowchart TD
 - [ ] **P6-030** **INT-002** — complete remaining `InterpretResult` edge cases per tracker (coordinate with P3-040).
 - [ ] **P6-031** **INT-028** — per tracker spec.
 - [ ] **P6-032** **INT-006** — propagate `MaxActiveLocalsDepth` from ring analysis (coordinate P3-070).
-- [ ] **P6-033** **INT-007** — **blocked — Q9** incremental analysis for expressions: tests first or document domain-only.
+- [ ] **P6-033** **INT-007** **Q9=add expression tests** Add incremental analysis tests for expression trees before enabling in VM pipeline. Until then, incremental remains domain-only.
   - **Maps:** K-050
 
 #### P6-E — Analysis pipeline tooling

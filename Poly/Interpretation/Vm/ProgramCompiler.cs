@@ -790,30 +790,81 @@ public static class ProgramCompiler {
     /// <see cref="EmitThrowOp"/>), then invokes the corresponding handler
     /// delegate from the function table.
     /// </summary>
+    /// <summary>
+    /// Check if <paramref name="exception"/> matches the catch type specified
+    /// by <paramref name="catchTypeName"/>. A null/empty catch type name is a
+    /// catch-all (matches everything). Otherwise walks the exception's type
+    /// hierarchy and checks FullName equality.
+    /// </summary>
+    private static bool ExceptionTypeMatches(Exception exception, string? catchTypeName) {
+        if (string.IsNullOrEmpty(catchTypeName))
+            return true;
+        for (var type = exception.GetType(); type is not null; type = type.BaseType) {
+            if (type.FullName == catchTypeName)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Invoke a handler delegate (catch, finally, or using-dispose) with the
+    /// VM state saved/restored around the call. The handler runs with
+    /// FrameBase=0 and ProgramCounter=0 so its µop dispatch starts fresh.
+    /// Returns true if the handler was actually invoked.
+    /// </summary>
+    private static bool TryInvokeHandler(VmState state, IReadOnlyList<Action<VmState>>? functions, int handlerFuncIndex) {
+        if (functions is null || handlerFuncIndex < 0 || handlerFuncIndex >= functions.Count)
+            return false;
+        var handler = functions[handlerFuncIndex];
+        if (handler is null)
+            return false;
+        int savedFb = state.FrameBase;
+        int savedPc = state.ProgramCounter;
+        state.FrameBase = 0;
+        state.ProgramCounter = 0;
+        handler(state);
+        state.FrameBase = savedFb;
+        state.ProgramCounter = savedPc;
+        return true;
+    }
+
     internal static void DispatchException(VmState state, ExceptionRegionTable table, Exception exception) {
         int faultPc = state.ProgramCounter;
         var entries = table.Entries;
         var functions = state.Program.Functions;
 
-        for (int i = entries.Count - 1; i >= 0; i--) {
+        // Forward scan: entries are in source/marker order (inner before outer),
+        // so catches are checked in declaration order and finally/using-dispose
+        // handlers run for side effects as their regions are encountered.
+        for (int i = 0; i < entries.Count; i++) {
             var entry = entries[i];
             if (faultPc >= entry.TryStartPc && faultPc < entry.TryEndPc) {
                 if (entry.Kind == RegionKind.Catch) {
-                    if (functions is not null && entry.HandlerFuncIndex >= 0 && entry.HandlerFuncIndex < functions.Count && functions[entry.HandlerFuncIndex] is not null) {
-                        // Save and reset VM state before calling the handler.
-                        // The handler's delegate starts µops from index 0, but
-                        // state.ProgramCounter was set to the fault PC by
-                        // EmitThrowOp. Reset it so the handler's _pc dispatch
-                        // starts at µop 0, not the fault PC.
-                        int savedFb = state.FrameBase;
-                        int savedPc = state.ProgramCounter;
-                        state.FrameBase = 0;
-                        state.ProgramCounter = 0;
-                        functions[entry.HandlerFuncIndex](state);
-                        state.FrameBase = savedFb;
-                        state.ProgramCounter = savedPc;
+                    if (!ExceptionTypeMatches(exception, entry.CatchTypeName))
+                        continue; // type doesn't match, try next catch
+
+                    // Invoke the catch handler, then run any finally handlers
+                    // in the SAME try region (for try/catch/finally — the finally
+                    // body is después the catch body in the µop stream and won't
+                    // be reached otherwise).
+                    TryInvokeHandler(state, functions, entry.HandlerFuncIndex);
+
+                    // After the catch handler, run finally handlers in the same try region
+                    // (identified by TryStartPc). This ensures catch + finally correct order.
+                    for (int j = i + 1; j < entries.Count; j++) {
+                        var next = entries[j];
+                        if (next.TryStartPc == entry.TryStartPc && next.Kind == RegionKind.Finally)
+                            TryInvokeHandler(state, functions, next.HandlerFuncIndex);
                     }
                     return;
+                }
+
+                // Finally and UsingDispose handlers run for side effects then
+                // continue scanning. The exception is NOT handled — it propagates
+                // to the nearest outer catch (or rethrows if none found).
+                if (entry.Kind is RegionKind.Finally or RegionKind.UsingDispose) {
+                    TryInvokeHandler(state, functions, entry.HandlerFuncIndex);
+                    continue;
                 }
             }
         }

@@ -1,7 +1,7 @@
 # ADR: Breakpoint Architecture — PC-Level Interrupts
 
 **Date:** 2026-06-08  
-**Status:** Accepted  
+**Status:** Accepted — **Partial** (DebugInterrupt callback functional; BreakpointPCs and Int vector 1 not implemented)  
 
 ## Context
 

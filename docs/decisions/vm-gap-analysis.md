@@ -148,7 +148,7 @@ Recursive macro expansion without base case will hit the step limit or stack ove
 | Integer arithmetic | ✓ | All signed/unsigned ops |
 | Double arithmetic | ✓ | All ops |
 | Control flow (if/while/for/switch) | ✓ | |  
-| Exceptions (try/catch/finally) | ✗ | PrimThrow wired (P1A); catch/finally bodies execute unconditionally (see INT-018) |
+| Exceptions (try/catch/finally) | 🟡 | **PrimThrow/catch MVPs** — unprotected throw wired (P1A); try-catch dispatch with side table (Strategy B, P1C). **Still missing:** try-finally, UsingStatement dispose, nested EH. See INT-018 tracking. |
 | Closures with upvalues | ✓ | |
 | CLR interop | ✓ | Methods, constructors, fields |
 | Member/index access | ✓ | Through CLR |

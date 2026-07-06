@@ -1,7 +1,7 @@
 # ADR: Peephole Optimizer — Post-Lowering Pass
 
 **Date:** 2026-06-08  
-**Status:** Accepted  
+**Status:** Accepted — **Deferred** per resolution plan Q2. No consumer yet; revisit when performance profiling identifies a bottleneck.  
 
 ## Context
 

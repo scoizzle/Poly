@@ -291,7 +291,6 @@ public class VmCorrectnessTests {
 
         LambdaExpression linqLambda;
         if (result.Parameters.Count > 0) {
-            // Parameterized expression: compile as lambda with params
             linqLambda = Expr.Lambda(result.Expression, result.Parameters);
         }
         else {
@@ -299,20 +298,23 @@ public class VmCorrectnessTests {
         }
         var linqDel = linqLambda.Compile();
         var linqRaw = linqDel.DynamicInvoke(args);
-        long linqVal = linqRaw switch {
-            long l => l,
-            int i => i,
-            bool b => b ? 1L : 0L,
-            short s => s,
-            byte by => by,
-            null => 0L,
-            _ => throw new InvalidOperationException($"Unexpected LINQ type: {linqRaw?.GetType()}")
-        };
+        long linqVal = NormalizeLongResult(linqRaw);
 
         // VM path — same args
         var (_, vmVal) = ExecVm(lowered, s => s.SetArgs(args));
         await Assert.That(vmVal).IsEqualTo(linqVal);
     }
+
+    /// <summary>Normalize a CLR result value to the VM's long representation.</summary>
+    private static long NormalizeLongResult(object? raw) => raw switch {
+        long l => l,
+        int i => i,
+        bool b => b ? 1L : 0L,
+        short s => s,
+        byte by => by,
+        null => 0L,
+        _ => throw new InvalidOperationException($"Unexpected type: {raw?.GetType()}")
+    };
 
     [Test]
     public async Task MatchLinq_Literal() {
@@ -483,6 +485,26 @@ public class VmCorrectnessTests {
         using var exec = Interpreter.Execute(vmProg);
         // Both should return something non-zero (heap handle for string)
         await Assert.That(exec.RawValue).IsNotEqualTo(0L);
+    }
+
+    [Test]
+    public async Task MatchLinq_PropertyAccess_NameEq() {
+        // entity.Name == "Alice" with PersonRecord("Alice", 25) → 1L
+        var subject = new Parameter("entity", TypeReference.To<PersonRecord>());
+        var lowered = LowerPass.Lower(
+            DomainExpression.Equal(
+                DomainExpression.Property("Name"),
+                DomainExpression.Literal("Alice")),
+            subject);
+        var analysis = LinqAnalyze(lowered);
+        var gen = new LinqExpressionGenerator(analysis);
+        var compiled = gen.CompileAsLambda(lowered, subject);
+        var linqDel = compiled.Compile();
+        var linqRaw = linqDel.DynamicInvoke(new PersonRecord("Alice", 25));
+        var linqVal = NormalizeLongResult(linqRaw);
+
+        var (_, vmVal) = ExecVm(lowered, s => s.SetArgs(new PersonRecord("Alice", 25)));
+        await Assert.That(vmVal).IsEqualTo(linqVal);
     }
 
     // ═══════════════════════════════════════════════════════════════

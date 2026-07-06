@@ -1,7 +1,7 @@
 # ADR: VM Sandboxing — Permission Table for CallExternal
 
 **Date:** 2026-06-08  
-**Status:** Accepted  
+**Status:** Accepted — **Deferred** per resolution plan Q2. Untrusted macro execution not yet a requirement.
 
 ## Context
 

@@ -1,7 +1,7 @@
 # ADR: Bytecode Serialization Format
 
 **Date:** 2026-06-08  
-**Status:** Accepted  
+**Status:** Accepted — **Deferred** per resolution plan Q2. INT-019 not yet prioritized; no bytecode consumer exists.  
 
 ## Context
 

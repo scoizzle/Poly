@@ -16,8 +16,7 @@ public sealed class AnalyzerBuilder {
     /// (or at the end if it has none). Throws if a declared dependency is not
     /// registered in this pipeline.
     /// </summary>
-    public AnalyzerBuilder AddAnalyzer<TAnalyzer>(TAnalyzer analyzer)
-        where TAnalyzer : INodeAnalyzer {
+    public AnalyzerBuilder AddAnalyzer(INodeAnalyzer analyzer) {
         ArgumentNullException.ThrowIfNull(analyzer);
 
         var offset = analyzer.Dependencies.Length == 0

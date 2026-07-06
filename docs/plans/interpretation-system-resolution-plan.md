@@ -1,10 +1,10 @@
 # Interpretation System — Resolution Plan
 
 **Created:** 2026-07-05  
-**Updated:** 2026-07-06 (checkbox sync #2)  
+**Updated:** 2026-07-06 (committed `ad9ed56`)  
 **Source:** [`docs/interpretation-system-architecture-review.md`](../interpretation-system-architecture-review.md) (Rev 1.15)  
 **Companion:** [`interpretation-system-issues.md`](interpretation-system-issues.md) (INT-/ANA- tracker)  
-**Baseline:** 1420/1420 tests green (was 1408); P0 analysis sprint complete; **Phase 1 in progress** (Strategy B try/catch MVP landed); **P2 harness + P3 hardening partial** (uncommitted).
+**Baseline:** 1420/1420 tests green (was 1408); P0 analysis sprint complete; **Phase 1 in progress** (Strategy B try/catch MVP landed); **P2 harness + P3 hardening partial** landed (`ad9ed56`).
 
 This plan turns architectural findings into **ordered, checkable work**. Task IDs are stable (`P0-001`, `P1C-012`, …). Check boxes in PRs or update status inline as work lands.
 
@@ -14,12 +14,12 @@ This plan turns architectural findings into **ordered, checkable work**. Task ID
 |-------|------|-------------|------|-------|
 | **P0** Truth sync | 8/16 | — | 8 | Review §5 + several C-* resolved; tracker/vision ADRs still open |
 | **P1** EH (INT-018) | 22/36 | 14 | — | P1A+P1B done; P1C try/catch MVP; finally/using/nested remain |
-| **P2** Parity | 4/27 | 2 | 21 | Harness + 2 MatchLinq tests (uncommitted); P2-003/004 open |
+| **P2** Parity | 4/27 | 2 | 21 | Harness + 2 MatchLinq tests (`ad9ed56`); P2-003/004 open |
 | **P3** Hardening | 9/21 | 2 | 10 | Ring save, TypeIs scalar, ABI partial, ExpansionPass guard |
 | **P4–P5** | 0 | — | all | Not started |
 | **P6** Hygiene | 2/24 | — | 22 | Dead CSharp code removed; Phi README fixed |
 
-**Current focus:** P1C-030–042 (try/finally, using, nested EH), commit P2/P3 uncommitted work, then P0 tracker hygiene.
+**Current focus:** P1C-030–042 (try/finally, using, nested EH), then P0 tracker hygiene.
 
 **Task status legend:** `open` | `in-progress` | `blocked` (needs Q#) | `done`
 
@@ -87,7 +87,7 @@ flowchart TD
 ### Phase 2 — Cross-engine parity
 **Goal:** VM ↔ Linq disagree in tests, not silently.  
 **Exit:** C-016, C-026 resolved or narrowed; parameterized `AssertVmMatchesLinq`.  
-**Status:** **in progress** — parameterized harness + 2 MatchLinq tests (uncommitted).
+**Status:** **in progress** — parameterized harness + 2 MatchLinq tests (`ad9ed56`).
 
 ### Phase 3 — VM correctness hardening
 **Goal:** Latent bugs exposed by tests.  
@@ -349,10 +349,10 @@ flowchart TD
 - [x] **P2-001** Refactor `AssertVmMatchesLinq` in `VmCorrectnessTests.cs` to accept `object?[] args` and pass to both LINQ `DynamicInvoke(args)` and VM `SetArgs`.
   - **Files:** `Poly.Tests/Interpretation/VmCorrectnessTests.cs` (~272–295)
   - **Maps:** K-047, C-026, §4.13.5 Phase 1
-  - **Done:** `AssertVmMatchesLinqImpl(expr, subject, args)` — uncommitted
+  - **Done:** `AssertVmMatchesLinqImpl(expr, subject, args)` — `ad9ed56`
 
 - [x] **P2-002** Add overload `AssertVmMatchesLinq(DomainExpression expr)` → calls with empty args (preserve existing 11 tests).
-  - **Done:** overloads at ~272–282 — uncommitted
+  - **Done:** overloads at ~272–282 — `ad9ed56`
 
 - [ ] **P2-003** Extract shared `NormalizeResult(object?) → long` used by both paths (bool → 0/1, null → 0, etc.).
   - **Open:** inline switch in `AssertVmMatchesLinqImpl`; not yet extracted
@@ -363,10 +363,10 @@ flowchart TD
 #### P2-B — Breadth-first MatchLinq tests (Syntax.Node or DomainExpression)
 
 - [x] **P2-010** `MatchLinq_PropertyAccess_Age` — parameterized entity
-  - **Done:** `VmCorrectnessTests.cs` — uncommitted (manual LINQ/VM compare; not yet routed through harness)
+  - **Done:** `VmCorrectnessTests.cs` — `ad9ed56` (manual LINQ/VM compare; not yet routed through harness)
 - [ ] **P2-011** `MatchLinq_PropertyAccess_NameEq`
 - [x] **P2-012** `MatchLinq_MethodCall_StringLength`
-  - **Done:** `VmCorrectnessTests.cs` — uncommitted
+  - **Done:** `VmCorrectnessTests.cs` — `ad9ed56`
 - [ ] **P2-013** `MatchLinq_MethodCall_MathMax`
 - [ ] **P2-014** `MatchLinq_Conditional_WithEntity`
 - [ ] **P2-015** `MatchLinq_IfElse_WithComparison`
@@ -445,10 +445,10 @@ flowchart TD
   - Assert all predecessors agree at each Phi/branch target (K-034)
   - **Files:** `ProgramCompiler.cs`
   - **Maps:** C-014, K-034
-  - **In progress:** DEBUG stub validates Goto/CondGoto target PCs only — depth convergence (K-034) not yet asserted (uncommitted)
+  - **In progress:** DEBUG stub validates Goto/CondGoto target PCs only — depth convergence (K-034) not yet asserted (`ad9ed56`)
 
 - [ ] **P3-011** Call verifier from `CompilePrimitives` in DEBUG builds only.
-  - **In progress:** `#if DEBUG VerifyRingDepths(...)` call added — uncommitted; full K-034 checks remain
+  - **In progress:** `#if DEBUG VerifyRingDepths(...)` call added (`ad9ed56`); full K-034 checks remain
 
 - [x] **P3-012** Remove `KNOWN BUG` comment from `Fuzz_Phi_NestedConditional_DifferentRingDepths`; add "fixed by ring-based BuildTargetDepth".
   - **Files:** `VmCorrectnessTests.cs` ~670
@@ -469,14 +469,14 @@ flowchart TD
 - [x] **P3-030** Rename `Expand_TypeIs_StringRefType` → `Expand_TypeIs_WithoutAnalysis_FailsClosed`.
   - **Files:** `Poly.Tests/Interpretation/PrimitiveExpandTests.cs` ~96
   - **Maps:** C-011
-  - **Done:** uncommitted
+  - **Done:** `ad9ed56`
 
 - [ ] **P3-031** Test `TypeIs_HeapRef_Match` — string on heap, `is string` → true through VM.
 - [ ] **P3-032** Test `TypeIs_HeapRef_Mismatch` → false
 - [ ] **P3-033** Test `TypeIs_HeapRef_Null` → false
 - [x] **P3-034** Test `TypeIs_Scalar_StaticMatch` — full pipeline, `StaticTypeIsMatch` path
   - **Maps:** K-015
-  - **Done:** `TypeIsVmTests.cs` — 3 scalar tests (string/int/null constants)
+  - **Done:** `TypeIsVmTests.cs` — 3 scalar tests (`ad9ed56`)
 
 #### P3-E — InterpretResult ABI
 
@@ -486,7 +486,7 @@ flowchart TD
   - `Void_ReturnsDefault`
   - Programs use `exec.Result` / `GetValue<T>()`, not `RawValue`
   - **Maps:** K-059, INT-002
-  - **Partial:** 3/4 scenarios (`ScalarReturn`, `BoolReturn`, `HeapStringReturn`); `Void_ReturnsDefault` still open
+  - **Partial:** 3/4 scenarios (`ScalarReturn`, `BoolReturn`, `HeapStringReturn`) — `ad9ed56`; `Void_ReturnsDefault` still open
 
 - [ ] **P3-041** Document in `Vm/README.md`: `RawValue` for low-level tests only; production uses `InterpretResult`.
 
@@ -495,14 +495,14 @@ flowchart TD
 - [x] **P3-050** Replace `Debug.Assert(result == result2)` with `if (result != result2) throw new InvalidOperationException(...)` or structured diagnostic.
   - **Files:** `Poly/DomainModeling/Lowering/PolicyEvaluator.cs` ~62
   - **Maps:** C-021
-  - **Done:** `Evaluate<TEntity>` throws `InvalidOperationException` on mismatch — uncommitted
+  - **Done:** `Evaluate<TEntity>` throws `InvalidOperationException` on mismatch — `ad9ed56`
 
 #### P3-G — Expansion infrastructure
 
 - [x] **P3-060** Wrap `ExpansionPass` depth increment in try/finally (or `IDisposable` guard) so `state.Depth` restores on `ToPrimitives` exception.
   - **Files:** `Poly/Interpretation/Analysis/ExpansionPass.cs`
   - **Maps:** K-060
-  - **Done:** try/finally around depth increment — uncommitted
+  - **Done:** try/finally around depth increment — `ad9ed56`
 
 - [x] **P3-061** Replace `TryResolveSlotByNodeId` manual iteration with `_slots.TryGetValue(nodeId, out slot)`.
   - **Files:** `Poly/Syntax/Primitives/ExpansionEnvironment.cs`
@@ -720,7 +720,7 @@ flowchart TD
 | **S1** | P0-001–P0-023, P1A-001–P1A-003 | Docs synced; throw wired + test | ✅ **mostly done** — P0-003/010–012/021/024–026 open |
 | **S2** | P1B-001, P1C-001–P1C-012 | EH ADR; region table; handlers compile | ✅ **done** — P1B-003 open |
 | **S3** | P1C-020–P1C-042, P1C-062–P1C-064 | Full EH; INT-018 done | **in progress** — try/catch MVP; finally/using/nested remain |
-| **S4** | P2-001–P2-019, P2-030–P2-033 | Parameterized MatchLinq + EH parity | **in progress** — harness + 2 MatchLinq tests (uncommitted) |
+| **S4** | P2-001–P2-019, P2-030–P2-033 | Parameterized MatchLinq + EH parity | **in progress** — harness + 2 MatchLinq tests (`ad9ed56`) |
 | **S5** | P3-001–P3-034, P3-050, P3-060–P3-061 | Ring fix; closures; TypeIs | **in progress** — ring save, scalar TypeIs, ABI partial |
 | **S6** | P4-001–P4-034 | INT-019 MVP | not started |
 | **ongoing** | P6-* between sprints | Hygiene | **in progress** — P6-003, P6-011 done |
@@ -779,4 +779,4 @@ flowchart TD
 
 ---
 
-*Task count: 154 total · **46 done** · **16 in progress** (P1C + P2/P3 partial) · **108 open** — last synced 2026-07-06.*
+*Task count: 154 total · **46 done** · **16 in progress** (P1C + P2/P3 partial) · **108 open** — last synced 2026-07-06 (`ad9ed56`).*

@@ -4,7 +4,9 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 internal sealed class EffectOrderingAnalyzer : INodeAnalyzer {
-    public static string PassId => "DomainEffectOrderingAnalyzer";
+    public const string Id = "DomainEffectOrderingAnalyzer";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
@@ -17,9 +18,14 @@ namespace Poly.Tests.TestHelpers;
 public static class AnalyzerBuilderExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseAllAnalyzers() => builder
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseValueRepresentationAnalysis()
+            .UseCallSiteCatalog()
             .UseLambdaReturnTypeResolution()
             .UseDefiniteAssignmentAnalysis()
             ;

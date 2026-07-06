@@ -6,7 +6,9 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
-    public static string PassId => "DomainSemanticDomainAnalyzer";
+    public const string Id = "DomainSemanticDomainAnalyzer";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

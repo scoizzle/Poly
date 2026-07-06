@@ -10,7 +10,9 @@ namespace Poly.DomainModeling.Analysis;
 /// This is a minimal implementation that uses only known-good APIs.
 /// </summary>
 public sealed class SemanticCoherenceAnalyzer : INodeAnalyzer {
-    public static string PassId => "DomainSemanticCoherence";
+    public const string Id = "DomainSemanticCoherence";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) return;
 

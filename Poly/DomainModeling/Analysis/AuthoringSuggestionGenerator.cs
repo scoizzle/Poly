@@ -11,7 +11,9 @@ namespace Poly.DomainModeling.Analysis;
 /// that uses only known-good APIs to ensure it compiles.
 /// </summary>
 public sealed class AuthoringSuggestionGenerator : INodeAnalyzer {
-    public static string PassId => "DomainAuthoringSuggestionGenerator";
+    public const string Id = "DomainAuthoringSuggestionGenerator";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) return;
 

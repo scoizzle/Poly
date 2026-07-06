@@ -7,7 +7,9 @@ using Poly.Syntax.Nodes;
 /// to avoid duplicate tree walks — both call the same resolvers for
 /// Invoke, New, Member, and IndexAccess nodes.</summary>
 internal sealed class TypeAndMemberResolver : INodeAnalyzer {
-    public static string PassId => "TypeAndMember";
+    public const string Id = "TypeAndMember";
+    public string PassName => Id;
+    public string[] Dependencies => [ThisReferenceContextAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<TypeAndMemberResolver>(node)) {
             return;
@@ -278,7 +280,7 @@ public static class TypeResolutionMetadataExtensions {
 
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseTypeAndMemberResolver() {
-            builder.AddAnalyzer(new TypeAndMemberResolver(), TypeAndMemberResolver.PassId);
+            builder.AddAnalyzer(new TypeAndMemberResolver());
             return builder;
         }
     }

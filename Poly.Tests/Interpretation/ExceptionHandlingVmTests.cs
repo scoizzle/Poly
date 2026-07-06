@@ -11,10 +11,10 @@ namespace Poly.Tests.Interpretation;
 
 public class ExceptionHandlingVmTests {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
+        .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
-        .UseThisReferenceContext()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseValueRepresentationAnalysis()

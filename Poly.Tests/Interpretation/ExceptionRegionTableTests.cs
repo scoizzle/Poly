@@ -20,16 +20,17 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class ExceptionRegionTableTests {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
+        .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
-        .UseThisReferenceContext()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseValueRepresentationAnalysis()
         .UseConstantFolding()
         .UseDefiniteAssignmentAnalysis()
         .UseLambdaReturnTypeResolution()
+        .UseCallSiteCatalog()
         .UseExceptionRegionAnalysis()
         .UsePrimitiveExpansion()
         .Build();

@@ -64,7 +64,9 @@ internal sealed class CallSiteCatalogState : IAnalysisMetadata {
 /// Placement: after <c>ValueRepresentationAnalysis</c>, before <c>ConstantFolding</c>.
 /// </summary>
 internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
-    public static string PassId => "CallSiteCatalog";
+    public const string Id = "CallSiteCatalog";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id, ValueRepresentationAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<CallSiteCatalogAnalyzer>(node))
             return;
@@ -207,7 +209,7 @@ public static class CallSiteCatalogExtensions {
         /// each call site node with its stable catalog index.
         /// </summary>
         public AnalyzerBuilder UseCallSiteCatalog() {
-            builder.AddAnalyzer(new CallSiteCatalogAnalyzer(), CallSiteCatalogAnalyzer.PassId);
+            builder.AddAnalyzer(new CallSiteCatalogAnalyzer());
             return builder;
         }
     }

@@ -1,6 +1,7 @@
 using Poly.Data.Modeling;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
@@ -14,9 +15,12 @@ namespace Poly.DomainModeling.Lowering;
 /// </summary>
 public static class PolicyEvaluator {
     private static readonly Analyzer LinqAnalyzer = new AnalyzerBuilder()
+        .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
-        .UseSideEffectAnalysis()
         .UseVariableScopeValidator()
+        .UseSideEffectAnalysis()
+        .UseJumpTargetResolution()
+        .UseControlFlowAnalysis()
         .UseDefiniteAssignmentAnalysis()
         .Build();
 

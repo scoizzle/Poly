@@ -9,10 +9,10 @@ namespace Poly.Tests.Interpretation;
 
 public class ValueRepresentationTests {
     private static readonly Analyzer AnalyzerWithPass = new AnalyzerBuilder()
+        .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
-        .UseThisReferenceContext()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseValueRepresentationAnalysis()

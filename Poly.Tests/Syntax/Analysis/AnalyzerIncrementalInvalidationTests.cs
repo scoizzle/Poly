@@ -96,22 +96,6 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     [Test]
-    public async Task Analyze_WhenMultipleAnalyzersReportSameDiagnostic_DeduplicatesWithinSingleRun() {
-        var analyzer = new AnalyzerBuilder()
-            .UseIncrementalAnalysis()
-            .AddAnalyzer(new DuplicateDiagnosticAnalyzer())
-            .AddAnalyzer(new DuplicateDiagnosticAnalyzer())
-            .Build();
-        var leaf = new TestLeaf(1);
-
-        var result = analyzer.Analyze(leaf);
-
-        await Assert.That(result.Diagnostics.Count).IsEqualTo(1);
-        await Assert.That(result.Diagnostics[0].Code).IsEqualTo("DUP");
-        await Assert.That(result.Diagnostics[0].Message).IsEqualTo("Duplicate diagnostic");
-    }
-
-    [Test]
     public async Task Analyze_WhenAnalyzerRevisitsSameNode_MetadataSkipPreventsDuplicateWork() {
         var analyzer = DefaultIncrementalAnalyzer<DuplicateVisitAnalyzer>();
         var leaf = new TestLeaf(1);
@@ -126,15 +110,15 @@ public class AnalyzerIncrementalInvalidationTests {
     [Test]
     public async Task Analyze_WhenPassesAreNamed_TelemetryPreservesExecutionOrder() {
         var analyzer = new AnalyzerBuilder()
-            .AddAnalyzer(new NoopAnalyzer(), "pass-b")
-            .AddAnalyzer(new NoopAnalyzer(), "pass-a")
+            .AddAnalyzer(new NoopAnalyzer())
+            .AddAnalyzer(new TestMetadataAnalyzer())
             .Build();
 
         var result = analyzer.Analyze(new TestLeaf(1));
 
         await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(2);
-        await Assert.That(result.Telemetry.Passes[0].PassName).IsEqualTo("pass-b");
-        await Assert.That(result.Telemetry.Passes[1].PassName).IsEqualTo("pass-a");
+        await Assert.That(result.Telemetry.Passes[0].PassName).IsEqualTo("TestNoop");
+        await Assert.That(result.Telemetry.Passes[1].PassName).IsEqualTo("TestMetadata");
     }
 
     [Test]
@@ -153,14 +137,18 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class NoopAnalyzer : INodeAnalyzer {
-        public static string PassId => "TestNoop";
+        public const string Id = "TestNoop";
+        public string PassName => Id;
+        public string[] Dependencies => [];
         public void Analyze(AnalysisContext context, Node node) {
             this.AnalyzeChildren(context, node);
         }
     }
 
     private sealed class TestMetadataAnalyzer : INodeAnalyzer {
-        public static string PassId => "TestMetadata";
+        public const string Id = "TestMetadata";
+        public string PassName => Id;
+        public string[] Dependencies => [];
         public void Analyze(AnalysisContext context, Node node) {
             switch (node) {
                 case TestLeaf leaf:
@@ -176,7 +164,9 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class ReuseSensitiveMetadataAnalyzer : INodeAnalyzer {
-        public static string PassId => "TestReuseSensitive";
+        public const string Id = "TestReuseSensitive";
+        public string PassName => Id;
+        public string[] Dependencies => [];
         public void Analyze(AnalysisContext context, Node node) {
             switch (node) {
                 case TestLeaf leaf:
@@ -192,7 +182,9 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class TestDiagnosticAnalyzer : INodeAnalyzer {
-        public static string PassId => "TestDiagnostic";
+        public const string Id = "TestDiagnostic";
+        public string PassName => Id;
+        public string[] Dependencies => [];
         public void Analyze(AnalysisContext context, Node node) {
             if (node is TestLeaf leaf && leaf.Value < 0) {
                 context.ReportError(leaf, "Negative leaf value", "NEG");
@@ -203,7 +195,9 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class DuplicateDiagnosticAnalyzer : INodeAnalyzer {
-        public static string PassId => "TestDuplicateDiagnostic";
+        public const string Id = "TestDuplicateDiagnostic";
+        public string PassName => Id;
+        public string[] Dependencies => [];
         public void Analyze(AnalysisContext context, Node node) {
             if (node is TestLeaf leaf) {
                 context.ReportError(leaf, "Duplicate diagnostic", "DUP");
@@ -215,7 +209,9 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class DuplicateVisitAnalyzer : INodeAnalyzer {
-        public static string PassId => "TestDuplicateVisit";
+        public const string Id = "TestDuplicateVisit";
+        public string PassName => Id;
+        public string[] Dependencies => [];
         public void Analyze(AnalysisContext context, Node node) {
             if (!context.TryBeginAnalyzerVisit<DuplicateVisitAnalyzer>(node)) {
                 return;

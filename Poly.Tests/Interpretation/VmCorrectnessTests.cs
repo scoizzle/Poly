@@ -24,12 +24,13 @@ public record PersonRecord(string Name, int Age);
 public class VmCorrectnessTests {
     private static AnalysisResult LinqAnalyze(Node node) {
         return new AnalyzerBuilder()
-            .UseTypeAndMemberResolver()
-            .UseConstantFolding()
-            .UseSideEffectAnalysis()
             .UseThisReferenceContext()
-            .UseControlFlowAnalysis()
+            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding()
             .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);
@@ -923,8 +924,15 @@ public class VmCorrectnessTests {
     private static VmProgram CompileNew(Node node) {
         // Use the analysis pipeline with ExpansionPass for proper integration
         var analysis = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseValueRepresentationAnalysis()
+            .UseCallSiteCatalog()
+            .UseExceptionRegionAnalysis()
             .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass())
             .Build()
             .Analyze(node);
@@ -1095,8 +1103,15 @@ public class VmCorrectnessTests {
         var m = new Member(new Constant(42L), "ToString");
         // Without type resolution, falls back to PushConstant(0L)
         var analysis = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseValueRepresentationAnalysis()
+            .UseCallSiteCatalog()
+            .UseExceptionRegionAnalysis()
             .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass())
             .Build()
             .Analyze(m);

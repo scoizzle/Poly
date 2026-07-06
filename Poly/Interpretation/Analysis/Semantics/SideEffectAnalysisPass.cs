@@ -11,7 +11,9 @@ public sealed record SideEffectAnalysisOptions {
 }
 
 internal sealed class SideEffectAnalyzer : INodeAnalyzer {
-    public static string PassId => "SideEffect";
+    public const string Id = "SideEffect";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id, ScopeValidator.Id];
     private static readonly SideEffectMetadata PureMeta = new(SideEffectKind.Pure);
     private static readonly ElisionMetadata Elidable = new(true);
     public void Analyze(AnalysisContext context, Node node) {
@@ -179,7 +181,7 @@ public sealed record AssignmentValueUsedMetadata(bool IsValueUsed) : IAnalysisMe
 public static class SideEffectAnalysisExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseSideEffectAnalysis() {
-            builder.AddAnalyzer(new SideEffectAnalyzer(), SideEffectAnalyzer.PassId);
+            builder.AddAnalyzer(new SideEffectAnalyzer());
             return builder;
         }
     }

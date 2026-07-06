@@ -9,7 +9,8 @@ internal sealed record IncrementalAnalysisTreeIndex(
 ) : IAnalysisMetadata;
 
 public sealed class IncrementalAnalysisAnalyzer : INodeAnalyzer {
-    public static string PassId => "IncrementalAnalysis";
+    public const string Id = "IncrementalAnalysis";
+    public string PassName => Id;
     public void Analyze(AnalysisContext context, Node node) {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(node);

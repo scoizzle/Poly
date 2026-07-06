@@ -23,7 +23,9 @@ internal sealed record DownstreamConstraintsMetadata(IReadOnlyList<Constraint> C
 ///   4. ExpressionValue with provable inverse: paramA → Expression(Add(paramA, c)) → Assign → offset range constraints
 /// </summary>
 internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
-    public static string PassId => "DataConstraintPropagationAnalyzer";
+    public const string Id = "DataConstraintPropagationAnalyzer";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

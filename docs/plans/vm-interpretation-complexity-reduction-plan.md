@@ -416,6 +416,6 @@ Phases 4, 5, and 6 are independent of 1–3 and each other. They can be parallel
 
 ## Future Work (Out of Scope)
 
-- **Enforced pass ordering** — the 13-pass pipeline is now enforced via a `PassDependencyTable` (in `Poly/Interpretation/Analysis/PassDependencyTable.cs`) with recursive DFS topological sort in `AnalyzerBuilder.TopologicalSort()`. Passes are automatically reordered to satisfy dependencies. Circular dependencies throw at build time. Unknown passes (not in the table) preserve their registration order.
+- **Enforced pass ordering** — the 13-pass pipeline is now enforced. Each pass declares `static abstract string PassId` and `static virtual string[] Dependencies` (default `[]`) on `INodeAnalyzer`. The `AnalyzerBuilder` has a single generic `AddAnalyzer<TAnalyzer>(TAnalyzer)` overload that reads both at compile time with zero reflection. Recursive DFS topological sort with stable tiebreaker. Circular dependencies throw at build time. The centralized `PassDependencyTable` was eliminated — deps live on each pass.
 - **ProgramCompiler file split** — the 1000-line file handles emission, call protocol, EH dispatch, and loop limiting. A future split could separate these, but the ring extraction (Phase 3) removes the biggest non-emission concern.
 - **LinqExpressionGenerator numeric promotion** — the `GetPromotedNumericType` logic is only in LinqExpressionGenerator and isn't duplicate. If a C#-targeting lowering path emerges, it may need to be shared, but for now it's correctly scoped.

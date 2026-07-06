@@ -10,10 +10,10 @@ namespace Poly.Tests.Interpretation;
 public class ExceptionRegionAnalysisTests {
     private static AnalysisResult Analyze(Node node) {
         return new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
-            .UseThisReferenceContext()
             .UseJumpTargetResolution()
             .UseControlFlowAnalysis()
             .UseConstantFolding()
@@ -154,10 +154,10 @@ public class ExceptionRegionAnalysisTests {
     public async Task SameAnalyzer_TwoSequentialAnalyses_NoRegionLeak() {
         // ANA-FIX-014: State isolation across sequential analyze calls.
         var analyzer = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
-            .UseThisReferenceContext()
             .UseJumpTargetResolution()
             .UseControlFlowAnalysis()
             .UseConstantFolding()

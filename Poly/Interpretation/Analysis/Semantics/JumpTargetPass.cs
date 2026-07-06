@@ -39,7 +39,9 @@ public sealed record ResolvedJumpTarget(NodeId TargetNodeId) : IAnalysisMetadata
 ///   - labeled break/continue with no matching enclosing loop
 /// </summary>
 internal sealed class JumpTargetAnalyzer : INodeAnalyzer {
-    public static string PassId => "JumpTarget";
+    public const string Id = "JumpTarget";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<JumpTargetAnalyzer>(node))
             return;
@@ -278,7 +280,7 @@ public static class JumpTargetResolutionExtensions {
         /// <para>Stamps <see cref="ResolvedJumpTarget"/> metadata on the corresponding nodes.</para>
         /// </summary>
         public AnalyzerBuilder UseJumpTargetResolution() {
-            builder.AddAnalyzer(new JumpTargetAnalyzer(), JumpTargetAnalyzer.PassId);
+            builder.AddAnalyzer(new JumpTargetAnalyzer());
             return builder;
         }
     }

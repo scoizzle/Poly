@@ -12,7 +12,9 @@ public sealed record ConstantValueMetadata(object? Value) : IAnalysisMetadata;
 /// This pass identifies nodes that can be computed at compile time and stores their values.
 /// </summary>
 public sealed class ConstantFoldingPass : INodeAnalyzer {
-    public static string PassId => "ConstantFolding";
+    public const string Id = "ConstantFolding";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id, SideEffectAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ConstantFoldingPass>(node)) {
             return;
@@ -649,7 +651,7 @@ public static class ConstantFoldingExtensions {
         /// This evaluates constant expressions at analysis time.
         /// </summary>
         public AnalyzerBuilder UseConstantFolding() {
-            builder.AddAnalyzer(new ConstantFoldingPass(), ConstantFoldingPass.PassId);
+            builder.AddAnalyzer(new ConstantFoldingPass());
             return builder;
         }
     }

@@ -147,7 +147,7 @@ public class DomainOperabilityTests {
         await Assert.That(run.Telemetry.TotalElapsed).IsGreaterThanOrEqualTo(TimeSpan.Zero);
         await Assert.That(run.Telemetry.Incremental).IsFalse();
 
-        var structural = run.Telemetry.Passes.FirstOrDefault(pass => pass.PassName == "StructuralDomainAnalyzer");
+        var structural = run.Telemetry.Passes.FirstOrDefault(pass => pass.PassName == "DataStructuralDomainAnalyzer");
         await Assert.That(structural is not null).IsTrue();
     }
 
@@ -402,7 +402,9 @@ public class DomainOperabilityTests {
     }
 
     private sealed class TreeTraversalCoverageAnalyzer : INodeAnalyzer {
-        public static string PassId => "TestTreeTraversalCoverage";
+        public const string Id = "TestTreeTraversalCoverage";
+        public string PassName => Id;
+        public string[] Dependencies => [];
         public HashSet<NodeId> VisitedNodeIds { get; } = new();
 
         public void Analyze(AnalysisContext context, Node node) {

@@ -2,6 +2,14 @@ namespace Poly.Syntax.Analysis;
 
 public interface INodeAnalyzer {
     void Analyze(AnalysisContext context, Node node);
+
+    /// <summary>Stable display name for this pass, used in telemetry and diagnostics.
+    /// Each concrete pass should expose a <c>public const string Id</c>
+    /// for type-safe cross-references in other passes' <see cref="Dependencies"/>.</summary>
+    string PassName { get; }
+
+    /// <summary>Pass names that must run before this one. Default is empty.</summary>
+    string[] Dependencies => [];
 }
 
 public static class NodeAnalyzerExtensions {

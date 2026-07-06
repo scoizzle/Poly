@@ -67,7 +67,9 @@ internal static class PolicyConstraintHelpers {
 }
 
 internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
-    public static string PassId => "DataPolicyConstraint";
+    public const string Id = "DataPolicyConstraint";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

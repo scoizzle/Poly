@@ -1,7 +1,9 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal sealed class ThisReferenceContextAnalyzer : INodeAnalyzer {
-    public static string PassId => "ThisReference";
+    public const string Id = "ThisReference";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ThisReferenceContextAnalyzer>(node)) {
             return;
@@ -82,7 +84,7 @@ internal sealed class ThisReferenceContextAnalyzer : INodeAnalyzer {
 public static class ThisReferenceContextMetadataExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseThisReferenceContext() {
-            builder.AddAnalyzer(new ThisReferenceContextAnalyzer(), ThisReferenceContextAnalyzer.PassId);
+            builder.AddAnalyzer(new ThisReferenceContextAnalyzer());
             return builder;
         }
     }

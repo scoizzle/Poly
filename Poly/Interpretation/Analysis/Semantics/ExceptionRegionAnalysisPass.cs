@@ -80,7 +80,9 @@ internal sealed class ExceptionRegionState : IAnalysisMetadata {
 /// (slot 12 in the pipeline).
 /// </summary>
 internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {
-    public static string PassId => "ExceptionRegion";
+    public const string Id = "ExceptionRegion";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id, ControlFlowAnalysisPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ExceptionRegionAnalyzer>(node))
             return;
@@ -261,7 +263,7 @@ public static class ExceptionRegionAnalysisExtensions {
         /// by the expansion pass and VM.
         /// </summary>
         public AnalyzerBuilder UseExceptionRegionAnalysis() {
-            builder.AddAnalyzer(new ExceptionRegionAnalyzer(), ExceptionRegionAnalyzer.PassId);
+            builder.AddAnalyzer(new ExceptionRegionAnalyzer());
             return builder;
         }
     }

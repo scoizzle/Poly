@@ -7,9 +7,9 @@ namespace Poly.Syntax.Analysis;
 /// Immutable after construction — safe for repeated use (passes are stateless).
 /// </summary>
 public sealed class Analyzer {
-    private readonly (INodeAnalyzer Analyzer, string PassName)[] _analyzers;
+    private readonly INodeAnalyzer[] _analyzers;
 
-    internal Analyzer((INodeAnalyzer Analyzer, string PassName)[] analyzers) {
+    internal Analyzer(INodeAnalyzer[] analyzers) {
         _analyzers = analyzers;
     }
 
@@ -22,13 +22,13 @@ public sealed class Analyzer {
         var collector = new AnalysisTelemetryCollector();
         var totalStart = Stopwatch.GetTimestamp();
 
-        foreach (var (analyzer, passName) in _analyzers) {
+        foreach (var analyzer in _analyzers) {
             if (!context.ShouldContinue(Options))
                 break;
 
             var passStart = Stopwatch.GetTimestamp();
             analyzer.Analyze(context, root);
-            collector.RecordPass(passName, Stopwatch.GetElapsedTime(passStart));
+            collector.RecordPass(analyzer.PassName, Stopwatch.GetElapsedTime(passStart));
 
             if (!context.ShouldContinue(Options))
                 break;

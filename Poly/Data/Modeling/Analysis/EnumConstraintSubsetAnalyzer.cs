@@ -6,7 +6,9 @@ namespace Poly.Data.Modeling.Analysis;
 /// Validates that EnumConstraint on properties is a subset of parent's EnumConstraint.
 /// </summary>
 internal sealed class EnumConstraintSubsetAnalyzer : INodeAnalyzer {
-    public static string PassId => "DataEnumConstraintSubsetAnalyzer";
+    public const string Id = "DataEnumConstraintSubsetAnalyzer";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Property property) {
             AnalyzeProperty(context, property);

@@ -15,10 +15,10 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class TypeIsVmTests {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
+        .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
-        .UseThisReferenceContext()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseValueRepresentationAnalysis()

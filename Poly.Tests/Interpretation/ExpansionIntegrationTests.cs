@@ -18,10 +18,10 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class ExpansionIntegrationTests {
     private static readonly Analyzer ProductionAnalyzer = new AnalyzerBuilder()
+        .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
-        .UseThisReferenceContext()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseValueRepresentationAnalysis()
@@ -164,10 +164,10 @@ public class ExpansionIntegrationTests {
         // analyzer produces isolated state (no catalog/region leaks).
         // Use a single cached analyzer instance (mirrors Interpreter._analyzer reuse).
         var analyzer = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
-            .UseThisReferenceContext()
             .UseJumpTargetResolution()
             .UseControlFlowAnalysis()
             .UseValueRepresentationAnalysis()

@@ -8,7 +8,9 @@ internal sealed record StageCapabilityMetadata(StageCapabilityView View) : IAnal
 internal sealed record RelationshipCapabilityMetadata(RelationshipCapabilityView View) : IAnalysisMetadata;
 
 internal sealed class CapabilityAnalyzer : INodeAnalyzer {
-    public static string PassId => "DataCapabilityAnalyzer";
+    public const string Id = "DataCapabilityAnalyzer";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

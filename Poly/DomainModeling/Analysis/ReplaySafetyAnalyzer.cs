@@ -4,7 +4,9 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 internal sealed class ReplaySafetyAnalyzer : INodeAnalyzer {
-    public static string PassId => "DomainReplaySafetyAnalyzer";
+    public const string Id = "DomainReplaySafetyAnalyzer";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

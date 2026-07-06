@@ -1,4 +1,5 @@
 using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Tests.TestHelpers;
@@ -76,8 +77,12 @@ public class LinqExpressionGeneratorTests {
         var node = new Add(new Multiply(new Constant(6), new Constant(7)), new Constant(1));
 
         var analysis = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
             .UseConstantFolding()
             .Build()
             .Analyze(node);
@@ -96,8 +101,12 @@ public class LinqExpressionGeneratorTests {
         var node = new Invoke(new Lambda([parameter], new Add(parameter, new Constant(10))), new Constant(5));
 
         var analysis = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
             .UseConstantFolding()
             .Build()
             .Analyze(node);
@@ -116,8 +125,12 @@ public class LinqExpressionGeneratorTests {
         var node = new Add(parameter, new Constant(0));
 
         var analysis = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
             .UseConstantFolding()
             .Build()
             .Analyze(node);
@@ -135,8 +148,12 @@ public class LinqExpressionGeneratorTests {
         var node = new And(new Constant(true), parameter);
 
         var analysis = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
             .UseConstantFolding()
             .Build()
             .Analyze(node);

@@ -1,81 +1,43 @@
-using Poly.Interpretation.Analysis;
-
 namespace Poly.Syntax.Analysis;
 
 /// <summary>
 /// Fluent builder for constructing <see cref="Analyzer"/> pipelines.
 ///
-/// Automatically topologically sorts registered passes according to the
-/// dependency table in <see cref="PassDependencyTable"/>. Passes not declared
-/// in the table (e.g. custom or test analyzers) remain in their registration
-/// order at the end of the pipeline. Circular dependencies throw at build time.
+/// Passes are automatically inserted in dependency order. A declared dependency
+/// that is not registered in the pipeline produces an error — it means the
+/// pipeline is incomplete and would produce wrong results.
+/// Circular dependencies throw at registration time.
 /// </summary>
 public sealed class AnalyzerBuilder {
-    private readonly List<(INodeAnalyzer Analyzer, string PassName)> _analyzers = new();
+    private readonly OrderedDictionary<string, INodeAnalyzer> _entries = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Adds an analyzer to the pipeline. The pass name defaults to the analyzer's type name.
+    /// Adds an analyzer. The pass is inserted after its last declared dependency
+    /// (or at the end if it has none). Throws if a declared dependency is not
+    /// registered in this pipeline.
     /// </summary>
-    public AnalyzerBuilder AddAnalyzer(INodeAnalyzer analyzer) {
+    public AnalyzerBuilder AddAnalyzer<TAnalyzer>(TAnalyzer analyzer)
+        where TAnalyzer : INodeAnalyzer {
         ArgumentNullException.ThrowIfNull(analyzer);
-        _analyzers.Add((analyzer, analyzer.GetType().Name));
+
+        var offset = analyzer.Dependencies.Length == 0
+            ? _entries.Count
+            : analyzer.Dependencies.Max(e => _entries.IndexOf(e) switch {
+                -1 => throw new InvalidOperationException(
+                    $"Pass '{analyzer.PassName}' depends on '{e}' which is not registered in this pipeline."),
+                int.MaxValue => throw new InvalidOperationException(
+                    $"Pass '{analyzer.PassName}' depends on '{e}' but a circular dependency was detected."),
+                var i => i + 1
+            });
+
+        _entries.Insert(offset, analyzer.PassName, analyzer);
         return this;
     }
 
     /// <summary>
-    /// Adds an analyzer to the pipeline with an explicit pass name.
-    /// </summary>
-    public AnalyzerBuilder AddAnalyzer(INodeAnalyzer analyzer, string passName) {
-        ArgumentNullException.ThrowIfNull(analyzer);
-        _analyzers.Add((analyzer, passName));
-        return this;
-    }
-
-    /// <summary>
-    /// Build the analyzer pipeline. Passes declared in <see cref="PassDependencyTable"/>
-    /// are topologically sorted to satisfy their dependencies. Unknown passes are
-    /// appended in registration order. Throws on circular dependencies.
+    /// Build the analyzer pipeline.
     /// </summary>
     public Analyzer Build() {
-        TopologicalSort();
-        return new Analyzer([.. _analyzers]);
-    }
-
-    private void TopologicalSort() {
-        var deps = PassDependencyTable.Dependencies;
-
-        var order = new Dictionary<string, long>(StringComparer.Ordinal);
-
-        void Compute(string passName) {
-            if (order.TryGetValue(passName, out var existing)) {
-                if (existing == long.MaxValue)
-                    throw new InvalidOperationException(
-                        $"Circular dependency detected involving pass '{passName}'.");
-                return;
-            }
-
-            order[passName] = long.MaxValue;
-            long value = 0;
-            if (deps.TryGetValue(passName, out var required)) {
-                foreach (var req in required) {
-                    Compute(req);
-                    if (order[req] > value)
-                        value = order[req];
-                }
-            }
-            order[passName] = value + 1;
-        }
-
-        foreach (var (_, name) in _analyzers) {
-            if (deps.ContainsKey(name))
-                Compute(name);
-        }
-        for (int i = 0; i < _analyzers.Count; i++) {
-            if (!deps.ContainsKey(_analyzers[i].PassName))
-                order[_analyzers[i].PassName] = i;
-        }
-
-        _analyzers.Sort((a, b) => order.GetValueOrDefault(a.PassName, 0L)
-            .CompareTo(order.GetValueOrDefault(b.PassName, 0L)));
+        return new Analyzer([.. _entries.Values]);
     }
 }

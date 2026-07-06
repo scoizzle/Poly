@@ -7,7 +7,9 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed record DownstreamConstraintsMetadata(IReadOnlyList<Constraint> Constraints) : IAnalysisMetadata;
 
 internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
-    public static string PassId => "DomainConstraintPropagationAnalyzer";
+    public const string Id = "DomainConstraintPropagationAnalyzer";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

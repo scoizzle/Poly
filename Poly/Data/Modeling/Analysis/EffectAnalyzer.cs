@@ -5,7 +5,9 @@ using Poly.Data.Modeling.TypeSystem;
 namespace Poly.Data.Modeling;
 
 internal sealed class EffectAnalyzer : INodeAnalyzer {
-    public static string PassId => "DataEffectAnalyzer";
+    public const string Id = "DataEffectAnalyzer";
+    public string PassName => Id;
+    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

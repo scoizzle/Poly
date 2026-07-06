@@ -11,10 +11,10 @@ namespace Poly.Tests.Interpretation;
 public class IncrementalAnalysisTests {
     private static Analyzer CreateIncrementalAnalyzer() => new AnalyzerBuilder()
         .UseIncrementalAnalysis()
+        .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
-        .UseThisReferenceContext()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseValueRepresentationAnalysis()

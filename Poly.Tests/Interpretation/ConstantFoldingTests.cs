@@ -1,4 +1,6 @@
 using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Interpretation.Analysis.ControlFlow;
+using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Tests.Interpretation;
 
@@ -9,7 +11,13 @@ public class ConstantFoldingTests {
         var ast = new Add(Wrap(1), Wrap(2));
 
         // Act
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -26,7 +34,13 @@ public class ConstantFoldingTests {
         // Arrange: 10 - 3
         var ast = new Subtract(Wrap(10), Wrap(3));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -39,7 +53,13 @@ public class ConstantFoldingTests {
         // Arrange: 4 * 5
         var ast = new Multiply(Wrap(4), Wrap(5));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -52,7 +72,13 @@ public class ConstantFoldingTests {
         // Arrange: 20 / 4
         var ast = new Divide(Wrap(20), Wrap(4));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -65,7 +91,13 @@ public class ConstantFoldingTests {
         // Arrange: 17 % 5
         var ast = new Modulo(Wrap(17), Wrap(5));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -78,7 +110,13 @@ public class ConstantFoldingTests {
         // Arrange: -42
         var ast = new UnaryMinus(Wrap(42));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -93,7 +131,13 @@ public class ConstantFoldingTests {
         var right = new Add(Wrap(3), Wrap(4));
         var ast = new Multiply(left, right);
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -110,7 +154,13 @@ public class ConstantFoldingTests {
         // Arrange: true && false
         var ast = new And(Wrap(true), Wrap(false));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -123,7 +173,13 @@ public class ConstantFoldingTests {
         // Arrange: true || false
         var ast = new Or(Wrap(true), Wrap(false));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -136,7 +192,13 @@ public class ConstantFoldingTests {
         // Arrange: !true
         var ast = new Not(Wrap(true));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -149,7 +211,13 @@ public class ConstantFoldingTests {
         // Arrange: 5 > 3
         var ast = new GreaterThan(Wrap(5), Wrap(3));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -162,7 +230,13 @@ public class ConstantFoldingTests {
         // Arrange: 3 <= 3
         var ast = new LessThanOrEqual(Wrap(3), Wrap(3));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -175,7 +249,13 @@ public class ConstantFoldingTests {
         // Arrange: 42 == 42
         var ast = new Equal(Wrap(42), Wrap(42));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -188,7 +268,13 @@ public class ConstantFoldingTests {
         // Arrange: 42 != 43
         var ast = new NotEqual(Wrap(42), Wrap(43));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -201,7 +287,13 @@ public class ConstantFoldingTests {
         // Arrange: true ? 1 : 2
         var ast = new Conditional(Wrap(true), Wrap(1), Wrap(2));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -214,7 +306,13 @@ public class ConstantFoldingTests {
         // Arrange: false ? 1 : 2
         var ast = new Conditional(Wrap(false), Wrap(1), Wrap(2));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -228,7 +326,13 @@ public class ConstantFoldingTests {
         var variable = new Variable("x");
         var ast = new Add(variable, Wrap(1));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -241,7 +345,13 @@ public class ConstantFoldingTests {
         // Arrange: 10 / 0
         var ast = new Divide(Wrap(10), Wrap(0));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert - division by zero should not fold
@@ -253,7 +363,13 @@ public class ConstantFoldingTests {
         // Arrange: 3.5 + 2.5
         var ast = new Add(Wrap(3.5), Wrap(2.5));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -266,7 +382,13 @@ public class ConstantFoldingTests {
         var parameter = new Parameter("flag", TypeReference.To<bool>());
         var ast = new And(Wrap(false), parameter);
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -278,7 +400,13 @@ public class ConstantFoldingTests {
         var parameter = new Parameter("flag", TypeReference.To<bool>());
         var ast = new Or(Wrap(true), parameter);
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -290,7 +418,13 @@ public class ConstantFoldingTests {
         // Arrange: "Hello" + " World"
         var ast = new Add(Wrap("Hello"), Wrap(" World"));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -303,7 +437,13 @@ public class ConstantFoldingTests {
         // Arrange: "value" ?? "default"
         var ast = new Coalesce(Wrap("value"), Wrap("default"));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert
@@ -317,7 +457,13 @@ public class ConstantFoldingTests {
         var lambda = new Lambda([parameter], new Add(parameter, Wrap(10)));
         var ast = new Invoke(lambda, Wrap(5));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -331,7 +477,13 @@ public class ConstantFoldingTests {
         var lambda = new Lambda([inner], new Add(inner, new Multiply(outer, Wrap(2))));
         var ast = new Invoke(new Lambda([outer], new Invoke(lambda, Wrap(5))), Wrap(3));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -346,7 +498,13 @@ public class ConstantFoldingTests {
         var sub = new Subtract(mul, Wrap(5));
         var ast = new Divide(sub, Wrap(3));
 
-        var result = new AnalyzerBuilder().UseConstantFolding().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding().Build().Analyze(ast);
 
 
         // Assert

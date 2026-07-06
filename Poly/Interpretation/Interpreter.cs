@@ -37,10 +37,10 @@ namespace Poly.Interpretation;
 /// </summary>
 public static class Interpreter {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
+        .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
-        .UseThisReferenceContext()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseValueRepresentationAnalysis()

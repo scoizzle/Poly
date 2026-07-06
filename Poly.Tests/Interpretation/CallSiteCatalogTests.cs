@@ -10,12 +10,13 @@ namespace Poly.Tests.Interpretation;
 public class CallSiteCatalogTests {
     private static AnalysisResult Analyze(Node node) {
         return new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
-            .UseThisReferenceContext()
             .UseJumpTargetResolution()
             .UseControlFlowAnalysis()
+            .UseValueRepresentationAnalysis()
             .UseCallSiteCatalog()
             .Build()
             .Analyze(node);
@@ -113,12 +114,13 @@ public class CallSiteCatalogTests {
         // ANA-FIX-014: State isolation across sequential analyze calls.
         // Use a single cached analyzer instance (mirrors Interpreter._analyzer reuse).
         var analyzer = new AnalyzerBuilder()
+            .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
-            .UseThisReferenceContext()
             .UseJumpTargetResolution()
             .UseControlFlowAnalysis()
+            .UseValueRepresentationAnalysis()
             .UseCallSiteCatalog()
             .Build();
 

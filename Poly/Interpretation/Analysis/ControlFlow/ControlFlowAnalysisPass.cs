@@ -27,7 +27,9 @@ public sealed record MustExecuteMetadata(bool MustExecute) : IAnalysisMetadata;
 /// Builds a control flow graph from an AST and performs reachability analysis.
 /// </summary>
 public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
-    public static string PassId => "ControlFlow";
+    public const string Id = "ControlFlow";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id, SideEffectAnalyzer.Id, JumpTargetAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ControlFlowAnalysisPass>(node)) {
             return;
@@ -814,7 +816,7 @@ public static class ControlFlowAnalysisExtensions {
         /// This builds a Control Flow Graph (CFG) and performs reachability analysis.
         /// </summary>
         public AnalyzerBuilder UseControlFlowAnalysis() {
-            builder.AddAnalyzer(new ControlFlowAnalysisPass(), ControlFlowAnalysisPass.PassId);
+            builder.AddAnalyzer(new ControlFlowAnalysisPass());
             return builder;
         }
     }

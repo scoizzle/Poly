@@ -239,12 +239,13 @@ public class DomainExpressionVmExecutionTests {
 
     private static InterpreterResult ExecuteViaLinq(Node node) {
         var analysis = new AnalyzerBuilder()
-            .UseTypeAndMemberResolver()
-            .UseConstantFolding()
-            .UseSideEffectAnalysis()
             .UseThisReferenceContext()
-            .UseControlFlowAnalysis()
+            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseControlFlowAnalysis()
+            .UseConstantFolding()
             .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);

@@ -33,7 +33,9 @@ internal sealed class ExpansionPassState : IAnalysisMetadata {
 /// Register via <c>builder.AddAnalyzer(new ExpansionPass())</c>.
 /// </summary>
 public sealed class ExpansionPass : INodeAnalyzer {
-    public static string PassId => "Expansion";
+    public const string Id = "Expansion";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id, SideEffectAnalyzer.Id, JumpTargetAnalyzer.Id, ControlFlowAnalysisPass.Id, ValueRepresentationAnalyzer.Id, CallSiteCatalogAnalyzer.Id, ExceptionRegionAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ExpansionPass>(node))
             return;
@@ -85,6 +87,6 @@ public static class ExpansionPassExtensions {
         /// <c>analysis.GetMetadata&lt;PrimitiveExpansionMetadata&gt;(node)</c>.
         /// </summary>
         public AnalyzerBuilder UsePrimitiveExpansion() => builder
-            .AddAnalyzer(new ExpansionPass(), ExpansionPass.PassId);
+            .AddAnalyzer(new ExpansionPass());
     }
 }

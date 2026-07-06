@@ -5,7 +5,9 @@ using Poly.Syntax.Nodes;
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal sealed class DefiniteAssignmentAnalyzer : INodeAnalyzer {
-    public static string PassId => "DefiniteAssignment";
+    public const string Id = "DefiniteAssignment";
+    public string PassName => Id;
+    public string[] Dependencies => [ControlFlowAnalysisPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<DefiniteAssignmentAnalyzer>(node))
             return;
@@ -164,7 +166,7 @@ public sealed record DefiniteAssignmentMetadata(HashSet<string> DefinitelyAssign
 public static class DefiniteAssignmentExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseDefiniteAssignmentAnalysis() {
-            builder.AddAnalyzer(new DefiniteAssignmentAnalyzer(), DefiniteAssignmentAnalyzer.PassId);
+            builder.AddAnalyzer(new DefiniteAssignmentAnalyzer());
             return builder;
         }
     }

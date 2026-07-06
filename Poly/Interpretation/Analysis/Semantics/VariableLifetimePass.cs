@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
 
@@ -22,7 +23,9 @@ internal sealed record ScopeState(
 );
 
 internal sealed class ScopeValidator : INodeAnalyzer {
-    public static string PassId => "VariableScope";
+    public const string Id = "VariableScope";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ScopeValidator>(node))
             return;
@@ -206,7 +209,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 public static class VariableAnalysisExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseVariableScopeValidator() {
-            builder.AddAnalyzer(new ScopeValidator(), ScopeValidator.PassId);
+            builder.AddAnalyzer(new ScopeValidator());
             return builder;
         }
     }

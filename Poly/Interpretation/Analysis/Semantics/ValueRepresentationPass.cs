@@ -45,7 +45,9 @@ public sealed record ValueRepresentationMetadata(
 /// Placement: after <c>ControlFlowAnalysis</c>, before <c>ConstantFolding</c>.
 /// </summary>
 internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
-    public static string PassId => "ValueRepresentation";
+    public const string Id = "ValueRepresentation";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id, ControlFlowAnalysisPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ValueRepresentationAnalyzer>(node))
             return;
@@ -251,7 +253,7 @@ public static class ValueRepresentationExtensions {
         /// (stack scalar, bool, heap ref, void, or unknown).
         /// </summary>
         public AnalyzerBuilder UseValueRepresentationAnalysis() {
-            builder.AddAnalyzer(new ValueRepresentationAnalyzer(), ValueRepresentationAnalyzer.PassId);
+            builder.AddAnalyzer(new ValueRepresentationAnalyzer());
             return builder;
         }
     }

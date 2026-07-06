@@ -50,24 +50,27 @@ public sealed class ExpansionPass : INodeAnalyzer {
         bool isRootEntry = state.Depth == 0;
         state.Depth++;
 
-        ExpansionContext pCtx;
-        if (isRootEntry) {
-            pCtx = new ExpansionContext(context);
-            context.SetMetadata<ExpansionContext>(null, pCtx);
-        }
-        else {
-            pCtx = context.GetMetadata<ExpansionContext>(null)
-                ?? throw new InvalidOperationException("ExpansionContext missing during traversal.");
-        }
+        try {
+            ExpansionContext pCtx;
+            if (isRootEntry) {
+                pCtx = new ExpansionContext(context);
+                context.SetMetadata<ExpansionContext>(null, pCtx);
+            }
+            else {
+                pCtx = context.GetMetadata<ExpansionContext>(null)
+                    ?? throw new InvalidOperationException("ExpansionContext missing during traversal.");
+            }
 
-        if (context.GetMetadata<PrimitiveExpansionMetadata>(actual) is null) {
-            var primitives = actual.ToPrimitives(pCtx).ToArray();
-            context.SetMetadata(actual, new PrimitiveExpansionMetadata(primitives));
+            if (context.GetMetadata<PrimitiveExpansionMetadata>(actual) is null) {
+                var primitives = actual.ToPrimitives(pCtx).ToArray();
+                context.SetMetadata(actual, new PrimitiveExpansionMetadata(primitives));
+            }
+
+            this.AnalyzeChildren(context, node);
         }
-
-        this.AnalyzeChildren(context, node);
-
-        state.Depth--;
+        finally {
+            state.Depth--;
+        }
     }
 }
 

@@ -1,12 +1,25 @@
 # Interpretation System — Resolution Plan
 
 **Created:** 2026-07-05  
-**Updated:** 2026-07-05 (full task breakdown)  
+**Updated:** 2026-07-06 (checkbox sync #2)  
 **Source:** [`docs/interpretation-system-architecture-review.md`](../interpretation-system-architecture-review.md) (Rev 1.15)  
 **Companion:** [`interpretation-system-issues.md`](interpretation-system-issues.md) (INT-/ANA- tracker)  
-**Baseline:** 1395/1395 tests green; P0 analysis sprint complete.
+**Baseline:** 1420/1420 tests green (was 1408); P0 analysis sprint complete; **Phase 1 in progress** (Strategy B try/catch MVP landed); **P2 harness + P3 hardening partial** (uncommitted).
 
 This plan turns architectural findings into **ordered, checkable work**. Task IDs are stable (`P0-001`, `P1C-012`, …). Check boxes in PRs or update status inline as work lands.
+
+### Progress snapshot (2026-07-06)
+
+| Phase | Done | In progress | Open | Notes |
+|-------|------|-------------|------|-------|
+| **P0** Truth sync | 8/16 | — | 8 | Review §5 + several C-* resolved; tracker/vision ADRs still open |
+| **P1** EH (INT-018) | 22/36 | 14 | — | P1A+P1B done; P1C try/catch MVP; finally/using/nested remain |
+| **P2** Parity | 4/27 | 2 | 21 | Harness + 2 MatchLinq tests (uncommitted); P2-003/004 open |
+| **P3** Hardening | 9/21 | 2 | 10 | Ring save, TypeIs scalar, ABI partial, ExpansionPass guard |
+| **P4–P5** | 0 | — | all | Not started |
+| **P6** Hygiene | 2/24 | — | 22 | Dead CSharp code removed; Phi README fixed |
+
+**Current focus:** P1C-030–042 (try/finally, using, nested EH), commit P2/P3 uncommitted work, then P0 tracker hygiene.
 
 **Task status legend:** `open` | `in-progress` | `blocked` (needs Q#) | `done`
 
@@ -63,19 +76,23 @@ flowchart TD
 
 ### Phase 0 — Truth sync
 **Goal:** Docs and tracker match code. No false `done`.  
-**Exit:** High-severity doc-only C-* resolved; §5 header restored.
+**Exit:** High-severity doc-only C-* resolved; §5 header restored.  
+**Status:** **in progress** — 8/16 tasks done.
 
 ### Phase 1 — Exception handling (INT-018)
 **Goal:** VM EH matches semantics (Strategy B — side table).  
-**Exit:** C-017, C-018, C-023 resolved; INT-018 `done`; INT-001 `done` only with catch/finally.
+**Exit:** C-017, C-018, C-023 resolved; INT-018 `done`; INT-001 `done` only with catch/finally.  
+**Status:** **in progress** — try/catch MVP landed (`ExceptionTableBuilder`, `DispatchException`, 8 EH tests); finally/using/nested open.
 
 ### Phase 2 — Cross-engine parity
 **Goal:** VM ↔ Linq disagree in tests, not silently.  
-**Exit:** C-016, C-026 resolved or narrowed; parameterized `AssertVmMatchesLinq`.
+**Exit:** C-016, C-026 resolved or narrowed; parameterized `AssertVmMatchesLinq`.  
+**Status:** **in progress** — parameterized harness + 2 MatchLinq tests (uncommitted).
 
 ### Phase 3 — VM correctness hardening
 **Goal:** Latent bugs exposed by tests.  
-**Exit:** C-022, C-014, C-015, C-021 resolved.
+**Exit:** C-022, C-014, C-015, C-021 resolved.  
+**Status:** **in progress** — ring save by `SavedSp`, scalar TypeIs, ABI partial, ExpansionPass depth guard.
 
 ### Phase 4 — Portable IR (INT-019)
 **Goal:** Catalog + primitives serialize; one call path.  
@@ -87,7 +104,8 @@ flowchart TD
 
 ### Phase 6 — Hygiene
 **Goal:** Reduce dead code and doc debt.  
-**Exit:** K-052–K-063 addressed or deferred with note.
+**Exit:** K-052–K-063 addressed or deferred with note.  
+**Status:** **in progress** — `WriteTestTopLevelStatement` removed; Phi README fixed.
 
 ---
 
@@ -97,23 +115,21 @@ flowchart TD
 
 #### P0-A — Architecture review hygiene
 
-- [ ] **P0-001** Restore `## 5. Contradiction register` header before the C-* table in `docs/interpretation-system-architecture-review.md` (currently missing after §4.22).
-  - **Files:** `docs/interpretation-system-architecture-review.md` (~line 2365)
-  - **Maps:** doc structure
-  - **Acceptance:** TOC/nav shows §5; table is under correct heading
+- [x] **P0-001** Restore `## 5. Contradiction register` header before the C-* table in `docs/interpretation-system-architecture-review.md` (currently missing after §4.22).
+  - **Files:** `docs/interpretation-system-architecture-review.md` (~line 2367)
+  - **Done:** 2026-07-06 (commit `3d7b1d7`)
 
-- [ ] **P0-002** Mark **C-004** resolved in §5 with `Status: resolved`, `Resolved: 2026-07-05`, note: README rewrite lists passes 1–13.
-  - **Files:** `docs/interpretation-system-architecture-review.md` §5
-  - **Evidence:** `Poly/Interpretation/README.md` lines 107–125
+- [x] **P0-002** Mark **C-004** resolved in §5 with `Status: resolved`, `Resolved: 2026-07-05`, note: README rewrite lists passes 1–13.
+  - **Done:** 2026-07-05/06 in architecture review §5
 
-- [ ] **P0-003** Fix §4.22.5–4.22.8 stale text ("§4.12 favors Strategy A" / "should update to B") — §4.12.7 already recommends B.
-  - **Files:** `docs/interpretation-system-architecture-review.md` §4.22.5, §4.22.8 action column
+- [ ] **P0-003** Fix §4.22.5 opening paragraph — still says "recommended Strategy A" before the Strategy B update note at §4.22.5 line ~2308.
+  - **Files:** `docs/interpretation-system-architecture-review.md` §4.22.5
 
-- [ ] **P0-004** Update **K-046** in §6: mark superseded by K-027 / §4.12.7 (Strategy B primary).
-  - **Files:** `docs/interpretation-system-architecture-review.md` §6
+- [x] **P0-004** Update **K-046** in §6: mark superseded by K-027 / §4.12.7 (Strategy B primary).
+  - **Done:** K-046 row updated in §6
 
-- [ ] **P0-005** Fix §3.4: `EmitPhi` is compile-time no-op (K-022), not runtime merge implementation.
-  - **Files:** `docs/interpretation-system-architecture-review.md` §3.4
+- [x] **P0-005** Fix §3.4: `EmitPhi` is compile-time no-op (K-022), not runtime merge implementation.
+  - **Done:** §3.4 SSA row corrected
 
 #### P0-B — Tracker alignment
 
@@ -130,20 +146,17 @@ flowchart TD
 
 #### P0-C — ADR reconciliation
 
-- [ ] **P0-020** Revise `docs/decisions/vm-gap-analysis.md` feature matrix: Exceptions → ✗; TypeIs → ✓; remove or reorder resolved priority items (#1 TypeIs, #2 GC, #4 breakpoints partial).
-  - **Files:** `docs/decisions/vm-gap-analysis.md`
-  - **Maps:** C-010, C-023, K-038
+- [x] **P0-020** Revise `docs/decisions/vm-gap-analysis.md` feature matrix: Exceptions → ✗; TypeIs → ✓; remove or reorder resolved priority items (#1 TypeIs, #2 GC, #4 breakpoints partial).
+  - **Done:** 2026-07-06 (commit `3d7b1d7`); priority list annotated
 
-- [ ] **P0-021** In vm-gap-analysis: add INT-018 reference for EH gap; note `EmitThrowOp` dead / catch-finally unconditional (C-017).
-  - **Depends:** P0-020
+- [ ] **P0-021** Refresh vm-gap-analysis EH row — still says "catch/finally bodies execute unconditionally" though try/catch dispatch is implemented; update to reflect P1C partial (try/catch ✓, finally/using ✗).
+  - **Depends:** P0-020 (partial refresh)
 
-- [ ] **P0-022** Reconcile priority #7 "policy/event opcodes" with domain-lowering-boundary ADR — document V2 lowers to generic ops; remove or reword #7.
-  - **Files:** `docs/decisions/vm-gap-analysis.md`, cross-ref `2026-06-08-domain-lowering-boundary.md`
-  - **Maps:** C-025, K-041
+- [x] **P0-022** Reconcile priority #7 "policy/event opcodes" with domain-lowering-boundary ADR — document V2 lowers to generic ops; remove or reword #7.
+  - **Done:** C-025 resolved in review; vm-gap priority #7 updated
 
-- [ ] **P0-023** Fix `docs/decisions/README.md` index bullet: remove "tree-walker interpreter" wording; VM is canonical.
-  - **Files:** `docs/decisions/README.md` (~line 26)
-  - **Maps:** C-005
+- [x] **P0-023** Fix `docs/decisions/README.md` index bullet: remove "tree-walker interpreter" wording; VM is canonical.
+  - **Done:** 2026-07-06 (commit `3d7b1d7`)
 
 - [ ] **P0-024** **Q1=defer** Add note to `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` or add amendment doc: two-tier VM→backend; primitives as IR; no `Poly/Ir/`; no tree-walker.
   - **Files:** vision doc or new `docs/decisions/2026-07-05-vision-amendment-vm-primitives.md`
@@ -162,61 +175,57 @@ flowchart TD
 
 #### P0-D — Verification (no code)
 
-- [ ] **P0-030** Run full test suite after doc-only PR; confirm still 1395/1395.
-  - **Command:** `dotnet run --project Poly.Tests/Poly.Tests.csproj`
+- [x] **P0-030** Run full test suite; confirm green.
+  - **Done:** 1420/1420 (2026-07-06)
 
 **Phase 0 exit checklist:**
-- [ ] P0-001 through P0-005 (review doc)
+- [x] P0-001, P0-002, P0-004, P0-005 (review doc) — P0-003 still open
 - [ ] P0-010 through P0-012 (tracker)
-- [ ] P0-020 through P0-023 (ADR sync)
-- [ ] P0-025 or Q1 answer recorded
+- [x] P0-020, P0-022, P0-023 (ADR sync) — P0-021 refresh open
+- [ ] P0-025 (Q1 answered defer; ADR note not yet written)
 
 ---
 
 ### Phase 1 — Exception handling (`P1A-` `P1B-` `P1C-`)
 
-**Strategy:** Strategy B (runtime dispatch / side table) per §4.12.7 — **confirm Q3** before P1B-001.
+**Strategy:** Strategy B (runtime dispatch / side table) per §4.12.7 — **Q3 confirmed Yes**.
 
-#### Phase 1a — Wire throw (`P1A-`)
+#### Phase 1a — Wire throw (`P1A-`) — **complete**
 
-- [ ] **P1A-001** In `ProgramCompiler` primitives switch: change `PrimThrow => null` to `PrimThrow => EmitThrowOp(consumedPcs, ctx)` (or equivalent signature).
-  - **Files:** `Poly/Interpretation/Vm/ProgramCompiler.cs` (~line 159)
-  - **Maps:** C-012, INT-001 (partial)
+- [x] **P1A-001** In `ProgramCompiler` primitives switch: `PrimThrow => EmitThrowOp(consumedPcs, ctx)`.
+  - **Done:** `ProgramCompiler.cs:160`
 
-- [ ] **P1A-002** Add comment above `PrimThrowProtected => null` and `RegionMarker => null`: intentional until INT-018 dispatch (P1C-*).
-  - **Files:** `ProgramCompiler.cs` (~lines 160–162)
+- [x] **P1A-002** Document `RegionMarker => null` as compile-time metadata only; `PrimThrowProtected` wired to `EmitThrowOp`.
+  - **Done:** comments at `ProgramCompiler.cs:161–163`
 
-- [ ] **P1A-003** Create `Poly.Tests/Interpretation/ThrowVmTests.cs` (or extend `VmCorrectnessTests`):
-  - `Throw_Uncaught_PropagatesException` — `Interpreter.Execute` on `throw new Exception("x")` throws (not silent return)
-  - Uses full pipeline (`Interpreter.Analyze` + `Compile` + `Execute`), not `ExecExpand`
-  - **Maps:** K-018
+- [x] **P1A-003** `Poly.Tests/Interpretation/ThrowVmTests.cs` — 4 tests (uncaught throw, message, void context, after local).
+  - **Done:** 2026-07-06
 
-- [ ] **P1A-004** Add test: `Throw_InTryWithoutCatch_Propagates` — documents current behavior pre-catch (exception unwinds; catch body still wrong until P1C).
-  - **Depends:** P1A-001
+- [x] **P1A-004** `Throw_OutsideTry_Propagates` in `ExceptionHandlingVmTests.cs` (covers unprotected throw through full pipeline).
+  - **Done:** superseded dedicated test name; same acceptance
 
-- [ ] **P1A-005** Verify `EmitThrowOp` dereferences heap handle correctly for string/object exceptions; fix if `ThrowStatement` lowering path differs.
-  - **Files:** `ProgramCompiler.cs` `EmitThrowOp` (~319), `Poly/Syntax/Nodes/ThrowStatement.cs`
+- [x] **P1A-005** `Throw_WithMessage_PropagatesCorrectMessage` verifies heap-handle dereference path.
+  - **Done:** `ThrowVmTests.cs`
 
-- [ ] **P1A-006** Do **not** mark INT-001 `done`; add tracker note "P1A complete — throw wired; catch/finally pending P1C".
+- [ ] **P1A-006** Tracker: INT-001 still marked `done` prematurely — update to `blocked` on INT-018 or add note that catch/finally acceptance is partial.
+  - **Open:** `interpretation-system-issues.md` §INT-001 still `done`
 
-**Phase 1a exit:** P1A-001, P1A-003 green.
+**Phase 1a exit:** ✅ P1A-001, P1A-003 green.
 
 ---
 
-#### Phase 1b — EH ADR (`P1B-`)
+#### Phase 1b — EH ADR (`P1B-`) — **mostly complete**
 
-- [ ] **P1B-001** **blocked — Q3** Create ADR `docs/decisions/2026-07-05-vm-exception-handling-strategy-b.md` (or amend vm-as-canonical-semantics EH section):
-  - Strategy B: `ExceptionRegionTable` on `VmProgram`
-  - Handlers as `Functions[]` entries
-  - Main delegate wrapped in `Expression.TryCatch` + dispatch expression
-  - References ANA-003 metadata contract (`ExceptionRegionMetadata`, `ExceptionRegionEntry`)
-  - **Maps:** C-018, K-027, INT-018
+- [x] **P1B-001** ADR `docs/decisions/2026-07-05-vm-exception-handling-strategy-b.md` — Status: Accepted.
+  - **Done:** 2026-07-06 (commit `3d7b1d7`)
 
-- [ ] **P1B-002** Document in ADR: `RegionMarker` becomes compile-time metadata only (not runtime µops) after P1C; flat expansion unchanged.
+- [x] **P1B-002** ADR documents Strategy B components: side table, handler `Functions[]`, dispatch algorithm.
+  - **Done:** ADR §Strategy B Design
 
 - [ ] **P1B-003** Link ADR from `Poly/Interpretation/Vm/README.md` EH section.
+  - **Open:** no link in Vm README yet
 
-**Phase 1b exit:** P1B-001 merged.
+**Phase 1b exit:** P1B-001 ✅ — P1B-003 remains.
 
 ---
 
@@ -224,63 +233,51 @@ flowchart TD
 
 ##### P1C-1 — Types and table construction
 
-- [ ] **P1C-001** Add `ExceptionRegionTable` type (new file or `VmProgram.cs`):
-  - `IReadOnlyList<ExceptionRegionEntry>` or dedicated record with: `TryStartPc`, `TryEndPc`, `HandlerFuncIndex`, `Kind` (Try/Catch/Finally/UsingDispose), `CatchTypeName?`, `CatchVariableName?`, `ParentRegionIndex`
-  - Serializable-friendly fields (strings + ints, no `System.Type` in table)
-  - **Files:** new `Poly/Interpretation/Vm/ExceptionRegionTable.cs` (suggested)
-  - **Maps:** INT-018, §4.12.4
+- [x] **P1C-001** `ExceptionRegionTable` + `ExceptionRegionEntry` in `ExceptionRegionTable.cs`.
+  - **Done:** includes `CatchTypeName`, `CatchVariableName`, `ParentRegionIndex`
 
-- [ ] **P1C-002** Add `ExceptionRegionTable? Regions` property on `VmProgram`.
-  - **Files:** `Poly/Interpretation/Vm/VmProgram.cs`
+- [x] **P1C-002** `ExceptionRegionTable? Regions` on `VmProgram`.
+  - **Done:** `VmProgram.cs`
 
-- [ ] **P1C-003** In `Interpreter.CompileCore` / `ProgramCompiler.CompilePrimitives`: read `ExceptionRegionMetadata` from `AnalysisResult` (module-level null key).
-  - **Files:** `Poly/Interpretation/Interpreter.cs`, `ProgramCompiler.cs`
+- [x] **P1C-003** `Interpreter.CompileCore` reads `ExceptionRegionMetadata` (null key).
+  - **Done:** `Interpreter.cs:259+`
 
-- [ ] **P1C-004** Implement `BuildExceptionRegionTable(primitives, metadata) → ExceptionRegionTable`:
-  - Map `RegionMarker` positions in flat µop array to PC ranges
-  - Cross-reference `ExceptionRegionEntry.AnchorNodeId`, `ProtectedNodeIds`, `HandlerNodeIds` from analysis
-  - **Maps:** C-017, C-018
-  - **Ask if stuck:** marker-to-PC alignment vs node-id alignment — confirm against `TryCatchFinally.ToPrimitives` emission order
+- [x] **P1C-004** `ExceptionTableBuilder.BuildTable(primitives, metadata)`.
+  - **Done:** `ExceptionTableBuilder.cs`
 
-- [ ] **P1C-005** Unit test: given primitives + metadata from `ExpansionIntegrationTests` fixture, table has expected PC ranges (shape test, no execution yet).
-  - **Files:** new `Poly.Tests/Interpretation/ExceptionRegionTableTests.cs`
+- [x] **P1C-005** `ExceptionRegionTableTests.cs` — shape tests for try/catch, try/finally table entries.
+  - **Done:** 2026-07-06
 
 ##### P1C-2 — Handler compilation
 
-- [ ] **P1C-010** Implement `ExtractHandlerPrimitiveRanges(primitives, table) → List<(int start, int end, int funcIndex)>` for catch/finally/dispose bodies.
-  - **Files:** `ProgramCompiler.cs`
+- [x] **P1C-010** `ExceptionTableBuilder.ExtractHandlerRanges(primitives)`.
+  - **Done:** `ExceptionTableBuilder.cs` (not `ProgramCompiler`)
 
-- [ ] **P1C-011** Compile each handler range as independent `Action<VmState>` via existing function compilation path (`CompilePrimitives` sub-range or `CompileRange` helper).
-  - Ring allocation: **fresh** `ComputePrimitiveRingDepths` per handler range (depth 0 at entry)
-  - **Files:** `ProgramCompiler.cs`
-  - **Maps:** §4.12.9 Option A
+- [x] **P1C-011** Handler ranges compiled via `ProgramCompiler.CompilePrimitives` in `CompileCore`.
+  - **Done:** `Interpreter.cs:268–277`
 
-- [ ] **P1C-012** Append handler delegates to `VmProgram.Functions`; store `HandlerFuncIndex` in table entries.
-  - **Depends:** P1C-010, P1C-011
+- [x] **P1C-012** Combined `Functions[]` with `WithHandlerIndexAt` updating table entries.
+  - **Done:** `Interpreter.cs:280–296`
 
-- [ ] **P1C-013** Catch variable binding: at handler entry, store caught exception in heap slot or ring local; inject load for catch body µops referencing exception.
-  - **Ask if stuck:** heap slot vs `Expression.Variable` inside dispatch wrapper — ADR should pick one
+- [ ] **P1C-013** Catch variable binding — exception object not injected into catch body frame.
+  - **Open:** typed catch test passes only when body ignores exception variable
 
 ##### P1C-3 — Main body + dispatch wrapper
 
-- [ ] **P1C-020** Compile **main** µop range excluding handler bodies (or skip handler PCs in main delegate — design choice document in PR).
-  - **Depends:** P1C-010
+- [x] **P1C-020** Normal path: `TryCatchFinally.ToPrimitives` emits `Goto(AfterCatches)` to skip catch bodies; handlers also compiled separately.
+  - **Done:** `TryCatchFinally.cs` + flat main delegate
 
-- [ ] **P1C-021** Generate dispatch expression `EmitExceptionDispatch(catchVar, state, regionTable)`:
-  - Read faulting PC (capture at throw site or use `ExceptionRegionMetadata` + stack walk)
-  - Find innermost matching region; type-filter catch clauses
-  - Invoke `Functions[handlerIndex](state)`; run finally chain; rethrow if unhandled
-  - **Files:** `ProgramCompiler.cs`
+- [x] **P1C-021** `ProgramCompiler.DispatchException` — PC scan, handler invoke, rethrow if unhandled.
+  - **Done:** `ProgramCompiler.cs:762+` — **gap:** no `CatchTypeName` filter yet; no `Finally` kind dispatch
 
-- [ ] **P1C-022** Wrap compiled main delegate: `Expression.TryCatch(mainBody, Catch(typeof(Exception), var, dispatch))`.
-  - **Depends:** P1C-021
+- [x] **P1C-022** Main delegate wrapped in CLR `try/catch` → `DispatchException` in `CompileCore`.
+  - **Done:** `Interpreter.cs:300–307` (runtime wrapper; `EmitExceptionDispatchWrapper` exists but unused)
 
-- [ ] **P1C-023** Change `PrimThrowProtected` from `null` to protected-throw path: set PC/exception state then enter dispatch (not bare unwind-only if catch exists).
-  - **Maps:** C-012, §4.12.10
-  - **Depends:** P1C-021
+- [x] **P1C-023** `PrimThrowProtected => EmitThrowOp` with fault PC saved before throw.
+  - **Done:** `EmitThrowOp` sets `state.ProgramCounter`
 
-- [ ] **P1C-024** Ensure **catch body does not run** on normal try completion (regression for C-017).
-  - **Test:** `TryCatchFinally_NormalCompletion_SkipsCatch` — return value from try only
+- [x] **P1C-024** `TryCatch_NormalCompletion_SkipsCatch` — catch not run on normal exit.
+  - **Done:** `ExceptionHandlingVmTests.cs`; C-017 marked resolved in review
 
 ##### P1C-4 — Try/finally and using
 
@@ -316,33 +313,32 @@ flowchart TD
 
 ##### P1C-7 — Cleanup and closure
 
-- [ ] **P1C-060** Remove or update `RegionMarker => null` comment; markers unused at runtime (metadata only).
-  - **Maps:** §4.12.10
+- [x] **P1C-060** `RegionMarker => null` with INT-018 Strategy B comment.
+  - **Done:** `ProgramCompiler.cs:163`
 
-- [ ] **P1C-061** Update `vm-gap-analysis.md` EH → ✓ (after tests green).
-  - **Depends:** all P1C tests
-  - **Maps:** C-023
+- [ ] **P1C-061** Update `vm-gap-analysis.md` EH row to reflect partial implementation (try/catch ✓, finally/using ✗).
+  - **Open:** feature matrix still ✗ with stale note
 
-- [ ] **P1C-062** Mark **C-017**, **C-018**, **C-023** resolved in architecture review §5.
-  - **Depends:** P1C-024, P1C-030, P1C-031
+- [ ] **P1C-062** Architecture review §5: **C-017 resolved**; **C-018** and **C-023** still open.
+  - **Partial:** C-017/C-002/C-012 done 2026-07-06; C-018 awaits finally/using/nested
 
-- [ ] **P1C-063** Mark **INT-018** `done` and **INT-001** `done` in tracker.
-  - **Depends:** P1C-062
+- [ ] **P1C-063** Mark **INT-018** `done` and reconcile **INT-001** in tracker.
+  - **Blocked on:** P1C-030–032 minimum
 
-- [ ] **P1C-064** Remove "INT-018 placeholder" / stale EH comments in `ProgramCompiler.cs`, `Primitives.cs`.
+- [ ] **P1C-064** Remove stale EH placeholder comments in `ProgramCompiler.cs`, `Primitives.cs`, architecture review §7 (still says EmitThrowOp dead).
 
 **Phase 1 minimum test matrix (all required for exit):**
 
-| Test ID | Scenario |
-|---------|----------|
-| T-EH-01 | Uncaught throw propagates |
-| T-EH-02 | Throw caught; catch returns value |
-| T-EH-03 | Try/finally; no throw; finally runs |
-| T-EH-04 | Throw; finally runs; exception propagates |
-| T-EH-05 | Normal try completion; catch skipped |
-| T-EH-06 | Using dispose on normal exit |
-| T-EH-07 | Using dispose on exception |
-| T-EH-08 | Nested try/catch |
+| Test ID | Scenario | Status |
+|---------|----------|--------|
+| T-EH-01 | Uncaught throw propagates | ✅ `ThrowVmTests`, `Throw_OutsideTry_Propagates` |
+| T-EH-02 | Throw caught; catch returns value | ✅ `TryCatch_Throw_CatchReturnsValue` |
+| T-EH-03 | Try/finally; no throw; finally runs | ❌ |
+| T-EH-04 | Throw; finally runs; exception propagates | ❌ |
+| T-EH-05 | Normal try completion; catch skipped | ✅ `TryCatch_NormalCompletion_SkipsCatch` |
+| T-EH-06 | Using dispose on normal exit | ❌ |
+| T-EH-07 | Using dispose on exception | ❌ |
+| T-EH-08 | Nested try/catch | ❌ |
 
 ---
 
@@ -350,23 +346,27 @@ flowchart TD
 
 #### P2-A — Harness infrastructure
 
-- [ ] **P2-001** Refactor `AssertVmMatchesLinq` in `VmCorrectnessTests.cs` to accept `object?[] args` and pass to both LINQ `DynamicInvoke(args)` and VM `SetArgs`.
+- [x] **P2-001** Refactor `AssertVmMatchesLinq` in `VmCorrectnessTests.cs` to accept `object?[] args` and pass to both LINQ `DynamicInvoke(args)` and VM `SetArgs`.
   - **Files:** `Poly.Tests/Interpretation/VmCorrectnessTests.cs` (~272–295)
   - **Maps:** K-047, C-026, §4.13.5 Phase 1
-  - **Template:** `Fuzz_RandomPropertyAccess_MatchLinq` (~768)
+  - **Done:** `AssertVmMatchesLinqImpl(expr, subject, args)` — uncommitted
 
-- [ ] **P2-002** Add overload `AssertVmMatchesLinq(DomainExpression expr)` → calls with empty args (preserve existing 11 tests).
+- [x] **P2-002** Add overload `AssertVmMatchesLinq(DomainExpression expr)` → calls with empty args (preserve existing 11 tests).
+  - **Done:** overloads at ~272–282 — uncommitted
 
 - [ ] **P2-003** Extract shared `NormalizeResult(object?) → long` used by both paths (bool → 0/1, null → 0, etc.).
+  - **Open:** inline switch in `AssertVmMatchesLinqImpl`; not yet extracted
 
 - [ ] **P2-004** Fix **K-048**: either add LINQ comparison to `AssertVmMatchesLinqComposite` OR rename to `AssertVmMultiCase` and document VM-only.
   - **Files:** `VmCorrectnessTests.cs` (~381–410)
 
 #### P2-B — Breadth-first MatchLinq tests (Syntax.Node or DomainExpression)
 
-- [ ] **P2-010** `MatchLinq_PropertyAccess_Age` — parameterized entity
+- [x] **P2-010** `MatchLinq_PropertyAccess_Age` — parameterized entity
+  - **Done:** `VmCorrectnessTests.cs` — uncommitted (manual LINQ/VM compare; not yet routed through harness)
 - [ ] **P2-011** `MatchLinq_PropertyAccess_NameEq`
-- [ ] **P2-012** `MatchLinq_MethodCall_StringLength`
+- [x] **P2-012** `MatchLinq_MethodCall_StringLength`
+  - **Done:** `VmCorrectnessTests.cs` — uncommitted
 - [ ] **P2-013** `MatchLinq_MethodCall_MathMax`
 - [ ] **P2-014** `MatchLinq_Conditional_WithEntity`
 - [ ] **P2-015** `MatchLinq_IfElse_WithComparison`
@@ -414,8 +414,8 @@ flowchart TD
   - **Maps:** K-025, §4.13.5 Phase 3
 
 **Phase 2 exit checklist:**
-- [ ] P2-001–P2-003 harness done
-- [ ] ≥8 new MatchLinq tests (P2-010–P2-019 minimum)
+- [ ] P2-001–P2-003 harness done — P2-001/002 ✅; P2-003 open
+- [ ] ≥8 new MatchLinq tests (P2-010–P2-019 minimum) — 2/8 (P2-010, P2-012)
 - [ ] P2-030–P2-033 after Phase 1
 - [ ] C-016, C-026 updated in review
 
@@ -425,15 +425,16 @@ flowchart TD
 
 #### P3-A — Nested function calls (ring save)
 
-- [ ] **P3-001** Design fix for `CtxPushRegisters`/`CtxPopRegisters` flat overwrite — options:
+- [x] **P3-001** Design fix for `CtxPushRegisters`/`CtxPopRegisters` flat overwrite — options:
   - (a) `Registers` as stack of save areas
   - (b) save area indexed by call depth on `VmState`
   - (c) document nested calls unsupported + runtime guard
   - **Files:** `ProgramCompiler.cs` 549–563, `VmState.cs`
   - **Maps:** C-022, K-032
-  - **Ask if stuck:** prefer (a) vs (b) — affects INT-005
+  - **Done:** chose **(b)** — `SavedSp` offsets ring save area per nested call (`03d9985`)
 
-- [ ] **P3-002** Implement chosen design from P3-001.
+- [x] **P3-002** Implement chosen design from P3-001.
+  - **Done:** `CtxPushRegisters`/`CtxPopRegisters` keyed by `ctx.SavedSp` (`ProgramCompiler.cs`)
 
 - [ ] **P3-003** Test `NestedLambda_CallPreservesOuterRing` — outer calls inner `Func<long,long>`; outer locals intact after return.
   - **Files:** new test in `VmCorrectnessTests.cs` or `ClosureVmTests.cs`
@@ -444,12 +445,15 @@ flowchart TD
   - Assert all predecessors agree at each Phi/branch target (K-034)
   - **Files:** `ProgramCompiler.cs`
   - **Maps:** C-014, K-034
+  - **In progress:** DEBUG stub validates Goto/CondGoto target PCs only — depth convergence (K-034) not yet asserted (uncommitted)
 
 - [ ] **P3-011** Call verifier from `CompilePrimitives` in DEBUG builds only.
+  - **In progress:** `#if DEBUG VerifyRingDepths(...)` call added — uncommitted; full K-034 checks remain
 
-- [ ] **P3-012** Remove `KNOWN BUG` comment from `Fuzz_Phi_NestedConditional_DifferentRingDepths`; add "fixed by ring-based BuildTargetDepth".
-  - **Files:** `VmCorrectnessTests.cs` ~605
+- [x] **P3-012** Remove `KNOWN BUG` comment from `Fuzz_Phi_NestedConditional_DifferentRingDepths`; add "fixed by ring-based BuildTargetDepth".
+  - **Files:** `VmCorrectnessTests.cs` ~670
   - **Maps:** C-015
+  - **Done:** comment updated; test expects 3L (`03d9985`)
 
 #### P3-C — Closures / upvalues
 
@@ -462,42 +466,48 @@ flowchart TD
 
 #### P3-D — TypeIs VM path
 
-- [ ] **P3-030** Rename `Expand_TypeIs_StringRefType` → `Expand_TypeIs_WithoutAnalysis_FailsClosed`.
+- [x] **P3-030** Rename `Expand_TypeIs_StringRefType` → `Expand_TypeIs_WithoutAnalysis_FailsClosed`.
   - **Files:** `Poly.Tests/Interpretation/PrimitiveExpandTests.cs` ~96
   - **Maps:** C-011
+  - **Done:** uncommitted
 
 - [ ] **P3-031** Test `TypeIs_HeapRef_Match` — string on heap, `is string` → true through VM.
 - [ ] **P3-032** Test `TypeIs_HeapRef_Mismatch` → false
 - [ ] **P3-033** Test `TypeIs_HeapRef_Null` → false
-- [ ] **P3-034** Test `TypeIs_Scalar_StaticMatch` — full pipeline, `StaticTypeIsMatch` path
+- [x] **P3-034** Test `TypeIs_Scalar_StaticMatch` — full pipeline, `StaticTypeIsMatch` path
   - **Maps:** K-015
+  - **Done:** `TypeIsVmTests.cs` — 3 scalar tests (string/int/null constants)
 
 #### P3-E — InterpretResult ABI
 
-- [ ] **P3-040** Add `InterpretResultAbiTests.cs`:
+- [x] **P3-040** Add `InterpretResultAbiTests.cs`:
   - `BlockRootedScalar_ReturnsInt` (may exist — extend)
   - `HeapRef_ReturnsDereferencedObject`
   - `Void_ReturnsDefault`
   - Programs use `exec.Result` / `GetValue<T>()`, not `RawValue`
   - **Maps:** K-059, INT-002
+  - **Partial:** 3/4 scenarios (`ScalarReturn`, `BoolReturn`, `HeapStringReturn`); `Void_ReturnsDefault` still open
 
 - [ ] **P3-041** Document in `Vm/README.md`: `RawValue` for low-level tests only; production uses `InterpretResult`.
 
 #### P3-F — PolicyEvaluator
 
-- [ ] **P3-050** Replace `Debug.Assert(result == result2)` with `if (result != result2) throw new InvalidOperationException(...)` or structured diagnostic.
+- [x] **P3-050** Replace `Debug.Assert(result == result2)` with `if (result != result2) throw new InvalidOperationException(...)` or structured diagnostic.
   - **Files:** `Poly/DomainModeling/Lowering/PolicyEvaluator.cs` ~62
   - **Maps:** C-021
+  - **Done:** `Evaluate<TEntity>` throws `InvalidOperationException` on mismatch — uncommitted
 
 #### P3-G — Expansion infrastructure
 
-- [ ] **P3-060** Wrap `ExpansionPass` depth increment in try/finally (or `IDisposable` guard) so `state.Depth` restores on `ToPrimitives` exception.
-  - **Files:** `Poly/Interpretation/Analysis/Semantics/ExpansionPass.cs`
+- [x] **P3-060** Wrap `ExpansionPass` depth increment in try/finally (or `IDisposable` guard) so `state.Depth` restores on `ToPrimitives` exception.
+  - **Files:** `Poly/Interpretation/Analysis/ExpansionPass.cs`
   - **Maps:** K-060
+  - **Done:** try/finally around depth increment — uncommitted
 
-- [ ] **P3-061** Replace `TryResolveSlotByNodeId` manual iteration with `_slots.TryGetValue(nodeId, out slot)`.
-  - **Files:** `Poly/Interpretation/Analysis/Semantics/ExpansionEnvironment.cs`
+- [x] **P3-061** Replace `TryResolveSlotByNodeId` manual iteration with `_slots.TryGetValue(nodeId, out slot)`.
+  - **Files:** `Poly/Syntax/Primitives/ExpansionEnvironment.cs`
   - **Maps:** K-061
+  - **Done:** `03d9985`
 
 #### P3-H — Ring depth limit
 
@@ -507,6 +517,7 @@ flowchart TD
   - **May expose bug** — fix in same task if fails
 
 **Phase 3 exit:** P3-002+003, P3-010, P3-012, P3-020+, P3-031+, P3-050, P3-060, P3-061 done.
+  - **Progress:** P3-002/012/030/034/050/060/061 ✅; P3-003/010/020/031+ open
 
 ---
 
@@ -611,12 +622,14 @@ flowchart TD
 - [ ] **P6-002** Delete `Closure.cs` OR refactor `EmitAllocClosure` to use it — grep `new Closure(` first.
   - **Maps:** K-054
 
-- [ ] **P6-003** Remove `CSharpGenerator.WriteTestTopLevelStatement` (~line 46).
+- [x] **P6-003** Remove `CSharpGenerator.WriteTestTopLevelStatement` (~line 46).
   - **Maps:** K-053
+  - **Done:** removed in `03d9985`; zero grep hits
 
 - [ ] **P6-004** Remove `NodeExtensions.Null`, `.True`, `.False`, `.Wrap()`.
   - **Files:** `Poly/Syntax/NodeExtensions.cs`
   - **Maps:** K-062
+  - **Open:** factories refactored to `readonly` but still present (`TypeIsVmTests` uses `Null`)
 
 - [ ] **P6-005** Remove `PendingFunction.CapturedInfo` field if still unread; fix tuple naming doc if needed.
   - **Maps:** K-056
@@ -627,8 +640,9 @@ flowchart TD
   - **Files:** `Poly/Interpretation/Mermaid/MermaidAstGenerator.cs`
   - **Maps:** K-063
 
-- [ ] **P6-011** Fix Phi `StackEffect` in `Poly/Syntax/Primitives/README.md` → `(0,0)`.
+- [x] **P6-011** Fix Phi `StackEffect` in `Poly/Syntax/Primitives/README.md` → `(0,0)`.
   - **Maps:** K-033
+  - **Done:** `03d9985`
 
 - [ ] **P6-012** Create `Poly/Interpretation/CSharp/README.md` — input contract, ToString fallback list, production entry via `DomainTools`.
   - **Maps:** K-052
@@ -686,7 +700,7 @@ flowchart TD
 |---|----------|---------|--------|----------------|
 | **Q1** | Module/BasicBlock: amend ADR vs implement? | Amend to partial | **Defer until real need arises** — avoid implementing speculative abstraction. Keep flat `CompilePrimitives` as-is. | P0-025, INT-021 → drop both |
 | **Q2** | Unimplemented ADRs: defer all vs breakpoint `BreakpointPCs` now? | Defer + annotate | **Defer all.** Bytecode serialization not important. Peephole useful later, not now. Sandboxing after current problem set. | P0-026, P6-052 |
-| **Q3** | Confirm EH Strategy B? | Yes | **Yes** — side-table dispatch makes sense. | P1B-001, all P1C |
+| **Q3** | Confirm EH Strategy B? | Yes | **Yes** — ADR accepted (`2026-07-05-vm-exception-handling-strategy-b.md`). | P1B-001 ✅, P1C in progress |
 | **Q4** | Short-circuit: VM `AndAlso`/`OrElse` vs expansion branches? | VM emit | _Open_ | P2-040 |
 | **Q5** | Delete `CallSiteCompiler`? | Delete | _Open_ | P4-001–003 |
 | **Q6** | Drop `MethodBase` from IR when? | After serializer sketch | _Open_ | P4-013 |
@@ -701,41 +715,46 @@ flowchart TD
 
 ## Suggested execution order
 
-| Sprint | Tasks | Deliverable |
-|--------|-------|-------------|
-| **S1** | P0-001–P0-023, P1A-001–P1A-003 | Docs synced; throw wired + test |
-| **S2** | P1B-001, P1C-001–P1C-012 | EH ADR; region table; handlers compile |
-| **S3** | P1C-020–P1C-042, P1C-062–P1C-064 | Full EH; INT-018 done |
-| **S4** | P2-001–P2-019, P2-030–P2-033 | Parameterized MatchLinq + EH parity |
-| **S5** | P3-001–P3-034, P3-050, P3-060–P3-061 | Ring fix; closures; TypeIs |
-| **S6** | P4-001–P4-034 | INT-019 MVP |
-| **ongoing** | P6-* between sprints | Hygiene |
+| Sprint | Tasks | Deliverable | Status |
+|--------|-------|-------------|--------|
+| **S1** | P0-001–P0-023, P1A-001–P1A-003 | Docs synced; throw wired + test | ✅ **mostly done** — P0-003/010–012/021/024–026 open |
+| **S2** | P1B-001, P1C-001–P1C-012 | EH ADR; region table; handlers compile | ✅ **done** — P1B-003 open |
+| **S3** | P1C-020–P1C-042, P1C-062–P1C-064 | Full EH; INT-018 done | **in progress** — try/catch MVP; finally/using/nested remain |
+| **S4** | P2-001–P2-019, P2-030–P2-033 | Parameterized MatchLinq + EH parity | **in progress** — harness + 2 MatchLinq tests (uncommitted) |
+| **S5** | P3-001–P3-034, P3-050, P3-060–P3-061 | Ring fix; closures; TypeIs | **in progress** — ring save, scalar TypeIs, ABI partial |
+| **S6** | P4-001–P4-034 | INT-019 MVP | not started |
+| **ongoing** | P6-* between sprints | Hygiene | **in progress** — P6-003, P6-011 done |
 
 ---
 
 ## Register closure checklist
 
-| Register | Close when task(s) done |
-|----------|-------------------------|
-| C-004 | P0-002 |
-| C-002, C-012 | P1C-063 (not P1A alone) |
-| C-017, C-018, C-023 | P1C-062 |
-| C-010, C-023 (ADR) | P0-020, P1C-061 |
-| C-025, K-041 | P0-022 |
-| C-005 | P0-023 |
-| C-009 | P0-012 |
-| C-001 | P0-025 or INT-021 |
-| C-016, C-026 | P2 exit |
-| C-022, K-032 | P3-003 |
-| C-014, C-015 | P3-010, P3-012 |
-| C-021 | P3-050 |
-| C-011, K-015 | P3-030–P3-034 |
-| C-013, C-006 | P4-001–002 |
-| C-008 | P4-040 |
-| C-019, C-020 | P5-001, P5-003, P5-005 |
-| K-046 | P0-004 |
-| K-058 | P3-020–P3-023 |
-| K-059 | P3-040 |
+| Register | Close when task(s) done | Status |
+|----------|-------------------------|--------|
+| C-004 | P0-002 | ✅ closed |
+| C-002, C-012 | P1C-063 (not P1A alone) | ✅ closed in review; tracker pending P1C-063 |
+| C-017 | P1C-024 | ✅ closed in review |
+| C-018, C-023 | P1C-062 | open |
+| C-010 | P0-020 | ✅ closed |
+| C-023 (ADR) | P1C-061 | open |
+| C-025, K-041 | P0-022 | ✅ closed |
+| C-005 | P0-023 | ✅ closed |
+| C-009 | P0-012 | open |
+| C-001 | P0-025 or INT-021 | open (Q1=defer) |
+| C-016, C-026 | P2 exit | open |
+| C-022, K-032 | P3-003 | partial — ring save done; nested-call test open |
+| C-014, C-015 | P3-010, P3-012 | partial — C-015 narrowed (P3-012 ✅); C-014 awaits full verifier |
+| C-021 | P3-050 | narrowed — PolicyEvaluator throws on mismatch |
+| C-011, K-015 | P3-030–P3-034 | partial — scalar TypeIs done; heap-ref (P3-031+) open |
+| C-013, C-006 | P4-001–002 | open |
+| C-008 | P4-040 | open |
+| C-019, C-020 | P5-001, P5-003, P5-005 | open |
+| K-046 | P0-004 | ✅ closed |
+| K-018 | P1A+P1C try/catch tests | narrowed in review |
+| K-058 | P3-020–P3-023 | open — `ClosureVmTests` has no-capture/param only |
+| K-059 | P3-040 | partial — 3 ABI tests; Void edge case open |
+| K-060 | P3-060 | narrowed |
+| K-061 | P3-061 | narrowed |
 
 ---
 
@@ -760,4 +779,4 @@ flowchart TD
 
 ---
 
-*Task count: Phase 0 (16) · Phase 1a (6) · Phase 1b (3) · Phase 1c (27) · Phase 2 (22) · Phase 3 (22) · Phase 4 (16) · Phase 5 (6) · Phase 6 (22) ≈ **140 checkable tasks**.*
+*Task count: 154 total · **46 done** · **16 in progress** (P1C + P2/P3 partial) · **108 open** — last synced 2026-07-06.*

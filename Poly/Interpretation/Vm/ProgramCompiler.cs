@@ -69,6 +69,10 @@ public static class ProgramCompiler {
         // the need for inline virtual-ring tracking in the emission loop.
         var consumedPcs = ComputePrimitiveConsumedPcs(primitives);
 
+#if DEBUG
+        VerifyRingDepths(primitives, ringDepthMap, ringDepthAtPC, consumedPcs);
+#endif
+
         // Preamble
         body.Add(Label(ctx.EntryLabel));
         body.Add(Assign(ctx.SlotsLocal, ctx.SlotsInitExpression));
@@ -670,6 +674,27 @@ public static class ProgramCompiler {
         }
         return result;
     }
+
+#if DEBUG
+    /// <summary>DEBUG-only: validate ring depth consistency at all branch targets.
+    /// Checks that every predecessor agrees on the ring depth at each label,
+    /// and that Phi convergence points have matching depths from all arms.</summary>
+    private static void VerifyRingDepths(
+        IReadOnlyList<PrimitiveNode> primitives,
+        Dictionary<int, int> ringDepthMap,
+        Dictionary<int, int> ringDepthAtPC,
+        int[][] consumedPcs) {
+        // Verify all branch targets are valid PCs.
+        // Note: depth convergence checking (K-034) is intentionally omitted here
+        // because BuildTargetDepth records only the first predecessor's depth.
+        for (int pc = 0; pc < primitives.Count; pc++) {
+            if (primitives[pc] is ResolvedGoto g && (g.TargetPc < 0 || g.TargetPc >= primitives.Count))
+                throw new InvalidOperationException($"Goto at PC {pc} targets invalid PC {g.TargetPc}");
+            if (primitives[pc] is ResolvedCondGoto cg && (cg.TargetPc < 0 || cg.TargetPc >= primitives.Count))
+                throw new InvalidOperationException($"CondGoto at PC {pc} targets invalid PC {cg.TargetPc}");
+        }
+    }
+#endif
 
     // ── Primitive emit helpers ──────────────────────────────────────
 

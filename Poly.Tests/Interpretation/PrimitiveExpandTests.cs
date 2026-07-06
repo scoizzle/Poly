@@ -93,7 +93,7 @@ public class PrimitiveExpandTests {
     [Test, Timeout(10_000)] public async Task Expand_TypeAs_Passthrough(CancellationToken ct) => await Assert.That(ExecExpand(new TypeAs(new Constant(42), TypeReference.To<int>()))).IsEqualTo(42);
     [Test, Timeout(10_000)] public async Task Expand_TypeCast_Passthrough(CancellationToken ct) => await Assert.That(ExecExpand(new TypeCast(new Constant(42), TypeReference.To<int>()))).IsEqualTo(42);
     [Test, Timeout(10_000)]
-    public async Task Expand_TypeIs_StringRefType(CancellationToken ct) {
+    public async Task Expand_TypeIs_WithoutAnalysis_FailsClosed(CancellationToken ct) {
         // TypeIs on a heap-ref value without analysis metadata: fails closed → 0
         var result = ExecExpand(new TypeIs(new Constant("hello"), TypeReference.To<string>()));
         await Assert.That(result).IsEqualTo(0L);

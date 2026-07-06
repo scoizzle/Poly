@@ -77,7 +77,10 @@ public static class PolicyEvaluator {
         var result = predicate(entity);
         var result2 = predicate2(entity);
 
-        Debug.Assert(result == result2);
-        return result && result2;
+        if (result != result2)
+            throw new InvalidOperationException(
+                $"Policy evaluation mismatch: LINQ returned {result}, VM returned {result2}. " +
+                $"This indicates a divergence between the two execution engines for policy '{policy.Name}'.");
+        return result;
     }
 }

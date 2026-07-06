@@ -881,6 +881,49 @@ public sealed class CSharpGenerator {
                 sb.Append('}');
                 return;
 
+            // Bitwise operations
+            case BitwiseAnd bitwiseAnd:
+                WriteBinary(sb, bitwiseAnd.LeftHandValue, " & ", bitwiseAnd.RightHandValue);
+                return;
+            case BitwiseOr bitwiseOr:
+                WriteBinary(sb, bitwiseOr.LeftHandValue, " | ", bitwiseOr.RightHandValue);
+                return;
+            case BitwiseXor bitwiseXor:
+                WriteBinary(sb, bitwiseXor.LeftHandValue, " ^ ", bitwiseXor.RightHandValue);
+                return;
+            case BitwiseNot bitwiseNot:
+                sb.Append('~');
+                WriteExpression(sb, bitwiseNot.Operand);
+                return;
+            case ShiftLeft shiftLeft:
+                WriteBinary(sb, shiftLeft.LeftHandValue, " << ", shiftLeft.RightHandValue);
+                return;
+            case ShiftRight shiftRight:
+                WriteBinary(sb, shiftRight.LeftHandValue, " >> ", shiftRight.RightHandValue);
+                return;
+
+            // VM-specific primitives (lowered to runtime ops in compiled path)
+            case PopCount popCount:
+                sb.Append("System.Numerics.BitOperations.PopCount((ulong)");
+                WriteExpression(sb, popCount.Operand);
+                sb.Append(')');
+                return;
+            case StridedSetBits:
+                sb.Append("/* StridedSetBits */");
+                return;
+            case NewArray newArray:
+                sb.Append('(');
+                WriteExpression(sb, newArray.ElementType);
+                sb.Append("[])(new ");
+                WriteExpression(sb, newArray.ElementType);
+                sb.Append('[');
+                WriteExpression(sb, newArray.Length);
+                sb.Append("])");
+                return;
+            case SuspendNode suspend:
+                WriteExpression(sb, suspend.Inner);
+                return;
+
             default:
                 sb.Append(node.ToString());
                 return;

@@ -60,17 +60,14 @@ public static class ProgramCompiler {
         for (int i = 0; i < n; i++)
             ctx.GetLabel(i);
 
-        // Compute ring depths and producer map from primitive StackEffect
-        var ringDepthMap = ComputePrimitiveRingDepths(primitives, out var ringDepthAtPC);
-        ctx.ConfigureRingAllocation(ringDepthMap, 32, 32);
-        ctx.SetRingDepthMap(ringDepthAtPC);
-
-        // One pass: compute consumed-PC arrays (BackwardScan style), eliminating
-        // the need for inline virtual-ring tracking in the emission loop.
-        var consumedPcs = ComputePrimitiveConsumedPcs(primitives);
+        // Compute ring allocation: maps each producer µop to a ring slot index
+        // and determines consumed-PC arrays for the emission loop.
+        var ringAllocation = RingAllocation.Compute(primitives);
+        ctx.Configure(ringAllocation, registerLimit: 32);
+        var consumedPcs = ringAllocation.ConsumedPcs;
 
 #if DEBUG
-        VerifyRingDepths(primitives, ringDepthMap, ringDepthAtPC, consumedPcs);
+        VerifyRingDepths(primitives, consumedPcs);
 #endif
 
         // Preamble
@@ -192,7 +189,12 @@ public static class ProgramCompiler {
 
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
-        return new VmProgram(del, 32);
+        // MaxActiveLocalsDepth sizes the state.Registers scratch buffer, which
+        // is indexed by SavedSp + ringIdx at call boundaries (CtxPushRegisters).
+        // The ring depth alone is insufficient — the runtime stack pointer can
+        // exceed it. 32 is a reasonable upper bound for current workloads.
+        int registerScratchSize = Math.Max(ringAllocation.MaxDepth, 32);
+        return new VmProgram(del, registerScratchSize, PcDepthMap: ringAllocation.ToSideTable());
     }
 
     private static Expression EmitPrimitiveCall(PrimCall call, int[] consumedPcs, CompilationContext ctx, int pc, Expression? functionsExpr) {
@@ -484,19 +486,8 @@ public static class ProgramCompiler {
             var ctorArgs = new Expression[consumedPcs.Length];
             for (int i = 0; i < consumedPcs.Length; i++)
                 ctorArgs[i] = ctx.ValueSlot(consumedPcs[i]);
-            for (int i = 0; i < ctor.GetParameters().Length; i++) {
-                var paramType = ctor.GetParameters()[i].ParameterType;
-                var pt = paramType.GetPrimitiveType();
-                if (pt is not null && pt.Value.IsStackValue()) {
-                    ctorArgs[i] = paramType == typeof(bool)
-                        ? NotEqual(ctorArgs[i], Constant(0L))
-                        : Convert(ctorArgs[i], paramType);
-                }
-                else if (!paramType.IsValueType) {
-                    var handle = Convert(ctorArgs[i], typeof(int));
-                    ctorArgs[i] = Convert(ArrayAccess(ctx.HeapRawSlots, handle), paramType);
-                }
-            }
+            for (int i = 0; i < ctor.GetParameters().Length; i++)
+                ctorArgs[i] = VmValueMarshaller.MarshalToClr(ctorArgs[i], ctor.GetParameters()[i].ParameterType, ctx.HeapRawSlots);
             var newObj = New(ctor, ctorArgs);
             var heapHandle = Convert(Call(ctx.Heap, HeapAllocate, Convert(newObj, typeof(object))), typeof(long));
             return Assign(ctx.ValueSlot(idx), heapHandle);
@@ -511,29 +502,11 @@ public static class ProgramCompiler {
         for (int i = 0; i < paramInfos.Length; i++) {
             int argIdx = isStatic ? i : i + 1;
             if (argIdx >= rawArgs.Length) break;
-            var paramType = paramInfos[i].ParameterType;
-            var pt = paramType.GetPrimitiveType();
-            if (pt is not null && pt.Value.IsStackValue()) {
-                rawArgs[argIdx] = paramType == typeof(bool)
-                    ? NotEqual(rawArgs[argIdx], Constant(0L))
-                    : Convert(rawArgs[argIdx], paramType);
-            }
-            else if (!paramType.IsValueType) {
-                var handle = Convert(rawArgs[argIdx], typeof(int));
-                rawArgs[argIdx] = Convert(ArrayAccess(ctx.HeapRawSlots, handle), paramType);
-            }
+            rawArgs[argIdx] = VmValueMarshaller.MarshalToClr(rawArgs[argIdx], paramInfos[i].ParameterType, ctx.HeapRawSlots);
         }
 
-        if (!isStatic && consumedPcs.Length > 0) {
-            var instanceType = method.DeclaringType;
-            var instPt = instanceType?.GetPrimitiveType();
-            if (instPt is not null && instPt.Value.IsStackValue())
-                rawArgs[0] = Convert(rawArgs[0], instanceType!);
-            else if (instanceType is not null && !instanceType.IsValueType) {
-                var handle = Convert(rawArgs[0], typeof(int));
-                rawArgs[0] = Convert(ArrayAccess(ctx.HeapRawSlots, handle), instanceType);
-            }
-        }
+        if (!isStatic && consumedPcs.Length > 0 && method.DeclaringType is not null)
+            rawArgs[0] = VmValueMarshaller.MarshalToClr(rawArgs[0], method.DeclaringType, ctx.HeapRawSlots);
 
         Expression? instance = isStatic ? null : rawArgs[0];
         var callArgs = isStatic ? rawArgs : rawArgs.Skip(1).ToArray();
@@ -541,19 +514,7 @@ public static class ProgramCompiler {
 
         if (method.ReturnType == typeof(void)) return call;
 
-        Expression result = call;
-        var returnType = method.ReturnType;
-        if (returnType != typeof(void)) {
-            var retPt = returnType.GetPrimitiveType();
-            if (retPt is not null && retPt.Value.IsStackValue()) {
-                result = returnType == typeof(bool)
-                    ? Condition(result, Constant(1L), Constant(0L))
-                    : returnType != typeof(long) ? Convert(result, typeof(long)) : result;
-            }
-            else {
-                result = Convert(Call(ctx.Heap, HeapAllocate, Convert(result, typeof(object))), typeof(long));
-            }
-        }
+        var result = VmValueMarshaller.MarshalFromClr(call, method.ReturnType, ctx.Heap);
         return Assign(ctx.ValueSlot(idx), result);
     }
 
@@ -579,114 +540,13 @@ public static class ProgramCompiler {
         return Block(stmts);
     }
 
-    /// <summary>Simulate the eval-stack ring for a primitive sequence.
-    /// Branch-aware: when a <c>CondGoto</c> or <c>Goto</c> targets a label,
-    /// the ring depth at that label is restored to what the predecessor
-    /// expects — not the linear fallthrough depth.  This lets both arms of
-    /// a branch leave values at the same ring depth for <c>Phi</c> to merge.</summary>
-    private static Dictionary<int, int> ComputePrimitiveRingDepths(
-        IReadOnlyList<PrimitiveNode> primitives,
-        out Dictionary<int, int> ringDepthAtPC) {
-        // Pre-compute expected depths at branch targets via local simulation
-        var targetDepth = BuildTargetDepth(primitives);
-
-        var ring = new List<int>();
-        var map = new Dictionary<int, int>();
-        ringDepthAtPC = new Dictionary<int, int>();
-        for (int pc = 0; pc < primitives.Count; pc++) {
-            // At a branch-target label, restore ring to expected predecessor depth
-            if (targetDepth.TryGetValue(pc, out int expectDepth) && expectDepth < ring.Count) {
-                ring.RemoveRange(expectDepth, ring.Count - expectDepth);
-            }
-
-            var (pop, push) = primitives[pc].StackEffect;
-            int entryDepth = ring.Count;
-            ringDepthAtPC[pc] = entryDepth;
-            int toPop = Math.Min(pop, entryDepth);
-            for (int i = 0; i < toPop && ring.Count > 0; i++)
-                ring.RemoveAt(ring.Count - 1);
-            if (push > 0) {
-                map[pc] = entryDepth - toPop;
-                for (int i = 0; i < push; i++)
-                    ring.Add(pc);
-            }
-        }
-        return map;
-    }
-
-    /// <summary>One-pass backward-scan equivalent for primitives.
-    /// Returns an array parallel to <paramref name="primitives"/> where each
-    /// entry is the consumed-from-PC list for that primitive.
-    /// Branch-aware: restores ring depth at branch-target labels so both
-    /// arms of a conditional leave values at the same depth for Phi.</summary>
-    private static int[][] ComputePrimitiveConsumedPcs(IReadOnlyList<PrimitiveNode> primitives) {
-        var targetDepth = BuildTargetDepth(primitives);
-
-        var ring = new List<int>();
-        var result = new int[primitives.Count][];
-        for (int pc = 0; pc < primitives.Count; pc++) {
-            // At a branch-target label, restore ring to expected predecessor depth
-            if (targetDepth.TryGetValue(pc, out int expectDepth) && expectDepth < ring.Count) {
-                ring.RemoveRange(expectDepth, ring.Count - expectDepth);
-            }
-
-            var (pop, push) = primitives[pc].StackEffect;
-            int entryDepth = ring.Count;
-            int toPop = Math.Min(pop, entryDepth);
-            var consumed = new int[toPop];
-            for (int i = 0; i < toPop; i++)
-                consumed[toPop - 1 - i] = ring[entryDepth - 1 - i];
-            result[pc] = consumed;
-            for (int i = 0; i < toPop && ring.Count > 0; i++)
-                ring.RemoveAt(ring.Count - 1);
-            for (int i = 0; i < push; i++)
-                ring.Add(pc);
-        }
-        return result;
-    }
-
-    /// <summary>Build a map from branch-target PC → expected ring depth.
-    /// For ResolvedCondGoto: the depth after popping the condition (same as fallthrough).
-    /// For ResolvedGoto: the depth at the Goto site (no stack effect).</summary>
-    private static Dictionary<int, int> BuildTargetDepth(IReadOnlyList<PrimitiveNode> primitives) {
-        var result = new Dictionary<int, int>();
-        var sim = new List<int>();
-        for (int pc = 0; pc < primitives.Count; pc++) {
-            // Advance sim BEFORE recording — CondGoto target expects depth
-            // AFTER the condition was popped (same as fallthrough), and
-            // Goto target expects depth at the Goto (no stack effect).
-            var (pop, push) = primitives[pc].StackEffect;
-            int toPop = Math.Min(pop, sim.Count);
-            if (toPop > 0) sim.RemoveRange(sim.Count - toPop, toPop);
-            int afterDepth = sim.Count;
-            for (int j = 0; j < push; j++) sim.Add(pc);
-
-            if (primitives[pc] is ResolvedCondGoto cg) {
-                // Record the depth AFTER popping the condition value
-                if (!result.ContainsKey(cg.TargetPc))
-                    result[cg.TargetPc] = afterDepth;
-            }
-            if (primitives[pc] is ResolvedGoto g) {
-                // Record the depth at the Goto (which has no stack effect)
-                if (!result.ContainsKey(g.TargetPc))
-                    result[g.TargetPc] = afterDepth;
-            }
-        }
-        return result;
-    }
-
 #if DEBUG
-    /// <summary>DEBUG-only: validate ring depth consistency at all branch targets.
-    /// Checks that every predecessor agrees on the ring depth at each label,
-    /// and that Phi convergence points have matching depths from all arms.</summary>
+    /// <summary>DEBUG-only: validate branch targets are valid PCs.
+    /// Note: depth convergence checking (K-034) is intentionally omitted here
+    /// because <c>BuildTargetDepth</c> records only the first predecessor's depth.</summary>
     private static void VerifyRingDepths(
         IReadOnlyList<PrimitiveNode> primitives,
-        Dictionary<int, int> ringDepthMap,
-        Dictionary<int, int> ringDepthAtPC,
-        int[][] consumedPcs) {
-        // Verify all branch targets are valid PCs.
-        // Note: depth convergence checking (K-034) is intentionally omitted here
-        // because BuildTargetDepth records only the first predecessor's depth.
+        IReadOnlyList<int[]> consumedPcs) {
         for (int pc = 0; pc < primitives.Count; pc++) {
             if (primitives[pc] is ResolvedGoto g && (g.TargetPc < 0 || g.TargetPc >= primitives.Count))
                 throw new InvalidOperationException($"Goto at PC {pc} targets invalid PC {g.TargetPc}");

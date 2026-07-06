@@ -45,6 +45,80 @@ public class ClosureVmTests {
     /// Invoke(Lambda) → Call → Function table → Return path.
     /// </summary>
     [Test]
+    public async Task NestedLambda_SimplePassthrough() {
+        // f(x) = x
+        // g(x) = f(x)
+        // g(42) = 42
+        // Tests basic nested function call.
+        var pF = new Parameter("x", TypeReference.To<long>());
+        var f = new Lambda([pF], pF);
+
+        var pG = new Parameter("x", TypeReference.To<long>());
+        var gBody = new Invoke(f, pG);
+        var g = new Lambda([pG], gBody);
+
+        var invoke = new Invoke(g, new Constant(42L));
+        var program = Interpreter.Compile(invoke);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.RawValue).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task NestedLambda_InnerAdds() {
+        // f(x) = x + 1
+        // g(x) = f(x)
+        // g(41) → 42
+        var pF = new Parameter("x", TypeReference.To<long>());
+        var f = new Lambda([pF], new SN.Add(pF, new Constant(1L)));
+
+        var pG = new Parameter("x", TypeReference.To<long>());
+        var g = new Lambda([pG], new Invoke(f, pG));
+
+        var invoke = new Invoke(g, new Constant(41L));
+        var program = Interpreter.Compile(invoke);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.RawValue).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task NestedLambda_OuterComputesThenCalls() {
+        // f(x) = x
+        // g(x) = f(x * 2)
+        // g(20) → 40  (passthrough, no transformation in f)
+        var pF = new Parameter("x", TypeReference.To<long>());
+        var f = new Lambda([pF], pF);
+
+        var pG = new Parameter("x", TypeReference.To<long>());
+        var g = new Lambda([pG], new Invoke(f, new SN.Multiply(pG, new Constant(2L))));
+
+        var invoke = new Invoke(g, new Constant(20L));
+        var program = Interpreter.Compile(invoke);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.RawValue).IsEqualTo(40L);
+    }
+
+    [Test]
+    public async Task NestedLambda_CallPreservesOuterRing() {
+        // f(x) = x + 1
+        // g(x) = f(x * 2)
+        // g(20) → f(40) → 41
+        // The inner call f(40) exercises SavedSp ring save in g's delegate:
+        // g's ring state must not be clobbered by f's ring allocation.
+        var pF = new Parameter("x", TypeReference.To<long>());
+        var fBody = new SN.Add(pF, new Constant(1L));
+        var f = new Lambda([pF], fBody);
+
+        var pG = new Parameter("x", TypeReference.To<long>());
+        var gBody = new Invoke(f, new SN.Multiply(pG, new Constant(2L)));
+        var g = new Lambda([pG], gBody);
+
+        var invoke = new Invoke(g, new Constant(20L));
+        var program = Interpreter.Compile(invoke);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.RawValue).IsEqualTo(41L);
+    }
+
+    [Test]
     public async Task Lambda_Call_RingPreservedAcrossCalls() {
         // f(x) = x + 1; f(41) → 42
         var p = new Parameter("x", TypeReference.To<long>());

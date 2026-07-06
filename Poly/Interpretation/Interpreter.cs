@@ -220,16 +220,16 @@ public static class Interpreter {
         if (pendingFunctions is not null && pendingFunctions.Count > 0) {
             int maxIdx = pendingFunctions.Max(pf => pf.LambdaIndex);
             functionTable = new Action<VmState>[maxIdx + 1];
+            // Pre-fill the table with all compiled delegates. The table reference
+            // is captured by Constant(functionTable) in each function's LINQ
+            // expression tree, so at RUNTIME the Call µop reads the CURRENT array
+            // contents — even for functions compiled later in this loop.
             foreach (var pf in pendingFunctions) {
-                // Each function body uses 0-based slot indices relative to FrameBase.
-                // FrameBase is set by the caller before invoking this delegate.
-                // Slot 0..ParamCount-1 are parameter slots (args passed by caller).
-                // LoadUpvalue/StoreUpvalue use state.ClosureHandle (set by caller).
                 var funcPrims = new List<PrimitiveNode>(pf.Body);
-                // Ensure the function ends with a Return
                 if (funcPrims.Count == 0 || funcPrims[^1] is not PrimReturn)
                     funcPrims.Add(new PrimReturn());
-                var funcProgram = ProgramCompiler.CompilePrimitives(funcPrims, mode, traceExpressions, callSites: callSites);
+                var funcProgram = ProgramCompiler.CompilePrimitives(
+                    funcPrims, mode, traceExpressions, functionTable, callSites);
                 functionTable[pf.LambdaIndex] = funcProgram.Delegate;
             }
         }

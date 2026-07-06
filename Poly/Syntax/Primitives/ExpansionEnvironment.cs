@@ -46,8 +46,11 @@ public sealed class ExpansionEnvironment {
     /// <summary>Number of slots in the full parent chain (for parameter slot assignment).</summary>
     public int TotalSlotDepth => _parent?.TotalSlotDepth ?? 0;
 
-    /// <summary>Allocate a sequential lambda index for closure call dispatch.</summary>
-    public int AllocateLambdaIndex() => _nextLambdaIndex++;
+    /// <summary>Allocate a sequential lambda index for closure call dispatch.
+    /// Child environments delegate to the parent so indices are unique across
+    /// nested lambda scopes.</summary>
+    public int AllocateLambdaIndex() =>
+        _parent?.AllocateLambdaIndex() ?? _nextLambdaIndex++;
 
     // ── Slot management ─────────────────────────────────────────
 
@@ -205,9 +208,15 @@ public sealed class ExpansionEnvironment {
     /// child environment (0-based slot indices).
     /// <paramref name="capturedInfo"> maps each child slot index to its
     /// parent (outer-scope) slot index.
+    /// Child environments delegate to the root so pending functions are
+    /// collected in one place across nested lambda scopes.
     public void AddPendingFunction(int lambdaIndex, List<PrimitiveNode> body,
         IReadOnlyList<(int ChildSlot, int ParentSlot)> capturedInfo,
         int paramCount, int localCount) {
+        if (_parent is not null) {
+            _parent.AddPendingFunction(lambdaIndex, body, capturedInfo, paramCount, localCount);
+            return;
+        }
         _pendingFunctions.Add(new PendingFunction(lambdaIndex, body, capturedInfo, paramCount, localCount));
     }
 

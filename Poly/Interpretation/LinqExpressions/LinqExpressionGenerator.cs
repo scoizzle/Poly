@@ -392,6 +392,20 @@ public sealed class LinqExpressionGenerator {
                 : Expression.Default(GetClrType(d)),
             ParameterReference => Expression.Default(typeof(object)),
 
+            // Bitwise operations
+            BitwiseAnd ba => Expression.And(CompileNode(ba.LeftHandValue, context), CompileNode(ba.RightHandValue, context)),
+            BitwiseOr bo => Expression.Or(CompileNode(bo.LeftHandValue, context), CompileNode(bo.RightHandValue, context)),
+            BitwiseXor bx => Expression.ExclusiveOr(CompileNode(bx.LeftHandValue, context), CompileNode(bx.RightHandValue, context)),
+            BitwiseNot bn => Expression.Not(CompileNode(bn.Operand, context)),
+            ShiftLeft sl => Expression.LeftShift(CompileNode(sl.LeftHandValue, context), CompileNode(sl.RightHandValue, context)),
+            ShiftRight sr => Expression.RightShift(CompileNode(sr.LeftHandValue, context), CompileNode(sr.RightHandValue, context)),
+
+            // VM-specific primitives (lowered to runtime ops in compiled path)
+            PopCount pc => Expression.Call(null,
+                typeof(System.Numerics.BitOperations).GetMethod(nameof(System.Numerics.BitOperations.PopCount), [typeof(ulong)])!,
+                Expression.Convert(CompileNode(pc.Operand, context), typeof(ulong))),
+            SuspendNode sn => CompileNode(sn.Inner, context),
+
             _ => throw new InvalidOperationException($"Unsupported node type: {node.GetType().Name}")
         };
     }

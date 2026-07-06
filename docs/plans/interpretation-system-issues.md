@@ -831,13 +831,14 @@ Next     INT-018, INT-019, INT-002 (remaining), INT-028
 
 | Field | Value |
 |-------|-------|
-| **Status** | `done` |
+| **Status** | `open` |
 | **Area** | VM / exceptions |
 | **Files** | `Poly/Interpretation/Vm/ProgramCompiler.cs` (`EmitThrowOp` wired), `Poly/Syntax/Nodes/ThrowStatement.cs`, `Poly.Tests/Interpretation/ThrowVmTests.cs`, `Poly.Tests/Interpretation/ExceptionHandlingVmTests.cs` |
 | **Problem** | IR-level `Throw` primitives were lowered but the compiler emitted nothing. |
 | **Action** | Implement `EmitThrowOp` with integration into exception-region handling (Strategy B — side-table dispatch). |
-| **Acceptance** | `ThrowVmTests` (4 tests) + `ExceptionHandlingVmTests` (3 tests) demonstrate throw, try-catch, catch-with-type through full pipeline. 1408/1408 tests green. |
+| **Acceptance** | Full structured EH: throw, try/catch, try/finally, try/catch/finally, multiple catch clauses with type filter — all through Strategy B dispatch. See Phase 1 test matrix in resolution plan. |
 | **Related** | INT-018 (Strategy B EH implementation), `docs/decisions/2026-07-05-vm-exception-handling-strategy-b.md` |
+| **Notes** | Bumped from `done` to `open`: EmitThrowOp + try/catch are wired but finally/using/nested EH remain. INT-001 not `done` until INT-018 Phase 1 exits. |
 
 ---
 
@@ -1302,9 +1303,10 @@ Phase D — Optimization & advanced IR
 ```
 ── P0 SPRINT — COMPLETE ✅ 1387/1387 tests ─────────────────
 DONE:   ANA-001, ANA-003, ANA-004 (passes + consumers + tests)
-        INT-001 (EmitThrowOp), INT-004 (fail fast), INT-008 (TypeCheck)
+        INT-004 (fail fast), INT-008 (TypeCheck)
         New.ToPrimitives + catalog wiring, incremental state isolation
         Expansion integration tests, all fix-up items resolved
+PARTIAL: INT-001 (EmitThrowOp + try/catch wired; blocked on INT-018 Phase 1 for finally/using/nested)
     ↓
 ── P1 primitive IR (unblocked by P0) ───────────────────────────
 INT-018 (EH primitives)               needs ANA-003 metadata — ready

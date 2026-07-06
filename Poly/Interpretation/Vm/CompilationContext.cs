@@ -10,8 +10,8 @@ namespace Poly.Interpretation.Vm;
 
 /// <summary>
 /// Compilation context: labels, expression references, and per-µop local storage.
-/// Producer relationships are carried by consumed-PC arrays set during
-/// <see cref="ProgramCompiler.ComputePrimitiveConsumedPcs"/>.
+/// Producer relationships are carried by consumed-PC arrays computed by
+/// <see cref="RingAllocator.Compute"/>.
 /// </summary>
 public sealed class CompilationContext {
     /// <summary>Optional call site catalog for portable index resolution in EmitCallExternalDirect.</summary>
@@ -125,36 +125,34 @@ public sealed class CompilationContext {
     private int _maxFrameDepth;
     private static readonly PropertyInfo StateFrameBasePropertyInfo = Ref<VmState>.Property(e => e.FrameBase);
 
-    /// <summary>Configure ring-based µop value allocation.
-    /// <paramref name="ringMap"/> maps each producer PC → its ring depth index.
-    /// Creates <c>_r{0..limit-1}</c> locals; deeper indices spill to
-    /// <c>_slots[FB + maxFrameDepth + spillIdx]</c> on the value stack.</summary>
-    public void ConfigureRingAllocation(Dictionary<int, int> ringMap, int maxActiveLocalDepth, int maxFrameDepth) {
-        _registerLimit = maxActiveLocalDepth;
-        _maxFrameDepth = maxFrameDepth;
+    /// <summary>Configure ring-based µop value allocation from a pre-computed
+    /// <see cref="RingAllocation"/>. Creates <c>_r{0..limit-1}</c> LINQ locals;
+    /// deeper indices spill to <c>_slots[FB + registerLimit + ringIdx]</c>.</summary>
+    /// <param name="allocation">The computed ring allocation.</param>
+    /// <param name="registerLimit">Maximum number of ring register locals to create.
+    /// Values beyond this limit spill to the value stack.</param>
+    public void Configure(RingAllocation allocation, int registerLimit) {
+        _registerLimit = registerLimit;
+        _maxFrameDepth = registerLimit;
         _pcToRingIdx.Clear();
         _ringRegisters.Clear();
-        foreach (var kv in ringMap) {
+        foreach (var kv in allocation.ProducerToRingIdx)
             _pcToRingIdx[kv.Key] = kv.Value;
-        }
 
-        int regCount = Math.Min(maxActiveLocalDepth, ringMap.Count > 0 ? ringMap.Values.Max() + 1 : 0);
+        int regCount = Math.Min(registerLimit, allocation.MaxDepth);
         for (int i = 0; i < regCount; i++) {
             var reg = Variable(typeof(long), $"_r{i}");
             _ringRegisters.Add(reg);
             _locals.Add(reg);
         }
+
+        _ringDepthAtPC.Clear();
+        foreach (var kv in allocation.RingDepthAtPC)
+            _ringDepthAtPC[kv.Key] = kv.Value;
     }
 
     /// <summary>Number of <c>_r{k}</c> ring register locals created.</summary>
     public int RingRegisterCount => _ringRegisters.Count;
-
-    /// <summary>Set the ring depth at each µop PC (computed by <c>ProgramCompiler.ComputeRingDepths</c>).</summary>
-    public void SetRingDepthMap(Dictionary<int, int> depthMap) {
-        _ringDepthAtPC.Clear();
-        foreach (var kv in depthMap)
-            _ringDepthAtPC[kv.Key] = kv.Value;
-    }
 
     /// <summary>Return the ring depth (eval-stack item count) at the given µop PC.
     /// Returns 0 if the PC is not in the map (e.g., past the end).</summary>

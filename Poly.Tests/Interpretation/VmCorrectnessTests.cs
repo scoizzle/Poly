@@ -705,7 +705,7 @@ public class VmCorrectnessTests {
     public async Task Fuzz_Phi_NestedConditional_DifferentRingDepths() {
         // φ merging at nested Conditional convergence points.
         // Fixed by ring-based BuildTargetDepth + ComputePrimitiveRingDepths
-        // (see ProgramCompiler.ComputePrimitiveRingDepths).
+        // (see RingAllocator.Compute).
         // if (true) { (if (true) { 1+2 } else { 3 }) } else { 4 } → should be 3
         var body = new Conditional(
             new Constant(1L),

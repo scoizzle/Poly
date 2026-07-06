@@ -2296,7 +2296,7 @@ The six novel approaches in Poly's Interpretation system are evaluated against e
 
 #### 4.22.5 Flat µop array for EH — THE HIGHEST RISK AREA
 
-**What it is:** All primitives in one flat `PrimitiveNode[]`. EH uses in-band `RegionMarker` annotations as no-op placeholders. The recommended Strategy A (§4.12) scans for markers and restructures into `Expression.TryCatchFinally`.
+**What it is:** All primitives in one flat `PrimitiveNode[]`. EH uses in-band `RegionMarker` annotations as no-op placeholders. The recommended Strategy B (§4.12.7) uses a side-table (external `ExceptionRegionTable`) with CLR `try/catch` and runtime handler dispatch via `DispatchException`.
 
 **Established practice:** LLVM, CLR, and JVM all use **side tables** for EH — a separate data structure mapping try ranges to handler PCs, not in-band markers. CLR IL has `try {} catch {}` scope descriptors in the method header. LLVM uses `landingpad` instructions with a personality function table.
 

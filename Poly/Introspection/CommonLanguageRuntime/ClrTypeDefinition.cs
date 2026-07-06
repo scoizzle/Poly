@@ -335,33 +335,13 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             : string.Join(",", parameters.Select(static parameter => parameter.ParameterTypeDefinition.FullName));
     }
 
-    private static PrimitiveType? GetPrimitiveTypeId(Type type) {
-        ArgumentNullException.ThrowIfNull(type);
-
-        return type switch {
-            Type t when t == typeof(bool) => PrimitiveType.Boolean,
-            Type t when t == typeof(sbyte) => PrimitiveType.Int8,
-            Type t when t == typeof(short) => PrimitiveType.Int16,
-            Type t when t == typeof(int) => PrimitiveType.Int32,
-            Type t when t == typeof(long) => PrimitiveType.Int64,
-            Type t when t == typeof(byte) => PrimitiveType.UInt8,
-            Type t when t == typeof(ushort) => PrimitiveType.UInt16,
-            Type t when t == typeof(uint) => PrimitiveType.UInt32,
-            Type t when t == typeof(ulong) => PrimitiveType.UInt64,
-            Type t when t == typeof(float) => PrimitiveType.Float32,
-            Type t when t == typeof(double) => PrimitiveType.Float64,
-            Type t when t == typeof(decimal) => PrimitiveType.Decimal,
-            Type t when t == typeof(string) => PrimitiveType.String,
-            Type t when t == typeof(char) => PrimitiveType.Char,
-            Type t when t == typeof(DateTime) => PrimitiveType.DateTime,
-            Type t when t == typeof(DateOnly) => PrimitiveType.DateOnly,
-            Type t when t == typeof(TimeOnly) => PrimitiveType.TimeOnly,
-            Type t when t == typeof(TimeSpan) => PrimitiveType.TimeSpan,
-            Type t when t == typeof(Guid) => PrimitiveType.Guid,
-            Type t when t == typeof(byte[]) => PrimitiveType.ByteArray,
-            _ => null
-        };
-    }
+    /// <summary>
+    /// Delegates to the canonical <see cref="PrimitiveType.GetPrimitiveType(Type)"/>
+    /// mapping. This private wrapper exists only to keep call sites unchanged; new
+    /// code should call <c>type.GetPrimitiveType()</c> directly.
+    /// </summary>
+    private static PrimitiveType? GetPrimitiveTypeId(Type type) =>
+        type.GetPrimitiveType();
 
     private static TypeCategory GetTypeCategory(Type type) {
         ArgumentNullException.ThrowIfNull(type);

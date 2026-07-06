@@ -5,9 +5,6 @@ public sealed record BitwiseAnd(Node LeftHandValue, Node RightHandValue) : Expre
     public override string ToString() => $"({LeftHandValue} & {RightHandValue})";
 
     /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        foreach (var p in LeftHandValue.ToPrimitives(context)) yield return p;
-        foreach (var p in RightHandValue.ToPrimitives(context)) yield return p;
-        yield return new Primitives.BinaryOp(Poly.Syntax.Primitives.OpKind.And);
-    }
+    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) =>
+        EmitBinaryOp(LeftHandValue, RightHandValue, Primitives.OpKind.And, context);
 }

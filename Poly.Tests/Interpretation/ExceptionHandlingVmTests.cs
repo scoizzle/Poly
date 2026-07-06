@@ -38,8 +38,32 @@ public class ExceptionHandlingVmTests {
     }
 
     [Test]
+    public async Task TryCatch_Throw_CatchReturnsValue() {
+        var node = new TryCatchFinally(
+            new ThrowStatement(new New(TypeReference.To<Exception>())),
+            [new CatchClause(null, null, new Constant(42))]);
+        var analysis = _analyzer.Analyze(node);
+        var result = Interpreter.Compile(node, analysis);
+        using var exec = Interpreter.Execute(result);
+        await Assert.That(exec.RawValue).IsEqualTo(42L);
+    }
+
+    [Test]
     public async Task Throw_OutsideTry_Propagates() {
         var node = new ThrowStatement(new New(TypeReference.To<Exception>()));
         await Assert.That(() => { Interpreter.Execute(node); }).ThrowsExactly<Exception>();
+    }
+
+    [Test]
+    public async Task TryCatch_Throw_CatchWithExceptionType_ReturnsValue() {
+        // try { throw new InvalidOperationException(); }
+        // catch (InvalidOperationException) { 42 }
+        var node = new TryCatchFinally(
+            new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())),
+            [new CatchClause(TypeReference.To<InvalidOperationException>(), null, new Constant(42))]);
+        var analysis = _analyzer.Analyze(node);
+        var result = Interpreter.Compile(node, analysis);
+        using var exec = Interpreter.Execute(result);
+        await Assert.That(exec.RawValue).IsEqualTo(42L);
     }
 }

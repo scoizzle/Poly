@@ -769,7 +769,18 @@ public static class ProgramCompiler {
             if (faultPc >= entry.TryStartPc && faultPc < entry.TryEndPc) {
                 if (entry.Kind == RegionKind.Catch) {
                     if (functions is not null && entry.HandlerFuncIndex >= 0 && entry.HandlerFuncIndex < functions.Count && functions[entry.HandlerFuncIndex] is not null) {
+                        // Save and reset VM state before calling the handler.
+                        // The handler's delegate starts µops from index 0, but
+                        // state.ProgramCounter was set to the fault PC by
+                        // EmitThrowOp. Reset it so the handler's _pc dispatch
+                        // starts at µop 0, not the fault PC.
+                        int savedFb = state.FrameBase;
+                        int savedPc = state.ProgramCounter;
+                        state.FrameBase = 0;
+                        state.ProgramCounter = 0;
                         functions[entry.HandlerFuncIndex](state);
+                        state.FrameBase = savedFb;
+                        state.ProgramCounter = savedPc;
                     }
                     return;
                 }

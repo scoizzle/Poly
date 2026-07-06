@@ -24,7 +24,6 @@ public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? 
     /// <inheritdoc />
     public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
         // Read ExceptionRegionMetadata to bracket try/catch/finally bodies.
-        // Placeholder markers until INT-018 implements real EH µops.
         var regions = context.Analysis.GetExceptionRegions();
         List<(ExceptionRegionEntry entry, int idx)>? ourRegions = null;
         if (regions is not null) {
@@ -36,15 +35,34 @@ public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? 
         }
 
         if (ourRegions is not null && ourRegions.Count > 0) {
+            // Strategy B (side-table dispatch): the main µop stream represents
+            // the NORMAL execution path. On normal exit:
+            //   - Catch bodies: SKIPPED (via Goto after try body)
+            //   - Finally bodies: EXECUTED (after catch skip, or directly after try body)
+            //
+            // On exceptional exit, DispatchException (Strategy B) invokes
+            // the correct handler function from the exception region table.
+
+            bool hasCatches = CatchClauses is { Count: > 0 };
+            bool hasFinally = FinallyBlock is not null;
+
             // Emit Try region marker
             yield return new Primitives.RegionMarker(ourRegions[0].idx, "EnterTry");
 
             // Expand the try block body
             foreach (var p in TryBlock.ToPrimitives(context)) yield return p;
 
-            // Expand catch clauses
-            if (CatchClauses is not null) {
-                foreach (var clause in CatchClauses) {
+            // If there are catch clauses, emit Goto to skip catch bodies
+            // on normal exit. Finally body follows after the skip label.
+            Primitives.Label? afterCatches = null;
+            if (hasCatches) {
+                afterCatches = new Primitives.Label("AfterCatches");
+                yield return new Primitives.Goto(afterCatches);
+            }
+
+            // Expand catch clauses (dispatched on exceptional exit)
+            if (hasCatches) {
+                foreach (var clause in CatchClauses!) {
                     var catchRegion = ourRegions.Find(r => r.entry.Kind == ExceptionRegionKind.Catch
                         && r.entry.CatchVariableName == clause.VariableName);
                     if (catchRegion.entry is not null) {
@@ -52,15 +70,18 @@ public sealed record TryCatchFinally(Node TryBlock, IReadOnlyList<CatchClause>? 
                     }
                     foreach (var p in clause.Body.ToPrimitives(context)) yield return p;
                 }
+                // Label for the Goto: skip past catch bodies, land right before finally
+                yield return afterCatches!;
             }
 
-            // Expand finally block
-            if (FinallyBlock is not null) {
+            // Expand finally block (runs on normal exit after try body or after catch bodies;
+            // on exceptional exit, dispatched via Strategy B handler function)
+            if (hasFinally) {
                 var finallyRegion = ourRegions.Find(r => r.entry.Kind == ExceptionRegionKind.Finally);
                 if (finallyRegion.entry is not null) {
                     yield return new Primitives.RegionMarker(finallyRegion.idx, "EnterFinally");
                 }
-                foreach (var p in FinallyBlock.ToPrimitives(context)) yield return p;
+                foreach (var p in FinallyBlock!.ToPrimitives(context)) yield return p;
             }
         }
         else {

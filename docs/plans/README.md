@@ -10,6 +10,7 @@ This directory contains execution-oriented planning documents — roadmaps, phas
 ## Current Plans
 
 - [Interpretation System Issues](interpretation-system-issues.md) — Tracked issues from the 2026-07-05 Interpretation code review. **P0 sprint DONE ✅** ANA-001/003/004 complete; **1395/1395 tests green**. **Next focus:** INT-018 (EH µops), INT-019 (portable call sites), INT-028 (New lowering).
+- [Interpretation System Resolution Plan](interpretation-system-resolution-plan.md) — **~140 checkable tasks** (P0–P6) derived from the architecture review: EH, parity, VM hardening, portable IR, domain bridge. Includes open decisions (Q1–Q10) — ask before guessing.
 - [Interpretation System Architecture Review](../interpretation-system-architecture-review.md) — **Living holistic review:** component map, pipeline, contradiction register, conceptual issues. Iterative — not a task list.
 - [V2 → V3 Master Roadmap](v2-to-v3/master-roadmap.md) — Canonical coordination document for execution status and workstream ownership.
 - [V2 → V3 Workstreams](v2-to-v3/workstreams/) — Detailed, execution-facing task breakdowns by workstream.

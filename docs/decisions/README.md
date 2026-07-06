@@ -23,7 +23,7 @@ These documents exist so that:
 
 - [2026-05-31: Immutable Core for Domain Modeling (V2 → V3)](2026-05-31-immutable-core-domain-modeling.md) — Strategic shift to immutable records while preserving the transactional evolution/correctness guarantees required by LLM agents.
 - [2026: V2 → V3 Domain Modeling Port Plan](2026-v2-to-v3-domain-modeling-port.md) — Living plan for the port to the immutable core + thin evolution layer (includes integration with the documentation and agent instruction structure).
-- [2026-05-31: Neurosymbolic Platform Vision](2026-05-31-neurosymbolic-platform-vision.md) — Architectural vision for Poly as a neurosymbolic platform: models codify discovered algorithms as composable macros in a symbolic IR, validated by a tree-walker interpreter, compiled to native backends. Reframes domain modeling as compiler frontend for program synthesis.
+- [2026-05-31: Neurosymbolic Platform Vision](2026-05-31-neurosymbolic-platform-vision.md) — Architectural vision for Poly as a neurosymbolic platform: models codify discovered algorithms as composable macros in a symbolic IR, validated by the VM (canonical semantics since 2026-06-08), compiled to native backends. Reframes domain modeling as compiler frontend for program synthesis.
 - [2026-06-08: VM as Canonical Semantics](2026-06-08-vm-as-canonical-semantics.md) — Tree-walker removed; VM becomes the canonical semantics reference for all backends.
 - [2026-06-08: Breakpoint Architecture](2026-06-08-breakpoint-architecture.md) — PC-level breakpoints via Int/Iret interrupts, managed externally. No AST modification.
 - [2026-06-08: Heap Reclamation Strategy](2026-06-08-heap-reclamation.md) — Free-list with explicit null-out. No tracing GC.
@@ -33,3 +33,4 @@ These documents exist so that:
 - [2026-06-08: Domain-Lowering Boundary](2026-06-08-domain-lowering-boundary.md) — No domain-specific VM opcodes. Domain concepts lower to existing generic ops.
 - [2026-06-09: Comparison Fusion Encoding](2026-06-09-comparison-fusion-encoding.md) — Why comparison+branch fusion lives in lowering, not in the comparison opcodes. Signed overflow rules out the subtraction trick.
 - [2026-07-04: Primitives as Canonical IR](2026-07-04-primitives-as-canonical-ir.md) — The PrimitiveNode instruction set IS the canonical intermediate representation, superseding the planned separate Poly/Ir/. Adds ValueSlot, Phi, BasicBlock, Module to the primitive format.
+- [2026-07-05: VM Exception Handling — Strategy B](2026-07-05-vm-exception-handling-strategy-b.md) — Structured EH via side table (ExceptionRegionTable) with handler dispatch, aligned with LLVM/CLR/JVM practice. Replaces the earlier Strategy A (LINQ nesting) recommendation.

@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Syntax.Primitives;
@@ -156,10 +157,10 @@ public static class ProgramCompiler {
                 LoadUpvalue lu => Assign(ctx.ValueSlot(idx), EmitLoadUpvalue(lu, ctx)),
                 StoreUpvalue su => EmitStoreUpvalue(su, pcs, ctx),
                 LoadHeapConstant lhc => Assign(ctx.ValueSlot(idx), EmitLoadHeapConstant(lhc, ctx)),
-                PrimThrow => null,
-                PrimThrowProtected => null,
+                PrimThrow => EmitThrowOp(pcs, ctx),
+                PrimThrowProtected => EmitThrowOp(pcs, ctx),  // INT-018 P1C: dispatch via outer TryCatch
                 PrimTypeCheck tc => EmitTypeCheckOp(tc, pcs, ctx, idx),
-                RegionMarker => null,        // No-op placeholder (INT-018)
+                RegionMarker => null,        // INT-018 P1C: becomes compile-time metadata only (Strategy B)
                 PrimCall c => EmitPrimitiveCall(c, pcs, ctx, idx, functionsExpr),
                 PrimExternalCall ec => EmitCallExternalDirect(ec.Target, ec.ArgCount, ec.IsStatic, pcs, ctx, idx, ec.SiteIndex, ctx.CallSites),
                 _ => throw new NotSupportedException($"Primitive not supported: {prim.GetType().Name}")
@@ -317,8 +318,6 @@ public static class ProgramCompiler {
     }
 
     private static Expression EmitThrowOp(int[] consumedPcs, CompilationContext ctx) {
-        // Pop the exception heap handle, dereference it to the CLR Exception object, and throw.
-        // The exception value is a heap handle on the stack (consumedPcs[0]).
         if (consumedPcs.Length == 0)
             return Expression.Throw(Expression.Constant(new InvalidOperationException("Throw with no operand")));
 
@@ -326,7 +325,13 @@ public static class ProgramCompiler {
         var exceptionExpr = Expression.Convert(
             Expression.ArrayAccess(ctx.HeapRawSlots, handleExpr),
             typeof(Exception));
-        return Expression.Throw(exceptionExpr);
+
+        // Save the faulting PC before throwing so that EH dispatch (Strategy B)
+        // can identify which try region the exception originated from.
+        int faultPc = ctx.CurrentLabelIndex;
+        return Block(
+            Assign(ctx.StateProgramCounter, Constant(faultPc)),
+            Expression.Throw(exceptionExpr));
     }
 
     private static Expression EmitReturnOp(int[] consumedPcs, CompilationContext ctx) {
@@ -740,5 +745,66 @@ public static class ProgramCompiler {
         var value = consumedPcs.Length > 0 ? ctx.ValueSlot(consumedPcs[0]) : Constant(0L);
         var result = Call(null, PopCountMethod, Convert(value, typeof(ulong)));
         return Assign(ctx.ValueSlot(ctx.CurrentLabelIndex), Convert(result, typeof(long)));
+    }
+
+    // ── EH dispatch (Strategy B) ──────────────────────────────────
+
+    /// <summary>
+    /// Runtime dispatch handler for Strategy B side-table EH.
+    /// Called from inside the <c>Expression.TryCatch</c> catch block when an
+    /// exception is thrown during execution of the main delegate.
+    ///
+    /// Scans the <see cref="ExceptionRegionTable"/> for the innermost region
+    /// that covers <c>state.ProgramCounter</c> (the faulting PC saved by
+    /// <see cref="EmitThrowOp"/>), then invokes the corresponding handler
+    /// delegate from the function table.
+    /// </summary>
+    internal static void DispatchException(VmState state, ExceptionRegionTable table, Exception exception) {
+        int faultPc = state.ProgramCounter;
+        var entries = table.Entries;
+        var functions = state.Program.Functions;
+
+        for (int i = entries.Count - 1; i >= 0; i--) {
+            var entry = entries[i];
+            if (faultPc >= entry.TryStartPc && faultPc < entry.TryEndPc) {
+                if (entry.Kind == RegionKind.Catch) {
+                    if (functions is not null && entry.HandlerFuncIndex >= 0 && entry.HandlerFuncIndex < functions.Count && functions[entry.HandlerFuncIndex] is not null) {
+                        functions[entry.HandlerFuncIndex](state);
+                    }
+                    return;
+                }
+            }
+        }
+
+        ExceptionDispatchInfo.Capture(exception).Throw();
+        throw exception;
+    }
+
+    /// <summary>
+    /// Generate the <c>Expression.TryCatch</c> wrapper around the main delegate body,
+    /// with a catch-all handler that calls <see cref="DispatchException"/>.
+    /// </summary>
+    internal static Expression EmitExceptionDispatchWrapper(
+        Expression mainBody,
+        CompilationContext ctx,
+        ExceptionRegionTable table) {
+
+        var exceptionVar = Variable(typeof(Exception), "_ex");
+        var tableConst = Constant(table);
+
+        var dispatchCall = Call(
+            typeof(ProgramCompiler).GetMethod(nameof(DispatchException),
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                ?? throw new InvalidOperationException("DispatchException method not found"),
+            ctx.State,
+            tableConst);
+
+        return TryCatch(
+            mainBody,
+            Catch(typeof(Exception), exceptionVar,
+                Block(
+                    dispatchCall,
+                    Constant(0L)  // default return value if catch handled
+                )));
     }
 }

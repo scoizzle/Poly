@@ -148,7 +148,7 @@ Recursive macro expansion without base case will hit the step limit or stack ove
 | Integer arithmetic | ✓ | All signed/unsigned ops |
 | Double arithmetic | ✓ | All ops |
 | Control flow (if/while/for/switch) | ✓ | |  
-| Exceptions (try/catch/finally) | ✓ | But CLR exceptions bypass catch |
+| Exceptions (try/catch/finally) | ✗ | PrimThrow wired (P1A); catch/finally bodies execute unconditionally (see INT-018) |
 | Closures with upvalues | ✓ | |
 | CLR interop | ✓ | Methods, constructors, fields |
 | Member/index access | ✓ | Through CLR |
@@ -157,7 +157,7 @@ Recursive macro expansion without base case will hit the step limit or stack ove
 | **GC** | ✗ | Append-only heap |
 | **Array operations** | ✗ | CLR-only |
 | **String operations** | ✗ | CLR-only |
-| **TypeIs correctness** | ✗ | Checks null, not type |
+| **TypeIs correctness** | ✓ | Three-way lowering (TypeCheck for heap-ref, StaticTypeIsMatch for scalar, 0L fallback); see K-015 for remaining VM-path test gap |
 | **Tail calls** | ✗ | |
 | **Dynamic dispatch** | ✗ | |
 | **Policy enforcement** | ✗ | |
@@ -175,15 +175,17 @@ Recursive macro expansion without base case will hit the step limit or stack ove
 
 ## Recommended Priority Order
 
-Based on the neurosymbolic platform vision and current project milestones:
+> **Note (2026-07-05):** This priority list is partially stale. See Phase 0 of `docs/plans/interpretation-system-resolution-plan.md` for the current ordering.
 
-1. **Fix `TypeIs`** — currently returns wrong results (high impact, low effort)
-2. **GC** — append-only heap blocks any long-running scenario (high impact, medium effort)
+Original list (kept for historical reference — see resolution plan for current priorities):
+
+1. ~~Fix `TypeIs`~~ — **resolved** (three-way lowering: TypeCheck + StaticTypeIsMatch)
+2. ~~GC~~ — **resolved** (free-list reclamation; Heap.Sweep deferred)
 3. **Tail calls** — recursive macro expansion is core to the platform (high impact, medium effort)
-4. **Breakpoints** — debugging macros requires execution control (high impact, medium effort)
+4. **Breakpoints** — **partial** (DebugInterrupt callback exists; BreakpointPCs not implemented)
 5. **Bytecode serialization** — cache lowered IR, enable VM state persistence (medium impact, medium effort)
 6. **Array/string opcodes** — remove CLR dependency for common operations (medium impact, high effort)
-7. **Policy/event opcodes** — domain-model concepts needed for production use (medium impact, high effort)
+7. ~~Policy/event opcodes~~ — **resolved per domain-lowering ADR:** domain concepts lower to generic ops; no domain-specific opcodes (see `docs/decisions/2026-06-08-domain-lowering-boundary.md`)
 8. **Peephole optimizer** — reduce bytecode size, improve performance (low impact, medium effort)
 9. **Sandboxing** — security for untrusted macro execution (low impact, high effort)
 10. **Dynamic dispatch** — virtual methods for polymorphic domain entities (low impact, high effort)

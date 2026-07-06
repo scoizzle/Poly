@@ -252,7 +252,70 @@ public static class Interpreter {
         var primsList = primitives.ToList();
         primsList.Add(new PrimReturn());
         var program = ProgramCompiler.CompilePrimitives(primsList, mode, traceExpressions, functionTable, callSites);
-        program = program with { RootValueKind = rootKind, CallSites = callSites };
+
+        // Build exception region table from analysis metadata (INT-018 Phase 1c, Strategy B).
+        // Extract and compile handler bodies as independent functions, then wrap
+        // the main delegate in Expression.TryCatch with dispatch.
+        var exceptionRegions = analysis.GetMetadata<ExceptionRegionMetadata>(null);
+        var regionTable = ExceptionTableBuilder.BuildTable(primitives, exceptionRegions);
+
+        if (regionTable is not null) {
+            // Extract handler primitive ranges and compile as standalone functions.
+            var handlerRanges = ExceptionTableBuilder.ExtractHandlerRanges(primitives);
+            var handlerDelegates = new List<Action<VmState>>();
+
+            int closureFuncCount = functionTable?.Length ?? 0;
+            foreach (var (startPc, endPc, kind, regionIdx, _) in handlerRanges) {
+                var handlerPrims = new List<PrimitiveNode>();
+                for (int pc = startPc; pc < endPc; pc++)
+                    handlerPrims.Add(primitives[pc]);
+                if (handlerPrims.Count == 0 || handlerPrims[^1] is not PrimReturn)
+                    handlerPrims.Add(new PrimReturn());
+
+                var handlerProgram = ProgramCompiler.CompilePrimitives(
+                    handlerPrims, mode, traceExpressions, callSites: callSites);
+                handlerDelegates.Add(handlerProgram.Delegate);
+            }
+
+            // Build combined function table: closure functions + handler functions.
+            int totalFuncCount = closureFuncCount + handlerDelegates.Count;
+            var combinedFunctions = new Action<VmState>[totalFuncCount];
+            if (functionTable is not null) {
+                for (int i = 0; i < closureFuncCount; i++)
+                    combinedFunctions[i] = functionTable[i];
+            }
+            for (int i = 0; i < handlerDelegates.Count; i++)
+                combinedFunctions[closureFuncCount + i] = handlerDelegates[i];
+
+            // Update HandlerFuncIndex in region table entries by position.
+            var updatedTable = regionTable;
+            int handlerCount = Math.Min(handlerRanges.Count, updatedTable.Entries.Count);
+            for (int h = 0; h < handlerCount; h++) {
+                int handlerIndex = closureFuncCount + h;
+                updatedTable = updatedTable.WithHandlerIndexAt(h, handlerIndex);
+            }
+
+            // Wrap the main delegate inside a try/catch that dispatches to handlers.
+            var mainDelegate = program.Delegate;
+            program = program with {
+                Delegate = s => {
+                    try {
+                        mainDelegate(s);
+                    }
+                    catch (Exception ex) when (updatedTable is not null) {
+                        ProgramCompiler.DispatchException(s, updatedTable, ex);
+                    }
+                },
+                Functions = combinedFunctions,
+                Regions = updatedTable
+            };
+        }
+
+        program = program with {
+            RootValueKind = rootKind,
+            CallSites = callSites,
+            Regions = regionTable ?? program.Regions
+        };
         return functionTable is not null
             ? program with { Functions = functionTable }
             : program;

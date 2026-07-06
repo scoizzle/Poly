@@ -602,11 +602,9 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task Fuzz_Phi_NestedConditional_DifferentRingDepths() {
-        // KNOWN BUG: φ merging at nested Conditional convergence points
-        // produces 0 instead of the correct value when the inner branches
-        // have different eval-stack depths.  The Lower.Assemble φ detection
-        // computes wrong ring-depth offsets for nested convergence points.
-        // See Lower.Assemble φ detection (lines ~99-186).
+        // φ merging at nested Conditional convergence points.
+        // Fixed by ring-based BuildTargetDepth + ComputePrimitiveRingDepths
+        // (see ProgramCompiler.ComputePrimitiveRingDepths).
         // if (true) { (if (true) { 1+2 } else { 3 }) } else { 4 } → should be 3
         var body = new Conditional(
             new Constant(1L),

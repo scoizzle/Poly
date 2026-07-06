@@ -243,27 +243,16 @@ public static class NodeExtensions {
 
     #region Static Factory Methods
 
-    /// <summary>
-    /// A predefined null literal expression.
-    /// </summary>
-    public static Constant Null = new Constant(null);
+    /// <summary>A <c>null</c> constant.</summary>
+    public static readonly Constant Null = new(null);
 
-    /// <summary>
-    /// A predefined literal representing the boolean value <c>true</c>.
-    /// </summary>
-    public static Constant True = new Constant(true);
+    /// <summary>A <c>true</c> constant.</summary>
+    public static readonly Constant True = new(true);
 
-    /// <summary>
-    /// A predefined literal representing the boolean value <c>false</c>.
-    /// </summary>
-    public static Constant False = new Constant(false);
+    /// <summary>A <c>false</c> constant.</summary>
+    public static readonly Constant False = new(false);
 
-    /// <summary>
-    /// Creates a literal expression wrapping the specified constant.
-    /// </summary>
-    /// <typeparam name="T">The type of the literal value.</typeparam>
-    /// <param name="value">The constant value to wrap.</param>
-    /// <returns>A literal expression representing the specified constant.</returns>
+    /// <summary>Wraps a CLR value into a <see cref="Constant"/> node.</summary>
     public static Constant Wrap(object? value) => new Constant(value);
 
     #endregion

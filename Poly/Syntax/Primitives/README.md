@@ -46,7 +46,7 @@ Primitives MAY also carry explicit dataflow information via `InputSlots`/`Result
 | `StoreUpvalue` | (1,1) | Store a captured upvalue (pushes value back) |
 | `IncLocal` | (0,0) | Increment a local variable by a constant delta |
 | `DecLocal` | (0,0) | Decrement a local variable by a constant delta |
-| `Phi` | (0,1) | SSA merge — selects among incoming `ValueSlot[]` at control-flow join |
+| `Phi` | (0,0) | SSA merge — compile-time no-op annotation; ring ensures convergence |
 | `ValueSlot` | — | Lightweight value identity for explicit dataflow edges |
 
 ## Design

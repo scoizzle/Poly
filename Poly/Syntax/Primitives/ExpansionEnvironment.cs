@@ -149,9 +149,8 @@ public sealed class ExpansionEnvironment {
     /// <summary>Resolve a slot by NodeId from parent scope. Returns
     /// the slot index assigned in the current or ancestor environment.</summary>
     private bool TryResolveSlotByNodeId(NodeId nodeId, out int slot) {
-        foreach (var kv in _slots) {
-            if (kv.Key == nodeId) { slot = kv.Value; return true; }
-        }
+        if (_slots.TryGetValue(nodeId, out slot))
+            return true;
         if (_parent is not null)
             return _parent.TryResolveSlotByNodeId(nodeId, out slot);
         slot = 0;

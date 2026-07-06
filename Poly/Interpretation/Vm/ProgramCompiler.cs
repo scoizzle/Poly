@@ -216,7 +216,9 @@ public static class ProgramCompiler {
         var fbProp = Property(state, nameof(VmState.FrameBase));
         var bodyExprs = new List<Expression>();
 
-        // 1. Save caller's ring to state.Registers
+        // 1. Save current SP to SavedSp, then save caller's ring to state.Registers
+        //    keyed by SavedSp offset (so each nested call gets its own save area).
+        bodyExprs.Add(Assign(ctx.SavedSp, spProp));
         bodyExprs.Add(CtxPushRegisters(ctx));
 
         // 2. Save closure handle → state.ClosureHandle
@@ -554,9 +556,12 @@ public static class ProgramCompiler {
     internal static Expression CtxPushRegisters(CompilationContext ctx) {
         int depth = ctx.GetRingDepth(ctx.CurrentLabelIndex);
         if (depth <= 0) return Empty();
+        // Save ring values to state.Registers with ctx.SavedSp as base offset.
+        // This gives each nested call its own save area (different SP at call time).
         var stmts = new Expression[depth];
+        var slots = Property(ctx.State, "Registers");
         for (int k = 0; k < depth; k++)
-            stmts[k] = Assign(ArrayAccess(ctx.Registers, Constant(k)), ctx.RingSlot(k));
+            stmts[k] = Assign(ArrayAccess(slots, Add(ctx.SavedSp, Constant(k))), ctx.RingSlot(k));
         return Block(stmts);
     }
 
@@ -564,8 +569,9 @@ public static class ProgramCompiler {
         int depth = ctx.GetRingDepth(ctx.CurrentLabelIndex);
         if (depth <= 0) return Empty();
         var stmts = new Expression[depth];
+        var slots = Property(ctx.State, "Registers");
         for (int k = 0; k < depth; k++)
-            stmts[k] = Assign(ctx.RingSlot(k), ArrayAccess(ctx.Registers, Constant(k)));
+            stmts[k] = Assign(ctx.RingSlot(k), ArrayAccess(slots, Add(ctx.SavedSp, Constant(k))));
         return Block(stmts);
     }
 

@@ -43,39 +43,6 @@ public sealed class CSharpGenerator {
         return sb.ToString().TrimEnd();
     }
 
-    private void WriteTestTopLevelStatement(StringBuilder sb, IReadOnlyList<TypeDefinitionNode> typeDefs) {
-        var testType = typeDefs.FirstOrDefault(t => t.Constructors?.Count > 0 && (t.Fields?.Count ?? 0) == 0 && t.Methods?.Any(m => (m.Parameters is null or []) && !m.IsStatic) == true);
-        if (testType is null) {
-            sb.AppendLine("Console.WriteLine(\"OK\");");
-            sb.AppendLine();
-            return;
-        }
-
-        var ctor = testType.Constructors![0];
-        sb.Append("var _test = new ");
-        sb.Append(testType.Name);
-        sb.Append('(');
-        if (ctor.Parameters != null) {
-            for (int i = 0; i < ctor.Parameters.Count; i++) {
-                if (i > 0) sb.Append(", ");
-                WriteDefaultValue(sb, ctor.Parameters[i].TypeReference);
-            }
-        }
-        sb.AppendLine(");");
-
-        var method = testType.Methods!.First(m => (m.Parameters is null or []) && !m.IsStatic);
-        sb.Append("_test.");
-        sb.Append(method.Name);
-        sb.AppendLine("();");
-
-        sb.Append("Console.WriteLine(\"Test passed: ");
-        sb.Append(testType.Name);
-        sb.Append('.');
-        sb.Append(method.Name);
-        sb.AppendLine(" executed.\");");
-        sb.AppendLine();
-    }
-
     private static void WriteDefaultValue(StringBuilder sb, Node? typeRef) {
         if (typeRef is PrimitiveTypeReference prim) {
             switch (prim.PrimitiveId) {

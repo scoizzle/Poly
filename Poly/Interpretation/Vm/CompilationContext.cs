@@ -86,6 +86,11 @@ public sealed class CompilationContext {
     /// <summary>Local copy of <c>state.MaxLoopIterations</c> for fast access in Jump µops.</summary>
     public ParameterExpression LoopMaxIter { get; }
 
+    /// <summary>Local capturing the StackPointer at ring-save time during function calls.
+    /// Used by <c>CtxPopRegisters</c> to locate the caller's saved ring values in the
+    /// value stack, since the callee may have moved SP.</summary>
+    public ParameterExpression SavedSp { get; }
+
     public LabelTarget EntryLabel { get; } = Label("entry");
     public LabelTarget ExitLabel { get; } = Label("exit");
 
@@ -112,6 +117,8 @@ public sealed class CompilationContext {
         LoopMaxIter = Variable(typeof(long), "_loopMaxIter");
         _locals.Add(LoopLimitActive);
         _locals.Add(LoopMaxIter);
+        SavedSp = Variable(typeof(int), "_savedSp");
+        _locals.Add(SavedSp);
     }
 
     private int _registerLimit;

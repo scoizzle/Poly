@@ -833,11 +833,11 @@ Next     INT-018, INT-019, INT-002 (remaining), INT-028
 |-------|-------|
 | **Status** | `done` |
 | **Area** | VM / exceptions |
-| **Files** | `Poly/Interpretation/Vm/ProgramCompiler.cs` (`EmitThrowOp` implemented), `Poly/Syntax/Nodes/ThrowStatement.cs` |
-| **Problem** | IR-level `Throw` primitives are lowered but the compiler emits nothing. Exception behavior may only surface via implicit CLR exceptions (e.g. divide-by-zero), not via `try/catch` regions in compiled programs. |
-| **Action** | Implement `EmitThrowOp` with integration into exception-region handling (if regions exist in primitive lowering). Add VM test proving `TryCatchFinally` catches a `ThrowStatement`. |
-| **Acceptance** | `VmCorrectnessTests` (or new `ThrowTests`) demonstrates throw → catch → resume without relying on arithmetic faults. |
-| **Related** | `docs/decisions/vm-gap-analysis.md` §4 (divide-by-zero vs exception regions) |
+| **Files** | `Poly/Interpretation/Vm/ProgramCompiler.cs` (`EmitThrowOp` wired), `Poly/Syntax/Nodes/ThrowStatement.cs`, `Poly.Tests/Interpretation/ThrowVmTests.cs`, `Poly.Tests/Interpretation/ExceptionHandlingVmTests.cs` |
+| **Problem** | IR-level `Throw` primitives were lowered but the compiler emitted nothing. |
+| **Action** | Implement `EmitThrowOp` with integration into exception-region handling (Strategy B — side-table dispatch). |
+| **Acceptance** | `ThrowVmTests` (4 tests) + `ExceptionHandlingVmTests` (3 tests) demonstrate throw, try-catch, catch-with-type through full pipeline. 1408/1408 tests green. |
+| **Related** | INT-018 (Strategy B EH implementation), `docs/decisions/2026-07-05-vm-exception-handling-strategy-b.md` |
 
 ---
 

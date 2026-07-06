@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
 
@@ -79,6 +80,7 @@ internal sealed class ExceptionRegionState : IAnalysisMetadata {
 /// (slot 12 in the pipeline).
 /// </summary>
 internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {
+    public static string PassId => "ExceptionRegion";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ExceptionRegionAnalyzer>(node))
             return;
@@ -257,11 +259,9 @@ public static class ExceptionRegionAnalysisExtensions {
         /// (<see cref="TryCatchFinally"/>, <see cref="UsingStatement"/>)
         /// and produces <see cref="ExceptionRegionMetadata"/> for use
         /// by the expansion pass and VM.
-        ///
-        /// Placement: after <c>LambdaReturnTypeResolution</c>, before <c>ExpansionPass</c>.
         /// </summary>
         public AnalyzerBuilder UseExceptionRegionAnalysis() {
-            builder.AddAnalyzer(new ExceptionRegionAnalyzer());
+            builder.AddAnalyzer(new ExceptionRegionAnalyzer(), ExceptionRegionAnalyzer.PassId);
             return builder;
         }
     }

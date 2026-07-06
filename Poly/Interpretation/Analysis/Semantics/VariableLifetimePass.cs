@@ -22,6 +22,7 @@ internal sealed record ScopeState(
 );
 
 internal sealed class ScopeValidator : INodeAnalyzer {
+    public static string PassId => "VariableScope";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ScopeValidator>(node))
             return;
@@ -205,7 +206,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 public static class VariableAnalysisExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseVariableScopeValidator() {
-            builder.AddAnalyzer(new ScopeValidator());
+            builder.AddAnalyzer(new ScopeValidator(), ScopeValidator.PassId);
             return builder;
         }
     }

@@ -3,6 +3,7 @@ using Poly.Data.Modeling.TypeSystem;
 namespace Poly.Data.Modeling;
 
 internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
+    public static string PassId => "DataStructuralDomainAnalyzer";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

@@ -11,6 +11,7 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// Also acts as an ITypeDefinitionProvider for the analyzed types.
 /// </summary>
 public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionProvider {
+    public static string PassId => "TypeDefinitionNode";
     private readonly Dictionary<string, AstTypeDefinition> _types = new();
     private FrozenDictionary<string, AstTypeDefinition>? _frozen;
 

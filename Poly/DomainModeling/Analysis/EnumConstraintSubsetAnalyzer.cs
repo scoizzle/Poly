@@ -4,6 +4,7 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 internal sealed class EnumConstraintSubsetAnalyzer : INodeAnalyzer {
+    public static string PassId => "DomainEnumConstraintSubsetAnalyzer";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

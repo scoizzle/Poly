@@ -3,6 +3,7 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
+    public static string PassId => "DomainContractIntegrationAnalyzer";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

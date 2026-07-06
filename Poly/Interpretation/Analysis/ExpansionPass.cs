@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
@@ -32,6 +33,7 @@ internal sealed class ExpansionPassState : IAnalysisMetadata {
 /// Register via <c>builder.AddAnalyzer(new ExpansionPass())</c>.
 /// </summary>
 public sealed class ExpansionPass : INodeAnalyzer {
+    public static string PassId => "Expansion";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ExpansionPass>(node))
             return;
@@ -83,6 +85,6 @@ public static class ExpansionPassExtensions {
         /// <c>analysis.GetMetadata&lt;PrimitiveExpansionMetadata&gt;(node)</c>.
         /// </summary>
         public AnalyzerBuilder UsePrimitiveExpansion() => builder
-            .AddAnalyzer(new ExpansionPass());
+            .AddAnalyzer(new ExpansionPass(), ExpansionPass.PassId);
     }
 }

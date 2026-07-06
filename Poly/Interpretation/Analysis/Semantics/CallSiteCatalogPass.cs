@@ -64,6 +64,7 @@ internal sealed class CallSiteCatalogState : IAnalysisMetadata {
 /// Placement: after <c>ValueRepresentationAnalysis</c>, before <c>ConstantFolding</c>.
 /// </summary>
 internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
+    public static string PassId => "CallSiteCatalog";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<CallSiteCatalogAnalyzer>(node))
             return;
@@ -204,11 +205,9 @@ public static class CallSiteCatalogExtensions {
         /// This pass builds a module-level catalog of all call sites
         /// (method invocations, property getters, constructors) and stamps
         /// each call site node with its stable catalog index.
-        ///
-        /// Placement: after <c>ValueRepresentationAnalysis</c>, before <c>ConstantFolding</c>.
         /// </summary>
         public AnalyzerBuilder UseCallSiteCatalog() {
-            builder.AddAnalyzer(new CallSiteCatalogAnalyzer());
+            builder.AddAnalyzer(new CallSiteCatalogAnalyzer(), CallSiteCatalogAnalyzer.PassId);
             return builder;
         }
     }

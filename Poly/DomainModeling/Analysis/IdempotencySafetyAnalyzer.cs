@@ -10,6 +10,7 @@ namespace Poly.DomainModeling.Analysis;
 /// This is a minimal implementation that uses only known-good APIs.
 /// </summary>
 public sealed class IdempotencySafetyAnalyzer : INodeAnalyzer {
+    public static string PassId => "DomainIdempotencySafety";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) return;
 

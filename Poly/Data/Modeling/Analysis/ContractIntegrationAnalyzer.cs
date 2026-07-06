@@ -3,6 +3,7 @@ using Poly.Data.Modeling.TypeSystem;
 namespace Poly.Data.Modeling;
 
 internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
+    public static string PassId => "DataContractIntegrationAnalyzer";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

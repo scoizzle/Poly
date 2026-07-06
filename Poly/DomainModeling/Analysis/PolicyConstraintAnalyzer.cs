@@ -4,6 +4,7 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
+    public static string PassId => "DomainPolicyConstraint";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node))
             return;

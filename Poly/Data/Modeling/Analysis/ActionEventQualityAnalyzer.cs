@@ -9,6 +9,7 @@ namespace Poly.Data.Modeling;
 using EffectConditional = Effects.Conditional;
 
 internal sealed class ActionEventQualityAnalyzer : INodeAnalyzer {
+    public static string PassId => "DataActionEventQualityAnalyzer";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

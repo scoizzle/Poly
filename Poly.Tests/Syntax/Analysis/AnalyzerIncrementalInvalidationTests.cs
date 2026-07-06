@@ -153,12 +153,14 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class NoopAnalyzer : INodeAnalyzer {
+        public static string PassId => "TestNoop";
         public void Analyze(AnalysisContext context, Node node) {
             this.AnalyzeChildren(context, node);
         }
     }
 
     private sealed class TestMetadataAnalyzer : INodeAnalyzer {
+        public static string PassId => "TestMetadata";
         public void Analyze(AnalysisContext context, Node node) {
             switch (node) {
                 case TestLeaf leaf:
@@ -174,6 +176,7 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class ReuseSensitiveMetadataAnalyzer : INodeAnalyzer {
+        public static string PassId => "TestReuseSensitive";
         public void Analyze(AnalysisContext context, Node node) {
             switch (node) {
                 case TestLeaf leaf:
@@ -189,6 +192,7 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class TestDiagnosticAnalyzer : INodeAnalyzer {
+        public static string PassId => "TestDiagnostic";
         public void Analyze(AnalysisContext context, Node node) {
             if (node is TestLeaf leaf && leaf.Value < 0) {
                 context.ReportError(leaf, "Negative leaf value", "NEG");
@@ -199,6 +203,7 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class DuplicateDiagnosticAnalyzer : INodeAnalyzer {
+        public static string PassId => "TestDuplicateDiagnostic";
         public void Analyze(AnalysisContext context, Node node) {
             if (node is TestLeaf leaf) {
                 context.ReportError(leaf, "Duplicate diagnostic", "DUP");
@@ -210,6 +215,7 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed class DuplicateVisitAnalyzer : INodeAnalyzer {
+        public static string PassId => "TestDuplicateVisit";
         public void Analyze(AnalysisContext context, Node node) {
             if (!context.TryBeginAnalyzerVisit<DuplicateVisitAnalyzer>(node)) {
                 return;

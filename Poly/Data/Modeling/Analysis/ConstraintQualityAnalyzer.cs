@@ -5,6 +5,7 @@ using Poly.Data.Modeling.Validation.Constraints;
 namespace Poly.Data.Modeling;
 
 internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
+    public static string PassId => "DataConstraintQualityAnalyzer";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

@@ -402,6 +402,7 @@ public class DomainOperabilityTests {
     }
 
     private sealed class TreeTraversalCoverageAnalyzer : INodeAnalyzer {
+        public static string PassId => "TestTreeTraversalCoverage";
         public HashSet<NodeId> VisitedNodeIds { get; } = new();
 
         public void Analyze(AnalysisContext context, Node node) {

@@ -4,6 +4,7 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 internal sealed class RuleCoverageAnalyzer : INodeAnalyzer {
+    public static string PassId => "DomainRuleCoverageAnalyzer";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

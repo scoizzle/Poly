@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Syntax.Analysis;
@@ -44,6 +45,7 @@ public sealed record ValueRepresentationMetadata(
 /// Placement: after <c>ControlFlowAnalysis</c>, before <c>ConstantFolding</c>.
 /// </summary>
 internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
+    public static string PassId => "ValueRepresentation";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<ValueRepresentationAnalyzer>(node))
             return;
@@ -247,11 +249,9 @@ public static class ValueRepresentationExtensions {
         /// Adds the <see cref="ValueRepresentationAnalyzer"/> to the pipeline.
         /// This pass classifies every node by its value representation kind
         /// (stack scalar, bool, heap ref, void, or unknown).
-        ///
-        /// Placement: after <c>ControlFlowAnalysis</c>, before <c>ConstantFolding</c>.
         /// </summary>
         public AnalyzerBuilder UseValueRepresentationAnalysis() {
-            builder.AddAnalyzer(new ValueRepresentationAnalyzer());
+            builder.AddAnalyzer(new ValueRepresentationAnalyzer(), ValueRepresentationAnalyzer.PassId);
             return builder;
         }
     }

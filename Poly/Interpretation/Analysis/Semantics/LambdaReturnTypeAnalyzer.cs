@@ -4,6 +4,7 @@ using Poly.Syntax.Nodes;
 namespace Poly.Interpretation.Analysis.Semantics;
 
 internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {
+    public static string PassId => "LambdaReturnType";
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<LambdaReturnTypeAnalyzer>(node))
             return;
@@ -46,7 +47,7 @@ internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {
 public static class LambdaReturnTypeExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseLambdaReturnTypeResolution() {
-            builder.AddAnalyzer(new LambdaReturnTypeAnalyzer());
+            builder.AddAnalyzer(new LambdaReturnTypeAnalyzer(), LambdaReturnTypeAnalyzer.PassId);
             return builder;
         }
     }

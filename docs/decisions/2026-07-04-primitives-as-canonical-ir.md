@@ -58,6 +58,7 @@ backward compatibility: primitives without explicit slots fall back to the exist
 - `Module` and `BasicBlock` types are added to `Poly/Syntax/Primitives/` as optional wrappers.
 - `ProgramCompiler` gains `CompileModule()` for dataflow-aware emission, with `CompilePrimitives()`
   as a backward-compatible shim.
+- **Lowering discipline (2026-07-06)**: `ToPrimitives()` must not discard information. It is the point to *expand* known analysis metadata (exception regions, value representations, call sites, dataflow facts, etc.) alongside the primitives. The output (primitives + metadata) should minimize the need for later reconstruction. The AST remains the primary symbolic form; enriched primitives serve execution.
 - Expansion methods (`ToPrimitives()`) can be migrated incrementally to produce explicit slots,
   starting with expression nodes (`Add`, `Subtract`, etc.) and control flow (`IfStatement`).
 - The `docs/experiments/interpretation-compiler-framework-plan.md` is updated to reflect

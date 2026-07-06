@@ -2,6 +2,8 @@
 
 **Status: SUPERSEDED by `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`.**
 
+**Further context (2026-07-06):** This plan assumed a separate IR layer. Current direction keeps the AST as the symbolic/model-facing form and uses enhanced primitives (with metadata expanded during lowering) for the VM. Many IR design *principles* (explicit dataflow, single lowering target for backends) still apply to the primitive path. See updated vision document and AGENTS.md.
+
 The primitive instruction set (`Poly/Syntax/Primitives/`) is now the canonical IR.
 The separate `Poly/Ir/` module and `EmissionContext`/`GenerationPass` infrastructure
 described below are not being created. Instead, the primitive format is being enhanced

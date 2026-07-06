@@ -29,13 +29,17 @@ This document describes the architecture of the Poly system — a neurosymbolic 
                │
                ▼
 ┌──────────────────────────────────────────────────────────┐
-│              Canonical IR (Poly/Ir/)       │
+│              Canonical Execution IR (Primitives) │
 │                                                          │
-│  Block-structured CFG, SSA values, explicit φ nodes.     │
-│  The pivot between domain-level expression and all       │
-│  execution backends. 16 instruction types.               │
+│  PrimitiveNode instruction set (enhanced with ValueSlot, │
+│  explicit dataflow, Phi, etc.). The canonical IR for the │
+│  VM execution engine. AST remains the primary symbolic   │
+│  / model-facing / serializable form.                     │
 │                                                          │
-│  Produces: Module (blocks, instructions, terminators)     │
+│  Lowering (ToPrimitives) is the point to expand metadata │
+│  rather than discard structure.                          │
+│                                                          │
+│  Produces: primitives + expanded metadata for execution  │
 └──────────────┬───────────────────────────────────────────┘
                │
                ▼

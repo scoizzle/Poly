@@ -1,10 +1,10 @@
 # Interpretation System — Resolution Plan
 
 **Created:** 2026-07-05  
-**Updated:** 2026-07-06 (committed `e7199a2`)  
+**Updated:** 2026-07-06 (post `f242529` EH landing + analysis refactors)  
 **Source:** [`docs/interpretation-system-architecture-review.md`](../interpretation-system-architecture-review.md) (Rev 1.15)  
 **Companion:** [`interpretation-system-issues.md`](interpretation-system-issues.md) (INT-/ANA- tracker)  
-**Baseline:** 1421/1421 tests green (was 1420); P0 analysis sprint complete; **Phase 1 in progress** (Strategy B try/catch MVP landed); **P2 harness complete**; P3 hardening partial.
+**Baseline:** 1429/1429 tests green; P0 analysis sprint complete; **Phase 1 in progress** (Strategy B try/catch + basic finally MVP; f242529); **P2 harness complete**; P3 hardening partial (ring save landed).
 
 This plan turns architectural findings into **ordered, checkable work**. Task IDs are stable (`P0-001`, `P1C-012`, …). Check boxes in PRs or update status inline as work lands.
 
@@ -12,14 +12,14 @@ This plan turns architectural findings into **ordered, checkable work**. Task ID
 
 | Phase | Done | In progress | Open | Notes |
 |-------|------|-------------|------|-------|
-| **P0** Truth sync | 10/16 | — | 6 | vm-gap EH row + ADR deferrals (`e7199a2`); tracker/vision ADRs still open |
-| **P1** EH (INT-018) | 23/36 | 13 | — | P1A+P1B done; P1C try/catch MVP; finally/using/nested remain |
-| **P2** Parity | 7/27 | 1 | 19 | Harness complete (`e7199a2`); 4 MatchLinq breadth tests |
-| **P3** Hardening | 9/21 | 2 | 10 | Ring save, TypeIs scalar, ABI partial, ExpansionPass guard |
+| **P0** Truth sync | 12/16 | — | 4 | vm-gap/ADR updates done; tracker INT-001 corrected; README index + a few vision notes remain |
+| **P1** EH (INT-018) | 27/36 | 9 | — | P1A+P1B done; P1C try/catch + basic try/finally + multiple-catch landed (f242529); using dispose, catch-var binding, nested/ParentRegion remain |
+| **P2** Parity | 7/27 | 1 | 19 | Harness complete; 4 MatchLinq breadth tests |
+| **P3** Hardening | 11/21 | 2 | 8 | Ring save (`SavedSp`), scalar TypeIs, ABI 3/4, Expansion guards; verifier stub, closure tests open |
 | **P4–P5** | 0 | — | all | Not started |
 | **P6** Hygiene | 2/24 | — | 22 | Dead CSharp code removed; Phi README fixed |
 
-**Current focus:** P1C-030–042 (try/finally, using, nested EH), then P0 tracker hygiene.
+**Current focus:** P1C-031/032 (Using dispose), P1C-013 (catch var binding), P1C-040 (nested/ParentRegion), then P0 doc hygiene + P2 breadth.
 
 **Task status legend:** `open` | `in-progress` | `blocked` (needs Q#) | `done`
 
@@ -77,22 +77,22 @@ flowchart TD
 ### Phase 0 — Truth sync
 **Goal:** Docs and tracker match code. No false `done`.  
 **Exit:** High-severity doc-only C-* resolved; §5 header restored.  
-**Status:** **in progress** — 10/16 tasks done.
+**Status:** **in progress** — 12/16 tasks done (INT-001 status + vm-gap/ADRs updated; minor doc items remain).
 
 ### Phase 1 — Exception handling (INT-018)
 **Goal:** VM EH matches semantics (Strategy B — side table).  
 **Exit:** C-017, C-018, C-023 resolved; INT-018 `done`; INT-001 `done` only with catch/finally.  
-**Status:** **in progress** — try/catch MVP landed (`ExceptionTableBuilder`, `DispatchException`, 8 EH tests); finally/using/nested open.
+**Status:** **in progress** — try/catch + basic try/finally + typed multiple-catch landed (f242529: ExceptionTableBuilder, DispatchException with type match + finally side-effect handling, 8+ EH tests); catch-var binding, Using dispose dispatch, nested/ParentRegionIndex remain open.
 
 ### Phase 2 — Cross-engine parity
 **Goal:** VM ↔ Linq disagree in tests, not silently.  
 **Exit:** C-016, C-026 resolved or narrowed; parameterized `AssertVmMatchesLinq`.  
-**Status:** **in progress** — harness complete (`e7199a2`); 4 breadth-first MatchLinq tests.
+**Status:** **in progress** — harness complete; 4 breadth-first MatchLinq tests.
 
 ### Phase 3 — VM correctness hardening
 **Goal:** Latent bugs exposed by tests.  
 **Exit:** C-022, C-014, C-015, C-021 resolved.  
-**Status:** **in progress** — ring save by `SavedSp`, scalar TypeIs, ABI partial, ExpansionPass depth guard.
+**Status:** **in progress** — ring save by `SavedSp` (nested calls), scalar TypeIs, ABI partial (3/4), ExpansionPass depth guard + slot lookup; ring verifier stub + closure tests open.
 
 ### Phase 4 — Portable IR (INT-019)
 **Goal:** Catalog + primitives serialize; one call path.  
@@ -122,8 +122,9 @@ flowchart TD
 - [x] **P0-002** Mark **C-004** resolved in §5 with `Status: resolved`, `Resolved: 2026-07-05`, note: README rewrite lists passes 1–13.
   - **Done:** 2026-07-05/06 in architecture review §5
 
-- [ ] **P0-003** Fix §4.22.5 opening paragraph — still says "recommended Strategy A" before the Strategy B update note at §4.22.5 line ~2308.
+- [ ] **P0-003** Review §4.22.5 opening paragraph vs. §4.12.7 Strategy B note (text now references the update; confirm/ close if paragraph is accurate).
   - **Files:** `docs/interpretation-system-architecture-review.md` §4.22.5
+  - **Note:** Review text improved post-1.15; may be closable.
 
 - [x] **P0-004** Update **K-046** in §6: mark superseded by K-027 / §4.12.7 (Strategy B primary).
   - **Done:** K-046 row updated in §6
@@ -158,9 +159,9 @@ flowchart TD
 - [x] **P0-023** Fix `docs/decisions/README.md` index bullet: remove "tree-walker interpreter" wording; VM is canonical.
   - **Done:** 2026-07-06 (commit `3d7b1d7`)
 
-- [ ] **P0-024** **Q1=defer** Add note to `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` or add amendment doc: two-tier VM→backend; primitives as IR; no `Poly/Ir/`; no tree-walker.
-  - **Files:** vision doc or new `docs/decisions/2026-07-05-vision-amendment-vm-primitives.md`
-  - **Maps:** C-024, K-039
+- [x] **P0-024** Add clarifying notes and amend vision/ARCHITECTURE/docs to solidify direction: AST as primary symbolic/serializable IR for models; primitives as canonical *execution* IR; lowering expands (does not discard) metadata. No separate Poly/Ir/. Performed as part of 2026-07-06 docs cleanup pass.
+  - **Done:** Updated vision doc header + stale sections, decisions/README.md, ARCHITECTURE.md diagram references, and cross-links.
+  - **Maps:** C-024, K-039 (largely addressed)
 
 - [ ] **P0-025** **Q1=defer** Update `2026-07-04-primitives-as-canonical-ir.md` status note: Module/BasicBlock deferred until consumer emerges; flat `CompilePrimitives` sufficient.
   - **Maps:** C-001, K-003, INT-009, INT-021
@@ -180,9 +181,10 @@ flowchart TD
   - **Done:** 1421/1421 (2026-07-06)
 
 **Phase 0 exit checklist:**
-- [x] P0-001, P0-002, P0-004, P0-005 (review doc) — P0-003 still open
-- [ ] P0-010 through P0-012 (tracker)
-- [x] P0-020, P0-021, P0-022, P0-023 (ADR sync) — P0-026 partial (README index open)
+- [x] P0-001, P0-002, P0-004, P0-005 (review doc) — P0-003 likely closable (review now references Strategy B update)
+- [x] P0-010, P0-011 (tracker — INT-001 corrected to open with note)
+- [ ] P0-012 (SPRINT-W6 hygiene)
+- [x] P0-020, P0-021, P0-022, P0-023 (ADR sync) — P0-026 partial (decisions/README.md index + vision amendment)
 - [ ] P0-025 (Q1 answered defer; ADR note not yet written)
 
 ---
@@ -208,8 +210,8 @@ flowchart TD
 - [x] **P1A-005** `Throw_WithMessage_PropagatesCorrectMessage` verifies heap-handle dereference path.
   - **Done:** `ThrowVmTests.cs`
 
-- [ ] **P1A-006** Tracker: INT-001 still marked `done` prematurely — update to `blocked` on INT-018 or add note that catch/finally acceptance is partial.
-  - **Open:** `interpretation-system-issues.md` §INT-001 still `done`
+- [x] **P1A-006** Tracker: INT-001 status corrected to `open` with note that full catch/finally acceptance is required.
+  - **Done:** `interpretation-system-issues.md` §INT-001 now `open` (bumped; notes Phase 1 dependency).
 
 **Phase 1a exit:** ✅ P1A-001, P1A-003 green.
 
@@ -269,7 +271,7 @@ flowchart TD
   - **Done:** `TryCatchFinally.cs` + flat main delegate
 
 - [x] **P1C-021** `ProgramCompiler.DispatchException` — PC scan, handler invoke, rethrow if unhandled.
-  - **Done:** `ProgramCompiler.cs:762+` — **gap:** no `CatchTypeName` filter yet; no `Finally` kind dispatch
+  - **Done:** `ProgramCompiler.cs`; type filter (`ExceptionTypeMatches`), Finally/UsingDispose side-effect dispatch + same-region finally after catch all present. Using regions not yet populated by builder.
 
 - [x] **P1C-022** Main delegate wrapped in CLR `try/catch` → `DispatchException` in `CompileCore`.
   - **Done:** `Interpreter.cs:300–307` (runtime wrapper; `EmitExceptionDispatchWrapper` exists but unused)
@@ -282,12 +284,14 @@ flowchart TD
 
 ##### P1C-4 — Try/finally and using
 
-- [ ] **P1C-030** Try/finally without catch: finally handler runs on normal and exceptional exit.
-  - **Test:** `TryFinally_Normal_FinallyRuns`, `TryFinally_Throw_FinallyThenRethrow`
+- [x] **P1C-030** Try/finally without catch: finally handler runs on normal and exceptional exit.
+  - **Test:** `TryFinally_Normal_FinallyRuns`, `TryFinally_Throw_FinallyThenRethrow` (plus combined in `TryCatchFinally_Throw_CatchHandlesFinallyRuns`).
+  - **Note:** Normal-path finally executes via sequential primitives in main delegate; exceptional via dispatch. Result value is finally's in current tests (documented).
   - **Maps:** INT-018 acceptance
 
 - [ ] **P1C-031** `UsingStatement` / `LeaveUsingDispose`: dispose handler invoked on exceptional exit; normal exit runs dispose in sequence or via finally dispatch.
-  - **Files:** may need `UsingStatement.ToPrimitives` order verified against ANA-FIX-007
+  - **Gap:** Builder only scans for "EnterCatch"/"EnterFinally" markers; Using emits "LeaveUsingDispose". No UsingDispose entries reach ExceptionRegionTable. No dispose call sequence is emitted for handler path (resource nodes captured in metadata but unused for VM execution). Fallback path also skips dispose.
+  - **Files:** `UsingStatement.cs`, `ExceptionTableBuilder.cs`, `ExceptionHandling*Tests`
   - **Maps:** K-045, ANA-FIX-007
   - **Related open tracker:** ANA-FIX-010 (EH tests)
 
@@ -298,9 +302,11 @@ flowchart TD
 
 - [ ] **P1C-040** Support `ParentRegionIndex` in dispatch: unwind to parent region when catch type does not match.
   - **Test:** `TryCatch_Nested_InnerCatch`, `TryCatch_Nested_OuterCatch`
+  - **Current:** Builder hardcodes `ParentRegionIndex: -1`; dispatch relies on flat scan order + continue on type mismatch.
 
-- [ ] **P1C-041** Test: multiple catch clauses (type filter order).
-  - **Test:** `TryCatch_MultipleCatch_FirstMatching`
+- [x] **P1C-041** Test: multiple catch clauses (type filter order).
+  - **Test:** `TryCatch_MultipleCatch_FirstMatching` (and typed single-catch variant) — both pass.
+  - **Done:** 2026-07-06 (f242529 area)
 
 - [ ] **P1C-042** Test: throw inside catch; finally inside nested try.
   - **Maps:** ANA-FIX-010
@@ -320,11 +326,11 @@ flowchart TD
 - [x] **P1C-061** Update `vm-gap-analysis.md` EH row to reflect partial implementation (try/catch ✓, finally/using ✗).
   - **Done:** same change as P0-021 (`e7199a2`)
 
-- [ ] **P1C-062** Architecture review §5: **C-017 resolved**; **C-018** and **C-023** still open.
-  - **Partial:** C-017/C-002/C-012 done 2026-07-06; C-018 awaits finally/using/nested
+- [x] **P1C-062** Architecture review §5: **C-017 resolved**; **C-018** and **C-023** still open.
+  - **Done:** C-017 closed; C-018/C-023 await using + nested + catch-var (P1C-013/031/040).
 
 - [ ] **P1C-063** Mark **INT-018** `done` and reconcile **INT-001** in tracker.
-  - **Blocked on:** P1C-030–032 minimum
+  - **Blocked on:** P1C-013 (catch var), P1C-031/032 (using), P1C-040 (nested) minimum for full semantics.
 
 - [ ] **P1C-064** Remove stale EH placeholder comments in `ProgramCompiler.cs`, `Primitives.cs`, architecture review §7 (still says EmitThrowOp dead).
 
@@ -334,12 +340,12 @@ flowchart TD
 |---------|----------|--------|
 | T-EH-01 | Uncaught throw propagates | ✅ `ThrowVmTests`, `Throw_OutsideTry_Propagates` |
 | T-EH-02 | Throw caught; catch returns value | ✅ `TryCatch_Throw_CatchReturnsValue` |
-| T-EH-03 | Try/finally; no throw; finally runs | ❌ |
-| T-EH-04 | Throw; finally runs; exception propagates | ❌ |
+| T-EH-03 | Try/finally; no throw; finally runs | ✅ `TryFinally_Normal_FinallyRuns` (note: result is finally value) |
+| T-EH-04 | Throw; finally runs; exception propagates | ✅ `TryFinally_Throw_FinallyThenRethrow` |
 | T-EH-05 | Normal try completion; catch skipped | ✅ `TryCatch_NormalCompletion_SkipsCatch` |
-| T-EH-06 | Using dispose on normal exit | ❌ |
-| T-EH-07 | Using dispose on exception | ❌ |
-| T-EH-08 | Nested try/catch | ❌ |
+| T-EH-06 | Using dispose on normal exit | ❌ (see P1C-031 gap) |
+| T-EH-07 | Using dispose on exception | ❌ (see P1C-031 gap) |
+| T-EH-08 | Nested try/catch | ❌ (P1C-040; ParentRegionIndex not wired) |
 
 ---
 
@@ -419,8 +425,9 @@ flowchart TD
 **Phase 2 exit checklist:**
 - [x] P2-001–P2-003 harness done
 - [ ] ≥8 new MatchLinq tests (P2-010–P2-019 minimum) — 4/8 (P2-010, P2-011, P2-012, P2-019)
-- [ ] P2-030–P2-033 after Phase 1
+- [ ] P2-030–P2-033 after Phase 1 (EH parity)
 - [ ] C-016, C-026 updated in review
+- Note: P2-040 (AndAlso/OrElse primitives) completed; short-circuit distinction moved to primitive level.
 
 ---
 
@@ -520,7 +527,7 @@ flowchart TD
   - **May expose bug** — fix in same task if fails
 
 **Phase 3 exit:** P3-002+003, P3-010, P3-012, P3-020+, P3-031+, P3-050, P3-060, P3-061 done.
-  - **Progress:** P3-002/012/030/034/050/060/061 ✅; P3-003/010/020/031+ open
+  - **Progress:** P3-001/002/012/030/034/050/060/061 ✅ (ring save + scalar TypeIs + guards); P3-003/010/011/020/031/040/041/070 open (verifier, closures, heap TypeIs, void ABI, depth>32 test)
 
 ---
 
@@ -720,11 +727,11 @@ flowchart TD
 
 | Sprint | Tasks | Deliverable | Status |
 |--------|-------|-------------|--------|
-| **S1** | P0-001–P0-023, P1A-001–P1A-003 | Docs synced; throw wired + test | ✅ **mostly done** — P0-003/010–012/021/024–026 open |
+| **S1** | P0-001–P0-023, P1A-001–P1A-003 | Docs synced; throw wired + test | ✅ **mostly done** — P0-003/012/024–026 remain |
 | **S2** | P1B-001, P1C-001–P1C-012 | EH ADR; region table; handlers compile | ✅ **done** — P1B-003 open |
-| **S3** | P1C-020–P1C-042, P1C-062–P1C-064 | Full EH; INT-018 done | **in progress** — try/catch MVP; finally/using/nested remain |
-| **S4** | P2-001–P2-019, P2-030–P2-033 | Parameterized MatchLinq + EH parity | **in progress** — harness done; 4/8 breadth tests (`e7199a2`) |
-| **S5** | P3-001–P3-034, P3-050, P3-060–P3-061 | Ring fix; closures; TypeIs | **in progress** — ring save, scalar TypeIs, ABI partial |
+| **S3** | P1C-020–P1C-042, P1C-062–P1C-064 | Full EH; INT-018 done | **in progress** — try/catch + basic finally + multi-catch done (f242529); using/catch-var/nested remain |
+| **S4** | P2-001–P2-019, P2-030–P2-033 | Parameterized MatchLinq + EH parity | **in progress** — harness done; 4/8 breadth tests |
+| **S5** | P3-001–P3-034, P3-050, P3-060–P3-061 | Ring fix; closures; TypeIs | **in progress** — ring save (`SavedSp`), scalar TypeIs, ABI partial |
 | **S6** | P4-001–P4-034 | INT-019 MVP | not started |
 | **ongoing** | P6-* between sprints | Hygiene | **in progress** — P6-003, P6-011 done |
 
@@ -735,9 +742,9 @@ flowchart TD
 | Register | Close when task(s) done | Status |
 |----------|-------------------------|--------|
 | C-004 | P0-002 | ✅ closed |
-| C-002, C-012 | P1C-063 (not P1A alone) | ✅ closed in review; tracker pending P1C-063 |
+| C-002, C-012 | P1C-063 (not P1A alone) | ✅ closed in review; tracker updated (INT-001 open) |
 | C-017 | P1C-024 | ✅ closed in review |
-| C-018, C-023 | P1C-062 | open |
+| C-018, C-023 | P1C-062 | open (awaits using + nested + catch-var) |
 | C-010 | P0-020 | ✅ closed |
 | C-023 (ADR) | P1C-061 | narrowed — vm-gap EH row updated |
 | C-025, K-041 | P0-022 | ✅ closed |
@@ -745,16 +752,16 @@ flowchart TD
 | C-009 | P0-012 | open |
 | C-001 | P0-025 or INT-021 | open (Q1=defer) |
 | C-016, C-026 | P2 exit | open |
-| C-022, K-032 | P3-003 | partial — ring save done; nested-call test open |
-| C-014, C-015 | P3-010, P3-012 | partial — C-015 narrowed (P3-012 ✅); C-014 awaits full verifier |
+| C-022, K-032 | P3-003 | partial — ring save via SavedSp done (P3-001/002); nested-call preservation test open |
+| C-014, C-015 | P3-010, P3-012 | partial — C-015 narrowed (P3-012 ✅); C-014 awaits full depth-convergence verifier |
 | C-021 | P3-050 | narrowed — PolicyEvaluator throws on mismatch |
-| C-011, K-015 | P3-030–P3-034 | partial — scalar TypeIs done; heap-ref (P3-031+) open |
+| C-011, K-015 | P3-030–P3-034 | partial — scalar TypeIs done (P3-034); heap-ref VM tests (P3-031+) + full ABI open |
 | C-013, C-006 | P4-001–002 | open |
 | C-008 | P4-040 | open |
 | C-019, C-020 | P5-001, P5-003, P5-005 | open |
 | K-046 | P0-004 | ✅ closed |
-| K-018 | P1A+P1C try/catch tests | narrowed in review |
-| K-058 | P3-020–P3-023 | open — `ClosureVmTests` has no-capture/param only |
+| K-018 | P1A+P1C try/catch + basic finally tests | narrowed (finally basics covered; using/catch-var remain) |
+| K-058 | P3-020–P3-023 | open — `ClosureVmTests` has no-capture/param only; upvalue VM tests pending |
 | K-059 | P3-040 | partial — 3 ABI tests; Void edge case open |
 | K-060 | P3-060 | narrowed |
 | K-061 | P3-061 | narrowed |
@@ -782,4 +789,4 @@ flowchart TD
 
 ---
 
-*Task count: 154 total · **53 done** · **14 in progress** (P1C + P2 breadth + P3 partial) · **101 open** — last synced 2026-07-06 (`e7199a2`).*
+*Task count: ~154 total · **~60 done** (f242529 EH + ring save + tracker/plan sync) · **~12 in progress** (P1C using/catch-var/nested + P2 breadth + P3 verifier/closures) · **~82 open** — last synced 2026-07-06 (1429/1429 tests). See health check for detailed deltas.*

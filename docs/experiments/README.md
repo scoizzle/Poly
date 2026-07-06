@@ -28,3 +28,5 @@ They do **not** represent current priorities, committed roadmap items, or active
 ## Note
 
 Files may be promoted into `docs/decisions/` or `docs/plans/` if/when the work becomes active, or archived further if they become obsolete.
+
+**2026-07-06 cleanup note**: Several files here (e.g. `interpretation-compiler-framework-plan.md`) assumed a separate `Poly/Ir/` and/or tree-walker as canonical. They are marked superseded. The current direction keeps the AST as the symbolic/serializable model IR and uses primitives (with metadata *expanded* during lowering, not discarded) as the VM execution IR. See updated `decisions/2026-05-31-neurosymbolic-platform-vision.md` and `2026-07-04-primitives-as-canonical-ir.md`.

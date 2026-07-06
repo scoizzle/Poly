@@ -1,9 +1,17 @@
-# ADR: Neurosymbolic Platform Vision — Codify, Execute, Evolve
+# Neurosymbolic Platform Vision — Codify, Execute, Evolve
 
 **Date:** 2026-05-31
-**Amended:** 2026-06-25 — added Expression Levels & Canonical IR section; added IR to What Is New
-**Status:** Accepted
-**Deciders:** Primary author
+**Amended:** 2026-06-25 (Expression Levels); 2026-07-06 (direction clarification)
+**Status:** Vision / Partially Superseded
+
+> **Current direction (2026-07-06):** 
+> - The **AST (`Poly.Syntax` nodes)** is the primary serializable, model-facing, symbolic IR. Models and synthesis primarily work with Domain expressions and the AST.
+> - **PrimitiveNode** (under Syntax/Primitives) is the canonical IR for the *VM execution engine*. Lowering (`ToPrimitives`) is an opportunity to *expand* known analysis metadata rather than discard structure.
+> - No separate `Poly/Ir/` module will be created (see 2026-07-04-primitives-as-canonical-ir.md).
+> - The VM provides canonical *execution semantics*. The AST provides the canonical *symbolic representation*.
+> - Earlier three-tier model (TreeWalker as canonical) and "Expression Levels" table below are historical; tree-walker was removed (2026-06-08-vm-as-canonical-semantics.md).
+
+This document retains value for the high-level neurosymbolic intent but should be read with the ADRs and AGENTS.md for the actual layering.
 
 ## Context
 
@@ -99,7 +107,9 @@ Each macro is a tiny program. The IR is the universal interface (text streams). 
 
 Unix gave developers pipes to compose programs written by humans. This platform gives models a pipe-equivalent for composing their own discoveries. Same shape, new source of programs.
 
-### Two-Tier Evaluation
+### Two-Tier Evaluation (Historical)
+
+> **Note (2026-07-06):** This section reflects the pre-2026-06-08 state. The tree-walker was removed; the VM is now the canonical execution semantics. Evaluation is effectively AST-level (symbolic) → primitives + expanded metadata (VM execution) → backends. See the header note and 2026-06-08-vm-as-canonical-semantics.md + 2026-07-04-primitives-as-canonical-ir.md.
 
 | Path | Speed | Fidelity | Use Case |
 |------|-------|----------|----------|
@@ -109,7 +119,9 @@ Unix gave developers pipes to compose programs written by humans. This platform 
 
 Each tier catches failures before you pay the next tier's cost. The tree walker is the highest-leverage: cheapest to build, saves the most expensive operation (backend compilation) most often.
 
-### Expression Levels & the Canonical IR
+### Expression Levels & the Canonical IR (Historical)
+
+> **Note (2026-07-06):** The planned separate `Poly/Ir/` was never created. Primitives (enhanced during lowering) serve as the canonical IR for execution. The AST remains the primary symbolic/serializable form. Models should not be exposed to execution-model details (ring allocation, etc.). Lowering must preserve and expand metadata.
 
 The evaluation tiers are projection targets, not authoring surfaces. Models express intent at one of three levels, with the Canonical IR (`Poly/Ir/`) as the pivot:
 
@@ -125,7 +137,7 @@ The IR is the lowest level that is semantically complete: every IR `Module` has 
 
 Once IR is verified by the VM, every backend is a **deterministic projection** of the same canonical representation (C# source, µop listing, CFG visualization, domain-level trace). The model never generates per-language code.
 
-For the full three-level architecture, the IR design, and the lowering pipeline, see `docs/ARCHITECTURE.md` §3 and `docs/experiments/interpretation-compiler-framework-plan.md`.
+For the full three-level architecture, the IR design, and the lowering pipeline, see `docs/ARCHITECTURE.md` §3 and `docs/experiments/interpretation-compiler-framework-plan.md` (both also require updates for current direction).
 
 ### Analysis ↔ Interpreter Boundary
 

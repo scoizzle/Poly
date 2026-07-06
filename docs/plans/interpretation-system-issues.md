@@ -1306,7 +1306,7 @@ DONE:   ANA-001, ANA-003, ANA-004 (passes + consumers + tests)
         INT-004 (fail fast), INT-008 (TypeCheck)
         New.ToPrimitives + catalog wiring, incremental state isolation
         Expansion integration tests, all fix-up items resolved
-PARTIAL: INT-001 (EmitThrowOp + try/catch wired; blocked on INT-018 Phase 1 for finally/using/nested)
+PARTIAL: INT-001 (EmitThrowOp + try/catch + basic try/finally + multi-catch wired via Strategy B; blocked on full INT-018 for using dispose, catch-var binding, nested EH)
     ↓
 ── P1 primitive IR (unblocked by P0) ───────────────────────────
 INT-018 (EH primitives)               needs ANA-003 metadata — ready

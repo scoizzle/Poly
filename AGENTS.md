@@ -32,11 +32,11 @@ The expanded rationale, history, and examples of how these principles have been 
 
 ## Overview & Architecture
 
-**Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in a symbolic IR, validated by the VM (canonical semantics), compiled to native backends. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` and `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
+**Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in the AST (the primary symbolic/serializable IR), validated by the VM (canonical execution semantics), compiled to native backends. The AST is the model-facing symbolic form; the PrimitiveNode instruction set is the canonical IR for the VM execution engine. Lowering (ToPrimitives) expands known analysis metadata rather than discarding structure. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` (with 2026-07-06 clarification), `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`, and `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
 
-**Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, VM design, and the neurosymbolic platform vision).
+**Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, VM design, and the neurosymbolic platform vision). Consult the 2026-07-06 docs cleanup for current layering (AST as symbolic primary; primitives as execution IR).
 
-- `Poly/` — core DSL: Syntax, Interpretation (VM), Synthesis (macros), Introspection, Validation, Data/Modeling, Text. (Canonical IR at `Ir/` is a planned migration — see `docs/experiments/interpretation-compiler-framework-plan.md`.)
+- `Poly/` — core DSL: Syntax (AST as symbolic IR), Interpretation (VM execution), Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
 - `Poly.Benchmarks/` — example entry point. (FluentApiExample.cs is fully commented out — do not treat it as a reference.)
 - `Poly.Tests/` — unit tests using **TUnit** (not xUnit/NUnit).
 
@@ -54,18 +54,25 @@ The expanded rationale, history, and examples of how these principles have been 
 ## Primitive IR — Canonical Intermediate Representation
 
 The `PrimitiveNode` instruction set (defined in `Poly/Syntax/Primitives/`) is the canonical
-intermediate representation. The planned separate `Poly/Ir/` module has been superseded —
-the primitives themselves carry the IR's semantics, enhanced with explicit dataflow slots
+intermediate representation for the VM execution engine. The planned separate `Poly/Ir/`
+module has been superseded — the primitives (plus metadata expanded during lowering)
+carry the IR's semantics for execution, enhanced with explicit dataflow slots
 (`ValueSlot`, `InputSlots`, `ResultSlot`) and a `Phi` primitive for SSA merge points.
 
+**Lowering discipline:** `ToPrimitives()` (driven by `ExpansionPass` + `ExpansionContext`)
+must not throw away information from the AST or prior analysis passes. It is the point
+to expand known metadata (regions, value kinds, dataflow facts, call sites, etc.) so
+the resulting primitives + metadata are information-preserving for the execution path.
+The AST remains the primary symbolic/serializable form for models and synthesis.
+
 See `Poly/Syntax/Primitives/README.md` for the taxonomy and `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`
-for the full rationale.
+for the full rationale (including the 2026-07-06 lowering note).
 
 ## Interpretation
 
 **Before working in this area:** Review `docs/decisions/` for any architecture or analysis-related decisions.
 
-Interpretation contains the VM execution engine and semantic analysis passes. It does **not** define the IR — it consumes it.
+Interpretation contains the VM execution engine and semantic analysis passes. It does **not** define the IR — it consumes the lowered primitives (with metadata expanded at lowering time). The AST (`Syntax/Nodes`) is the primary symbolic form; Interpretation owns execution semantics on the primitive IR.
 
 **The TreeWalkingInterpreter has been removed.** The VM is the sole canonical execution engine.
 See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
@@ -104,7 +111,7 @@ var analyzer = new AnalyzerBuilder()
 
 var result = analyzer.Analyze(node);
 
-// 2. Compile primitives to executable delegate
+// 2. Compile primitives (with metadata expanded during lowering) to executable delegate
 var primitives = result.GetMetadata<PrimitiveExpansionMetadata>(node)!.Primitives;
 var program = ProgramCompiler.CompilePrimitives(primitives);
 
@@ -113,8 +120,10 @@ using var state = new VmState(program);
 var output = Vm.Execute(state);
 ```
 
-See `Poly/Syntax/Primitives/README.md` for the primitive taxonomy and
-`Poly/Syntax/Primitives/Module.cs` for the block-structured SSA container.
+See `Poly/Syntax/Primitives/README.md` for the primitive taxonomy.
+
+During expansion, prior analysis metadata is expanded into the output (not discarded) so that
+the primitives for a node plus attached metadata are sufficient for correct VM execution.
 
 ## Validation
 
@@ -204,7 +213,7 @@ Before performing analysis or making changes to **any** section:
 - Consult the decisions in `docs/decisions/` that correspond to that area (see `docs/decisions/README.md`).
 - In particular, review `docs/decisions/2026-core-engineering-principles.md` (the foundational "why we do things this way" decisions).
 
-Major decisions (such as the 2026 immutable core + evolution layer work, and the neurosymbolic platform vision) are documented there. When you make a significant cross-cutting choice, add or update the corresponding decision record and reference it from here and from the relevant section above.
+Major decisions (such as the 2026 immutable core + evolution layer work, the neurosymbolic platform vision with 2026-07-06 clarification, primitives as execution IR, and VM as canonical semantics) are documented there. The 2026-07-06 docs cleanup pass further solidified: AST as primary symbolic/serializable IR for models; primitives + expanded metadata as the execution IR; no information loss on lowering. When you make a significant cross-cutting choice, add or update the corresponding decision record and reference it from here and from the relevant section above.
 
 AGENTS.md contains the *operational* rules. `docs/decisions/` contains the *rationale and history*. Both are required reading.
 

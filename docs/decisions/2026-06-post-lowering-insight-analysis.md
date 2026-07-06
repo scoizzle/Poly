@@ -7,7 +7,7 @@
 
 ## Context
 
-The neurosymbolic platform vision states that models codify discovered algorithms and heuristics as composable macros in a symbolic IR, validated by a tree-walker interpreter, and compiled to native backends.
+The neurosymbolic platform vision states that models codify discovered algorithms and heuristics as composable macros in a symbolic IR (primarily the AST), validated via the VM (canonical execution semantics), and compiled to native backends. Tree-walker references are historical.
 
 A critical insight emerged during the design of the tree-walking interpreter and lowering system:
 

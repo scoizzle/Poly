@@ -1,10 +1,10 @@
 # Interpretation System — Resolution Plan
 
 **Created:** 2026-07-05  
-**Updated:** 2026-07-06 (committed `ad9ed56`)  
+**Updated:** 2026-07-06 (committed `e7199a2`)  
 **Source:** [`docs/interpretation-system-architecture-review.md`](../interpretation-system-architecture-review.md) (Rev 1.15)  
 **Companion:** [`interpretation-system-issues.md`](interpretation-system-issues.md) (INT-/ANA- tracker)  
-**Baseline:** 1420/1420 tests green (was 1408); P0 analysis sprint complete; **Phase 1 in progress** (Strategy B try/catch MVP landed); **P2 harness + P3 hardening partial** landed (`ad9ed56`).
+**Baseline:** 1421/1421 tests green (was 1420); P0 analysis sprint complete; **Phase 1 in progress** (Strategy B try/catch MVP landed); **P2 harness complete**; P3 hardening partial.
 
 This plan turns architectural findings into **ordered, checkable work**. Task IDs are stable (`P0-001`, `P1C-012`, …). Check boxes in PRs or update status inline as work lands.
 
@@ -12,9 +12,9 @@ This plan turns architectural findings into **ordered, checkable work**. Task ID
 
 | Phase | Done | In progress | Open | Notes |
 |-------|------|-------------|------|-------|
-| **P0** Truth sync | 8/16 | — | 8 | Review §5 + several C-* resolved; tracker/vision ADRs still open |
-| **P1** EH (INT-018) | 22/36 | 14 | — | P1A+P1B done; P1C try/catch MVP; finally/using/nested remain |
-| **P2** Parity | 4/27 | 2 | 21 | Harness + 2 MatchLinq tests (`ad9ed56`); P2-003/004 open |
+| **P0** Truth sync | 10/16 | — | 6 | vm-gap EH row + ADR deferrals (`e7199a2`); tracker/vision ADRs still open |
+| **P1** EH (INT-018) | 23/36 | 13 | — | P1A+P1B done; P1C try/catch MVP; finally/using/nested remain |
+| **P2** Parity | 7/27 | 1 | 19 | Harness complete (`e7199a2`); 4 MatchLinq breadth tests |
 | **P3** Hardening | 9/21 | 2 | 10 | Ring save, TypeIs scalar, ABI partial, ExpansionPass guard |
 | **P4–P5** | 0 | — | all | Not started |
 | **P6** Hygiene | 2/24 | — | 22 | Dead CSharp code removed; Phi README fixed |
@@ -77,7 +77,7 @@ flowchart TD
 ### Phase 0 — Truth sync
 **Goal:** Docs and tracker match code. No false `done`.  
 **Exit:** High-severity doc-only C-* resolved; §5 header restored.  
-**Status:** **in progress** — 8/16 tasks done.
+**Status:** **in progress** — 10/16 tasks done.
 
 ### Phase 1 — Exception handling (INT-018)
 **Goal:** VM EH matches semantics (Strategy B — side table).  
@@ -87,7 +87,7 @@ flowchart TD
 ### Phase 2 — Cross-engine parity
 **Goal:** VM ↔ Linq disagree in tests, not silently.  
 **Exit:** C-016, C-026 resolved or narrowed; parameterized `AssertVmMatchesLinq`.  
-**Status:** **in progress** — parameterized harness + 2 MatchLinq tests (`ad9ed56`).
+**Status:** **in progress** — harness complete (`e7199a2`); 4 breadth-first MatchLinq tests.
 
 ### Phase 3 — VM correctness hardening
 **Goal:** Latent bugs exposed by tests.  
@@ -149,8 +149,8 @@ flowchart TD
 - [x] **P0-020** Revise `docs/decisions/vm-gap-analysis.md` feature matrix: Exceptions → ✗; TypeIs → ✓; remove or reorder resolved priority items (#1 TypeIs, #2 GC, #4 breakpoints partial).
   - **Done:** 2026-07-06 (commit `3d7b1d7`); priority list annotated
 
-- [ ] **P0-021** Refresh vm-gap-analysis EH row — still says "catch/finally bodies execute unconditionally" though try/catch dispatch is implemented; update to reflect P1C partial (try/catch ✓, finally/using ✗).
-  - **Depends:** P0-020 (partial refresh)
+- [x] **P0-021** Refresh vm-gap-analysis EH row — still says "catch/finally bodies execute unconditionally" though try/catch dispatch is implemented; update to reflect P1C partial (try/catch ✓, finally/using ✗).
+  - **Done:** EH row → 🟡 partial (`e7199a2`)
 
 - [x] **P0-022** Reconcile priority #7 "policy/event opcodes" with domain-lowering-boundary ADR — document V2 lowers to generic ops; remove or reword #7.
   - **Done:** C-025 resolved in review; vm-gap priority #7 updated
@@ -165,23 +165,24 @@ flowchart TD
 - [ ] **P0-025** **Q1=defer** Update `2026-07-04-primitives-as-canonical-ir.md` status note: Module/BasicBlock deferred until consumer emerges; flat `CompilePrimitives` sufficient.
   - **Maps:** C-001, K-003, INT-009, INT-021
 
-- [ ] **P0-026** **Q2=defer all** Triage unimplemented ADRs — set explicit status on each:
+- [x] **P0-026** **Q2=defer all** Triage unimplemented ADRs — set explicit status on each:
   - `bytecode-serialization` → Deferred until INT-019 consumer
   - `peephole-optimizer` → Deferred (INT-008)
   - `sandboxing-approach` → Deferred (no PermissionSet)
   - `breakpoint-architecture` → Partial (`DebugInterrupt` only) — defer `BreakpointPCs`
   - **Files:** each ADR front-matter + `docs/decisions/README.md`
   - **Maps:** K-040, open Q13 in architecture review
+  - **Partial:** 4/4 ADR front-matters annotated (`e7199a2`); `docs/decisions/README.md` index not yet updated
 
 #### P0-D — Verification (no code)
 
 - [x] **P0-030** Run full test suite; confirm green.
-  - **Done:** 1420/1420 (2026-07-06)
+  - **Done:** 1421/1421 (2026-07-06)
 
 **Phase 0 exit checklist:**
 - [x] P0-001, P0-002, P0-004, P0-005 (review doc) — P0-003 still open
 - [ ] P0-010 through P0-012 (tracker)
-- [x] P0-020, P0-022, P0-023 (ADR sync) — P0-021 refresh open
+- [x] P0-020, P0-021, P0-022, P0-023 (ADR sync) — P0-026 partial (README index open)
 - [ ] P0-025 (Q1 answered defer; ADR note not yet written)
 
 ---
@@ -316,8 +317,8 @@ flowchart TD
 - [x] **P1C-060** `RegionMarker => null` with INT-018 Strategy B comment.
   - **Done:** `ProgramCompiler.cs:163`
 
-- [ ] **P1C-061** Update `vm-gap-analysis.md` EH row to reflect partial implementation (try/catch ✓, finally/using ✗).
-  - **Open:** feature matrix still ✗ with stale note
+- [x] **P1C-061** Update `vm-gap-analysis.md` EH row to reflect partial implementation (try/catch ✓, finally/using ✗).
+  - **Done:** same change as P0-021 (`e7199a2`)
 
 - [ ] **P1C-062** Architecture review §5: **C-017 resolved**; **C-018** and **C-023** still open.
   - **Partial:** C-017/C-002/C-012 done 2026-07-06; C-018 awaits finally/using/nested
@@ -354,8 +355,8 @@ flowchart TD
 - [x] **P2-002** Add overload `AssertVmMatchesLinq(DomainExpression expr)` → calls with empty args (preserve existing 11 tests).
   - **Done:** overloads at ~272–282 — `ad9ed56`
 
-- [ ] **P2-003** Extract shared `NormalizeResult(object?) → long` used by both paths (bool → 0/1, null → 0, etc.).
-  - **Open:** inline switch in `AssertVmMatchesLinqImpl`; not yet extracted
+- [x] **P2-003** Extract shared `NormalizeResult(object?) → long` used by both paths (bool → 0/1, null → 0, etc.).
+  - **Done:** `NormalizeLongResult` helper (`e7199a2`)
 
 - [ ] **P2-004** Fix **K-048**: either add LINQ comparison to `AssertVmMatchesLinqComposite` OR rename to `AssertVmMultiCase` and document VM-only.
   - **Files:** `VmCorrectnessTests.cs` (~381–410)
@@ -364,7 +365,8 @@ flowchart TD
 
 - [x] **P2-010** `MatchLinq_PropertyAccess_Age` — parameterized entity
   - **Done:** `VmCorrectnessTests.cs` — `ad9ed56` (manual LINQ/VM compare; not yet routed through harness)
-- [ ] **P2-011** `MatchLinq_PropertyAccess_NameEq`
+- [x] **P2-011** `MatchLinq_PropertyAccess_NameEq`
+  - **Done:** `VmCorrectnessTests.cs` — `e7199a2`
 - [x] **P2-012** `MatchLinq_MethodCall_StringLength`
   - **Done:** `VmCorrectnessTests.cs` — `ad9ed56`
 - [ ] **P2-013** `MatchLinq_MethodCall_MathMax`
@@ -373,7 +375,8 @@ flowchart TD
 - [ ] **P2-016** `MatchLinq_WhileLoop_Count`
 - [ ] **P2-017** `MatchLinq_ForLoop_Count` (if VM supports)
 - [ ] **P2-018** `MatchLinq_DoWhileLoop`
-- [ ] **P2-019** `MatchLinq_Coalesce`
+- [x] **P2-019** `MatchLinq_Coalesce`
+  - **Done:** `MatchLinq_Coalesce_NonNull` — `ad9ed56` (weak oracle: non-zero heap handle only, not full value compare)
 - [ ] **P2-020** `MatchLinq_TypeIs_HeapRef` — **blocked** until P3-040 or confirm TypeCheck works
 - [ ] **P2-021** `MatchLinq_Lambda_NoCapture` — simple `() => expr`
 - [ ] **P2-022** `MatchLinq_Lambda_WithCapture` — **blocked** until P3-030
@@ -414,8 +417,8 @@ flowchart TD
   - **Maps:** K-025, §4.13.5 Phase 3
 
 **Phase 2 exit checklist:**
-- [ ] P2-001–P2-003 harness done — P2-001/002 ✅; P2-003 open
-- [ ] ≥8 new MatchLinq tests (P2-010–P2-019 minimum) — 2/8 (P2-010, P2-012)
+- [x] P2-001–P2-003 harness done
+- [ ] ≥8 new MatchLinq tests (P2-010–P2-019 minimum) — 4/8 (P2-010, P2-011, P2-012, P2-019)
 - [ ] P2-030–P2-033 after Phase 1
 - [ ] C-016, C-026 updated in review
 
@@ -720,7 +723,7 @@ flowchart TD
 | **S1** | P0-001–P0-023, P1A-001–P1A-003 | Docs synced; throw wired + test | ✅ **mostly done** — P0-003/010–012/021/024–026 open |
 | **S2** | P1B-001, P1C-001–P1C-012 | EH ADR; region table; handlers compile | ✅ **done** — P1B-003 open |
 | **S3** | P1C-020–P1C-042, P1C-062–P1C-064 | Full EH; INT-018 done | **in progress** — try/catch MVP; finally/using/nested remain |
-| **S4** | P2-001–P2-019, P2-030–P2-033 | Parameterized MatchLinq + EH parity | **in progress** — harness + 2 MatchLinq tests (`ad9ed56`) |
+| **S4** | P2-001–P2-019, P2-030–P2-033 | Parameterized MatchLinq + EH parity | **in progress** — harness done; 4/8 breadth tests (`e7199a2`) |
 | **S5** | P3-001–P3-034, P3-050, P3-060–P3-061 | Ring fix; closures; TypeIs | **in progress** — ring save, scalar TypeIs, ABI partial |
 | **S6** | P4-001–P4-034 | INT-019 MVP | not started |
 | **ongoing** | P6-* between sprints | Hygiene | **in progress** — P6-003, P6-011 done |
@@ -736,7 +739,7 @@ flowchart TD
 | C-017 | P1C-024 | ✅ closed in review |
 | C-018, C-023 | P1C-062 | open |
 | C-010 | P0-020 | ✅ closed |
-| C-023 (ADR) | P1C-061 | open |
+| C-023 (ADR) | P1C-061 | narrowed — vm-gap EH row updated |
 | C-025, K-041 | P0-022 | ✅ closed |
 | C-005 | P0-023 | ✅ closed |
 | C-009 | P0-012 | open |
@@ -779,4 +782,4 @@ flowchart TD
 
 ---
 
-*Task count: 154 total · **46 done** · **16 in progress** (P1C + P2/P3 partial) · **108 open** — last synced 2026-07-06 (`ad9ed56`).*
+*Task count: 154 total · **53 done** · **14 in progress** (P1C + P2 breadth + P3 partial) · **101 open** — last synced 2026-07-06 (`e7199a2`).*

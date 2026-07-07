@@ -14,9 +14,4 @@ public sealed record Not(Node Value) : Expression {
     /// <inheritdoc />
     public override string ToString() => $"!{Value}";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        foreach (var p in Value.ToPrimitives(context)) yield return p;
-        yield return new Primitives.UnaryOp(Poly.Syntax.Primitives.UnaryOpKind.Not);
-    }
 }

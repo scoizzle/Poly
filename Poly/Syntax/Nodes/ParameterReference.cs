@@ -8,9 +8,4 @@ namespace Poly.Syntax.Nodes;
 public sealed record ParameterReference : Node {
     public override string ToString() => "(parameter)";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        // Parameter references are resolved by analysis; placeholder
-        yield return new Primitives.PushConstant(0L);
-    }
 }

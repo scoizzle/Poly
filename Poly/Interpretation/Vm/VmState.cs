@@ -1,3 +1,6 @@
+using Poly.Syntax;
+using Poly.Syntax.Nodes;
+
 namespace Poly.Interpretation.Vm;
 
 public sealed class VmState : IDisposable {
@@ -36,6 +39,21 @@ public sealed class VmState : IDisposable {
     /// function.  Restored by the caller after the function returns.</summary>
     public int OldFrameBase { get; set; }
 
+    /// <summary>
+    /// In the direct (structured expression) execution path, this holds a reference
+    /// to the AST node currently being executed or at which we are suspended.
+    /// This allows debuggers, tracers, and suspend/resume logic to work directly
+    /// with the symbolic AST rather than a synthetic PC.
+    /// In the primitive path this may remain null (position derived from ProgramCounter + analysis).
+    /// </summary>
+    public Node? CurrentAstNode { get; set; }
+
+    /// <summary>
+    /// Lightweight, serializable identifier for the current AST node (preferred
+    /// for suspended state that needs to be persisted or sent over the wire).
+    /// </summary>
+    public NodeId? CurrentNodeId { get; set; }
+
     public VmState(VmProgram program) {
         Program = program;
     }
@@ -70,6 +88,8 @@ public sealed class VmState : IDisposable {
         Stack.Reset();
         Heap.Clear();
         LoopCounters = null;
+        CurrentAstNode = null;
+        CurrentNodeId = null;
     }
 
     public void Dispose() => Stack.Dispose();

@@ -76,7 +76,7 @@ internal sealed class ExceptionRegionState : IAnalysisMetadata {
 /// (<see cref="TryCatchFinally"/>, <see cref="UsingStatement"/>)
 /// and builds an <see cref="ExceptionRegionMetadata"/> table.
 ///
-/// Placement: after <c>LambdaReturnTypeResolution</c>, before <c>ExpansionPass</c>
+/// Placement: after <c>LambdaReturnTypeResolution</c>
 /// (slot 12 in the pipeline).
 /// </summary>
 internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {

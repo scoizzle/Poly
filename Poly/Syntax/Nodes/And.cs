@@ -15,7 +15,4 @@ public sealed record And(Node LeftHandValue, Node RightHandValue) : Expression {
     /// <inheritdoc />
     public override string ToString() => $"{LeftHandValue} and {RightHandValue}";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) =>
-        EmitBinaryOp(LeftHandValue, RightHandValue, Primitives.OpKind.And, context);
 }

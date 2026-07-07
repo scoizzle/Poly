@@ -15,7 +15,4 @@ public sealed record Or(Node LeftHandValue, Node RightHandValue) : Expression {
 
     /// <inheritdoc />
     public override string ToString() => $"{LeftHandValue} || {RightHandValue}";
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) =>
-        EmitBinaryOp(LeftHandValue, RightHandValue, Primitives.OpKind.Or, context);
 }

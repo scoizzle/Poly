@@ -21,16 +21,4 @@ public sealed record Parameter(string Name, Node? TypeReference = null, Node? De
         return sb.ToString();
     }
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        var env = context.Env;
-        if (!env.TryGetSlot(this, out var slotIndex)) {
-            if (env.TryGetLambdaParameterSlot(Name, out slotIndex))
-                env.AliasSlot(this, slotIndex);
-            else
-                slotIndex = env.GetOrAssignSlot(this);
-        }
-
-        yield return new Primitives.Parameter(slotIndex);
-    }
 }

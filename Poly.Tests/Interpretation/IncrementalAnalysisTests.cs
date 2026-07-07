@@ -23,7 +23,7 @@ public class IncrementalAnalysisTests {
         .UseDefiniteAssignmentAnalysis()
         .UseLambdaReturnTypeResolution()
         .UseExceptionRegionAnalysis()
-        .UsePrimitiveExpansion()
+        // .UsePrimitiveExpansion() — deprecated, non-critical path
         .Build();
 
     [Test]

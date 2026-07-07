@@ -15,7 +15,4 @@ public sealed record Divide(Node LeftHandValue, Node RightHandValue) : Expressio
     /// <inheritdoc />
     public override string ToString() => $"({LeftHandValue} / {RightHandValue})";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) =>
-        EmitBinaryOp(LeftHandValue, RightHandValue, Primitives.OpKind.Div, context);
 }

@@ -52,7 +52,7 @@ public static class PolicyEvaluator {
     /// <summary>
     /// Compiles <paramref name="policy"/> into a <c>Func&lt;TEntity, bool&gt;</c>
     /// that evaluates the policy's guard expression against an entity instance.
-    /// Uses the new <c>ExpansionPass</c> + <c>CompilePrimitives</c> pipeline.
+    /// Uses the direct AST lowering pipeline.
     /// </summary>
     public static Func<TEntity, bool> CompileVMPredicate<TEntity>(this Policy policy) {
         ArgumentNullException.ThrowIfNull(policy);

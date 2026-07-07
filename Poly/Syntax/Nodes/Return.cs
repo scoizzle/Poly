@@ -18,15 +18,4 @@ public sealed record Return(Node? Value = null) : Statement {
     public static Return True => new(new Constant(true));
     public static Return Null => new(new Constant(null));
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        if (Value is not null) {
-            foreach (var p in Value.ToPrimitives(context))
-                yield return p;
-        }
-        else {
-            yield return new Primitives.PushConstant(0L);
-        }
-        yield return new Primitives.Return();
-    }
 }

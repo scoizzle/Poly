@@ -19,7 +19,6 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 | `DefiniteAssignmentAnalyzer` | `.UseDefiniteAssignmentAnalysis()` | `DefiniteAssignmentMetadata` | (none) |
 | `LambdaReturnTypeAnalyzer` | `.UseLambdaReturnTypeResolution()` | Resolved Lambda types | (none) |
 | `ExceptionRegionAnalyzer` | `.UseExceptionRegionAnalysis()` | `ExceptionRegionMetadata`, `InProtectedRegionMetadata` | (none) |
-| `ExpansionPass` | `.UsePrimitiveExpansion()` | `PrimitiveExpansionMetadata` | (none) |
 
 ## Pass Ordering
 

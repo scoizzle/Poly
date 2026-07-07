@@ -9,10 +9,4 @@ public sealed record NewArray(Node ElementType, Node Length) : Expression {
     public override IEnumerable<Node?> Children => [Length, ElementType];
     public override string ToString() => $"new {ElementType}[{Length}]";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        // Element type is compile-time metadata — no runtime µops needed
-        foreach (var p in Length.ToPrimitives(context)) yield return p;
-        yield return new Primitives.NewArray();
-    }
 }

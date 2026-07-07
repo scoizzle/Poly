@@ -1,5 +1,3 @@
-using Poly.Syntax.Primitives;
-
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -15,28 +13,4 @@ public sealed record Conditional(Node Condition, Node IfTrue, Node IfFalse) : Ex
     /// <inheritdoc />
     public override string ToString() => $"({Condition} ? {IfTrue} : {IfFalse})";
 
-    /// <inheritdoc />
-    public override IEnumerable<PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        var elseLabel = new Label("ternary_else");
-        var mergeLabel = new Label("ternary_merge");
-
-        // Condition
-        foreach (var p in Condition.ToPrimitives(context))
-            yield return p;
-        yield return new CondGoto(elseLabel);
-
-        // True branch
-        foreach (var p in IfTrue.ToPrimitives(context))
-            yield return p;
-        yield return new Goto(mergeLabel);
-
-        // False branch
-        yield return elseLabel;
-        foreach (var p in IfFalse.ToPrimitives(context))
-            yield return p;
-
-        // Merge: Phi annotation.
-        yield return mergeLabel;
-        yield return new Phi();
-    }
 }

@@ -14,7 +14,4 @@ public sealed record GreaterThan(Node LeftHandValue, Node RightHandValue) : Expr
 
     public override string ToString() => $"{LeftHandValue} > {RightHandValue}";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) =>
-        EmitBinaryOp(LeftHandValue, RightHandValue, Primitives.OpKind.Gt, context);
 }

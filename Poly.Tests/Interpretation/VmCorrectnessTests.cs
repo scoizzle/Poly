@@ -705,8 +705,7 @@ public class VmCorrectnessTests {
     [Test]
     public async Task Fuzz_Phi_NestedConditional_DifferentRingDepths() {
         // φ merging at nested Conditional convergence points.
-        // Fixed by ring-based BuildTargetDepth + ComputePrimitiveRingDepths
-        // (see RingAllocator.Compute).
+        // Fixed by ring-based depth tracking in the direct emitter.
         // if (true) { (if (true) { 1+2 } else { 3 }) } else { 4 } → should be 3
         var body = new Conditional(
             new Constant(1L),
@@ -921,37 +920,16 @@ public class VmCorrectnessTests {
 
     // ── New pipeline helpers ──────────────────────────────────────
 
-    private static VmProgram CompileNew(Node node) {
-        // Use the analysis pipeline with ExpansionPass for proper integration
-        var analysis = new AnalyzerBuilder()
-            .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
-            .UseVariableScopeValidator()
-            .UseSideEffectAnalysis()
-            .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseValueRepresentationAnalysis()
-            .UseCallSiteCatalog()
-            .UseExceptionRegionAnalysis()
-            .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass())
-            .Build()
-            .Analyze(node);
-        var meta = analysis.GetMetadata<Poly.Interpretation.Analysis.PrimitiveExpansionMetadata>(node);
-        if (meta is null) throw new InvalidOperationException("No PrimitiveExpansionMetadata");
-        var primsList = meta.Primitives.ToList();
-        primsList.Add(new Poly.Syntax.Primitives.Return());
-        var linked = Poly.Interpretation.Vm.PrimitiveLinker.Link(primsList);
-        return Poly.Interpretation.Vm.ProgramCompiler.CompilePrimitives(linked);
-    }
+    private static VmProgram CompileNew(Node node) =>
+        Interpreter.Compile(node, CompilationMode.Normal);
 
     private static long ExecNew(Node node) {
-        var prog = CompileNew(node);
-        using var exec = Interpreter.Execute(prog, s => s.MaxLoopIterations = 10_000);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node), s => s.MaxLoopIterations = 10_000);
         return (long)(exec.Result.Value ?? 0);
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  E. New pipeline (CompilePrimitives) tests
+    //  E. Standard pipeline tests (direct ABI lowering)
     // ═══════════════════════════════════════════════════════════════
 
     [Test, Timeout(10_000)]
@@ -1044,13 +1022,23 @@ public class VmCorrectnessTests {
 
     [Test, Timeout(10_000)]
     public async Task New_If_TrueBranch(CancellationToken ct) {
-        var r = ExecNew(new IfStatement(new Constant(1), new Constant(42), new Constant(0)));
+        var result = new Variable("r");
+        var r = ExecNew(new Block([
+            new Assignment(result, new Constant(0L)),
+            new IfStatement(new Constant(1L), new Assignment(result, new Constant(42L))),
+            result
+        ], [result]));
         await Assert.That(r).IsEqualTo(42L);
     }
 
     [Test, Timeout(10_000)]
     public async Task New_If_FalseBranch(CancellationToken ct) {
-        var r = ExecNew(new IfStatement(new Constant(0), new Constant(1), new Constant(99)));
+        var result = new Variable("r");
+        var r = ExecNew(new Block([
+            new Assignment(result, new Constant(0L)),
+            new IfStatement(new Constant(0L), new Assignment(result, new Constant(1L)), new Assignment(result, new Constant(99L))),
+            result
+        ], [result]));
         await Assert.That(r).IsEqualTo(99L);
     }
 
@@ -1080,45 +1068,24 @@ public class VmCorrectnessTests {
         await Assert.That(r).IsEqualTo(5L);
     }
 
-    // ── New pipeline: string constants ──
+    // ── New pipeline: string constants via direct path ──
 
     [Test, Timeout(10_000)]
-    public async Task New_StringConstant_PushesHeapHandle(CancellationToken ct) {
-        var ctx = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
-        var pCtx = new Poly.Syntax.Primitives.ExpansionContext(ctx);
-        var prims = new Constant("hello").ToPrimitives(pCtx).ToArray();
-        await Assert.That(prims.Length).IsEqualTo(1);
-        await Assert.That(prims[0]).IsTypeOf<Poly.Syntax.Primitives.PushConstant>();
-        var pc = (Poly.Syntax.Primitives.PushConstant)prims[0];
-        await Assert.That(pc.Value).IsEqualTo("hello");
+    public async Task New_StringConstant_ReturnsString(CancellationToken ct) {
+        var program = Interpreter.Compile(new Constant("hello"));
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.Result.HasValue).IsTrue();
+        await Assert.That(exec.Result.Value).IsEqualTo("hello");
     }
 
-    // ── New pipeline: Member access with resolved metadata ──
+    // ── New pipeline: Member access via direct path ──
 
     [Test, Timeout(10_000)]
-    public async Task New_Member_ResolvedProperty_CallsGetter(CancellationToken ct) {
-        // When Member has resolved metadata (from TypeAndMemberResolver),
-        // it emits a CallExternal primitive. Test that the primitive is
-        // emitted correctly by checking the type.
-        var m = new Member(new Constant(42L), "ToString");
-        // Without type resolution, falls back to PushConstant(0L)
-        var analysis = new AnalyzerBuilder()
-            .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
-            .UseVariableScopeValidator()
-            .UseSideEffectAnalysis()
-            .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseValueRepresentationAnalysis()
-            .UseCallSiteCatalog()
-            .UseExceptionRegionAnalysis()
-            .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass())
-            .Build()
-            .Analyze(m);
-        var meta = analysis.GetMetadata<PrimitiveExpansionMetadata>(m);
-        var primitives = meta?.Primitives;
-        // Should emit either CallExternal (if resolved) or PushConstant (if not)
-        await Assert.That(primitives).IsNotNull();
+    public async Task New_Member_ToStringOnInt_ReturnsString(CancellationToken ct) {
+        var program = Interpreter.Compile(new Member(new Constant(42L), "ToString"));
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.Result.HasValue).IsTrue();
+        await Assert.That(exec.Result.Value).IsEqualTo("42");
     }
 
     // ═══════════════════════════════════════════════════════════════

@@ -25,20 +25,4 @@ public sealed record Variable(string Name, Node? Value = null) : Expression {
     /// <inheritdoc />
     public override string ToString() => Name;
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        var env = context.Env;
-        if (!env.TryResolveSlot(this, out var slot))
-            throw new InvalidOperationException($"Variable '{Name}' has no slot assigned");
-
-        // When inside a child (lambda) scope and this variable belongs
-        // to a parent scope, emit LoadUpvalue instead of LoadLocal.
-        if (env.IsUpvalue(this)) {
-            int upvIdx = env.GetOrAssignUpvalueIndex(this);
-            yield return new Primitives.LoadUpvalue(upvIdx);
-        }
-        else {
-            yield return new Primitives.LoadLocal(slot);
-        }
-    }
 }

@@ -7,7 +7,5 @@ public sealed record VmProgram(
     int MaxActiveLocalsDepth,
     IReadOnlyList<Action<VmState>>? Functions = null,
     ValueRepresentationKind? RootValueKind = null,
-    IReadOnlyList<CallSiteEntry>? CallSites = null,
-    ExceptionRegionTable? Regions = null,
-    PcToRingDepth? PcDepthMap = null
+    IReadOnlyList<CallSiteEntry>? CallSites = null
 );

@@ -4,7 +4,4 @@ public sealed record ShiftLeft(Node LeftHandValue, Node RightHandValue) : Expres
     public override IEnumerable<Node?> Children => [LeftHandValue, RightHandValue];
     public override string ToString() => $"({LeftHandValue} << {RightHandValue})";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) =>
-        EmitBinaryOp(LeftHandValue, RightHandValue, Primitives.OpKind.Shl, context);
 }

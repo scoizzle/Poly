@@ -1,5 +1,3 @@
-using Poly.Syntax.Primitives;
-
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -17,7 +15,4 @@ public sealed record Add(Node LeftHandValue, Node RightHandValue) : Expression {
     /// <inheritdoc />
     public override string ToString() => $"({LeftHandValue} + {RightHandValue})";
 
-    /// <inheritdoc />
-    public override IEnumerable<PrimitiveNode> ToPrimitives(ExpansionContext context) =>
-        EmitBinaryOp(LeftHandValue, RightHandValue, OpKind.Add, context);
 }

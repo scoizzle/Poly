@@ -17,41 +17,6 @@ public sealed record SwitchStatement(Node Value, IReadOnlyList<SwitchCase> Cases
         return $"switch ({Value}) {{ {cases}{defaultStr} }}";
     }
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        var endLabel = new Primitives.Label("switch_end");
-        var caseLabels = Cases.Select(_ => new Primitives.Label("case")).ToList();
-
-        // Emit value once; dup it for each comparison
-        foreach (var p in Value.ToPrimitives(context)) yield return p;
-
-        for (int i = 0; i < Cases.Count; i++) {
-            yield return new Primitives.Dup();
-
-            foreach (var p in Cases[i].Pattern.ToPrimitives(context)) yield return p;
-            yield return new Primitives.BinaryOp(Poly.Syntax.Primitives.OpKind.Eq);
-            yield return new Primitives.CondGoto(caseLabels[i]);
-        }
-
-        // No case matched
-        yield return new Primitives.Discard(); // discard original value
-        if (DefaultCase is not null) {
-            foreach (var p in DefaultCase.ToPrimitives(context)) yield return p;
-        }
-        yield return new Primitives.Goto(endLabel);
-
-        // Case bodies (each enters with value on stack, discards it)
-        for (int i = 0; i < Cases.Count; i++) {
-            yield return caseLabels[i];
-            yield return new Primitives.Discard(); // discard original value
-            foreach (var p in Cases[i].Body.ToPrimitives(context)) yield return p;
-            // Prevent fallthrough to next case
-            if (i < Cases.Count - 1 || DefaultCase is not null)
-                yield return new Primitives.Goto(endLabel);
-        }
-
-        yield return endLabel;
-    }
 }
 
 /// <summary>

@@ -32,9 +32,9 @@ The expanded rationale, history, and examples of how these principles have been 
 
 ## Overview & Architecture
 
-**Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in the AST (the primary symbolic/serializable IR), validated by the VM (canonical execution semantics), compiled to native backends. The AST is the model-facing symbolic form; the PrimitiveNode instruction set is the canonical IR for the VM execution engine. Lowering (ToPrimitives) expands known analysis metadata rather than discarding structure. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` (with 2026-07-06 clarification), `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`, and `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
+**Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in the AST (the primary symbolic/serializable IR), validated by the VM (canonical execution semantics), compiled to native backends. The AST is the model-facing symbolic form; `DirectVmAbiEmitter` performs direct AST-to-VM-ABI lowering without an intermediate primitive flattening step. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` (with 2026-07-06 clarification), `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`, and `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
 
-**Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, VM design, and the neurosymbolic platform vision). Consult the 2026-07-06 docs cleanup for current layering (AST as symbolic primary; primitives as execution IR).
+**Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, VM design, and the neurosymbolic platform vision). The AST is the symbolic primary; the VM ABI is the execution target.
 
 - `Poly/` — core DSL: Syntax (AST as symbolic IR), Interpretation (VM execution), Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
 - `Poly.Benchmarks/` — example entry point. (FluentApiExample.cs is fully commented out — do not treat it as a reference.)
@@ -49,30 +49,19 @@ The expanded rationale, history, and examples of how these principles have been 
 - No module may depend on `Synthesis` except `DomainModeling` (evolution loop).
 - Exception: CLR implementations under `Poly/Introspection/CommonLanguageRuntime` add concrete types without introducing reverse dependencies.
 - **Domain concepts lower to generic VM opcodes** (no domain-specific opcodes). See `docs/decisions/2026-06-08-domain-lowering-boundary.md`.
-- **The primitive instruction set is the canonical IR** — see `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`.
+- **The AST is the canonical symbolic form** — no intermediate primitive IR. The `DirectVmAbiEmitter` performs direct AST-to-VM-ABI lowering. See `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`.
 
-## Primitive IR — Canonical Intermediate Representation
+## Direct AST Lowering
 
-The `PrimitiveNode` instruction set (defined in `Poly/Syntax/Primitives/`) is the canonical
-intermediate representation for the VM execution engine. The planned separate `Poly/Ir/`
-module has been superseded — the primitives (plus metadata expanded during lowering)
-carry the IR's semantics for execution, enhanced with explicit dataflow slots
-(`ValueSlot`, `InputSlots`, `ResultSlot`) and a `Phi` primitive for SSA merge points.
-
-**Lowering discipline:** `ToPrimitives()` (driven by `ExpansionPass` + `ExpansionContext`)
-must not throw away information from the AST or prior analysis passes. It is the point
-to expand known metadata (regions, value kinds, dataflow facts, call sites, etc.) so
-the resulting primitives + metadata are information-preserving for the execution path.
-The AST remains the primary symbolic/serializable form for models and synthesis.
-
-See `Poly/Syntax/Primitives/README.md` for the taxonomy and `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`
-for the full rationale (including the 2026-07-06 lowering note).
+The `DirectVmAbiEmitter` (in `Poly/Interpretation/Vm/`) walks analyzed AST nodes and emits
+`System.Linq.Expressions` trees targeting `VmState` directly. No intermediate primitive
+flattening, ring allocator, or side-table reconstruction is needed.
 
 ## Interpretation
 
 **Before working in this area:** Review `docs/decisions/` for any architecture or analysis-related decisions.
 
-Interpretation contains the VM execution engine and semantic analysis passes. It does **not** define the IR — it consumes the lowered primitives (with metadata expanded at lowering time). The AST (`Syntax/Nodes`) is the primary symbolic form; Interpretation owns execution semantics on the primitive IR.
+Interpretation contains the VM execution engine and semantic analysis passes. It does **not** define the IR — it consumes the lowered primitives (with metadata expanded at lowering time). The AST (`Syntax/Nodes`) is the primary symbolic form; Interpretation owns execution semantics on the lowered AST.
 
 **The TreeWalkingInterpreter has been removed.** The VM is the sole canonical execution engine.
 See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.
@@ -90,7 +79,6 @@ for the full directory map, and the individual READMEs in each sub-directory for
 Syntax definitions are in `Poly/Syntax/`:
 - `Poly/Syntax/Nodes/` — AST node types (pure records)
 - `Poly/Syntax/Analysis/` — `AnalysisContext`, `AnalyzerBuilder`, `Analyzer`, diagnostics & metadata store
-- `Poly/Syntax/Primitives/README.md` — PrimitiveNode taxonomy and conventions
 
 ### Pipeline
 
@@ -106,24 +94,21 @@ var analyzer = new AnalyzerBuilder()
     .UseConstantFolding()
     .UseDefiniteAssignmentAnalysis()
     .UseLambdaReturnTypeResolution()
-    .UsePrimitiveExpansion()
+    .UseExceptionRegionAnalysis()
     .Build();
 
-var result = analyzer.Analyze(node);
+var analysis = analyzer.Analyze(node);
 
-// 2. Compile primitives (with metadata expanded during lowering) to executable delegate
-var primitives = result.GetMetadata<PrimitiveExpansionMetadata>(node)!.Primitives;
-var program = ProgramCompiler.CompilePrimitives(primitives);
+// 2. Compile direct (AST → VM ABI, no intermediate IR)
+var program = Interpreter.Compile(node, analysis);
 
 // 3. Execute
-using var state = new VmState(program);
-var output = Vm.Execute(state);
+using var exec = Interpreter.Execute(program, s => s.MaxLoopIterations = 10_000);
+var output = exec.Result;
 ```
 
-See `Poly/Syntax/Primitives/README.md` for the primitive taxonomy.
-
-During expansion, prior analysis metadata is expanded into the output (not discarded) so that
-the primitives for a node plus attached metadata are sufficient for correct VM execution.
+See `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` for the emitter implementation.
+the lowered AST plus attached metadata are sufficient for correct VM execution.
 
 ## Validation
 
@@ -199,7 +184,7 @@ The full rationale for these exact rules lives in (or should be added to) `docs/
 | Analysis passes             | `Interpretation/Analysis/` — see `Poly/Interpretation/Analysis/README.md` |
 | AST node types              | `Syntax/Nodes/` |
 | VM execution engine         | `Interpretation/Vm/` — see `Poly/Interpretation/Vm/README.md` |
-| Primitive IR (canonical)    | `Syntax/Primitives/` — see `Poly/Syntax/Primitives/README.md` |
+| Canonical lowering          | `Interpretation/Vm/` — see `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` |
 | Validation rules            | `Validation/Rules/` (register in `Validation/Rule.cs`) |
 | Data-model constraints      | `Data/Modeling/Validation/` |
 | Shared helpers              | `Extensions/` |
@@ -213,7 +198,7 @@ Before performing analysis or making changes to **any** section:
 - Consult the decisions in `docs/decisions/` that correspond to that area (see `docs/decisions/README.md`).
 - In particular, review `docs/decisions/2026-core-engineering-principles.md` (the foundational "why we do things this way" decisions).
 
-Major decisions (such as the 2026 immutable core + evolution layer work, the neurosymbolic platform vision with 2026-07-06 clarification, primitives as execution IR, and VM as canonical semantics) are documented there. The 2026-07-06 docs cleanup pass further solidified: AST as primary symbolic/serializable IR for models; primitives + expanded metadata as the execution IR; no information loss on lowering. When you make a significant cross-cutting choice, add or update the corresponding decision record and reference it from here and from the relevant section above.
+Major decisions (such as the 2026 immutable core + evolution layer work, the neurosymbolic platform vision with 2026-07-06 clarification, direct AST-to-VM-ABI lowering, and VM as canonical semantics) are documented there. The 2026-07-06 docs cleanup pass further solidified: AST as primary symbolic/serializable IR; direct lowering as the execution path; no information loss on lowering. When you make a significant cross-cutting choice, add or update the corresponding decision record and reference it from here and from the relevant section above.
 
 AGENTS.md contains the *operational* rules. `docs/decisions/` contains the *rationale and history*. Both are required reading.
 

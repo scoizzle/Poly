@@ -1,58 +1,46 @@
 # VM Execution Engine (Interpretation/Vm/)
 
-The VM execution engine takes expanded primitive sequences and compiles them into
-LINQ Expression delegates for fast execution.
+The VM execution engine compiles analyzed AST nodes directly into LINQ Expression
+delegates for fast execution via `DirectVmAbiEmitter`.
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
+| `DirectVmAbiEmitter.cs` | **Primary compiler**: walks analyzed AST, emits `Action<VmState>` delegate |
 | `VmState.cs` | Per-execution state: stack, heap, registers, debug interrupt, trace, loop limits |
 | `VmProgram.cs` | Compiled program record (delegate + max local depth) |
-| `ProgramCompiler.cs` | `PrimitiveNode[]` → compiled `Action<VmState>` delegate via LINQ Expressions |
-| `CompilationContext.cs` | Ring-based µop value allocation, label management, local variable caching |
 | `ValueStack.cs` | Pooled `long[]` stack backed by `ArrayPool<long>.Shared` |
 | `Heap.cs` | Object heap for reference-type values with free-list recycling |
-| `PrimitiveLinker.cs` | Label→PC resolution for Goto/CondGoto primitives |
-| `CallSiteCompiler.cs` | Compiles external CLR method calls to `CallSiteDelegate` |
+| `CompilationMode.cs` | Debug/tracing vs. optimized mode enum |
 | `Closure.cs` | Closure representation (function index + captured values) |
 | `FunctionEntry.cs` | Function metadata (start PC, arg slots, local count) |
 | `VmTrace.cs` | µop-level tracing infrastructure (gated by `state.Trace != null`) |
-
-## Exception handling (Strategy B)
-
-Structured EH uses the side-table dispatch model (Strategy B) per
-docs/decisions/2026-07-05-vm-exception-handling-strategy-b.md.
-`ExceptionRegionTable` on `VmProgram` maps PC ranges to handler
-function indices. The main delegate is wrapped in a CLR `try/catch`
-that dispatches to handler functions via `ProgramCompiler.DispatchException`.
-
-**Status:** `PrimThrow` wired. Try-catch with handler dispatch working.
-Try-finally, using, and nested EH not yet implemented.
-
-## Ring vs ValueStack — ghost stack model
-
-The compiled delegate never calls `ValueStack.Push`/`Pop`/`Drop` during normal
-µop execution. All values flow through ring registers (`_r0`..`_rN`) allocated
-at compile time via `ComputePrimitiveRingDepths`. The `Stack.StackPointer` is
-**stale** throughout execution — it is only updated by `EmitReturnOp`.
-
-This is an intentional optimization: the ring replaces the eval-stack with
-local-variable access, which the CLR JIT can enregister. The tradeoff is that
-any runtime feature needing stack depth (exception handler dispatch, stack
-traces, debugger inspection) must reconstruct logical depth from compile-time
-information. The `PcToRingDepth` side table (see `PcToRingDepth.cs`) provides
-the PC→ring-depth mapping for these scenarios.
 | `Ref.cs` | Safe reflection helpers using expression-tree-based MemberInfo lookups |
+| `VmValueMarshaller.cs` | Converts between `VmState` representation and CLR types |
 
 ## Pipeline
 
 ```
-PrimitiveNode[] → PrimitiveLinker.Link() → ProgramCompiler.CompilePrimitives()
-    → VmProgram → Interpreter.Execute() → ExecutionResult
+Analyzed AST → DirectVmAbiEmitter.Emit() → VmProgram → Interpreter.Execute() → ExecutionResult
 ```
 
-## Adding a New Primitive
+No intermediate primitive flattening: the emitter walks the analyzed AST directly
+and produces LINQ Expression trees that read/write `VmState` fields. All control
+flow (loops, branches, try/catch/finally) uses native CLR Expression nodes.
+
+## Ring Register Model
+
+The emitter uses a ring register discipline during compilation: values flow through
+`_r0.._rN` local variables allocated inline. Unlike the old primitive path, there
+is no global pre-pass (`RingAllocator`) — ring assignment happens during the AST
+walk. The result is equivalent: the CLR JIT can enregister ring locals.
+
+## Exception Handling
+
+Structured EH uses native CLR `Expression.TryCatchFinally` — no side tables or
+handler dispatching. The emitter directly produces `TryCatch(Try(body), Catch(...),
+Finally(body))` expression trees for `TryCatchFinally` nodes.
 
 1. Define the record in `Poly/Syntax/Primitives/Primitives.cs` with a `StackEffect` override
 2. Add a `case` arm in `ProgramCompiler.CompilePrimitives()` to emit the LINQ Expression

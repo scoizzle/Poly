@@ -27,7 +27,7 @@ public class TypeIsVmTests {
         .UseDefiniteAssignmentAnalysis()
         .UseLambdaReturnTypeResolution()
         .UseExceptionRegionAnalysis()
-        .UsePrimitiveExpansion()
+        // .UsePrimitiveExpansion() — deprecated/non-critical
         .Build();
 
     /// <summary>

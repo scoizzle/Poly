@@ -8,8 +8,4 @@ public sealed record Await(Node Operand) : Expression {
 
     public override string ToString() => $"await {Operand}";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        foreach (var p in Operand.ToPrimitives(context)) yield return p;
-    }
 }

@@ -15,16 +15,4 @@ public sealed record ThrowStatement(Node Exception) : Statement {
     /// <inheritdoc />
     public override string ToString() => $"throw {Exception};";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        foreach (var p in Exception.ToPrimitives(context)) yield return p;
-
-        // When inside a protected region, emit ThrowProtected marker (distinct from
-        // unprotected throw). This is a placeholder until INT-018 implements real EH.
-        var isProtected = context.Analysis.IsInProtectedRegion(this);
-        if (isProtected)
-            yield return new Primitives.ThrowProtected();
-        else
-            yield return new Primitives.Throw();
-    }
 }

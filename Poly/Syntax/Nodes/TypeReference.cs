@@ -6,9 +6,4 @@ public record TypeReference(string TypeName) : Node {
 
     public override string ToString() => TypeName;
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        // Type references are compile-time metadata only
-        yield return new Primitives.PushConstant(0L);
-    }
 };

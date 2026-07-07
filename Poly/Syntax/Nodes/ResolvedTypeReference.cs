@@ -6,9 +6,4 @@ namespace Poly.Syntax.Nodes;
 /// folding) to indicate the target type of a <see cref="TypeCast"/>
 /// without requiring the type name to be re-resolved.</summary>
 public sealed record ResolvedTypeReference(ITypeDefinition TypeDefinition) : Node {
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        // Resolved type references are compile-time metadata; no runtime effect
-        yield return new Primitives.PushConstant(0L);
-    }
 }

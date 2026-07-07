@@ -13,9 +13,4 @@ public sealed record GotoStatement(string Target) : Statement {
     /// <inheritdoc />
     public override string ToString() => $"goto {Target};";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        // A goto/label pair within the same function; uses a named label
-        yield return new Primitives.Goto(new Primitives.Label(Target));
-    }
 }

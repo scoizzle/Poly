@@ -7,7 +7,6 @@ using Poly.Interpretation.Vm;
 
 using Expr = System.Linq.Expressions.Expression;
 using Exprs = System.Linq.Expressions;
-using Prim = Poly.Syntax.Primitives;
 using SN = Poly.Syntax.Nodes;
 
 namespace Poly.Tests.TestHelpers;
@@ -30,12 +29,6 @@ public static class AnalyzerBuilderExtensions {
             .UseDefiniteAssignmentAnalysis()
             ;
 
-        /// <summary>
-        /// Adds the <see cref="Poly.Interpretation.Analysis.ExpansionPass"/> to the pipeline.
-        /// This enables the new primitive-based compilation path.
-        /// </summary>
-        public AnalyzerBuilder UsePrimitiveExpansion() => builder
-            .AddAnalyzer(new Poly.Interpretation.Analysis.ExpansionPass());
     }
 }
 

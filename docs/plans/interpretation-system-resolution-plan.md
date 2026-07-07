@@ -19,7 +19,7 @@ This plan turns architectural findings into **ordered, checkable work**. Task ID
 | **P4–P5** | 0 | — | all | Not started |
 | **P6** Hygiene | 2/24 | — | 22 | Dead CSharp code removed; Phi README fixed |
 
-**Current focus:** P1C-031/032 (Using dispose), P1C-013 (catch var binding), P1C-040 (nested/ParentRegion), then P0 doc hygiene + P2 breadth.
+**Current focus (updated):** Direct AST lowering is now the primary VM path. Primitive expansion / ProgramCompiler is non-critical and undergoing deprecation + pruning. Focus on hardening direct emitter for remaining node types used in workloads, migrating or pruning primitive-tied tests, and cleaning docs. Legacy path kept temporarily behind Obsolete for transition.
 
 **Task status legend:** `open` | `in-progress` | `blocked` (needs Q#) | `done`
 

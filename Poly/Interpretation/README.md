@@ -2,9 +2,7 @@
 
 Semantic analysis and VM execution for programs expressed as `Poly.Syntax.Nodes` ASTs.
 
-The module turns a syntax tree into a runnable program: analysis passes attach metadata, expansion lowers the tree to primitive IR, and the VM compiles and runs that IR. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior** for the platform — not the legacy LINQ expression generator or removed tree-walker.
-
-Primitives are the canonical IR ([ADR](../../docs/decisions/2026-07-04-primitives-as-canonical-ir.md)); Interpretation consumes them but does not define the instruction set (see `Poly/Syntax/Primitives/`).
+The module turns a syntax tree into a runnable program: analysis passes attach metadata and diagnostics, then the direct AST-to-VM-ABI emitter produces an executable delegate. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior** for the platform — not the legacy LINQ expression generator or removed tree-walker.
 
 ---
 
@@ -12,22 +10,21 @@ Primitives are the canonical IR ([ADR](../../docs/decisions/2026-07-04-primitive
 
 | Direction | Module | Relationship |
 |-----------|--------|--------------|
-| In | `Poly.Syntax` | AST node types, `Analyzer` / `AnalysisContext`, primitive definitions |
+| In | `Poly.Syntax` | AST node types, `Analyzer` / `AnalysisContext` |
 | In | `Poly.Introspection` | CLR type definitions, member resolution helpers |
 | Out | `Poly.Validation` | May depend on Interpretation for rule evaluation |
 | Out | `Poly.Synthesis` | Uses VM to validate macros |
 | No | `Poly.Synthesis` | Interpretation must not depend on Synthesis |
 
-Domain-specific constructs lower to generic primitives and VM opcodes — no domain opcodes in this module ([domain-lowering boundary](../../docs/decisions/2026-06-08-domain-lowering-boundary.md)).
+Domain constructs lower to generic VM opcodes — no domain opcodes in this module ([domain-lowering boundary](../../docs/decisions/2026-06-08-domain-lowering-boundary.md)).
 
 ---
 
 ## What this module does
 
 1. **Analyze** — Run ordered `INodeAnalyzer` passes; produce `AnalysisResult` (metadata + diagnostics).
-2. **Expand** — `ExpansionPass` drives `Node.ToPrimitives()`; store `PrimitiveExpansionMetadata` per node.
-3. **Compile** — `ProgramCompiler` lowers primitives to a compiled `Action<VmState>` delegate (`VmProgram`).
-4. **Execute** — Run the delegate on `VmState`; `InterpretResult` applies value-representation rules at the API boundary.
+2. **Compile** — `DirectVmAbiEmitter` lowers the analyzed AST directly to a compiled `Action<VmState>` delegate (`VmProgram`). No intermediate primitive flattening.
+3. **Execute** — Run the delegate on `VmState`; `InterpretResult` applies value-representation rules at the API boundary.
 
 ---
 

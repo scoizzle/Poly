@@ -1,5 +1,3 @@
-using Poly.Syntax.Primitives;
-
 namespace Poly.Syntax.Nodes;
 
 /// <summary>
@@ -14,8 +12,4 @@ public sealed record Constant(object? Value) : Expression {
     /// <inheritdoc />
     public override string ToString() => Value?.ToString() ?? "null";
 
-    /// <inheritdoc />
-    public override IEnumerable<PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        yield return new PushConstant(Value);
-    }
 }

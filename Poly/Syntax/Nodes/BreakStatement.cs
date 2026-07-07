@@ -13,12 +13,4 @@ public sealed record BreakStatement(string? Label = null) : Statement {
     /// <inheritdoc />
     public override string ToString() => Label is not null ? $"break {Label};" : "break;";
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        var target = context.GetMetadata<Interpretation.Analysis.Semantics.ResolvedJumpTarget>(this);
-        if (target is null)
-            throw new InvalidOperationException("break outside loop");
-        var env = context.Env;
-        yield return new Primitives.Goto(env.GetLoopBoundary(target.TargetNodeId).Exit);
-    }
 }

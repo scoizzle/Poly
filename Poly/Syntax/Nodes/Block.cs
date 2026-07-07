@@ -62,55 +62,6 @@ public sealed record Block : Node {
         return $"{{ {string.Join("; ", Nodes)} }}";
     }
 
-    /// <inheritdoc />
-    public override IEnumerable<Primitives.PrimitiveNode> ToPrimitives(Primitives.ExpansionContext context) {
-        var env = context.Env;
-
-        // Assign slots to declared variables
-        foreach (var v in Variables) {
-            if (v is not null && !env.HasSlot(v)) {
-                env.GetOrAssignSlot(v);
-            }
-        }
-
-        // Emit children; discard all but the last.
-        // Loop types (WhileLoop, ForLoop, DoWhileLoop) manage their own ring
-        // effect via body-net cleanup Discards.  Other children may leave
-        // more than one value on the ring (e.g. Assignments with LoadLocal),
-        // so compute the child's net push and emit that many Discards.
-        for (int i = 0; i < Nodes.Count; i++) {
-            if (i < Nodes.Count - 1 && Nodes[i] is WhileLoop or ForLoop or DoWhileLoop) {
-                // Loops handle their own body ring cleanup, but their non-last
-                // position means their body is in statement context.
-                using var _ = env.EnterStatementContext();
-                foreach (var p in Nodes[i].ToPrimitives(context))
-                    yield return p;
-            }
-            else if (i < Nodes.Count - 1) {
-                // Statement position — child result will be discarded.
-                // Collect eagerly inside the using scope so the child
-                // sees statement context during expansion.
-                var childPrims = default(List<Primitives.PrimitiveNode>)!;
-                using (env.EnterStatementContext()) {
-                    childPrims = Nodes[i].ToPrimitives(context).ToList();
-                }
-                int childNetPush = 0;
-                foreach (var p in childPrims) {
-                    var (pop, push) = p.StackEffect;
-                    childNetPush += push - pop;
-                }
-                foreach (var p in childPrims)
-                    yield return p;
-                for (int j = 0; j < childNetPush; j++)
-                    yield return new Primitives.Discard();
-            }
-            else {
-                // Expression position — last child result is kept
-                foreach (var p in Nodes[i].ToPrimitives(context))
-                    yield return p;
-            }
-        }
-    }
 
     private static bool IsVariableNode(Node node) => node is Variable or Parameter;
 }

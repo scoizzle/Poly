@@ -1,7 +1,9 @@
-# ADR: Primitive Instruction Set as Canonical IR
+# ADR: Primitive Instruction Set as Canonical IR (Superseded)
 
 **Date:** 2026-07-04
-**Status:** Accepted
+**Status:** Superseded — the primitive instruction set has been removed from the critical
+execution path. The AST is the canonical symbolic form; the `DirectVmAbiEmitter` performs
+direct AST-to-VM-ABI lowering. See `docs/plans/pruning-primitives-plan.md`.
 
 ## Context
 
@@ -9,50 +11,46 @@ The 2026-05-31 neurosymbolic platform vision and the 2026-06-24 compiler framewo
 described a **separate canonical IR** (`Poly/Ir/`) as a block-structured CFG with SSA values,
 distinct from the `PrimitiveNode` instruction set used by the VM.
 
-During development of 25+ primitive types and the peephole optimizer (`PrimitiveOptimizer`),
-two realities emerged:
+During development, the `PrimitiveNode` instruction set became the canonical IR for the VM
+execution engine, with `ToPrimitives()` expansions from each AST node type. This was the
+approach used throughout the initial VM implementation.
 
-1. **The primitives already are the IR.** Every semantic concept planned for the canonical IR
-   exists in the primitive set: operations (`BinaryOp`, `UnaryOp`), memory (`LoadLocal`,
-   `StoreLocal`, `ArrayLoad`, `ArrayStore`), control flow (`Goto`, `CondGoto`, `Label`),
-   functions (`Call`, `CallExternal`, `Parameter`), and optimizations (`IncLocal`, `DecLocal`).
+## Decision (Superseded)
 
-2. **A separate IR duplicates the instruction set.** Every AST node would need two lowering
-   targets (`ToPrimitives()` and `Emit(IrContext)`). Every backend would need two paths.
-   A conversion pass from primitives → IR would be required, adding complexity with zero
-   semantic gain.
+As of 2026-07-07, the `PrimitiveNode` instruction set and its entire expansion infrastructure
+(`ToPrimitives()`, `ExpansionPass`, `ProgramCompiler`, `RingAllocator`, `PrimitiveLinker`,
+etc.) have been removed from the codebase. The VM execution path now uses **direct AST lowering**
+via `DirectVmAbiEmitter`, which walks the analyzed AST and emits `System.Linq.Expressions`
+trees targeting `VmState` directly — no intermediate primitive flattening or reconstruction.
 
-## Decision
+## Rationale for Superseding
 
-**The `PrimitiveNode` instruction set IS the canonical IR.** Rather than creating a second
-representation, we enhance the primitive format with explicit dataflow information:
+1. **The AST is the canonical symbolic form.** There was no benefit to flattening structured
+   AST nodes to a flat `PrimitiveNode[]` array and then reconstructing control flow, closures,
+   and exception handling from that array. The direct path is simpler, faster to compile,
+   and preserves AST structure for debugging.
 
-- `ValueSlot` — lightweight value identity (index into the module's value table)
-- `InputSlots` / `ResultSlot` — optional explicit dataflow edges on each primitive
-- `Phi` — explicit merge point primitive
-- `BasicBlock` — contiguous non-branching primitive sequence bounded by terminators
-- `Module` — container for `BasicBlock` lists, value slots, and metadata
+2. **Information loss on flattening.** Lowering structured AST → flat primitives → reconstructed
+   control flow lost information that the direct path preserves (AST node identity for debug
+   position, structured EH as native `TryCatchFinally`, etc.).
 
-These additions make the primitive format an explicit SSA IR while maintaining full
-backward compatibility: primitives without explicit slots fall back to the existing
-`StackEffect`-based dataflow simulation.
+3. **Accidental complexity.** The primitive pipeline required `RingAllocator`, `PrimitiveLinker`,
+   `ExceptionTableBuilder`, `PcToRingDepth`, and side tables that the direct path renders
+   unnecessary. The direct path uses ~1600 lines of emitter code versus thousands across the
+   primitive infrastructure.
 
-## Rationale
-
-- Eliminates the need for a separate `Poly/Ir/` module, `EmissionContext`, `GenerationPass`,
-  and all the infrastructure described in the 2026-06-24 plan.
-- The primitive set has reached semantic completeness (25+ types covering all planned IR
-  instructions). Adding `Phi` completes the SSA picture.
-- Existing `ComputePrimitiveConsumedPcs` already computes use-def chains from `StackEffect`.
-  Explicit slots make this a direct read instead of a simulation, but the information is
-  the same.
-- Every backend (VM, C# codegen, future WASM, AOT) already consumes primitives. Enhancing
-  the primitive format improves all backends simultaneously.
+4. **No backend required primitives.** The only consumer of primitives was the VM execution
+   engine, which now uses direct lowering. C# code generation and LINQ expression generation
+   consume the analyzed AST directly.
 
 ## Consequences
 
-- `Poly/Ir/` is not created. The compiler framework plan's sections describing a separate
-  IR are superseded by this decision.
+- The `Poly/Ir/` module is not created (same as original decision).
+- All `ToPrimitives()` overrides on AST nodes have been removed.
+- The `Poly/Syntax/Primitives/` directory has been deleted.
+- The VM execution path is cleaner, faster to compile, and structurally sound.
+- A future decision could reintroduce a thin export/portable IR if needed, but only with
+  real consumers driving the requirement.
 - `PrimitiveNode` gains `InputSlots` and `ResultSlot` with default (empty/null) implementations.
 - A `Phi` primitive type is added to the primitive set.
 - `Module` and `BasicBlock` types are added to `Poly/Syntax/Primitives/` as optional wrappers.

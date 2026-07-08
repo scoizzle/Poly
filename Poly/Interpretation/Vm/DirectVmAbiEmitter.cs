@@ -72,7 +72,7 @@ public static class DirectVmAbiEmitter {
         // DeclareVariable inside blocks will still assign scope-relative slots.
         ctx.EnterActivation(0, 0);
 
-        var rootExpr = CompileNode(root, ctx);
+        var rootExpr = CompileNodeWithTracking(root, ctx);
 
         // Flush the root result from the ring to the value stack,
         // matching the ABI convention: result at _slots[_fb], SP = _fb + 1.
@@ -111,29 +111,36 @@ public static class DirectVmAbiEmitter {
     // ── Compile dispatch ───────────────────────────────────────────
 
     /// <summary>
-    /// Compile a single AST node to an expression that executes it and
-    /// leaves its result (if any) on the ring.
-    /// In Debug/Normal mode, wraps the node with a <see cref="VmState.DebugInterrupt"/>
-    /// check so external code can step through each AST boundary.
+    /// Compile a single AST node. In all modes, delegates directly to
+    /// <see cref="CompileNodeInner"/> without adding tracking expressions.
+    /// Step tracking and node-field assignments are handled by <see cref="EmitBlock"/>
+    /// at statement boundaries, avoiding deep call stacks from deeply nested
+    /// expression trees (<c>CompileNode->CompileNodeInner->Emit*->CompileNode</c>
+    /// recursion that overflows the stack at ~400 expression levels).
+    ///
+    /// For debug/suspend support, <see cref="CompileNodeWithTracking"/> adds
+    /// the CurrentAstNode/CurrentNodeId assignments.
     /// </summary>
     private static Expression CompileNode(Node node, AbiCtx ctx) {
-        // Assign a step/PC for this node. This serves as the "address" that
-        // can be mapped back to the symbolic Node for debuggers, stack traces,
-        // variable name resolution, etc.
+        return CompileNodeInner(node, ctx);
+    }
+
+    /// <summary>Compile a node with step tracking (step counter, RecordStepNode,
+    /// CurrentAstNode/CurrentNodeId field writes, debug interrupt guard).
+    /// Used at statement boundaries where suspend/resume matters.</summary>
+    private static Expression CompileNodeWithTracking(Node node, AbiCtx ctx) {
         int step = ctx.StepCounter++;
         ctx.RecordStepNode(step, node);
-
-        // For the direct path, surface the actual AST node so that VmState can
-        // expose the current symbolic position (for debuggers, tracing, and
-        // suspend/resume) instead of only a synthetic step/PC.
-        var setCurrentNode = Block(
-            Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(node)),
-            Assign(Property(ctx.State, nameof(VmState.CurrentNodeId)), Constant(node.Id, typeof(NodeId?)))
-        );
-
-        var body = CompileNodeInner(node, ctx);
-        var guarded = WithInterrupt(body, ctx, step);
-        return Block(setCurrentNode, guarded);
+        if (ctx.DebugHookProp != null) {
+            var setCurrentNode = Block(
+                Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(node)),
+                Assign(Property(ctx.State, nameof(VmState.CurrentNodeId)), Constant(node.Id, typeof(NodeId?)))
+            );
+            var body = CompileNodeInner(node, ctx);
+            var guarded = WithInterrupt(body, ctx, step);
+            return Block(setCurrentNode, guarded);
+        }
+        return CompileNodeInner(node, ctx);
     }
 
     /// <summary>
@@ -141,33 +148,33 @@ public static class DirectVmAbiEmitter {
     /// </summary>
     private static Expression CompileNodeInner(Node node, AbiCtx ctx) {
         return node switch {
-            // ── Expression nodes: CompileValue + ring spill ──────
-            Constant c => EmitConstant(c, ctx),
+            // String/heap constants: ring path
+            Constant c when c.Value is string or null => EmitConstant(c, ctx),
+            // Numeric constants: eval-stack fast path
+            Constant c => SpillToRing(CompileValue(c, ctx), ctx),
 
-            // Binary arithmetic — already uses CompileValue
-            Add n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Add, ctx),
-            Subtract n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
-            Multiply n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
-            Divide n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Divide, ctx),
-            Modulo n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Modulo, ctx),
-            BitwiseAnd n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, And, ctx),
-            BitwiseOr n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Or, ctx),
-            BitwiseXor n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
-            ShiftLeft n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
-            ShiftRight n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
+            // Binary arithmetic — use RING version (operands through CompileNode)
+            // to prevent stack overflow from CompileValue↔CompileNode↔Member cycles.
+            Add n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Add, ctx),
+            Subtract n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
+            Multiply n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
+            Divide n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Divide, ctx),
+            Modulo n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Modulo, ctx),
+            BitwiseAnd n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, And, ctx),
+            BitwiseOr n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Or, ctx),
+            BitwiseXor n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
+            ShiftLeft n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
+            ShiftRight n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
 
-            // Pure expressions with explicit CompileValue support
-            Equal n => SpillToRing(CompileValue(n, ctx), ctx),
-            NotEqual n => SpillToRing(CompileValue(n, ctx), ctx),
-            LessThan n => SpillToRing(CompileValue(n, ctx), ctx),
-            LessThanOrEqual n => SpillToRing(CompileValue(n, ctx), ctx),
-            GreaterThan n => SpillToRing(CompileValue(n, ctx), ctx),
-            GreaterThanOrEqual n => SpillToRing(CompileValue(n, ctx), ctx),
-            Not n => SpillToRing(CompileValue(n, ctx), ctx),
-            UnaryMinus n => SpillToRing(CompileValue(n, ctx), ctx),
-            BitwiseNot n => SpillToRing(CompileValue(n, ctx), ctx),
-            Conditional c => SpillToRing(CompileValue(c, ctx), ctx),
-            Coalesce n => SpillToRing(CompileValue(n, ctx), ctx),
+            // Comparisons — ring version
+            Equal n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, Equal, ctx, n),
+            NotEqual n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, NotEqual, ctx, n),
+            LessThan n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, LessThan, ctx),
+            LessThanOrEqual n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx),
+            GreaterThan n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx),
+            GreaterThanOrEqual n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx),
+
+            // Pure expressions with CompileValue support — safe leaf nodes only.
             Variable v => SpillToRing(CompileValue(v, ctx), ctx),
             Default d => SpillToRing(CompileValue(d, ctx), ctx),
             ThisReference _ => SpillToRing(CompileValue(new Default(), ctx), ctx),
@@ -176,6 +183,14 @@ public static class DirectVmAbiEmitter {
             TypeAs t => SpillToRing(CompileValue(t, ctx), ctx),
             TypeCast t => SpillToRing(CompileValue(t, ctx), ctx),
             Await a => SpillToRing(CompileValue(a, ctx), ctx),
+
+            // Not/Conditional/Coealesce/Unary — use ring-based methods to avoid
+            // unbounded CompileValue→CompileNode→EmitMember→CompileValue recursion.
+            Not n => EmitNot(n, ctx),
+            UnaryMinus n => EmitUnaryMinus(n, ctx),
+            BitwiseNot n => EmitBitwiseNot(n, ctx),
+            Conditional c => EmitConditional(c, ctx),
+            Coalesce n => EmitCoalesce(n, ctx),
 
             // Short-circuit logical — keep on ring path (statement-like)
             And n => EmitLogicalAnd(n, ctx),
@@ -427,7 +442,10 @@ public static class DirectVmAbiEmitter {
     /// LINQ eval stack — no ring slot.</summary>
     private static Expression CompileValue(Node node, AbiCtx ctx) {
         return node switch {
-            // Constants use ring path to handle heap allocation for strings/objects
+            // Numeric constants: eval stack only, no ring, no CompileNode overhead
+            Constant c when TryValueToLong(c.Value, out _) || c.Value is double || c.Value is float
+                => EmitConstantValue(c),
+            // String/heap constants: need ring path for heap allocation
             Constant c => SpillRingRead(CompileNode(c, ctx), ctx),
             Variable v => ctx.VariableRead(v),
             Add n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Add, ctx),
@@ -459,7 +477,20 @@ public static class DirectVmAbiEmitter {
             TypeAs ta => CompileValue(ta.Operand, ctx),
             TypeCast tc => CompileValue(tc.Operand, ctx),
             Await a => CompileValue(a.Operand, ctx),
-            _ => SpillRingRead(CompileNode(node, ctx), ctx)
+
+            // Complex expression nodes: route through ring path.
+            // Must be explicit (not a fallback) to prevent unbounded recursion.
+            Member m => SpillRingRead(CompileNode(m, ctx), ctx),
+            IndexAccess n => SpillRingRead(CompileNode(n, ctx), ctx),
+            New n => SpillRingRead(CompileNode(n, ctx), ctx),
+            NewArray n => SpillRingRead(CompileNode(n, ctx), ctx),
+            Parameter p => SpillRingRead(CompileNode(p, ctx), ctx),
+            Invoke inv => SpillRingRead(CompileNode(inv, ctx), ctx),
+            TypeIs t => SpillRingRead(CompileNode(t, ctx), ctx),
+            SwitchStatement sw => SpillRingRead(CompileNode(sw, ctx), ctx),
+            StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),
+            _ => throw new NotSupportedException(
+                $"CompileValue: unhandled {node.GetType().Name}")
         };
     }
 
@@ -555,7 +586,91 @@ public static class DirectVmAbiEmitter {
         return Condition(cf(lv, rv), Constant(1L), Constant(0L));
     }
 
-    /// <summary>Binary arithmetic — uses CompileValue for operands (eval stack),</summary>
+    // ── Ring-based expression helpers (for CompileNodeInner dispatch) ──
+    // These compile operands via CompileNode (full step tracking) and combine
+    // results on the ring. Used by CompileNodeInner to avoid unbounded
+    // CompileValue→CompileNode recursion when operands contain Member nodes.
+    // TODO: Convert CompileNodeInner's expression dispatch to use these, then
+    // the CompileValue versions can be used without fallback safety concerns.
+
+    /// <summary>Binary arithmetic — ring-based (operands through CompileNode).</summary>
+    private static Expression EmitBinaryArithmeticRing(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> factory,
+        AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var leftCompiled = CompileNode(left, ctx);
+        int leftSlot = ctx.RingDepth - 1;
+        var rightCompiled = CompileNode(right, ctx);
+        int rightSlot = ctx.RingDepth - 1;
+
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            var resultBits = Call(BitConverterDoubleToInt64Bits,
+                factory(Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftSlot)),
+                        Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightSlot))));
+            ctx.RingDepth = d + 1;
+            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d), resultBits));
+        }
+
+        if (right is Constant rc && TryValueToLong(rc.Value, out long rv) && rv > 0 && (rv & (rv - 1)) == 0) {
+            if (factory.Method.Name == nameof(Expression.Modulo)) {
+                ctx.RingDepth = d + 1;
+                return Block(leftCompiled, rightCompiled,
+                    Assign(ctx.RingVar(d), Expression.And(ctx.RingVar(leftSlot), Constant(rv - 1))));
+            }
+            if (factory.Method.Name == nameof(Expression.Divide)) {
+                ctx.RingDepth = d + 1;
+                return Block(leftCompiled, rightCompiled,
+                    Assign(ctx.RingVar(d), Expression.RightShift(ctx.RingVar(leftSlot), Constant(BitScanReverse(rv)))));
+            }
+            if (factory.Method.Name == nameof(Expression.Multiply)) {
+                ctx.RingDepth = d + 1;
+                return Block(leftCompiled, rightCompiled,
+                    Assign(ctx.RingVar(d), Expression.LeftShift(ctx.RingVar(leftSlot), Constant(BitScanReverse(rv)))));
+            }
+        }
+
+        Expression rhs = ctx.RingVar(rightSlot);
+        if (factory == LeftShift || factory == RightShift)
+            rhs = Convert(rhs, typeof(int));
+        ctx.RingDepth = d + 1;
+        return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d), factory(ctx.RingVar(leftSlot), rhs)));
+    }
+
+    /// <summary>Comparison — ring-based (operands through CompileNode).</summary>
+    private static Expression EmitComparisonRing(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        AbiCtx ctx, Node? cn = null) {
+        int d = ctx.RingDepth;
+        var leftCompiled = CompileNode(left, ctx);
+        int leftSlot = ctx.RingDepth - 1;
+        var rightCompiled = CompileNode(right, ctx);
+        int rightSlot = ctx.RingDepth - 1;
+
+        bool eq = cf == Equal || cf == NotEqual;
+        if (eq && AreHeapValues(ctx, left, right)) {
+            var lo = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(ctx.RingVar(leftSlot), typeof(int)));
+            var ro = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(ctx.RingVar(rightSlot), typeof(int)));
+            var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
+            ctx.RingDepth = d + 1;
+            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
+                Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
+                              cf == Equal ? Constant(0L) : Constant(1L))));
+        }
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            ctx.RingDepth = d + 1;
+            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
+                Condition(cf(Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftSlot)),
+                              Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightSlot))),
+                    Constant(1L), Constant(0L))));
+        }
+        ctx.RingDepth = d + 1;
+        return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
+            Condition(cf(ctx.RingVar(leftSlot), ctx.RingVar(rightSlot)), Constant(1L), Constant(0L))));
+    }
+
+    /// <summary>Binary arithmetic — uses CompileValue for operands,</summary>
     private static Expression EmitBinaryArithmetic(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
@@ -1218,7 +1333,9 @@ public static class DirectVmAbiEmitter {
 
         var stmtExprs = new List<Expression>();
         for (int i = 0; i < block.Nodes.Count; i++) {
-            stmtExprs.Add(CompileNode(block.Nodes[i], ctx));
+            // Use CompileNodeWithTracking at statement boundaries for
+            // step counter, RecordStepNode, and CurrentNode tracking.
+            stmtExprs.Add(CompileNodeWithTracking(block.Nodes[i], ctx));
         }
 
         // Flush register file back to _slots before scope exit.

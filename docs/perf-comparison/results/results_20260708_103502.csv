@@ -1,0 +1,12 @@
+benchmark,language,size_or_limit,result,runs,min_ms,max_ms,avg_ms,prep_ms
+sieve,C,FAILED
+sieve,C++,FAILED
+sieve,Rust,FAILED
+sieve,Python,FAILED
+sieve,JS,FAILED
+sieve,Bun,FAILED
+sieve,Deno,FAILED
+sieve,Py+NumPy,FAILED
+sieve,C# native,FAILED
+sieve,C# vectorized,FAILED
+sieve,Poly VM,FAILED

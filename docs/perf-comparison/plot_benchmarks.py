@@ -41,7 +41,12 @@ def plot_csv(csv_path):
             data.setdefault(row["benchmark"], []).append(row)
 
     for bm in data:
-        data[bm].sort(key=lambda r: float(r["time_ms"]))
+        # Support both old format (time_ms) and new format (avg_ms)
+        time_key = "time_ms" if "time_ms" in data[bm][0] else "avg_ms"
+        data[bm] = [r for r in data[bm] if r.get(time_key)]
+        if not data[bm]:
+            continue
+        data[bm].sort(key=lambda r: float(r[time_key]))
 
     fig, axes = plt.subplots(2, 2, figsize=(16, 10))
     fig.suptitle("Poly VM Benchmark Comparison — Execution Time (ms, log scale, lower is better)",
@@ -55,7 +60,7 @@ def plot_csv(csv_path):
 
         for r in rows:
             lang = r["language"]
-            exec_ms = float(r["time_ms"])
+            exec_ms = float(r[time_key])
             prep_ms = float(r.get("prep_ms", "0") or "0")
 
             labels.append(lang)

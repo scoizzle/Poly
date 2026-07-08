@@ -11,8 +11,10 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RESULTS="$RESULTS_DIR/results_$TIMESTAMP.csv"
 BENCH="${1:-all}"        # which benchmark: sieve, mandelbrot, nqueens, collatz, or all
 LIMIT="${2:-1000000}"    # default limit (used by sieve, collatz; ignored by mandelbrot/nqueens which are hardcoded)
+ITERATIONS="${3:-5}"     # number of runs per implementation for aggregated stats
+WARMUP="${4:-1}"         # number of warmup runs before timing (discarded)
 
-echo "benchmark,language,size_or_limit,result,time_ms,prep_ms" | tee "$RESULTS"
+echo "benchmark,language,size_or_limit,result,runs,min_ms,max_ms,avg_ms,prep_ms" | tee "$RESULTS"
 
 # ── Expected results per benchmark ──
 expected_for() {
@@ -43,6 +45,65 @@ validate_result() {
     fi
     echo "  ✓ result: $actual" >&2
     return 0
+}
+
+# ── Multi-run helper ──────────────────────────────────────────
+# Runs a command N times and extracts time_ms from its CSV output (field 4).
+# Returns: "min max avg first_line"
+# The first_line is used for result validation.
+# Usage: run_and_collect <setup_cmd> <run_cmd> [has_prep]
+#   setup_cmd:   command that prints one CSV output line (warmup, discarded)
+#   run_cmd:     command that prints one CSV output line (timed)
+#   has_prep:    if 1, the CSV has a prep_ms field (field 5)
+run_and_collect() {
+    local run_cmd="$1"
+    local has_prep="${2:-0}"
+
+    local times=()
+    local first_line=""
+
+    # Warmup
+    local w
+    for ((w = 0; w < WARMUP; w++)); do
+        eval "$run_cmd" >/dev/null 2>&1 || true
+    done
+
+    # Timed runs
+    local i
+    for ((i = 0; i < ITERATIONS; i++)); do
+        local line
+        line=$(eval "$run_cmd" 2>/dev/null | head -1)
+        if [ -z "$line" ]; then
+            echo "  ⚠  run $i produced no output" >&2
+            continue
+        fi
+        if [ -z "$first_line" ]; then
+            first_line="$line"
+        fi
+        local t
+        t=$(echo "$line" | cut -d',' -f4)
+        times+=("$t")
+    done
+
+    if [ ${#times[@]} -eq 0 ]; then
+        echo "  ✗ all runs failed" >&2
+        return 1
+    fi
+
+    # Sort and compute stats
+    local sorted
+    sorted=($(printf '%s\n' "${times[@]}" | sort -n))
+    local min="${sorted[0]}"
+    local max="${sorted[${#sorted[@]}-1]}"
+    local sum=0
+    for t in "${times[@]}"; do
+        sum=$(awk "BEGIN {print $sum + $t}")
+    done
+    local avg
+    avg=$(awk "BEGIN {printf \"%.1f\", $sum / ${#times[@]}}")
+    local runs="${#times[@]}"
+
+    echo "$min $max $avg $first_line"
 }
 
 # ── Docker status check ──
@@ -84,22 +145,52 @@ run_docker() {
     echo "  [$bench] $label ($source_file) ..." >&2
     local img="poly-${bench}-$(echo "$label" | tr 'A-Z+' 'a-zx')"
     docker build -q -f "$dockerfile" --build-arg "SOURCE_FILE=$source_file" -t "$img" . 2>/dev/null
-    local output
+    # Get result from first (warmup) run
+    local warmup_line
     if [ -n "$arg" ]; then
-        output=$(docker run --rm "$img" "$arg" 2>/dev/null)
+        warmup_line=$(docker run --rm "$img" "$arg" 2>/dev/null | head -1)
     else
-        output=$(docker run --rm "$img" 2>/dev/null)
+        warmup_line=$(docker run --rm "$img" 2>/dev/null | head -1)
     fi
-    if [ $? -ne 0 ] || [ -z "$output" ]; then
+    if [ -z "$warmup_line" ]; then
         echo "$bench,$label,FAILED" | tee -a "$RESULTS"
         return
     fi
-    local first_line
-    first_line=$(echo "$output" | head -1)
-    if validate_result "$bench" "$first_line"; then
-        echo "$bench,$first_line" | tee -a "$RESULTS"
+
+    # Multi-run
+    local times=()
+    local i
+    for ((i = 0; i < ITERATIONS + WARMUP; i++)); do
+        local line
+        if [ -n "$arg" ]; then
+            line=$(docker run --rm "$img" "$arg" 2>/dev/null | head -1)
+        else
+            line=$(docker run --rm "$img" 2>/dev/null | head -1)
+        fi
+        if [ -z "$line" ]; then continue; fi
+        # First ITERATIONS runs are warmup (if WARMUP > 0)
+        if ((i >= WARMUP)); then
+            local t; t=$(echo "$line" | cut -d',' -f4)
+            times+=("$t")
+        fi
+    done
+
+    if [ ${#times[@]} -eq 0 ]; then
+        echo "$bench,$label,FAILED" | tee -a "$RESULTS"
+        return
+    fi
+    local sorted; sorted=($(printf '%s\n' "${times[@]}" | sort -n))
+    local min="${sorted[0]}" max="${sorted[${#sorted[@]}-1]}" sum=0
+    for t in "${times[@]}"; do sum=$(awk "BEGIN {print $sum + $t}"); done
+    local avg; avg=$(awk "BEGIN {printf \"%.1f\", $sum / ${#times[@]}}")
+
+    local size result
+    result=$(echo "$warmup_line" | cut -d',' -f3)
+    size=$(echo "$warmup_line" | cut -d',' -f2)
+    if validate_result "$bench" "$warmup_line"; then
+        echo "$bench,$label,$size,$result,$ITERATIONS,$min,$max,$avg,0" | tee -a "$RESULTS"
     else
-        echo "$bench,$(echo "$first_line" | cut -d',' -f1,2),FAILED" | tee -a "$RESULTS"
+        echo "$bench,$label,FAILED" | tee -a "$RESULTS"
     fi
 }
 
@@ -117,22 +208,23 @@ run_cs_native() {
 </Project>
 EOF
     cp "$source_file" "$tmp/Program.cs"
-    local output
-    if [ -n "$arg" ]; then
-        output=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null)
-    else
-        output=$(dotnet run -c Release --project "$tmp/bench.csproj" 2>/dev/null)
-    fi
-    if [ $? -ne 0 ] || [ -z "$output" ]; then
+    # Build once before timing runs
+    dotnet build -c Release "$tmp/bench.csproj" >/dev/null 2>&1 || return 1
+    local run_cmd="dotnet run -c Release --project $tmp/bench.csproj -- $arg"
+    local stats
+    stats=$(run_and_collect "$run_cmd" 0) || {
         echo "$bench,C# native,FAILED" | tee -a "$RESULTS"
         return
-    fi
-    local first_line
-    first_line=$(echo "$output" | head -1)
+    }
+    local min max avg first_line
+    read -r min max avg first_line <<< "$stats"
+    local size result
+    result=$(echo "$first_line" | cut -d',' -f3)
+    size=$(echo "$first_line" | cut -d',' -f2)
     if validate_result "$bench" "$first_line"; then
-        echo "$bench,$first_line" | tee -a "$RESULTS"
+        echo "$bench,C# native,$size,$result,$ITERATIONS,$min,$max,$avg,0" | tee -a "$RESULTS"
     else
-        echo "$bench,$(echo "$first_line" | cut -d',' -f1,2),FAILED" | tee -a "$RESULTS"
+        echo "$bench,C# native,FAILED" | tee -a "$RESULTS"
     fi
 }
 
@@ -153,22 +245,22 @@ run_cs_vectorized() {
   </ItemGroup>
 </Project>
 ENDPROJ
-    local output
-    if [ -n "$arg" ]; then
-        output=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null)
-    else
-        output=$(dotnet run -c Release --project "$tmp/bench.csproj" 2>/dev/null)
-    fi
-    if [ $? -ne 0 ] || [ -z "$output" ]; then
+    dotnet build -c Release "$tmp/bench.csproj" >/dev/null 2>&1 || return 1
+    local run_cmd="dotnet run -c Release --project $tmp/bench.csproj -- $arg"
+    local stats
+    stats=$(run_and_collect "$run_cmd" 0) || {
         echo "$bench,C# vectorized,FAILED" | tee -a "$RESULTS"
         return
-    fi
-    local first_line
-    first_line=$(echo "$output" | head -1)
+    }
+    local min max avg first_line
+    read -r min max avg first_line <<< "$stats"
+    local size result
+    result=$(echo "$first_line" | cut -d',' -f3)
+    size=$(echo "$first_line" | cut -d',' -f2)
     if validate_result "$bench" "$first_line"; then
-        echo "$bench,$first_line" | tee -a "$RESULTS"
+        echo "$bench,C# vectorized,$size,$result,$ITERATIONS,$min,$max,$avg,0" | tee -a "$RESULTS"
     else
-        echo "$bench,$(echo "$first_line" | cut -d',' -f1,2),FAILED" | tee -a "$RESULTS"
+        echo "$bench,C# vectorized,FAILED" | tee -a "$RESULTS"
     fi
 }
 
@@ -190,22 +282,33 @@ run_polyvm() {
   </ItemGroup>
 </Project>
 ENDPROJ
-    local output
-    if [ -n "$arg" ]; then
-        output=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null)
-    else
-        output=$(dotnet run -c Release --project "$tmp/bench.csproj" 2>/dev/null)
-    fi
-    if [ $? -ne 0 ] || [ -z "$output" ]; then
+    # Build once, then capture prep_ms from the first run
+    dotnet build -c Release "$tmp/bench.csproj" >/dev/null 2>&1 || return 1
+    local first_line
+    first_line=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null | head -1)
+    if [ -z "$first_line" ]; then
         echo "$bench,Poly VM,FAILED" | tee -a "$RESULTS"
         return
     fi
-    local first_line
-    first_line=$(echo "$output" | head -1)
+    local prep_ms
+    prep_ms=$(echo "$first_line" | cut -d',' -f5)
+
+    # Multi-run for execution time (build cache avoids recompilation)
+    local run_cmd="dotnet run -c Release --no-build --project $tmp/bench.csproj -- $arg"
+    local stats
+    stats=$(run_and_collect "$run_cmd" 1) || {
+        echo "$bench,Poly VM,FAILED" | tee -a "$RESULTS"
+        return
+    }
+    local min max avg
+    read -r min max avg first_line <<< "$stats"
+    local size result
+    result=$(echo "$first_line" | cut -d',' -f3)
+    size=$(echo "$first_line" | cut -d',' -f2)
     if validate_result "$bench" "$first_line"; then
-        echo "$bench,$first_line" | tee -a "$RESULTS"
+        echo "$bench,Poly VM,$size,$result,$ITERATIONS,$min,$max,$avg,$prep_ms" | tee -a "$RESULTS"
     else
-        echo "$bench,$(echo "$first_line" | cut -d',' -f1,2),FAILED" | tee -a "$RESULTS"
+        echo "$bench,Poly VM,FAILED" | tee -a "$RESULTS"
     fi
 }
 
@@ -230,19 +333,25 @@ run_polyvm_raw() {
   </ItemGroup>
 </Project>
 ENDPROJ
-    local output
-    if [ -n "$arg" ]; then
-        output=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null)
-    else
-        output=$(dotnet run -c Release --project "$tmp/bench.csproj" 2>/dev/null)
-    fi
-    if [ $? -ne 0 ] || [ -z "$output" ]; then
+    dotnet build -c Release "$tmp/bench.csproj" >/dev/null 2>&1 || return 1
+    local first_line
+    first_line=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null | head -1)
+    local prep_ms
+    prep_ms=$(echo "$first_line" | cut -d',' -f5)
+
+    local run_cmd="dotnet run -c Release --no-build --project $tmp/bench.csproj -- $arg"
+    local stats
+    stats=$(run_and_collect "$run_cmd" 1) || {
         echo "$bench,Poly VM double,FAILED" | tee -a "$RESULTS"
         return
-    fi
-    local first_line
-    first_line=$(echo "$output" | head -1)
-    echo "$first_line" | tee -a "$RESULTS"
+    }
+    local min max avg
+    read -r min max avg first_line <<< "$stats"
+    local size result label
+    result=$(echo "$first_line" | cut -d',' -f3)
+    size=$(echo "$first_line" | cut -d',' -f2)
+    label=$(echo "$first_line" | cut -d',' -f1)
+    echo "$label,$size,$result,$ITERATIONS,$min,$max,$avg,$prep_ms" | tee -a "$RESULTS"
 }
 
 # ── Run a single benchmark across all languages ──

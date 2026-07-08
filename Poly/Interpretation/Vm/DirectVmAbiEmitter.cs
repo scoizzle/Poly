@@ -141,44 +141,52 @@ public static class DirectVmAbiEmitter {
     /// </summary>
     private static Expression CompileNodeInner(Node node, AbiCtx ctx) {
         return node switch {
-            // Leaf expressions
+            // ── Expression nodes: CompileValue + ring spill ──────
             Constant c => EmitConstant(c, ctx),
 
-            // Binary arithmetic
+            // Binary arithmetic — already uses CompileValue
             Add n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Add, ctx),
             Subtract n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
             Multiply n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
             Divide n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Divide, ctx),
             Modulo n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Modulo, ctx),
-
-            // Bitwise
             BitwiseAnd n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, And, ctx),
             BitwiseOr n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Or, ctx),
             BitwiseXor n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
             ShiftLeft n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
             ShiftRight n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
 
-            // Comparisons (produce 0/1 long)
-            Equal n => EmitComparison(n.LeftHandValue, n.RightHandValue, Equal, ctx, n),
-            NotEqual n => EmitComparison(n.LeftHandValue, n.RightHandValue, NotEqual, ctx, n),
-            LessThan n => EmitComparison(n.LeftHandValue, n.RightHandValue, LessThan, ctx),
-            LessThanOrEqual n => EmitComparison(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx),
-            GreaterThan n => EmitComparison(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx),
-            GreaterThanOrEqual n => EmitComparison(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx),
+            // Pure expressions with explicit CompileValue support
+            Equal n => SpillToRing(CompileValue(n, ctx), ctx),
+            NotEqual n => SpillToRing(CompileValue(n, ctx), ctx),
+            LessThan n => SpillToRing(CompileValue(n, ctx), ctx),
+            LessThanOrEqual n => SpillToRing(CompileValue(n, ctx), ctx),
+            GreaterThan n => SpillToRing(CompileValue(n, ctx), ctx),
+            GreaterThanOrEqual n => SpillToRing(CompileValue(n, ctx), ctx),
+            Not n => SpillToRing(CompileValue(n, ctx), ctx),
+            UnaryMinus n => SpillToRing(CompileValue(n, ctx), ctx),
+            BitwiseNot n => SpillToRing(CompileValue(n, ctx), ctx),
+            Conditional c => SpillToRing(CompileValue(c, ctx), ctx),
+            Coalesce n => SpillToRing(CompileValue(n, ctx), ctx),
+            Variable v => SpillToRing(CompileValue(v, ctx), ctx),
+            Default d => SpillToRing(CompileValue(d, ctx), ctx),
+            ThisReference _ => SpillToRing(CompileValue(new Default(), ctx), ctx),
+            ParameterReference pr => SpillToRing(CompileValue(pr, ctx), ctx),
+            NullForgiving n => SpillToRing(CompileValue(n, ctx), ctx),
+            TypeAs t => SpillToRing(CompileValue(t, ctx), ctx),
+            TypeCast t => SpillToRing(CompileValue(t, ctx), ctx),
+            Await a => SpillToRing(CompileValue(a, ctx), ctx),
 
-            // Boolean logical (short-circuit)
+            // Short-circuit logical — keep on ring path (statement-like)
             And n => EmitLogicalAnd(n, ctx),
             Or n => EmitLogicalOr(n, ctx),
 
-            // Null coalescing
-            Coalesce n => EmitCoalesce(n, ctx),
+            // Complex expressions — ring path only (no CompileValue support)
+            PopCount pc => EmitPopCount(pc, ctx),
+            Member m => EmitMember(m, ctx),
+            TypeIs t => EmitTypeIs(t, ctx),
 
-            // Unary
-            Not n => EmitNot(n, ctx),
-            UnaryMinus n => EmitUnaryMinus(n, ctx),
-            BitwiseNot n => EmitBitwiseNot(n, ctx),
-
-            // Statements / void
+            // ── Statement / complex nodes ────────────────────────
             Return r => EmitReturn(r, ctx),
             IfStatement ifStmt => EmitIfStatement(ifStmt, ctx),
             WhileLoop wl => EmitWhileLoop(wl, ctx),
@@ -194,11 +202,7 @@ public static class DirectVmAbiEmitter {
             UsingStatement us => EmitUsingStatement(us, ctx),
             SuspendNode sn => EmitSuspendNode(sn, ctx),
 
-            // Conditional / ternary
-            Conditional c => EmitConditional(c, ctx),
-
             // Variables and blocks
-            Variable v => EmitVariable(v, ctx),
             Assignment a => EmitAssignment(a, ctx),
             Block b => EmitBlock(b, ctx),
 
@@ -207,26 +211,10 @@ public static class DirectVmAbiEmitter {
             Lambda l => EmitLambda(l, ctx),
             Invoke inv => EmitInvoke(inv, ctx),
 
-            // Member access via CLR reflection
-            Member m => EmitMember(m, ctx),
-            PopCount pc => EmitPopCount(pc, ctx),
-
-            // Type operations
-            TypeIs t => EmitTypeIs(t, ctx),
-            TypeAs t => EmitTypeAs(t, ctx),
-            TypeCast t => EmitTypeCast(t, ctx),
-            Await a => EmitAwait(a, ctx),
-            Default d => EmitDefault(d, ctx),
-
             // Allocations and indexing
             New n => EmitNew(n, ctx),
             NewArray n => EmitNewArray(n, ctx),
             IndexAccess n => EmitIndexAccess(n, ctx),
-
-            // Other common
-            ThisReference _ => EmitConstant(new Constant(0L), ctx),
-            ParameterReference pr => EmitParameterReference(pr, ctx),
-            NullForgiving n => CompileNode(n.Operand, ctx),
             StridedSetBits ssb => EmitStridedSetBits(ssb, ctx),
 
             // Switch as conditional chain
@@ -433,64 +421,162 @@ public static class DirectVmAbiEmitter {
         return pos;
     }
 
-    /// <summary>Binary arithmetic (add, sub, mul, div, mod).</summary>
+    // ── CompileValue: expression-returning compilation ────────────
+
+    /// <summary>Compile a node to an Expression that produces its value on the
+    /// LINQ eval stack — no ring slot.</summary>
+    private static Expression CompileValue(Node node, AbiCtx ctx) {
+        return node switch {
+            // Constants use ring path to handle heap allocation for strings/objects
+            Constant c => SpillRingRead(CompileNode(c, ctx), ctx),
+            Variable v => ctx.VariableRead(v),
+            Add n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Add, ctx),
+            Subtract n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
+            Multiply n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
+            Divide n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Divide, ctx),
+            Modulo n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Modulo, ctx),
+            BitwiseAnd n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, And, ctx),
+            BitwiseOr n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Or, ctx),
+            BitwiseXor n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
+            ShiftLeft n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
+            ShiftRight n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
+            Equal n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, Equal, ctx, n),
+            NotEqual n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, NotEqual, ctx, n),
+            LessThan n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThan, ctx),
+            LessThanOrEqual n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx),
+            GreaterThan n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx),
+            GreaterThanOrEqual n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx),
+            Not n => EmitNotValue(n, ctx),
+            UnaryMinus n => EmitUnaryMinusValue(n, ctx),
+            BitwiseNot n => EmitBitwiseNotValue(n, ctx),
+            PopCount pc => EmitPopCountValue(pc, ctx),
+            Conditional c => EmitConditionalValue(c, ctx),
+            Coalesce n => EmitCoalesceValue(n, ctx),
+            Default _ => Constant(0L),
+            ThisReference _ => Constant(0L),
+            ParameterReference _ => Constant(0L),
+            NullForgiving n => CompileValue(n.Operand, ctx),
+            TypeAs ta => CompileValue(ta.Operand, ctx),
+            TypeCast tc => CompileValue(tc.Operand, ctx),
+            Await a => CompileValue(a.Operand, ctx),
+            _ => SpillRingRead(CompileNode(node, ctx), ctx)
+        };
+    }
+
+    /// <summary>Allocate a ring slot and assign a value expression to it.</summary>
+    private static Expression SpillToRing(Expression value, AbiCtx ctx) {
+        int slot = ctx.AllocSlot();
+        ctx.RingDepth = slot + 1;
+        return Assign(ctx.RingVar(slot), value);
+    }
+
+    /// <summary>Wrap a ring-store expression and return the ring variable.</summary>
+    private static Expression SpillRingRead(Expression compiled, AbiCtx ctx) {
+        int slot = ctx.RingDepth - 1;
+        return Block(compiled, ctx.RingVar(slot));
+    }
+
+    // ── Value-returning helpers (eval stack, no ring) ────────────
+
+    private static Expression EmitConstantValue(Constant c) {
+        if (TryValueToLong(c.Value, out long val)) return Constant(val);
+        if (c.Value is double dbl) return Constant(BitConverter.DoubleToInt64Bits(dbl));
+        if (c.Value is float flt) return Constant(BitConverter.DoubleToInt64Bits(flt));
+        return Constant(0L);
+    }
+
+    private static Expression EmitBinaryArithmeticValue(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> factory,
+        AbiCtx ctx) {
+        var leftVal = CompileValue(left, ctx);
+        var rightVal = CompileValue(right, ctx);
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+            return Call(BitConverterDoubleToInt64Bits,
+                factory(Call(BitConverterInt64BitsToDouble, leftVal),
+                        Call(BitConverterInt64BitsToDouble, rightVal)));
+        if (right is Constant rc && TryValueToLong(rc.Value, out long rv) && rv > 0 && (rv & (rv - 1)) == 0) {
+            if (factory.Method.Name == nameof(Expression.Modulo))
+                return Expression.And(leftVal, Constant(rv - 1));
+            if (factory.Method.Name == nameof(Expression.Divide))
+                return Expression.RightShift(leftVal, Constant(BitScanReverse(rv)));
+            if (factory.Method.Name == nameof(Expression.Multiply))
+                return Expression.LeftShift(leftVal, Constant(BitScanReverse(rv)));
+        }
+        var rhs = rightVal;
+        if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
+        return factory(leftVal, rhs);
+    }
+
+    private static Expression EmitNotValue(Not n, AbiCtx ctx) =>
+        Condition(Equal(CompileValue(n.Value, ctx), Constant(0L)), Constant(1L), Constant(0L));
+
+    private static Expression EmitUnaryMinusValue(UnaryMinus n, AbiCtx ctx) {
+        var v = CompileValue(n.Operand, ctx);
+        return IsDoubleValue(ctx, n.Operand)
+            ? Call(BitConverterDoubleToInt64Bits, Negate(Call(BitConverterInt64BitsToDouble, v)))
+            : Negate(v);
+    }
+
+    private static Expression EmitBitwiseNotValue(BitwiseNot n, AbiCtx ctx) =>
+        Not(CompileValue(n.Operand, ctx));
+
+    private static Expression EmitPopCountValue(PopCount pc, AbiCtx ctx) =>
+        Convert(Call(null, typeof(System.Numerics.BitOperations)
+            .GetMethod(nameof(System.Numerics.BitOperations.PopCount), [typeof(ulong)])!,
+            Convert(CompileValue(pc.Operand, ctx), typeof(ulong))), typeof(long));
+
+    private static Expression EmitConditionalValue(Conditional c, AbiCtx ctx) =>
+        Condition(NotEqual(CompileValue(c.Condition, ctx), Constant(0L)),
+            CompileValue(c.IfTrue, ctx), CompileValue(c.IfFalse, ctx));
+
+    private static Expression EmitCoalesceValue(Coalesce n, AbiCtx ctx) {
+        var lv = CompileValue(n.LeftHandValue, ctx);
+        return Condition(NotEqual(lv, Constant(0L)), lv, CompileValue(n.RightHandValue, ctx));
+    }
+
+    private static Expression EmitComparisonValue(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        AbiCtx ctx, Node? cn = null) {
+        var lv = CompileValue(left, ctx);
+        var rv = CompileValue(right, ctx);
+        bool eq = cf == Equal || cf == NotEqual;
+        if (eq && AreHeapValues(ctx, left, right)) {
+            var lo = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(lv, typeof(int)));
+            var ro = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(rv, typeof(int)));
+            var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
+            return Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
+                                cf == Equal ? Constant(0L) : Constant(1L));
+        }
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+            return Condition(cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv)),
+                Constant(1L), Constant(0L));
+        return Condition(cf(lv, rv), Constant(1L), Constant(0L));
+    }
+
+    /// <summary>Binary arithmetic — uses CompileValue for operands (eval stack),</summary>
     private static Expression EmitBinaryArithmetic(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
         AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var leftExpr = CompileNode(left, ctx);
-        int leftResult = ctx.RingDepth - 1;
-
-        var rightExpr = CompileNode(right, ctx);
-        int rightResult = ctx.RingDepth - 1;
-
-        // Double/float path: reinterpret bits, do IEEE 754 arithmetic, store bits back
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
-            var leftDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftResult));
-            var rightDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightResult));
-            var resultDbl = factory(leftDbl, rightDbl);
-            var resultBits = Call(BitConverterDoubleToInt64Bits, resultDbl);
-            var result = Assign(ctx.RingVar(d), resultBits);
-            ctx.RingDepth = d + 1;
-            return Block(leftExpr, rightExpr, result);
+        var leftVal = CompileValue(left, ctx);
+        var rightVal = CompileValue(right, ctx);
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+            return SpillToRing(Call(BitConverterDoubleToInt64Bits,
+                factory(Call(BitConverterInt64BitsToDouble, leftVal),
+                        Call(BitConverterInt64BitsToDouble, rightVal))), ctx);
+        if (right is Constant rc && TryValueToLong(rc.Value, out long rv) && rv > 0 && (rv & (rv - 1)) == 0) {
+            if (factory.Method.Name == nameof(Expression.Modulo))
+                return SpillToRing(Expression.And(leftVal, Constant(rv - 1)), ctx);
+            if (factory.Method.Name == nameof(Expression.Divide))
+                return SpillToRing(Expression.RightShift(leftVal, Constant(BitScanReverse(rv))), ctx);
+            if (factory.Method.Name == nameof(Expression.Multiply))
+                return SpillToRing(Expression.LeftShift(leftVal, Constant(BitScanReverse(rv))), ctx);
         }
-
-        // Integer path — check for power-of-two constant optimizations
-        if (right is Constant rc && TryValueToLong(rc.Value, out long rVal) && rVal > 0 && (rVal & (rVal - 1)) == 0) {
-            string op = factory.Method.Name;
-            // Modulo(x, 2^k) → And(x, k-1)     (avoids expensive rem library call)
-            if (op == nameof(Expression.Modulo)) {
-                var result = Assign(ctx.RingVar(d),
-                    Expression.And(ctx.RingVar(leftResult), Constant(rVal - 1)));
-                ctx.RingDepth = d + 1;
-                return Block(leftExpr, rightExpr, result);
-            }
-            // Divide(x, 2^k) → ShiftRight(x, k)  (signed shift)
-            if (op == nameof(Expression.Divide)) {
-                int k = BitScanReverse(rVal);
-                var result = Assign(ctx.RingVar(d),
-                    Expression.RightShift(ctx.RingVar(leftResult), Constant(k)));
-                ctx.RingDepth = d + 1;
-                return Block(leftExpr, rightExpr, result);
-            }
-            // Multiply(x, 2^k) → ShiftLeft(x, k)
-            if (op == nameof(Expression.Multiply)) {
-                int k = BitScanReverse(rVal);
-                var result = Assign(ctx.RingVar(d),
-                    Expression.LeftShift(ctx.RingVar(leftResult), Constant(k)));
-                ctx.RingDepth = d + 1;
-                return Block(leftExpr, rightExpr, result);
-            }
-        }
-
-        // Integer path (default behavior)
-        Expression rhs = ctx.RingVar(rightResult);
-        if (factory == LeftShift || factory == RightShift)
-            rhs = Convert(rhs, typeof(int));
-        var result2 = Assign(ctx.RingVar(d), factory(ctx.RingVar(leftResult), rhs));
-        ctx.RingDepth = d + 1;
-        return Block(leftExpr, rightExpr, result2);
+        var rhs = rightVal;
+        if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
+        return SpillToRing(factory(leftVal, rhs), ctx);
     }
 
     /// <summary>Comparison (eq, neq, lt, gt, etc.) → 0/1 long.

@@ -3,7 +3,6 @@ using System.Linq;
 using Poly.Syntax;
 using Poly.Syntax.Nodes;
 using Poly.Interpretation;
-using Prim = Poly.Syntax.Primitives;
 using Poly.Interpretation.Vm;
 
 int limit = args.Length > 0 ? int.Parse(args[0]) : 1000000;

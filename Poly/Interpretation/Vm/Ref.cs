@@ -22,7 +22,7 @@ internal static class Ref {
 
     /// <summary>Constructor via <c>() => new T(args)</c>, e.g. <c>Ref.Constructor(() => new InvalidOperationException(""))</c>.
     /// Extract the <see cref="ConstructorInfo"/> from the <c>new</c> expression.</summary>
-    public static ConstructorInfo Constructor(Expression<Func<object>> expr) =>
+    public static ConstructorInfo Constructor<T>(Expression<Func<T>> expr) =>
         ((NewExpression)expr.Body).Constructor!;
 }
 

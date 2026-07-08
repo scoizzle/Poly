@@ -38,17 +38,18 @@ Domain constructs lower to generic VM opcodes — no domain opcodes in this modu
   (13 passes)            metadata + diagnostics
        │
        ▼
-  ExpansionPass  ──►  PrimitiveExpansionMetadata
-       │              (linear PrimitiveNode[])
-       ▼
-  ProgramCompiler  ──►  VmProgram
-  + PrimitiveLinker      (delegate, Functions[], RootValueKind, CallSites)
+  DirectVmAbiEmitter ──►  VmProgram
+  (direct AST-to-ABI      (delegate, StepNodes, DebugInfo)
+   lowering, no
+   primitive expansion)
        │
        ▼
   Interpreter.Execute  ──►  ExecutionResult / InterpretResult
 ```
 
 The cached standard pipeline lives in `Interpreter.cs`. Pass order and metadata contracts are documented in [`Analysis/README.md`](Analysis/README.md).
+
+Direct AST lowering is the sole compilation path. No primitive flattening or expansion step is used — the `DirectVmAbiEmitter` walks the analyzed AST directly and emits `System.Linq.Expressions` trees targeting the VM ABI (`VmState`, ring registers, 2-value frame model, heap).
 
 ---
 
@@ -91,7 +92,7 @@ long handle = exec.RawValue;
 
 | Directory | Role | Detail |
 |-----------|------|--------|
-| [`Analysis/`](Analysis/) | Semantic passes + expansion | [`Analysis/README.md`](Analysis/README.md) — pass registry, ordering, diagnostics |
+| [`Analysis/`](Analysis/) | Semantic analysis passes | [`Analysis/README.md`](Analysis/README.md) — pass registry, ordering, diagnostics |
 | [`Vm/`](Vm/) | Compile primitives → delegate; runtime state | [`Vm/README.md`](Vm/README.md) — `ProgramCompiler`, stack/heap ABI |
 | [`CSharp/`](CSharp/) | C# source emission from AST | Secondary backend; not canonical semantics |
 | [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Test/reference path; migration to VM ongoing (see tracker INT-003) |
@@ -101,7 +102,7 @@ Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `Interp
 
 ---
 
-## Standard analysis pipeline (13 passes)
+## Standard analysis pipeline (12 passes)
 
 Registered in `Interpreter._analyzer` in this order. **Do not reorder** without updating [`Analysis/README.md`](Analysis/README.md) and tests.
 
@@ -119,17 +120,19 @@ Registered in `Interpreter._analyzer` in this order. **Do not reorder** without 
 | 10 | `.UseDefiniteAssignmentAnalysis()` | Definite assignment |
 | 11 | `.UseLambdaReturnTypeResolution()` | Lambda return types |
 | 12 | `.UseExceptionRegionAnalysis()` | Try/catch/using region table |
-| 13 | `.UsePrimitiveExpansion()` | AST → `PrimitiveExpansionMetadata` |
 
-Custom pipelines: build your own `Analyzer` via `AnalyzerBuilder` (same extensions). `Interpreter.Compile` expects expansion metadata on the root when using the standard expansion pass.
+Custom pipelines: build your own `Analyzer` via `AnalyzerBuilder` (same extensions).
 
 ---
 
-## Primitive IR
+## Direct AST lowering
 
-Instruction definitions live under `Poly/Syntax/Primitives/` (`PrimitiveNode`, `StackEffect`, linking, `Phi`, `CallExternal`, EH placeholders). See [`Poly/Syntax/Primitives/README.md`](../Syntax/Primitives/README.md).
+The sole compilation path is `DirectVmAbiEmitter` which walks the analyzed AST and emits
+`System.Linq.Expressions` trees targeting the VM ABI (`VmState`, ring registers for temporaries,
+2-value frame model for user variables and call linkage, heap for objects). No primitive
+flattening or expansion step exists — the AST is the canonical lowering target.
 
-Lowering is implemented on each AST node as `ToPrimitives(ExpansionContext)`; `ExpansionPass` invokes it and caches the sequence.
+See [`Vm/README.md`](Vm/README.md) for the ABI model and emitter details.
 
 ---
 
@@ -141,7 +144,7 @@ These read the **AST directly** and are not the conformance target for new featu
 - **C#** — `CSharpGenerator`; codegen and pretty-printing.
 - **Mermaid** — `MermaidAstGenerator`; docs and debugging.
 
-New language semantics should land in analysis → primitives → `ProgramCompiler` first.
+New language semantics should land in analysis → direct lowering → `DirectVmAbiEmitter` first.
 
 ---
 
@@ -149,7 +152,7 @@ New language semantics should land in analysis → primitives → `ProgramCompil
 
 | Resource | Use |
 |----------|-----|
-| `Poly.Tests/Interpretation/` | VM correctness, expansion, integration tests |
+| `Poly.Tests/Interpretation/` | VM correctness, direct lowering, integration tests |
 | [`docs/plans/interpretation-system-issues.md`](../../docs/plans/interpretation-system-issues.md) | Tracked gaps (INT-*, ANA-*) |
 | [`docs/interpretation-system-architecture-review.md`](../../docs/interpretation-system-architecture-review.md) | Holistic architecture review (living doc) |
 | [`docs/decisions/`](../../docs/decisions/) | ADRs: VM, primitives-as-IR, EH, serialization, sandboxing |

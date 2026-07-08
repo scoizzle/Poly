@@ -1,0 +1,11 @@
+benchmark,language,size_or_limit,result,time_ms,prep_ms
+sieve,C,1000000,78498,3.9
+sieve,C++,1000000,78498,5.23992
+sieve,Rust,1000000,78498,3.9
+sieve,Python,1000000,78498,1097.2
+sieve,JS,1000000,78498,72.5
+sieve,Bun,1000000,78498,160.9
+sieve,Deno,1000000,78498,52.1
+sieve,Python+NumPy,1000000,78498,2.7
+sieve,C# native,1000000,78498,4
+sieve,C# vectorized,1000000,78498,5

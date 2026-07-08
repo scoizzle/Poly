@@ -1,0 +1,45 @@
+benchmark,language,size_or_limit,result,time_ms,prep_ms
+sieve,C,1000000,78498,4.6
+sieve,C++,1000000,78498,4.64292
+sieve,Rust,1000000,78498,4.0
+sieve,Python,1000000,78498,1181.5
+sieve,JS,1000000,78498,53.5
+sieve,Bun,1000000,78498,163.7
+sieve,Deno,1000000,78498,39.9
+sieve,Python+NumPy,1000000,78498,2.1
+sieve,C# native,1000000,78498,6
+sieve,C# vectorized,1000000,78498,6
+sieve,Poly VM,1000000,78498,5,59
+mandelbrot,C,128,458080,0.8
+mandelbrot,C++,128,458080,0.80675
+mandelbrot,Rust,128,458080,0.8
+mandelbrot,Python,128,458080,47.9
+mandelbrot,JS,128,458080,3.3
+mandelbrot,Bun,128,458080,3.9
+mandelbrot,Deno,128,458080,3.4
+mandelbrot,Python+NumPy,128,458080,17.3
+mandelbrot,C# native,128,458080,1
+mandelbrot,C# vectorized,128,458080,1
+mandelbrot,Poly VM,128,458080,55,57
+nqueens,C,8,92,0.0
+nqueens,C++,8,92,0.015625
+nqueens,Rust,8,92,0.0
+nqueens,Python,8,92,0.6
+nqueens,JS,8,92,0.7
+nqueens,Bun,8,92,0.7
+nqueens,Deno,8,92,0.7
+nqueens,Python+NumPy,8,92,0.6
+nqueens,C# native,8,92,0
+nqueens,C# vectorized,8,92,0
+nqueens,Poly VM,8,92,1,64
+collatz,C,1000000,837799:524,147.0
+collatz,C++,1000000,837799:524,166.029
+collatz,Rust,1000000,837799:524,104.3
+collatz,Python,1000000,837799:524,5263.6
+collatz,JS,1000000,837799:524,1830.2
+collatz,Bun,1000000,837799:524,350.8
+collatz,Deno,1000000,837799:524,612.6
+collatz,Python+NumPy,1000000,837799:524,5592.5
+collatz,C# native,1000000,837799:524,166
+collatz,C# vectorized,1000000,837799:524,178
+collatz,Poly VM,1000000,837799:524,6502,50

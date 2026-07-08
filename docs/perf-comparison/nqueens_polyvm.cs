@@ -3,59 +3,75 @@ using System.Linq;
 using Poly.Syntax;
 using Poly.Syntax.Nodes;
 using Poly.Interpretation;
-using Prim = Poly.Syntax.Primitives;
 using Poly.Interpretation.Vm;
 
 int boardSize = args.Length > 0 ? int.Parse(args[0]) : 8;
 bool debug = args.Length > 1 && args[1] == "--debug";
 
-var stack = new Variable("stack");
-var sp = new Variable("sp");
+// Per-row arrays for the classic iterative N-Queens algorithm
+var colsArr = new Variable("colsArr");
+var ldArr = new Variable("ldArr");
+var rdArr = new Variable("rdArr");
+var triedArr = new Variable("triedArr");
+var row = new Variable("row");
 var total = new Variable("total");
-var ld = new Variable("ld"); var cols = new Variable("cols");
-var rd = new Variable("rd");
-var avail = new Variable("avail"); var bit = new Variable("bit");
+var avail = new Variable("avail");
+var bit = new Variable("bit");
 
-long allBits = (1L << boardSize) - 1;
-// Stack depth for bitboard n-queens: worst-case ~boardSize! placements
-// Each state uses 3 longs.  Give plenty of room.
-int stackSize = boardSize * boardSize * boardSize * 3;
-
-Node StackAt(Node idx) => new IndexAccess(stack, idx);
+// Helper: IndexAccess into an array
+Node At(Variable arr, Node idx) => new IndexAccess(arr, idx);
 Node Long(long v) => new Constant(v);
 
+int allBits = (1 << boardSize) - 1;
+
 var body = new Invoke(new Lambda([], new Block(
-    [new Assignment(stack, new NewArray(TypeReference.To<long>(), new Constant(stackSize))),
-     new Assignment(sp, Long(0)),
+    [new Assignment(colsArr, new NewArray(TypeReference.To<long>(), new Constant(8))),
+     new Assignment(ldArr, new NewArray(TypeReference.To<long>(), new Constant(8))),
+     new Assignment(rdArr, new NewArray(TypeReference.To<long>(), new Constant(8))),
+     new Assignment(triedArr, new NewArray(TypeReference.To<long>(), new Constant(8))),
+     new Assignment(row, Long(0)),
      new Assignment(total, Long(0)),
-     new Assignment(StackAt(sp), Long(0)),
-     new Assignment(StackAt(new Add(sp, Long(1))), Long(0)),
-     new Assignment(StackAt(new Add(sp, Long(2))), Long(0)),
-     new Assignment(sp, new Add(sp, Long(3))),
-     new WhileLoop(new GreaterThan(sp, Long(0)), new Block([
-         new Assignment(sp, new Subtract(sp, Long(3))),
-         new Assignment(ld, StackAt(sp)),
-         new Assignment(cols, StackAt(new Add(sp, Long(1)))),
-         new Assignment(rd, StackAt(new Add(sp, Long(2)))),
-         new IfStatement(new Equal(cols, Long(allBits)),
-             new Assignment(total, new Add(total, Long(1)))),
+     // Initialize row 0
+     new Assignment(At(colsArr, Long(0)), Long(0)),
+     new Assignment(At(ldArr, Long(0)), Long(0)),
+     new Assignment(At(rdArr, Long(0)), Long(0)),
+     new Assignment(At(triedArr, Long(0)), Long(0)),
+     // Main backtracking loop
+     new WhileLoop(new GreaterThanOrEqual(row, Long(0)), new Block([
          new Assignment(avail, new BitwiseAnd(
-             new BitwiseNot(new BitwiseOr(new BitwiseOr(ld, cols), rd)),
-             Long(allBits))),
-         new WhileLoop(new NotEqual(avail, Long(0)), new Block([
+             new BitwiseAnd(
+                 new BitwiseNot(new BitwiseOr(
+                     new BitwiseOr(At(ldArr, row), At(colsArr, row)),
+                     At(rdArr, row))),
+                 Long(allBits)),
+             new BitwiseNot(At(triedArr, row)))),
+         new IfStatement(new Equal(avail, Long(0)), new Block([
+             new Assignment(At(triedArr, row), Long(0)),
+             new Assignment(row, new Subtract(row, Long(1)))
+         ]), new Block([
              new Assignment(bit, new BitwiseAnd(new UnaryMinus(avail), avail)),
-             new Assignment(avail, new BitwiseXor(avail, bit)),
-             new Assignment(StackAt(sp),
-                 new ShiftLeft(new BitwiseOr(ld, bit), Long(1))),
-             new Assignment(StackAt(new Add(sp, Long(1))),
-                 new BitwiseOr(cols, bit)),
-             new Assignment(StackAt(new Add(sp, Long(2))),
-                 new ShiftRight(new BitwiseOr(rd, bit), Long(1))),
-             new Assignment(sp, new Add(sp, Long(3))),
+             new Assignment(At(triedArr, row),
+                 new BitwiseOr(At(triedArr, row), bit)),
+             new IfStatement(new Equal(row, Long(7)),
+                 new Assignment(total, new Add(total, Long(1))),
+                 new Block([
+                     new Assignment(row, new Add(row, Long(1))),
+                     new Assignment(At(colsArr, row),
+                         new BitwiseOr(At(colsArr, new Subtract(row, Long(1))), bit)),
+                     new Assignment(At(ldArr, row),
+                         new ShiftLeft(
+                             new BitwiseOr(At(ldArr, new Subtract(row, Long(1))), bit),
+                             Long(1))),
+                     new Assignment(At(rdArr, row),
+                         new ShiftRight(
+                             new BitwiseOr(At(rdArr, new Subtract(row, Long(1))), bit),
+                             Long(1))),
+                     new Assignment(At(triedArr, row), Long(0)),
+                 ]))
          ])),
      ])),
      total],
-    [stack, sp, total, ld, cols, rd, avail, bit])));
+    [colsArr, ldArr, rdArr, triedArr, row, total, avail, bit])));
 
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
 var program = Interpreter.Compile(body, CompilationMode.NoDebug);

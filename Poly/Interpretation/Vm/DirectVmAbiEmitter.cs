@@ -52,7 +52,7 @@ public static class DirectVmAbiEmitter {
         body.Add(Assign(ctx.SlotsLocal, ctx.SlotsInitExpression));
         body.Add(Assign(ctx.HeapLocal, ctx.HeapInitExpression));
         body.Add(Assign(ctx.Registers,
-            Coalesce(ctx.Registers, NewArrayBounds(typeof(long), Constant(32)))));
+            Coalesce(ctx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
         body.Add(IfThen(
             Equal(Property(ctx.State, "FrameBase"), Constant(-1)),
             Assign(Property(ctx.State, "FrameBase"), Constant(0))));
@@ -63,10 +63,15 @@ public static class DirectVmAbiEmitter {
         // (set inside CompileNode / at suspend points).
         if (mode != CompilationMode.NoDebug) {
             body.Add(Assign(ctx.ProgramCounter, Constant(0)));
-            ctx.DebugInterruptProp = Property(ctx.State, nameof(VmState.DebugInterrupt));
+            ctx.DebugHookProp = Property(ctx.State, nameof(VmState.DebugHook));
         }
 
         // ── Compile root node ────────────────────────────────────────
+        // Enter the top-level activation in the compile-time simulator.
+        // The root frame has 0 arguments and 0 known locals at this point;
+        // DeclareVariable inside blocks will still assign scope-relative slots.
+        ctx.EnterActivation(0, 0);
+
         var rootExpr = CompileNode(root, ctx);
 
         // Flush the root result from the ring to the value stack,
@@ -79,6 +84,9 @@ public static class DirectVmAbiEmitter {
             body.Add(Assign(ctx.SlotsStackPointer,
                 Add(ctx.FrameBaseLocal, Constant(1))));
         }
+
+        // Leave the top-level activation (compile-time simulator bookkeeping).
+        ctx.LeaveActivation();
 
         // ── Exit ─────────────────────────────────────────────────────
         body.Add(Label(ctx.ExitLabel));
@@ -95,7 +103,9 @@ public static class DirectVmAbiEmitter {
         var del = delegateExpr.Compile();
 
         int registerScratchSize = ctx.MaxRingDepth;
-        return new VmProgram(del, registerScratchSize, RootValueKind: rootKind);
+        var debugInfo = new VmDebugInfo(ctx.VariableLayouts);
+        return new VmProgram(del, registerScratchSize, RootValueKind: rootKind,
+            StepNodes: ctx.StepNodes, DebugInfo: debugInfo);
     }
 
     // ── Compile dispatch ───────────────────────────────────────────
@@ -107,6 +117,12 @@ public static class DirectVmAbiEmitter {
     /// check so external code can step through each AST boundary.
     /// </summary>
     private static Expression CompileNode(Node node, AbiCtx ctx) {
+        // Assign a step/PC for this node. This serves as the "address" that
+        // can be mapped back to the symbolic Node for debuggers, stack traces,
+        // variable name resolution, etc.
+        int step = ctx.StepCounter++;
+        ctx.RecordStepNode(step, node);
+
         // For the direct path, surface the actual AST node so that VmState can
         // expose the current symbolic position (for debuggers, tracing, and
         // suspend/resume) instead of only a synthetic step/PC.
@@ -116,7 +132,7 @@ public static class DirectVmAbiEmitter {
         );
 
         var body = CompileNodeInner(node, ctx);
-        var guarded = WithInterrupt(body, ctx);
+        var guarded = WithInterrupt(body, ctx, step);
         return Block(setCurrentNode, guarded);
     }
 
@@ -230,6 +246,11 @@ public static class DirectVmAbiEmitter {
         int slot = ctx.AllocSlot();
         if (TryValueToLong(c.Value, out long val))
             return Assign(ctx.RingVar(slot), Constant(val));
+        // float/double: store bit pattern directly in the long ring slot
+        if (c.Value is double dbl)
+            return Assign(ctx.RingVar(slot), Constant(BitConverter.DoubleToInt64Bits(dbl)));
+        if (c.Value is float flt)
+            return Assign(ctx.RingVar(slot), Constant(BitConverter.DoubleToInt64Bits(flt)));
         // Non-numeric: allocate on heap
         var allocate = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)),
             Convert(Constant(c.Value), typeof(object)));
@@ -269,32 +290,30 @@ public static class DirectVmAbiEmitter {
         }
 
         if (ctor is not null) {
-            // Compile arguments onto the ring
+            // Compile arguments onto the ring — track actual result slots
             int d = ctx.RingDepth;
             var argExprs = new List<Expression>();
+            int[] argSlots = new int[n.Arguments.Length];
             for (int i = 0; i < n.Arguments.Length; i++) {
                 argExprs.Add(CompileNode(n.Arguments[i], ctx));
-                ctx.RingDepth = d + i + 1;
+                argSlots[i] = ctx.RingDepth - 1;
             }
 
             var ctorParams = ctor.GetParameters();
             var ctorArgs = new Expression[ctorParams.Length];
             for (int i = 0; i < ctorParams.Length; i++) {
-                var ringVal = ctx.RingVar(d + i);
+                var ringVal = ctx.RingVar(argSlots[i]);
                 var paramType = ctorParams[i].ParameterType;
                 if (paramType.IsValueType) {
-                    // Value types: unbox from long
                     ctorArgs[i] = Convert(ringVal, paramType);
                 }
                 else if (paramType == typeof(string)) {
-                    // String is heap handle — read actual string from heap
                     ctorArgs[i] = Convert(
                         Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
                             Convert(ringVal, typeof(int))),
                         paramType);
                 }
                 else {
-                    // Other reference type: read from heap
                     ctorArgs[i] = Convert(
                         Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
                             Convert(ringVal, typeof(int))),
@@ -306,7 +325,7 @@ public static class DirectVmAbiEmitter {
             var boxed = Convert(newExpr, typeof(object));
             int slot = ctx.AllocSlot();
             var handle = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)), boxed);
-            ctx.RingDepth = d + n.Arguments.Length + 1;
+            ctx.RingDepth = slot + 1;
             return Block(argExprs.Concat([Assign(ctx.RingVar(slot), Convert(handle, typeof(long)))]));
         }
 
@@ -329,20 +348,25 @@ public static class DirectVmAbiEmitter {
     }
 
     private static Expression EmitNewArray(NewArray n, AbiCtx ctx) {
-        int lenSlot = ctx.RingDepth;
+        int d = ctx.RingDepth;
         var lenExpr = CompileNode(n.Length, ctx);
-        ctx.RingDepth = lenSlot + 1;
+        int lenResult = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref lenResult, d, ctx);
 
         int slot = ctx.AllocSlot();
-        // Create object[] of given length on heap (ABI uses object[] for all arrays)
-        var arr = NewArrayBounds(typeof(object), Convert(ctx.RingVar(lenSlot), typeof(int)));
+        // Resolve element type: value types like long[] store unboxed values,
+        // reference types and unknown types use object[].
+        Type elemType = n.ElementType switch {
+            ClrTypeReference ctr when ctr.RuntimeType.IsValueType => ctr.RuntimeType,
+            _ => typeof(object)
+        };
+        var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenResult), typeof(int)));
         var handle = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)),
             Convert(arr, typeof(object)));
-        return Block(lenExpr, Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
+        return Block(lenExpr, fold, Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
     }
 
     private static Expression EmitIndexAccess(IndexAccess n, AbiCtx ctx) {
-        // Compile array and index — let post-depth tracking handle correct slots
         int startDepth = ctx.RingDepth;
         var arrExpr = CompileNode(n.Value, ctx);
         int arrSlot = ctx.RingDepth - 1;
@@ -351,18 +375,28 @@ public static class DirectVmAbiEmitter {
         int idxSlot = ctx.RingDepth - 1;
 
         int outSlot = ctx.AllocSlot();
-        // Read object from heap (should be object[]), then index, get value as long (or re-box)
-        var arrObjParam = Variable(typeof(object[]), "_arrObj");
-        var arrObj = Convert(
-            Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
-                Convert(ctx.RingVar(arrSlot), typeof(int))),
-            typeof(object[]));
-        var assignedArr = Assign(arrObjParam, arrObj);
-        var val = ArrayAccess(arrObjParam, Convert(ctx.RingVar(idxSlot), typeof(int)));
-        var asLong = Convert(val, typeof(long));
-        return Block([arrObjParam],
-            arrExpr, idxExpr, assignedArr,
-            Assign(ctx.RingVar(outSlot), asLong));
+        // Read raw object from heap, then index based on runtime type.
+        // NewArray creates long[] for value types and object[] for ref types,
+        // so we handle both.
+        var rawObj = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+            Convert(ctx.RingVar(arrSlot), typeof(int)));
+        var idx = Convert(ctx.RingVar(idxSlot), typeof(int));
+
+        var longArr = Variable(typeof(long[]), "_longArr");
+        var objArr = Variable(typeof(object[]), "_objArr");
+        var valExpr = Condition(
+            TypeIs(rawObj, typeof(long[])),
+            // long[]: read directly (value is already long)
+            Block([longArr],
+                Assign(longArr, Convert(rawObj, typeof(long[]))),
+                ArrayAccess(longArr, idx)),
+            // object[]: read and unbox
+            Block([objArr],
+                Assign(objArr, Convert(rawObj, typeof(object[]))),
+                Convert(ArrayAccess(objArr, idx), typeof(long))));
+
+        return Block(arrExpr, idxExpr,
+            Assign(ctx.RingVar(outSlot), valExpr));
     }
 
     /// <summary>Try to convert a CLR value to the long-based ABI representation.
@@ -379,6 +413,26 @@ public static class DirectVmAbiEmitter {
         }
     }
 
+    /// <summary>
+    /// If the operand used more ring slots than expected, fold its result back to slot <paramref name="d"/>
+    /// so the caller can reliably find it at <c>RingVar(d)</c>. Returns an expression that does the copy
+    /// (or <see cref="Empty()"/> if no copy is needed), and sets <paramref name="resultSlot"/> to <paramref name="d"/>.
+    /// </summary>
+    private static Expression FoldResultToSlot(ref int resultSlot, int d, AbiCtx ctx) {
+        if (resultSlot <= d) return Empty();
+        var copy = Assign(ctx.RingVar(d), ctx.RingVar(resultSlot));
+        resultSlot = d;
+        ctx.RingDepth = d + 1;
+        return copy;
+    }
+
+    /// <summary>Find the highest set bit position (0-based) for a positive power of two.</summary>
+    private static int BitScanReverse(long v) {
+        int pos = 0;
+        while (v > 1) { v >>= 1; pos++; }
+        return pos;
+    }
+
     /// <summary>Binary arithmetic (add, sub, mul, div, mod).</summary>
     private static Expression EmitBinaryArithmetic(
         Node left, Node right,
@@ -386,18 +440,57 @@ public static class DirectVmAbiEmitter {
         AbiCtx ctx) {
         int d = ctx.RingDepth;
         var leftExpr = CompileNode(left, ctx);
-        int leftResult = ctx.RingDepth - 1;  // result of left after its allocations
+        int leftResult = ctx.RingDepth - 1;
 
         var rightExpr = CompileNode(right, ctx);
-        int rightResult = ctx.RingDepth - 1; // result of right after its allocations
+        int rightResult = ctx.RingDepth - 1;
 
+        // Double/float path: reinterpret bits, do IEEE 754 arithmetic, store bits back
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            var leftDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftResult));
+            var rightDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightResult));
+            var resultDbl = factory(leftDbl, rightDbl);
+            var resultBits = Call(BitConverterDoubleToInt64Bits, resultDbl);
+            var result = Assign(ctx.RingVar(d), resultBits);
+            ctx.RingDepth = d + 1;
+            return Block(leftExpr, rightExpr, result);
+        }
+
+        // Integer path — check for power-of-two constant optimizations
+        if (right is Constant rc && TryValueToLong(rc.Value, out long rVal) && rVal > 0 && (rVal & (rVal - 1)) == 0) {
+            string op = factory.Method.Name;
+            // Modulo(x, 2^k) → And(x, k-1)     (avoids expensive rem library call)
+            if (op == nameof(Expression.Modulo)) {
+                var result = Assign(ctx.RingVar(d),
+                    Expression.And(ctx.RingVar(leftResult), Constant(rVal - 1)));
+                ctx.RingDepth = d + 1;
+                return Block(leftExpr, rightExpr, result);
+            }
+            // Divide(x, 2^k) → ShiftRight(x, k)  (signed shift)
+            if (op == nameof(Expression.Divide)) {
+                int k = BitScanReverse(rVal);
+                var result = Assign(ctx.RingVar(d),
+                    Expression.RightShift(ctx.RingVar(leftResult), Constant(k)));
+                ctx.RingDepth = d + 1;
+                return Block(leftExpr, rightExpr, result);
+            }
+            // Multiply(x, 2^k) → ShiftLeft(x, k)
+            if (op == nameof(Expression.Multiply)) {
+                int k = BitScanReverse(rVal);
+                var result = Assign(ctx.RingVar(d),
+                    Expression.LeftShift(ctx.RingVar(leftResult), Constant(k)));
+                ctx.RingDepth = d + 1;
+                return Block(leftExpr, rightExpr, result);
+            }
+        }
+
+        // Integer path (default behavior)
         Expression rhs = ctx.RingVar(rightResult);
-        // LeftShift/RightShift require int rhs for the LINQ Expression tree
         if (factory == LeftShift || factory == RightShift)
             rhs = Convert(rhs, typeof(int));
-        var result = Assign(ctx.RingVar(d), factory(ctx.RingVar(leftResult), rhs));
-        ctx.RingDepth = d + 1; // result lives at slot d
-        return Block(leftExpr, rightExpr, result);
+        var result2 = Assign(ctx.RingVar(d), factory(ctx.RingVar(leftResult), rhs));
+        ctx.RingDepth = d + 1;
+        return Block(leftExpr, rightExpr, result2);
     }
 
     /// <summary>Comparison (eq, neq, lt, gt, etc.) → 0/1 long.
@@ -435,6 +528,17 @@ public static class DirectVmAbiEmitter {
             return Block(leftExpr, rightExpr, result);
         }
 
+        // Double/float comparison: reinterpret bits before comparing
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            var leftDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftResult));
+            var rightDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightResult));
+            var result = Assign(ctx.RingVar(d),
+                Condition(comparisonFactory(leftDbl, rightDbl),
+                    Constant(1L), Constant(0L)));
+            ctx.RingDepth = d + 1;
+            return Block(leftExpr, rightExpr, result);
+        }
+
         var simpleResult = Assign(
             ctx.RingVar(d),
             Condition(comparisonFactory(ctx.RingVar(leftResult), ctx.RingVar(rightResult)),
@@ -468,23 +572,23 @@ public static class DirectVmAbiEmitter {
     /// <summary>Short-circuit AND: if left is false, skip right.</summary>
     private static Expression EmitLogicalAnd(And and, AbiCtx ctx) {
         int d = ctx.RingDepth;
-        var leftExpr = CompileNode(and.LeftHandValue, ctx); // depth = d+1
-        ctx.RingDepth = d + 1;
+        var leftExpr = CompileNode(and.LeftHandValue, ctx);
+        int leftSlot = ctx.RingDepth - 1;
+        var foldLeft = FoldResultToSlot(ref leftSlot, d, ctx);
 
-        var rightLabel = Label("and_right");
-        var doneLabel = Label("and_done");
+        int rightStart = ctx.RingDepth;
+        var rightExpr = CompileNode(and.RightHandValue, ctx);
+        int rightSlot = ctx.RingDepth - 1;
 
-        // If left (at _r{d}) is 0, jump to done with 0
         var result = Assign(ctx.RingVar(d),
             Block(
-                leftExpr,
+                leftExpr, foldLeft,
                 Condition(
-                    Equal(ctx.RingVar(d), Constant(0L)),
+                    Equal(ctx.RingVar(leftSlot), Constant(0L)),
                     Constant(0L),
-                    // Right side
                     Block(
-                        CompileNode(and.RightHandValue, ctx),
-                        ctx.RingVar(d + 1)  // right's result is at d+1
+                        rightExpr,
+                        ctx.RingVar(rightSlot)
                     )
                 )
             ));
@@ -496,17 +600,22 @@ public static class DirectVmAbiEmitter {
     private static Expression EmitLogicalOr(Or or, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var leftExpr = CompileNode(or.LeftHandValue, ctx);
-        ctx.RingDepth = d + 1;
+        int leftSlot = ctx.RingDepth - 1;
+        var foldLeft = FoldResultToSlot(ref leftSlot, d, ctx);
+
+        int rightStart = ctx.RingDepth;
+        var rightExpr = CompileNode(or.RightHandValue, ctx);
+        int rightSlot = ctx.RingDepth - 1;
 
         var result = Assign(ctx.RingVar(d),
             Block(
-                leftExpr,
+                leftExpr, foldLeft,
                 Condition(
-                    NotEqual(ctx.RingVar(d), Constant(0L)),
+                    NotEqual(ctx.RingVar(leftSlot), Constant(0L)),
                     Constant(1L),
                     Block(
-                        CompileNode(or.RightHandValue, ctx),
-                        ctx.RingVar(d + 1)
+                        rightExpr,
+                        ctx.RingVar(rightSlot)
                     )
                 )
             ));
@@ -518,81 +627,90 @@ public static class DirectVmAbiEmitter {
     private static Expression EmitNot(Not not, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var operandExpr = CompileNode(not.Value, ctx);
-        ctx.RingDepth = d + 1;
-        var result = Assign(ctx.RingVar(d),
-            Condition(Equal(ctx.RingVar(d), Constant(0L)), Constant(1L), Constant(0L)));
-        ctx.RingDepth = d + 1;
-        return Block(operandExpr, result);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        var result = Assign(ctx.RingVar(resultSlot),
+            Condition(Equal(ctx.RingVar(resultSlot), Constant(0L)), Constant(1L), Constant(0L)));
+        ctx.RingDepth = resultSlot + 1;
+        return Block(operandExpr, fold, result);
     }
 
     /// <summary>Unary minus: negate value.</summary>
     private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var operandExpr = CompileNode(unaryMinus.Operand, ctx);
-        ctx.RingDepth = d + 1;
-        var result = Assign(ctx.RingVar(d), Negate(ctx.RingVar(d)));
-        ctx.RingDepth = d + 1;
-        return Block(operandExpr, result);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        Expression result;
+        if (IsDoubleValue(ctx, unaryMinus.Operand)) {
+            var dbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(resultSlot));
+            result = Assign(ctx.RingVar(resultSlot),
+                Call(BitConverterDoubleToInt64Bits, Negate(dbl)));
+        }
+        else {
+            result = Assign(ctx.RingVar(resultSlot), Negate(ctx.RingVar(resultSlot)));
+        }
+        ctx.RingDepth = resultSlot + 1;
+        return Block(operandExpr, fold, result);
     }
 
     private static Expression EmitBitwiseNot(BitwiseNot n, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var operandExpr = CompileNode(n.Operand, ctx);
-        ctx.RingDepth = d + 1;
-        var result = Assign(ctx.RingVar(d), Not(ctx.RingVar(d)));
-        ctx.RingDepth = d + 1;
-        return Block(operandExpr, result);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        var result = Assign(ctx.RingVar(resultSlot), Not(ctx.RingVar(resultSlot)));
+        ctx.RingDepth = resultSlot + 1;
+        return Block(operandExpr, fold, result);
     }
 
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount.</summary>
     private static Expression EmitPopCount(PopCount pc, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var operandExpr = CompileNode(pc.Operand, ctx);
-        ctx.RingDepth = d + 1;
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
         var call = Call(null,
             typeof(System.Numerics.BitOperations).GetMethod(nameof(System.Numerics.BitOperations.PopCount), [typeof(ulong)])!,
-            Convert(ctx.RingVar(d), typeof(ulong)));
-        var result = Assign(ctx.RingVar(d), Convert(call, typeof(long)));
-        ctx.RingDepth = d + 1;
-        return Block(operandExpr, result);
+            Convert(ctx.RingVar(resultSlot), typeof(ulong)));
+        var result = Assign(ctx.RingVar(resultSlot), Convert(call, typeof(long)));
+        ctx.RingDepth = resultSlot + 1;
+        return Block(operandExpr, fold, result);
     }
 
     /// <summary>Member access via CLR reflection: resolve from analysis metadata
     /// and emit a property getter, field read, or method call.</summary>
     private static Expression EmitMember(Member m, AbiCtx ctx) {
         int d = ctx.RingDepth;
-        var instanceExpr = CompileNode(m.Value, ctx);  // heap handle or scalar on ring at d
-        ctx.RingDepth = d + 1;
+        var instanceExpr = CompileNode(m.Value, ctx);
+        int instanceSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref instanceSlot, d, ctx);
 
         var resolved = ctx.Analysis?.GetResolvedMember(m);
 
         // Static member — no instance needed
         if (resolved?.LifetimeModifier == LifetimeModifier.Static) {
-            return EmitResolvedMember(resolved, null, d, ctx, instanceExpr);
+            return EmitResolvedMember(resolved, null, d, ctx, Block(instanceExpr, fold));
         }
 
         if (resolved is not null) {
-            // Determine if the declaring type is a value type (needs boxing)
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
             bool isValueType = declaringTypeDef is ClrTypeDefinition clrDef
                 && clrDef.RuntimeType.IsValueType;
 
             Expression instanceObj;
             if (isValueType) {
-                // Value type: box the scalar value from the ring
-                // Use the resolved CLR type for proper unboxing
-                instanceObj = Convert(ctx.RingVar(d), typeof(object));
+                instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
             }
             else {
-                // Reference type: read object from heap using the handle
                 instanceObj = Call(ctx.HeapLocal,
                     typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
-                    Convert(ctx.RingVar(d), typeof(int)));
+                    Convert(ctx.RingVar(instanceSlot), typeof(int)));
             }
-            return EmitResolvedMember(resolved, instanceObj, d, ctx, instanceExpr);
+            return EmitResolvedMember(resolved, instanceObj, d, ctx, Block(instanceExpr, fold));
         }
 
-        // No metadata — fallback passthrough (return the instance value)
+        // No metadata — fallback passthrough
         return instanceExpr;
     }
 
@@ -672,8 +790,9 @@ public static class DirectVmAbiEmitter {
     /// <summary>TypeIs: check if the operand's heap object is assignable to the target type.</summary>
     private static Expression EmitTypeIs(TypeIs t, AbiCtx ctx) {
         int d = ctx.RingDepth;
-        var operandExpr = CompileNode(t.Operand, ctx); // heap handle at _r{d}
-        ctx.RingDepth = d + 1;
+        var operandExpr = CompileNode(t.Operand, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
 
         // Resolve target type from TypeReference via analysis or CLR type lookup
         Type? targetType = null;
@@ -690,16 +809,16 @@ public static class DirectVmAbiEmitter {
 
         if (targetType is null) {
             // Cannot resolve — return 0 (false)
-            return Block(operandExpr, Assign(ctx.RingVar(d), Constant(0L)));
+            return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), Constant(0L)));
         }
 
         // Read heap object and check type: _heap.UnsafeGet((int)handle) is TargetType
         var heapObj = Call(ctx.HeapLocal,
             typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
-            Convert(ctx.RingVar(d), typeof(int)));
+            Convert(ctx.RingVar(resultSlot), typeof(int)));
         var typeCheck = TypeIs(heapObj, targetType);
         var result = Condition(typeCheck, Constant(1L), Constant(0L));
-        return Block(operandExpr, Assign(ctx.RingVar(d), result));
+        return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), result));
     }
 
     /// <summary>TypeAs: Expression.TypeAs(operand, targetType).</summary>
@@ -740,33 +859,37 @@ public static class DirectVmAbiEmitter {
     private static Expression EmitStridedSetBits(StridedSetBits ssb, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var arrExpr = CompileNode(ssb.Array, ctx);
-        ctx.RingDepth = d + 1;
+        int arrSlot = ctx.RingDepth - 1;
         var startExpr = CompileNode(ssb.StartValue, ctx);
-        ctx.RingDepth = d + 2;
+        int startSlot = ctx.RingDepth - 1;
         var stepExpr = CompileNode(ssb.Step, ctx);
-        ctx.RingDepth = d + 3;
+        int stepSlot = ctx.RingDepth - 1;
         var limitExpr = CompileNode(ssb.Limit, ctx);
+        int limitSlot = ctx.RingDepth - 1;
+
+        // Fold all four operands to consecutive slots starting at d
+        var foldArr = FoldResultToSlot(ref arrSlot, d, ctx);
+        var foldStart = FoldResultToSlot(ref startSlot, d + 1, ctx);
+        var foldStep = FoldResultToSlot(ref stepSlot, d + 2, ctx);
+        var foldLimit = FoldResultToSlot(ref limitSlot, d + 3, ctx);
         ctx.RingDepth = d + 4;
-        // ABI-level strided set: bit |= 1 << (j & 63) at arr[j >> 6] for j = start, start+step, ...
-        // For POC, emit a loop that sets bits.
-        // Using _heap.RawSlots[ handle ][ wordIndex ] |= 1L << (j & 63)
-        var arrObj = Convert(ArrayAccess(ctx.HeapRawSlots, Convert(ctx.RingVar(d), typeof(int))), typeof(long[]));
+
+        // ABI-level strided set
+        var arrObj = Convert(ArrayAccess(ctx.HeapRawSlots, Convert(ctx.RingVar(arrSlot), typeof(int))), typeof(long[]));
         var j = Variable(typeof(long), "_bits_j");
         var loopStart = Label("_stride_loop");
         var loopEnd = Label("_stride_done");
         var loopBody = Block(
-            // wordIdx = (int)(j >> 6)
-            // arrObj[wordIdx] |= 1L << (int)(j & 63)
             Assign(ArrayAccess(arrObj, Convert(RightShift(j, Constant(6)), typeof(int))),
                 Or(ArrayAccess(arrObj, Convert(RightShift(j, Constant(6)), typeof(int))),
                     LeftShift(Constant(1L), Convert(And(j, Constant(63L)), typeof(int))))),
-            Assign(j, Add(j, ctx.RingVar(d + 2))), // j += step
-            IfThen(GreaterThan(j, ctx.RingVar(d + 3)), Goto(loopEnd)), // if j > limit, break
+            Assign(j, Add(j, ctx.RingVar(stepSlot))), // j += step
+            IfThen(GreaterThan(j, ctx.RingVar(limitSlot)), Goto(loopEnd)),
             Goto(loopStart)
         );
         var result = Block(
             [j],
-            Assign(j, ctx.RingVar(d + 1)), // j = start
+            Assign(j, ctx.RingVar(startSlot)), // j = start
             Label(loopStart),
             loopBody,
             Label(loopEnd)
@@ -800,17 +923,15 @@ public static class DirectVmAbiEmitter {
         ctx.PushLoopScope(breakLabel, continueLabel);
 
         var stmts = new List<Expression>();
-        // Initializer
         if (fl.Initializer != null)
             stmts.Add(CompileNode(fl.Initializer, ctx));
-        // Condition check at top of each iteration (default true)
         var condition = fl.Condition ?? new Constant(1L);
         int d = ctx.RingDepth;
-        // Body
+
         int bodyDepth = ctx.RingDepth;
         var bodyExpr = CompileNode(fl.Body, ctx);
         ctx.RingDepth = bodyDepth;
-        // Increment
+
         Expression? incrementExpr = null;
         if (fl.Increment != null) {
             ctx.RingDepth = d;
@@ -819,18 +940,21 @@ public static class DirectVmAbiEmitter {
         }
 
         var loopBody = new List<Expression>();
-        int condDepth = ctx.RingDepth;
         var condExpr = CompileNode(condition, ctx);
-        ctx.RingDepth = condDepth + 1;
+        int condSlot = ctx.RingDepth - 1;
+        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
+        ctx.RingDepth = condSlot + 1;
+
         loopBody.Add(condExpr);
-        loopBody.Add(IfThen(Equal(ctx.RingVar(d), Constant(0L)), Goto(breakLabel)));
+        loopBody.Add(foldCond);
+        loopBody.Add(IfThen(Equal(ctx.RingVar(condSlot), Constant(0L)), Goto(breakLabel)));
         loopBody.Add(bodyExpr);
         if (incrementExpr != null) loopBody.Add(incrementExpr);
         loopBody.Add(Label(continueLabel));
 
         stmts.Add(Loop(Block(loopBody), breakLabel));
         ctx.PopLoopScope();
-        ctx.RingDepth = d + 1; // leave loop result (last var value) on ring
+        ctx.RingDepth = d + 1;
         return Block(stmts);
     }
 
@@ -840,16 +964,15 @@ public static class DirectVmAbiEmitter {
         var continueLabel = Label("foreach_continue");
         ctx.PushLoopScope(breakLabel, continueLabel);
 
-        int d = ctx.RingDepth;
         var collectionExpr = CompileNode(fel.Collection, ctx);
-        ctx.RingDepth = d + 1;
+        // collection result is not used (POC — enumeration stub)
 
         int bodyDepth = ctx.RingDepth;
         var bodyExpr = CompileNode(fel.Body, ctx);
         ctx.RingDepth = bodyDepth;
 
         ctx.PopLoopScope();
-        ctx.RingDepth = d;
+        ctx.RingDepth = 0;
         return Block(collectionExpr, bodyExpr);
     }
 
@@ -884,13 +1007,14 @@ public static class DirectVmAbiEmitter {
     private static Expression EmitReturn(Return ret, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var retVal = ret.Value ?? throw new InvalidOperationException("Return with null value");
-        var valueExpr = CompileNode(retVal, ctx); // depth = d+1
-        ctx.RingDepth = d + 1;
+        var valueExpr = CompileNode(retVal, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
 
         // Write to _slots[_fb], set SP = _fb + 1, goto exit
         return Block(
-            valueExpr,
-            Assign(ArrayAccess(ctx.SlotsLocal, ctx.FrameBaseLocal), ctx.RingVar(d)),
+            valueExpr, fold,
+            Assign(ArrayAccess(ctx.SlotsLocal, ctx.FrameBaseLocal), ctx.RingVar(resultSlot)),
             Assign(ctx.SlotsStackPointer,
                 Add(ctx.FrameBaseLocal, Constant(1))),
             Goto(ctx.ExitLabel));
@@ -914,12 +1038,9 @@ public static class DirectVmAbiEmitter {
                 typeof(long));
             return Assign(ctx.RingVar(slot), captured);
         }
-        // Local variable on value stack
-        if (!ctx.TryGetVariable(v, out int varIndex)) {
-            throw new InvalidOperationException($"Variable '{v.Name}' not declared in scope or as parameter");
-        }
+        // Local variable on value stack — read via compile-time frame offset
         int slot2 = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot2), ctx.VariableRead(varIndex));
+        return Assign(ctx.RingVar(slot2), ctx.VariableRead(v));
     }
 
     /// <summary>Assignment: evaluate RHS, store to variable (local or capture),
@@ -935,18 +1056,30 @@ public static class DirectVmAbiEmitter {
             var valExpr = CompileNode(a.Value, ctx);
             int valSlot = ctx.RingDepth - 1;
 
-            // Read object[] from heap, store value at index
-            var arrObj = Convert(
+            var rawObj = Convert(
                 ArrayAccess(ctx.HeapRawSlots, Convert(ctx.RingVar(arrSlot), typeof(int))),
-                typeof(object[]));
-            var store = Assign(
-                ArrayAccess(arrObj, Convert(ctx.RingVar(idxSlot), typeof(int))),
-                Convert(ctx.RingVar(valSlot), typeof(object)));
+                typeof(object));
+            var idx = Convert(ctx.RingVar(idxSlot), typeof(int));
+            var val = ctx.RingVar(valSlot);
+
+            // Runtime type check: long[] or object[]
+            var longArr = Variable(typeof(long[]), "_assignLongArr");
+            var objArr = Variable(typeof(object[]), "_assignObjArr");
+            var store = IfThenElse(
+                TypeIs(rawObj, typeof(long[])),
+                // long[]: write directly
+                Block([longArr],
+                    Assign(longArr, Convert(rawObj, typeof(long[]))),
+                    Assign(ArrayAccess(longArr, idx), val)),
+                // object[]: box and write
+                Block([objArr],
+                    Assign(objArr, Convert(rawObj, typeof(object[]))),
+                    Assign(ArrayAccess(objArr, idx), Convert(val, typeof(object)))));
 
             // Leave the assigned value on the ring
             ctx.RingDepth = arrSlot + 1;
             return Block(arrExpr, idxExpr, valExpr, store,
-                Assign(ctx.RingVar(arrSlot), ctx.RingVar(valSlot)));
+                Assign(ctx.RingVar(arrSlot), val));
         }
 
         if (a.Destination is not Variable destVar) {
@@ -958,58 +1091,55 @@ public static class DirectVmAbiEmitter {
         if (ctx.TryGetCapture(destVar, out int capIndex)) {
             int d = ctx.RingDepth;
             var valueExpr = CompileNode(a.Value, ctx);
-            ctx.RingDepth = d + 1;
+            int valSlot = ctx.RingDepth - 1;
+            var foldVal = FoldResultToSlot(ref valSlot, d, ctx);
             var closureArr = Convert(
                 ArrayAccess(ctx.HeapRawSlots, Convert(ctx.ClosureHandle, typeof(int))),
                 typeof(object[]));
             var store = Assign(
                 ArrayAccess(closureArr, Constant(capIndex + 1)),
-                Convert(ctx.RingVar(d), typeof(object)));
-            ctx.RingDepth = d + 1;
-            return Block(valueExpr, store);
+                Convert(ctx.RingVar(valSlot), typeof(object)));
+            ctx.RingDepth = valSlot + 1;
+            return Block(valueExpr, foldVal, store);
         }
 
-        // Local variable
-        if (!ctx.TryGetVariable(destVar, out int varIndex)) {
-            throw new InvalidOperationException($"Variable '{destVar.Name}' not declared");
-        }
-
+        // Local variable — write via compile-time frame offset
         int d2 = ctx.RingDepth;
         var valueExpr2 = CompileNode(a.Value, ctx);
         // Result is at ctx.RingDepth - 1 — use that slot (not d2), because
         // complex value expressions (NewArray, etc.) may allocate multiple slots.
         int resultSlot = ctx.RingDepth - 1;
 
-        var result = ctx.VariableWrite(varIndex, ctx.RingVar(resultSlot));
+        var result = ctx.VariableWrite(destVar, ctx.RingVar(resultSlot));
         ctx.RingDepth = resultSlot + 1;
         return Block(valueExpr2, result);
     }
 
     /// <summary>Block: compile statements sequentially in a child scope.</summary>
     private static Expression EmitBlock(Block block, AbiCtx ctx) {
-        // Create child scope for block-local variables
         ctx.PushScope();
         var varInitExprs = new List<Expression>();
 
         foreach (var v in block.Variables) {
             if (v is Variable variable) {
-                // Declare variable slot on the value stack (not on ring)
-                int idx = ctx.DeclareVariable(variable);
-                // Initialize to 0 (ABI convention for long slots)
-                varInitExprs.Add(Assign(ctx.VariableRead(idx), Constant(0L)));
+                // Declare variable: allocates a register file slot
+                ctx.DeclareVariable(variable);
+                // Initialize to 0 (ABI convention for long slots).
+                // This writes to the register file, not _slots.
+                varInitExprs.Add(Assign(ctx.VariableRead(variable), Constant(0L)));
             }
         }
 
-        // Compile each statement in sequence
         var stmtExprs = new List<Expression>();
         for (int i = 0; i < block.Nodes.Count; i++) {
-            var stmt = block.Nodes[i];
-            var compiled = CompileNode(stmt, ctx);
-            stmtExprs.Add(compiled);
+            stmtExprs.Add(CompileNode(block.Nodes[i], ctx));
         }
 
+        // Flush register file back to _slots before scope exit.
+        // This gives the JIT a clear load-compute-store pattern.
+        var stores = ctx.EmitScopeStores();
         ctx.PopScope();
-        return Block(varInitExprs.Concat(stmtExprs));
+        return Block(Block(varInitExprs), Block(stmtExprs), Block(stores));
     }
 
     /// <summary>If statement: conditionally execute branches.
@@ -1017,15 +1147,17 @@ public static class DirectVmAbiEmitter {
     /// Ring depth converges to the pre-condition depth.</summary>
     private static Expression EmitIfStatement(IfStatement ifStmt, AbiCtx ctx) {
         int d = ctx.RingDepth;
-        var condExpr = CompileNode(ifStmt.Condition, ctx); // condition value at _r{d}
+        var condExpr = CompileNode(ifStmt.Condition, ctx);
+        int condSlot = ctx.RingDepth - 1;
+        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
 
-        ctx.RingDepth = d;
+        ctx.RingDepth = condSlot + 1;
         var thenBody = CompileNode(ifStmt.ThenBranch, ctx);
 
         Expression? elseBody = null;
         var elseNode = ifStmt.ElseBranch;
         if (elseNode is not null) {
-            ctx.RingDepth = d;
+            ctx.RingDepth = condSlot + 1;
             elseBody = CompileNode(elseNode, ctx);
         }
 
@@ -1033,9 +1165,9 @@ public static class DirectVmAbiEmitter {
         ctx.RingDepth = d;
 
         return Block(
-            condExpr,
+            condExpr, foldCond,
             IfThenElse(
-                NotEqual(ctx.RingVar(d), Constant(0L)),
+                NotEqual(ctx.RingVar(condSlot), Constant(0L)),
                 thenBody,
                 elseBody ?? Empty()));
     }
@@ -1043,68 +1175,116 @@ public static class DirectVmAbiEmitter {
     /// <summary>Conditional (ternary): condition ? true : false. Leaves result on ring.</summary>
     private static Expression EmitConditional(Conditional c, AbiCtx ctx) {
         int d = ctx.RingDepth;
-        var condExpr = CompileNode(c.Condition, ctx); // condition at _r{d}
-        ctx.RingDepth = d + 1;
+        var condExpr = CompileNode(c.Condition, ctx);
+        int condSlot = ctx.RingDepth - 1;
+        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
+        ctx.RingDepth = condSlot + 1;
 
-        // Compile true branch — result ends at RingDepth - 1
         var trueExpr = CompileNode(c.IfTrue, ctx);
         int trueResultSlot = ctx.RingDepth - 1;
 
-        // Compile false branch — result ends at RingDepth - 1
         var falseExpr = CompileNode(c.IfFalse, ctx);
         int falseResultSlot = ctx.RingDepth - 1;
 
-        // Use the condition value from earlier slot _r{d}
+        // Use the condition value from the folded slot
         var result = Condition(
-            NotEqual(ctx.RingVar(d), Constant(0L)),
+            NotEqual(ctx.RingVar(condSlot), Constant(0L)),
             ctx.RingVar(trueResultSlot),
             ctx.RingVar(falseResultSlot)
         );
         int slot = ctx.AllocSlot();
-        return Block(condExpr, trueExpr, falseExpr, Assign(ctx.RingVar(slot), result));
+        return Block(condExpr, foldCond, trueExpr, falseExpr,
+            Assign(ctx.RingVar(slot), result));
     }
 
     private static Expression EmitCoalesce(Coalesce n, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var leftExpr = CompileNode(n.LeftHandValue, ctx);
-        ctx.RingDepth = d + 1;
-        int leftSlot = d;
+        int leftSlot = ctx.RingDepth - 1;
+        var foldLeft = FoldResultToSlot(ref leftSlot, d, ctx);
+        ctx.RingDepth = leftSlot + 1;
 
-        int rightDepth = ctx.RingDepth;
+        int rightStart = ctx.RingDepth;
         var rightExpr = CompileNode(n.RightHandValue, ctx);
-        ctx.RingDepth = rightDepth + 1;
+        int rightSlot = ctx.RingDepth - 1;
 
         // If left != 0 use left else right (0 represents "null" or falsy in ABI)
         var result = Condition(
             NotEqual(ctx.RingVar(leftSlot), Constant(0L)),
             ctx.RingVar(leftSlot),
-            ctx.RingVar(rightDepth)
+            ctx.RingVar(rightSlot)
         );
         int outSlot = ctx.AllocSlot();
-        return Block(leftExpr, rightExpr, Assign(ctx.RingVar(outSlot), result));
+        return Block(leftExpr, foldLeft, rightExpr,
+            Assign(ctx.RingVar(outSlot), result));
     }
 
     private static Expression EmitSwitch(SwitchStatement sw, AbiCtx ctx) {
-        // Basic lowering to chained conditionals (real would be better with jump table).
+        // Lower to chained conditionals matching the pattern used by EmitConditional:
+        // pre-compile all patterns and bodies into ring slots, then build nested
+        // LINQ Condition expressions that select the correct body result.
         int d = ctx.RingDepth;
         var valueExpr = CompileNode(sw.Value, ctx);
-        ctx.RingDepth = d + 1;
-        int valSlot = d;
+        int valSlot = ctx.RingDepth - 1;
+        var foldVal = FoldResultToSlot(ref valSlot, d, ctx);
+        ctx.RingDepth = valSlot + 1;
 
-        Expression current = sw.DefaultCase != null
-            ? CompileNode(sw.DefaultCase, ctx)
-            : EmitConstant(new Constant(0L), ctx);
-
-        for (int i = sw.Cases.Count - 1; i >= 0; i--) {
-            var c = sw.Cases[i];
-            // Compare value to the case pattern (Pattern is a single Node)
-            var test = new Equal(new Variable("_swval"), c.Pattern); // placeholder; use val
-            // Simplified: always take last case body for demo (proper comparison needs ring value)
-            var body = CompileNode(c.Body, ctx);
-            current = Block(CompileNode(c.Pattern, ctx), body); // very rough
+        // Pre-compile default case (evaluated unconditionally; result selected via Condition).
+        Expression defExpr;
+        int defSlot;
+        if (sw.DefaultCase != null) {
+            int defDepth = ctx.RingDepth;
+            defExpr = CompileNode(sw.DefaultCase, ctx);
+            ctx.RingDepth = defDepth + 1;
+            defSlot = defDepth;
+        }
+        else {
+            defSlot = ctx.AllocSlot();
+            defExpr = Assign(ctx.RingVar(defSlot), Constant(0L));
         }
 
-        return Block(valueExpr, current);
+        // Pre-compile all cases (patterns and bodies) in order.
+        var compiledCases = new (Expression pExpr, int pSlot, Expression bExpr, int bSlot)[sw.Cases.Count];
+        for (int i = 0; i < sw.Cases.Count; i++) {
+            var c = sw.Cases[i];
+
+            int pDepth = ctx.RingDepth;
+            var pExpr = CompileNode(c.Pattern, ctx);
+            ctx.RingDepth = pDepth + 1;
+            int pSlot = pDepth;
+
+            int bDepth = ctx.RingDepth;
+            var bExpr = CompileNode(c.Body, ctx);
+            ctx.RingDepth = bDepth + 1;
+            int bSlot = bDepth;
+
+            compiledCases[i] = (pExpr, pSlot, bExpr, bSlot);
+        }
+
+        // Build nested Condition expressions from last case to first.
+        Expression resultExpr = ctx.RingVar(defSlot);
+        for (int i = sw.Cases.Count - 1; i >= 0; i--) {
+            var (_, pSlot, _, bSlot) = compiledCases[i];
+            resultExpr = Condition(
+                Expression.Equal(ctx.RingVar(valSlot), ctx.RingVar(pSlot)),
+                ctx.RingVar(bSlot),
+                resultExpr
+            );
+        }
+
+        // Assign the final selected value to a ring slot.
+        int outSlot = ctx.AllocSlot();
+        ctx.RingDepth = outSlot + 1;
+
+        var allExprs = new List<Expression> { valueExpr, defExpr };
+        foreach (var (pExpr, _, bExpr, _) in compiledCases) {
+            allExprs.Add(pExpr);
+            allExprs.Add(bExpr);
+        }
+        allExprs.Add(foldVal);
+        allExprs.Add(Assign(ctx.RingVar(outSlot), resultExpr));
+
+        return Block(allExprs);
     }
 
     /// <summary>While loop: evaluate condition, execute body, repeat.</summary>
@@ -1114,10 +1294,10 @@ public static class DirectVmAbiEmitter {
         var continueLabel = Label("wl_continue");
         ctx.PushLoopScope(breakLabel, continueLabel);
 
-        // Condition: must produce 0/1 at ring[d]
-        int condDepth = ctx.RingDepth;
         var condExpr = CompileNode(wl.Condition, ctx);
-        ctx.RingDepth = condDepth + 1;
+        int condSlot = ctx.RingDepth - 1;
+        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
+        ctx.RingDepth = condSlot + 1;
 
         // Body: must be ring-neutral (no net value left)
         int bodyDepth = ctx.RingDepth;
@@ -1126,10 +1306,10 @@ public static class DirectVmAbiEmitter {
         ctx.RingDepth = bodyDepth;
 
         var loopBody = Block(
-            condExpr,
+            condExpr, foldCond,
             IfThen(
-                Equal(ctx.RingVar(d), Constant(0L)),           // if condition is false
-                Goto(breakLabel)),                               // break
+                Equal(ctx.RingVar(condSlot), Constant(0L)),
+                Goto(breakLabel)),
             bodyExpr,
             Label(continueLabel));
 
@@ -1150,16 +1330,17 @@ public static class DirectVmAbiEmitter {
         var bodyExpr = CompileNode(dwl.Body, ctx);
         ctx.RingDepth = bodyDepth;
 
-        int condDepth = ctx.RingDepth;
         var condExpr = CompileNode(dwl.Condition, ctx);
-        ctx.RingDepth = condDepth + 1;
+        int condSlot = ctx.RingDepth - 1;
+        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
+        ctx.RingDepth = condSlot + 1;
 
         var loopBody = Block(
             bodyExpr,
             Label(continueLabel),
-            condExpr,
+            condExpr, foldCond,
             IfThen(
-                Equal(ctx.RingVar(d), Constant(0L)),
+                Equal(ctx.RingVar(condSlot), Constant(0L)),
                 Goto(breakLabel))
         );
 
@@ -1219,29 +1400,33 @@ public static class DirectVmAbiEmitter {
             // For POC binding: allocate the exception on the heap and store handle to a ring slot.
             // The catch body is compiled; if it references the variable by name in tests, we use a synthetic.
             ctx.PushScope();
-            int varIdx = -1;
             Variable? synthetic = null;
             if (!string.IsNullOrEmpty(clause.VariableName)) {
                 synthetic = new Variable(clause.VariableName);
-                varIdx = ctx.DeclareVariable(synthetic);
+                ctx.DeclareVariable(synthetic);
             }
 
             var bodyExpr = CompileNode(clause.Body, ctx);
-            ctx.PopScope();
 
             // Allocate handle for the ex so ABI code can see it as a "value".
             var allocate = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)), Convert(exParam, typeof(object)));
             var handle = Convert(allocate, typeof(long));
 
             Expression catchBodyExpr = bodyExpr;
-            if (varIdx >= 0 && synthetic != null) {
+            if (synthetic != null) {
                 // Store the handle so EmitVariable for this synthetic can find it.
-                // We store before the body.
+                // Use compile-time frame offset for the write.
                 catchBodyExpr = Block(
-                    Assign(ctx.VariableRead(varIdx), handle),
+                    ctx.VariableWrite(synthetic, handle),
                     bodyExpr
                 );
             }
+
+            // Emit scope stores before popping, then PopScope.
+            var catchStores = ctx.EmitScopeStores();
+            if (catchStores.Count > 0)
+                catchBodyExpr = Block(catchBodyExpr, Block(catchStores));
+            ctx.PopScope();
 
             catchBlocks.Add(Catch(exParam,
                 catchBodyExpr.Type == typeof(void)
@@ -1331,7 +1516,7 @@ public static class DirectVmAbiEmitter {
         for (int i = 0; i < captures.Count; i++) {
             var cap = captures[i];
             body.Add(Assign(ArrayAccess(closureArrVar, Constant(1 + i)),
-                Convert(ctx.VariableRead(cap.OuterSlotIndex), typeof(object))));
+                Convert(ctx.VariableRead(cap.Variable), typeof(object))));
         }
 
         var handle = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)),
@@ -1383,26 +1568,31 @@ public static class DirectVmAbiEmitter {
                     int d = ctx.RingDepth;
                     // Compile instance (for instance methods) or null (for static)
                     bool isStatic = resolved.LifetimeModifier == LifetimeModifier.Static;
-                    if (isStatic) {
-                        // No instance needed
-                    }
-                    else {
-                        var instanceExpr = CompileNode(member.Value, ctx);
-                        ctx.RingDepth = d + 1;
+                    int instanceSlot = -1;
+                    Expression? instanceExpr = null;
+                    if (!isStatic) {
+                        instanceExpr = CompileNode(member.Value, ctx);
+                        instanceSlot = ctx.RingDepth - 1;
+                        var foldInst = FoldResultToSlot(ref instanceSlot, d, ctx);
+                        instanceExpr = Block(instanceExpr, foldInst);
+                        ctx.RingDepth = instanceSlot + 1;
                     }
 
-                    // Compile arguments
+                    // Compile arguments — track actual result slots
                     var argExprs = new List<Expression>();
+                    int[] argSlots = new int[invoke.Arguments.Length];
                     for (int i = 0; i < invoke.Arguments.Length; i++) {
                         argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
-                        ctx.RingDepth = d + (isStatic ? 0 : 1) + i + 1;
+                        argSlots[i] = ctx.RingDepth - 1;
                     }
+                    ctx.RingDepth = d + (isStatic ? 0 : 1) + invoke.Arguments.Length + 1;
 
                     var methodParams = methodInfo.GetParameters();
                     var methodArgs = new Expression[methodParams.Length];
                     int baseIdx = isStatic ? 0 : 1;
                     for (int i = 0; i < methodParams.Length; i++) {
-                        var ringVal = ctx.RingVar(d + baseIdx + i);
+                        int slotIdx = i < invoke.Arguments.Length ? argSlots[i] : d + baseIdx + i;
+                        var ringVal = ctx.RingVar(slotIdx);
                         var paramType = methodParams[i].ParameterType;
                         if (paramType.IsValueType) {
                             methodArgs[i] = Convert(ringVal, paramType);
@@ -1428,12 +1618,12 @@ public static class DirectVmAbiEmitter {
                     else {
                         var instanceObj = Call(ctx.HeapLocal,
                             typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
-                            Convert(ctx.RingVar(d), typeof(int)));
+                            Convert(ctx.RingVar(instanceSlot), typeof(int)));
                         callExpr = Call(instanceObj, methodInfo, methodArgs);
                     }
 
                     int slot = ctx.AllocSlot();
-                    ctx.RingDepth = d + (isStatic ? 0 : 1) + invoke.Arguments.Length + 1;
+                    ctx.RingDepth = slot + 1;
 
                     // Convert result to ABI (value types unboxed, ref types heap-allocated)
                     var resultType = methodInfo.ReturnType;
@@ -1476,8 +1666,8 @@ public static class DirectVmAbiEmitter {
             var argExprs = new List<Expression>();
             int[] argSlots = new int[invoke.Arguments.Length];
             for (int i = 0; i < invoke.Arguments.Length; i++) {
-                argSlots[i] = ctx.RingDepth;
                 argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
+                argSlots[i] = ctx.RingDepth - 1;
             }
             int saveDepth = ctx.RingDepth;
 
@@ -1499,26 +1689,56 @@ public static class DirectVmAbiEmitter {
                 Property(ctx.State, nameof(VmState.ClosureHandle)),
                 Convert(ctx.RingVar(closureSlot), typeof(int))));
 
-            // 5. Push argument values from ring to value stack.
-            // Set FrameBase PAST the args so that local variables (at FB + varIndex)
-            // don't collide with parameters (at FB - paramCount + paramIndex).
+            // 5. Push arguments from ring to value stack with optional 2-word frame header.
+            // When there are explicit Invoke arguments, push a 2-word header (PreviousFP,
+            // SavedSP) before the arguments. When there are 0 arguments (the SetArgs pattern),
+            // skip the header to preserve backward compatibility with root-level SetArgs.
+            //
+            // Layout with header:
+            //   [_callSp + 0] = PreviousFP
+            //   [_callSp + 1] = SavedSP
+            //   [_callSp + 2] = arg0, [_callSp + 3] = arg1, ...
+            //   _fb = callSp + 2 + max(args.Length, 1)
+            //
+            // ParameterRead uses _fb - ParamSlotOffset + paramIdx which resolves to
+            // _slots[callSp + 2 + paramIdx] — correct with the 2-word header.
             var callSp = Variable(typeof(int), "_callSp");
             preBody.Add(Assign(callSp, spProp));
-            for (int i = 0; i < invoke.Arguments.Length; i++) {
-                preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal, spProp), ctx.RingVar(argSlots[i])));
+
+            int headerSize = invoke.Arguments.Length > 0 ? 2 : 0;
+
+            if (headerSize > 0) {
+                // Push PreviousFP (= current state.FrameBase as long)
+                preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal, callSp),
+                    Convert(fbProp, typeof(long))));
+                // Push SavedSP (= callSp as long, the SP before the header)
+                preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal, Add(callSp, Constant(1))),
+                    Convert(callSp, typeof(long))));
+                // Advance SP past the 2-word header
                 preBody.Add(Call(Property(ctx.State, "Stack"),
                     Ref<ValueStack>.Method(s => s.SetStackPointer(0)),
-                    Add(spProp, Constant(1))));
+                    Add(callSp, Constant(headerSize))));
             }
-            // FB = callSp + max(args.Length, 1) so params are at slots[FB - N + paramIdx]
+
+            // Push arguments
+            for (int i = 0; i < invoke.Arguments.Length; i++) {
+                preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal,
+                    Add(callSp, Constant(headerSize + i))),
+                    ctx.RingVar(argSlots[i])));
+            }
+            // Advance SP past args
+            if (invoke.Arguments.Length > 0 || headerSize > 0) {
+                preBody.Add(Call(Property(ctx.State, "Stack"),
+                    Ref<ValueStack>.Method(s => s.SetStackPointer(0)),
+                    Add(callSp, Constant(headerSize + invoke.Arguments.Length))));
+            }
+
+            // FB = callSp + headerSize + max(args.Length, 1) so params are at slots[FB - N + paramIdx]
             // Even with 0 args, reserve 1 slot for implicit SetArgs parameter.
             int paramCount = Math.Max(1, invoke.Arguments.Length);
-            Expression newFb = Add(callSp, Constant(paramCount));
+            Expression newFb = Add(callSp, Constant(headerSize + paramCount));
 
-            // 6. Save ReturnPC and OldFrameBase, set new FrameBase
-            preBody.Add(Assign(Property(ctx.State, nameof(VmState.ReturnPC)),
-                Add(Property(ctx.State, nameof(VmState.ProgramCounter)), Constant(1))));
-            preBody.Add(Assign(Property(ctx.State, nameof(VmState.OldFrameBase)), fbProp));
+            // 6. Set new FrameBase (saved PreviousFP is already in the 2-word header).
             preBody.Add(Assign(fbProp, newFb));
             preBody.Add(Assign(ctx.FrameBaseLocal, newFb)); // sync _fb local
 
@@ -1542,11 +1762,19 @@ public static class DirectVmAbiEmitter {
             // Write saved result to ring slot 0 (ring now fully restored)
             postBody.Add(Assign(ctx.RingVar(0), invokeResult));
 
-            // Restore FrameBase (local and state)
-            postBody.Add(Assign(ctx.FrameBaseLocal,
-                Property(ctx.State, nameof(VmState.OldFrameBase))));
-            postBody.Add(Assign(fbProp,
-                Property(ctx.State, nameof(VmState.OldFrameBase))));
+            // Restore FrameBase from the 2-word header (PreviousFP at _slots[callSp]).
+            // When headerSize == 0 (SetArgs pattern), restore from OldFrameBase legacy field.
+            if (headerSize > 0) {
+                var prevFp = Convert(ArrayAccess(ctx.SlotsLocal, callSp), typeof(int));
+                postBody.Add(Assign(ctx.FrameBaseLocal, prevFp));
+                postBody.Add(Assign(fbProp, prevFp));
+            }
+            else {
+                postBody.Add(Assign(ctx.FrameBaseLocal,
+                    Property(ctx.State, nameof(VmState.OldFrameBase))));
+                postBody.Add(Assign(fbProp,
+                    Property(ctx.State, nameof(VmState.OldFrameBase))));
+            }
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
@@ -1598,11 +1826,11 @@ public static class DirectVmAbiEmitter {
         bodyExprs.Add(Assign(fnCtx.SlotsLocal, fnCtx.SlotsInitExpression));
         bodyExprs.Add(Assign(fnCtx.HeapLocal, fnCtx.HeapInitExpression));
         bodyExprs.Add(Assign(fnCtx.Registers,
-            Coalesce(fnCtx.Registers, NewArrayBounds(typeof(long), Constant(32)))));
+            Coalesce(fnCtx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
         bodyExprs.Add(Assign(fnCtx.FrameBaseLocal, fnCtx.FrameBaseInitExpression));
 
         if (mode != CompilationMode.NoDebug) {
-            fnCtx.DebugInterruptProp = Property(fnCtx.State, nameof(VmState.DebugInterrupt));
+            fnCtx.DebugHookProp = Property(fnCtx.State, nameof(VmState.DebugHook));
         }
 
         // Register captures so EmitVariable/EmitAssignment can route to heap reads
@@ -1614,9 +1842,18 @@ public static class DirectVmAbiEmitter {
         foreach (var param in parameters)
             fnCtx.DeclareParameter(param);
 
+        // Enter the activation in the compile-time simulator.
+        // Local count is 0 initially; DeclareVariable calls inside the body
+        // will assign scope-relative slots but the simulator currently tracks
+        // frame size based on the counts passed here.
+        fnCtx.EnterActivation(parameters.Count, 0);
+
         // Compile body
         var bodyCompiled = CompileNode(body, fnCtx);
         bodyExprs.Add(bodyCompiled);
+
+        // Leave the activation in the compile-time simulator.
+        fnCtx.LeaveActivation();
 
         // Flush result: return value at _slots[_fb], SP = _fb + 1
         if (fnCtx.RingDepth > 0) {
@@ -1635,23 +1872,42 @@ public static class DirectVmAbiEmitter {
     // ── Helpers ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Wrap a compiled node expression with a DebugInterrupt guard.
-    /// In NoDebug mode (<see cref="AbiCtx.DebugInterruptProp"/> is null),
+    /// Wrap a compiled node expression with a simplified debug hook guard.
+    /// In NoDebug mode (<see cref="AbiCtx.DebugHookProp"/> is null),
     /// returns the body unchanged — zero overhead.
     ///
-    /// In the direct path we also set state.CurrentAstNode / CurrentNodeId
-    /// (in CompileNode) so that the callback sees the real source AST node
-    /// rather than only a synthetic identifier.
+    /// When a hook is set, emits code that snapshots the current frame's
+    /// locals into a <c>long[]</c> buffer (using compile-time known offsets),
+    /// then invokes <c>DebugHook(node, ReadOnlySpan&lt;long&gt;(buffer), heap)</c>.
+    ///
+    /// The <c>ProgramCounter</c> is also flushed to the current step for
+    /// legacy compatibility.
     /// </summary>
-    private static Expression WithInterrupt(Expression body, AbiCtx ctx) {
-        if (ctx.DebugInterruptProp is null) return body;
-        int step = ctx.StepCounter++;
+    private static Expression WithInterrupt(Expression body, AbiCtx ctx, int step) {
+        if (ctx.DebugHookProp is null) return body;
+
+        int localCount = ctx.CurrentLocalCount;
+
+        // Build the hook invocation expression only when the hook is non-null.
+        // Emit: if (state.DebugHook != null) { snapshot + invoke }
+        var stmts = new List<Expression>();
+
+        // Create a ReadOnlySpan<long> directly over _slots[_fb .. _fb + localCount].
+        // This is a zero-allocation slice — no buffer copy needed.
+        Expression spanExpr = localCount == 0
+            ? New(
+                typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[])])!,
+                NewArrayBounds(typeof(long), Constant(0)))
+            : New(
+                typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[]), typeof(int), typeof(int)])!,
+                ctx.SlotsLocal, ctx.FrameBaseLocal, Constant(localCount));
+
+        stmts.Add(Invoke(ctx.DebugHookProp, ctx.CurrentAstNodeExpr, spanExpr, ctx.HeapLocal));
+
         return Block(
             IfThen(
-                NotEqual(ctx.DebugInterruptProp, Constant(null, typeof(Action<VmState>))),
-                Block(
-                    Assign(ctx.StatePcFlush, Constant(step)),
-                    Invoke(ctx.DebugInterruptProp, ctx.State))),
+                NotEqual(ctx.DebugHookProp, Constant(null, typeof(Action<Node, ReadOnlySpan<long>, Heap>))),
+                Block(Assign(ctx.StatePcFlush, Constant(step)), Block(stmts))),
             body);
     }
 
@@ -1674,6 +1930,23 @@ public static class DirectVmAbiEmitter {
         Ref<VmState>.Property(e => e.Heap.RawSlots);
     private static readonly PropertyInfo StateClosureHandleProperty =
         Ref<VmState>.Property(e => e.ClosureHandle);
+
+    // ── Float/double helpers ────────────────────────────────────────
+
+    private static readonly MethodInfo BitConverterInt64BitsToDouble =
+        typeof(BitConverter).GetMethod(nameof(BitConverter.Int64BitsToDouble), [typeof(long)])!;
+
+    private static readonly MethodInfo BitConverterDoubleToInt64Bits =
+        typeof(BitConverter).GetMethod(nameof(BitConverter.DoubleToInt64Bits), [typeof(double)])!;
+
+    /// <summary>Check if a node is statically known to produce a double/float value.
+    /// Returns true when the analysis metadata says the ClrType is double or float.</summary>
+    private static bool IsDoubleValue(AbiCtx ctx, Node node) {
+        if (ctx.Analysis is null) return false;
+        var meta = ctx.Analysis.GetMetadata<ValueRepresentationMetadata>(node);
+        if (meta?.ClrType is null) return false;
+        return meta.ClrType == typeof(double) || meta.ClrType == typeof(float);
+    }
 
     /// <summary>
     /// Proper recursive expression tree dumper for side-by-side comparison
@@ -1762,6 +2035,14 @@ public static class DirectVmAbiEmitter {
             ResultLocal = Variable(typeof(long), "_result");
             _locals.Add(ResultLocal);
 
+            // Initialize the fixed-size register file (user variable cache)
+            _regVars = new List<ParameterExpression>(RegisterCount);
+            for (int i = 0; i < RegisterCount; i++) {
+                var r = Variable(typeof(long), $"_reg{i}");
+                _regVars.Add(r);
+                _locals.Add(r);
+            }
+
             EntryLabel = Label("_entry");
             ExitLabel = Label("_exit");
         }
@@ -1781,8 +2062,26 @@ public static class DirectVmAbiEmitter {
         /// <summary>Monotonic counter for generating unique label names.</summary>
         public int LabelCounter { get; set; }
 
-        /// <summary>Debug interrupt callback expression (state.DebugInterrupt), or null in NoDebug mode.</summary>
-        public Expression? DebugInterruptProp { get; set; }
+        /// <summary>Debug hook callback expression (state.DebugHook), or null in NoDebug mode.
+        /// When non-null, the emitter generates local snapshot + hook invocation before each node.</summary>
+        public Expression? DebugHookProp { get; set; }
+
+        /// <summary>Expression to read <c>state.CurrentAstNode</c>.</summary>
+        public Expression CurrentAstNodeExpr =>
+            Property(_stateParam, nameof(VmState.CurrentAstNode));
+
+        /// <summary>
+        /// Number of locally declared variables across all active scopes.
+        /// Used to size the locals snapshot buffer for the debug hook.
+        /// </summary>
+        public int CurrentLocalCount {
+            get {
+                int count = 0;
+                foreach (var scope in _scopeStack)
+                    count += scope.Count;
+                return count;
+            }
+        }
 
         /// <summary>Monotonic step counter for DebugInterrupt indexing.
         /// Incremented for each AST node to give stable interrupt points.</summary>
@@ -1866,29 +2165,105 @@ public static class DirectVmAbiEmitter {
             return slot;
         }
 
-        // ── Variable scope management ────────────────────────────
+        // ── Variable scope management / Register file ────────────
 
         private readonly Stack<Dictionary<Variable, int>> _scopeStack = new();
+        private readonly Dictionary<Variable, int> _variableRegisters = new(ReferenceEqualityComparer.Instance);
+        private readonly Stack<List<Variable>> _scopeVars = new();
+
+        // Fixed-size register file for user variables. The JIT can enregister
+        // a small set of locals far more efficiently than per-variable ones or
+        // array accesses. 8 registers is generous for any realistic block.
+        private const int RegisterCount = 8;
+        private readonly List<ParameterExpression> _regVars;
+        private readonly bool[] _regUsed = new bool[RegisterCount];
 
         /// <summary>Enter a new block scope for variable declarations.</summary>
         public void PushScope() {
             _scopeStack.Push(new Dictionary<Variable, int>(ReferenceEqualityComparer.Instance));
+            _scopeVars.Push(new List<Variable>());
         }
 
-        /// <summary>Exit the current block scope.</summary>
+        /// <summary>Exit the current block scope — emits no expressions;
+        /// the caller calls <see cref="EmitScopeStores"/> before this.</summary>
         public void PopScope() {
+            // Free registers allocated in this scope
+            if (_scopeVars.Count > 0) {
+                foreach (var v in _scopeVars.Peek()) {
+                    if (_variableRegisters.TryGetValue(v, out int regIdx)) {
+                        _regUsed[regIdx] = false;
+                        _variableRegisters.Remove(v);
+                    }
+                }
+            }
             _scopeStack.Pop();
+            _scopeVars.Pop();
         }
 
-        /// <summary>Declare a variable, assigning a value-stack slot index.
-        /// Variables are stored in <c>_slots[_fb + varIndex]</c>, not on the ring.</summary>
-        public int DeclareVariable(Variable v) {
+        /// <summary>Store-back expressions for the current scope, flushing register
+        /// values back to <c>_slots</c>. Call BEFORE <see cref="PopScope"/>.</summary>
+        public IReadOnlyList<Expression> EmitScopeStores() {
+            if (_scopeVars.Count == 0 || _scopeStack.Count == 0) return Array.Empty<Expression>();
+            var vars = _scopeVars.Peek();
+            var scope = _scopeStack.Peek();
+            var stores = new List<Expression>(vars.Count);
+            foreach (var v in vars) {
+                if (_variableRegisters.TryGetValue(v, out int regIdx) && scope.TryGetValue(v, out int slot)) {
+                    stores.Add(Assign(
+                        ArrayAccess(SlotsLocal, Add(FrameBaseLocal, Constant(slot))),
+                        _regVars[regIdx]));
+                }
+            }
+            return stores;
+        }
+
+        /// <summary>Load expressions for the current scope, loading register
+        /// values from <c>_slots</code> into the register file.</summary>
+        public IReadOnlyList<Expression> EmitScopeLoads() {
+            if (_scopeVars.Count == 0 || _scopeStack.Count == 0) return Array.Empty<Expression>();
+            var vars = _scopeVars.Peek();
+            var scope = _scopeStack.Peek();
+            var loads = new List<Expression>(vars.Count);
+            foreach (var v in vars) {
+                if (_variableRegisters.TryGetValue(v, out int regIdx) && scope.TryGetValue(v, out int slot)) {
+                    loads.Add(Assign(
+                        _regVars[regIdx],
+                        ArrayAccess(SlotsLocal, Add(FrameBaseLocal, Constant(slot)))));
+                }
+            }
+            return loads;
+        }
+
+        /// <summary>Declare a variable, allocating it to a register file slot.
+        /// Writes go through the register; the caller must emit
+        /// <see cref="EmitScopeStores"/> before scope exit.</summary>
+        public void DeclareVariable(Variable v) {
             if (_scopeStack.Count == 0)
                 throw new InvalidOperationException("No active scope");
             int slot = _scopeStack.Peek().Count;
             _scopeStack.Peek()[v] = slot;
-            return slot;
+            // Allocate a register file slot
+            int regIdx = -1;
+            for (int i = 0; i < RegisterCount; i++) {
+                if (!_regUsed[i]) { regIdx = i; break; }
+            }
+            if (regIdx < 0) {
+                // Out of registers — use _slots directly (fallback; should be rare)
+                // We'll fall through to the VariableRead(int) path for this var.
+                _scopeVars.Peek().Add(v);
+                _variableLayouts.Add(new VariableLayout(v.Name, slot));
+                return;
+            }
+            _regUsed[regIdx] = true;
+            _variableRegisters[v] = regIdx;
+            _scopeVars.Peek().Add(v);
+            _variableLayouts.Add(new VariableLayout(v.Name, slot));
         }
+
+        private readonly List<VariableLayout> _variableLayouts = new();
+
+        /// <summary>Variable layouts collected during lowering for debug info.</summary>
+        public IReadOnlyList<VariableLayout> VariableLayouts => _variableLayouts;
 
         /// <summary>Try to resolve a variable to its value-stack slot index.</summary>
         public bool TryGetVariable(Variable v, out int slot) {
@@ -1905,13 +2280,35 @@ public static class DirectVmAbiEmitter {
         /// variables live at <c>_slots[_fb + varIndex]</c>.</summary>
         public int ParamSlotOffset { get; set; }
 
-        /// <summary>Expression to read a variable from the value stack: <c>_slots[_fb + varIndex]</c>.</summary>
+        /// <summary>Expression to read a variable from the value stack: <c>_slots[_fb + varIndex]</c>.
+        /// Fallback when no register is available.</summary>
         public Expression VariableRead(int varIndex) =>
             ArrayAccess(SlotsLocal, Add(FrameBaseLocal, Constant(varIndex)));
 
-        /// <summary>Expression to write to a variable: <c>_slots[_fb + varIndex] = value</c>.</summary>
+        /// <summary>Read a variable from its register file slot.
+        /// The JIT enregisters this for hot-loop performance.</summary>
+        public Expression VariableRead(Variable v) {
+            if (_variableRegisters.TryGetValue(v, out int regIdx))
+                return _regVars[regIdx];
+            if (TryGetVariable(v, out int slotIndex))
+                return VariableRead(slotIndex);
+            throw new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
+        }
+
+        /// <summary>Expression to write to a variable: <c>_slots[_fb + varIndex] = value</c>.
+        /// Fallback when no register is available.</summary>
         public Expression VariableWrite(int varIndex, Expression value) =>
             Assign(VariableRead(varIndex), value);
+
+        /// <summary>Write a variable to its register file slot.
+        /// The JIT enregisters this for hot-loop performance.</summary>
+        public Expression VariableWrite(Variable v, Expression value) {
+            if (_variableRegisters.TryGetValue(v, out int regIdx))
+                return Assign(_regVars[regIdx], value);
+            if (TryGetVariable(v, out int slotIndex))
+                return VariableWrite(slotIndex, value);
+            throw new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
+        }
 
         /// <summary>Read a function parameter from the value stack.
         /// Parameters are stored BEFORE the local variable region:
@@ -1989,5 +2386,94 @@ public static class DirectVmAbiEmitter {
         /// <summary>Check if a variable is a capture and get its capture-array index.</summary>
         public bool TryGetCapture(Variable v, out int captureIndex) =>
             _capturedVars.TryGetValue(v, out captureIndex);
+
+        // List of nodes indexed by the step/PC assigned during lowering.
+        // This is passed to VmProgram so the debugger can resolve PC -> Node
+        // for stack traces, variable name lookup (via the node's scope), etc.
+        private readonly List<Node?> _stepNodes = new();
+        public IReadOnlyList<Node> StepNodes => _stepNodes.ToArray().Where(n => n is not null).Select(n => n!).ToList().AsReadOnly();
+
+        /// <summary>Record the node for a given step index (used to populate StepNodes for PC->Node debug mapping).</summary>
+        public void RecordStepNode(int step, Node node) {
+            while (_stepNodes.Count <= step)
+                _stepNodes.Add(null);
+            _stepNodes[step] = node;
+        }
+
+        // ── Compile-time stack / frame simulator (used only while emitting) ──
+        //
+        // This lets the lowering "simulate" SP adjustments and frame allocation
+        // at compile time. Because we know argument/local counts for every
+        // scope at lowering time, we can pre-compute exact offsets for every
+        // user variable and only emit the minimal runtime operations
+        // (the 2-word frame header push + SP advance) at actual call boundaries.
+        //
+        // Inside a function body the emitted code uses a frameBase local +
+        // constant offsets — almost no runtime arithmetic for variable access.
+
+        private readonly Stack<CompileTimeFrame> _ctFrames = new();
+        private int _ctSp; // virtual stack pointer, only for layout decisions during emit
+
+        private sealed class CompileTimeFrame {
+            public int ArgumentCount { get; }
+            public int LocalCount { get; }
+            public int BaseOffset { get; }   // offset from this frame's "frame base" where data starts
+            public int HeaderSize { get; }   // size of the frame header (0 for current layout, 2 for 2-value model)
+
+            public CompileTimeFrame(int args, int locals, int baseOffset, int headerSize) {
+                ArgumentCount = args;
+                LocalCount = locals;
+                BaseOffset = baseOffset;
+                HeaderSize = headerSize;
+            }
+        }
+
+        /// <summary>
+        /// Called during lowering when we cross into a new activation (function entry
+        /// or non-inlined call). We "push" a frame in the virtual model.
+        /// </summary>
+        /// <param name="argumentCount">Number of arguments for this activation.</param>
+        /// <param name="localCount">Number of local variables for this activation.</param>
+        /// <param name="headerSize">Size of the frame header in words (2 for the full
+        /// 2-value frame model; 0 for the current layout where no header is pushed).</param>
+        public void EnterActivation(int argumentCount, int localCount, int headerSize = 0) {
+            // The data for this frame starts after the header (if any).
+            var frame = new CompileTimeFrame(argumentCount, localCount, _ctSp + headerSize, headerSize);
+            _ctFrames.Push(frame);
+            _ctSp += headerSize + argumentCount + localCount;
+        }
+
+        public void LeaveActivation() {
+            if (_ctFrames.Count == 0) throw new InvalidOperationException("No active frame");
+            var f = _ctFrames.Pop();
+            _ctSp -= f.HeaderSize + f.ArgumentCount + f.LocalCount;
+        }
+
+        /// <summary>
+        /// Returns the compile-time offset for a user variable relative to
+        /// the current frame base. The emitted expression will be something like
+        /// ArrayAccess(frameBaseLocal, Constant(offset)).
+        /// 
+        /// Currently returns the scope-relative slot index directly, since _fb
+        /// points to the start of the local variable area (no header pushed on
+        /// the runtime stack yet). When the 2-word header is added to the
+        /// runtime preamble, this method will account for the header size,
+        /// argument area, and interleaved linkage values.
+        /// </summary>
+        public int GetCompileTimeVariableOffset(Variable v) {
+            if (!TryGetVariable(v, out int slotInScope))
+                throw new InvalidOperationException($"Variable '{v.Name}' has no slot");
+            return slotInScope;
+        }
+
+        /// <summary>
+        /// The exact number of stack slots this frame occupies (known at lowering time).
+        /// Used when emitting the "advance SP" part of a frame prologue.
+        /// </summary>
+        public int GetCurrentFrameSize() =>
+            _ctFrames.Count == 0 ? 0 : _ctFrames.Peek().ArgumentCount + _ctFrames.Peek().LocalCount + 2;
+
+        // Note: the *runtime* side of this is the CallStack class (and the
+        // actual pushes of the two Word values + SP adjustment that we emit).
     }
 }

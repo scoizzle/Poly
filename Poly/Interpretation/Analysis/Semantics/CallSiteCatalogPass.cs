@@ -119,7 +119,7 @@ internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
         var resolved = context.GetResolvedMember(node);
         if (resolved is ClrMethod clrMethod) {
             // ArgCount includes instance receiver slot for instance methods,
-            // matching the convention used by Invoke.ToPrimitives CallExternal emission.
+            // matching the convention used by the direct emitter for CLR method calls.
             int argCount = clrMethod.MethodInfo.GetParameters().Length + (clrMethod.IsStatic ? 0 : 1);
             var entry = CreateEntry(
                 clrMethod.MethodInfo,

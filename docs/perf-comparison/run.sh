@@ -209,6 +209,42 @@ ENDPROJ
     fi
 }
 
+# Run a Poly VM benchmark that outputs its own CSV header (no result validation).
+# Used for variants with different iteration counts (e.g. double-precision mandelbrot)
+# where the numeric result differs from the fixed-point reference.
+run_polyvm_raw() {
+    local bench="$1"
+    local source_file="$2"
+    local poly_root="$3"
+    local arg="${4:-}"
+
+    echo "  [$bench] Poly VM (raw) ..." >&2
+    local tmp="/tmp/${bench}_polyvm_raw_${TIMESTAMP}"
+    mkdir -p "$tmp"
+    cp "$source_file" "$tmp/Program.cs"
+    cat > "$tmp/bench.csproj" << ENDPROJ
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$poly_root/Poly/Poly.csproj" />
+  </ItemGroup>
+</Project>
+ENDPROJ
+    local output
+    if [ -n "$arg" ]; then
+        output=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null)
+    else
+        output=$(dotnet run -c Release --project "$tmp/bench.csproj" 2>/dev/null)
+    fi
+    if [ $? -ne 0 ] || [ -z "$output" ]; then
+        echo "$bench,Poly VM double,FAILED" | tee -a "$RESULTS"
+        return
+    fi
+    local first_line
+    first_line=$(echo "$output" | head -1)
+    echo "$first_line" | tee -a "$RESULTS"
+}
+
 # ── Run a single benchmark across all languages ──
 run_bench() {
     local bench="$1"
@@ -239,6 +275,7 @@ run_bench() {
                 run_cs_vectorized "$bench" "mandelbrot_cs_vectorized.cs" ""
             fi
             run_polyvm "$bench" "mandelbrot_polyvm.cs" "$poly_root" "128"
+            run_polyvm_raw "$bench" "mandelbrot_polyvm_dbl.cs" "$poly_root" "128"
             ;;
 
         nqueens)

@@ -36,5 +36,5 @@ if __name__ == '__main__':
     limit = int(sys.argv[1]) if len(sys.argv) > 1 else 1000000
     start = time.perf_counter()
     result = sieve(limit)
-    ms = (time.perf_counter() - start) * 1000
-    print(f"Python,{limit},{result},{ms:.1f}")
+    us = (time.perf_counter() - start) * 1_000_000
+    print(f"Python,{limit},{result},{us:.0f}")

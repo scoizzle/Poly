@@ -19,5 +19,5 @@ function collatz(limit) {
 const limit = parseInt(process.argv[2]) || 10000;
 const start = performance.now();
 const [bestN, maxLen] = collatz(limit);
-const ms = performance.now() - start;
-console.log(`JS,${limit},${bestN}:${maxLen},${ms.toFixed(1)}`);
+const us = (performance.now() - start) * 1000;
+console.log(`JS,${limit},${bestN}:${maxLen},${us.toFixed(0)}`);

@@ -48,4 +48,4 @@ while (offset < wordCnt) {
 long result = limit - 1 - composites;
 
 sw.Stop();
-Console.WriteLine($"C# vectorized,{limit},{result},{sw.ElapsedMilliseconds}");
+Console.WriteLine($"C# vectorized,{limit},{result},{sw.Elapsed.TotalMicroseconds:F0}");

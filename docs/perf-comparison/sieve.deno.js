@@ -24,5 +24,5 @@ function sieve(limit) {
 const limit = parseInt(Deno.args[0]) || 1000000;
 const start = performance.now();
 const result = sieve(limit);
-const ms = performance.now() - start;
-console.log(`Deno,${limit},${result},${ms.toFixed(1)}`);
+const us = (performance.now() - start) * 1000;
+console.log(`Deno,${limit},${result},${us.toFixed(0)}`);

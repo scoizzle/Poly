@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
     auto start = std::chrono::steady_clock::now();
     collatz(limit, best_n, max_len);
     auto end = std::chrono::steady_clock::now();
-    double ms = std::chrono::duration<double, std::milli>(end - start).count();
-    std::cout << "C++," << limit << "," << best_n << ":" << max_len << "," << ms << std::endl;
+    double us = std::chrono::duration<double, std::micro>(end - start).count();
+    std::cout << "C++," << limit << "," << best_n << ":" << max_len << "," << us << std::endl;
     return 0;
 }

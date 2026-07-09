@@ -22,5 +22,5 @@ function mandelbrot() {
 
 const start = performance.now();
 const result = mandelbrot();
-const ms = performance.now() - start;
-console.log(`JS,128,${result},${ms.toFixed(1)}`);
+const us = (performance.now() - start) * 1000;
+console.log(`JS,128,${result},${us.toFixed(0)}`);

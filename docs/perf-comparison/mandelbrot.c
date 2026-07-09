@@ -31,8 +31,8 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC, &start);
     int64_t result = mandelbrot();
     clock_gettime(CLOCK_MONOTONIC, &end);
-    double ms = (end.tv_sec - start.tv_sec) * 1000.0
-              + (end.tv_nsec - start.tv_nsec) / 1000000.0;
-    printf("C,128,%lld,%.1f\n", (long long)result, ms);
+    double us = (end.tv_sec - start.tv_sec) * 1000000.0
+              + (end.tv_nsec - start.tv_nsec) / 1000.0;
+    printf("C,128,%lld,%.0f\n", (long long)result, us);
     return 0;
 }

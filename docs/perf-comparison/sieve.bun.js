@@ -24,5 +24,5 @@ function sieve(limit) {
 const limit = parseInt(process.argv[2]) || 1000000;
 const start = performance.now();
 const result = sieve(limit);
-const ms = performance.now() - start;
-console.log(`Bun,${limit},${result},${ms.toFixed(1)}`);
+const us = (performance.now() - start) * 1000;
+console.log(`Bun,${limit},${result},${us.toFixed(0)}`);

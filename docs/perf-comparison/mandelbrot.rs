@@ -26,6 +26,6 @@ fn mandelbrot() -> i64 {
 fn main() {
     let start = Instant::now();
     let result = mandelbrot();
-    let ms = start.elapsed().as_secs_f64() * 1000.0;
-    println!("Rust,128,{},{:.1}", result, ms);
+    let us = start.elapsed().as_secs_f64() * 1_000_000.0;
+    println!("Rust,128,{},{:.0}", result, us);
 }

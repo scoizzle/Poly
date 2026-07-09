@@ -38,6 +38,6 @@ fn nqueens() -> i32 {
 fn main() {
     let start = Instant::now();
     let result = nqueens();
-    let ms = start.elapsed().as_secs_f64() * 1000.0;
-    println!("Rust,8,{},{:.1}", result, ms);
+    let us = start.elapsed().as_secs_f64() * 1_000_000.0;
+    println!("Rust,8,{},{:.0}", result, us);
 }

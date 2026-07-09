@@ -30,8 +30,8 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC, &start);
     collatz(limit, &best_n, &max_len);
     clock_gettime(CLOCK_MONOTONIC, &end);
-    double ms = (end.tv_sec - start.tv_sec) * 1000.0
-              + (end.tv_nsec - start.tv_nsec) / 1000000.0;
-    printf("C,%d,%d:%d,%.1f\n", limit, best_n, max_len, ms);
+    double us = (end.tv_sec - start.tv_sec) * 1000000.0
+              + (end.tv_nsec - start.tv_nsec) / 1000.0;
+    printf("C,%d,%d:%d,%.0f\n", limit, best_n, max_len, us);
     return 0;
 }

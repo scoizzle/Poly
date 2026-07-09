@@ -37,8 +37,8 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC, &start);
     int result = nqueens();
     clock_gettime(CLOCK_MONOTONIC, &end);
-    double ms = (end.tv_sec - start.tv_sec) * 1000.0
-              + (end.tv_nsec - start.tv_nsec) / 1000000.0;
-    printf("C,8,%d,%.1f\n", result, ms);
+    double us = (end.tv_sec - start.tv_sec) * 1000000.0
+              + (end.tv_nsec - start.tv_nsec) / 1000.0;
+    printf("C,8,%d,%.0f\n", result, us);
     return 0;
 }

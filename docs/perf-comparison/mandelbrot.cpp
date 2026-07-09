@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
     auto start = std::chrono::steady_clock::now();
     int64_t result = mandelbrot();
     auto end = std::chrono::steady_clock::now();
-    double ms = std::chrono::duration<double, std::milli>(end - start).count();
-    std::cout << "C++,128," << result << "," << ms << std::endl;
+    double us = std::chrono::duration<double, std::micro>(end - start).count();
+    std::cout << "C++,128," << result << "," << us << std::endl;
     return 0;
 }

@@ -31,4 +31,4 @@ int NQueens() {
 var sw = Stopwatch.StartNew();
 int result = NQueens();
 sw.Stop();
-Console.WriteLine($"C# native,8,{result},{sw.ElapsedMilliseconds}");
+Console.WriteLine($"C# native,8,{result},{sw.Elapsed.TotalMicroseconds:F0}");

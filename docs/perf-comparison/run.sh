@@ -14,7 +14,7 @@ LIMIT="${2:-1000000}"    # default limit (used by sieve, collatz; ignored by man
 ITERATIONS="${3:-5}"     # number of runs per implementation for aggregated stats
 WARMUP="${4:-1}"         # number of warmup runs before timing (discarded)
 
-echo "benchmark,language,size_or_limit,result,runs,min_ms,max_ms,avg_ms,prep_ms" | tee "$RESULTS"
+echo "benchmark,language,size_or_limit,result,runs,min_us,max_us,avg_us,prep_ms" | tee "$RESULTS"
 
 # ── Expected results per benchmark ──
 expected_for() {
@@ -100,7 +100,7 @@ run_and_collect() {
         sum=$(awk "BEGIN {print $sum + $t}")
     done
     local avg
-    avg=$(awk "BEGIN {printf \"%.1f\", $sum / ${#times[@]}}")
+    avg=$(awk "BEGIN {printf \"%.3f\", $sum / ${#times[@]}}")
     local runs="${#times[@]}"
 
     echo "$min $max $avg $first_line"
@@ -182,7 +182,7 @@ run_docker() {
     local sorted; sorted=($(printf '%s\n' "${times[@]}" | sort -n))
     local min="${sorted[0]}" max="${sorted[${#sorted[@]}-1]}" sum=0
     for t in "${times[@]}"; do sum=$(awk "BEGIN {print $sum + $t}"); done
-    local avg; avg=$(awk "BEGIN {printf \"%.1f\", $sum / ${#times[@]}}")
+    local avg; avg=$(awk "BEGIN {printf \"%.3f\", $sum / ${#times[@]}}")
 
     local size result
     result=$(echo "$warmup_line" | cut -d',' -f3)
@@ -312,6 +312,50 @@ ENDPROJ
     fi
 }
 
+# Run a Poly VM benchmark in Normal (debug) compilation mode.
+# Copies the source, replaces NoDebug with Normal, builds, benchmarks.
+run_polyvm_normal() {
+    local bench="$1"
+    local source_file="$2"
+    local poly_root="$3"
+    local arg="${4:-}"
+
+    echo "  [$bench] Poly VM (Normal) ..." >&2
+    local tmp="/tmp/${bench}_polyvm_normal_${TIMESTAMP}"
+    mkdir -p "$tmp"
+    sed 's/CompilationMode\.NoDebug/CompilationMode.Normal/' "$source_file" > "$tmp/Program.cs"
+    cat > "$tmp/bench.csproj" << ENDPROJ
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$poly_root/Poly/Poly.csproj" />
+  </ItemGroup>
+</Project>
+ENDPROJ
+    dotnet build -c Release "$tmp/bench.csproj" >/dev/null 2>&1 || return 1
+    local first_line
+    first_line=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null | head -1)
+    if [ -z "$first_line" ]; then
+        echo "$bench,Poly VM (Normal),FAILED" | tee -a "$RESULTS"
+        return
+    fi
+    local prep_ms
+    prep_ms=$(echo "$first_line" | cut -d',' -f5)
+
+    local run_cmd="dotnet run -c Release --no-build --project $tmp/bench.csproj -- $arg"
+    local stats
+    stats=$(run_and_collect "$run_cmd" 1) || {
+        echo "$bench,Poly VM (Normal),FAILED" | tee -a "$RESULTS"
+        return
+    }
+    local min max avg
+    read -r min max avg first_line <<< "$stats"
+    local size result
+    result=$(echo "$first_line" | cut -d',' -f3)
+    size=$(echo "$first_line" | cut -d',' -f2)
+    echo "$bench,Poly VM (Normal),$size,$result,$ITERATIONS,$min,$max,$avg,$prep_ms" | tee -a "$RESULTS"
+}
+
 # Run a Poly VM benchmark that outputs its own CSV header (no result validation).
 # Used for variants with different iteration counts (e.g. double-precision mandelbrot)
 # where the numeric result differs from the fixed-point reference.
@@ -371,6 +415,7 @@ run_bench() {
             run_cs_native "$bench" "sieve.cs" "$limit_arg"
             run_cs_vectorized "$bench" "sieve_cs_vectorized.cs" "$limit_arg"
             run_polyvm "$bench" "sieve_polyvm.cs" "$poly_root" "$limit_arg"
+            run_polyvm_normal "$bench" "sieve_polyvm.cs" "$poly_root" "$limit_arg"
             ;;
 
         mandelbrot)
@@ -384,6 +429,7 @@ run_bench() {
                 run_cs_vectorized "$bench" "mandelbrot_cs_vectorized.cs" ""
             fi
             run_polyvm "$bench" "mandelbrot_polyvm.cs" "$poly_root" "128"
+            run_polyvm_normal "$bench" "mandelbrot_polyvm.cs" "$poly_root" "128"
             run_polyvm_raw "$bench" "mandelbrot_polyvm_dbl.cs" "$poly_root" "128"
             ;;
 
@@ -398,6 +444,7 @@ run_bench() {
                 run_cs_vectorized "$bench" "nqueens_cs_vectorized.cs" ""
             fi
             run_polyvm "$bench" "nqueens_polyvm.cs" "$poly_root" "8"
+            run_polyvm_normal "$bench" "nqueens_polyvm.cs" "$poly_root" "8"
             ;;
 
         collatz)
@@ -409,6 +456,7 @@ run_bench() {
             run_cs_native "$bench" "collatz.cs" "$limit_arg"
             run_cs_vectorized "$bench" "collatz_cs_vectorized.cs" "$limit_arg"
             run_polyvm "$bench" "collatz_polyvm.cs" "$poly_root" "$limit_arg"
+            run_polyvm_normal "$bench" "collatz_polyvm.cs" "$poly_root" "$limit_arg"
             ;;
     esac
 }

@@ -23,4 +23,4 @@ int limit = args.Length > 0 ? int.Parse(args[0]) : 10000;
 var sw = Stopwatch.StartNew();
 var (bestN, maxLen) = Collatz(limit);
 sw.Stop();
-Console.WriteLine($"C# native,{limit},{bestN}:{maxLen},{sw.ElapsedMilliseconds}");
+Console.WriteLine($"C# native,{limit},{bestN}:{maxLen},{sw.Elapsed.TotalMicroseconds:F0}");

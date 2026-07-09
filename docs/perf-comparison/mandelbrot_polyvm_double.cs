@@ -67,4 +67,4 @@ var sw = System.Diagnostics.Stopwatch.StartNew();
 using var exec = Interpreter.Execute(program);
 long result = exec.RawValue;
 sw.Stop();
-Console.WriteLine($"Poly VM double,{size},{result},{sw.ElapsedMilliseconds},{prepSw.ElapsedMilliseconds}");
+Console.WriteLine($"Poly VM double,{size},{result},{sw.Elapsed.TotalMicroseconds:F0},{prepSw.ElapsedMilliseconds}");

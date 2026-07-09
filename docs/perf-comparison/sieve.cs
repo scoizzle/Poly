@@ -23,4 +23,4 @@ int limit = args.Length > 0 ? int.Parse(args[0]) : 1000000;
 var sw = Stopwatch.StartNew();
 long result = Sieve(limit);
 sw.Stop();
-Console.WriteLine($"C# native,{limit},{result},{sw.ElapsedMilliseconds}");
+Console.WriteLine($"C# native,{limit},{result},{sw.Elapsed.TotalMicroseconds:F0}");

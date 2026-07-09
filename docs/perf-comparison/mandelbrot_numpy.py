@@ -24,5 +24,5 @@ def mandelbrot(size=128, max_iter=256):
 if __name__ == '__main__':
     start = time.perf_counter()
     result = mandelbrot()
-    ms = (time.perf_counter() - start) * 1000
-    print(f"Python+NumPy,128,{result},{ms:.1f}")
+    us = (time.perf_counter() - start) * 1_000_000
+    print(f"Python+NumPy,128,{result},{us:.0f}")

@@ -29,5 +29,5 @@ function nqueens() {
 
 const start = performance.now();
 const result = nqueens();
-const ms = performance.now() - start;
-console.log(`Bun,8,${result},${ms.toFixed(1)}`);
+const us = (performance.now() - start) * 1000;
+console.log(`Bun,8,${result},${us.toFixed(0)}`);

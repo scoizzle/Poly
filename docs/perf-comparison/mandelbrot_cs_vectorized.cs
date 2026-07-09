@@ -25,4 +25,4 @@ long Mandelbrot() {
 var sw = Stopwatch.StartNew();
 long result = Mandelbrot();
 sw.Stop();
-Console.WriteLine($"C# vectorized,128,{result},{sw.ElapsedMilliseconds}");
+Console.WriteLine($"C# vectorized,128,{result},{sw.Elapsed.TotalMicroseconds:F0}");

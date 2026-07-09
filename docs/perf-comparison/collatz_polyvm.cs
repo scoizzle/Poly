@@ -55,4 +55,4 @@ if (debug) {
 sw.Stop();
 long bestNVal = result >> 32;
 long maxLenVal = result & 0xFFFFFFFFL;
-Console.WriteLine($"Poly VM,{limit},{bestNVal}:{maxLenVal},{sw.ElapsedMilliseconds},{prepSw.ElapsedMilliseconds}");
+Console.WriteLine($"Poly VM,{limit},{bestNVal}:{maxLenVal},{sw.Elapsed.TotalMicroseconds:F0},{prepSw.ElapsedMilliseconds}");

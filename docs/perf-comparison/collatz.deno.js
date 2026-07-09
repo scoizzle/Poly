@@ -19,5 +19,5 @@ function collatz(limit) {
 const limit = parseInt(Deno.args[0]) || 10000;
 const start = performance.now();
 const [bestN, maxLen] = collatz(limit);
-const ms = performance.now() - start;
-console.log(`Deno,${limit},${bestN}:${maxLen},${ms.toFixed(1)}`);
+const us = (performance.now() - start) * 1000;
+console.log(`Deno,${limit},${bestN}:${maxLen},${us.toFixed(0)}`);

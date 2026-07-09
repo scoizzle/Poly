@@ -34,6 +34,6 @@ fn main() {
 
     let start = Instant::now();
     let result = sieve(limit);
-    let ms = start.elapsed().as_secs_f64() * 1000.0;
-    println!("Rust,{},{},{:.1}", limit, result, ms);
+    let us = start.elapsed().as_secs_f64() * 1_000_000.0;
+    println!("Rust,{},{},{:.0}", limit, result, us);
 }

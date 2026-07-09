@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
     auto start = std::chrono::steady_clock::now();
     int result = nqueens();
     auto end = std::chrono::steady_clock::now();
-    double ms = std::chrono::duration<double, std::milli>(end - start).count();
-    std::cout << "C++,8," << result << "," << ms << std::endl;
+    double us = std::chrono::duration<double, std::micro>(end - start).count();
+    std::cout << "C++,8," << result << "," << us << std::endl;
     return 0;
 }

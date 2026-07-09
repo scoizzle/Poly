@@ -3,6 +3,7 @@ using System.Reflection;
 
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Syntax.Analysis;
 
 using static System.Linq.Expressions.Expression;
 
@@ -13,7 +14,7 @@ namespace Poly.Interpretation.Vm;
 ///
 /// Walks the AST after analysis and emits <see cref="Expression"/> trees
 /// targeting the bespoke VM ABI (<see cref="VmState"/>, ring registers,
-/// <see cref="FrameBase"/>, heap, etc.) — the sole lowering path.
+/// heap, etc.) — the sole lowering path.
 /// </summary>
 public static class DirectVmAbiEmitter {
     /// <summary>
@@ -53,10 +54,15 @@ public static class DirectVmAbiEmitter {
         body.Add(Assign(ctx.HeapLocal, ctx.HeapInitExpression));
         body.Add(Assign(ctx.Registers,
             Coalesce(ctx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
-        body.Add(IfThen(
-            Equal(Property(ctx.State, "FrameBase"), Constant(-1)),
-            Assign(Property(ctx.State, "FrameBase"), Constant(0))));
-        body.Add(Assign(ctx.FrameBaseLocal, ctx.FrameBaseInitExpression));
+        // Restore persistent frame position if resuming, otherwise start at slot 0.
+        // The condition is a single CompareExchange-style check on status, trivially
+        // elided by the CLR JIT on fresh execution (the Resuming branch is never taken).
+        body.Add(Assign(ctx.FramePosLocal,
+            Condition(
+                Equal(Property(ctx.State, nameof(VmState.Status)),
+                    Constant(InterpreterStatus.Resuming)),
+                Property(ctx.State, nameof(VmState.FramePos)),
+                Constant(0))));
 
         // Track a small step for legacy/compatibility if needed, but the primary
         // "current position" for the direct path is now the AST node itself
@@ -65,6 +71,12 @@ public static class DirectVmAbiEmitter {
             body.Add(Assign(ctx.ProgramCounter, Constant(0)));
             ctx.DebugHookProp = Property(ctx.State, nameof(VmState.DebugHook));
         }
+
+        // ── PC-dispatch switch ──────────────────────────────────────
+        // When resuming from a suspend point, the preamble restores _fp then
+        // dispatches on state.ProgramCounter to jump directly to the right
+        // pause point.  Fresh executions fall through linearly.
+        body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
 
         // ── Compile root node ────────────────────────────────────────
         // Enter the top-level activation in the compile-time simulator.
@@ -75,14 +87,14 @@ public static class DirectVmAbiEmitter {
         var rootExpr = CompileNodeWithTracking(root, ctx);
 
         // Flush the root result from the ring to the value stack,
-        // matching the ABI convention: result at _slots[_fb], SP = _fb + 1.
+        // matching the ABI convention: result at _slots[_fp], SP = _fp + 1.
         // The top ring slot holds the expression result.
         body.Add(rootExpr);
         if (ctx.RingDepth > 0) {
-            body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FrameBaseLocal),
+            body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),
                 ctx.RingVar(ctx.RingDepth - 1)));
             body.Add(Assign(ctx.SlotsStackPointer,
-                Add(ctx.FrameBaseLocal, Constant(1))));
+                Add(ctx.FramePosLocal, Constant(1))));
         }
 
         // Leave the top-level activation (compile-time simulator bookkeeping).
@@ -105,7 +117,8 @@ public static class DirectVmAbiEmitter {
         int registerScratchSize = ctx.MaxRingDepth;
         var debugInfo = new VmDebugInfo(ctx.VariableLayouts);
         return new VmProgram(del, registerScratchSize, RootValueKind: rootKind,
-            StepNodes: ctx.StepNodes, DebugInfo: debugInfo);
+            StepNodes: ctx.StepNodes, DebugInfo: debugInfo,
+            RegisterCount: ctx.RegisterCount);
     }
 
     // ── Compile dispatch ───────────────────────────────────────────
@@ -122,6 +135,9 @@ public static class DirectVmAbiEmitter {
     /// the CurrentAstNode/CurrentNodeId assignments.
     /// </summary>
     private static Expression CompileNode(Node node, AbiCtx ctx) {
+        // If analysis registered a replacement (e.g. constant folding), use that instead.
+        if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
+            return CompileNode(replacement, ctx);
         return CompileNodeInner(node, ctx);
     }
 
@@ -129,6 +145,10 @@ public static class DirectVmAbiEmitter {
     /// CurrentAstNode/CurrentNodeId field writes, debug interrupt guard).
     /// Used at statement boundaries where suspend/resume matters.</summary>
     private static Expression CompileNodeWithTracking(Node node, AbiCtx ctx) {
+        // Resolve analysis replacement first so tracking uses the effective node.
+        if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
+            node = replacement;
+
         int step = ctx.StepCounter++;
         ctx.RecordStepNode(step, node);
         if (ctx.DebugHookProp != null) {
@@ -378,28 +398,50 @@ public static class DirectVmAbiEmitter {
         int idxSlot = ctx.RingDepth - 1;
 
         int outSlot = ctx.AllocSlot();
-        // Read raw object from heap, then index based on runtime type.
-        // NewArray creates long[] for value types and object[] for ref types,
-        // so we handle both.
         var rawObj = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
             Convert(ctx.RingVar(arrSlot), typeof(int)));
         var idx = Convert(ctx.RingVar(idxSlot), typeof(int));
 
-        var longArr = Variable(typeof(long[]), "_longArr");
-        var objArr = Variable(typeof(object[]), "_objArr");
-        var valExpr = Condition(
-            TypeIs(rawObj, typeof(long[])),
-            // long[]: read directly (value is already long)
-            Block([longArr],
+        // Try to resolve the array element type from analysis metadata.
+        // When known at compile time, skip the runtime TypeIs check.
+        Type? elementType = ctx.Analysis?.GetResolvedType(n) is ClrTypeDefinition clrElem
+            ? clrElem.RuntimeType
+            : null;
+
+        if (elementType is { IsValueType: true }) {
+            // Value type array — direct long[] access (no unbox needed)
+            var longArr = Variable(typeof(long[]), "_longArr");
+            var valExpr = Block([longArr],
                 Assign(longArr, Convert(rawObj, typeof(long[]))),
-                ArrayAccess(longArr, idx)),
-            // object[]: read and unbox
-            Block([objArr],
+                ArrayAccess(longArr, idx));
+            return Block(arrExpr, idxExpr,
+                Assign(ctx.RingVar(outSlot), valExpr));
+        }
+
+        if (elementType is not null) {
+            // Reference type array — direct object[] access with unbox
+            var objArr = Variable(typeof(object[]), "_objArr");
+            var valExpr = Block([objArr],
                 Assign(objArr, Convert(rawObj, typeof(object[]))),
-                Convert(ArrayAccess(objArr, idx), typeof(long))));
+                Convert(ArrayAccess(objArr, idx), typeof(long)));
+            return Block(arrExpr, idxExpr,
+                Assign(ctx.RingVar(outSlot), valExpr));
+        }
+
+        // Unknown type — runtime type check (existing fallback)
+        var longArrU = Variable(typeof(long[]), "_longArr");
+        var objArrU = Variable(typeof(object[]), "_objArr");
+        var valExprU = Condition(
+            TypeIs(rawObj, typeof(long[])),
+            Block([longArrU],
+                Assign(longArrU, Convert(rawObj, typeof(long[]))),
+                ArrayAccess(longArrU, idx)),
+            Block([objArrU],
+                Assign(objArrU, Convert(rawObj, typeof(object[]))),
+                Convert(ArrayAccess(objArrU, idx), typeof(long))));
 
         return Block(arrExpr, idxExpr,
-            Assign(ctx.RingVar(outSlot), valExpr));
+            Assign(ctx.RingVar(outSlot), valExprU));
     }
 
     /// <summary>Try to convert a CLR value to the long-based ABI representation.
@@ -1212,12 +1254,12 @@ public static class DirectVmAbiEmitter {
         int resultSlot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref resultSlot, d, ctx);
 
-        // Write to _slots[_fb], set SP = _fb + 1, goto exit
+        // Write to _slots[_fp], set SP = _fp + 1, goto exit
         return Block(
             valueExpr, fold,
-            Assign(ArrayAccess(ctx.SlotsLocal, ctx.FrameBaseLocal), ctx.RingVar(resultSlot)),
+            Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal), ctx.RingVar(resultSlot)),
             Assign(ctx.SlotsStackPointer,
-                Add(ctx.FrameBaseLocal, Constant(1))),
+                Add(ctx.FramePosLocal, Constant(1))),
             Goto(ctx.ExitLabel));
     }
 
@@ -1263,19 +1305,39 @@ public static class DirectVmAbiEmitter {
             var idx = Convert(ctx.RingVar(idxSlot), typeof(int));
             var val = ctx.RingVar(valSlot);
 
-            // Runtime type check: long[] or object[]
-            var longArr = Variable(typeof(long[]), "_assignLongArr");
-            var objArr = Variable(typeof(object[]), "_assignObjArr");
-            var store = IfThenElse(
-                TypeIs(rawObj, typeof(long[])),
-                // long[]: write directly
-                Block([longArr],
+            // Try to resolve element type from analysis to skip runtime TypeIs check.
+            Type? elemType = ctx.Analysis?.GetResolvedType(indexAccess) is ClrTypeDefinition clrElem
+                ? clrElem.RuntimeType
+                : null;
+
+            Expression store;
+            if (elemType is { IsValueType: true }) {
+                // Value type array — direct long[] write
+                var longArr = Variable(typeof(long[]), "_assignLongArr");
+                store = Block([longArr],
                     Assign(longArr, Convert(rawObj, typeof(long[]))),
-                    Assign(ArrayAccess(longArr, idx), val)),
-                // object[]: box and write
-                Block([objArr],
+                    Assign(ArrayAccess(longArr, idx), val));
+            }
+            else if (elemType is not null) {
+                // Reference type array — direct object[] write with boxing
+                var objArr = Variable(typeof(object[]), "_assignObjArr");
+                store = Block([objArr],
                     Assign(objArr, Convert(rawObj, typeof(object[]))),
-                    Assign(ArrayAccess(objArr, idx), Convert(val, typeof(object)))));
+                    Assign(ArrayAccess(objArr, idx), Convert(val, typeof(object))));
+            }
+            else {
+                // Unknown type — runtime type check (existing fallback)
+                var longArr = Variable(typeof(long[]), "_assignLongArr");
+                var objArr = Variable(typeof(object[]), "_assignObjArr");
+                store = IfThenElse(
+                    TypeIs(rawObj, typeof(long[])),
+                    Block([longArr],
+                        Assign(longArr, Convert(rawObj, typeof(long[]))),
+                        Assign(ArrayAccess(longArr, idx), val)),
+                    Block([objArr],
+                        Assign(objArr, Convert(rawObj, typeof(object[]))),
+                        Assign(ArrayAccess(objArr, idx), Convert(val, typeof(object)))));
+            }
 
             // Leave the assigned value on the ring
             ctx.RingDepth = arrSlot + 1;
@@ -1648,11 +1710,14 @@ public static class DirectVmAbiEmitter {
     /// Supports non-trivial suspend/resume validation (e.g. inside loops with captures).
     /// </summary>
     private static Expression EmitSuspendNode(SuspendNode sn, AbiCtx ctx) {
+        // Register and emit the resume label at this suspend point so the
+        // PC-dispatch switch can jump here on re-entry.
+        // The step was already assigned by CompileNodeWithTracking's counter increment.
+        int step = ctx.StepCounter - 1;
+        var resumeLabel = ctx.RegisterOrGetResumeLabel(step);
         var innerExpr = CompileNode(sn.Inner, ctx);
 
         // Explicitly set the source AST node for this suspension point.
-        // This gives VmState a direct reference to the symbolic position
-        // (no need for a reverse PC->node map in the common case for the direct path).
         var setCurrentNode = Block(
             Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(sn)),
             Assign(Property(ctx.State, nameof(VmState.CurrentNodeId)), Constant(sn.Id, typeof(NodeId?)))
@@ -1662,16 +1727,21 @@ public static class DirectVmAbiEmitter {
             Property(ctx.State, nameof(VmState.Status)),
             Constant(InterpreterStatus.Suspended));
 
-        // We can still maintain a small resume id / step for the dispatch logic
-        // if using a label-based resume map, but the node itself is now primary
-        // for "where are we symbolically".
-        var saveResumeId = Assign(ctx.ProgramCounter, Constant(ctx.StepCounter));
+        // Save the resume program counter so the dispatch switch can route here.
+        var saveResumeId = Assign(ctx.ProgramCounter, Constant(step));
+
+        // Save the current frame position so the preamble can restore it on resume.
+        var saveFramePos = Assign(
+            Property(ctx.State, nameof(VmState.FramePos)),
+            ctx.FramePosLocal);
 
         return Block(
+            Label(resumeLabel),
             innerExpr,
             setCurrentNode,
             setStatus,
             saveResumeId,
+            saveFramePos,
             Goto(ctx.ExitLabel)
         );
     }
@@ -1853,6 +1923,13 @@ public static class DirectVmAbiEmitter {
 
         if (invoke.Delegate is Lambda lambda) {
 
+            // Trivial inline: no captures, body is a single expression.
+            if (FindCaptures(lambda.Body, ctx).Count == 0
+                && lambda.Body is not Poly.Syntax.Nodes.Block
+                && invoke.Arguments.Length > 0) {
+                return EmitInlineInvoke(lambda, invoke, ctx);
+            }
+
             // 0. Declare lambda parameters in a child scope so EmitParameter works.
             // Reset the parameter slot counter for this invocation level so that
             // nested functions use their own parameter index space (INT-027).
@@ -1877,7 +1954,6 @@ public static class DirectVmAbiEmitter {
             var preBody = new List<Expression>();   // before inline body
             var postBody = new List<Expression>();  // after inline body
             var spProp = Property(Property(ctx.State, "Stack"), "StackPointer");
-            var fbProp = Property(ctx.State, nameof(VmState.FrameBase));
             var regSlots = Property(ctx.State, "Registers");
 
             // 3. Create a per-invocation SP local (avoids nested invoke corruption
@@ -1898,12 +1974,12 @@ public static class DirectVmAbiEmitter {
             // skip the header to preserve backward compatibility with root-level SetArgs.
             //
             // Layout with header:
-            //   [_callSp + 0] = PreviousFP
+            //   [_callSp + 0] = PreviousFP (current _fp value)
             //   [_callSp + 1] = SavedSP
             //   [_callSp + 2] = arg0, [_callSp + 3] = arg1, ...
-            //   _fb = callSp + 2 + max(args.Length, 1)
+            //   _fp = callSp + 2 + max(args.Length, 1)
             //
-            // ParameterRead uses _fb - ParamSlotOffset + paramIdx which resolves to
+            // ParameterRead uses _fp - ParamSlotOffset + paramIdx which resolves to
             // _slots[callSp + 2 + paramIdx] — correct with the 2-word header.
             var callSp = Variable(typeof(int), "_callSp");
             preBody.Add(Assign(callSp, spProp));
@@ -1911,9 +1987,9 @@ public static class DirectVmAbiEmitter {
             int headerSize = invoke.Arguments.Length > 0 ? 2 : 0;
 
             if (headerSize > 0) {
-                // Push PreviousFP (= current state.FrameBase as long)
+                // Push PreviousFP (= current _fp as long)
                 preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal, callSp),
-                    Convert(fbProp, typeof(long))));
+                    Convert(ctx.FramePosLocal, typeof(long))));
                 // Push SavedSP (= callSp as long, the SP before the header)
                 preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal, Add(callSp, Constant(1))),
                     Convert(callSp, typeof(long))));
@@ -1936,14 +2012,13 @@ public static class DirectVmAbiEmitter {
                     Add(callSp, Constant(headerSize + invoke.Arguments.Length))));
             }
 
-            // FB = callSp + headerSize + max(args.Length, 1) so params are at slots[FB - N + paramIdx]
+            // _fp = callSp + headerSize + max(args.Length, 1) so params are at slots[_fp - N + paramIdx]
             // Even with 0 args, reserve 1 slot for implicit SetArgs parameter.
             int paramCount = Math.Max(1, invoke.Arguments.Length);
-            Expression newFb = Add(callSp, Constant(headerSize + paramCount));
+            Expression newFp = Add(callSp, Constant(headerSize + paramCount));
 
-            // 6. Set new FrameBase (saved PreviousFP is already in the 2-word header).
-            preBody.Add(Assign(fbProp, newFb));
-            preBody.Add(Assign(ctx.FrameBaseLocal, newFb)); // sync _fb local
+            // 6. Set new _fp (saved PreviousFP is already in the 2-word header).
+            preBody.Add(Assign(ctx.FramePosLocal, newFp));
 
             // Set ParamSlotOffset so EmitParameter reads from corrected slot
             int savedParamOffset = ctx.ParamSlotOffset;
@@ -1965,18 +2040,15 @@ public static class DirectVmAbiEmitter {
             // Write saved result to ring slot 0 (ring now fully restored)
             postBody.Add(Assign(ctx.RingVar(0), invokeResult));
 
-            // Restore FrameBase from the 2-word header (PreviousFP at _slots[callSp]).
-            // When headerSize == 0 (SetArgs pattern), restore from OldFrameBase legacy field.
+            // Restore _fp from the 2-word header (PreviousFP at _slots[callSp]).
+            // When headerSize == 0 (SetArgs pattern), restore from OldFramePos legacy field.
             if (headerSize > 0) {
                 var prevFp = Convert(ArrayAccess(ctx.SlotsLocal, callSp), typeof(int));
-                postBody.Add(Assign(ctx.FrameBaseLocal, prevFp));
-                postBody.Add(Assign(fbProp, prevFp));
+                postBody.Add(Assign(ctx.FramePosLocal, prevFp));
             }
             else {
-                postBody.Add(Assign(ctx.FrameBaseLocal,
-                    Property(ctx.State, nameof(VmState.OldFrameBase))));
-                postBody.Add(Assign(fbProp,
-                    Property(ctx.State, nameof(VmState.OldFrameBase))));
+                postBody.Add(Assign(ctx.FramePosLocal,
+                    Property(ctx.State, nameof(VmState.OldFramePos))));
             }
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
@@ -1988,6 +2060,21 @@ public static class DirectVmAbiEmitter {
 
         throw new NotSupportedException(
             $"DirectVmAbiEmitter: Invoke not supported for delegate type {invoke.Delegate.GetType().Name}");
+    }
+
+    /// <summary>Inline a small lambda with no captures and a single-expression body.
+    /// Skips frame push, closure allocation, and ring save/restore — compiles
+    /// arguments directly to the ring and maps parameter reads to argument slots.</summary>
+    private static Expression EmitInlineInvoke(Lambda lambda, Invoke invoke, AbiCtx ctx) {
+        int depth = ctx.RingDepth;
+        var argExprs = new Expression[invoke.Arguments.Length];
+        for (int i = 0; i < invoke.Arguments.Length; i++) {
+            argExprs[i] = CompileNode(invoke.Arguments[i], ctx);
+            ctx.MapInlineParameter(i, ctx.RingDepth - 1);
+        }
+        var bodyExpr = CompileNode(lambda.Body, ctx);
+        ctx.ClearInlineParameters();
+        return Block(argExprs.Concat([bodyExpr]));
     }
 
     /// <summary>
@@ -2030,7 +2117,12 @@ public static class DirectVmAbiEmitter {
         bodyExprs.Add(Assign(fnCtx.HeapLocal, fnCtx.HeapInitExpression));
         bodyExprs.Add(Assign(fnCtx.Registers,
             Coalesce(fnCtx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
-        bodyExprs.Add(Assign(fnCtx.FrameBaseLocal, fnCtx.FrameBaseInitExpression));
+        bodyExprs.Add(Assign(fnCtx.FramePosLocal,
+            Condition(
+                Equal(Property(fnCtx.State, nameof(VmState.Status)),
+                    Constant(InterpreterStatus.Resuming)),
+                Property(fnCtx.State, nameof(VmState.FramePos)),
+                Constant(0))));
 
         if (mode != CompilationMode.NoDebug) {
             fnCtx.DebugHookProp = Property(fnCtx.State, nameof(VmState.DebugHook));
@@ -2040,7 +2132,7 @@ public static class DirectVmAbiEmitter {
         for (int i = 0; i < captures.Count; i++)
             fnCtx.DeclareCapture(captures[i].Variable, i);
 
-        // Declare parameters as value-stack variables (mapped to _slots[_fb + idx])
+        // Declare parameters as value-stack variables (mapped to _slots[_fp + idx])
         fnCtx.PushScope();
         foreach (var param in parameters)
             fnCtx.DeclareParameter(param);
@@ -2058,12 +2150,12 @@ public static class DirectVmAbiEmitter {
         // Leave the activation in the compile-time simulator.
         fnCtx.LeaveActivation();
 
-        // Flush result: return value at _slots[_fb], SP = _fb + 1
+        // Flush result: return value at _slots[_fp], SP = _fp + 1
         if (fnCtx.RingDepth > 0) {
-            bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FrameBaseLocal),
+            bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal),
                 fnCtx.RingVar(fnCtx.RingDepth - 1)));
             bodyExprs.Add(Assign(fnCtx.SlotsStackPointer,
-                Add(fnCtx.FrameBaseLocal, Constant(1))));
+                Add(fnCtx.FramePosLocal, Constant(1))));
         }
 
         bodyExprs.Add(Label(fnCtx.ExitLabel));
@@ -2103,7 +2195,7 @@ public static class DirectVmAbiEmitter {
                 NewArrayBounds(typeof(long), Constant(0)))
             : New(
                 typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[]), typeof(int), typeof(int)])!,
-                ctx.SlotsLocal, ctx.FrameBaseLocal, Constant(localCount));
+                ctx.SlotsLocal, ctx.FramePosLocal, Constant(localCount));
 
         stmts.Add(Invoke(ctx.DebugHookProp, ctx.CurrentAstNodeExpr, spanExpr, ctx.HeapLocal));
 
@@ -2119,8 +2211,6 @@ public static class DirectVmAbiEmitter {
 
     // ── Static property/method refs ─────────────────────────────────
 
-    private static readonly PropertyInfo StateFrameBaseProperty =
-        Ref<VmState>.Property(e => e.FrameBase);
     private static readonly PropertyInfo StateStackProperty =
         Ref<VmState>.Property(e => e.Stack);
     private static readonly PropertyInfo ValueStackRawSlotsProperty =
@@ -2217,7 +2307,12 @@ public static class DirectVmAbiEmitter {
 
         // ── Construction ─────────────────────────────────────────
 
-        public AbiCtx() {
+        public AbiCtx() : this(8) { }
+
+        public AbiCtx(int registerCount) {
+            _registerCount = Math.Clamp(registerCount, 8, MaxRegisterCount);
+            _regUsed = new bool[_registerCount];
+
             _stateParam = Parameter(typeof(VmState), "state");
 
             ProgramCounter = Variable(typeof(int), "_pc");
@@ -2229,8 +2324,8 @@ public static class DirectVmAbiEmitter {
             HeapLocal = Variable(typeof(Heap), "_heap");
             _locals.Add(HeapLocal);
 
-            FrameBaseLocal = Variable(typeof(int), "_fb");
-            _locals.Add(FrameBaseLocal);
+            FramePosLocal = Variable(typeof(int), "_fp");
+            _locals.Add(FramePosLocal);
 
             SavedSp = Variable(typeof(int), "_savedSp");
             _locals.Add(SavedSp);
@@ -2238,9 +2333,10 @@ public static class DirectVmAbiEmitter {
             ResultLocal = Variable(typeof(long), "_result");
             _locals.Add(ResultLocal);
 
-            // Initialize the fixed-size register file (user variable cache)
-            _regVars = new List<ParameterExpression>(RegisterCount);
-            for (int i = 0; i < RegisterCount; i++) {
+            // Initialize the register file (user variable cache).
+            // Grows on demand up to MaxRegisterCount via GrowRegisterFile.
+            _regVars = new List<ParameterExpression>(_registerCount);
+            for (int i = 0; i < _registerCount; i++) {
                 var r = Variable(typeof(long), $"_reg{i}");
                 _regVars.Add(r);
                 _locals.Add(r);
@@ -2256,7 +2352,7 @@ public static class DirectVmAbiEmitter {
         public ParameterExpression ProgramCounter { get; }
         public ParameterExpression SlotsLocal { get; }
         public ParameterExpression HeapLocal { get; }
-        public ParameterExpression FrameBaseLocal { get; }
+        public ParameterExpression FramePosLocal { get; }
         public ParameterExpression SavedSp { get; }
         public ParameterExpression ResultLocal { get; }
         public LabelTarget EntryLabel { get; }
@@ -2290,11 +2386,43 @@ public static class DirectVmAbiEmitter {
         /// Incremented for each AST node to give stable interrupt points.</summary>
         public int StepCounter { get; set; }
 
+        /// <summary>Map from step number (PC value) to resume label target.
+        /// Populated during lowering; consumed to emit the PC-dispatch switch.</summary>
+        public LabelTarget RegisterOrGetResumeLabel(int step) {
+            if (!_resumeLabels.TryGetValue(step, out var label)) {
+                label = Label($"resume_{step}");
+                _resumeLabels[step] = label;
+            }
+            return label;
+        }
+
+        private readonly Dictionary<int, LabelTarget> _resumeLabels = new();
+
+        /// <summary>Build the PC-dispatch switch: a single SwitchExpression that Gotos
+        /// the right resume label based on <c>state.ProgramCounter</c>.</summary>
+        public Expression EmitPcDispatch(Expression defaultBody) {
+            if (_resumeLabels.Count == 0) return Empty();
+            var cases = new System.Linq.Expressions.SwitchCase[_resumeLabels.Count];
+            int i = 0;
+            foreach (var (step, label) in _resumeLabels) {
+                cases[i++] = System.Linq.Expressions.Expression.SwitchCase(Goto(label), Constant(step));
+            }
+            return IfThen(
+                Equal(Property(_stateParam, nameof(VmState.Status)),
+                    Constant(InterpreterStatus.Resuming)),
+                System.Linq.Expressions.Expression.Switch(
+                    Property(_stateParam, nameof(VmState.ProgramCounter)),
+                    defaultBody, cases));
+        }
+
         /// <summary>Expression for <c>state.ProgramCounter</c> — flushed before interrupt.</summary>
         public Expression StatePcFlush => Property(_stateParam, "ProgramCounter");
 
         /// <summary>Compilation mode for the current emitter context.</summary>
         public CompilationMode Mode { get; set; }
+
+        /// <summary>Number of register file slots in use. Starts at 8, grows on demand to 32.</summary>
+        public int RegisterCount => _registerCount;
 
         /// <summary>
         /// Constant expression referencing the compiled function table array
@@ -2316,10 +2444,6 @@ public static class DirectVmAbiEmitter {
         /// <summary>Expression to initialize <c>_heap</c> from <c>state.Heap</c>.</summary>
         public Expression HeapInitExpression =>
             Property(_stateParam, "Heap");
-
-        /// <summary>Expression to initialize <c>_fb</c> from <c>state.FrameBase</c>.</summary>
-        public Expression FrameBaseInitExpression =>
-            Property(_stateParam, StateFrameBaseProperty);
 
         /// <summary>Expression: <c>state.Registers</c>.</summary>
         public Expression Registers =>
@@ -2374,12 +2498,14 @@ public static class DirectVmAbiEmitter {
         private readonly Dictionary<Variable, int> _variableRegisters = new(ReferenceEqualityComparer.Instance);
         private readonly Stack<List<Variable>> _scopeVars = new();
 
-        // Fixed-size register file for user variables. The JIT can enregister
+        // Configurable register file for user variables. The JIT can enregister
         // a small set of locals far more efficiently than per-variable ones or
-        // array accesses. 8 registers is generous for any realistic block.
-        private const int RegisterCount = 8;
+        // array accesses. Default is 8; grows on demand up to MaxRegisterCount
+        // when a scope needs more.
+        private const int MaxRegisterCount = 32;
+        private int _registerCount;
         private readonly List<ParameterExpression> _regVars;
-        private readonly bool[] _regUsed = new bool[RegisterCount];
+        private bool[] _regUsed;
 
         /// <summary>Enter a new block scope for variable declarations.</summary>
         public void PushScope() {
@@ -2413,7 +2539,7 @@ public static class DirectVmAbiEmitter {
             foreach (var v in vars) {
                 if (_variableRegisters.TryGetValue(v, out int regIdx) && scope.TryGetValue(v, out int slot)) {
                     stores.Add(Assign(
-                        ArrayAccess(SlotsLocal, Add(FrameBaseLocal, Constant(slot))),
+                        ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot))),
                         _regVars[regIdx]));
                 }
             }
@@ -2431,7 +2557,7 @@ public static class DirectVmAbiEmitter {
                 if (_variableRegisters.TryGetValue(v, out int regIdx) && scope.TryGetValue(v, out int slot)) {
                     loads.Add(Assign(
                         _regVars[regIdx],
-                        ArrayAccess(SlotsLocal, Add(FrameBaseLocal, Constant(slot)))));
+                        ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot)))));
                 }
             }
             return loads;
@@ -2445,14 +2571,21 @@ public static class DirectVmAbiEmitter {
                 throw new InvalidOperationException("No active scope");
             int slot = _scopeStack.Peek().Count;
             _scopeStack.Peek()[v] = slot;
-            // Allocate a register file slot
+            // Allocate a register file slot, growing on demand up to MaxRegisterCount
             int regIdx = -1;
-            for (int i = 0; i < RegisterCount; i++) {
-                if (!_regUsed[i]) { regIdx = i; break; }
+            while (regIdx < 0) {
+                for (int i = 0; i < _registerCount; i++) {
+                    if (!_regUsed[i]) { regIdx = i; break; }
+                }
+                if (regIdx < 0 && _registerCount < MaxRegisterCount) {
+                    GrowRegisterFile();
+                }
+                else {
+                    break;
+                }
             }
             if (regIdx < 0) {
                 // Out of registers — use _slots directly (fallback; should be rare)
-                // We'll fall through to the VariableRead(int) path for this var.
                 _scopeVars.Peek().Add(v);
                 _variableLayouts.Add(new VariableLayout(v.Name, slot));
                 return;
@@ -2461,6 +2594,26 @@ public static class DirectVmAbiEmitter {
             _variableRegisters[v] = regIdx;
             _scopeVars.Peek().Add(v);
             _variableLayouts.Add(new VariableLayout(v.Name, slot));
+        }
+
+        /// <summary>Grow the register file by 8 (up to <see cref="MaxRegisterCount"/>).
+        /// Creates new LINQ ParameterExpression variables and adds them to the
+        /// expression tree locals list so they're available at compile time.</summary>
+        private void GrowRegisterFile() {
+            int old = _registerCount;
+            int grown = Math.Min(old + 8, MaxRegisterCount);
+            int added = grown - old;
+            // Expand _regUsed
+            var newRegUsed = new bool[grown];
+            Array.Copy(_regUsed, newRegUsed, old);
+            _regUsed = newRegUsed;
+            // Add new register variables
+            for (int i = old; i < grown; i++) {
+                var r = Variable(typeof(long), $"_reg{i}");
+                _regVars.Add(r);
+                _locals.Add(r);
+            }
+            _registerCount = grown;
         }
 
         private readonly List<VariableLayout> _variableLayouts = new();
@@ -2486,7 +2639,7 @@ public static class DirectVmAbiEmitter {
         /// <summary>Expression to read a variable from the value stack: <c>_slots[_fb + varIndex]</c>.
         /// Fallback when no register is available.</summary>
         public Expression VariableRead(int varIndex) =>
-            ArrayAccess(SlotsLocal, Add(FrameBaseLocal, Constant(varIndex)));
+            ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(varIndex)));
 
         /// <summary>Read a variable from its register file slot.
         /// The JIT enregisters this for hot-loop performance.</summary>
@@ -2517,7 +2670,23 @@ public static class DirectVmAbiEmitter {
         /// Parameters are stored BEFORE the local variable region:
         /// <c>_slots[_fb - ParamSlotOffset + paramIndex]</c>.</summary>
         public Expression ParameterRead(int paramIndex) =>
-            ArrayAccess(SlotsLocal, Add(FrameBaseLocal, Constant(paramIndex - ParamSlotOffset)));
+            _inlineParameterMap is { } map && map.TryGetValue(paramIndex, out int ringSlot)
+                ? RingVar(ringSlot)
+                : (Expression)ArrayAccess(SlotsLocal,
+                    Add(FramePosLocal, Constant(paramIndex - ParamSlotOffset)));
+
+        // ── Inline parameter mapping (for small lambda inlining) ─
+
+        private Dictionary<int, int>? _inlineParameterMap;
+
+        /// <summary>Map a parameter index to a ring slot for inlined lambda invocation.</summary>
+        public void MapInlineParameter(int paramIndex, int ringSlot) {
+            _inlineParameterMap ??= new();
+            _inlineParameterMap[paramIndex] = ringSlot;
+        }
+
+        /// <summary>Clear all inline parameter mappings.</summary>
+        public void ClearInlineParameters() => _inlineParameterMap = null;
 
         // ── Loop scope management (for break/continue) ──────────
 

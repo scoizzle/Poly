@@ -444,14 +444,20 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (!leftValue.HasValue)
             return FoldResult.NotFoldable;
 
-        // If left is not null, result is left
+        // In the Poly ABI, 0L is the "falsy/null" sentinel — Coalesce treats it as empty.
+        if (leftValue.Value is long lv && lv == 0L) {
+            var rightValue = GetConstantValue(context, coalesce.RightHandValue, parameterValues);
+            return rightValue.HasValue ? FoldResult.Success(rightValue.Value) : FoldResult.NotFoldable;
+        }
+
+        // Non-zero, non-null value — result is left
         if (leftValue.Value != null) {
             return FoldResult.Success(leftValue.Value);
         }
 
-        // If left is null, result is right
-        var rightValue = GetConstantValue(context, coalesce.RightHandValue, parameterValues);
-        return rightValue.HasValue ? FoldResult.Success(rightValue.Value) : FoldResult.NotFoldable;
+        // Left is null — result is right
+        var rv = GetConstantValue(context, coalesce.RightHandValue, parameterValues);
+        return rv.HasValue ? FoldResult.Success(rv.Value) : FoldResult.NotFoldable;
     }
 
     private FoldResult FoldInvocation(AnalysisContext context, Invoke invoke, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {

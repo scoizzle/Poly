@@ -20,5 +20,11 @@ public sealed record VmProgram(
     /// variable layout (name -> frame offset) so debuggers can map
     /// raw stack values to names without re-running analysis.
     /// </summary>
-    object? DebugInfo = null
+    object? DebugInfo = null,
+
+    /// <summary>
+    /// Number of register file slots used by this program.
+    /// Default 8, grows on demand up to 32.
+    /// </summary>
+    int RegisterCount = 8
 );

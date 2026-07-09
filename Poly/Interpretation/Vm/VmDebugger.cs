@@ -56,8 +56,9 @@ public static class VmDebugger {
     /// Returns the named locals for the current frame, resolved from
     /// <see cref="VmProgram.DebugInfo"/> and <see cref="VmState"/>.
     ///
-    /// Reads variable values from <c>state.Stack.RawSlots[state.FrameBase + offset]</c>
-    /// using the layout captured at compile time.
+    /// Reads variable values from <c>state.Stack.RawSlots</c> using the
+    /// layout captured at compile time. For root frames (the common case),
+    /// slot 0 is the frame base.
     ///
     /// NOTE: After execution completes, the result value may have overwritten
     /// the slot at offset 0 (the first local). For accurate local values
@@ -70,14 +71,13 @@ public static class VmDebugger {
             return Array.Empty<(string, long)>();
 
         var slots = state.Stack.RawSlots;
-        int fb = state.FrameBase;
-        if (fb < 0) fb = 0; // treat -1 (unset) as 0
+        const int fp = 0; // root frame always starts at slot 0
         var result = new (string, long)[debugInfo.Variables.Count];
 
         for (int i = 0; i < debugInfo.Variables.Count; i++) {
             var v = debugInfo.Variables[i];
-            long value = (fb + v.FrameOffset < slots.Length)
-                ? slots[fb + v.FrameOffset]
+            long value = (fp + v.FrameOffset < slots.Length)
+                ? slots[fp + v.FrameOffset]
                 : 0L;
             result[i] = (v.Name, value);
         }

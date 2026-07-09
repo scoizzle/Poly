@@ -114,7 +114,7 @@ public static class Interpreter {
     /// <see cref="ExecutionResult"/> API via the <c>Execute</c> overloads.
     /// </summary>
     internal static InterpreterResult Resume(VmState state, params IEnumerable<object?> args) {
-        state.Status = InterpreterStatus.Running;
+        state.Status = InterpreterStatus.Resuming;
         state.Registers ??= new long[256];
         state.SetArgs(args);
         state.Program.Delegate(state);

@@ -189,8 +189,11 @@ public sealed class VmState : IDisposable {
     public ValueStack Stack { get; } = new();
     public long[]? Registers { get; set; }
     public int ProgramCounter { get; set; }
-    public int FrameBase { get; set; } = -1;
     public InterpreterStatus Status { get; set; } = InterpreterStatus.Running;
+    /// <summary>Persistent frame position. Set at suspend time; restored by the
+    /// preamble before the PC-dispatch switch so resume starts at the right _fp.
+    /// 0 = root frame (fresh execution).</summary>
+    public int FramePos { get; set; }
     public Heap Heap { get; } = new();
     public TextWriter? Trace { get; set; }
 
@@ -226,9 +229,9 @@ public sealed class VmState : IDisposable {
     /// <c>LoadUpvalue</c>/<c>StoreUpvalue</c> to access captures.</summary>
     public int ClosureHandle { get; set; }
 
-    /// <summary>Caller's <see cref="FrameBase"/> saved before invoking a
+    /// <summary>Caller's frame position saved before invoking a
     /// function.  Restored by the caller after the function returns.</summary>
-    public int OldFrameBase { get; set; }
+    public int OldFramePos { get; set; }
 
     /// <summary>
     /// In the direct (structured expression) execution path, this holds a reference
@@ -274,8 +277,8 @@ public sealed class VmState : IDisposable {
 
     public void Reset() {
         ProgramCounter = 0;
-        FrameBase = -1;
         Status = InterpreterStatus.Running;
+        FramePos = 0;
         Stack.Reset();
         Heap.Clear();
         LoopCounters = null;

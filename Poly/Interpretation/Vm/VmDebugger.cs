@@ -1,8 +1,9 @@
+using Poly.Syntax.Nodes;
+
 namespace Poly.Interpretation.Vm;
 
 /// <summary>
 /// Describes a single user variable's name and its offset within the frame.
-/// Used by debuggers to map raw <c>_slots[_fb + offset]</c> values to named locals.
 /// </summary>
 public sealed record VariableLayout(string Name, int FrameOffset);
 
@@ -10,94 +11,241 @@ public sealed record VariableLayout(string Name, int FrameOffset);
 /// Debug information collected during lowering. Stored in <see cref="VmProgram.DebugInfo"/>.
 /// </summary>
 public sealed record VmDebugInfo(
-    /// <summary>All user-visible variables with their frame offsets.</summary>
     IReadOnlyList<VariableLayout> Variables
 );
 
 /// <summary>
-/// Helper for resolving symbolic debug information from a suspended or running
-/// <see cref="VmState"/> and its <see cref="VmProgram"/>.
-///
-/// Currently supports single-frame local resolution. Full multi-frame walk
-/// (via PreviousFramePointer/SavedStackPointer) requires the 2-word frame
-/// header runtime emission (tracked in ABI-001).
+/// Result of a single step or continue operation.
 /// </summary>
-public static class VmDebugger {
+public sealed record DebugResult(
+    Node Node,
+    IReadOnlyList<(string Name, long Value)> Locals,
+    bool IsCompleted = false,
+    bool IsSuspend = false
+);
+
+/// <summary>
+/// Stateful debugger for Poly VM programs. Attaches via <see cref="VmState.DebugHook"/>
+/// and provides step-over, continue, and inspection for use inside a neurosymbolic
+/// loop or MCP service.
+///
+/// DESIGN — "always loaded, zero overhead when idle":
+/// The hook runs the program on a background thread.  During normal execution the
+/// hook checks a <c>volatile bool</c> and returns immediately — no blocking, no
+/// event wait.  When <see cref="StepOver"/> is called, it sets a flag so the next
+/// hook invocation blocks and signals back.  This means the program runs at full
+/// speed when nobody is debugging, and the thread only blocks when actively stepping.
+///
+/// Usage:
+/// <code>
+/// using var dbg = new VmDebugger(program);
+/// dbg.Start();                    // begin execution, pause at first statement
+/// var r1 = dbg.StepOver();        // advance one statement
+/// dbg.Continue();                 // run to completion (non-blocking hook)
+/// 
+/// // Later, re-run with stepping:
+/// dbg.Continue();                 // reset — run full speed until done
+/// </code>
+/// </summary>
+public sealed class VmDebugger : IDisposable {
+    private readonly VmProgram _program;
+    private readonly VmState _state;
+    private Task? _execution;
+    private readonly AutoResetEvent _hookReady = new(false);   // set by hook when blocked for step
+    private readonly AutoResetEvent _stepRelease = new(false);  // set by StepOver to release hook
+    private readonly ManualResetEvent _completed = new(false);  // set when delegate finishes
+    private volatile bool _stepRequested;   // set by StepOver, read by hook
+    private volatile bool _disposed;
+
+    /// <summary>Named locals at the last statement boundary.</summary>
+    public IReadOnlyList<(string Name, long Value)> CurrentLocals { get; private set; }
+        = Array.Empty<(string, long)>();
+
+    /// <summary>AST node at the last statement boundary.</summary>
+    public Node? CurrentNode { get; private set; }
+
+    /// <summary>The underlying VM state (inspect between steps).</summary>
+    public VmState State => _state;
+
+    /// <summary>True if the program finished.</summary>
+    public bool IsCompleted => _completed.WaitOne(0);
+
+    public VmDebugger(VmProgram program, VmState? preexistingState = null) {
+        _program = program;
+        _state = preexistingState ?? new VmState(program);
+    }
+
     /// <summary>
-    /// Returns the named locals for the current frame, resolved from
-    /// <see cref="VmProgram.DebugInfo"/> and the live frame's locals span.
-    ///
-    /// Useful inside a DebugHook callback where the locals span is provided
-    /// by the emitter (compile-time offset-based snapshot).
+    /// Start execution on a background thread.  The hook runs pass-through
+    /// (non-blocking) until <see cref="StepOver"/> is called.
+    /// Blocks until the first statement boundary is reached.
     /// </summary>
+    public DebugResult Start(CancellationToken ct = default) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _state.Status = InterpreterStatus.Running;
+        _state.Registers ??= new long[256];
+        _state.DebugHook = DebugHookHandler;
+
+        // Set step flag before launching so the first hook blocks immediately.
+        // This ensures Start() returns paused at the first statement.
+        _stepRequested = true;
+
+        _execution = Task.Run(() => {
+            try { _program.Delegate(_state); }
+            finally { _completed.Set(); _hookReady.Set(); }
+        }, ct);
+
+        // Wait for the first hook to fire — it will because _stepRequested is set
+        WaitHandle.WaitAny([_hookReady, _completed]);
+        if (_completed.WaitOne(0))
+            return CaptureCompleted();
+        return CaptureResult();
+    }
+
+    /// <summary>
+    /// Advance one statement boundary.  Sets the step flag so the next hook
+    /// invocation blocks, then waits for it.  Returns the debug result at
+    /// the new statement boundary.
+    /// </summary>
+    public DebugResult StepOver(CancellationToken ct = default) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        _stepRequested = true;
+
+        // Release the hook if it was blocked from the previous step
+        _stepRelease.Set();
+
+        // Wait for the hook to fire at the next statement boundary
+        WaitHandle.WaitAny([_hookReady, _completed]);
+
+        if (_completed.WaitOne(0))
+            return CaptureCompleted();
+        return CaptureResult();
+    }
+
+    /// <summary>
+    /// Run to completion or until a SuspendNode.  The hook runs pass-through
+    /// (non-blocking) — no per-statement synchronization overhead.
+    /// </summary>
+    public DebugResult Continue(CancellationToken ct = default) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // Clear step flag — hook runs free from now on
+        _stepRequested = false;
+
+        // Release any currently-blocked hook
+        _stepRelease.Set();
+
+        // Wait for completion or suspend
+        var handles = new WaitHandle[] { _completed, _hookReady };
+        while (!ct.IsCancellationRequested) {
+            int which = WaitHandle.WaitAny(handles);
+            ct.ThrowIfCancellationRequested();
+            if (_completed.WaitOne(0))
+                return CaptureCompleted();
+            if (_state.Status == InterpreterStatus.Suspended)
+                return CaptureResult();
+            // _hookReady was set (stale from a previous step) — ignore
+        }
+        ct.ThrowIfCancellationRequested();
+        return CaptureResult();
+    }
+
+    // ── Hook ─────────────────────────────────────────────────
+
+    private void DebugHookHandler(Node node, ReadOnlySpan<long> localsSpan, Heap heap) {
+        if (_disposed) return;
+
+        // Pass-through: if nobody's stepping, return immediately.
+        if (!_stepRequested) return;
+
+        CurrentLocals = GetLocals(_program, localsSpan);
+        CurrentNode = node;
+
+        // Someone wants to step — signal that we're at a boundary and block
+        // until they tell us to continue.
+        _hookReady.Set();
+        _stepRelease.WaitOne();
+
+        // After being released, clear the step flag so the NEXT statement
+        // runs pass-through unless StepOver is called again.
+        _stepRequested = false;
+    }
+
+    // ── Result capture ───────────────────────────────────────
+
+    private DebugResult CaptureResult() {
+        var r = new DebugResult(
+            Node: _state.CurrentAstNode ?? new Constant(0L),
+            Locals: GetLocals(_state),
+            IsSuspend: _state.Status == InterpreterStatus.Suspended);
+        CurrentNode = r.Node;
+        CurrentLocals = r.Locals;
+        return r;
+    }
+
+    private DebugResult CaptureCompleted() {
+        var r = new DebugResult(
+            Node: _state.CurrentAstNode ?? new Constant(0L),
+            Locals: GetLocals(_state),
+            IsCompleted: true);
+        CurrentNode = r.Node;
+        CurrentLocals = r.Locals;
+        return r;
+    }
+
+    public void Dispose() {
+        if (_disposed) return;
+        _disposed = true;
+        _state.DebugHook = null;
+        _stepRelease.Set();  // release any blocked hook
+        _hookReady.Dispose();
+        _stepRelease.Dispose();
+        _completed.Dispose();
+    }
+
+    // ── Static helpers (also usable standalone) ────────────────
+
+    /// <summary>Named local resolution from compile-time debug info.</summary>
     public static IReadOnlyList<(string Name, long Value)> GetLocals(
         VmProgram program, ReadOnlySpan<long> localsSpan) {
         var debugInfo = program.DebugInfo as VmDebugInfo;
         if (debugInfo is null || debugInfo.Variables.Count == 0)
             return Array.Empty<(string, long)>();
-
         var result = new (string, long)[debugInfo.Variables.Count];
         int count = Math.Min(debugInfo.Variables.Count, localsSpan.Length);
-
         for (int i = 0; i < count; i++) {
             var v = debugInfo.Variables[i];
             result[i] = (v.Name, localsSpan[v.FrameOffset]);
         }
-
-        // If there are more variables than span length, pad with 0
-        for (int i = count; i < debugInfo.Variables.Count; i++) {
+        for (int i = count; i < debugInfo.Variables.Count; i++)
             result[i] = (debugInfo.Variables[i].Name, 0L);
-        }
-
         return result;
     }
 
-    /// <summary>
-    /// Returns the named locals for the current frame, resolved from
-    /// <see cref="VmProgram.DebugInfo"/> and <see cref="VmState"/>.
-    ///
-    /// Reads variable values from <c>state.Stack.RawSlots</c> using the
-    /// layout captured at compile time. For root frames (the common case),
-    /// slot 0 is the frame base.
-    ///
-    /// NOTE: After execution completes, the result value may have overwritten
-    /// the slot at offset 0 (the first local). For accurate local values
-    /// during execution, use <see cref="GetLocals(VmProgram, ReadOnlySpan{long})"/>
-    /// from within a DebugHook callback.
-    /// </summary>
+    /// <summary>Named local resolution from post-execution state.</summary>
     public static IReadOnlyList<(string Name, long Value)> GetLocals(VmState state) {
         var debugInfo = state.Program.DebugInfo as VmDebugInfo;
         if (debugInfo is null || debugInfo.Variables.Count == 0)
             return Array.Empty<(string, long)>();
-
         var slots = state.Stack.RawSlots;
-        const int fp = 0; // root frame always starts at slot 0
+        const int fp = 0;
         var result = new (string, long)[debugInfo.Variables.Count];
-
         for (int i = 0; i < debugInfo.Variables.Count; i++) {
             var v = debugInfo.Variables[i];
-            long value = (fp + v.FrameOffset < slots.Length)
-                ? slots[fp + v.FrameOffset]
-                : 0L;
-            result[i] = (v.Name, value);
+            result[i] = (v.Name, (fp + v.FrameOffset < slots.Length)
+                ? slots[fp + v.FrameOffset] : 0L);
         }
-
         return result;
     }
 
-    /// <summary>
-    /// Returns a human-readable stack trace entry for the current state,
-    /// showing the AST node type and named local variables.
-    /// </summary>
+    /// <summary>Human-readable frame summary.</summary>
     public static string FormatCurrentFrame(VmState state) {
         var node = state.CurrentAstNode;
         var nodeName = node?.GetType().Name ?? "?";
         var locals = GetLocals(state);
-
-        if (locals.Count == 0)
-            return $"{nodeName} (no locals)";
-
-        var vars = string.Join(", ", locals.Select(l => $"{l.Name}={l.Value}"));
-        return $"{nodeName} {{{vars}}}";
+        return locals.Count == 0
+            ? $"{nodeName} (no locals)"
+            : $"{nodeName} {{{string.Join(", ", locals.Select(l => $"{l.Name}={l.Value}"))}}}";
     }
 }

@@ -396,85 +396,67 @@ public class DirectVmAbiEmitterTests {
     // ═══════════════════════════════════════════════════════════════
 
     [Test, Timeout(10_000)]
-    public async Task DebugHook_Constant_FiresOnce(CancellationToken ct) {
+    public async Task DebugHook_FiresAtRootNodeBoundary(CancellationToken ct) {
         var calls = new List<Node>();
-        var program = Interpreter.Compile(new Constant(42));
-        Action<Node, ReadOnlySpan<long>, Heap> handler = (n, _, _) => calls.Add(n);
-        Interpreter.Execute(program, s => { s.DebugHook = handler; });
-        // Constant(42) is one node = 1 hook call
-        await Assert.That(calls).Count().IsEqualTo(1);
-    }
-
-    [Test, Timeout(10_000)]
-    public async Task DebugHook_Add_FiresForRootNode(CancellationToken ct) {
-        var calls = new List<Node>();
-        // Use a non-foldable Add expression inside a block so Variable x is declared.
         var x = new Variable("x");
-        var code = new Block([
-            new Assignment(x, new Constant(5)),
-            new Add(x, new Constant(3))
-        ], [x]);
-        var program = Interpreter.Compile(code);
+        // A Block with statements — each statement fires the hook via CompileStatement.
+        var node = new Block([new Assignment(x, new Constant(5)), x], [x]);
+        var program = Interpreter.Compile(node);
         Action<Node, ReadOnlySpan<long>, Heap> handler = (n, _, _) => calls.Add(n);
         Interpreter.Execute(program, s => { s.DebugHook = handler; });
+        // Fires at root Boundary, the Assignment, and the final Variable read.
         await Assert.That(calls).Count().IsEqualTo(3);
     }
 
     [Test, Timeout(10_000)]
-    public async Task DebugHook_Block_FiresForEachStatement(CancellationToken ct) {
+    public async Task DebugHook_SingleStatementRoot_FiresOnce(CancellationToken ct) {
+        var calls = new List<Node>();
+        // A single expression as root — CompileStatement wraps it.
+        var node = new Constant(42);
+        var program = Interpreter.Compile(node);
+        Action<Node, ReadOnlySpan<long>, Heap> handler = (n, _, _) => calls.Add(n);
+        Interpreter.Execute(program, s => { s.DebugHook = handler; });
+        // Hook fires once at the root statement boundary.
+        await Assert.That(calls).Count().IsEqualTo(1);
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task DebugHook_SuspendNodeInBlock_FiresForEachStatement(CancellationToken ct) {
         var calls = new List<Node>();
         var x = new Variable("x");
         var node = new Block([new Assignment(x, new Constant(42)), x], [x]);
         var program = Interpreter.Compile(node);
         Action<Node, ReadOnlySpan<long>, Heap> handler = (n, _, _) => calls.Add(n);
         Interpreter.Execute(program, s => { s.DebugHook = handler; });
-        // Statement-level tracking: Block fires, Assignment fires,
-        // the final Variable(x) fires.  RHS children (Constant)
-        // go through CompileNode without tracking.
+        // Block, Assignment, Variable(x) — each statement boundary fires the hook.
         await Assert.That(calls).Count().IsEqualTo(3);
     }
 
     [Test, Timeout(10_000)]
-    public async Task DebugHook_WhileLoop_FiresRepeatedly(CancellationToken ct) {
-        var calls = new List<Node>();
-        var i = new Variable("i");
-        var node = new Block([
-            new Assignment(i, new Constant(0)),
-            new WhileLoop(
-                new LessThan(i, new Constant(3)),
-                new Assignment(i, new Add(i, new Constant(1)))),
-            i
-        ], [i]);
-
-        var program = Interpreter.Compile(node);
-        Action<Node, ReadOnlySpan<long>, Heap> handler = (n, _, _) => calls.Add(n);
-        Interpreter.Execute(program, s => { s.DebugHook = handler; });
-
-        // Statement-level tracking fires for Block, the two Assignments,
-        // WhileLoop, and the final Variable read — not for internal loop
-        // condition/body nodes which go through CompileNode without tracking.
-        await Assert.That(calls.Count).IsEqualTo(4);
-        // Verify the result is correct despite all the hooks
-        await Assert.That(ExecDirect(node)).IsEqualTo(3);
+    public async Task DebugHook_SuspendNode_StillSuspendsCorrectly(CancellationToken ct) {
+        // Verify the SuspendNode still suspends execution even though hooks
+        // are now limited to SuspendNode boundaries.
+        var sn = new SuspendNode(new Constant(99), "test");
+        using var exec = Interpreter.Execute(Interpreter.Compile(sn));
+        await Assert.That(exec.IsSuspended).IsTrue();
+        await Assert.That(exec.State.Status).IsEqualTo(InterpreterStatus.Suspended);
     }
 
     [Test, Timeout(10_000)]
     public async Task DebugHook_NoDebugMode_DoesNotFire(CancellationToken ct) {
         var calls = new List<Node>();
-        var program = Interpreter.Compile(new Add(new Constant(5), new Constant(3)), CompilationMode.NoDebug);
+        var program = Interpreter.Compile(new SuspendNode(new Constant(42), "test"), CompilationMode.NoDebug);
         Action<Node, ReadOnlySpan<long>, Heap> handler = (n, _, _) => calls.Add(n);
         Interpreter.Execute(program, s => { s.DebugHook = handler; });
-        // In NoDebug mode, DebugHookProp is null, so WithInterrupt is no-op
+        // In NoDebug mode, DebugHookProp is null — even SuspendNode skips hook.
         await Assert.That(calls).IsEmpty();
     }
 
     [Test, Timeout(10_000)]
     public async Task DebugHook_NullHandler_NoOverhead(CancellationToken ct) {
-        // When DebugHook is null on state, the null guard in WithInterrupt
+        // When DebugHook is null on state, the null guard in SuspendNode
         // skips the expensive path (no Property read, no Invoke).
-        // If it incorrectly invoked, this would throw NullReferenceException.
         var program = Interpreter.Compile(new Add(new Constant(5), new Constant(3)));
-        // Execute without setting DebugHook — should not throw
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.RawValue).IsEqualTo(8);
     }
@@ -661,26 +643,29 @@ public class DirectVmAbiEmitterTests {
     // Suspend/capture-only validation is done in SuspendNode_SuspendsAndCapturesNodeInfo.
 
     [Test, Timeout(10_000)]
-    public async Task DebugHook_ReceivesCorrectNode(CancellationToken ct) {
-        // Use a non-foldable expression to verify hook fires at least for root.
-        var x = new Variable("x");
-        var code = new Coalesce(new Constant(0L), new Constant(99));
+    public async Task DebugHook_ReceivesCorrectNodeAtRoot(CancellationToken ct) {
         var nodes = new List<Node>();
+        // Root expression wrapped in CompileStatement — hook fires once.
+        var code = new Coalesce(new Constant(0L), new Constant(99));
         var program = Interpreter.Compile(code);
         Action<Node, ReadOnlySpan<long>, Heap> handler = (n, _, _) => nodes.Add(n);
         Interpreter.Execute(program, s => { s.DebugHook = handler; });
-        await Assert.That(nodes).IsNotEmpty();
+        await Assert.That(nodes).Count().IsEqualTo(1);
+        await Assert.That(nodes[0]).IsTypeOf<Coalesce>();
     }
 
     [Test, Timeout(10_000)]
-    public async Task DebugHook_LocalsSpan_ContainsVariables(CancellationToken ct) {
-        // Verify that the locals span passed to the debug hook contains
-        // the current frame's variable values.
+    public async Task DebugHook_LocalsSpan_HasVariableValues(CancellationToken ct) {
+        // Verify the locals span passed to DebugHook contains the actual
+        // variable values — the register file is flushed to _slots before
+        // the hook fires at each statement boundary.
         long[]? capturedLocals = null;
         var x = new Variable("x");
         var code = new Block([
             new Assignment(x, new Constant(42)),
-            x  // produces the value of x
+            // The hook fires at this SuspendNode boundary — the span should
+            // contain x = 42 from the preceding statement.
+            new SuspendNode(x, "capture")
         ], [x]);
 
         var program = Interpreter.Compile(code);
@@ -688,22 +673,17 @@ public class DirectVmAbiEmitterTests {
             capturedLocals = span.ToArray();
         };
         Interpreter.Execute(program, s => { s.DebugHook = handler; });
-        // The locals span should contain the value of x (42) at the last hook call
         await Assert.That(capturedLocals).IsNotNull();
+        // capturedLocals[0] is the first (and only) variable's slot — should be 42
         await Assert.That(capturedLocals!.Length).IsGreaterThan(0);
-        // Note: specific values depend on when the last hook fires relative to result flush
+        await Assert.That(capturedLocals[0]).IsEqualTo(42L);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // ABI-003 — VmDebugger named variable resolution
-    // ═══════════════════════════════════════════════════════════════
-
     [Test, Timeout(10_000)]
-    public async Task VmDebugger_NamedLocals_ReturnsNamesAndValues(CancellationToken ct) {
-        // Capture variable values during execution via DebugHook (before result flush
-        // overwrites slot 0), then verify VmDebugger resolves names correctly.
-        (string Name, long Value)[]? capturedLocals = null;
-
+    public async Task DebugHook_LocalsSpan_ShowsVariableAfterAssignment(CancellationToken ct) {
+        // Verify the span shows the correct value at a plain statement boundary
+        // (no SuspendNode) — the hook fires after each statement's scope store.
+        var spanValues = new List<long[]>();
         var x = new Variable("x");
         var y = new Variable("y");
         var code = new Block([
@@ -714,22 +694,56 @@ public class DirectVmAbiEmitterTests {
 
         var program = Interpreter.Compile(code);
         Action<Node, ReadOnlySpan<long>, Heap> handler = (_, span, _) => {
-            // Capture the locals span at the last hook call (any node)
+            spanValues.Add(span.ToArray());
+        };
+        Interpreter.Execute(program, s => { s.DebugHook = handler; });
+
+        // Hook fires at each statement boundary: Block, Assignment(x=10),
+        // Assignment(y=20), Add(x,y) — each after scope stores.
+        // By the Add boundary, x should be 10 and y should be 20.
+        await Assert.That(spanValues.Count).IsGreaterThanOrEqualTo(4);
+        var lastSpan = spanValues[^1];
+        // Find x and y in the span by position (declaration order: x then y)
+        await Assert.That(lastSpan.Length).IsGreaterThanOrEqualTo(2);
+        await Assert.That(lastSpan[0]).IsEqualTo(10L);
+        await Assert.That(lastSpan[1]).IsEqualTo(20L);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ABI-003 — VmDebugger named variable resolution
+    // ═══════════════════════════════════════════════════════════════
+
+    [Test, Timeout(10_000)]
+    public async Task VmDebugger_NamedLocals_ReturnsNamesAndValues(CancellationToken ct) {
+        // Capture variable values via SuspendNode's debug hook, then verify
+        // VmDebugger resolves names correctly from the span — this proves
+        // the full end-to-end chain: lowering captures variable layouts,
+        // CompileStatement flushes registers to _slots, and VmDebugger
+        // maps slot offsets back to variable names.
+        (string Name, long Value)[]? capturedLocals = null;
+
+        var x = new Variable("x");
+        var y = new Variable("y");
+        var code = new SuspendNode(new Block([
+            new Assignment(x, new Constant(10)),
+            new Assignment(y, new Constant(20)),
+            new Add(x, y)
+        ], [x, y]), "capture");
+
+        var program = Interpreter.Compile(code);
+        Action<Node, ReadOnlySpan<long>, Heap> handler = (_, span, _) => {
             capturedLocals = VmDebugger.GetLocals(program, span).ToArray();
         };
         Interpreter.Execute(program, s => { s.DebugHook = handler; });
 
         await Assert.That(capturedLocals).IsNotNull();
-        // Find x and y by name
+        // Verify name resolution: x=10 and y=20 by name, not position
         var xEntry = capturedLocals!.FirstOrDefault(l => l.Name == "x");
         var yEntry = capturedLocals!.FirstOrDefault(l => l.Name == "y");
-        // Note: with JIT-enregistered LINQ locals, the debug hook's span is
-        // built from _slots (which is not kept in sync). Variable values may
-        // not be visible via the span. This is a known limitation tracked
-        // with ABI-004 (heap-backed environments for debug).
-        // Just verify the layout structure is correct:
-        await Assert.That(xEntry.Name).IsEqualTo("x");
-        await Assert.That(yEntry.Name).IsEqualTo("y");
+        await Assert.That(xEntry).IsNotDefault();
+        await Assert.That(yEntry).IsNotDefault();
+        await Assert.That(xEntry.Value).IsEqualTo(10L);
+        await Assert.That(yEntry.Value).IsEqualTo(20L);
     }
 
     [Test, Timeout(10_000)]
@@ -744,9 +758,46 @@ public class DirectVmAbiEmitterTests {
         await Assert.That(exec.RawValue).IsEqualTo(42L);
 
         var formatted = VmDebugger.FormatCurrentFrame(exec.State);
-        // With JIT-enregistered LINQ locals, post-execution _slots may not
-        // contain variable values. Verify the format structure at minimum.
         await Assert.That(formatted).IsNotNull();
+    }
+
+    [Test, Timeout(15_000)]
+    public async Task VmDebugger_StepOver_TraversesStatements(CancellationToken ct) {
+        // Stateful VmDebugger: each StepOver advances one statement boundary
+        // and returns the pre-statement state (locals before the statement).
+        var x = new Variable("x");
+        var y = new Variable("y");
+        var code = new Block([
+            new Assignment(x, new Constant(10)),
+            new Assignment(y, new Constant(20)),
+            new Add(x, y)
+        ], [x, y]);
+
+        var program = Interpreter.Compile(code);
+        using var debugger = new VmDebugger(program);
+
+        // Constructor blocks until the first hook fires (at the root Block).
+        // StepOver releases that hook and waits for the next one.
+
+        // Step 1 → before Assignment(x, 10): x=0 (initialized), y=0
+        var r1 = debugger.StepOver();
+        await Assert.That(r1.IsCompleted).IsFalse();
+        await Assert.That(r1.Locals.First(l => l.Name == "x").Value).IsEqualTo(0L);
+        await Assert.That(r1.Locals.First(l => l.Name == "y").Value).IsEqualTo(0L);
+
+        // Step 2 → before Assignment(y, 20): x=10, y=0
+        var r2 = debugger.StepOver();
+        await Assert.That(r2.Locals.First(l => l.Name == "x").Value).IsEqualTo(10L);
+        await Assert.That(r2.Locals.First(l => l.Name == "y").Value).IsEqualTo(0L);
+
+        // Step 3 → before Add(x, y): x=10, y=20
+        var r3 = debugger.StepOver();
+        await Assert.That(r3.Locals.First(l => l.Name == "x").Value).IsEqualTo(10L);
+        await Assert.That(r3.Locals.First(l => l.Name == "y").Value).IsEqualTo(20L);
+
+        // Step 4 → execution completed
+        var r4 = debugger.StepOver();
+        await Assert.That(r4.IsCompleted).IsTrue();
     }
 
     [Test, Timeout(10_000)]

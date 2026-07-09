@@ -84,7 +84,9 @@ public static class DirectVmAbiEmitter {
         // DeclareVariable inside blocks will still assign scope-relative slots.
         ctx.EnterActivation(0, 0);
 
-        var rootExpr = CompileNodeWithTracking(root, ctx);
+        // CompileStatement wraps the root with CurrentAstNode + DebugHook,
+        // consistent with statement-level tracking in EmitBlock.
+        var rootExpr = CompileStatement(root, ctx);
 
         // Flush the root result from the ring to the value stack,
         // matching the ABI convention: result at _slots[_fp], SP = _fp + 1.
@@ -131,8 +133,10 @@ public static class DirectVmAbiEmitter {
     /// expression trees (<c>CompileNode->CompileNodeInner->Emit*->CompileNode</c>
     /// recursion that overflows the stack at ~400 expression levels).
     ///
-    /// For debug/suspend support, <see cref="CompileNodeWithTracking"/> adds
-    /// the CurrentAstNode/CurrentNodeId assignments.
+    /// DebugHook support: at statement boundaries <see cref="CompileStatement"/>
+    /// inserts a lightweight <c>CurrentAstNode</c> set + null-guarded hook invoke.
+    /// The expensive locals span + step recording are exclusive to
+    /// <see cref="EmitSuspendNode"/> so Normal mode stays fast.
     /// </summary>
     private static Expression CompileNode(Node node, AbiCtx ctx) {
         // If analysis registered a replacement (e.g. constant folding), use that instead.
@@ -141,26 +145,36 @@ public static class DirectVmAbiEmitter {
         return CompileNodeInner(node, ctx);
     }
 
-    /// <summary>Compile a node with step tracking (step counter, RecordStepNode,
-    /// CurrentAstNode/CurrentNodeId field writes, debug interrupt guard).
-    /// Used at statement boundaries where suspend/resume matters.</summary>
-    private static Expression CompileNodeWithTracking(Node node, AbiCtx ctx) {
-        // Resolve analysis replacement first so tracking uses the effective node.
-        if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
-            node = replacement;
+    /// <summary>
+    /// Compile a statement node with DebugHook support.
+    /// Before invoking the hook, flushes the register file to <c>_slots</c> so
+    /// the locals span contains accurate variable values.  The entire hook path
+    /// is inside a runtime null guard — zero overhead when no hook is set.
+    /// </summary>
+    private static Expression CompileStatement(Node node, AbiCtx ctx) {
+        if (ctx.DebugHookProp is null) return CompileNode(node, ctx);
 
-        int step = ctx.StepCounter++;
-        ctx.RecordStepNode(step, node);
-        if (ctx.DebugHookProp != null) {
-            var setCurrentNode = Block(
-                Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(node)),
-                Assign(Property(ctx.State, nameof(VmState.CurrentNodeId)), Constant(node.Id, typeof(NodeId?)))
-            );
-            var body = CompileNodeInner(node, ctx);
-            var guarded = WithInterrupt(body, ctx, step);
-            return Block(setCurrentNode, guarded);
-        }
-        return CompileNodeInner(node, ctx);
+        // Flush register file to _slots so the debug hook span sees current values.
+        var stores = ctx.EmitScopeStores();
+        var body = CompileNode(node, ctx);
+
+        int localCount = ctx.CurrentLocalCount;
+        Expression spanExpr = localCount == 0
+            ? New(typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[])])!,
+                NewArrayBounds(typeof(long), Constant(0)))
+            : New(typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[]), typeof(int), typeof(int)])!,
+                ctx.SlotsLocal, ctx.FramePosLocal, Constant(localCount));
+
+        var invoke = Block(
+            Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(node)),
+            Invoke(ctx.DebugHookProp, Constant(node), spanExpr, ctx.HeapLocal));
+
+        return Block(
+            Block(stores),
+            IfThen(NotEqual(ctx.DebugHookProp,
+                Constant(null, typeof(Action<Node, ReadOnlySpan<long>, Heap>))),
+                invoke),
+            body);
     }
 
     /// <summary>
@@ -373,8 +387,8 @@ public static class DirectVmAbiEmitter {
     private static Expression EmitNewArray(NewArray n, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var lenExpr = CompileNode(n.Length, ctx);
-        int lenResult = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref lenResult, d, ctx);
+        int lenSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref lenSlot, d, ctx);
 
         int slot = ctx.AllocSlot();
         // Resolve element type: value types like long[] store unboxed values,
@@ -383,7 +397,18 @@ public static class DirectVmAbiEmitter {
             ClrTypeReference ctr when ctr.RuntimeType.IsValueType => ctr.RuntimeType,
             _ => typeof(object)
         };
-        var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenResult), typeof(int)));
+
+        // Small fixed-size value-type arrays: allocate in frame slots (negative _fp offset)
+        // instead of on the heap.  The handle is the base offset itself (always negative),
+        // so IndexAccess can distinguish it from heap handles (always non-negative).
+        if (elemType.IsValueType && n.Length is Constant len && TryValueToLong(len.Value, out long lv)
+            && lv > 0 && lv <= AbiCtx.SmallArrayThreshold) {
+            int baseOffset = ctx.AllocateSmallArray();
+            return Block(lenExpr, fold,
+                Assign(ctx.RingVar(slot), Constant((long)baseOffset)));
+        }
+
+        var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
         var handle = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)),
             Convert(arr, typeof(object)));
         return Block(lenExpr, fold, Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
@@ -391,6 +416,21 @@ public static class DirectVmAbiEmitter {
 
     private static Expression EmitIndexAccess(IndexAccess n, AbiCtx ctx) {
         int startDepth = ctx.RingDepth;
+
+        // Compile-time fast path: tracked frame-local variable → _slots[base + idx] directly.
+        if (n.Value is Variable arrVar && ctx.TryGetFrameLocalBase(arrVar) is int flBase) {
+            ctx.AllocSlot();
+            var idxCompiled = CompileNode(
+                n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx);
+            int idxResult = ctx.RingDepth - 1;
+            var foldIdx = FoldResultToSlot(ref idxResult, startDepth, ctx);
+            ctx.RingDepth = idxResult + 1;
+            var result = ArrayAccess(ctx.SlotsLocal,
+                Add(Constant(flBase), Convert(ctx.RingVar(idxResult), typeof(int))));
+            return Block(idxCompiled, foldIdx,
+                Assign(ctx.RingVar(startDepth), result));
+        }
+
         var arrExpr = CompileNode(n.Value, ctx);
         int arrSlot = ctx.RingDepth - 1;
 
@@ -398,18 +438,17 @@ public static class DirectVmAbiEmitter {
         int idxSlot = ctx.RingDepth - 1;
 
         int outSlot = ctx.AllocSlot();
+
         var rawObj = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
             Convert(ctx.RingVar(arrSlot), typeof(int)));
         var idx = Convert(ctx.RingVar(idxSlot), typeof(int));
 
-        // Try to resolve the array element type from analysis metadata.
-        // When known at compile time, skip the runtime TypeIs check.
+        // Resolve element type from analysis to skip runtime TypeIs check.
         Type? elementType = ctx.Analysis?.GetResolvedType(n) is ClrTypeDefinition clrElem
             ? clrElem.RuntimeType
             : null;
 
         if (elementType is { IsValueType: true }) {
-            // Value type array — direct long[] access (no unbox needed)
             var longArr = Variable(typeof(long[]), "_longArr");
             var valExpr = Block([longArr],
                 Assign(longArr, Convert(rawObj, typeof(long[]))),
@@ -419,7 +458,6 @@ public static class DirectVmAbiEmitter {
         }
 
         if (elementType is not null) {
-            // Reference type array — direct object[] access with unbox
             var objArr = Variable(typeof(object[]), "_objArr");
             var valExpr = Block([objArr],
                 Assign(objArr, Convert(rawObj, typeof(object[]))),
@@ -428,7 +466,7 @@ public static class DirectVmAbiEmitter {
                 Assign(ctx.RingVar(outSlot), valExpr));
         }
 
-        // Unknown type — runtime type check (existing fallback)
+        // Unknown element type — runtime TypeIs check fallback
         var longArrU = Variable(typeof(long[]), "_longArr");
         var objArrU = Variable(typeof(object[]), "_objArr");
         var valExprU = Condition(
@@ -1101,6 +1139,41 @@ public static class DirectVmAbiEmitter {
     /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>
     private static Expression EmitStridedSetBits(StridedSetBits ssb, AbiCtx ctx) {
         int d = ctx.RingDepth;
+
+        // Compile-time fast path: if the array is a tracked frame-local variable,
+        // access _slots[base + elemIdx] directly with no runtime dispatch.
+        if (ssb.Array is Variable arrVarS && ctx.TryGetFrameLocalBase(arrVarS) is int flBaseS) {
+            var startExprS = CompileNode(ssb.StartValue, ctx);
+            int startSlotS = ctx.RingDepth - 1;
+            var stepExprS = CompileNode(ssb.Step, ctx);
+            int stepSlotS = ctx.RingDepth - 1;
+            var limitExprS = CompileNode(ssb.Limit, ctx);
+            int limitSlotS = ctx.RingDepth - 1;
+
+            var foldStartS = FoldResultToSlot(ref startSlotS, d, ctx);
+            var foldStepS = FoldResultToSlot(ref stepSlotS, d + 1, ctx);
+            var foldLimitS = FoldResultToSlot(ref limitSlotS, d + 2, ctx);
+            ctx.RingDepth = d + 3;
+
+            var jS = Variable(typeof(long), "_bits_j");
+            var elemIdxS = Convert(RightShift(jS, Constant(6)), typeof(int));
+            var slotAddr = Add(Constant(flBaseS), elemIdxS);
+
+            var loopStartS = Label("_stride_loop_f");
+            var loopEndS = Label("_stride_done_f");
+            var loopBodyS = Block(
+                Assign(ArrayAccess(ctx.SlotsLocal, slotAddr),
+                    Or(ArrayAccess(ctx.SlotsLocal, slotAddr),
+                        LeftShift(Constant(1L), Convert(And(jS, Constant(63L)), typeof(int))))),
+                Assign(jS, Add(jS, ctx.RingVar(stepSlotS))),
+                IfThen(GreaterThan(jS, ctx.RingVar(limitSlotS)), Goto(loopEndS)),
+                Goto(loopStartS));
+            return Block(startExprS, stepExprS, limitExprS,
+                Block([jS],
+                    Assign(jS, ctx.RingVar(startSlotS)),
+                    Label(loopStartS), loopBodyS, Label(loopEndS)));
+        }
+
         var arrExpr = CompileNode(ssb.Array, ctx);
         int arrSlot = ctx.RingDepth - 1;
         var startExpr = CompileNode(ssb.StartValue, ctx);
@@ -1117,8 +1190,10 @@ public static class DirectVmAbiEmitter {
         var foldLimit = FoldResultToSlot(ref limitSlot, d + 3, ctx);
         ctx.RingDepth = d + 4;
 
-        // ABI-level strided set
-        var arrObj = Convert(ArrayAccess(ctx.HeapRawSlots, Convert(ctx.RingVar(arrSlot), typeof(int))), typeof(long[]));
+        // ABI-level strided set — heap array path (direct cast to long[]).
+        // Frame-local arrays are handled via the compile-time fast path above.
+        var arrObj = Convert(ArrayAccess(ctx.HeapRawSlots,
+            Convert(ctx.RingVar(arrSlot), typeof(int))), typeof(long[]));
         var j = Variable(typeof(long), "_bits_j");
         var loopStart = Label("_stride_loop");
         var loopEnd = Label("_stride_done");
@@ -1291,6 +1366,24 @@ public static class DirectVmAbiEmitter {
     private static Expression EmitAssignment(Assignment a, AbiCtx ctx) {
         // Array element assignment: arr[index] = value
         if (a.Destination is IndexAccess indexAccess) {
+            // Compile-time fast path: if the array is a tracked frame-local variable,
+            // emit _slots[base + idx] = val directly — no dispatch.
+            if (indexAccess.Value is Variable arrVarW
+                && ctx.TryGetFrameLocalBase(arrVarW) is int flBaseW) {
+                var idxExprW = CompileNode(
+                    indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx);
+                int idxSlotW = ctx.RingDepth - 1;
+                var valExprW = CompileNode(a.Value, ctx);
+                int valSlotW = ctx.RingDepth - 1;
+                var storeW = Assign(
+                    ArrayAccess(ctx.SlotsLocal,
+                        Add(Constant(flBaseW), Convert(ctx.RingVar(idxSlotW), typeof(int)))),
+                    ctx.RingVar(valSlotW));
+                ctx.RingDepth = idxSlotW + 1;
+                return Block(idxExprW, valExprW, storeW,
+                    Assign(ctx.RingVar(idxSlotW), ctx.RingVar(valSlotW)));
+            }
+
             var arrExpr = CompileNode(indexAccess.Value, ctx);
             int arrSlot = ctx.RingDepth - 1;
             var idxExpr = CompileNode(
@@ -1312,21 +1405,18 @@ public static class DirectVmAbiEmitter {
 
             Expression store;
             if (elemType is { IsValueType: true }) {
-                // Value type array — direct long[] write
                 var longArr = Variable(typeof(long[]), "_assignLongArr");
                 store = Block([longArr],
                     Assign(longArr, Convert(rawObj, typeof(long[]))),
                     Assign(ArrayAccess(longArr, idx), val));
             }
             else if (elemType is not null) {
-                // Reference type array — direct object[] write with boxing
                 var objArr = Variable(typeof(object[]), "_assignObjArr");
                 store = Block([objArr],
                     Assign(objArr, Convert(rawObj, typeof(object[]))),
                     Assign(ArrayAccess(objArr, idx), Convert(val, typeof(object))));
             }
             else {
-                // Unknown type — runtime type check (existing fallback)
                 var longArr = Variable(typeof(long[]), "_assignLongArr");
                 var objArr = Variable(typeof(object[]), "_assignObjArr");
                 store = IfThenElse(
@@ -1339,7 +1429,6 @@ public static class DirectVmAbiEmitter {
                         Assign(ArrayAccess(objArr, idx), Convert(val, typeof(object)))));
             }
 
-            // Leave the assigned value on the ring
             ctx.RingDepth = arrSlot + 1;
             return Block(arrExpr, idxExpr, valExpr, store,
                 Assign(ctx.RingVar(arrSlot), val));
@@ -1349,6 +1438,29 @@ public static class DirectVmAbiEmitter {
             throw new NotSupportedException(
                 $"Assignment destination must be a Variable or IndexAccess, got {a.Destination.GetType().Name}");
         }
+
+        // Frame-local array allocation: Variable = NewArray(elemType, constLen)
+        // where the array is a small value-type array (≤ SmallArrayThreshold).
+        // Bypass heap entirely: allocate in _slots and track the variable so
+        // subsequent IndexAccess can emit direct _slots access without dispatch.
+        if (a.Value is NewArray newArr && newArr.Length is Constant lenConst
+            && TryValueToLong(lenConst.Value, out long arrLen)
+            && arrLen > 0 && arrLen <= AbiCtx.SmallArrayThreshold) {
+            Type elemType = newArr.ElementType switch {
+                ClrTypeReference ctr when ctr.RuntimeType.IsValueType => ctr.RuntimeType,
+                _ => typeof(object)
+            };
+            if (elemType.IsValueType) {
+                int baseOffset = ctx.AllocateSmallArray();
+                ctx.TrackFrameLocalArray(destVar, baseOffset);
+                int slot = ctx.AllocSlot();
+                return Assign(ctx.RingVar(slot), Constant((long)baseOffset));
+            }
+        }
+
+        // Variable reassigned — if it was tracked as frame-local, untrack it.
+        // The new value might be a heap array, a non-array, etc.
+        ctx.UntrackFrameLocalArray(destVar);
 
         // Check capture (upvalue) first
         if (ctx.TryGetCapture(destVar, out int capIndex)) {
@@ -1395,9 +1507,8 @@ public static class DirectVmAbiEmitter {
 
         var stmtExprs = new List<Expression>();
         for (int i = 0; i < block.Nodes.Count; i++) {
-            // Use CompileNodeWithTracking at statement boundaries for
-            // step counter, RecordStepNode, and CurrentNode tracking.
-            stmtExprs.Add(CompileNodeWithTracking(block.Nodes[i], ctx));
+            // CompileStatement adds lightweight DebugHook + CurrentAstNode tracking.
+            stmtExprs.Add(CompileStatement(block.Nodes[i], ctx));
         }
 
         // Flush register file back to _slots before scope exit.
@@ -1710,27 +1821,22 @@ public static class DirectVmAbiEmitter {
     /// Supports non-trivial suspend/resume validation (e.g. inside loops with captures).
     /// </summary>
     private static Expression EmitSuspendNode(SuspendNode sn, AbiCtx ctx) {
-        // Register and emit the resume label at this suspend point so the
-        // PC-dispatch switch can jump here on re-entry.
-        // The step was already assigned by CompileNodeWithTracking's counter increment.
-        int step = ctx.StepCounter - 1;
+        // Manage our own step counter.  DebugHook invoke and CurrentAstNode set
+        // at statement boundaries are handled by CompileStatement in EmitBlock.
+        // When the SuspendNode is the root node (not inside a Block), this
+        // method sets CurrentAstNode directly.
+        int step = ctx.StepCounter++;
+        ctx.RecordStepNode(step, sn);
         var resumeLabel = ctx.RegisterOrGetResumeLabel(step);
         var innerExpr = CompileNode(sn.Inner, ctx);
 
-        // Explicitly set the source AST node for this suspension point.
         var setCurrentNode = Block(
             Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(sn)),
-            Assign(Property(ctx.State, nameof(VmState.CurrentNodeId)), Constant(sn.Id, typeof(NodeId?)))
-        );
-
+            Assign(Property(ctx.State, nameof(VmState.CurrentNodeId)), Constant(sn.Id, typeof(NodeId?))));
         var setStatus = Assign(
             Property(ctx.State, nameof(VmState.Status)),
             Constant(InterpreterStatus.Suspended));
-
-        // Save the resume program counter so the dispatch switch can route here.
         var saveResumeId = Assign(ctx.ProgramCounter, Constant(step));
-
-        // Save the current frame position so the preamble can restore it on resume.
         var saveFramePos = Assign(
             Property(ctx.State, nameof(VmState.FramePos)),
             ctx.FramePosLocal);
@@ -1742,8 +1848,7 @@ public static class DirectVmAbiEmitter {
             setStatus,
             saveResumeId,
             saveFramePos,
-            Goto(ctx.ExitLabel)
-        );
+            Goto(ctx.ExitLabel));
     }
 
     /// <summary>Parameter: read from the value-stack slot set up by the caller
@@ -1923,10 +2028,12 @@ public static class DirectVmAbiEmitter {
 
         if (invoke.Delegate is Lambda lambda) {
 
-            // Trivial inline: no captures, body is a single expression.
-            if (FindCaptures(lambda.Body, ctx).Count == 0
-                && lambda.Body is not Poly.Syntax.Nodes.Block
-                && invoke.Arguments.Length > 0) {
+            // Trivial inline: no captures → compile body directly in the caller's
+            // context.  Works for any body shape (expression or Block) with any
+            // number of arguments (zero maps no parameters, >0 maps to ring slots).
+            // The caller's scope stack is safe because EmitBlock handles its own
+            // PushScope/PopScope internally.
+            if (FindCaptures(lambda.Body, ctx).Count == 0) {
                 return EmitInlineInvoke(lambda, invoke, ctx);
             }
 
@@ -2437,6 +2544,22 @@ public static class DirectVmAbiEmitter {
         /// <summary>All local variables used in the compiled expression tree.</summary>
         public IReadOnlyList<ParameterExpression> Locals => _locals;
 
+        /// <summary>Maximum slot-based array size that gets allocated in the frame
+        /// instead of on the heap.  These use absolute slot indices at or above
+        /// <see cref="SmallArraySlotBase"/> so they don't collide with user variables.</summary>
+        internal const int SmallArrayThreshold = 16;
+        internal const int SmallArraySlotBase = 128; // well past variables, within ValueStack initial capacity
+        private int _nextSmallArraySlot = SmallArraySlotBase; // absolute slot base, grows up
+
+        /// <summary>Reserve slots in the frame for a small fixed-size value-type array.
+        /// Returns the absolute slot index base (handle) for this array, which is
+        /// >= <see cref="SmallArraySlotBase"/> — distinct from heap handles (always &lt; 256).</summary>
+        public int AllocateSmallArray() {
+            int baseOffset = _nextSmallArraySlot;
+            _nextSmallArraySlot += SmallArrayThreshold;
+            return baseOffset;
+        }
+
         /// <summary>Expression to initialize <c>_slots</c> from <c>state.Stack.RawSlots</c>.</summary>
         public Expression SlotsInitExpression =>
             Property(Property(_stateParam, StateStackProperty), ValueStackRawSlotsProperty);
@@ -2491,6 +2614,28 @@ public static class DirectVmAbiEmitter {
             RingVar(slot); // ensure it exists
             return slot;
         }
+
+        // ── Frame-local array variable tracking ──────────────────
+
+        // Variables whose most recent assignment was a frame-local NewArray.
+        // Maps variable → base offset into _slots (always >= SmallArraySlotBase).
+        // Used by EmitIndexAccess to bypass runtime handle dispatch.
+        private Dictionary<Variable, int>? _frameLocalVars;
+
+        /// <summary>Track a variable as holding a frame-local array.</summary>
+        public void TrackFrameLocalArray(Variable v, int baseOffset) {
+            _frameLocalVars ??= new(ReferenceEqualityComparer.Instance);
+            _frameLocalVars[v] = baseOffset;
+        }
+
+        /// <summary>Remove a variable from frame-local tracking (e.g. on reassignment).</summary>
+        public void UntrackFrameLocalArray(Variable v) {
+            _frameLocalVars?.Remove(v);
+        }
+
+        /// <summary>Get the frame-local base offset for a variable, or null if not tracked.</summary>
+        public int? TryGetFrameLocalBase(Variable v) =>
+            _frameLocalVars is { } dict && dict.TryGetValue(v, out int baseOffset) ? baseOffset : null;
 
         // ── Variable scope management / Register file ────────────
 

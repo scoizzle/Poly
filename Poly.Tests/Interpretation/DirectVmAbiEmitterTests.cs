@@ -770,8 +770,12 @@ public class DirectVmAbiEmitterTests {
         var program = Interpreter.Compile(code);
         using var debugger = new VmDebugger(program);
 
-        // Constructor blocks until the first hook fires (at the root Block).
-        // StepOver releases that hook and waits for the next one.
+        // Start blocks until the first hook fires (at the root Block boundary).
+        // At the Block boundary, variables are initialized: x=0, y=0.
+        var startResult = debugger.Start();
+        await Assert.That(startResult.IsCompleted).IsFalse();
+        await Assert.That(startResult.Locals.First(l => l.Name == "x").Value).IsEqualTo(0L);
+        await Assert.That(startResult.Locals.First(l => l.Name == "y").Value).IsEqualTo(0L);
 
         // Step 1 → before Assignment(x, 10): x=0 (initialized), y=0
         var r1 = debugger.StepOver();

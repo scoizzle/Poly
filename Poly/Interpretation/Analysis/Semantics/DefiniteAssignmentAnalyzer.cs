@@ -161,6 +161,12 @@ internal sealed class DefiniteAssignmentAnalyzer : INodeAnalyzer {
     }
 }
 
+/// <summary>Metadata recording the set of variables that are definitely
+/// assigned at a given program point. Used by the VM to elide redundant
+/// initialization checks and by the emitter to skip zero-init of proven
+/// assigned locals.</summary>
+/// <param name="DefinitelyAssigned">Set of variable names that have been
+/// assigned on all paths reaching this point.</param>
 public sealed record DefiniteAssignmentMetadata(HashSet<string> DefinitelyAssigned) : IAnalysisMetadata;
 
 public static class DefiniteAssignmentExtensions {

@@ -9,13 +9,30 @@ using static System.Linq.Expressions.Expression;
 
 namespace Poly.Interpretation.Vm;
 
-/// <summary>
-/// Direct AST-to-VM-ABI emitter — the primary compilation path.
+/// <summary>Direct AST-to-VM-ABI emitter — the primary (and sole) compilation path.
+/// Walks the analyzed AST and emits <see cref="Expression"/> trees targeting the
+/// bespoke VM ABI (<see cref="VmState"/>, ring registers, 2-word frame model,
+/// heap). No intermediate primitive flattening or expansion step exists.</summary>
+/// <remarks>
+/// <para>This is the canonical lowering path described in
+/// <see href=\"../../../../docs/decisions/2026-07-04-primitives-as-canonical-ir.md\">primitives-as-canonical-ir.md</see>.
+/// The emitter produces a single <c>Action&lt;VmState&gt;</c> delegate per program.
+/// All control flow (loops, branches, try/catch/finally) uses native CLR Expression
+/// nodes — no side tables or handler dispatching.</para>
 ///
-/// Walks the AST after analysis and emits <see cref="Expression"/> trees
-/// targeting the bespoke VM ABI (<see cref="VmState"/>, ring registers,
-/// heap, etc.) — the sole lowering path.
-/// </summary>
+/// <para>Key design points:</para>
+/// <list type=\"bullet\">
+///   <item><b>Ring registers</b> — Values flow through <c>_r0.._rN</c> locals
+///   allocated inline during the AST walk. No global pre-pass (RingAllocator).</item>
+///   <item><b>Structured EH</b> — Uses native <c>Expression.TryCatchFinally</c>
+///   directly for TryCatchFinally nodes.</item>
+///   <item><b>Frame model</b> — 2-word header (previousFP + savedSP) with
+///   compile-time-known argument/local counts.</item>
+///   <item><b>Debug modes</b> — <see cref="CompilationMode.Normal"/> includes
+///   DebugHook and PC tracking; <see cref="CompilationMode.NoDebug"/> omits
+///   them for maximum speed.</item>
+/// </list>
+/// </remarks>
 public static class DirectVmAbiEmitter {
     /// <summary>
     /// Describes a captured variable: the <see cref="Variable"/> node and its
@@ -23,14 +40,19 @@ public static class DirectVmAbiEmitter {
     /// </summary>
     private sealed record Capture(Variable Variable, int OuterSlotIndex);
 
-    /// <summary>
-    /// Emit a compiled <see cref="VmProgram"/> from an analyzed AST root node,
-    /// targeting the bespoke VM ABI directly (no primitives).
-    /// </summary>
+    /// <summary>Emits a compiled <see cref="VmProgram"/> from an analyzed AST
+    /// root node, targeting the bespoke VM ABI directly. This is the canonical
+    /// compilation path — no primitives or intermediate IR.</summary>
     /// <param name="root">The AST root node to compile.</param>
-    /// <param name="analysis">Analysis result from the standard pipeline (without PrimitiveExpansion).</param>
-    /// <param name="mode">Compilation mode for debug/tracing support.</param>
-    /// <returns>A <see cref="VmProgram"/> runnable by <see cref="Interpreter.Execute(VmProgram, Action{VmState})"/>.</returns>
+    /// <param name="analysis">Analysis result from the standard pipeline
+    /// (without PrimitiveExpansion). Must contain all metadata the emitter
+    /// requires (types, side effects, value representation, etc.).</param>
+    /// <param name="mode">Compilation mode. <see cref="CompilationMode.Normal"/>
+    /// (default) includes debug/trace hooks; <see cref="CompilationMode.NoDebug"/>
+    /// omits them for peak performance.</param>
+    /// <returns>A <see cref="VmProgram"/> containing the compiled delegate and
+    /// metadata (function table, call sites, step nodes, debug info). Execute
+    /// via <see cref="Interpreter.Execute(VmProgram, Action{VmState})"/>.</returns>
     public static VmProgram Emit(
         Node root,
         AnalysisResult analysis,

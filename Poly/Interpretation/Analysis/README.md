@@ -47,6 +47,83 @@ See `Interpreter.cs` for the exact pass list.
 | `ControlFlow/` | CFG construction, reachability, infinite-loop detection |
 | `ConstantFolding/` | Constant expression evaluation and algebraic simplification |
 
+## Writing a New Analysis Pass
+
+Every pass must implement `INodeAnalyzer`:
+
+```csharp
+internal sealed class MyPass : INodeAnalyzer {
+    public const string Id = "MyPass";
+    public string PassName => Id;
+    public string[] Dependencies => [TypeAndMemberResolver.Id];
+
+    public void Analyze(AnalysisContext context, Node node) {
+        if (!context.TryBeginAnalyzerVisit<MyPass>(node))
+            return;
+
+        // Post-order: analyze children first, then the parent
+        this.AnalyzeChildren(context, node);
+
+        // Attach metadata
+        context.SetMetadata(node, new MyMetadata(someValue));
+
+        // Report diagnostics
+        if (someError)
+            context.ReportDiagnostic(node, DiagnosticSeverity.Error,
+                "Description of the problem", "MY0001");
+    }
+}
+```
+
+### Registration
+
+Add an extension method on `AnalyzerBuilder`:
+
+```csharp
+public static class MyPassExtensions {
+    extension(AnalyzerBuilder builder) {
+        public AnalyzerBuilder UseMyPass() {
+            builder.AddPass(state => new MyPass());
+            return builder;
+        }
+    }
+}
+```
+
+Then register in your `AnalyzerBuilder` chain:
+
+```csharp
+var analyzer = new AnalyzerBuilder()
+    .UseTypeAndMemberResolver()
+    // ... other passes ...
+    .UseMyPass()
+    .Build();
+```
+
+### Metadata Types
+
+Metadata records implement `IAnalysisMetadata` and are stored per-node via
+`context.SetMetadata(node, metadata)`. Retrieve with `context.GetMetadata<T>(node)`.
+
+Metadata on the root node (null key) is accessible module-wide.
+Per-node metadata is scoped to that specific AST node.
+
+### Dependencies
+
+The `Dependencies` array declares which passes must run before this one.
+The `AnalyzerBuilder` ensures passes execute in topological order.
+Circular dependencies cause a build-time exception.
+
+### Pass Ordering Rules
+
+1. Type/member resolution must come first — all passes depend on resolved types.
+2. Variable scoping must precede side-effect analysis.
+3. Jump targets must be resolved before CFG construction.
+4. CFG must be built before post-CFG passes (constant folding, definite assignment, EH).
+5. Exception region analysis is always last — it depends on CFG and definite assignment.
+
+---
+
 ## Diagnostics
 
 All passes emit diagnostics through `AnalysisContext`. See [`DIAGNOSTICS_EXAMPLE.md`](DIAGNOSTICS_EXAMPLE.md)

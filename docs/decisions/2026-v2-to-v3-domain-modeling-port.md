@@ -1,9 +1,11 @@
 # ADR / Planning Document: V2 → V3 Domain Modeling Port (Immutable Core + Preserved Evolution)
 
 **Date:** 2026-05-31 (initial)  
-**Status:** Living Plan — **July 2026: Phase 1 foundation complete; primary execution focus is Phase 2 (WS8) then Phase 3 (MCP)**  
+**Status:** Living Plan — **July 2026: Phase 1 complete; V2 has zero product consumers; first consumer = MCP + direct domain API; then freeze/delete V2 (not live MCP migration / full parity)**  
 **Owner:** Primary author  
-**Execution plan:** `docs/plans/v2-to-v3/master-roadmap.md` (authoritative for task status)  
+**Execution plan:** `docs/plans/v2-to-v3/master-roadmap.md` (milestones) + **`docs/plans/v2-to-v3/v3-completion-plan.md`** (gaps + WP1–WP9 implementation order)  
+**First consumer spike:** `docs/plans/v2-to-v3/spikes/first-v3-consumer.md`  
+**MCP principles:** `docs/plans/v2-to-v3/spikes/mcp-guiding-principles.md`  
 **Related Decisions:**
 - `2026-core-engineering-principles.md` (foundational)
 - `2026-05-31-immutable-core-domain-modeling.md` (the strategic decision)
@@ -13,17 +15,17 @@
 
 ## Context
 
-The repository currently has two parallel domain modeling systems:
+The repository has two parallel domain modeling systems:
 
-- **V2** (`Poly/Data/Modeling`): The current integrated, production surface. Uses internally mutable records + a large Command/Intent transactional mutation subsystem. Delivers strong value for MCP/LLM agents today via `ApplyWithTrace`, sessions, rich traces, and automatic rollback on analysis errors. Contains the full feature set, analyzers, lowering (including exact contract interface rules), demos, tests, recipes, and MCP tools.
+- **V2** (`Poly/Data/Modeling`): Legacy mutable-core + large mutation/intent machinery. **As of July 2026 it has no product consumers** — only in-repo remnants (prototype MCP tools, demos, V2 tests). It is not a live agent surface that must be preserved for compatibility.
 
-- **V3** (`Poly/DomainModeling`): A cleaner foundation using true immutable records + a unified `DomainExpression` system + fluent builders. Reuses the shared `Syntax/Analysis` infrastructure. Currently has limited effects and early analysis, but a strong design sketch for the thin evolution layer (the primary agent interaction model). The fluent builders exist mainly for human test fixtures and occasional one-shot construction; they are not expected to be the dominant interface for LLM/MCP-driven work.
+- **V3** (`Poly/DomainModeling`): Immutable records + `DomainExpression` + evolution layer (`Apply` / `Evolve`). **This is the only stack we invest in going forward.** Builders remain a convenience for tests/fixtures; evolution is the intended agent interaction model.
 
 **Why this port now:**
-- Zero customers = low-risk window for a major architectural shift.
-- Two cost-benefit analyses + explicit decision confirmed that the V2 mutation layer creates unsustainable incidental complexity ("mutation tax") as the system grows.
-- The immutable core + `DomainExpression` align better with the project's core engineering principles (see `2026-core-engineering-principles.md`). The fluent builders are a secondary ergonomic convenience rather than a primary value driver.
-- The **non-negotiable constraint** is preserving the transactional, correctness-gated evolution experience for future agent consumers.
+- **Zero product consumers of V2** = still the low-risk window to finish cutover without migration theater.
+- Two cost-benefit analyses + explicit decision confirmed that the V2 mutation layer creates unsustainable incidental complexity ("mutation tax").
+- Immutable core + `DomainExpression` align with core engineering principles.
+- **Non-negotiable for future agents:** analysis-gated evolution, rich diagnostics/traces, rollback-on-error semantics — implemented on V3, not by keeping V2 alive.
 
 **Important recent context (as of late May 2026):**
 - We have centralized high-level decisions in `docs/decisions/`.
@@ -35,100 +37,94 @@ This port must be executed in a way that respects those documentation and agent-
 ## Goals
 
 - Make the **immutable V3 model** the single source of truth.
-- Deliver a **thin but highly ergonomic evolution layer** that provides an excellent agent experience for both construction and change, while preserving full `ApplyWithTrace`-style semantics, rich traces, rollback on analysis errors, and MCP compatibility — all with significantly lower long-term maintenance cost than the old V2 mutation machinery.
-- Achieve **full observable parity** for consumers during transition, while treating the MCP tool surface and interaction model as something we will deliberately optimize for how models actually use tools (both incremental improvements and more fundamental redesign).
-- Design the Evolution layer with a full real-time visual authoring experience in mind from the start. This includes:
-  - Live rendering of LLM-driven changes.
-  - Direct human editing of the domain through UI controls (adding/editing entities, properties, actions, effects, policies, stages, relationships, etc.).
-  - Optimistic application of changes with reconciliation against analysis results.
-  - Fine-grained, observable, incremental change events suitable for visual diffing and live updates.
-  - Strong support for stable visual identity (NodeId continuity) and rich history/branching.
+- Deliver analysis-gated evolution (`Apply` / `Evolve`) with usable traces and rollback — the agent-facing contract for construction and change.
+- **Ship the first real consumer on V3:** a **direct domain API** (evolve / query / optional lower+eval) with **MCP as a thin adapter** over it — **not** a compatibility migration of the V2-shaped `DomainTools` surface.
+- **Freeze then delete V2** once that path works; dual maintenance is temporary waste, not a product strategy.
+- Grow expressiveness **only when that path needs it** (roadblocks, UI, next agent scenario).
+- Long-term: evolution supports real-time visual authoring (live LLM edits, human UI edits, optimistic apply, NodeId stability) — design constraint, not Phase 2 scope.
+- Align with Core Engineering Principles; consult `docs/decisions/` before major changes.
 
-  This is a major long-term requirement, not an afterthought (see the Evolution Layer design doc for the full set of UI requirements).
-- Use the documented roadblocks as forcing functions to prove the new foundation is superior.
-- Significantly reduce the mutation tax while strengthening the "domain model as the key artifact" principle.
-- Keep all work aligned with the Core Engineering Principles and the requirement to consult `docs/decisions/` first.
+### Quality bar for the cutover (July 2026)
 
-**Explicit non-goals for this phase:**
-- Full runtime instance execution/simulation engine.
-- Visual authoring.
+| Focus | Practice |
+|-------|----------|
+| **System correctness** | Analysis gate, rollback, truthful diagnostics, correct VM evaluation when runtime truth is required. |
+| **Robustness via composition** | Small composable ops on the direct API; multi-step via `Apply`. MCP **curates** agent-facing tools (see MCP principles spike). |
+| **MCP + direct API guiding light** | MCP scenarios pull features; the direct API is the contract into DomainModeling / Syntax / VM. Tool design: `spikes/mcp-guiding-principles.md`. |
+| **Tests** | Primary net on the direct API (TUnit); MCP smokes / agent-task evals reuse those scenarios. |
+| **Natural-reading code** | Fluent, name-for-what-it-is surfaces; avoid pattern-taxonomy and V2 intent-bag shapes as defaults. |
+
+**Explicit non-goals:**
+- Full V2 feature parity before the MCP/direct path works.
+- Long-lived V3→V2 adapters “for MCP continuity.”
+- Full runtime instance simulation engine (until a consumer demands it).
 - Keeping both implementations indefinitely.
+- Domain logic living only inside MCP tool method bodies.
 
 ## Recommended Approach
 
-**"Immutable Core First + Thin Evolution Layer + Staged Migration + Documentation Discipline"**
+**"Immutable Core + Evolution + Direct API + Thin MCP + Delete V2"**
 
-Phases (refined from the earlier detailed plan):
+(Not: full V2 parity, then migrate a live MCP surface.)
 
-### Phase 1: Foundation + Minimal Viable Evolution Layer
-- Implement the evolution layer (see `2026-05-31-evolution-layer-design.md`).
-- **High priority in Phase 1:** Design and prototype a fluent, ergonomic public API for the evolution layer itself. The explicit goal is to make the transactional evolution path the primary, pleasant interface for both construction and change — potentially making heavy further investment in the separate fluent builder API unnecessary.
-- Use V3 builders (or a thin pure construction abstraction) only as an implementation detail inside the applicator when convenient. The builders are now viewed as a secondary ergonomic convenience (mainly useful for human test code), not a co-equal primary deliverable.
-- Support a useful subset of operations via the existing `DomainMutationIntent` shape (for MCP compatibility) or a cleaner native change model.
-- Prove NodeId continuity and rich trace generation.
-- Prove on PersonLifecycle examples + at least one roadblock scenario, preferably using the new fluent evolution surface.
-- Ensure the layer produces traces and rollback behavior that MCP agents can consume without behavior change.
+### Phase 1: Foundation + Minimal Viable Evolution Layer — **DONE**
+- Evolution layer, fluent `Evolve()`, NodeId continuity, proofs, audit — see master roadmap.
 
-**Documentation requirement for this phase:**
-- Any new significant design choices during implementation must result in (or update) a decision record in `docs/decisions/`.
-- Update `AGENTS.md` if operational rules change.
+### Phase 2: Capabilities the consumer needs
+- Direct API composability + diagnostics quality as dogfood demands.
+- E2E DomainExpression → VM when runtime evaluation is required.
+- Contract/program generation only if tools emit code/interfaces.
+- Not a V2 checklist — pull by MCP/direct scenarios.
 
-### Phase 2: Analysis & Lowering Parity
-- Port critical metadata (Effective* etc.) using the shared Syntax.Analysis pipeline.
-- Ensure lowering produces identical contract interfaces (per the authoritative rules in AGENTS.md).
-- Do not duplicate analyzer logic unnecessarily.
+### Phase 3: First V3 consumer + freeze V2 — **consumer named; implementation not started**
+- Direct domain API + thin MCP **on V3 only** (`spikes/first-v3-consumer.md`).
+- Free to redesign tool surface for how models use tools.
+- Declare **V2 freeze**: no new V2 features.
 
-**Documentation requirement:**
-- The contract interface rules and their rationale should have (or be linked from) a clear decision record.
+### Phase 4: Expressiveness as pulled by consumers
+- Actor, rule policies, roadblocks — only when the live MCP/direct path needs them.
 
-### Phase 3: Consumer Migration (MCP-first)
-- Migrate MCP tools to the new evolution layer (initially with minimal visible change for continuity).
-- Evolve the MCP tool surface and interaction patterns to be optimized for how models actually use tools (scope includes both incremental improvements and more fundamental redesign of the agent-facing catalog, batching, affordances, and feedback loops).
-- Migrate demos (the evolution layer + intent compatibility is the primary path; builders can be used opportunistically for initial construction of test domains if helpful).
-- Migrate tests.
+### Phase 5: Delete V2
+- Remove `Poly/Data/Modeling` and V2-only demos/tests/MCP code.
+- Update docs / AGENTS.md.
 
-### Phase 4: Full Expressiveness + Roadblock Resolution
-- Fill gaps in effects, Actor, subscriptions, etc., using the immutable + expression model.
-- Explicitly solve the known roadblocks on the new foundation.
+## Key Constraints & Realities (Updated July 2026)
 
-### Phase 5: Cutover & Cleanup
-- Switch integrated surfaces to V3 + evolution layer.
-- Remove the old mutable V2 implementation.
-- Update all documentation (including ensuring the principles decision and this port plan stay current).
-
-## Key Constraints & Realities (Updated)
-
-- **Agent visibility is not equal**: Core principles and high-frequency operational rules must stay prominent in `AGENTS.md`. Deeper rationale belongs in `docs/decisions/`.
-- Before any significant work in a section, the corresponding decision(s) in `docs/decisions/` must be reviewed (enforced via AGENTS.md).
-- Preserve exact lowering contract interface behavior (this is a hard requirement from AGENTS.md).
-- Dual maintenance is acceptable but should be time-boxed with clear gates.
+- **V2 has zero product consumers** — cutover risk is in-repo only; use that freedom.
+- **Agent visibility is not equal**: principles stay in `AGENTS.md`; rationale in decisions.
+- **Contract interface naming** (AGENTS.md) still applies when/if we generate interfaces — for the V3 consumer, not “parity with V2 files.”
+- **Dual maintenance is not a goal** — freeze and delete V2 after M2 works.
+- **No new V2 investment** except build-breaking fixes during transition.
+- **MCP is not the domain layer** — it adapts the direct API.
 
 ## Status Snapshot (2026-07-10)
 
 | Area | State |
 |------|--------|
-| Phase 1 evolution foundation | **Done** — real applicator, 66 `DomainChange` types, fluent `Evolve()`, proofs claimed (WS5) |
-| Expressiveness audit (WS7) | **Done** — living table; remaining gaps include Actor subtype, rule-composed policies |
-| DomainExpression → Syntax | **Done** |
-| Direct AST→VM execution | **Done enough** for DomainModeling proofs; not the critical path |
-| Phase 2 open | E2E DomainExpression→VM product tests; V3 contract interface generation |
-| Phase 3 | Not started — MCP on V3 evolution |
+| Phase 1 evolution foundation | **Done** |
+| Expressiveness audit (WS7) | **Done** (living) |
+| DomainExpression → Syntax / VM ready enough | **Done** |
+| V2 product consumers | **Zero** |
+| First V3 consumer named | **MCP + direct domain API** |
+| First V3 consumer implemented | **Not started** |
+| V2 freeze / delete | **Not started** |
 
-Do **not** restart Phase 1 greenfield evolution tasks. See `docs/plans/v2-to-v3/master-roadmap.md` for current tasking.
+Do **not** restart Phase 1 greenfield evolution tasks. See `docs/plans/v2-to-v3/master-roadmap.md` for tasking.
 
 ## Next Planning Steps (Recommended)
 
-1. ~~Refine Phase 1 scope~~ — **Done** (operations + applicator shipped).
-2. **Drive Phase 2 (WS8)** — e2e policy/VM evaluation + contract interface inventory/port.
-3. **Gate Phase 3** on: agents can evolve a domain and evaluate a policy on the VM without V2 mutators.
-4. Keep treating this document as strategic; **task status lives in the master roadmap**.
+1. ~~Name the first V3 consumer~~ → **Done**.
+2. ~~MCP principles + completion plan~~ → **Done** (`v3-completion-plan.md`).
+3. **Execute WP1→WP4** (builtins, queries, tests, MCP rewrite).
+4. **Freeze V2**, port demos, **delete V2** (WP6–WP8).
+5. Expressiveness (Actor, contract gen, …) only when pulled (WP9).
 
 **Related living documents (execution side):**
 - `docs/plans/v2-to-v3/master-roadmap.md` — **Authoritative task status**
 - `docs/plans/v2-to-v3/orchestration-guide.md` — multi-agent operating model
 - `docs/plans/v2-to-v3/agent-summaries/` — executor reports
 - `docs/plans/v2-to-v3/workstreams/` — workstream detail
-- `docs/plans/v2-to-v3/simple-agent-tasks/` — micro-tasks (**prefer `ws8-*` / `ws4-*`; `ws1-*` superseded**)
+- `docs/plans/v2-to-v3/simple-agent-tasks/` — micro-tasks (**prefer `ws8-*` / `ws4-*` / name-first-consumer; `ws1-*` superseded**)
 
 **Related decisions:**
 - `docs/decisions/2026-core-engineering-principles.md`

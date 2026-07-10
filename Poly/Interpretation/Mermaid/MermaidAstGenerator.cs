@@ -2,12 +2,15 @@ using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Interpretation.Mermaid;
 
-/// <summary>
-/// Generates Mermaid flowchart diagrams from analyzed AST nodes for visualization purposes.
-/// </summary>
+/// <summary>Generates Mermaid flowchart diagrams from analyzed AST nodes for
+/// visualization. Output can be rendered in GitHub Markdown, VS Code extensions,
+/// or any Mermaid-compatible renderer.</summary>
 /// <remarks>
-/// This class produces Mermaid markdown syntax that can be rendered in documentation,
-/// GitHub/GitLab, or VS Code extensions to visualize the structure of abstract syntax trees.
+/// <para>Produces <c>graph TB</c> (top-to-bottom) flowcharts with labeled edges
+/// showing child relationships (left, right, body, condition, etc.). Leaf nodes
+/// use rounded rectangles; internal nodes use sharp rectangles.</para>
+/// <para>When an <see cref="AnalysisResult"/> is provided, type information is
+/// included in node labels for richer visualization.</para>
 /// </remarks>
 public sealed class MermaidAstGenerator {
     private readonly AnalysisResult? _analysisResult;
@@ -15,19 +18,18 @@ public sealed class MermaidAstGenerator {
     private readonly HashSet<string> _visitedEdges;
     private readonly StringBuilder _scratch;
 
-    /// <summary>
-    /// Initializes a new instance without analysis metadata.
-    /// </summary>
+    /// <summary>Creates a generator without analysis metadata. Node labels will
+    /// show only AST node types and values without type information.</summary>
     public MermaidAstGenerator() {
         _output = new StringBuilder();
         _visitedEdges = new HashSet<string>();
         _scratch = new StringBuilder();
     }
 
-    /// <summary>
-    /// Initializes a new instance with semantic analysis results for enhanced output.
-    /// </summary>
-    /// <param name="analysisResult">The semantic analysis result containing type information.</param>
+    /// <summary>Creates a generator with semantic analysis results for
+    /// type-enriched output.</summary>
+    /// <param name="analysisResult">The semantic analysis result containing
+    /// type resolution information for enhanced node labels.</param>
     public MermaidAstGenerator(AnalysisResult analysisResult) {
         ArgumentNullException.ThrowIfNull(analysisResult);
         _analysisResult = analysisResult;
@@ -36,12 +38,15 @@ public sealed class MermaidAstGenerator {
         _scratch = new StringBuilder();
     }
 
-    /// <summary>
-    /// Generates a Mermaid flowchart diagram from an AST node.
-    /// </summary>
-    /// <param name="node">The root node to visualize.</param>
-    /// <param name="direction">The flow direction: TB (top-bottom), LR (left-right), etc.</param>
-    /// <returns>Mermaid markdown syntax as a string.</returns>
+    /// <summary>Generates a Mermaid flowchart diagram from an AST node.
+    /// The output is a directed graph with labeled edges showing AST child
+    /// relationships (left, right, body, condition, etc.). Leaf nodes use
+    /// rounded rectangles; internal nodes use sharp rectangles.</summary>
+    /// <param name="node">The root AST node to visualize.</param>
+    /// <param name="direction">The flow direction: TB (top-bottom, default),
+    /// LR (left-right), BT (bottom-top), RL (right-left).</param>
+    /// <returns>A Mermaid flowchart string (without <c>```mermaid</c> fences)
+    /// suitable for embedding in Markdown documents.</returns>
     public string Generate(Node node, string direction = "TB") {
         ArgumentNullException.ThrowIfNull(node);
 

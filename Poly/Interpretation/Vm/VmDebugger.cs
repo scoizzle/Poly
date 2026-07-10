@@ -57,19 +57,32 @@ public sealed class VmDebugger : IDisposable {
     private volatile bool _stepRequested;   // set by StepOver, read by hook
     private volatile bool _disposed;
 
-    /// <summary>Named locals at the last statement boundary.</summary>
+    /// <summary>Named local variables at the last statement boundary.
+    /// Updated after each <see cref="StepOver"/> or <see cref="Continue"/>.
+    /// Read-only snapshot of the current frame's locals with their names
+    /// as resolved from <see cref="VmProgram.DebugInfo"/>.</summary>
     public IReadOnlyList<(string Name, long Value)> CurrentLocals { get; private set; }
         = Array.Empty<(string, long)>();
 
-    /// <summary>AST node at the last statement boundary.</summary>
+    /// <summary>AST node at the last statement boundary.
+    /// Updated after each step or continue operation.
+    /// Useful for symbolic debugger UIs and MCP-based tooling.</summary>
     public Node? CurrentNode { get; private set; }
 
-    /// <summary>The underlying VM state (inspect between steps).</summary>
+    /// <summary>The underlying VM state. Inspect between steps to examine
+    /// the heap, stack, or program counter directly.</summary>
     public VmState State => _state;
 
-    /// <summary>True if the program finished.</summary>
+    /// <summary>True when the compiled program has completed execution.
+    /// Check before calling <see cref="StepOver"/> to avoid waiting.</summary>
     public bool IsCompleted => _completed.WaitOne(0);
 
+    /// <summary>Creates a new VM debugger for the given compiled program.
+    /// Optionally accepts a pre-existing <see cref="VmState"/> for stateful
+    /// debugging sessions (e.g. after a suspend).</summary>
+    /// <param name="program">The compiled program to debug.</param>
+    /// <param name="preexistingState">Optional pre-existing VM state.
+    /// If null, a fresh <see cref="VmState"/> is created.</param>
     public VmDebugger(VmProgram program, VmState? preexistingState = null) {
         _program = program;
         _state = preexistingState ?? new VmState(program);

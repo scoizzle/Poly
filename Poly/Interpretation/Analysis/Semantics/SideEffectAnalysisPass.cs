@@ -2,11 +2,13 @@ using Poly.Syntax.Nodes;
 
 namespace Poly.Interpretation.Analysis.Semantics;
 
-/// <summary>
-/// Options controlling dead code / elision analysis and diagnostics.
-/// </summary>
+/// <summary>Options controlling dead code / elision analysis and diagnostics.</summary>
 public sealed record SideEffectAnalysisOptions {
+    /// <summary>Default options with elision diagnostics disabled.</summary>
     public static SideEffectAnalysisOptions Default { get; } = new();
+
+    /// <summary>When true, emits <c>DEAD_CODE_ELIDABLE</c> diagnostics for
+    /// pure expressions whose results are unused and could be elided.</summary>
     public bool EmitElisionDiagnostics { get; init; }
 }
 

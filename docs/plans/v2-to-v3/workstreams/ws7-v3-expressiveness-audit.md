@@ -4,7 +4,7 @@
 **Priority**: High (risk reduction for Phase 4)  
 **Owner**: Grok (orchestrator, full send per user direction)  
 **Status**: Audit refreshed — code outpaced original audit. See "Live Audit Update" below. Most gaps resolved during WS1 implementation. Remaining genuine gaps documented.  
-**Last Updated**: 2026-06-22 (Live Audit Update applied)
+**Last Updated**: 2026-07-10 (stale-note: lowering row outdated — see below)
 
 ## Goal
 
@@ -80,7 +80,7 @@ A single living document (this file or a linked appendix) containing:
 | Recipes / Scaffolding | ✅ Dedicated system + Contract import recipes (Clr + OpenApi) | ⚠️ Fluent builders provide some scaffolding ergonomics, but no equivalent recipe abstraction | Partial gap | V3 builders are nicer for hand-authoring, but lack rapid scaffolding + contract import |
 | Full Effect output wiring model (`EffectResult`, `BindOutputTo`, `EffectValueRef`) | ✅ Rich | ⚠️ Partial (`InvocationResult?` on Effect base) | Gap | Complex chained effects blocked |
 | Capability views / analysis metadata | ✅ 19 files: ~10 specialized analyzers + rich metadata types + utilities | ✅ **17 analyzers** registered in `DomainModelAnalyzer.cs` — near parity with V2. All 10 V2 analyzers ported plus 7 additional ones (ActionParameterUsageAnalyzer, EffectOrderingAnalyzer, EventFlowAnalyzer, ReplaySafetyAnalyzer, CorrelationAnalyzer, CausalityAnalyzer, EventContractAnalyzer, RuleCoverageAnalyzer) | Near-equivalent | V3 reuses shared `Syntax.Analysis` infrastructure. Analyzer count is 17 vs V2's ~19. Remaining gap is 2-3 V2-specific analyzers. The original audit understated V3 analysis significantly. |
-| Lowering / Code Generation | ✅ `DomainLoweringGenerator` (1528 lines) + full pipeline | ⚠️ `DomainModeling/Lowering/` directory does not exist. No DomainExpression→Syntax AST lowering. `_customCompilers` in `LinqExpressionGenerator` is never populated. | Genuine gap (Phase 2/WS8) | This is the single largest remaining gap. No executable output from V3 domain models yet. |
+| Lowering / Code Generation | ✅ `DomainLoweringGenerator` (1528 lines) + full pipeline | ⚠️ **Updated July 2026:** `DomainExpressionLoweringPass` + `PolicyEvaluator` + VM execution tests exist. **Still missing:** full domain→program / contract interface gen (`DomainImplementationLoweringPass` is V2-only). | Partial (expressions OK; program/codegen pull-only) | See `v3-completion-plan.md` G6/G7/G17. Do not treat DE→AST as missing. |
 
 **Classification Legend**:
 - **Equivalent / V3 improved**: V3 is at parity or better for the concept.
@@ -102,12 +102,12 @@ A single living document (this file or a linked appendix) containing:
 - ✅ **Dynamic calculations** — All arithmetic operators (Add, Subtract, Multiply, Divide), DateOperation, and Comparison operators now present on DomainExpression.
 - ✅ **LinkRelationship / UnlinkRelationship** — Both exist.
 
-**Still blocked (genuine remaining gaps):**
-- ❌ **Library RenewLoan** (library-roadblocks.md:32-52): Still blocked by no executable lowering path. The expressions exist but can't be compiled.
-- ❌ **Library CheckoutBook / ReturnBook** (library-roadblocks.md:14-30): AssignEffect + RelationshipNav exist structurally, but no executable lowering path means they can't run.
-- ❌ **Healthcare Multiple Ownership** (healthcare-roadblocks.md:6-45): Validation constraint on multiple `SourceOwnsTarget = true` relationships. Design issue, not missing feature.
-- ❌ **Actor / UAC / claims scenarios** (healthcare, general): No Actor concept in V3.
-- ❌ **Lowering / Code Generation** — No DomainExpression→Syntax AST lowering. No executable output from V3. This is the single largest remaining gap (Phase 2/WS8).
+**Still blocked / deferred (July 2026 refresh):**
+- ⚠️ **Library expression/runtime paths:** DomainExpression → Syntax → VM works for many expression shapes; full **action/effect program** simulation and V3 **contract interface gen** still missing (not required for M2 MCP authoring).
+- ❌ **Healthcare Multiple Ownership**: Validation constraint on multiple `SourceOwnsTarget = true` — design issue (WP9).
+- ❌ **Actor / UAC / claims**: No Actor in V3 (WP9).
+- ⚠️ **Program / contract codegen**: V2-only `DomainImplementationLoweringPass` (WP9 when pulled).
+- **M2 path is not blocked on Actor or full codegen** — blocked on direct API façade, builtins, tests, MCP rewrite (`v3-completion-plan.md` WP1–WP4).
 
 **Exhaustive Suggested Fixes Extracted from Roadblock Files** (for direct Phase 4 input):
 

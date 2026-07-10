@@ -1,19 +1,23 @@
 # Workstream WS8: Phase 2 — Analysis Unification & Lowering Parity
 
 **Phase**: 2  
-**Priority**: **Critical path** (primary focus after Interpretation detour)  
+**Priority**: **Support the first V3 consumer** (not “match V2”)  
 **Owner**: TBD — claim on `master-roadmap.md`  
-**Status**: **Active** — DomainExpression→AST done; e2e Domain→VM proofs + V3 contract interface gen are the open gates for Phase 3  
+**Status**: **Active** — DE→AST done; pull e2e VM eval / contract gen **only when MCP + direct API need them**  
 **Last Updated**: 2026-07-10  
 
-> **July 2026 re-entry:** Direct AST→VM-ABI is production-capable; stop treating VM hardening as the WS8 center of gravity. Prefer micro-tasks:
+> **Consumer-driven (July 2026):** V2 has **zero product consumers**. First consumer is **MCP + direct domain API** (`spikes/first-v3-consumer.md`). Do not expand this workstream for V2 parity — only capabilities that path requires. Prefer correctness and composition on the direct API; tests on that path are the primary net.
+>
+> Micro-tasks (use if pulled):
 > - `simple-agent-tasks/ws8-e2e-policy-vm-eval.md`
 > - `simple-agent-tasks/ws8-inventory-v2-contract-interface-rules.md`
 > - `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md`
 
 ## Goal
 
-Unify the V2 and V3 analysis surfaces on the shared `Syntax/Analysis` infrastructure and achieve lowering parity for core domain concepts (DomainExpression, policies, effects, constraints) through the V3 compilation pipeline (Syntax AST → LoweringPrep/UopGeneration analysis → VM µops → Vm.Execute).
+Give the **MCP + direct domain API** consumer a reliable path from domain concepts (especially `DomainExpression` / policies) through shared `Syntax/Analysis` to **VM execution** (`Interpreter.Compile` / `DirectVmAbiEmitter`), and optional contract/program generation **if tools emit code**.
+
+This is **not** a mandate to reproduce every V2 lowering feature before that consumer works.
 
 **Updated: The TreeWalkingInterpreter is removed. The VM (`Poly/Interpretation/Vm/`) is the sole canonical execution engine.** See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`. LinqExpressionGenerator is test/secondary only. CSharpGenerator is the codegen output.
 
@@ -30,10 +34,11 @@ Unify the V2 and V3 analysis surfaces on the shared `Syntax/Analysis` infrastruc
 - V2 `DomainLoweringGenerator` (1529 lines) lowers V2 domain model to AST — but is coupled to V2 Data/Modeling types
 
 **Deliverable status (July 2026):**
-- **DomainExpression Lowering Pass (A)** — ✅ `DomainExpressionLoweringPass.cs` (all expression kinds → Syntax/Nodes). Execution target is direct AST→ABI (`Interpreter.Compile` / `DirectVmAbiEmitter`), not the removed µop/primitive path described in older paragraphs below.
-- **Unified Domain → expression → Syntax → VM pipeline** — 🟡 lowering exists; **product gate = e2e tests** (policy/guard on VM with entity args).
-- **V3 contract interface generation** — ⬜ still missing vs V2 `LowerToContractInterfaces` (AGENTS.md naming rules).
-- **V3 test/program generation** — ⬜ only as first consumers demand (MCP/demos).
+- **DomainExpression Lowering Pass (A)** — ✅ `DomainExpressionLoweringPass.cs` → Syntax/Nodes; VM tests under `Poly.Tests/DomainModeling/Lowering/`.
+- **E2E policy attach → Evaluate** — 🟡 productize + tests (`ws8-e2e-policy-vm-eval.md` / completion plan WP3–WP5); expression VM already partially proven.
+- **V3 contract interface generation** — ⬜ WP9 only if consumer generates `I{Stage}{Entity}`.
+- **V3 test/program generation** — ⬜ WP9 only if pulled.
+- **Execution order:** Prefer `v3-completion-plan.md` WP1–WP4 before expanding WS8.
 
 **Note on V3 analyzer count (corrected June 2026)**: The original WS8 plan claimed V3 had only 3 analyzers (Structural, Semantic, PolicyConstraint). The actual V3 `DomainModelAnalyzer.cs` registers **17 analyzers**, matching all 10 V2 analyzers plus 7 additional ones. V2 had ~19 analyzers total. The gap is ~2 analyzers — effectively at parity. The shared `Syntax/Analysis` infrastructure is the foundation for both. See the refreshed `ws7-v3-expressiveness-audit.md` for the full corrected audit.
 

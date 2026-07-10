@@ -2,17 +2,32 @@ using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Interpretation.CSharp;
 
+/// <summary>C# source code generator. Produces readable C# code from analyzed
+/// AST nodes — intended for codegen, pretty-printing, and debugging.</summary>
+/// <remarks>This is a secondary backend, NOT the canonical semantics path.
+/// See <see cref="DirectVmAbiEmitter"/> for the authoritative execution path.
+/// The generated code uses modern C# features (nullable enable, switch expressions,
+/// pattern matching) and is formatted with standard indentation.</remarks>
 public sealed class CSharpGenerator {
     private readonly AnalysisResult? _analysisResult;
 
+    /// <summary>Creates a generator without analysis metadata. Some type-aware
+    /// features (e.g. resolved member names) may be unavailable.</summary>
     public CSharpGenerator() {
     }
 
+    /// <summary>Creates a generator with semantic analysis results for
+    /// type-aware code generation.</summary>
+    /// <param name="analysisResult">The semantic analysis result.</param>
     public CSharpGenerator(AnalysisResult analysisResult) {
         ArgumentNullException.ThrowIfNull(analysisResult);
         _analysisResult = analysisResult;
     }
 
+    /// <summary>Generates C# source code for a single AST node.</summary>
+    /// <param name="node">The node to generate (expression, statement, block,
+    /// or type definition).</param>
+    /// <returns>Formatted C# source code.</returns>
     public string Generate(Node node) {
         ArgumentNullException.ThrowIfNull(node);
         var sb = new StringBuilder();
@@ -20,10 +35,19 @@ public sealed class CSharpGenerator {
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>Generates C# source code for a collection of type definitions.</summary>
+    /// <param name="typeDefs">The type definitions to emit.</param>
+    /// <returns>Formatted C# source code with nullable enabled.</returns>
     public string Generate(IReadOnlyList<TypeDefinitionNode> typeDefs) {
         return Generate(typeDefs, testStatements: null);
     }
 
+    /// <summary>Generates C# source code for type definitions preceded by
+    /// optional test statements (e.g. usage examples or setup code).</summary>
+    /// <param name="typeDefs">The type definitions to emit.</param>
+    /// <param name="testStatements">Optional statements to emit before the
+    /// type definitions (typically usage or setup code).</param>
+    /// <returns>Formatted C# source code.</returns>
     public string Generate(IReadOnlyList<TypeDefinitionNode> typeDefs, IReadOnlyList<Node>? testStatements) {
         ArgumentNullException.ThrowIfNull(typeDefs);
         var sb = new StringBuilder();

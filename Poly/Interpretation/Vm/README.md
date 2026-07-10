@@ -42,9 +42,68 @@ Structured EH uses native CLR `Expression.TryCatchFinally` — no side tables or
 handler dispatching. The emitter directly produces `TryCatch(Try(body), Catch(...),
 Finally(body))` expression trees for `TryCatchFinally` nodes.
 
-1. Define the record in `Poly/Syntax/Primitives/Primitives.cs` with a `StackEffect` override
-2. Add a `case` arm in `ProgramCompiler.CompilePrimitives()` to emit the LINQ Expression
-3. Add emit tests in `Poly.Tests/Interpretation/PrimitiveExpandTests.cs`
+This is a secondary path — the direct AST lowering in `DirectVmAbiEmitter.cs`
+handles structured EH natively via `Expression.TryCatchFinally`.
+
+## Runtime Types
+
+### `Word`
+The fundamental storage unit — wraps a `long` with implicit conversions to/from
+`int` and `long`. Negative values are heap handles (`Word.IsHandle`).
+
+### `CallStackFrame`
+A view into the call stack describing one activation. Links to the caller via
+`PreviousFramePointer` and `SavedStackPointer`. Argument and local counts are
+compile-time-known values attached to the view — not stored on the stack.
+
+### `CallStack`
+The runtime call stack. Provides:
+- `AllocateFrame()` / `DeallocateFrame()` for frame management
+- `GetLocal()` / `GetArgument()` for frame-relative access
+- `GetLocals()` / `GetArguments()` for span-based bulk access (used by debug hooks)
+- `CurrentFrame` to inspect the topmost frame
+- `RunSimulation()` for manual testing of ABI invariants
+
+### `ValueStack`
+Pooled `long[]` stack backed by `ArrayPool<long>.Shared`. Automatically grows
+by doubling. All public members are aggressively inlined by the JIT. Key
+operations: `Push`, `Pop`, `Drop`, `Reserve`, `Reset`. Return to pool on `Dispose()`.
+
+### `Heap`
+Contiguous object store indexed by handles. Handle 0 is the ABI null/falsy
+sentinel (never allocated). Free-list recycles handles of set-to-null objects.
+Grows by doubling. Methods: `Allocate`, `Get`, `Set`, `UnsafeGet`, `UnsafeSet`, `Clear`.
+
+### `VmDebugger`
+High-level step debugger:
+- `Start()` — begin execution, pause at first statement
+- `StepOver()` — advance one statement boundary
+- `Continue()` — run to completion
+- `CurrentNode` / `CurrentLocals` — inspect the current position
+
+Uses a background thread with blocking hooks. Zero overhead when not stepping.
+
+## Debug Hooks
+
+| Hook | Signature | When Called | Overhead When Null |
+|------|-----------|-------------|-------------------|
+| `DebugInterrupt` | `Action<VmState>?` | Before each µop (Normal mode) | Single null check |
+| `DebugHook` | `Action<Node, ReadOnlySpan<long>, Heap>?` | Before each AST node (Normal mode) | Single null check |
+
+`DebugHook` is preferred for new code — it's simpler and provides direct access
+to the current node, locals span, and heap.
+
+## Value Marshalling
+
+`VmValueMarshaller` converts between VM representation (`long` scalars, heap
+handles) and CLR types. Used by `DirectVmAbiEmitter` when emitting external
+method/constructor calls:
+
+- `MarshalToClr(rawValue, targetType, heapRawSlots)` — VM → CLR
+- `MarshalFromClr(clrValue, sourceType, heap)` — CLR → VM
+
+Stack scalars pass through `Convert`; booleans use `!= 0` / ternary;
+heap references de-reference via `heapRawSlots[handle]`.
 
 ## Key Design Decisions
 

@@ -6,17 +6,26 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.LinqExpressions;
 
-/// <summary>
-/// Generates LINQ Expression trees from analyzed AST nodes for testing and compilation purposes.
-/// </summary>
+/// <summary>Generates LINQ Expression trees from analyzed AST nodes for testing
+/// and legacy compilation purposes. This is a test/reference path — NOT the
+/// canonical semantics backend.</summary>
 /// <remarks>
-/// This class consumes an AnalysisResult (output from the semantic analysis system) and compiles
-/// AST nodes into executable LINQ Expression trees. It's primarily useful for testing the analysis
-/// system and generating lambda expressions from interpreted code.
+/// <para>Consumes an <see cref="AnalysisResult"/> (output from the semantic
+/// analysis system) and compiles AST nodes into executable LINQ Expression trees.
+/// Primarily useful for testing the analysis system and generating lambda
+/// expressions from interpreted code.</para>
+/// <para>New language semantics should land in analysis → direct lowering
+/// (<see cref="DirectVmAbiEmitter"/>) first. Parity tests may continue to
+/// use this path for cross-validation.</para>
 /// </remarks>
 public sealed class LinqExpressionGenerator {
     private readonly AnalysisResult _analysisResult;
 
+    /// <summary>Holds the compiled LINQ Expression and the set of parameters
+    /// that need to be bound before invocation.</summary>
+    /// <param name="Expression">The compiled expression tree.</param>
+    /// <param name="Parameters">The parameter expressions captured during
+    /// compilation (e.g. for lambda parameters).</param>
     public sealed record CompilationResult(Expression Expression, IReadOnlyList<ParameterExpression> Parameters);
 
     private sealed class CompilationState {

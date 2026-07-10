@@ -5,14 +5,21 @@
 
 ## Current Focus (July 2026)
 
-| Priority | Parent | What to pick |
-|----------|--------|----------------|
-| **1 — Active** | **WS8** | DomainExpression → VM e2e, contract interface gen, lowering consumer gaps |
-| **2 — Polish** | **WS4** | Trace / diagnostic quality for agents |
-| **3 — Hygiene** | **WS6** | Docs only (usually orchestrator) |
-| **Skip** | WS1 / WS2 / WS3 micro-tasks | Marked **Done** or **Superseded** — evolution foundation already shipped |
+**Completion plan:** [`../v3-completion-plan.md`](../v3-completion-plan.md) — gaps G1–G17 + work packages WP1–WP9.  
+**Consumer:** MCP + direct API (`../spikes/first-v3-consumer.md`).  
+**MCP rules:** `../spikes/mcp-guiding-principles.md`.
 
-Interpretation / VM micro-optimizations are **out of scope** for this directory unless a WS8 task explicitly requires a VM fix.
+| Priority | Package | Pick these |
+|----------|---------|------------|
+| **1** | **WP1** | `wp1-v3-builtin-catalog.md`, `wp1-sever-policyevaluator-v2.md` |
+| **2** | **WP2** | `wp2-domain-query-projections.md`, `wp2-direct-api-happy-path-tests.md` |
+| **3** | **WP3** | `wp3-evolution-rollback-suite.md`, `ws8-e2e-policy-vm-eval.md` |
+| **4** | **WP4** | `wp4-mcp-session-and-overview.md`, `wp4-mcp-evolve-tools.md`, `wp4-retire-v2-domaintools.md` |
+| **5** | **WP5** | `ws8-domainexpression-lower-smoke-matrix.md` (if eval tools ship) |
+| **6** | Polish | `ws4-agent-trace-reading-guide.md` |
+| **Skip** | Old foundation | All `ws1-*`, `ws2-research-*`, `ws3-add-*` — **superseded** |
+
+**Quality bar:** correctness · composition on direct API · curated MCP · tests · natural code.
 
 ## Philosophy
 
@@ -21,45 +28,33 @@ Interpretation / VM micro-optimizations are **out of scope** for this directory 
 - Clear verification (build + named tests).
 - Link only the needed decisions / source files.
 - Prefer **implementation** over design.
+- New DomainChange / tools only with a consumer call site + test.
 
 ## How to Use
 
-1. **Orchestrators**: Decompose WS8/WS4 into micro-tasks here; keep status accurate.
-2. **Executors**: Pick **Not Started** tasks for WS8/WS4 only. Follow steps strictly. File `agent-summaries/`.
-3. **Do not** claim superseded WS1 “skeleton” tasks — the applicator already exists.
+1. **Orchestrators**: Decompose WPs into micro-tasks here; keep status accurate; update `v3-completion-plan.md` progress log when a WP finishes.
+2. **Executors**: Pick **Not Started** tasks in WP order. Follow steps strictly. File `agent-summaries/`.
+3. **Do not** claim superseded WS1 skeleton tasks.
 
 ## Task Format
 
-Use `TEMPLATE-micro-task.md`. Every task must include:
-
-- Parent workstream (WSx)
-- Difficulty + rough token budget
-- Exact steps + verification
-- Status: Not Started / In Progress / Done / Superseded
+Use `TEMPLATE-micro-task.md`.
 
 ## Status Legend for Older Tasks
 
-Many files under this directory were written for **greenfield WS1**. Treat them as follows:
-
 | Pattern | Status |
 |---------|--------|
-| `ws1-implement-basic-domain-evolution-skeleton` | **Superseded** — `DomainEvolution` is real |
-| `ws1-define-evolution-result-record` | **Superseded** — records exist |
-| `ws1-implement-evolution-trace-record` | **Superseded** |
-| `ws1-implement-minimal-applicator-skeleton` | **Superseded** — applicator works |
-| `ws1-implement-minimal-noop-change-handler` | **Superseded** |
-| `ws1-define-first-domainchange-types` | **Superseded** — 66 subtypes |
-| `ws1-add-nodeid-preservation-test` | **Done** if tests exist; else verify once then Done |
-| `ws1-improve-trace-affected-nodes` | Prefer WS4 tasks |
-| `ws1-sketch/propose-fluent-evolution` | **Superseded** — `EvolutionBuilder` is large and fluent |
-| `ws2-research-nodeid-behavior` | **Superseded** — mechanical continuity in applicator |
-| `ws3-*` | **Superseded** — ops landed in DomainChange + EvolutionBuilder |
-| `ws6-audit-workstream-against-principles` | Optional hygiene |
-
-Active tasks live at the top of the directory listing by date or are named `ws8-*` / `ws4-*`.
+| `ws1-*` (evolution skeleton era) | **Superseded** |
+| `ws2-research-nodeid-*` | **Superseded** |
+| `ws3-add-*` / `ws3-confirm-*` | **Superseded** |
+| `ws3-name-first-v3-consumer` | **Done** |
+| `ws6-audit-*` | Optional hygiene |
+| `ws8-*` | Active when WP3/WP5 pulls |
+| `wp1-*` … `wp4-*` | **Active execution path** |
 
 ## Related
 
+- Completion plan: `../v3-completion-plan.md`
 - Parent roadmap: `../master-roadmap.md`
 - Orchestration: `../orchestration-guide.md`
 - Decisions: `docs/decisions/2026-v2-to-v3-domain-modeling-port.md`

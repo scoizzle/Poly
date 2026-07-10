@@ -125,7 +125,7 @@ Custom pipelines: build your own `Analyzer` via `AnalyzerBuilder` (same extensio
 
 ---
 
-## Direct AST lowering
+## Direct AST Lowering
 
 The sole compilation path is `DirectVmAbiEmitter` which walks the analyzed AST and emits
 `System.Linq.Expressions` trees targeting the VM ABI (`VmState`, ring registers for temporaries,
@@ -133,6 +133,147 @@ The sole compilation path is `DirectVmAbiEmitter` which walks the analyzed AST a
 flattening or expansion step exists — the AST is the canonical lowering target.
 
 See [`Vm/README.md`](Vm/README.md) for the ABI model and emitter details.
+
+### Frame ABI (CallStack)
+
+The call stack uses a linked frame model with a 2-word header:
+
+```
+[...argN-1..arg0] [previousFP] [savedSP] [local0..localM-1]
+                   ^-- frame header (2 words)                ^-- SP
+```
+
+- **`previousFP`**: Frame pointer of the caller (-1 for root frame).
+- **`savedSP`**: Stack pointer just before the header was pushed.
+- **Argument/local counts** are known at compile time — not stored on the stack.
+
+`CallStack.AllocateFrame()` pushes the header and reserves local space.
+`CallStack.DeallocateFrame()` restores the stack pointer and pops the frame.
+The `CallStackFrame` record provides typed span accessors (`GetLocals`, `GetArguments`)
+and indexers (`GetLocal`, `GetArgument`) for debug hooks and resume.
+
+### Ring Registers
+
+The emitter uses a ring register discipline during compilation: values flow through
+`_r0.._rN` local variables allocated inline during the AST walk. Unlike the old
+primitive path, there is no global pre-pass (`RingAllocator`) — ring assignment
+happens during the AST walk. The result is equivalent: the CLR JIT can enregister
+ring locals.
+
+### Compilation Modes
+
+| Mode | Debug Hooks | PC Tracking | Use Case |
+|------|-------------|-------------|----------|
+| `Normal` (default) | Enabled | Enabled | Development, debugging, testing |
+| `NoDebug` | Disabled | Disabled | Production, benchmarks, maximum speed |
+
+---
+
+## Value Representation
+
+The VM uses a uniform `long` representation on the evaluation stack, but the
+[`ValueRepresentationAnalyzer`](Analysis/Semantics/ValueRepresentationPass.cs)
+classifies every expression by how its value should be interpreted:
+
+| Kind | Description | Example |
+|------|-------------|---------|
+| `StackScalar` | Numeric value stored directly (int, long, float, etc.) | `2 + 3` |
+| `Bool` | Boolean (1 = true, 0 = false) | `a == b` |
+| `HeapRef` | Heap handle; the slot holds an index into `VmState.Heap` | `new Person()` |
+| `Void` | Statement/produces no value | `if (x) { }` |
+| `Unknown` | Could not be determined statically | Runtime dispatch |
+
+The `RootValueKind` on `VmProgram` tells `InterpreterResult` how to correctly
+marshal the program's top-level result — whether to dereference a heap handle
+or return the raw scalar.
+
+---
+
+## µop-level Tracing
+
+Every µop compiled in `Normal` or `Debug` mode carries a `SourceName` label.
+At compile time, `TraceBefore` inserts a `VmTrace.LogUop(pc, text, sp, fb, state)`
+call inside each µop's expression — **~1 ns overhead** when `state.Trace` is null
+(the default).
+
+Enable tracing by setting `state.Trace` to any `TextWriter`:
+
+```csharp
+using var exec = Interpreter.Execute(program, state => {
+    state.Trace = Console.Error;  // or StringWriter, etc.
+});
+```
+
+`CommentOp("; text")` markers alias section boundaries in the µop list for
+readability and generate zero code. Test files use `TestTraceWriter` which
+routes to `Console.Error` — visible in TUnit via `--show-stderr`.
+Active in all build configurations.
+
+---
+
+## Stepping and Debugging
+
+`VmDebugger` provides high-level step-over and continue for interactive
+debugging sessions. It attaches via `VmState.DebugHook` and uses a background
+thread to execute the program:
+
+```csharp
+using var dbg = new VmDebugger(program);
+var r1 = dbg.Start();         // pause at first statement
+var r2 = dbg.StepOver();      // advance one statement
+dbg.Continue();               // run to completion
+```
+
+The debugger is "always loaded, zero overhead when idle": during normal execution
+the hook checks a `volatile bool` and returns immediately. `StepOver` sets a flag
+so the next hook invocation blocks and signals back — the program runs at full
+speed when nobody is stepping.
+
+For lower-level control, use `VmState.DebugInterrupt` (invoked before each µop
+with the full `VmState`) or `VmState.DebugHook` (invoked before each AST node
+with a locals span and heap reference).
+
+---
+
+## Suspend / Resume
+
+The VM supports suspend-and-resume for breakpoints and await-like scenarios:
+
+```csharp
+// First execution suspends
+using var exec = Interpreter.Execute(program);
+if (exec.IsSuspended)
+{
+    // Inspect state, modify variables, etc.
+    var state = exec.State;
+
+    // Resume with new arguments
+    using var resumed = exec.Resume(args);
+}
+```
+
+Key mechanics:
+- `VmState.Status` transitions `Running → Suspended → Resuming → Running`
+- The preamble re-reads `VmState.FramePos` and dispatches to the correct
+  program counter on resume.
+- `CurrentAstNode` and `CurrentNodeId` track the suspend point symbolically.
+
+---
+
+## Exception Handling
+
+Structured exception handling uses native CLR `Expression.TryCatchFinally`
+directly — no side tables or handler dispatching:
+
+| AST Node | CLR Mapping |
+|----------|-------------|
+| `TryCatchFinally` | `Expression.TryCatch(Try(body), Catch(...), Finally(body))` |
+| `ThrowStatement` | `Expression.Throw(...)` |
+| `UsingStatement` | Lowered to try/finally with dispose |
+
+The `ExceptionRegionAnalyzer` pass builds a region table (`ExceptionRegionMetadata`)
+listing all protected ranges, handler types, and catch variable names. The emitter
+consumes this to produce the correct nesting of `Try`/`Catch`/`Finally` expressions.
 
 ---
 
@@ -145,6 +286,71 @@ These read the **AST directly** and are not the conformance target for new featu
 - **Mermaid** — `MermaidAstGenerator`; docs and debugging.
 
 New language semantics should land in analysis → direct lowering → `DirectVmAbiEmitter` first.
+
+---
+
+## Working with ExecutionResult
+
+`ExecutionResult` owns the `VmState` and exposes both the value and the state:
+
+```csharp
+using var result = Interpreter.Execute(program, state => {
+    state.SetArgs(42, "hello");
+});
+
+// Typed value extraction (respects RootValueKind)
+int number = result.GetValue<int>();      // 42
+string text = result.GetValue<string>();  // "hello"
+
+// Raw access
+long raw = result.RawValue;
+
+// State inspection (heap, stack, trace)
+VmState state = result.State;
+var heapObj = state.Heap.Get(handle);
+
+// Resumption after suspension
+if (result.IsSuspended)
+{
+    using var resumed = result.Resume(moreArgs);
+    Console.WriteLine(resumed.GetValue<string>());
+}
+```
+
+### InterpreterResult Values
+
+`InterpreterResult` is a discriminated union via `ResultKind`:
+
+| Kind | Meaning | Value |
+|------|---------|-------|
+| `Void` | Statement completed, no value | `null` |
+| `Value` | Expression produced a value | The value |
+| `Return` | Return signal | Optional return value |
+| `Break` | Break from loop | Optional label |
+| `Continue` | Continue loop iteration | Optional label |
+| `Throw` | Exception thrown | The `Exception` |
+| `Suspend` | Execution suspended | Optional reason string |
+
+Use `GetValue<T>()` for typed extraction — it handles conversions from `long`
+to `bool`, `int`, `short`, `byte`, and `object` automatically.
+
+---
+
+## Extending the Pipeline
+
+### Adding a New Analysis Pass
+
+1. Create a class implementing `INodeAnalyzer` in `Interpretation/Analysis/Semantics/` (or the appropriate subdirectory).
+2. Implement `PassName`, `Dependencies`, and `Analyze()`. Use `context.SetMetadata()` and `context.ReportDiagnostic()` for outputs.
+3. Add an extension method on `AnalyzerBuilder` in the same file.
+4. Register it in `Interpreter.cs` (in the `AnalyzerBuilder` chain) and update the pass table in this README and `Analysis/README.md`.
+5. Add tests in `Poly.Tests/Interpretation/`.
+
+### Adding a New Primitive
+
+Primitives are defined in `Poly/Syntax/Primitives/Primitives.cs`. Add the record
+with a `StackEffect` override, then add the `case` arm in `DirectVmAbiEmitter`
+to emit the LINQ Expression. Add emit tests in `Poly.Tests/Interpretation/`.
 
 ---
 

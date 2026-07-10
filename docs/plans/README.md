@@ -8,9 +8,12 @@ Architectural rationale lives in **`docs/decisions/`**. Module maps live in **`P
 
 | Plan | Role |
 |------|------|
-| [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | **Primary product focus** — DomainModeling evolution + WS8 lowering/consumer parity + Phase 3 MCP |
-| [V2 → V3 Workstreams](v2-to-v3/workstreams/) | Workstream detail (`ws8-*` active; WS1 foundation complete) |
-| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — prefer **`ws8-*` / `ws4-*`** only |
+| [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | Milestones M1–M4, quality bar, readiness checklist |
+| [**V3 Completion Plan**](v2-to-v3/v3-completion-plan.md) | **Day-to-day execution:** gaps G1–G17, work packages WP1–WP9, acceptance criteria |
+| [First V3 consumer spike](v2-to-v3/spikes/first-v3-consumer.md) | Named M2 consumer + happy path + out of scope |
+| [MCP guiding principles](v2-to-v3/spikes/mcp-guiding-principles.md) | Agent-tool research + Poly constraints for MCP rewrite |
+| [V2 → V3 Workstreams](v2-to-v3/workstreams/) | Workstream detail (`ws8-*` pull-only; WS1 foundation complete) |
+| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — **`wp1-*`…`wp4-*` first**, then `ws8-*` / `ws4-*` if pulled |
 | [Orchestration Guide](v2-to-v3/orchestration-guide.md) | Multi-agent operating model |
 
 ## Interpretation (current)
@@ -51,6 +54,6 @@ Agents **must not** implement work from the archive without an explicit re-open 
 ## Guidelines
 
 1. Consult `docs/decisions/` before significant work.
-2. Prefer **V2→V3 master roadmap** for “what next.”
+2. Prefer **`v3-completion-plan.md`** for “what next” (WP order); master roadmap for milestones.
 3. When a design choice lands, update or add a decision record — not a new competing IR plan.
-4. New Interpretation work needs a **first consumer** (DomainModeling/MCP/tests), per core engineering principles.
+4. New Interpretation work needs a **first consumer** (direct domain API / MCP / tests), per core engineering principles.

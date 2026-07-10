@@ -58,9 +58,10 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     }
 }
 
-/// <summary>
-/// Metadata indicating the ITypeDefinition extracted from a TypeDefinitionNode.
-/// </summary>
+/// <summary>Metadata associating a <see cref="TypeDefinitionNode"/> with its
+/// resolved <see cref="ITypeDefinition"/>. Set by
+/// <see cref="TypeDefinitionNodeAnalyzer"/> during analysis.</summary>
+/// <param name="TypeDefinition">The resolved type definition.</param>
 public sealed record TypeDefinitionMetadata(ITypeDefinition TypeDefinition) : IAnalysisMetadata;
 
 /// <summary>

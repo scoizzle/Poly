@@ -55,7 +55,8 @@ public sealed record ExceptionRegionMetadata(
 /// reside inside protected (try) regions, aiding lowering passes in
 /// deciding whether to emit a primitive throw or a direct CLR throw.
 /// </summary>
-/// <param name="IsInProtectedRegion">True if this throw is inside a try block.</param>
+/// <param name="IsInProtectedRegion">True when this node is inside a try block,
+/// catch clause, finally block, or using statement dispose region.</param>
 public sealed record InProtectedRegionMetadata(
     bool IsInProtectedRegion
 ) : IAnalysisMetadata;

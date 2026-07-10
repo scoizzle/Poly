@@ -33,6 +33,52 @@ MCP tools (thin, curated)  →  Direct domain API (composable)  →  DomainModel
 
 ---
 
+## 1.1 Product decisions locked (2026-07-10)
+
+| Topic | Decision |
+|-------|----------|
+| **M2 scope** | Get **1–2 entity concepts fully working** end-to-end on V3 (author + analyze + query + MCP + tests), then flush out the rest of the surface. Not “every tool before any depth.” |
+| **Vertical slice (default)** | Prefer a lifecycle-shaped entity (e.g. Person or Order): entity + properties + stages + actions + at least one policy/guard expression path. Second entity only if needed to prove relationships. Exact names TBD in WP2/WP4. |
+| **Export/import** | **Not** M2 target as V2-style JSON DTOs. Prefer a future **DSL-spec** as the portable form. Defer portable transfer until that design lands. |
+| **Runtime subjects** | Tests may use **C# records**. Long-term entity instance representation (nested `Dictionary<string, object>` simulation, codegen C#, or other) is **owned by Interpretation** when domain entities lower — not invent a parallel story in DomainModeling/MCP. |
+| **V2 cutover** | **Sharp cliff**: when V3 MCP path works, stop registering V2 tools; no dual-stack product period. |
+| **V2 tests** | **Port aggressively** into V3 tests (or delete if redundant) — do not keep a large V2-only suite as a comfort blanket until M4. |
+| **Direct API / workspace** | **Decided (2026-07-10)** — see §1.2 |
+
+### 1.2 Direct API & workspace (decided)
+
+**MCP is a consumer**, not the home of domain semantics. The product surface into the system is a **great, model-optimized API** on `DomainModeling` (and Interpretation as needed). MCP adapts that API for agents; it does not redefine the model.
+
+| Layer | Owns | Does not own |
+|-------|------|----------------|
+| **DomainModeling (direct API)** | Immutable `Domain` graph; **single** evolution path (`DomainEvolution` / `Evolve` / `Apply` + analysis gate); **model-optimized queries/views** (overview, entity shape, analysis summary as domain concepts); bootstrap/builtins; policy/expression hooks tests use | Session IDs, revision counters, agent DTOs, tool descriptions, long-lived “workspace” handle as a *product* type |
+| **Poly.Mcp** | **Workspace/session** (sessionId → current `Domain` + revision + last analysis); thin tool methods; envelopes, affordances, agent-oriented messages | Domain rules, a second mutation engine, reinvented query semantics |
+| **Tests** | Prefer **DomainModeling** for correctness of evolve/query/eval. **May** reference `Poly.Mcp` public types to exercise session/workspace behavior | — |
+
+**Implications:**
+
+1. **Single evolution system** — only `DomainEvolution` / change application on immutable roots. No parallel “MCP mutate” or mutable domain graph. Efficiency = batch changes → one analysis gate → new root or discard (immutability already gives atomicity).
+2. **Workspace is an MCP problem** — `DomainWorkspace` / session store lives under `Poly.Mcp` (or MCP-adjacent host types), not in DomainModeling core. That removes the “what is the core host type?” thrash.
+3. **“Great API” = model-optimized view** — C# that reads in domain terms (`Evolve().AddEntity…`, `DomainQueries.Overview(domain)`), not MCP/JSON shapes and not REST bags. Optimize for fidelity to the domain model, not for protocol convenience.
+4. **Sugar is discovered** — no big façade redesign up front. Start with EvolutionBuilder + query helpers; add scenario helpers only when a real slice proves repetition. Layers of abstraction after working code.
+5. **Tests and MCP share the same evolve/query core**; MCP adds only session lifecycle. Tests that need session semantics depend on MCP public types deliberately.
+6. **Human UI is a future peer consumer** of the same DomainModeling API (and can reuse MCP session *patterns*). A great MCP surface (capabilities, diagnostics, affordances, revision) is also good UX scaffolding — but the UI should not be forced to go only through the LLM. See `spikes/mcp-guiding-principles.md` § Agents and human UI.
+
+**Strawman shapes (names flexible):**
+
+```text
+// Core — no workspace type
+Domain d = DomainFactory.Create("Demo");
+var result = new DomainEvolution(d).Evolve().AddEntity("Order").Apply();
+d = result.Domain; // or keep prior root if rolled back
+var overview = DomainQueries.Overview(d);
+
+// MCP — workspace/session
+session.Apply(evo => evo.AddEntity("Order")); // inside: DomainEvolution + bump revision on success
+```
+
+---
+
 ## 2. Current state (code reality, July 2026)
 
 ### 2.1 Already solid (do not rebuild)
@@ -55,15 +101,15 @@ Ordered by **pull from M2** (not by theoretical completeness).
 
 | ID | Gap | Severity for M2 | Notes |
 |----|-----|-----------------|-------|
-| **G1** | No **direct domain API** façade beyond raw `EvolutionBuilder` / `Domain` | **Blocker** | MCP and tests need stable session + evolve + query surface with natural names and projections |
+| **G1** | Model-optimized **query/bootstrap** not productized; evolve exists but needs docs + slice tests | **Blocker** | Workspace stays in MCP; core = EvolutionBuilder + queries + factory |
 | **G2** | No V3 **bootstrap / built-in type catalog** | **Blocker** | V2 has `CanonicalBuiltInTypeCatalog`; MCP CreateSession depends on it. V3 must not import V2 for bootstrap |
 | **G3** | **V2 leakage into V3** (`PolicyEvaluator` `using Poly.Data.Modeling`) | **Blocker** | V3 must compile/run with zero V2 dependency for product path |
-| **G4** | Thin **test net** (6 V3 test files vs ~29 V2) | **Blocker** for ship confidence | Happy path + rollback + policy VM + query projections |
-| **G5** | **MCP still V2-shaped** (~80 tools, mutators, intents) | **Blocker** for M2 | Rewrite per MCP principles; not port tool-for-tool |
-| **G6** | **Policy / DomainExpression e2e** not productized | High | Expression VM tests exist; full “attach policy on entity → Evaluate with CLR/record” path needs packaging + tests (`ws8-e2e-policy-vm-eval`) |
-| **G7** | No V3 **domain → program / contract interface** lowering | Medium (M2 optional) | V2 `DomainImplementationLoweringPass` / `LowerToContractInterfaces` only. Pull when MCP/codegen needs it |
-| **G8** | No V3 **query / overview / diff** helpers | High for MCP | Today only inside V2 `DomainDiffUtil` / MCP DTOs |
-| **G9** | **Export/import** portable domain | Medium | MCP needs redesigned DTOs over V3 `Domain` |
+| **G4** | Thin **test net** + V2 tests not yet ported | **Blocker** | Vertical slice tests + **aggressive port** of valuable V2 tests to V3 |
+| **G5** | **MCP still V2-shaped** (~80 tools, mutators, intents) | **Blocker** for M2 | Rewrite; **sharp cliff** off V2 tools when V3 path works |
+| **G6** | **Policy / DomainExpression e2e** not productized | High for slice | Tests with **C# records** OK; deeper entity-instance lowering is Interpretation’s problem |
+| **G7** | No V3 **domain → program / contract interface** lowering | Medium (post-slice) | Interpretation/Domain boundary; pull when codegen/simulation needed |
+| **G8** | No V3 **query / overview** helpers | High for MCP | Concise projections for the vertical slice |
+| **G9** | **Export/import** portable domain | **Deferred** | Prefer future **DSL spec** as transfer form — not V2 DTO parity in M2 |
 | **G10** | **Actor / claims / UAC** | Low for M2 | Genuine expressiveness gap; pull when consumer needs |
 | **G11** | Rich **Rule** subtypes vs `DomainExpression` only | Low for M2 | Prefer DE; add rules only if composition fails agents |
 | **G12** | Effect **output wiring** (`BindOutputTo`) | Low | Complex chaining only |
@@ -73,20 +119,22 @@ Ordered by **pull from M2** (not by theoretical completeness).
 | **G16** | WS7 audit **stale** on lowering | Doc | Lowering exists; update when touching WS7 |
 | **G17** | Effect bodies not lowered to executable **programs** | Out of M2 unless runtime sim demanded | Expression/policy eval first; full action simulation later |
 
-### 2.3 What “direct domain API” means (design target)
+### 2.3 What “direct domain API” means (decided direction)
 
-Not a second evolution engine. A **host-facing façade** over what already exists:
+Not a second evolution engine. A **model-optimized library API** that MCP and tests consume:
 
-| Capability | Suggested home | Responsibility |
-|------------|----------------|----------------|
-| Bootstrap domain | e.g. `DomainModeling/Bootstrap/` or `DomainFactory` | Empty domain + built-in primitives (string, int, …) |
-| Evolve | wrap `DomainEvolution` / `EvolutionBuilder` | Same analysis gate; natural method names already largely present |
-| Query | e.g. `DomainQueries` / projection records | Overview, entity detail, analysis summary — **no MCP types** |
-| Session (optional core vs MCP) | Prefer **MCP-owned** session store; core stays pure | MCP holds `Domain` + revision + last `AnalysisResult` |
-| Evaluate | `PolicyEvaluator` + thin wrappers | Policy/guard → VM bool |
-| Serialize (M2+) | Export/import DTOs in DomainModeling or adjacent | Round-trip enough for MCP transfer |
+| Capability | Home | Responsibility |
+|------------|------|----------------|
+| Bootstrap domain | `DomainModeling` (e.g. factory / builtins) | Empty domain + built-in primitives |
+| Evolve | `DomainEvolution` / `EvolutionBuilder` only | Single analysis-gated path on immutable roots |
+| Query / views | `DomainModeling` projections | Model-shaped overviews/details — **not** MCP DTOs |
+| Workspace / session | **`Poly.Mcp` only** | sessionId, revision, last analysis, current `Domain` root |
+| Evaluate | DomainModeling + Interpretation | Policy/expression; tests with C# records; instance models later via Interpretation |
+| Serialize | Deferred | Future DSL spec |
 
-**Placement rule:** types the **test suite** needs without referencing `Poly.Mcp` live in `Poly/DomainModeling/` (or a small `Poly/DomainModeling/Api/` if clarity needs a folder). MCP maps DTOs/tools only.
+**Placement rule:** Domain correctness types live in `DomainModeling`. MCP types may be used by tests that intentionally cover the agent host. Core never references MCP.
+
+**Vertical slice acceptance (M2 minimum):** one chosen entity concept is fully authorable and inspectable via V3 core API + MCP workspace + tests (properties, stages, actions, analysis rollback, overview/detail). Optional second entity only if the slice needs relationships.
 
 ---
 
@@ -125,21 +173,21 @@ Do packages **in order** unless noted parallel-safe.
 
 ---
 
-### WP2 — Direct domain API (evolve + query)
+### WP2 — Model-optimized direct API (evolve + query)
 
 | | |
 |--|--|
-| **Goal** | Stable, naturally named façade that MCP and tests share |
+| **Goal** | Great library API into the domain model that MCP consumes and tests prefer |
 | **Depends on** | WP1 |
 | **Deliverables** | |
-| | 1. **Domain host API** (names illustrative): create/bootstrap, apply evolve builder or change list, return `EvolutionResult` with diagnostics |
-| | 2. **Query projections** (records in DomainModeling): `DomainOverview`, `EntitySummary`, `EntityDetail`, `AnalysisSummary` — name-first, concise |
-| | 3. Optional **batch helpers**: e.g. scaffold entity+property+stage as composed changes (server-side composition) |
-| | 4. README section in `DomainModeling/README.md`: how to evolve and query without MCP |
+| | 1. Document **single evolve path**: `DomainEvolution` / `EvolutionBuilder` / `Apply` (no parallel mutators, no core workspace) |
+| | 2. **Query projections** in DomainModeling: model-optimized overview/entity/analysis views |
+| | 3. Sugar only if the vertical slice proves repetition (discovered, not a second façade) |
+| | 4. README: evolve + query without MCP; workspace/session lives in MCP |
 | **Design constraints** | |
-| | - Prefer extending/documenting `DomainEvolution`/`EvolutionBuilder` over inventing parallel mutators |
-| | - Queries pure functions over `Domain` + optional `AnalysisResult` |
-| | - No JSON attributes required in core; MCP can map |
+| | - Immutable roots; efficiency = batch + one analysis gate |
+| | - No workspace/session types in DomainModeling |
+| | - Queries pure over `Domain` (+ optional `AnalysisResult`) |
 | **Acceptance** | TUnit: multi-step evolve success; evolve with bad name → rollback + errors; overview lists entity after add |
 | **Out of scope** | Full V2 query surface, Mermaid, visual |
 | **Seed tasks** | `wp2-domain-query-projections.md`, `wp2-direct-api-happy-path-tests.md` |
@@ -174,18 +222,18 @@ Do packages **in order** unless noted parallel-safe.
 
 | | |
 |--|--|
-| **Goal** | M2 consumer: agents use V3 only via curated tools |
+| **Goal** | M2 consumer: agents use V3 only via curated tools for the **vertical slice** (1–2 entities) |
 | **Depends on** | WP2–WP3 |
 | **Deliverables** | |
 | | 1. Session store in `Poly.Mcp` holding V3 `Domain` + revision + analysis |
-| | 2. Tool inventory ≤ ~25 tools per `mcp-guiding-principles.md` (session, overview, get entity, atomic evolve set, optional batch scaffold, analysis, optional export/import, optional evaluate) |
-| | 3. Every tool → direct API only; **delete or stop using** V2 mutators in product path |
+| | 2. Tool inventory sized for the slice (session, overview, get entity, evolve set, analysis) — ≤ ~25; no export/import |
+| | 3. **Sharp cliff:** unregister/remove V2 tools from product path when V3 works — no dual stack |
 | | 4. Response envelope: success, message, sessionId, revision, diagnostics, affordances |
 | | 5. Descriptions written as agent UX |
-| | 6. Smoke tests or scripted multi-tool scenario (if host allows); else integration tests calling tool methods directly |
-| **Acceptance** | Happy path from `first-v3-consumer.md` works end-to-end without `Poly.Data.Modeling` |
-| **Out of scope** | Port all 80 tools; Actor tools; full V2 policy rules |
-| **Seed tasks** | `wp4-mcp-session-and-overview.md`, `wp4-mcp-evolve-tools.md`, `wp4-mcp-rewrite-retire-v2-tools.md` |
+| | 6. Smoke tests for the vertical-slice multi-tool path |
+| **Acceptance** | Chosen entity concept(s) fully workable via MCP + V3 only; no `Poly.Data.Modeling` on that path |
+| **Out of scope** | Port all 80 tools; V2 DTO export/import; Actor; full surface flush before slice works |
+| **Seed tasks** | `wp4-mcp-session-and-overview.md`, `wp4-mcp-evolve-tools.md`, `wp4-retire-v2-domaintools.md` |
 
 ---
 
@@ -217,27 +265,27 @@ Do packages **in order** unless noted parallel-safe.
 
 ---
 
-### WP7 — Port demos / remaining tests off V2
+### WP7 — Port demos / remaining tests off V2 (**aggressive**)
 
 | | |
 |--|--|
-| **Goal** | Clear the path to delete V2 |
-| **Depends on** | WP6 |
-| **Deliverables** | Benchmarks demos on V3 evolve/builders; rewrite or drop V2-only tests that still teach value; integration tests use V3 lowering when needed |
-| **Acceptance** | No demo entrypoint requires V2 |
-| **Out of scope** | Perfect parity of every V2 test |
+| **Goal** | Clear the path to delete V2 **quickly** |
+| **Depends on** | WP6 (can start porting valuable V2 tests as soon as WP1–WP3 allow) |
+| **Deliverables** | **Port aggressively** V2 tests that still teach value onto V3; delete redundant V2-only tests rather than preserving them; demos/benchmarks on V3 |
+| **Acceptance** | No demo requires V2; V2 test tree shrinking toward empty; no large “oracle” V2 suite retained for comfort |
+| **Out of scope** | Keeping dual test matrices indefinitely |
 
 ---
 
-### WP8 — Delete V2
+### WP8 — Delete V2 (**sharp cliff completion**)
 
 | | |
 |--|--|
 | **Goal** | Single modeling stack |
-| **Depends on** | WP7 |
-| **Deliverables** | Remove `Poly/Data/Modeling` (or quarantine); fix all references; update placement docs |
+| **Depends on** | WP7 + WP4 cliff already removed product V2 MCP |
+| **Deliverables** | Remove `Poly/Data/Modeling`; fix all references; update placement docs |
 | **Acceptance** | Solution builds; V3 + MCP tests green; grep shows no product `Poly.Data.Modeling` |
-| **Out of scope** | Keeping dual stack “just in case” |
+| **Out of scope** | Soft dual maintenance, “just in case” forks |
 
 ---
 
@@ -276,77 +324,66 @@ Ship **only** when MCP/direct API dogfood or next product scenario requires it.
 ```
 Poly/DomainModeling/
   Bootstrap/          # NEW — built-in catalog, DomainFactory
-  Evolution/          # EXISTS — keep as core evolve engine
-  Queries/            # NEW — overview/detail projections
+  Evolution/          # EXISTS — single evolve engine
+  Queries/            # NEW — model-optimized projections
   Lowering/           # EXISTS — DE lower + PolicyEvaluator (V3-only)
-  Api/                # OPTIONAL folder — façade types if EvolutionBuilder alone is awkward
   Analysis/           # EXISTS
-  ...
+  ...                  # NO Workspace type here
 
 Poly.Mcp/
-  Sessions/           # session store
-  Tools/              # curated tool classes (not one 3k-line DomainTools)
-  Mapping/            # DTO mapping from DomainModeling queries
+  Sessions/ or Workspace/   # sessionId, Domain root, revision, analysis
+  Tools/                    # curated tools (consumer of DomainModeling)
+  Mapping/                  # agent DTOs from domain queries
 
-Poly.Tests/DomainModeling/
-  Bootstrap/
-  Api/ or Direct/
-  Evolution/
-  Lowering/
-  Queries/
+Poly.Tests/DomainModeling/  # core correctness (no MCP required)
+Poly.Tests/Mcp/             # optional — session/workspace via public MCP types
 ```
 
-Exact folder names can adjust; **boundaries** matter: MCP never owns domain rules.
+**Boundaries:** MCP never owns domain rules; DomainModeling never owns session/workspace.
 
 ---
 
-## 6. Direct API surface (minimum for M2 happy path)
+## 6. Direct API surface (minimum for M2 vertical slice)
 
-Illustrative C# shape — implement with natural names; adjust to fit existing types.
+Illustrative C# — core first; MCP only adds session.
 
 ```csharp
-// Bootstrap
-Domain domain = DomainFactory.Create("Orders"); // builtins included
+// --- DomainModeling (great API / model view) ---
+Domain domain = DomainFactory.Create("Orders");
 
-// Evolve
-var evo = new DomainEvolution(domain);
-var result = evo.Evolve()
+var result = new DomainEvolution(domain).Evolve()
     .AddEntity("Order")
-    .AddPropertyToEntity("Order", new Property("Total", /* int type ref */))
+    .AddPropertyToEntity("Order", /* ... */)
     .AddStage("Order", "Draft")
     .AddAction("Order", "Submit")
     .Apply();
 
-if (result.WasRolledBack) { /* diagnostics */ }
-domain = result.Domain;
+if (result.WasRolledBack) { /* diagnostics; domain unchanged */ }
+else domain = result.Domain;
 
-// Query
 var overview = DomainQueries.Overview(domain);
-var entity = DomainQueries.GetEntity(domain, "Order");
 
-// Evaluate (when ready)
-bool ok = policy.EvaluateOnVm(sampleRecord);
+// --- Poly.Mcp (workspace) ---
+// session holds Domain + Revision + Analysis; tools call DomainEvolution then update session on success
 ```
-
-MCP tools wrap the same sequence with `sessionId` and envelopes.
 
 ---
 
-## 7. MCP tool budget (M2 default)
+## 7. MCP tool budget (M2 vertical slice)
 
-From `mcp-guiding-principles.md` — **start here**, expand only with evidence:
+From `mcp-guiding-principles.md` — tools needed for **1–2 full entities**, expand only after the slice is solid:
 
 | Group | Tools |
 |-------|--------|
 | Session | CreateDomainSession, ListSessions (or interrogate) |
 | Orient | GetDomainOverview, GetEntity, GetDomainAnalysis |
-| Evolve atomic | AddEntity, AddProperty, AddStage, AddAction, AddRelationship, RemoveEntity (minimal remove set) |
-| Evolve composed | optional ScaffoldLifecycleEntity **or** ApplyChangeBatch (typed, not free-form bag) |
+| Evolve atomic | AddEntity, AddProperty, AddStage, AddAction; relationship only if second entity in slice; minimal removes |
+| Evolve composed | optional scaffold for the chosen lifecycle shape |
 | Recover | diagnostics on all mutators; affordances |
-| Runtime | EvaluatePolicy (if WP5) |
-| Portability | ExportDomain, ImportDomain (after WP2 serialize) |
+| Runtime | EvaluatePolicy only if slice includes guard eval with records |
+| Portability | **Out** — DSL import/export later |
 
-**Cap:** ~25. Retire V2 DomainTools wholesale when this ships.
+**Cap:** ~25 for slice. **Sharp cliff:** unregister V2 DomainTools when this ships.
 
 ---
 
@@ -354,9 +391,11 @@ From `mcp-guiding-principles.md` — **start here**, expand only with evidence:
 
 - Full V2 MutationCommand / Intent parity  
 - Porting all V2 analyzers 1:1  
-- Full effect/action runtime simulator  
+- Full effect/action runtime simulator (Interpretation owns instance/runtime model evolution)  
 - Actor, visual, recipes, OpenAPI without a consumer  
 - Long dual-stack MCP  
+- V2-style JSON export/import as the durable format (DSL spec instead)  
+- Flushing entire evolve/MCP surface before one vertical entity works  
 - Interpretation µop redesign  
 - Speculative DomainExpression nodes  
 
@@ -409,5 +448,7 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 | Date | Note |
 |------|------|
 | 2026-07-10 | Plan created from code audit + consumer/MCP principles. WS7 lowering gap marked stale (pass + VM tests exist). |
+| 2026-07-10 | Product decisions: vertical slice; DSL import/export later; records for tests / Interpretation owns instances; sharp V2 cliff; aggressive test port. |
+| 2026-07-10 | Direct API: model-optimized DomainModeling API; single evolve path; **workspace/session in MCP only**; sugar discovered while building; tests may use MCP public types for host coverage. |
 
 Update this log when a WP completes or a gap classification changes.

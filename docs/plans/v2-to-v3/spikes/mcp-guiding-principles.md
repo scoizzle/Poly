@@ -9,6 +9,37 @@ This note consolidates **external MCP / agent-tool research** with **Poly’s qu
 
 ---
 
+## Agents and human UI (same quality bar)
+
+MCP is **model-controlled** by protocol design, but a **well-built MCP host surface** can also be excellent for **human UI/UX**:
+
+| Shared asset | Agent value | Human UI value |
+|--------------|-------------|----------------|
+| Session + revision | Continuity across tool calls | Undo-friendly timeline, optimistic UI |
+| Analysis diagnostics | Self-correction | Error panels, inline validation |
+| Affordances (next steps) | Planning next tool | Buttons, command palette, “what can I do here?” |
+| Concise overview / detail | Context budget | Master–detail screens |
+| Atomic + composed evolve | Reliable multi-step | Forms + wizards over the same ops |
+| Rollback on failure | Safe agent loops | “Change not applied” without corrupt model |
+
+**Architecture that makes dual use real:**
+
+```
+Human UI  ──┐
+            ├──→  DomainModeling API (model-optimized, single evolve path)
+Agent/MCP ──┘         ▲
+                 workspace/session can live in MCP *or* a thin UI host
+                 that reuses the same session semantics
+```
+
+- **Do** design MCP tools as **capability verbs** on the domain (AddEntity, GetOverview) with stable results — those map cleanly to UI actions.
+- **Do not** assume the *only* human path is “drive the LLM that drives MCP.” A first-class UI should call the **same DomainModeling API** (and may share session types or copy MCP session patterns).
+- **Do not** specialize the core API for chat transcripts or widget trees — keep it model-shaped; adapters own presentation.
+
+**Implication for M2:** Prefer tool and response shapes that a UI could bind without translation soup (clear success/fail, revision, diagnostics, named entities). That improves agents *and* future human hosts.
+
+---
+
 ## Research sources (short)
 
 | Source | Takeaways we adopt |

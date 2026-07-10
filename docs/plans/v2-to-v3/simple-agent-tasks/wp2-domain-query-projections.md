@@ -7,7 +7,7 @@
 
 ## Objective
 
-Name-first, concise query projections over V3 `Domain` for tests and MCP (no MCP types in core).
+Model-optimized query projections over V3 `Domain` for the **direct library API** (tests + MCP both consume). No MCP types in core; no workspace type here.
 
 ## Exact Steps
 

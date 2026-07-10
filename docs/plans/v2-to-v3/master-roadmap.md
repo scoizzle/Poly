@@ -30,10 +30,16 @@ These focus areas govern design and review for the V2→V3 cutover. They sit on 
 **Layering (fixed):**
 
 ```
-MCP tools (thin, curated)  →  Direct domain API (composable)  →  DomainModeling / Syntax / VM
-                                    ▲
-                               tests + demos
+MCP tools + workspace/session (thin consumer)
+        →  Model-optimized DomainModeling API (single Evolve path + queries)
+        →  Domain / analysis / Syntax / VM
+                    ▲
+         tests (core API; optional MCP types for session)
 ```
+
+- **Workspace/session** lives in **MCP only**.  
+- **One evolution system** on immutable roots.  
+- Sugar layers appear as we build the vertical slice — not a pre-designed second façade.
 
 **MCP rewrite constraints (summary — full list in the spike):**
 
@@ -93,9 +99,9 @@ Further Interpretation work is **on-demand** when a V3 consumer forces a gap.
 | Milestone | Done when |
 |-----------|-----------|
 | **M1 — Foundation** | ✅ Evolution layer real; proofs; audit |
-| **M2 — First V3 consumer** | **Direct domain API** + **MCP thin tools** construct/evolve/query a domain **only** via V3 (`Evolve`/`Apply` + analysis); TUnit covers the direct path; no `Poly.Data.Modeling` mutators on that path |
-| **M3 — V2 freeze** | No new V2 features; V2 tests only gate deletion |
-| **M4 — V2 delete** | `Poly/Data/Modeling` removed (or isolated and unreferenced); demos/tests/MCP on V3 only |
+| **M2 — First V3 consumer** | **1–2 entity concepts fully working** on V3: direct path + curated MCP + tests (author/analyze/query; optional policy+records). **Sharp cliff** off V2 MCP tools. No V2-style export/import requirement (DSL later). |
+| **M3 — V2 freeze** | No new V2 features; **aggressive port/delete** of V2 tests underway |
+| **M4 — V2 delete** | `Poly/Data/Modeling` removed; demos/tests/MCP on V3 only |
 
 **Named consumer:** `spikes/first-v3-consumer.md` — MCP + direct API (not CLI-first, not demo-only).
 

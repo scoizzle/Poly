@@ -14,10 +14,10 @@ Not “MCP only,” and not “CLI first then maybe MCP.”
 
 | Layer | Role |
 |-------|------|
-| **Direct domain API** | Primary product surface: evolve (`Apply` / `Evolve`), analyze, lower DomainExpression → Syntax AST, evaluate on VM when needed, export/import snapshots. Readable C# that a human or test calls without MCP. |
-| **MCP** | Thin adapter: sessions, JSON DTOs, tool descriptions, affordances. Calls the direct API; does not reimplement domain rules. |
+| **Direct domain API** | **Great, model-optimized API** into the system: immutable `Domain`, single evolve path (`Apply` / `Evolve`), model-shaped queries, lower/eval as needed. Readable C#; tests prefer this. **No workspace type here.** |
+| **MCP** | **Consumer** of that API: **workspace/session** (sessionId, revision, analysis), tool descriptions, affordances, agent envelopes. Does not reimplement domain rules. |
 
-**Why:** Agents are the near-term product path (`Poly.Mcp` already exists as a V2-shaped prototype). The direct API is what correctness and composition attach to: tests, demos, and any future CLI share one path. MCP is the guiding *scenario*; the direct API is the guiding *contract into the rest of the system*.
+**Why:** Agents are the near-term scenario, but the library API is the optimized view of the *model*. MCP adapts; it does not own domain semantics. Workspace thrash ends when session lives only in MCP.
 
 **V2 reality:** Zero product consumers. Free to redesign tools and API shapes. Do not preserve V2 mutation/intent shapes for compatibility.
 
@@ -49,21 +49,25 @@ Not “MCP only,” and not “CLI first then maybe MCP.”
 | Readable `EvolutionResult` / diagnostics for agents | **Yes** | WS4 polish if gaps show up in dogfood |
 | DomainExpression → Syntax → VM eval | **When** first policy tool needs runtime truth | `ws8-e2e-policy-vm-eval` |
 | Contract interface / full C# program gen | **No** for minimal M2 | Pull later if tools demand |
-| Export/import portable payload | **Nice** | Redesign DTOs; not V2 parity |
+| Export/import portable payload | **Out of M2** | Future **DSL spec** is the preferred portable form |
+| Vertical depth | **In** | **1–2 entity concepts fully working** before breadth flush |
 
 ## Explicit out of scope for M2
 
 - Full V2 tool-count parity or V2 intent/mutation type names
 - Actor model, full Rule-system port, roadblocks
 - Long-lived V3→V2 adapter
-- Dual-stack MCP (V2 and V3 side by side as product)
+- Dual-stack MCP (V2 and V3 side by side as product) — **sharp cliff** off V2 tools
+- V2-style JSON domain export/import as durable format
 - Speculative analyzers or DomainChange types without a direct-API call site
+- Flushing entire surface before one vertical entity works
 
 ## Suggested freeze / delete order for V2 remnants
 
-1. **M2 green** — new MCP + direct API path works for happy path above; tests on direct API.
-2. **M3 freeze** — no new `Poly/Data/Modeling` features; document in roadmap + AGENTS.md.
-3. **Delete in order:** rewrite/remove `Poly.Mcp/DomainTools.cs` V2 paths → move demos off V2 → delete or quarantine V2 tests → remove `Poly/Data/Modeling`.
+1. **M2 green** — vertical slice on V3 MCP + tests; **unregister V2 MCP tools immediately** (sharp cliff).
+2. **M3 freeze** — no new `Poly/Data/Modeling` features.
+3. **Aggressive test port** — move valuable V2 tests to V3; delete the rest; demos off V2.
+4. **Delete** `Poly/Data/Modeling` when references are gone.
 
 ## Architecture sketch
 

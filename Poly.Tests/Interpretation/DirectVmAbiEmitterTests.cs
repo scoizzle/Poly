@@ -611,12 +611,6 @@ public class DirectVmAbiEmitterTests {
         // the body expr. Here we just verify execution now that captures work.
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.RawValue).IsEqualTo(42L);
-
-        // Example of using dumper on a simple expr for illustration (in real use, capture internal expr)
-        var sample = System.Linq.Expressions.Expression.Constant(42L);
-        var dump = DirectVmAbiEmitter.DumpTree(sample);
-        // Just ensure dumper doesn't crash and produces output
-        await Assert.That(dump).Contains("Constant");
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -842,16 +836,7 @@ public class DirectVmAbiEmitterTests {
             new Add(x, i)
         ], [x, i]);
 
-        var sw = new System.IO.StringWriter();
-        var program = Interpreter.Compile(code, traceExpressions: sw);
-
-        var dump = sw.ToString();
-        // The trace now contains the dumped delegate expression tree from direct lowering.
-        await Assert.That(dump).Contains("Block");
-        await Assert.That(dump).Contains("Constant");
-        await Assert.That(dump).Contains("Loop");  // WhileLoop lowers to Loop expression
-        // Direct path keeps structured control flow (Loop/Block) vs primitive path's flat ops + labels.
-        // Also verify the compiled program works (cross-check).
+        var program = Interpreter.Compile(code);
         await Assert.That(program).IsNotNull();
     }
 

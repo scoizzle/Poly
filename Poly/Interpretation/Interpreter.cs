@@ -53,16 +53,16 @@ public static class Interpreter {
     /// Analyze and compile using the primary direct AST-to-VM-ABI lowering path.
     /// This is the supported way to produce a runnable <see cref="VmProgram"/>.
     /// </summary>
-    public static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal, TextWriter? traceExpressions = null) {
+    public static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) {
         var analysis = _analyzer.Analyze(node);
-        return DirectVmAbiEmitter.Emit(node, analysis, mode, traceExpressions);
+        return DirectVmAbiEmitter.Emit(node, analysis, mode);
     }
 
     /// <summary>
     /// Compile a previously-analyzed node using the direct AST-to-ABI emitter.
     /// </summary>
-    public static VmProgram Compile(Node node, AnalysisResult analysis, CompilationMode mode = CompilationMode.Normal, TextWriter? traceExpressions = null) =>
-        DirectVmAbiEmitter.Emit(node, analysis, mode, traceExpressions);
+    public static VmProgram Compile(Node node, AnalysisResult analysis, CompilationMode mode = CompilationMode.Normal) =>
+        DirectVmAbiEmitter.Emit(node, analysis, mode);
 
     /// <summary>
     /// Analyze, compile, and execute <paramref name="node"/>, returning the

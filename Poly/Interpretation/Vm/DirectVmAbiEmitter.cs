@@ -30,13 +30,11 @@ public static class DirectVmAbiEmitter {
     /// <param name="root">The AST root node to compile.</param>
     /// <param name="analysis">Analysis result from the standard pipeline (without PrimitiveExpansion).</param>
     /// <param name="mode">Compilation mode for debug/tracing support.</param>
-    /// <param name="traceExpressions">Optional writer for expression tree diagnostics.</param>
     /// <returns>A <see cref="VmProgram"/> runnable by <see cref="Interpreter.Execute(VmProgram, Action{VmState})"/>.</returns>
     public static VmProgram Emit(
         Node root,
         AnalysisResult analysis,
-        CompilationMode mode = CompilationMode.Normal,
-        TextWriter? traceExpressions = null) {
+        CompilationMode mode = CompilationMode.Normal) {
 
         var ctx = new AbiCtx();
         ctx.Mode = mode;
@@ -110,10 +108,6 @@ public static class DirectVmAbiEmitter {
 
         // Build and compile the delegate
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
-        if (traceExpressions != null) {
-            traceExpressions.WriteLine("=== Direct AST Emitter Expression Tree ===");
-            traceExpressions.WriteLine(DumpTree(delegateExpr));
-        }
         var del = delegateExpr.Compile();
 
         int registerScratchSize = ctx.MaxRingDepth;
@@ -1507,7 +1501,6 @@ public static class DirectVmAbiEmitter {
 
         var stmtExprs = new List<Expression>();
         for (int i = 0; i < block.Nodes.Count; i++) {
-            // CompileStatement adds lightweight DebugHook + CurrentAstNode tracking.
             stmtExprs.Add(CompileStatement(block.Nodes[i], ctx));
         }
 
@@ -1515,7 +1508,13 @@ public static class DirectVmAbiEmitter {
         // This gives the JIT a clear load-compute-store pattern.
         var stores = ctx.EmitScopeStores();
         ctx.PopScope();
-        return Block(Block(varInitExprs), Block(stmtExprs), Block(stores));
+
+        // Flatten: merge varInitExprs, stmtExprs, stores into one block.
+        var all = new List<Expression>(varInitExprs.Count + stmtExprs.Count + stores.Count);
+        all.AddRange(varInitExprs);
+        all.AddRange(stmtExprs);
+        all.AddRange(stores);
+        return Block(all);
     }
 
     /// <summary>If statement: conditionally execute branches.
@@ -2346,51 +2345,6 @@ public static class DirectVmAbiEmitter {
         var meta = ctx.Analysis.GetMetadata<ValueRepresentationMetadata>(node);
         if (meta?.ClrType is null) return false;
         return meta.ClrType == typeof(double) || meta.ClrType == typeof(float);
-    }
-
-    /// <summary>
-    /// Proper recursive expression tree dumper for side-by-side comparison
-    /// between direct emitter and primitive path (or for diagnostics).
-    /// </summary>
-    public static string DumpTree(Expression expr, int indent = 0) {
-        var sb = new StringBuilder();
-        Dump(expr, sb, indent);
-        return sb.ToString();
-    }
-
-    private static void Dump(Expression expr, StringBuilder sb, int indent) {
-        string pad = new string(' ', indent * 2);
-        sb.AppendLine($"{pad}{expr.NodeType} ({expr.Type.Name})");
-        if (expr is BinaryExpression b) {
-            Dump(b.Left, sb, indent + 1);
-            Dump(b.Right, sb, indent + 1);
-        }
-        else if (expr is UnaryExpression u) {
-            if (u.Operand != null) Dump(u.Operand, sb, indent + 1);
-        }
-        else if (expr is BlockExpression blk) {
-            foreach (var e in blk.Expressions) Dump(e, sb, indent + 1);
-        }
-        else if (expr is ConditionalExpression c) {
-            Dump(c.Test, sb, indent + 1);
-            Dump(c.IfTrue, sb, indent + 1);
-            if (c.IfFalse != null) Dump(c.IfFalse, sb, indent + 1);
-        }
-        else if (expr is LambdaExpression lam) {
-            sb.AppendLine($"{pad}  => ({string.Join(", ", lam.Parameters.Select(p => p.Name + ":" + p.Type.Name))})");
-            Dump(lam.Body, sb, indent + 1);
-        }
-        else if (expr is MethodCallExpression m) {
-            if (m.Object != null) Dump(m.Object, sb, indent + 1);
-            foreach (var arg in m.Arguments) Dump(arg, sb, indent + 1);
-        }
-        else if (expr is MemberExpression mem) {
-            if (mem.Expression != null) Dump(mem.Expression, sb, indent + 1);
-        }
-        else if (expr is ConstantExpression) {
-            sb.AppendLine($"{pad}  const: {expr.ToString()}");
-        }
-        // Extend as needed for other node types (Goto, Loop, etc.)
     }
 
     /// <summary>

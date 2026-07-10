@@ -1,31 +1,56 @@
 # Plans & Roadmaps
 
-This directory contains execution-oriented planning documents — roadmaps, phase breakdowns, task trackers, and milestone tracking.
+Execution-oriented planning — roadmaps, phase breakdowns, task trackers.
 
-## Purpose
+Architectural rationale lives in **`docs/decisions/`**. Module maps live in **`Poly/*/README.md`**.
 
-- Keep day-to-day "what still needs to be done" work visible and updatable.
-- Separate execution tracking from architectural rationale (which lives in `docs/decisions/`).
+## Active plans
 
-## Current Plans
+| Plan | Role |
+|------|------|
+| [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | **Primary product focus** — DomainModeling evolution + WS8 lowering/consumer parity + Phase 3 MCP |
+| [V2 → V3 Workstreams](v2-to-v3/workstreams/) | Workstream detail (`ws8-*` active; WS1 foundation complete) |
+| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — prefer **`ws8-*` / `ws4-*`** only |
+| [Orchestration Guide](v2-to-v3/orchestration-guide.md) | Multi-agent operating model |
 
-- [Interpretation System Issues](interpretation-system-issues.md) — Tracked issues from the 2026-07-05 Interpretation code review. **P0 sprint DONE ✅** ANA-001/003/004 complete; **1421/1421 tests green**. **Next focus:** INT-018 (finally/using), cross-engine parity breadth (P2), INT-019 (portable call sites).
-- [Interpretation System Resolution Plan](interpretation-system-resolution-plan.md) — **154 checkable tasks** (P0–P6); ongoing cleanup. Synced 2026-07-06 (includes P0-024 docs hygiene for current direction: AST symbolic primary + primitives execution IR + metadata expansion on lowering). See also 2026-07-06 docs cleanup pass.
-- [Interpretation System Architecture Review](../interpretation-system-architecture-review.md) — **Living holistic review:** component map, pipeline, contradiction register, conceptual issues. Iterative — not a task list.
-- [V2 → V3 Master Roadmap](v2-to-v3/master-roadmap.md) — **Canonical** coordination document. **July 2026:** Phase 1 evolution foundation complete; active focus **Phase 2 / WS8** (DomainExpression→VM e2e + contract gen) then Phase 3 MCP. Interpretation is no longer the critical path.
-- [V2 → V3 Workstreams](v2-to-v3/workstreams/) — Detailed, execution-facing task breakdowns by workstream (`ws8-*` active).
+## Interpretation (current)
 
-## Legacy / Redirects
+Interpretation is **not** driven by a large open task list anymore.
 
-- [Legacy V2 → V3 Roadmap Redirect](v2-to-v3-domain-modeling-port-roadmap.md) — Superseded pointer maintained for compatibility.
+| Source of truth | Content |
+|-----------------|--------|
+| `Poly/Interpretation/README.md` | Pipeline, modules, pass order |
+| `docs/decisions/2026-06-08-vm-as-canonical-semantics.md` | VM sole engine |
+| `docs/decisions/2026-07-04-primitives-as-canonical-ir.md` | Historical title; body = direct AST→ABI |
+| `docs/decisions/2026-06-08-domain-lowering-boundary.md` | Domain → generic AST only |
 
-**Special support for smaller agents**:
-- `v2-to-v3/simple-agent-tasks/` contains micro-tasks deliberately sized for smaller/lower-capability models.
-- `v2-to-v3/agent-summaries/` is where agents submit structured reports of their work. Orchestrators use these to maintain the plan without direct edits from executors.
-- See `v2-to-v3/simple-agent-tasks/README.md` and the `orchestration-guide.md` for details.
+Optional still-valid plan snippets (verify against code before implementing):
+
+- [array-specialization-plan.md](array-specialization-plan.md) — emitter TypeIs elimination
+- [analyzer-improvements.md](analyzer-improvements.md) — analysis quality ideas
+- [future-platform-capabilities.md](future-platform-capabilities.md) — deferred product ideas
+- [neurosymbolic-platform-from-first-principles.md](neurosymbolic-platform-from-first-principles.md) — vision sketch
+- Anti-patterns [001](anti-pattern-001-duplicate-tree-walks.md), [003](anti-pattern-003-extension-point-accretion.md), [004](anti-pattern-004-interface-new-hiding.md), [005](anti-pattern-005-second-system-effect.md), [007](anti-pattern-007-single-point-dependency.md)
+
+Holistic architecture notes (living review, not a task list):
+
+- [Interpretation System Architecture Review](../interpretation-system-architecture-review.md) — **partially stale**; prefer module README + decisions for the pipeline. Do not treat its companion trackers as live (they are archived).
+
+## Archived (do not execute)
+
+| Archive | Contents |
+|---------|----------|
+| [**archive/interpretation/**](archive/interpretation/README.md) | Plans for µop/bytecode/tree-walker/primitive IR, completed direct-lowering campaigns, and the INT/ANA resolution trackers |
+
+Agents **must not** implement work from the archive without an explicit re-open validated against `DirectVmAbiEmitter`.
+
+## Legacy redirects
+
+- [v2-to-v3-domain-modeling-port-roadmap.md](v2-to-v3-domain-modeling-port-roadmap.md) → points at `v2-to-v3/master-roadmap.md`
 
 ## Guidelines
 
-- Before starting significant work on any item, review the relevant decision(s) in `docs/decisions/`.
-- Update this tracker as work progresses (status, new tasks, blockers).
-- When a major design choice is made while executing a plan, create or update the corresponding decision record.
+1. Consult `docs/decisions/` before significant work.
+2. Prefer **V2→V3 master roadmap** for “what next.”
+3. When a design choice lands, update or add a decision record — not a new competing IR plan.
+4. New Interpretation work needs a **first consumer** (DomainModeling/MCP/tests), per core engineering principles.

@@ -153,7 +153,8 @@ New language semantics should land in analysis → direct lowering → `DirectVm
 | Resource | Use |
 |----------|-----|
 | `Poly.Tests/Interpretation/` | VM correctness, direct lowering, integration tests |
-| [`docs/plans/interpretation-system-issues.md`](../../docs/plans/interpretation-system-issues.md) | Tracked gaps (INT-*, ANA-*) |
+| [`docs/plans/archive/interpretation/`](../../docs/plans/archive/interpretation/README.md) | **Archived** pre-direct-ABI plans (do not execute) |
+| [`docs/plans/v2-to-v3/master-roadmap.md`](../../docs/plans/v2-to-v3/master-roadmap.md) | Active product planning (DomainModeling V2→V3) |
 | [`docs/interpretation-system-architecture-review.md`](../../docs/interpretation-system-architecture-review.md) | Holistic architecture review (living doc) |
 | [`docs/decisions/`](../../docs/decisions/) | ADRs: VM, primitives-as-IR, EH, serialization, sandboxing |
 

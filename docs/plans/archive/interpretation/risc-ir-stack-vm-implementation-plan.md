@@ -1,3 +1,7 @@
+> **ARCHIVED (2026-07-10)** — Do not implement. Superseded by direct AST→VM-ABI (`DirectVmAbiEmitter`). See `docs/plans/archive/interpretation/README.md`.
+>
+> Original document follows for historical context only.
+
 # Implementation Plan: Bytecode VM for the Reference Interpreter
 
 **Status**: Active implementation — Phases 0–4 complete, Phase 5 in progress. **VM IS the canonical execution engine** (`Poly/Interpretation/Vm/`). The tree-walking interpreter it was designed to replace has been removed. See `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`.  

@@ -1,9 +1,13 @@
 # Interpretation System — Architecture Review (Living Document)
 
 **Created:** 2026-07-05  
-**Status:** Active — iterative review in progress  
-**Scope:** `Poly/Interpretation/`, `Poly/Syntax/` (nodes, primitives, analysis infrastructure), and backends that consume the interpretation pipeline.  
-**Companion artifacts:** [`docs/plans/interpretation-system-issues.md`](plans/interpretation-system-issues.md) (task tracker), [`docs/decisions/`](decisions/) (ADRs), [`Poly/Interpretation/README.md`](../Poly/Interpretation/README.md) (module map).
+**Status:** Living review — **partially historical** (pre-direct-ABI sections remain; pipeline truth is `Poly/Interpretation/README.md` + decisions)  
+**Scope:** `Poly/Interpretation/`, `Poly/Syntax/`, and backends that consume the interpretation pipeline.  
+**Companion artifacts:**
+- [`docs/plans/archive/interpretation/`](plans/archive/interpretation/README.md) — **archived** INT/ANA trackers and µop-era plans (do not execute)
+- [`docs/decisions/`](decisions/) (ADRs)
+- [`Poly/Interpretation/README.md`](../Poly/Interpretation/README.md) (module map — **current pipeline**)
+- [`docs/plans/v2-to-v3/master-roadmap.md`](plans/v2-to-v3/master-roadmap.md) (active product plans)
 
 ---
 
@@ -18,7 +22,7 @@ You are extending a **living architecture review**, not implementing fixes and n
 1. **Describe** each Interpretation component as it exists today (files, data flow, contracts).
 2. **Compare** against ADRs in `docs/decisions/` and module READMEs — note drift.
 3. **Register** findings in §5 (contradictions) or §6 (conceptual issues) with stable IDs.
-4. **Do not** duplicate `docs/plans/interpretation-system-issues.md` — link to INT-/ANA- items when a finding already has a tracked task; add new register entries when the issue is architectural insight not yet captured.
+4. **Do not** resume archived INT-/ANA- trackers. If a finding needs work, file it against current `DirectVmAbiEmitter` / analysis under the V2→V3 roadmap or a new short decision — not under `docs/plans/archive/interpretation/`.
 
 ### Required reading (in order)
 
@@ -74,7 +78,7 @@ New IDs: next free number in the section. When resolving: set `Status: resolved`
 
 ### Do not
 
-- Turn this into a duplicate of `interpretation-system-issues.md` (no INT-/SPRINT- task lists here).
+- Turn this into a duplicate of `plans/archive/interpretation/interpretation-system-issues.md` (no INT-/SPRINT- task lists here).
 - Mark architectural problems `done` because a test passes — tests prove behavior, not design coherence.
 - Delete register rows; resolve in place.
 - Implement code fixes in the same turn unless the user explicitly asks — this document is identification-first.
@@ -335,7 +339,7 @@ This three-way branch pattern (runtime-check / static-resolved / fail-closed) is
 
 - Top-level and lambda bodies: separate compiled `Action<VmState>` delegates in `VmProgram.Functions`.
 - `Call` / `AllocClosure` dispatch to function table.
-- `Return` in lambda body ends that delegate (jumps to `ExitLabel`) — not a full in-delegate frame return ([INT-005](plans/interpretation-system-issues.md)).
+- `Return` in lambda body ends that delegate (jumps to `ExitLabel`) — not a full in-delegate frame return ([INT-005](plans/archive/interpretation/interpretation-system-issues.md)).
 
 **Ring allocation — the key design:**
 
@@ -362,7 +366,7 @@ This means the VM's `Stack` pointer is only meaningful at function-entry and fun
 
 | Backend | Consumes | Status |
 |---------|----------|--------|
-| `LinqExpressionGenerator` | AST directly (with analysis metadata for DCE + node replacements) | **First complete execution engine** — mature independent implementation covering ~40+ node types. Produces opaque LINQ delegates: no suspend/resume, no runtime state inspection. Superseded by VM for runtime introspection, but remains the most complete correctness reference. Cross-validated against VM for arithmetic/logic/property-access only (K-024). Has DCE, type-promotion, and `GetNodeReplacement` features the VM lacks (K-025). **[VM must achieve parity](plans/interpretation-system-issues.md) before it can claim canonical status (C-016).** |
+| `LinqExpressionGenerator` | AST directly (with analysis metadata for DCE + node replacements) | **First complete execution engine** — mature independent implementation covering ~40+ node types. Produces opaque LINQ delegates: no suspend/resume, no runtime state inspection. Superseded by VM for runtime introspection, but remains the most complete correctness reference. Cross-validated against VM for arithmetic/logic/property-access only (K-024). Has DCE, type-promotion, and `GetNodeReplacement` features the VM lacks (K-025). **[VM must achieve parity](plans/archive/interpretation/interpretation-system-issues.md) before it can claim canonical status (C-016).** |
 | `CSharpGenerator` | AST + optional `TypeDefinitionNode[]` | **Sole production backend for domain type definitions** (1,089 lines). Stateless recursive-descent pretty-printer used via `Poly.Mcp/DomainTools.cs:1383` (`GenerateCSharpFromRoots`). Handles 20 statement types, ~40 expression types explicitly — 11 types fall through to `ToString()` (coincidentally valid for bitwise ops, incorrect for PopCount/StridedSet/SuspendNode). Optional DCE via `AnalysisResult` but production path uses none. No `CSharp/README.md` (K-052). Contains dead code `WriteTestTopLevelStatement` (K-053). Contract interface rules independently encoded from VM. See §4.15 for full analysis. |
 | `MermaidAstGenerator` | AST | Visualization only. |
 
@@ -2376,7 +2380,7 @@ The six novel approaches in Poly's Interpretation system are evaluated against e
 | **C-007** | Medium | `vm-gap-analysis.md` TypeIs section obsolete | Claims `IsNotNull` only; `TypeCheck` + static scalar match exist | Archive or revise §4 fidelity section |
 | | | **→ Status: resolved 2026-07-05** — TypeIs now correctly uses `TypeCheck` primitive for heap-ref operands and `StaticTypeIsMatch` for scalar/bool. See K-015 for remaining VM-path test gap. |
 | **C-008** | Low | `CallSite` catalog indexes `Member` property getters but not `ClrMethod` members — for `Member` used as standalone values (method groups, event handlers) | `ProcessMember` only handles `ClrTypeProperty` at `CallSiteCatalogPass.cs:122-135`. `ClrMethod` members on `Member` nodes are skipped. However, `Invoke.ToPrimitives` reads both resolved member AND `CallSiteIndex` — the index comes from `ProcessInvoke`, so only standalone `Member` references are unindexed. | Extend catalog or document intentional omission |
-| **C-009** | Low | Sprint tracker W6 section still shows pre-closure ❌ rows | `interpretation-system-issues.md` §SPRINT-W6 vs header "complete" | Tracker hygiene pass |
+| **C-009** | Low | Sprint tracker W6 section still shows pre-closure ❌ rows | `plans/archive/interpretation/interpretation-system-issues.md` §SPRINT-W6 vs header "complete" | Tracker hygiene pass |
 | **C-010** | Resolved (2026-07-05) | `vm-gap-analysis.md` priority list ranked "Fix TypeIs" #1, but TypeIs was already correct — **Fixed.** Priority list updated with resolved/partial annotations. | Priority list now shows TypeIs → resolved, GC → resolved, breakpoints → partial. | Close. |
 | **C-011** | Low | `PrimitiveExpandTests.Expand_TypeIs_StringRefType` test name implies correctness check, but actually tests no-analysis fallback (Unknown → 0L — "fails closed") | `Poly.Tests/Interpretation/PrimitiveExpandTests.cs:96` — `ExecExpand` creates fresh `ExpansionContext` without analysis pipeline, so `GetValueRepresentation` returns `Unknown` and `ToPrimitives` emits `PushConstant(0L)` | Rename test to `Expand_TypeIs_WithoutAnalysis_FailsClosed`; add separate VM-path test with full pipeline |
 | **C-012** | Resolved (2026-07-06) | `EmitThrowOp` was fully implemented but never wired — **Fixed.** Both PrimThrow and PrimThrowProtected now wired to EmitThrowOp. Strategy B handler dispatch implemented. | PrimThrow => EmitThrowOp(pcs, ctx); PrimThrowProtected => EmitThrowOp(pcs, ctx). 4 throw tests + 4 EH execution tests passing. | Close. |
@@ -2406,7 +2410,7 @@ Issues that are **internally consistent** but create **design risk, duplication,
 | **K-001** | Value ABI | Stack slots are untyped `long`; heap handles and scalars share representation | Every consumer needs analysis or convention; bugs like INT-002 recur at API boundaries |
 | **K-002** | Lowering | `ToPrimitives` on nodes reads analysis metadata ad hoc | No single "lowering contract" document; easy to emit IR inconsistent with analysis (EH, catalog) |
 | **K-003** | IR maturity | `InputSlots`/`ResultSlot` unused in expansion | ADR SSA path incomplete; ring simulation remains sole dataflow model |
-| **K-004** | Closures | One delegate per lambda body; `Return` ends program | Works today; blocks single-module multi-function bytecode ([INT-005](plans/interpretation-system-issues.md)) |
+| **K-004** | Closures | One delegate per lambda body; `Return` ends program | Works today; blocks single-module multi-function bytecode ([INT-005](plans/archive/interpretation/interpretation-system-issues.md)) |
 | **K-005** | Incremental | Expression pipeline supports incremental infra but `Interpreter` doesn't use it | Domain model gets incremental analysis; expression re-analysis is untested in production entry point |
 | **K-006** | EH | Three-layer placeholder (analysis → markers → VM) without VM consumer; `EmitThrowOp` dead code. The flat µop array model makes this more than a wiring gap — catch/finally bodies execute unconditionally after try body (see §4.6). | Risk of analysis/IR drift until INT-018; `EmitThrowOp` is implemented but orphaned — may drift from the real throw path when wired. Tests verify expansion shape only, not execution. Two fundamentally different implementation strategies exist (nesting vs runtime dispatch) with no decision (K-027). |
 | **K-007** | TypeIs | Static scalar `is` uses compile-time type match (`StaticTypeIsMatch`); heap-ref `is` uses runtime `TypeCheck` primitive | Static path is correct by construction (representation determines lowering — analysis is source of truth). `Unknown` path fails closed (0L). The `TypeCheck` path is end-to-end untested through VM compile+execute — see K-015. The `System.Type` embedding blocks portable serialization — see K-016. |
@@ -2533,7 +2537,7 @@ Issues that are **internally consistent** but create **design risk, duplication,
 
 | Document | Relationship |
 |----------|--------------|
-| [interpretation-system-issues.md](plans/interpretation-system-issues.md) | Actionable tracker (INT-*, ANA-*) |
+| [interpretation-system-issues.md](plans/archive/interpretation/interpretation-system-issues.md) | **Archived** tracker (INT-*, ANA-*) — do not execute |
 | [vm-gap-analysis.md](decisions/vm-gap-analysis.md) | 2026-06 gap inventory — partially stale |
 | [2026-07-04-primitives-as-canonical-ir.md](decisions/2026-07-04-primitives-as-canonical-ir.md) | IR authority |
 | [2026-06-08-vm-as-canonical-semantics.md](decisions/2026-06-08-vm-as-canonical-semantics.md) | VM authority |

@@ -1,3 +1,5 @@
+> **Note (2026-07-10):** This experiment may reference pre-direct-ABI plans. Those plans live under `docs/plans/archive/interpretation/`. Prefer `DirectVmAbiEmitter` + current decisions for new work.
+
 # Research: Direct AST Lowering to Bespoke VM ABI (Without Primitives as Mandatory Layer)
 
 **Status:** Research spike / exploratory  
@@ -6,7 +8,7 @@
 - `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`
 - `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`
 - `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` (with 2026-07-06 clarification)
-- `docs/plans/interpretation-system-resolution-plan.md`
+- `docs/plans/archive/interpretation/interpretation-system-resolution-plan.md`
 - Current `LinqExpressionGenerator` and `ProgramCompiler`
 
 ---

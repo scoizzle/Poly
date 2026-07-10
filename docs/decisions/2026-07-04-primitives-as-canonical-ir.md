@@ -3,7 +3,7 @@
 **Date:** 2026-07-04
 **Status:** Superseded — the primitive instruction set has been removed from the critical
 execution path. The AST is the canonical symbolic form; the `DirectVmAbiEmitter` performs
-direct AST-to-VM-ABI lowering. See `docs/plans/pruning-primitives-plan.md`.
+direct AST-to-VM-ABI lowering. Historical campaign notes: `docs/plans/archive/interpretation/pruning-primitives-plan.md` (archived).
 
 ## Context
 

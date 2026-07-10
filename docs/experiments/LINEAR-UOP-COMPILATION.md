@@ -1,3 +1,5 @@
+> **Note (2026-07-10):** This experiment may reference pre-direct-ABI plans. Those plans live under `docs/plans/archive/interpretation/`. Prefer `DirectVmAbiEmitter` + current decisions for new work.
+
 # Experiment: Linear µop Compilation (Label/Goto Dispatch Removal)
 
 ## Hypothesis

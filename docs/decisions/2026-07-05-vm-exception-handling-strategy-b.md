@@ -4,10 +4,11 @@
 **Status:** Accepted  
 **Supersedes:** The Strategy A recommendation in §4.12 of `docs/interpretation-system-architecture-review.md` (Rev 1.5). Strategy B is now the primary approach following external comparison against LLVM, CLR, and JVM practice (§4.22).  
 **Context documents:**
-- [`docs/interpretation-system-architecture-review.md`](../interpretation-system-architecture-review.md) §4.12 (EH design chapter), §4.22 (external comparison)
-- [`docs/plans/interpretation-system-resolution-plan.md`](../plans/interpretation-system-resolution-plan.md) Phase 1 (INT-018)
+- [`docs/interpretation-system-architecture-review.md`](../interpretation-system-architecture-review.md) §4.12 (EH design chapter), §4.22 (external comparison) — living review; some sections predate direct AST ABI
+- [`docs/plans/archive/interpretation/interpretation-system-resolution-plan.md`](../plans/archive/interpretation/interpretation-system-resolution-plan.md) — **archived** INT-018 tracker (historical only)
 - `2026-06-08-vm-as-canonical-semantics.md` (VM authority)
 - `2026-06-08-breakpoint-architecture.md` (sibling runtime-control ADR)
+- Current EH reality: structured `Expression.TryCatchFinally` from `DirectVmAbiEmitter` (prefer code over µop-era strategy text when they conflict)
 
 ## Problem
 
@@ -104,6 +105,6 @@ Expression.TryCatch(mainBody,
 
 ## Related
 
-- INT-018 tracker item in [`docs/plans/interpretation-system-issues.md`](../plans/interpretation-system-issues.md)
-- Resolution plan Phase 1 in [`docs/plans/interpretation-system-resolution-plan.md`](../plans/interpretation-system-resolution-plan.md)
+- INT-018 tracker (historical): [`docs/plans/archive/interpretation/interpretation-system-issues.md`](../plans/archive/interpretation/interpretation-system-issues.md)
+- Resolution plan Phase 1 (historical): [`docs/plans/archive/interpretation/interpretation-system-resolution-plan.md`](../plans/archive/interpretation/interpretation-system-resolution-plan.md)
 - Analysis pass: `ExceptionRegionAnalysisPass` (produces `ExceptionRegionMetadata`)

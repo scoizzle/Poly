@@ -1,3 +1,7 @@
+> **ARCHIVED (2026-07-10)** — Do not implement. Superseded by direct AST→VM-ABI (`DirectVmAbiEmitter`). See `docs/plans/archive/interpretation/README.md`.
+>
+> Original document follows for historical context only.
+
 # Anti-Pattern 002: Speculative Capture in Bytecode
 
 **Problem:** `Bytecode` carries fields that are populated during lowering but never queried by any consumer. Each field normalizes the "capture everything" pattern, making it harder to distinguish genuinely needed payload from speculative capture.

@@ -1,3 +1,7 @@
+> **ARCHIVED (2026-07-10)** — Do not implement. Superseded by direct AST→VM-ABI (`DirectVmAbiEmitter`). See `docs/plans/archive/interpretation/README.md`.
+>
+> Original document follows for historical context only.
+
 # Pruning the Primitive Expansion Path and ToPrimitives Implementations
 
 **Date:** 2026-07-07  
@@ -6,7 +10,7 @@
 **Related:**
 - `docs/experiments/direct-ast-lowering-spike.md`
 - `docs/decisions/2026-07-04-primitives-as-canonical-ir.md` (to be updated)
-- `docs/plans/interpretation-system-resolution-plan.md`
+- `docs/plans/archive/interpretation/interpretation-system-resolution-plan.md`
 - `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs`
 - `Poly/Syntax/Node.cs`
 
@@ -105,7 +109,7 @@ As of 2026-07-07 the critical path has been switched (`Interpreter.Compile` now 
 
 ### Phase 6: Documentation & Architecture Updates
 - [ ] P6-01: Update `docs/decisions/2026-07-04-primitives-as-canonical-ir.md` (record that the decision is superseded for the VM execution path).
-- [ ] P6-02: Update `docs/plans/interpretation-system-resolution-plan.md`.
+- [ ] P6-02: Update `docs/plans/archive/interpretation/interpretation-system-resolution-plan.md` (archived — no longer required).
 - [ ] P6-03: Update `Poly/Interpretation/Vm/README.md` and `Poly/Interpretation/README.md`.
 - [ ] P6-04: Delete `Poly/Syntax/Primitives/README.md`.
 - [ ] P6-05: Review and update `AGENTS.md` (Placement Rules, build notes, etc.).

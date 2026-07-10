@@ -241,9 +241,9 @@ Likely few. Most tests check `is Constant`, `is Add`, etc., not the base type.
 
 | File | Change |
 |------|--------|
-| `docs/plans/v2-to-v3/spikes/lowering-as-analysis-passes.md` | Add Statement/Expression to architecture section |
-| `docs/plans/v2-to-v3/spikes/lowering-analysis-passes-phase2.md` | Mention that Block PopOp logic simplifies |
-| `docs/plans/v2-to-v3/spikes/lowering-assembly-step.md` | (will create with assembly step details) |
+| `docs/plans/archive/interpretation/v2-to-v3/spikes/lowering-as-analysis-passes.md` | Add Statement/Expression to architecture section |
+| `docs/plans/archive/interpretation/v2-to-v3/spikes/lowering-analysis-passes-phase2.md` | Mention that Block PopOp logic simplifies |
+| lowering-assembly-step | Never created; obsolete under direct AST→ABI |
 
 ---
 

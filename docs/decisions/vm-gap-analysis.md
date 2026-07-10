@@ -175,7 +175,10 @@ Recursive macro expansion without base case will hit the step limit or stack ove
 
 ## Recommended Priority Order
 
-> **Note (2026-07-05):** This priority list is partially stale. See Phase 0 of `docs/plans/interpretation-system-resolution-plan.md` for the current ordering.
+> **Note (2026-07-10):** This gap list and priority ordering are **historical** (bytecode/µop era).
+> Do not use as an execution backlog. Current pipeline: AST → `DirectVmAbiEmitter` → VM ABI.
+> Product planning: `docs/plans/v2-to-v3/master-roadmap.md`. Archived trackers:
+> `docs/plans/archive/interpretation/`.
 
 Original list (kept for historical reference — see resolution plan for current priorities):
 

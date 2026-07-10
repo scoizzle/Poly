@@ -1,3 +1,7 @@
+> **ARCHIVED (2026-07-10)** — Do not implement. Superseded by direct AST→VM-ABI (`DirectVmAbiEmitter`). See `docs/plans/archive/interpretation/README.md`.
+>
+> Original document follows for historical context only.
+
 # Anti-Pattern 006: Completeness-Driven µop Inventory
 
 **Problem:** 14 of 37 µop types are never emitted by lowering. The 9 immediate-bearing variants (`NegImmOp` through `ShrImmOp`) exist because the `EmitBinary` switch lists them as possible fusion targets, but lowering never produces the source pattern that triggers them. This is "design the complete instruction set first, then write the code generator" — the opposite of "build working code before extracting abstractions."

@@ -1,3 +1,7 @@
+> **ARCHIVED (2026-07-10)** — Do not implement. Superseded by direct AST→VM-ABI (`DirectVmAbiEmitter`). See `docs/plans/archive/interpretation/README.md`.
+>
+> Original document follows for historical context only.
+
 # Stack Depth & Definite Assignment Analyzers
 
 ## 1. Stack Depth Analyzer

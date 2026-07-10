@@ -25,7 +25,7 @@ Synthesize the substantial analysis and introspection work performed in the curr
   - Restructured "Current State" with "Baseline at Planning" + new "Progress Achieved (Core Analysis Unification + Introspection)" subsection (detailed bullet list matching the master note).
   - Added note linking the work to neurosymbolic "re-analyzable + analysis-driven execution" requirements.
   - Preserved all original DomainExpression lowering / V3 parity deliverables as still primary.
-- Updated `docs/plans/v2-to-v3/tree-walking-interpreter-design.md` with note on explicit analysis policy (bare interpreter auto-runs full pipeline; contrast with lighter helpers; tests should make policy intentional).
+- Updated tree-walking interpreter design note (historical; now at `docs/plans/archive/interpretation/v2-to-v3/tree-walking-interpreter-design.md`).
 - Minor hygiene on the legacy redirect file.
 - The enum definition change (`CompileTimeConst = ReadOnlyAfterInit | (1 << 1)`) + supporting emission/ToString adjustments (else-if to avoid double prefixes) were already landed; plans now document the "automatically imply" behavior.
 
@@ -58,7 +58,7 @@ Synthesize the substantial analysis and introspection work performed in the curr
 ```diff
 ~ docs/plans/v2-to-v3/master-roadmap.md
 ~ docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md
-~ docs/plans/v2-to-v3/tree-walking-interpreter-design.md
+~ docs/plans/archive/interpretation/v2-to-v3/tree-walking-interpreter-design.md (archived 2026-07-10)
 ~ docs/plans/v2-to-v3-domain-modeling-port-roadmap.md (minor hygiene)
 + docs/plans/v2-to-v3/agent-summaries/orchestrator-plan-synthesis-2026-analysis-mutability.md (this file)
 ```

@@ -17,13 +17,15 @@ These documents exist so that:
 - Keep entries concise and scannable. Link to more detailed records where they exist.
 - Update `AGENTS.md` when adding new decisions that agents must be aware of.
 
-**Note on Plans vs Decisions**: Execution roadmaps, phase breakdowns, and task tracking now live in `docs/plans/`. See `docs/plans/v2-to-v3-domain-modeling-port-roadmap.md` for the current V2→V3 port tracker.
+**Note on Plans vs Decisions**: Execution roadmaps live in `docs/plans/`.  
+**Active product plan:** [`docs/plans/v2-to-v3/master-roadmap.md`](../plans/v2-to-v3/master-roadmap.md).  
+**Archived Interpretation IR-era plans:** [`docs/plans/archive/interpretation/`](../plans/archive/interpretation/README.md) (do not execute).
 
 ## Current Decisions
 
 - [2026-05-31: Immutable Core for Domain Modeling (V2 → V3)](2026-05-31-immutable-core-domain-modeling.md) — Strategic shift to immutable records while preserving the transactional evolution/correctness guarantees required by LLM agents.
 - [2026: V2 → V3 Domain Modeling Port Plan](2026-v2-to-v3-domain-modeling-port.md) — Living plan for the port to the immutable core + thin evolution layer (includes integration with the documentation and agent instruction structure).
-- [2026-05-31: Neurosymbolic Platform Vision](2026-05-31-neurosymbolic-platform-vision.md) — Historical vision document. Core ideas (models codify macros in symbolic form, domain modeling as synthesis frontend) remain relevant. **Many specifics superseded**: tree-walker removed (see 2026-06-08-vm-as-canonical-semantics), no separate `Poly/Ir/` (primitives are the canonical execution IR per 2026-07-04), AST remains the primary serializable symbolic form for models while primitives + metadata (expanded at lowering time) serve execution. See amendment note in the document.
+- [2026-05-31: Neurosymbolic Platform Vision](2026-05-31-neurosymbolic-platform-vision.md) — Historical vision document. Core ideas remain relevant. **Many specifics superseded**: tree-walker removed; AST is primary symbolic form; execution is direct AST→VM-ABI (`DirectVmAbiEmitter`), not a separate primitive IR (see 2026-06-08-vm-as-canonical-semantics + superseded 2026-07-04 ADR).
 - [2026-06-08: VM as Canonical Semantics](2026-06-08-vm-as-canonical-semantics.md) — Tree-walker removed; VM becomes the canonical semantics reference for all backends.
 - [2026-06-08: Breakpoint Architecture](2026-06-08-breakpoint-architecture.md) — PC-level breakpoints via Int/Iret interrupts, managed externally. No AST modification.
 - [2026-06-08: Heap Reclamation Strategy](2026-06-08-heap-reclamation.md) — Free-list with explicit null-out. No tracing GC.
@@ -32,5 +34,5 @@ These documents exist so that:
 - [2026-06-08: VM Sandboxing](2026-06-08-sandboxing-approach.md) — Permission table checked at CallExternal entry. Deny by default, allow overrides.
 - [2026-06-08: Domain-Lowering Boundary](2026-06-08-domain-lowering-boundary.md) — No domain-specific VM opcodes. Domain concepts lower to existing generic ops.
 - [2026-06-09: Comparison Fusion Encoding](2026-06-09-comparison-fusion-encoding.md) — Why comparison+branch fusion lives in lowering, not in the comparison opcodes. Signed overflow rules out the subtraction trick.
-- [2026-07-04: Primitives as Canonical IR](2026-07-04-primitives-as-canonical-ir.md) — The PrimitiveNode instruction set IS the canonical intermediate representation, superseding the planned separate Poly/Ir/. Adds ValueSlot, Phi, BasicBlock, Module to the primitive format.
+- [2026-07-04: Primitives as Canonical IR](2026-07-04-primitives-as-canonical-ir.md) — **Superseded.** Title is historical; body documents removal of primitive IR in favor of direct AST→VM-ABI.
 - [2026-07-05: VM Exception Handling — Strategy B](2026-07-05-vm-exception-handling-strategy-b.md) — Structured EH via side table (ExceptionRegionTable) with handler dispatch, aligned with LLVM/CLR/JVM practice. Replaces the earlier Strategy A (LINQ nesting) recommendation.

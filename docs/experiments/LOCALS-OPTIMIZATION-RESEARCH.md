@@ -1,3 +1,5 @@
+> **Note (2026-07-10):** This experiment may reference pre-direct-ABI plans. Those plans live under `docs/plans/archive/interpretation/`. Prefer `DirectVmAbiEmitter` + current decisions for new work.
+
 # Research: Eliminating Unnecessary Push/Pop for Short-Lived µop Values
 
 ## The Problem
@@ -154,7 +156,7 @@ Compile µops to expression trees as today, then walk the resulting expression t
 
 ### C. µop-level register allocation (SSA-lite)
 
-The full SSA plan (`docs/plans/abstract-interpretation-and-ssa.md`) already designs this:
+The full SSA plan (`docs/plans/archive/interpretation/abstract-interpretation-and-ssa.md`) already designs this:
 1. Build SSA form from µops (stack reconstruction, dominator tree, phi placement, variable renaming).
 2. Optimize in SSA (SCCP, DCE, GVN, LICM).
 3. Destruct SSA back to µops with stack scheduling and local slot assignment.
@@ -335,7 +337,7 @@ The suspend/resume analysis changes the tier ranking. Block-local promotion (App
 - It unlocks the full optimization pipeline (SCCP, DCE, GVN, LICM) — the neurosymbolic loop will need all of these.
 - The block-local promotion approach's code (use-def chain reconstruction, CLR local allocation, SP adjustment) is a subset of what SSA destruction already does. Building it independently is duplicate effort.
 
-The plan in `docs/plans/abstract-interpretation-and-ssa.md` needs re-targeting from `byte[]` opcodes to `MicroOp[]` records. The SSA IR types (`SsaValue`, `SsaBlock`, `SsaInstruction`) remain valid; what changes is:
+The plan in `docs/plans/archive/interpretation/abstract-interpretation-and-ssa.md` needs re-targeting from `byte[]` opcodes to `MicroOp[]` records. The SSA IR types (`SsaValue`, `SsaBlock`, `SsaInstruction`) remain valid; what changes is:
 - **Stack reconstruction (Phase 1b)**: instead of decoding `byte[]` opcodes, iterate `MicroOp[]` calling `StackEffect` on each record.
 - **µop type mapping**: `MicroOp` subclasses map to `SsaOpcode` enum values (e.g., `AddOp` → `SsaOpcode.Add`).
 - **Destruction (Phase 3)**: instead of emitting bytecode, emit `MicroOp[]` records — the stack scheduling phase produces a compact µop sequence.

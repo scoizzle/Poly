@@ -27,6 +27,8 @@
 
 **Implication:** Primary agent effort returns to **DomainModeling V2→V3** (evolution, analysis/lowering parity for *consumers*, MCP migration). Further Interpretation work is **on-demand** when a DomainModeling proof or MCP path forces a gap.
 
+**Plans hygiene (2026-07-10):** Pre-direct-ABI Interpretation plans (µop/bytecode/tree-walker trackers, completed campaigns) are under `docs/plans/archive/interpretation/`. Do not implement from the archive.
+
 ---
 
 ## Core Rules for All Agents

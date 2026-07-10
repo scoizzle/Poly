@@ -1,3 +1,7 @@
+> **ARCHIVED (2026-07-10)** — Do not implement. Superseded by direct AST→VM-ABI (`DirectVmAbiEmitter`). See `docs/plans/archive/interpretation/README.md`.
+>
+> Original document follows for historical context only.
+
 # Prompt: Execute the Direct Lowering + ABI Refactor Task List (Simpler Model Version)
 
 **Target audience:** Smaller / cheaper / lower-context models or agents.

@@ -1,84 +1,65 @@
 # Simple Agent Tasks (Micro-Tasks for Smaller Models)
 
-**Purpose**: This directory contains very small, self-contained tasks that can be reliably completed by smaller, lower-context, or cheaper model-based agents.
+**Purpose**: Small, self-contained tasks for lower-context / cheaper agents.  
+**Last Updated**: 2026-07-10
+
+## Current Focus (July 2026)
+
+| Priority | Parent | What to pick |
+|----------|--------|----------------|
+| **1 — Active** | **WS8** | DomainExpression → VM e2e, contract interface gen, lowering consumer gaps |
+| **2 — Polish** | **WS4** | Trace / diagnostic quality for agents |
+| **3 — Hygiene** | **WS6** | Docs only (usually orchestrator) |
+| **Skip** | WS1 / WS2 / WS3 micro-tasks | Marked **Done** or **Superseded** — evolution foundation already shipped |
+
+Interpretation / VM micro-optimizations are **out of scope** for this directory unless a WS8 task explicitly requires a VM fix.
 
 ## Philosophy
 
-Not all work requires a large frontier model. The majority of the V2→V3 port implementation can (and should) be done by simpler agents if we break the work down properly.
-
-**Guiding rules for tasks in this directory**:
 - One task = one small, verifiable change.
-- Minimal context needed (ideally < 4k–8k tokens total).
-- Clear, explicit instructions.
-- Self-contained verification steps.
-- References to AGENTS.md + specific decision files for principles.
-- Designed so a small model can succeed without deep architectural reasoning.
+- Minimal context (ideally &lt; 4k–8k tokens).
+- Clear verification (build + named tests).
+- Link only the needed decisions / source files.
+- Prefer **implementation** over design.
 
-## How to Use These Tasks
+## How to Use
 
-1. **Larger agents / orchestrators**: Scan the workstream files, identify suitable micro-tasks, create new ones here, and assign them to smaller agents.
-2. **Smaller agents**: Pick a task from this directory. Read only the referenced files + the task itself. Complete it. Update status.
-3. **All agents**: After finishing, mark the task complete and update the parent workstream/master roadmap.
+1. **Orchestrators**: Decompose WS8/WS4 into micro-tasks here; keep status accurate.
+2. **Executors**: Pick **Not Started** tasks for WS8/WS4 only. Follow steps strictly. File `agent-summaries/`.
+3. **Do not** claim superseded WS1 “skeleton” tasks — the applicator already exists.
 
 ## Task Format
 
-Every micro-task should follow this template (see examples in this directory):
+Use `TEMPLATE-micro-task.md`. Every task must include:
 
-```markdown
-# Micro-Task: [Short Descriptive Name]
+- Parent workstream (WSx)
+- Difficulty + rough token budget
+- Exact steps + verification
+- Status: Not Started / In Progress / Done / Superseded
 
-**Parent Workstream**: WSx
-**Difficulty**: Small Model Friendly
-**Estimated Tokens**: < 6k
+## Status Legend for Older Tasks
 
-## Objective
-One clear sentence.
+Many files under this directory were written for **greenfield WS1**. Treat them as follows:
 
-## Context You Need
-- Link to specific small sections of AGENTS.md
-- Link to 1-2 specific decision files (never the whole plan)
-- 1-2 source files at most
+| Pattern | Status |
+|---------|--------|
+| `ws1-implement-basic-domain-evolution-skeleton` | **Superseded** — `DomainEvolution` is real |
+| `ws1-define-evolution-result-record` | **Superseded** — records exist |
+| `ws1-implement-evolution-trace-record` | **Superseded** |
+| `ws1-implement-minimal-applicator-skeleton` | **Superseded** — applicator works |
+| `ws1-implement-minimal-noop-change-handler` | **Superseded** |
+| `ws1-define-first-domainchange-types` | **Superseded** — 66 subtypes |
+| `ws1-add-nodeid-preservation-test` | **Done** if tests exist; else verify once then Done |
+| `ws1-improve-trace-affected-nodes` | Prefer WS4 tasks |
+| `ws1-sketch/propose-fluent-evolution` | **Superseded** — `EvolutionBuilder` is large and fluent |
+| `ws2-research-nodeid-behavior` | **Superseded** — mechanical continuity in applicator |
+| `ws3-*` | **Superseded** — ops landed in DomainChange + EvolutionBuilder |
+| `ws6-audit-workstream-against-principles` | Optional hygiene |
 
-## Exact Steps
-1. ...
-2. ...
+Active tasks live at the top of the directory listing by date or are named `ws8-*` / `ws4-*`.
 
-## Verification
-- Build succeeds
-- Specific test passes
-- [ ] Checklist item
+## Related
 
-## Output
-What the agent should produce (e.g., "a new file at X with Y", "a passing test", "updated comment").
-
-## Status
-[ ] Not Started / In Progress (claimed by @agent-xyz) / Done
-```
-
-## Principles for Small-Model Tasks
-
-- Prefer **implementation** over design.
-- Prefer **copy-paste + adapt** patterns over inventing new abstractions.
-- One file changed is ideal. Two files max for most tasks.
-- Always include explicit "check AGENTS.md Core Principles" reminder.
-- Make the success condition objective and testable.
-
-## Current Micro-Tasks
-
-(See files in this directory)
-
-When creating new ones, name them clearly, e.g.:
-- `ws3-add-property-operation.md`
-- `ws1-implement-evolution-trace-record.md`
-
-## Coordination & Reporting
-
-See the **[Orchestration Guide](../orchestration-guide.md)** for the full model.
-
-**Important**: After completing (or attempting) a micro-task, **do not edit the master roadmap or workstream files directly**. Instead:
-
-1. Create a new file in `../agent-summaries/` using the template (`TEMPLATE-task-summary.md`).
-2. Fill it out (especially the "Impact on the Overall Plan" and "Decision Impact" sections).
-3. Update only the Status line in *this* micro-task file to indicate that a summary was submitted.
-
-The orchestrator(s) will review your summary and fold the results into the official plan. This is the designed way for smaller agents to contribute without breaking shared state.
+- Parent roadmap: `../master-roadmap.md`
+- Orchestration: `../orchestration-guide.md`
+- Decisions: `docs/decisions/2026-v2-to-v3-domain-modeling-port.md`

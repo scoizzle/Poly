@@ -1,10 +1,15 @@
 # Workstream WS8: Phase 2 — Analysis Unification & Lowering Parity
 
-**Phase**: 2
-**Priority**: High (blocks consumer migration)
-**Owner**: TBD
-**Status**: In Progress (VM execution engine substantially hardened June 2026: lazy constant loading, clean argument passing, string equality via `IsReferenceEquality`, type system unification via `IsStackValue`, reflection consolidation via `Ref<T>`, `NoDebug` compilation mode, benchmark infrastructure. 1316 tests passing. Core shared analysis surface + member mutability modeling also advanced.)
-**Last Updated**: 2026-06-23 (VM execution engine hardened — argument passing, string comparison, type classification, reflection, benchmarks)
+**Phase**: 2  
+**Priority**: **Critical path** (primary focus after Interpretation detour)  
+**Owner**: TBD — claim on `master-roadmap.md`  
+**Status**: **Active** — DomainExpression→AST done; e2e Domain→VM proofs + V3 contract interface gen are the open gates for Phase 3  
+**Last Updated**: 2026-07-10  
+
+> **July 2026 re-entry:** Direct AST→VM-ABI is production-capable; stop treating VM hardening as the WS8 center of gravity. Prefer micro-tasks:
+> - `simple-agent-tasks/ws8-e2e-policy-vm-eval.md`
+> - `simple-agent-tasks/ws8-inventory-v2-contract-interface-rules.md`
+> - `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md`
 
 ## Goal
 
@@ -24,11 +29,11 @@ Unify the V2 and V3 analysis surfaces on the shared `Syntax/Analysis` infrastruc
 - `Introspection/` type resolution system is complete (ITypeDefinition, ClrTypeDefinitionRegistry)
 - V2 `DomainLoweringGenerator` (1529 lines) lowers V2 domain model to AST — but is coupled to V2 Data/Modeling types
 
-**What's still missing (core deliverables unchanged):**
-- **DomainExpression Lowering Pass (Deliverable A)** — ✅ **RESOLVED June 2026**. `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` converts all 21 DomainExpression types to Syntax/Nodes. Maps through the standard LoweringPrep/UopGeneration analysis → VM pipeline.
-- **No unified pipeline** from `Domain` → `DomainExpression` → Syntax/Nodes → VM execution — 🟡 partial. Lowering pass exists. End-to-end VM integration test still needed.
-- **No V3 contract interface generation** — V2 `LowerToContractInterfaces` has no V3 equivalent
-- **No V3 test/program generation** — V2 `GenerateTestStatements` has no V3 equivalent
+**Deliverable status (July 2026):**
+- **DomainExpression Lowering Pass (A)** — ✅ `DomainExpressionLoweringPass.cs` (all expression kinds → Syntax/Nodes). Execution target is direct AST→ABI (`Interpreter.Compile` / `DirectVmAbiEmitter`), not the removed µop/primitive path described in older paragraphs below.
+- **Unified Domain → expression → Syntax → VM pipeline** — 🟡 lowering exists; **product gate = e2e tests** (policy/guard on VM with entity args).
+- **V3 contract interface generation** — ⬜ still missing vs V2 `LowerToContractInterfaces` (AGENTS.md naming rules).
+- **V3 test/program generation** — ⬜ only as first consumers demand (MCP/demos).
 
 **Note on V3 analyzer count (corrected June 2026)**: The original WS8 plan claimed V3 had only 3 analyzers (Structural, Semantic, PolicyConstraint). The actual V3 `DomainModelAnalyzer.cs` registers **17 analyzers**, matching all 10 V2 analyzers plus 7 additional ones. V2 had ~19 analyzers total. The gap is ~2 analyzers — effectively at parity. The shared `Syntax/Analysis` infrastructure is the foundation for both. See the refreshed `ws7-v3-expressiveness-audit.md` for the full corrected audit.
 

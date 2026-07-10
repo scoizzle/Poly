@@ -33,4 +33,4 @@ A short document or addition to the proposal spike listing the recommended first
 ## Status
 
 **Claimed by**:  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md

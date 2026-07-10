@@ -51,7 +51,7 @@ These are pure data carriers. No applicator logic yet.
 
 **Claimed by**:  
 **Started**:  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md
 
 **Notes / Blockers**:
 

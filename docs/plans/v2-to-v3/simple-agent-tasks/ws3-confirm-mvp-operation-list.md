@@ -42,4 +42,4 @@ Produce a clear, agreed-upon list of the exact operations that will be supported
 ## Status
 
 **Claimed by**:  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md

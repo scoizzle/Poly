@@ -1,10 +1,12 @@
 # Workstream WS1 (Consolidated): Evolution Layer Applicator + MVP Operations + NodeId Continuity
 
 **Phase**: 1  
-**Priority**: Critical Path (highest leverage)  
+**Priority**: Complete — do not reopen unless proofs regress  
 **Owner**: Grok (primary orchestrator)  
-**Status**: Foundation Complete (MVP operations + core applicator + basic traces delivered). Phase 1 continues with quality/audit/proof focus per re-evaluated master roadmap (June 2026).  
-**Last Updated**: 2026-06 (under active ownership)
+**Status**: **Complete** (2026-07-10 reaffirmation). Real `DomainEvolution.Apply` / `Evolve()`, 66 `DomainChange` subtypes, analysis gate + rollback, NodeId continuity, incremental analysis.  
+**Last Updated**: 2026-07-10  
+
+> **July 2026 note:** Interpretation/VM work is complete enough that platform work no longer blocks DomainModeling. Next active workstream is **WS8** (consumer-facing lowering parity + e2e VM proofs), not a restart of this file. Micro-tasks under `simple-agent-tasks/ws1-*` are **Superseded**.
 
 ## Goal
 
@@ -22,7 +24,7 @@ This is the single most important deliverable in Phase 1. Everything else (trace
 ## Rationale for Consolidation (from Code Review + Ownership Plan)
 
 - The skeleton (`DomainEvolution`, `EvolutionResult`, `EvolutionTrace`, `EvolutionBuilder`, abstract `DomainChange`) already exists and compiles.
-- `ApplyChanges` is a deliberate identity placeholder.
+- ~~`ApplyChanges` is a deliberate identity placeholder.~~ **Resolved:** applicator is real via `DomainMutationContext` (verified July 2026).
 - WS1 (core infrastructure) and WS3 (operations) are not separable — the applicator *is* the operations.
 - NodeId continuity is a mechanical detail inside the applicator, not a standalone research workstream.
 - Merging removes fake handoffs and matches ground truth.

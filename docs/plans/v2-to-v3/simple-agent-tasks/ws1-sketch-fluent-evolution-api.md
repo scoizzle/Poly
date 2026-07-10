@@ -37,4 +37,4 @@ A new or updated document in `docs/plans/v2-to-v3/spikes/` with the comparison a
 ## Status
 
 **Claimed by**:  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md

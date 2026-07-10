@@ -34,4 +34,4 @@ Better observable traces coming out of every `Apply` for the current MVP operati
 ## Status
 
 **Claimed by**:  
-**Status**: Not Started
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md

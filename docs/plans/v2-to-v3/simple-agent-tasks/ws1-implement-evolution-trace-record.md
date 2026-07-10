@@ -56,7 +56,7 @@ Define a clean, immutable `EvolutionTrace` record (and supporting simple types l
 ## Status
 
 **Claimed by**:  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md
 
 ---
 

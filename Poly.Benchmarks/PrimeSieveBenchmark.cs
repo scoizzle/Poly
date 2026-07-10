@@ -11,11 +11,11 @@ namespace Poly.Benchmarks;
 /// Measures PolyVM vs native C# performance for counting primes
 /// via the Sieve of Eratosthenes at three scales:
 ///
-///   Scale | Limit          | Algorithm     | π(limit) approx
-///   ------|----------------|---------------|-----------------
-///   1M    |      16,000,000| Flat sieve    |         1,031,130
-///   10M   |     180,000,000| Flat sieve    |        10,017,595
-///   1B    |  23,000,000,000| Segmented     |     1,006,163,969
+///   Scale | Limit          | Algorithm     | π(limit)
+///   ------|----------------|---------------|--------------
+///   1M    |      16,000,000| Flat sieve    |     1,031,130
+///   10M   |     180,000,000| Flat sieve    |    10,017,595
+///   1B    |  23,000,000,000| Segmented     | 1,008,309,544
 ///
 /// All use bit-parallel packing (long[] as a bitset) and PopCount for
 /// counting.  Both PolyVM and native run the same algorithm for each scale.
@@ -86,7 +86,7 @@ public class PrimeSieveBenchmark {
     // ═════════════════════════════════════════════════════════════
 
     private static long NativeFlatSieve(int limit, long[] bits) {
-        int wordCnt = (limit + 64) / 64;
+        int wordCnt = limit / 64 + 1;
         Array.Clear(bits, 0, bits.Length);
 
         for (int i = 2; i * i <= limit; i++) {
@@ -100,8 +100,8 @@ public class PrimeSieveBenchmark {
         for (int w = 0; w < wordCnt - 1; w++)
             count += long.PopCount(~bits[w]);
 
-        long lastMask = (limit & 63) == 63 ? -1L : (1L << ((limit & 63) + 1)) - 1L;
-        if (lastMask < 0) lastMask = -1;
+        int lastBits = limit - (wordCnt - 1) * 64 + 1;
+        long lastMask = lastBits == 64 ? -1L : (1L << lastBits) - 1L;
         count += long.PopCount(~bits[wordCnt - 1] & lastMask);
 
         return count - 2;
@@ -113,10 +113,9 @@ public class PrimeSieveBenchmark {
 
     private static long NativeSegmentedSieve(long limit, int segmentSize) {
         int sqrtLimit = (int)Math.Sqrt(limit);
-        int sqrtWordCnt = (sqrtLimit + 64) / 64;
+        int sqrtWordCnt = sqrtLimit / 64 + 1;
         long[] sqrtBits = new long[sqrtWordCnt];
 
-        // Phase 1: simple sieve up to sqrt(limit) to find base primes
         for (int i = 2; i * i <= sqrtLimit; i++) {
             if ((sqrtBits[i >> 6] >> (i & 63) & 1) == 0) {
                 for (int j = i * i; j <= sqrtLimit; j += i)
@@ -124,7 +123,6 @@ public class PrimeSieveBenchmark {
             }
         }
 
-        // Extract base primes into a dense array
         int primeCount = 0;
         int[] basePrimes = new int[sqrtLimit / 8 + 1000];
         for (int i = 2; i <= sqrtLimit; i++) {
@@ -133,12 +131,12 @@ public class PrimeSieveBenchmark {
         }
 
         long total = primeCount;
-        int segWordCnt = (segmentSize + 64) / 64;
+        int segWordCnt = (segmentSize + 63) / 64;
         long[] segment = new long[segWordCnt];
 
-        // Phase 2: process each segment
         for (long low = sqrtLimit + 1; low <= limit; low += segmentSize) {
             long high = Math.Min(low + segmentSize - 1, limit);
+            long range = high - low + 1;
             Array.Clear(segment, 0, segWordCnt);
 
             foreach (int pv in basePrimes.AsSpan(0, primeCount)) {
@@ -152,12 +150,17 @@ public class PrimeSieveBenchmark {
                     segment[j >> 6] |= 1L << (int)(j & 63);
             }
 
-            for (int w = 0; w < segWordCnt; w++)
+            long fullWords = range / 64;
+            int remainder = (int)(range % 64);
+            for (int w = 0; w < fullWords; w++)
                 total += long.PopCount(~segment[w]);
+            if (remainder > 0)
+                total += long.PopCount(~segment[fullWords] & ((1L << remainder) - 1));
         }
 
-        // Subtract phantom primes at positions 0 and 1
-        return total - 2;
+        // No phantom subtraction needed — the base-prime counting starts at 2
+        // and segments span [sqrtLimit+1 … limit] so positions 0/1 are never counted.
+        return total;
     }
 
     // ═════════════════════════════════════════════════════════════
@@ -252,6 +255,8 @@ public class PrimeSieveBenchmark {
         var s = new Variable("s");       // start
         var rs = new Variable("rs");     // relStart
         var rl = new Variable("rl");     // relLimit
+        var range = new Variable("range"); // per-segment range (high-low+1)
+        var rem = new Variable("rem");     // range % 64
 
         // IsPrime(bits, x) : ((bits[x>>6] >> (x&63)) & 1) == 0
         static Node IsPrime(Node bits, Node x) => new Equal(
@@ -351,23 +356,37 @@ public class PrimeSieveBenchmark {
                     ])),
 
                 // ── Count survivors via PopCount ──
+                // range = high - low + 1
+                new Assignment(range, new Add(new Subtract(high, low), new Constant(1L))),
+                // rem = range % 64
+                new Assignment(rem, new Modulo(range, new Constant(64L))),
+
+                // Count full words: for (w = 0; w < range / 64; w++)
                 new Assignment(w, new Constant(0L)),
                 new WhileLoop(
-                    new LessThan(w, new Constant(segWordCnt)),
+                    new LessThan(w, new Divide(range, new Constant(64L))),
                     new Block([
                         new Assignment(total, new Add(total,
                             new PopCount(new BitwiseNot(new IndexAccess(seg, w))))),
                         new Assignment(w, new Add(w, new Constant(1L)))
                     ])),
 
+                // If remainder > 0, count the last partial word with mask
+                new IfStatement(
+                    new GreaterThan(rem, new Constant(0L)),
+                    new Assignment(total, new Add(total,
+                        new PopCount(new BitwiseAnd(
+                            new BitwiseNot(new IndexAccess(seg,
+                                new Divide(range, new Constant(64L)))),
+                            new Subtract(new ShiftLeft(new Constant(1L), rem),
+                                new Constant(1L))))))),
+
                 new Assignment(low, new Add(low, new Constant((long)segmentSize)))
             ])));
 
-        // Subtract 0 and 1 (not prime)
-        nodes.Add(new Assignment(total, new Subtract(total, new Constant(2L))));
         nodes.Add(total);
 
         return new Block(nodes, [baseBits, basePrimes, seg, i, p, low, high,
-            total, pc, pi, w, s, rs, rl]);
+            total, pc, pi, w, s, rs, rl, range, rem]);
     }
 }

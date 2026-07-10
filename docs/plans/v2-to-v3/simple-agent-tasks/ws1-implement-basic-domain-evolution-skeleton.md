@@ -2,11 +2,12 @@
 
 **Parent Workstream**: WS1 - Evolution Layer Core Infrastructure  
 **Difficulty**: Medium (requires understanding the design)  
-**Estimated Context**: Medium
+**Estimated Context**: Medium  
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md
 
-> **Important (June 2026):** This task was written before the decision documented in `docs/decisions/2026-05-31-evolution-layer-design.md` (resolved Open Question #8). The explicit `EvolutionTransaction` / `BeginTransaction` / `Commit` model has been removed. The new target is `DomainEvolution` with `Apply(batch)` + `Evolve()` returning a lightweight `EvolutionBuilder`.
+> **Superseded:** `DomainEvolution` / `Evolve()` / real applicator already ship. Do not implement a skeleton.
 >
-> The **spirit** of the task remains: prove that the analysis gate + `EvolutionResult` (success vs. rolled-back with original root + trace) works cleanly on the immutable core. Update the task details to the simpler API before starting.
+> Historical note (June 2026): This task was written before the decision documented in `docs/decisions/2026-05-31-evolution-layer-design.md` (resolved Open Question #8).
 
 ## Objective
 Create a minimal but working skeleton for `DomainEvolution` (with `Apply` and `Evolve()` fluent builder) that can handle a no-op batch (apply nothing → run analysis → succeed or return rolled-back result).
@@ -55,4 +56,4 @@ Create a minimal but working skeleton for `DomainEvolution` (with `Apply` and `E
 ## Status
 
 **Claimed by**:  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md

@@ -54,7 +54,7 @@ This is the first working code that makes the evolution layer do something real 
 
 **Claimed by**:  
 **Started**:  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md
 
 **Notes / Blockers**:
 

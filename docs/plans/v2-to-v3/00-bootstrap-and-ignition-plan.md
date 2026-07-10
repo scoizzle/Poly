@@ -1,12 +1,15 @@
 # V2 → V3 Port — Bootstrap & Ignition Plan (First 1–2 Weeks)
 
-> **Historical note (June 2026):** This document describes the initial ignition sequence and is retained for provenance.
+> **Historical note (June 2026; reaffirmed July 2026):** Initial ignition (WS1 claim) is complete. This document is retained for provenance only.
+>
+> **Current re-entry (July 2026):** Phase 1 foundation is delivered; Interpretation is no longer the critical path. Active work is **Phase 2 / WS8** (e2e DomainExpression→VM + contract gen), not a greenfield WS1 restart.
 >
 > For current status and active priorities, use:
 > - `docs/plans/v2-to-v3/master-roadmap.md`
-> - `docs/plans/v2-to-v3/workstreams/`
+> - `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`
+> - `docs/plans/v2-to-v3/simple-agent-tasks/` (`ws8-*`, `ws4-*` only)
 
-**Purpose**: This is the practical "ignition sequence" to move from planning into real parallel implementation with multiple agents (including smaller ones).
+**Purpose** (historical): Practical "ignition sequence" to move from planning into real parallel implementation with multiple agents (including smaller ones).
 
 It assumes the overall plan, workstreams, orchestration model, and documentation guardrails are already in place.
 

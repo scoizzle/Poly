@@ -1,10 +1,12 @@
 # Workstream WS4: Trace & Agent Experience Quality (Rollback UX)
 
-**Phase**: 1  
-**Priority**: High  
+**Phase**: 1 (hygiene / polish)  
+**Priority**: Medium — serviceable for proofs; improve for agents  
 **Owner**: TBD  
-**Status**: In Progress (orchestrator-led kickoff after WS7 completion)  
-**Last Updated**: 2026-06 (full-send simplification pass: removed overall AffectedNodeIds + AttemptedChanges; verified clean Information diagnostic integration)
+**Status**: In Progress  
+**Last Updated**: 2026-07-10  
+
+> Active micro-task: `simple-agent-tasks/ws4-agent-trace-reading-guide.md`
 
 ## Goal
 Ensure that the traces and rollback behavior produced by the evolution layer are high-quality, clear, and genuinely useful for LLM/MCP agents — at least as good as (ideally better than) the old V2 `ApplyWithTrace` experience.

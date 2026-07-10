@@ -36,4 +36,4 @@ Implement adding a new `Stage` to an `Entity` through the evolution layer.
 ## Status
 
 **Claimed by**:  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md

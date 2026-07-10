@@ -12,8 +12,8 @@ This directory contains execution-oriented planning documents — roadmaps, phas
 - [Interpretation System Issues](interpretation-system-issues.md) — Tracked issues from the 2026-07-05 Interpretation code review. **P0 sprint DONE ✅** ANA-001/003/004 complete; **1421/1421 tests green**. **Next focus:** INT-018 (finally/using), cross-engine parity breadth (P2), INT-019 (portable call sites).
 - [Interpretation System Resolution Plan](interpretation-system-resolution-plan.md) — **154 checkable tasks** (P0–P6); ongoing cleanup. Synced 2026-07-06 (includes P0-024 docs hygiene for current direction: AST symbolic primary + primitives execution IR + metadata expansion on lowering). See also 2026-07-06 docs cleanup pass.
 - [Interpretation System Architecture Review](../interpretation-system-architecture-review.md) — **Living holistic review:** component map, pipeline, contradiction register, conceptual issues. Iterative — not a task list.
-- [V2 → V3 Master Roadmap](v2-to-v3/master-roadmap.md) — Canonical coordination document for execution status and workstream ownership.
-- [V2 → V3 Workstreams](v2-to-v3/workstreams/) — Detailed, execution-facing task breakdowns by workstream.
+- [V2 → V3 Master Roadmap](v2-to-v3/master-roadmap.md) — **Canonical** coordination document. **July 2026:** Phase 1 evolution foundation complete; active focus **Phase 2 / WS8** (DomainExpression→VM e2e + contract gen) then Phase 3 MCP. Interpretation is no longer the critical path.
+- [V2 → V3 Workstreams](v2-to-v3/workstreams/) — Detailed, execution-facing task breakdowns by workstream (`ws8-*` active).
 
 ## Legacy / Redirects
 

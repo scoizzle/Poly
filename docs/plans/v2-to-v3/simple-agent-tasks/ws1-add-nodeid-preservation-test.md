@@ -35,4 +35,4 @@ Updated test file with a clear NodeId continuity test exercising the current app
 ## Status
 
 **Claimed by**:  
-**Status**: Not Started
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md

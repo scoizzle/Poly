@@ -1,12 +1,15 @@
 # ADR / Planning Document: V2 → V3 Domain Modeling Port (Immutable Core + Preserved Evolution)
 
 **Date:** 2026-05-31 (initial)  
-**Status:** Living Plan  
+**Status:** Living Plan — **July 2026: Phase 1 foundation complete; primary execution focus is Phase 2 (WS8) then Phase 3 (MCP)**  
 **Owner:** Primary author  
+**Execution plan:** `docs/plans/v2-to-v3/master-roadmap.md` (authoritative for task status)  
 **Related Decisions:**
 - `2026-core-engineering-principles.md` (foundational)
 - `2026-05-31-immutable-core-domain-modeling.md` (the strategic decision)
 - `2026-05-31-evolution-layer-design.md` (the technical approach for the evolution layer)
+- `2026-06-08-vm-as-canonical-semantics.md` (execution target for lowered DomainExpression)
+- `2026-06-08-domain-lowering-boundary.md` (DomainModeling lowers to generic AST only)
 
 ## Context
 
@@ -100,23 +103,32 @@ Phases (refined from the earlier detailed plan):
 - Preserve exact lowering contract interface behavior (this is a hard requirement from AGENTS.md).
 - Dual maintenance is acceptable but should be time-boxed with clear gates.
 
+## Status Snapshot (2026-07-10)
+
+| Area | State |
+|------|--------|
+| Phase 1 evolution foundation | **Done** — real applicator, 66 `DomainChange` types, fluent `Evolve()`, proofs claimed (WS5) |
+| Expressiveness audit (WS7) | **Done** — living table; remaining gaps include Actor subtype, rule-composed policies |
+| DomainExpression → Syntax | **Done** |
+| Direct AST→VM execution | **Done enough** for DomainModeling proofs; not the critical path |
+| Phase 2 open | E2E DomainExpression→VM product tests; V3 contract interface generation |
+| Phase 3 | Not started — MCP on V3 evolution |
+
+Do **not** restart Phase 1 greenfield evolution tasks. See `docs/plans/v2-to-v3/master-roadmap.md` for current tasking.
+
 ## Next Planning Steps (Recommended)
 
-1. **Refine Phase 1 scope** — Decide the exact minimal set of operations to support in the first evolution layer milestone (see the companion breakdown in `docs/plans/v2-to-v3-domain-modeling-port-roadmap.md`).
-2. Create supporting decision records as design choices are made during Phase 1 (especially NodeId continuity and change representation strategy).
-3. Define measurable "Phase 1 complete" criteria that include:
-   - Working evolution layer with good traces + rollback
-   - Proof on PersonLifecycle + at least one roadblock
-   - Documentation and `AGENTS.md` updates
-   - Clear go/no-go for Phase 2
-4. Continue treating this document as a living artifact.
+1. ~~Refine Phase 1 scope~~ — **Done** (operations + applicator shipped).
+2. **Drive Phase 2 (WS8)** — e2e policy/VM evaluation + contract interface inventory/port.
+3. **Gate Phase 3** on: agents can evolve a domain and evaluate a policy on the VM without V2 mutators.
+4. Keep treating this document as strategic; **task status lives in the master roadmap**.
 
 **Related living documents (execution side):**
-- `docs/plans/v2-to-v3/master-roadmap.md` — Current master coordination document.
-- `docs/plans/v2-to-v3/orchestration-guide.md` — **The authoritative guide for how the entire multi-agent effort (large + small models) is orchestrated and coordinated.**
-- `docs/plans/v2-to-v3/agent-summaries/` — The mechanism by which all agents (especially smaller ones) report completed work. Orchestrators consume these summaries to keep the master plan accurate.
-- `docs/plans/v2-to-v3/workstreams/` — Detailed workstream task files.
-- `docs/plans/v2-to-v3/simple-agent-tasks/` — Micro-tasks designed so smaller/simpler/cheaper model agents can handle the majority of implementation work.
+- `docs/plans/v2-to-v3/master-roadmap.md` — **Authoritative task status**
+- `docs/plans/v2-to-v3/orchestration-guide.md` — multi-agent operating model
+- `docs/plans/v2-to-v3/agent-summaries/` — executor reports
+- `docs/plans/v2-to-v3/workstreams/` — workstream detail
+- `docs/plans/v2-to-v3/simple-agent-tasks/` — micro-tasks (**prefer `ws8-*` / `ws4-*`; `ws1-*` superseded**)
 
 **Related decisions:**
 - `docs/decisions/2026-core-engineering-principles.md`

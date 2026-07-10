@@ -59,7 +59,7 @@ Implement the ability to add a new `Property` to an existing `Entity` through th
 ## Status
 
 **Claimed by**: (fill in when you start)  
-**Status**: Not Started / In Progress / Done (summary submitted)
+**Status**: Superseded (2026-07-10) — evolution foundation delivered; see master-roadmap.md
 
 ---
 

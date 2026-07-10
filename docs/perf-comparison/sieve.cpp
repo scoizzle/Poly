@@ -27,6 +27,7 @@ int64_t sieve(int64_t limit) {
 
 int main(int argc, char** argv) {
     int64_t limit = argc > 1 ? std::atol(argv[1]) : 1000000;
+    (void)sieve(limit); /* warmup */
     auto start = std::chrono::steady_clock::now();
     int64_t result = sieve(limit);
     auto end = std::chrono::steady_clock::now();

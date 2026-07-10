@@ -28,6 +28,7 @@ int NQueens() {
     return total;
 }
 
+_ = NQueens(); // warmup
 var sw = Stopwatch.StartNew();
 int result = NQueens();
 sw.Stop();

@@ -20,6 +20,7 @@ int limit = args.Length > 0 ? int.Parse(args[0]) : 10000;
     return (bestN, maxLen);
 }
 
+_ = Collatz(limit); // warmup
 var sw = Stopwatch.StartNew();
 var (bestN, maxLen) = Collatz(limit);
 sw.Stop();

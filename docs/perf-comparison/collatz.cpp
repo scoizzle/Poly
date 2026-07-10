@@ -26,6 +26,7 @@ void collatz(int limit, int& best_n, int& max_len) {
 int main(int argc, char** argv) {
     int limit = argc > 1 ? std::atoi(argv[1]) : 10000;
     int best_n, max_len;
+    collatz(limit, best_n, max_len); /* warmup */
     auto start = std::chrono::steady_clock::now();
     collatz(limit, best_n, max_len);
     auto end = std::chrono::steady_clock::now();

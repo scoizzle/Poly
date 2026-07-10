@@ -17,6 +17,7 @@ function collatz(limit) {
 }
 
 const limit = parseInt(Bun.argv[2]) || 10000;
+collatz(limit); // warmup
 const start = performance.now();
 const [bestN, maxLen] = collatz(limit);
 const us = (performance.now() - start) * 1000;

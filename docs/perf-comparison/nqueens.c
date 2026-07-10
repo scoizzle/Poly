@@ -33,6 +33,7 @@ int nqueens(void) {
 
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
+    (void)nqueens(); /* warmup */
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
     int result = nqueens();

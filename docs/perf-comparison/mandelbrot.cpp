@@ -26,6 +26,7 @@ int64_t mandelbrot() {
 
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
+    (void)mandelbrot(); /* warmup */
     auto start = std::chrono::steady_clock::now();
     int64_t result = mandelbrot();
     auto end = std::chrono::steady_clock::now();

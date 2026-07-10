@@ -27,6 +27,7 @@ int64_t mandelbrot(void) {
 
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
+    (void)mandelbrot(); /* warmup */
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
     int64_t result = mandelbrot();

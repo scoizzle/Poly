@@ -36,6 +36,7 @@ fn nqueens() -> i32 {
 }
 
 fn main() {
+    let _ = nqueens(); // warmup
     let start = Instant::now();
     let result = nqueens();
     let us = start.elapsed().as_secs_f64() * 1_000_000.0;

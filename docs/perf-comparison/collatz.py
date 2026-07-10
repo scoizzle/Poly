@@ -20,6 +20,7 @@ def collatz(limit):
 
 if __name__ == '__main__':
     limit = int(sys.argv[1]) if len(sys.argv) > 1 else 10000
+    collatz(limit)  # warmup
     start = time.perf_counter()
     best_n, max_len = collatz(limit)
     us = (time.perf_counter() - start) * 1_000_000

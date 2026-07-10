@@ -32,6 +32,7 @@ int nqueens() {
 
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
+    (void)nqueens(); /* warmup */
     auto start = std::chrono::steady_clock::now();
     int result = nqueens();
     auto end = std::chrono::steady_clock::now();

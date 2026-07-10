@@ -27,6 +27,7 @@ function nqueens() {
     return total;
 }
 
+nqueens(); // warmup
 const start = performance.now();
 const result = nqueens();
 const us = (performance.now() - start) * 1000;

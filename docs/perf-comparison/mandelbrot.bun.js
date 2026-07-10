@@ -20,6 +20,7 @@ function mandelbrot() {
     return total;
 }
 
+mandelbrot(); // warmup
 const start = performance.now();
 const result = mandelbrot();
 const us = (performance.now() - start) * 1000;

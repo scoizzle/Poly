@@ -29,6 +29,7 @@ def nqueens():
     return total
 
 if __name__ == '__main__':
+    nqueens()  # warmup
     start = time.perf_counter()
     result = nqueens()
     us = (time.perf_counter() - start) * 1_000_000

@@ -21,6 +21,7 @@ def mandelbrot():
     return total
 
 if __name__ == '__main__':
+    mandelbrot()  # warmup
     start = time.perf_counter()
     result = mandelbrot()
     us = (time.perf_counter() - start) * 1_000_000

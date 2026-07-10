@@ -356,17 +356,26 @@ ENDPROJ
     echo "$bench,Poly VM (Normal),$size,$result,$ITERATIONS,$min,$max,$avg,$prep_ms" | tee -a "$RESULTS"
 }
 
-# Run a Poly VM benchmark that outputs its own CSV header (no result validation).
-# Used for variants with different iteration counts (e.g. double-precision mandelbrot)
-# where the numeric result differs from the fixed-point reference.
-run_polyvm_raw() {
+# Run a Poly VM variant that is NOT validated against the fixed-point expected
+# result (e.g. double-precision mandelbrot). Source must print:
+#   language,size,result,us,prep_ms
+# same field layout as the other Poly drivers.
+run_polyvm_variant() {
     local bench="$1"
     local source_file="$2"
     local poly_root="$3"
     local arg="${4:-}"
+    local display_name="${5:-}"   # optional override for log line
 
-    echo "  [$bench] Poly VM (raw) ..." >&2
-    local tmp="/tmp/${bench}_polyvm_raw_${TIMESTAMP}"
+    if [ ! -f "$source_file" ]; then
+        echo "  ⚠  skip missing $source_file" >&2
+        return
+    fi
+
+    local tag
+    tag=$(basename "$source_file" .cs)
+    echo "  [$bench] Poly variant ($tag)${display_name:+ — $display_name} ..." >&2
+    local tmp="/tmp/${bench}_${tag}_${TIMESTAMP}"
     mkdir -p "$tmp"
     cp "$source_file" "$tmp/Program.cs"
     cat > "$tmp/bench.csproj" << ENDPROJ
@@ -377,25 +386,70 @@ run_polyvm_raw() {
   </ItemGroup>
 </Project>
 ENDPROJ
-    dotnet build -c Release "$tmp/bench.csproj" >/dev/null 2>&1 || return 1
+    dotnet build -c Release "$tmp/bench.csproj" >/dev/null 2>&1 || {
+        echo "$bench,$tag,FAILED" | tee -a "$RESULTS"
+        return
+    }
     local first_line
     first_line=$(dotnet run -c Release --project "$tmp/bench.csproj" -- "$arg" 2>/dev/null | head -1)
-    local prep_ms
+    if [ -z "$first_line" ]; then
+        echo "$bench,$tag,FAILED" | tee -a "$RESULTS"
+        return
+    fi
+    local prep_ms language size result
+    language=$(echo "$first_line" | cut -d',' -f1)
+    size=$(echo "$first_line" | cut -d',' -f2)
+    result=$(echo "$first_line" | cut -d',' -f3)
     prep_ms=$(echo "$first_line" | cut -d',' -f5)
 
     local run_cmd="dotnet run -c Release --no-build --project $tmp/bench.csproj -- $arg"
     local stats
     stats=$(run_and_collect "$run_cmd" 1) || {
-        echo "$bench,Poly VM double,FAILED" | tee -a "$RESULTS"
+        echo "$bench,$language,FAILED" | tee -a "$RESULTS"
         return
     }
     local min max avg
     read -r min max avg first_line <<< "$stats"
-    local size result label
-    result=$(echo "$first_line" | cut -d',' -f3)
+    # Re-parse size/result from a timed line in case they differ (they shouldn't)
     size=$(echo "$first_line" | cut -d',' -f2)
-    label=$(echo "$first_line" | cut -d',' -f1)
-    echo "$label,$size,$result,$ITERATIONS,$min,$max,$avg,$prep_ms" | tee -a "$RESULTS"
+    result=$(echo "$first_line" | cut -d',' -f3)
+    language=$(echo "$first_line" | cut -d',' -f1)
+    echo "$bench,$language,$size,$result,$ITERATIONS,$min,$max,$avg,$prep_ms" | tee -a "$RESULTS"
+}
+
+# ── Host-side C# / Poly variants for one bench ──
+# Runs every on-disk variant that exists; skips silently when a file is absent.
+run_host_variants() {
+    local bench="$1"
+    local poly_root="$2"
+    local arg="${3:-}"          # size/limit passed to the program
+    local poly_arg="${4:-$arg}" # arg for Poly drivers (may differ, e.g. mandelbrot 128)
+
+    # C# native
+    if [ -f "${bench}.cs" ]; then
+        run_cs_native "$bench" "${bench}.cs" "$arg"
+    fi
+
+    # C# vectorized
+    if [ -f "${bench}_cs_vectorized.cs" ]; then
+        run_cs_vectorized "$bench" "${bench}_cs_vectorized.cs" "$arg"
+    fi
+
+    # Poly VM (NoDebug) + Normal mode
+    if [ -f "${bench}_polyvm.cs" ]; then
+        run_polyvm "$bench" "${bench}_polyvm.cs" "$poly_root" "$poly_arg"
+        run_polyvm_normal "$bench" "${bench}_polyvm.cs" "$poly_root" "$poly_arg"
+    fi
+
+    # Extra Poly variants (double-precision, alternate lowerings, …)
+    # Any ${bench}_polyvm_*.cs other than the main ${bench}_polyvm.cs
+    local variant
+    local variants=( "${bench}"_polyvm_*.cs )
+    for variant in "${variants[@]}"; do
+        # When the glob matches nothing, bash leaves the pattern as a literal.
+        [ -f "$variant" ] || continue
+        run_polyvm_variant "$bench" "$variant" "$poly_root" "$poly_arg"
+    done
 }
 
 # ── Run a single benchmark across all languages ──
@@ -405,58 +459,40 @@ run_bench() {
     local poly_root
     poly_root="$(cd "$(dirname "$0")/../.." && pwd)"
 
+    # Docker-based languages (skip missing sources)
+    local lang_entry label dockerfile source_pattern source_file docker_arg
+    docker_arg="$limit_arg"
+    case "$bench" in
+        mandelbrot|nqueens) docker_arg="" ;;
+    esac
+
+    for lang_entry in "${DOCKER_LANGS[@]}"; do
+        IFS=':' read -r label dockerfile source_pattern <<< "$lang_entry"
+        source_file="${source_pattern//\{bench\}/$bench}"
+        if [ ! -f "$source_file" ]; then
+            echo "  ⚠  skip missing $source_file ($label)" >&2
+            continue
+        fi
+        run_docker "$bench" "$label" "$dockerfile" "$source_file" "$docker_arg"
+    done
+
+    # Host-side C# + Poly (and any polyvm_* variants on disk)
     case "$bench" in
         sieve)
-            for lang_entry in "${DOCKER_LANGS[@]}"; do
-                IFS=':' read -r label dockerfile source_pattern <<< "$lang_entry"
-                source_file="${source_pattern//\{bench\}/$bench}"
-                run_docker "$bench" "$label" "$dockerfile" "$source_file" "$limit_arg"
-            done
-            run_cs_native "$bench" "sieve.cs" "$limit_arg"
-            run_cs_vectorized "$bench" "sieve_cs_vectorized.cs" "$limit_arg"
-            run_polyvm "$bench" "sieve_polyvm.cs" "$poly_root" "$limit_arg"
-            run_polyvm_normal "$bench" "sieve_polyvm.cs" "$poly_root" "$limit_arg"
+            run_host_variants "$bench" "$poly_root" "$limit_arg" "$limit_arg"
             ;;
-
         mandelbrot)
-            for lang_entry in "${DOCKER_LANGS[@]}"; do
-                IFS=':' read -r label dockerfile source_pattern <<< "$lang_entry"
-                source_file="${source_pattern//\{bench\}/$bench}"
-                run_docker "$bench" "$label" "$dockerfile" "$source_file" ""
-            done
-            run_cs_native "$bench" "mandelbrot.cs" ""
-            if [ -f "mandelbrot_cs_vectorized.cs" ]; then
-                run_cs_vectorized "$bench" "mandelbrot_cs_vectorized.cs" ""
-            fi
-            run_polyvm "$bench" "mandelbrot_polyvm.cs" "$poly_root" "128"
-            run_polyvm_normal "$bench" "mandelbrot_polyvm.cs" "$poly_root" "128"
-            run_polyvm_raw "$bench" "mandelbrot_polyvm_dbl.cs" "$poly_root" "128"
+            run_host_variants "$bench" "$poly_root" "" "128"
             ;;
-
         nqueens)
-            for lang_entry in "${DOCKER_LANGS[@]}"; do
-                IFS=':' read -r label dockerfile source_pattern <<< "$lang_entry"
-                source_file="${source_pattern//\{bench\}/$bench}"
-                run_docker "$bench" "$label" "$dockerfile" "$source_file" ""
-            done
-            run_cs_native "$bench" "nqueens.cs" ""
-            if [ -f "nqueens_cs_vectorized.cs" ]; then
-                run_cs_vectorized "$bench" "nqueens_cs_vectorized.cs" ""
-            fi
-            run_polyvm "$bench" "nqueens_polyvm.cs" "$poly_root" "8"
-            run_polyvm_normal "$bench" "nqueens_polyvm.cs" "$poly_root" "8"
+            run_host_variants "$bench" "$poly_root" "" "8"
             ;;
-
         collatz)
-            for lang_entry in "${DOCKER_LANGS[@]}"; do
-                IFS=':' read -r label dockerfile source_pattern <<< "$lang_entry"
-                source_file="${source_pattern//\{bench\}/$bench}"
-                run_docker "$bench" "$label" "$dockerfile" "$source_file" "$limit_arg"
-            done
-            run_cs_native "$bench" "collatz.cs" "$limit_arg"
-            run_cs_vectorized "$bench" "collatz_cs_vectorized.cs" "$limit_arg"
-            run_polyvm "$bench" "collatz_polyvm.cs" "$poly_root" "$limit_arg"
-            run_polyvm_normal "$bench" "collatz_polyvm.cs" "$poly_root" "$limit_arg"
+            run_host_variants "$bench" "$poly_root" "$limit_arg" "$limit_arg"
+            ;;
+        *)
+            echo "  ✗ unknown bench: $bench" >&2
+            return 1
             ;;
     esac
 }

@@ -29,6 +29,7 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(10_000);
 
+    let _ = collatz(limit); // warmup
     let start = Instant::now();
     let (best_n, max_len) = collatz(limit);
     let us = start.elapsed().as_secs_f64() * 1_000_000.0;

@@ -24,6 +24,7 @@ fn mandelbrot() -> i64 {
 }
 
 fn main() {
+    let _ = mandelbrot(); // warmup
     let start = Instant::now();
     let result = mandelbrot();
     let us = start.elapsed().as_secs_f64() * 1_000_000.0;

@@ -20,6 +20,7 @@ long Sieve(int limit) {
 }
 
 int limit = args.Length > 0 ? int.Parse(args[0]) : 1000000;
+_ = Sieve(limit); // warmup
 var sw = Stopwatch.StartNew();
 long result = Sieve(limit);
 sw.Stop();

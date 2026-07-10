@@ -27,6 +27,7 @@ int64_t sieve(int64_t limit) {
 
 int main(int argc, char** argv) {
     int64_t limit = argc > 1 ? atol(argv[1]) : 1000000;
+    (void)sieve(limit); /* warmup */
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
     int64_t result = sieve(limit);

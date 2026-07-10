@@ -72,4 +72,5 @@ var sw = System.Diagnostics.Stopwatch.StartNew();
 using var exec = Interpreter.Execute(program);
 long result = exec.RawValue;
 sw.Stop();
-Console.WriteLine($"mandelbrot,Poly VM double,{size},{result},{sw.Elapsed.TotalMicroseconds:F0},{prepSw.ElapsedMilliseconds}");
+// Same field layout as other Poly benches: language,size,result,us,prep_ms
+Console.WriteLine($"Poly VM double (bits),{size},{result},{sw.Elapsed.TotalMicroseconds:F0},{prepSw.ElapsedMilliseconds}");

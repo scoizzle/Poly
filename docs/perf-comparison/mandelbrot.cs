@@ -22,6 +22,7 @@ long Mandelbrot() {
     return total;
 }
 
+_ = Mandelbrot(); // warmup
 var sw = Stopwatch.StartNew();
 long result = Mandelbrot();
 sw.Stop();

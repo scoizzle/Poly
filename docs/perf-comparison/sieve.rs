@@ -32,6 +32,7 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(1_000_000);
 
+    let _ = sieve(limit); // warmup
     let start = Instant::now();
     let result = sieve(limit);
     let us = start.elapsed().as_secs_f64() * 1_000_000.0;

@@ -22,6 +22,7 @@ function sieve(limit) {
 }
 
 const limit = parseInt(process.argv[2]) || 1000000;
+sieve(limit); // warmup
 const start = performance.now();
 const result = sieve(limit);
 const us = (performance.now() - start) * 1000;

@@ -26,6 +26,7 @@ void collatz(int limit, int* best_n, int* max_len) {
 int main(int argc, char** argv) {
     int limit = argc > 1 ? atoi(argv[1]) : 10000;
     int best_n, max_len;
+    collatz(limit, &best_n, &max_len); /* warmup */
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
     collatz(limit, &best_n, &max_len);

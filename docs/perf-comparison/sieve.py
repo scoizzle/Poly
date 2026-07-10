@@ -34,6 +34,7 @@ def sieve(limit):
 
 if __name__ == '__main__':
     limit = int(sys.argv[1]) if len(sys.argv) > 1 else 1000000
+    sieve(limit)  # warmup
     start = time.perf_counter()
     result = sieve(limit)
     us = (time.perf_counter() - start) * 1_000_000

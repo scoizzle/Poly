@@ -176,33 +176,33 @@ public static class DirectVmAbiEmitter {
     /// </summary>
     private static Expression CompileNodeInner(Node node, AbiCtx ctx) {
         return node switch {
-            // String/heap constants: ring path
-            Constant c when c.Value is string or null => EmitConstant(c, ctx),
-            // Numeric constants: eval-stack fast path
-            Constant c => SpillToRing(CompileValue(c, ctx), ctx),
+            // All constants — EmitConstant handles numeric, float bits, and heap objects.
+            // (Do not route heap constants through CompileValue: that used to call
+            // CompileNode back into this arm and stack-overflow.)
+            Constant c => EmitConstant(c, ctx),
 
-            // Binary arithmetic — use RING version (operands through CompileNode)
-            // to prevent stack overflow from CompileValue↔CompileNode↔Member cycles.
-            Add n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Add, ctx),
-            Subtract n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
-            Multiply n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
-            Divide n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Divide, ctx),
-            Modulo n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Modulo, ctx),
-            BitwiseAnd n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, And, ctx),
-            BitwiseOr n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, Or, ctx),
-            BitwiseXor n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
-            ShiftLeft n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
-            ShiftRight n => EmitBinaryArithmeticRing(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
+            // Pure expression trees — CompileValue builds nested Expression nodes
+            // (no intermediate ring stores), then SpillToRing once. Complex leaves
+            // (Member, heap IndexAccess, Invoke, …) fall back via SpillRingRead
+            // inside CompileValue, so statement-level DebugHook is unaffected.
+            Add n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Add, ctx),
+            Subtract n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
+            Multiply n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
+            Divide n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Divide, ctx),
+            Modulo n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Modulo, ctx),
+            BitwiseAnd n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, And, ctx),
+            BitwiseOr n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Or, ctx),
+            BitwiseXor n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
+            ShiftLeft n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
+            ShiftRight n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
 
-            // Comparisons — ring version
-            Equal n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, Equal, ctx, n),
-            NotEqual n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, NotEqual, ctx, n),
-            LessThan n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, LessThan, ctx),
-            LessThanOrEqual n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx),
-            GreaterThan n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx),
-            GreaterThanOrEqual n => EmitComparisonRing(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx),
+            Equal n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, Equal, ctx, n), ctx),
+            NotEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, NotEqual, ctx, n), ctx),
+            LessThan n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThan, ctx), ctx),
+            LessThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx), ctx),
+            GreaterThan n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx), ctx),
+            GreaterThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx), ctx),
 
-            // Pure expressions with CompileValue support — safe leaf nodes only.
             Variable v => SpillToRing(CompileValue(v, ctx), ctx),
             Default d => SpillToRing(CompileValue(d, ctx), ctx),
             ThisReference _ => SpillToRing(CompileValue(new Default(), ctx), ctx),
@@ -212,20 +212,16 @@ public static class DirectVmAbiEmitter {
             TypeCast t => SpillToRing(CompileValue(t, ctx), ctx),
             Await a => SpillToRing(CompileValue(a, ctx), ctx),
 
-            // Not/Conditional/Coealesce/Unary — use ring-based methods to avoid
-            // unbounded CompileValue→CompileNode→EmitMember→CompileValue recursion.
-            Not n => EmitNot(n, ctx),
-            UnaryMinus n => EmitUnaryMinus(n, ctx),
-            BitwiseNot n => EmitBitwiseNot(n, ctx),
-            Conditional c => EmitConditional(c, ctx),
-            Coalesce n => EmitCoalesce(n, ctx),
+            Not n => SpillToRing(EmitNotValue(n, ctx), ctx),
+            UnaryMinus n => SpillToRing(EmitUnaryMinusValue(n, ctx), ctx),
+            BitwiseNot n => SpillToRing(EmitBitwiseNotValue(n, ctx), ctx),
+            Conditional c => SpillToRing(EmitConditionalValue(c, ctx), ctx),
+            Coalesce n => SpillToRing(EmitCoalesceValue(n, ctx), ctx),
+            And n => SpillToRing(EmitLogicalAndValue(n, ctx), ctx),
+            Or n => SpillToRing(EmitLogicalOrValue(n, ctx), ctx),
+            PopCount pc => SpillToRing(EmitPopCountValue(pc, ctx), ctx),
 
-            // Short-circuit logical — keep on ring path (statement-like)
-            And n => EmitLogicalAnd(n, ctx),
-            Or n => EmitLogicalOr(n, ctx),
-
-            // Complex expressions — ring path only (no CompileValue support)
-            PopCount pc => EmitPopCount(pc, ctx),
+            // Complex expressions — ring path (side effects / heap / reflection)
             Member m => EmitMember(m, ctx),
             TypeIs t => EmitTypeIs(t, ctx),
 
@@ -392,13 +388,17 @@ public static class DirectVmAbiEmitter {
             _ => typeof(object)
         };
 
-        // Small fixed-size value-type arrays: allocate in frame slots (negative _fp offset)
-        // instead of on the heap.  The handle is the base offset itself (always negative),
-        // so IndexAccess can distinguish it from heap handles (always non-negative).
+        // Small fixed-size value-type arrays: allocate in frame slots instead of
+        // on the heap.  The handle is the absolute slot base (>= SmallArraySlotBase).
         if (elemType.IsValueType && n.Length is Constant len && TryValueToLong(len.Value, out long lv)
             && lv > 0 && lv <= AbiCtx.SmallArrayThreshold) {
             int baseOffset = ctx.AllocateSmallArray();
-            return Block(lenExpr, fold,
+            var zeroInits = new Expression[(int)lv];
+            for (int zi = 0; zi < (int)lv; zi++)
+                zeroInits[zi] = Assign(
+                    ArrayAccess(ctx.SlotsLocal, Constant(baseOffset + zi)),
+                    Constant(0L));
+            return Block(lenExpr, fold, Block(zeroInits),
                 Assign(ctx.RingVar(slot), Constant((long)baseOffset)));
         }
 
@@ -409,20 +409,9 @@ public static class DirectVmAbiEmitter {
     }
 
     private static Expression EmitIndexAccess(IndexAccess n, AbiCtx ctx) {
-        int startDepth = ctx.RingDepth;
-
-        // Compile-time fast path: tracked frame-local variable → _slots[base + idx] directly.
-        if (n.Value is Variable arrVar && ctx.TryGetFrameLocalBase(arrVar) is int flBase) {
-            ctx.AllocSlot();
-            var idxCompiled = CompileNode(
-                n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx);
-            int idxResult = ctx.RingDepth - 1;
-            var foldIdx = FoldResultToSlot(ref idxResult, startDepth, ctx);
-            ctx.RingDepth = idxResult + 1;
-            var result = ArrayAccess(ctx.SlotsLocal,
-                Add(Constant(flBase), Convert(ctx.RingVar(idxResult), typeof(int))));
-            return Block(idxCompiled, foldIdx,
-                Assign(ctx.RingVar(startDepth), result));
+        // Compile-time fast path: tracked frame-local variable → pure value tree.
+        if (n.Value is Variable arrVar && ctx.TryGetFrameLocalBase(arrVar) is int) {
+            return SpillToRing(EmitIndexAccessValue(n, ctx), ctx);
         }
 
         var arrExpr = CompileNode(n.Value, ctx);
@@ -516,11 +505,12 @@ public static class DirectVmAbiEmitter {
     /// LINQ eval stack — no ring slot.</summary>
     private static Expression CompileValue(Node node, AbiCtx ctx) {
         return node switch {
-            // Numeric constants: eval stack only, no ring, no CompileNode overhead
+            // Numeric constants: eval stack only, no ring
             Constant c when TryValueToLong(c.Value, out _) || c.Value is double || c.Value is float
                 => EmitConstantValue(c),
-            // String/heap constants: need ring path for heap allocation
-            Constant c => SpillRingRead(CompileNode(c, ctx), ctx),
+            // String/heap constants: allocate on heap via EmitConstant (not CompileNode —
+            // avoids CompileValue↔CompileNodeInner recursion on object constants).
+            Constant c => SpillRingRead(EmitConstant(c, ctx), ctx),
             Variable v => ctx.VariableRead(v),
             Add n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Add, ctx),
             Subtract n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
@@ -544,6 +534,8 @@ public static class DirectVmAbiEmitter {
             PopCount pc => EmitPopCountValue(pc, ctx),
             Conditional c => EmitConditionalValue(c, ctx),
             Coalesce n => EmitCoalesceValue(n, ctx),
+            And n => EmitLogicalAndValue(n, ctx),
+            Or n => EmitLogicalOrValue(n, ctx),
             Default _ => Constant(0L),
             ThisReference _ => Constant(0L),
             ParameterReference _ => Constant(0L),
@@ -552,10 +544,14 @@ public static class DirectVmAbiEmitter {
             TypeCast tc => CompileValue(tc.Operand, ctx),
             Await a => CompileValue(a.Operand, ctx),
 
+            // Frame-local small arrays: pure _slots[base+i] expression (no ring).
+            IndexAccess n => EmitIndexAccessValue(n, ctx),
+
             // Complex expression nodes: route through ring path.
             // Must be explicit (not a fallback) to prevent unbounded recursion.
+            // Block is used as an expression (e.g. mandelbrot pixel block yielding `iter`).
+            Block b => SpillRingRead(CompileNode(b, ctx), ctx),
             Member m => SpillRingRead(CompileNode(m, ctx), ctx),
-            IndexAccess n => SpillRingRead(CompileNode(n, ctx), ctx),
             New n => SpillRingRead(CompileNode(n, ctx), ctx),
             NewArray n => SpillRingRead(CompileNode(n, ctx), ctx),
             Parameter p => SpillRingRead(CompileNode(p, ctx), ctx),
@@ -566,6 +562,21 @@ public static class DirectVmAbiEmitter {
             _ => throw new NotSupportedException(
                 $"CompileValue: unhandled {node.GetType().Name}")
         };
+    }
+
+    /// <summary>
+    /// IndexAccess as a value expression. Frame-local arrays lower to a pure
+    /// <c>_slots[base + idx]</c> tree; heap arrays fall back to the ring path.
+    /// </summary>
+    private static Expression EmitIndexAccessValue(IndexAccess n, AbiCtx ctx) {
+        if (n.Value is Variable arrVar && ctx.TryGetFrameLocalBase(arrVar) is int flBase) {
+            Expression idx = n.Arguments.Length > 0
+                ? CompileValue(n.Arguments[0], ctx)
+                : Constant(0L);
+            return ArrayAccess(ctx.SlotsLocal,
+                Add(Constant(flBase), Convert(idx, typeof(int))));
+        }
+        return SpillRingRead(CompileNode(n, ctx), ctx);
     }
 
     /// <summary>Allocate a ring slot and assign a value expression to it.</summary>
@@ -632,12 +643,68 @@ public static class DirectVmAbiEmitter {
             Convert(CompileValue(pc.Operand, ctx), typeof(ulong))), typeof(long));
 
     private static Expression EmitConditionalValue(Conditional c, AbiCtx ctx) =>
-        Condition(NotEqual(CompileValue(c.Condition, ctx), Constant(0L)),
+        Condition(CompileConditionAsBool(c.Condition, ctx),
             CompileValue(c.IfTrue, ctx), CompileValue(c.IfFalse, ctx));
 
+    /// <summary>
+    /// Coalesce with single evaluation of the left operand (temp local in the
+    /// expression tree). Right is only evaluated when left is 0.
+    /// </summary>
     private static Expression EmitCoalesceValue(Coalesce n, AbiCtx ctx) {
-        var lv = CompileValue(n.LeftHandValue, ctx);
-        return Condition(NotEqual(lv, Constant(0L)), lv, CompileValue(n.RightHandValue, ctx));
+        var tmp = Variable(typeof(long), "_coal");
+        return Block([tmp],
+            Assign(tmp, CompileValue(n.LeftHandValue, ctx)),
+            Condition(NotEqual(tmp, Constant(0L)), tmp, CompileValue(n.RightHandValue, ctx)));
+    }
+
+    private static Expression EmitLogicalAndValue(And n, AbiCtx ctx) =>
+        Condition(Equal(CompileValue(n.LeftHandValue, ctx), Constant(0L)),
+            Constant(0L),
+            CompileValue(n.RightHandValue, ctx));
+
+    private static Expression EmitLogicalOrValue(Or n, AbiCtx ctx) =>
+        Condition(NotEqual(CompileValue(n.LeftHandValue, ctx), Constant(0L)),
+            Constant(1L),
+            CompileValue(n.RightHandValue, ctx));
+
+    /// <summary>
+    /// Compile a condition to a <see cref="bool"/>-typed Expression for use in
+    /// <c>IfThen</c>/<c>Loop</c>/<c>Condition</c> tests — fused comparisons skip
+    /// the intermediate 0/1 long materialization.
+    /// </summary>
+    private static Expression CompileConditionAsBool(Node node, AbiCtx ctx) =>
+        node switch {
+            Equal n => CompileCompareTest(n.LeftHandValue, n.RightHandValue, Equal, ctx),
+            NotEqual n => CompileCompareTest(n.LeftHandValue, n.RightHandValue, NotEqual, ctx),
+            LessThan n => CompileCompareTest(n.LeftHandValue, n.RightHandValue, LessThan, ctx),
+            LessThanOrEqual n => CompileCompareTest(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx),
+            GreaterThan n => CompileCompareTest(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx),
+            GreaterThanOrEqual n => CompileCompareTest(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx),
+            Not n => Not(CompileConditionAsBool(n.Value, ctx)),
+            And n => AndAlso(CompileConditionAsBool(n.LeftHandValue, ctx),
+                CompileConditionAsBool(n.RightHandValue, ctx)),
+            Or n => OrElse(CompileConditionAsBool(n.LeftHandValue, ctx),
+                CompileConditionAsBool(n.RightHandValue, ctx)),
+            _ => NotEqual(CompileValue(node, ctx), Constant(0L))
+        };
+
+    /// <summary>Comparison as a bool Expression (no 0/1 long).</summary>
+    private static Expression CompileCompareTest(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        AbiCtx ctx) {
+        var lv = CompileValue(left, ctx);
+        var rv = CompileValue(right, ctx);
+        bool eq = cf == Equal || cf == NotEqual;
+        if (eq && AreHeapValues(ctx, left, right)) {
+            var lo = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(lv, typeof(int)));
+            var ro = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(rv, typeof(int)));
+            var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
+            return cf == Equal ? ec : Not(ec);
+        }
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+            return cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv));
+        return cf(lv, rv);
     }
 
     private static Expression EmitComparisonValue(
@@ -660,12 +727,9 @@ public static class DirectVmAbiEmitter {
         return Condition(cf(lv, rv), Constant(1L), Constant(0L));
     }
 
-    // ── Ring-based expression helpers (for CompileNodeInner dispatch) ──
-    // These compile operands via CompileNode (full step tracking) and combine
-    // results on the ring. Used by CompileNodeInner to avoid unbounded
-    // CompileValue→CompileNode recursion when operands contain Member nodes.
-    // TODO: Convert CompileNodeInner's expression dispatch to use these, then
-    // the CompileValue versions can be used without fallback safety concerns.
+    // ── Ring-based expression helpers ──
+    // Retained for paths that still walk operands via CompileNode (Member, etc.).
+    // Pure expression dispatch uses CompileValue + SpillToRing instead.
 
     /// <summary>Binary arithmetic — ring-based (operands through CompileNode).</summary>
     private static Expression EmitBinaryArithmeticRing(
@@ -1251,22 +1315,19 @@ public static class DirectVmAbiEmitter {
             ctx.RingDepth = d;
         }
 
-        var loopBody = new List<Expression>();
-        var condExpr = CompileNode(condition, ctx);
-        int condSlot = ctx.RingDepth - 1;
-        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
-        ctx.RingDepth = condSlot + 1;
+        var test = CompileConditionAsBool(condition, ctx);
+        ctx.RingDepth = d;
 
-        loopBody.Add(condExpr);
-        loopBody.Add(foldCond);
-        loopBody.Add(IfThen(Equal(ctx.RingVar(condSlot), Constant(0L)), Goto(breakLabel)));
-        loopBody.Add(bodyExpr);
+        var loopBody = new List<Expression> {
+            IfThen(Not(test), Goto(breakLabel)),
+            bodyExpr
+        };
         if (incrementExpr != null) loopBody.Add(incrementExpr);
         loopBody.Add(Label(continueLabel));
 
         stmts.Add(Loop(Block(loopBody), breakLabel));
         ctx.PopLoopScope();
-        ctx.RingDepth = d + 1;
+        ctx.RingDepth = d;
         return Block(stmts);
     }
 
@@ -1364,18 +1425,19 @@ public static class DirectVmAbiEmitter {
             // emit _slots[base + idx] = val directly — no dispatch.
             if (indexAccess.Value is Variable arrVarW
                 && ctx.TryGetFrameLocalBase(arrVarW) is int flBaseW) {
-                var idxExprW = CompileNode(
-                    indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx);
-                int idxSlotW = ctx.RingDepth - 1;
-                var valExprW = CompileNode(a.Value, ctx);
-                int valSlotW = ctx.RingDepth - 1;
-                var storeW = Assign(
-                    ArrayAccess(ctx.SlotsLocal,
-                        Add(Constant(flBaseW), Convert(ctx.RingVar(idxSlotW), typeof(int)))),
-                    ctx.RingVar(valSlotW));
-                ctx.RingDepth = idxSlotW + 1;
-                return Block(idxExprW, valExprW, storeW,
-                    Assign(ctx.RingVar(idxSlotW), ctx.RingVar(valSlotW)));
+                Expression idxVal = indexAccess.Arguments.Length > 0
+                    ? CompileValue(indexAccess.Arguments[0], ctx)
+                    : Constant(0L);
+                Expression valVal = CompileValue(a.Value, ctx);
+                int flResultSlot = ctx.AllocSlot();
+                ctx.RingDepth = flResultSlot + 1;
+                var idxTmp = Variable(typeof(int), "_flIdx");
+                return Block([idxTmp],
+                    Assign(idxTmp, Convert(idxVal, typeof(int))),
+                    Assign(ctx.RingVar(flResultSlot), valVal),
+                    Assign(ArrayAccess(ctx.SlotsLocal, Add(Constant(flBaseW), idxTmp)),
+                        ctx.RingVar(flResultSlot)),
+                    ctx.RingVar(flResultSlot));
             }
 
             var arrExpr = CompileNode(indexAccess.Value, ctx);
@@ -1447,8 +1509,17 @@ public static class DirectVmAbiEmitter {
             if (elemType.IsValueType) {
                 int baseOffset = ctx.AllocateSmallArray();
                 ctx.TrackFrameLocalArray(destVar, baseOffset);
+                // ArrayPool-backed _slots are dirty — zero the frame-local region.
+                var zeroInits = new Expression[(int)arrLen];
+                for (int zi = 0; zi < (int)arrLen; zi++)
+                    zeroInits[zi] = Assign(
+                        ArrayAccess(ctx.SlotsLocal, Constant(baseOffset + zi)),
+                        Constant(0L));
                 int slot = ctx.AllocSlot();
-                return Assign(ctx.RingVar(slot), Constant((long)baseOffset));
+                return Block(
+                    Block(zeroInits),
+                    ctx.VariableWrite(destVar, Constant((long)baseOffset)),
+                    Assign(ctx.RingVar(slot), Constant((long)baseOffset)));
             }
         }
 
@@ -1518,81 +1589,32 @@ public static class DirectVmAbiEmitter {
     }
 
     /// <summary>If statement: conditionally execute branches.
-    /// For this spike, handles only void branches (no value produced on ring).
-    /// Ring depth converges to the pre-condition depth.</summary>
+    /// Comparison conditions fuse to a bool test (no 0/1 long). Ring depth
+    /// converges to the pre-condition depth.</summary>
     private static Expression EmitIfStatement(IfStatement ifStmt, AbiCtx ctx) {
         int d = ctx.RingDepth;
-        var condExpr = CompileNode(ifStmt.Condition, ctx);
-        int condSlot = ctx.RingDepth - 1;
-        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
-
-        ctx.RingDepth = condSlot + 1;
-        var thenBody = CompileNode(ifStmt.ThenBranch, ctx);
-
-        Expression? elseBody = null;
-        var elseNode = ifStmt.ElseBranch;
-        if (elseNode is not null) {
-            ctx.RingDepth = condSlot + 1;
-            elseBody = CompileNode(elseNode, ctx);
-        }
-
-        // IfStatement is a statement (void) — no result left on ring.
+        var test = CompileConditionAsBool(ifStmt.Condition, ctx);
+        // Condition temps (if any) are embedded in <c>test</c>; reset depth for arms.
         ctx.RingDepth = d;
 
-        return Block(
-            condExpr, foldCond,
-            IfThenElse(
-                NotEqual(ctx.RingVar(condSlot), Constant(0L)),
-                thenBody,
-                elseBody ?? Empty()));
+        var thenBody = CompileNode(ifStmt.ThenBranch, ctx);
+        ctx.RingDepth = d;
+
+        Expression elseBody = Empty();
+        if (ifStmt.ElseBranch is not null) {
+            elseBody = CompileNode(ifStmt.ElseBranch, ctx);
+            ctx.RingDepth = d;
+        }
+
+        return IfThenElse(test, thenBody, elseBody);
     }
 
-    /// <summary>Conditional (ternary): condition ? true : false. Leaves result on ring.</summary>
-    private static Expression EmitConditional(Conditional c, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var condExpr = CompileNode(c.Condition, ctx);
-        int condSlot = ctx.RingDepth - 1;
-        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
-        ctx.RingDepth = condSlot + 1;
+    /// <summary>Conditional (ternary): condition ? true : false. Lazy arms.</summary>
+    private static Expression EmitConditional(Conditional c, AbiCtx ctx) =>
+        SpillToRing(EmitConditionalValue(c, ctx), ctx);
 
-        var trueExpr = CompileNode(c.IfTrue, ctx);
-        int trueResultSlot = ctx.RingDepth - 1;
-
-        var falseExpr = CompileNode(c.IfFalse, ctx);
-        int falseResultSlot = ctx.RingDepth - 1;
-
-        // Use the condition value from the folded slot
-        var result = Condition(
-            NotEqual(ctx.RingVar(condSlot), Constant(0L)),
-            ctx.RingVar(trueResultSlot),
-            ctx.RingVar(falseResultSlot)
-        );
-        int slot = ctx.AllocSlot();
-        return Block(condExpr, foldCond, trueExpr, falseExpr,
-            Assign(ctx.RingVar(slot), result));
-    }
-
-    private static Expression EmitCoalesce(Coalesce n, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var leftExpr = CompileNode(n.LeftHandValue, ctx);
-        int leftSlot = ctx.RingDepth - 1;
-        var foldLeft = FoldResultToSlot(ref leftSlot, d, ctx);
-        ctx.RingDepth = leftSlot + 1;
-
-        int rightStart = ctx.RingDepth;
-        var rightExpr = CompileNode(n.RightHandValue, ctx);
-        int rightSlot = ctx.RingDepth - 1;
-
-        // If left != 0 use left else right (0 represents "null" or falsy in ABI)
-        var result = Condition(
-            NotEqual(ctx.RingVar(leftSlot), Constant(0L)),
-            ctx.RingVar(leftSlot),
-            ctx.RingVar(rightSlot)
-        );
-        int outSlot = ctx.AllocSlot();
-        return Block(leftExpr, foldLeft, rightExpr,
-            Assign(ctx.RingVar(outSlot), result));
-    }
+    private static Expression EmitCoalesce(Coalesce n, AbiCtx ctx) =>
+        SpillToRing(EmitCoalesceValue(n, ctx), ctx);
 
     private static Expression EmitSwitch(SwitchStatement sw, AbiCtx ctx) {
         // Lower to chained conditionals matching the pattern used by EmitConditional:
@@ -1662,35 +1684,28 @@ public static class DirectVmAbiEmitter {
         return Block(allExprs);
     }
 
-    /// <summary>While loop: evaluate condition, execute body, repeat.</summary>
+    /// <summary>While loop: evaluate condition, execute body, repeat.
+    /// Comparison conditions fuse to a bool test (no 0/1 long).</summary>
     private static Expression EmitWhileLoop(WhileLoop wl, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var breakLabel = Label("wl_break");
         var continueLabel = Label("wl_continue");
         ctx.PushLoopScope(breakLabel, continueLabel);
 
-        var condExpr = CompileNode(wl.Condition, ctx);
-        int condSlot = ctx.RingDepth - 1;
-        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
-        ctx.RingDepth = condSlot + 1;
+        var test = CompileConditionAsBool(wl.Condition, ctx);
+        ctx.RingDepth = d;
 
-        // Body: must be ring-neutral (no net value left)
-        int bodyDepth = ctx.RingDepth;
         var bodyExpr = CompileNode(wl.Body, ctx);
-        // Reset ring depth after body
-        ctx.RingDepth = bodyDepth;
+        ctx.RingDepth = d;
 
         var loopBody = Block(
-            condExpr, foldCond,
-            IfThen(
-                Equal(ctx.RingVar(condSlot), Constant(0L)),
-                Goto(breakLabel)),
+            IfThen(Not(test), Goto(breakLabel)),
             bodyExpr,
             Label(continueLabel));
 
         var result = Loop(loopBody, breakLabel);
         ctx.PopLoopScope();
-        ctx.RingDepth = d; // loop produces nothing
+        ctx.RingDepth = d;
         return result;
     }
 
@@ -1701,23 +1716,16 @@ public static class DirectVmAbiEmitter {
         var continueLabel = Label("dwl_continue");
         ctx.PushLoopScope(breakLabel, continueLabel);
 
-        int bodyDepth = ctx.RingDepth;
         var bodyExpr = CompileNode(dwl.Body, ctx);
-        ctx.RingDepth = bodyDepth;
+        ctx.RingDepth = d;
 
-        var condExpr = CompileNode(dwl.Condition, ctx);
-        int condSlot = ctx.RingDepth - 1;
-        var foldCond = FoldResultToSlot(ref condSlot, d, ctx);
-        ctx.RingDepth = condSlot + 1;
+        var test = CompileConditionAsBool(dwl.Condition, ctx);
+        ctx.RingDepth = d;
 
         var loopBody = Block(
             bodyExpr,
             Label(continueLabel),
-            condExpr, foldCond,
-            IfThen(
-                Equal(ctx.RingVar(condSlot), Constant(0L)),
-                Goto(breakLabel))
-        );
+            IfThen(Not(test), Goto(breakLabel)));
 
         var result = Loop(loopBody, breakLabel);
         ctx.PopLoopScope();
@@ -2028,11 +2036,12 @@ public static class DirectVmAbiEmitter {
         if (invoke.Delegate is Lambda lambda) {
 
             // Trivial inline: no captures → compile body directly in the caller's
-            // context.  Works for any body shape (expression or Block) with any
-            // number of arguments (zero maps no parameters, >0 maps to ring slots).
-            // The caller's scope stack is safe because EmitBlock handles its own
-            // PushScope/PopScope internally.
-            if (FindCaptures(lambda.Body, ctx).Count == 0) {
+            // context.  Skip when the lambda has parameters but Invoke has no
+            // argument expressions (SetArgs pattern): those parameters live in
+            // value-stack slots and need ParamSlotOffset/FramePos setup from the
+            // frame path so locals don't overwrite them on EmitScopeStores.
+            if (FindCaptures(lambda.Body, ctx).Count == 0
+                && !(lambda.Parameters.Count > 0 && invoke.Arguments.Length == 0)) {
                 return EmitInlineInvoke(lambda, invoke, ctx);
             }
 

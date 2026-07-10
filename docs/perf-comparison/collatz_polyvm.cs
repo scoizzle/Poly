@@ -41,6 +41,8 @@ var body = new Invoke(new Lambda([], new Block(
 
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
 var program = Interpreter.Compile(body, CompilationMode.NoDebug);
+// Absorb first-call JIT of the Expression.Compile() delegate into prep.
+using (var _ = Interpreter.Execute(program)) { }
 prepSw.Stop();
 
 long result;

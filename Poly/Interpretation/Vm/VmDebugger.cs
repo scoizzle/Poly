@@ -164,12 +164,13 @@ public sealed class VmDebugger : IDisposable {
 
         // Someone wants to step — signal that we're at a boundary and block
         // until they tell us to continue.
+        //
+        // Do NOT clear _stepRequested here. StepOver leaves it true so the
+        // next statement boundary also pauses; Continue() clears it for
+        // full-speed run-to-completion. Clearing it in the hook made multi-
+        // step impossible (every StepOver would free-run to the end).
         _hookReady.Set();
         _stepRelease.WaitOne();
-
-        // After being released, clear the step flag so the NEXT statement
-        // runs pass-through unless StepOver is called again.
-        _stepRequested = false;
     }
 
     // ── Result capture ───────────────────────────────────────

@@ -1,5 +1,7 @@
 # Poly Architecture
 
+> **Status: historical / may be stale.** For the current short platform map (purpose, boundaries, critical support including node replacement and direct AST→VM), use **[`docs/CORE.md`](CORE.md)**. Prefer module READMEs under `Poly/*/` and ADRs under `docs/decisions/` over diagrams in this file when they conflict. Sections below that describe an intermediate **primitive IR** / separate µop-compiler path are **superseded** by direct AST→VM-ABI (`DirectVmAbiEmitter`).
+
 This document describes the architecture of the Poly system — a neurosymbolic platform where models codify algorithms and heuristics as composable macros in a symbolic IR, validated by the VM (canonical semantics), and compiled to native backends.
 
 ## System Overview

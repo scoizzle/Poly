@@ -2,6 +2,8 @@
 
 This directory contains the **V3 immutable core** for domain modeling.
 
+**Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — domain → generic AST, policy subjects, no parallel rewriters/ABI hacks.
+
 ## Quick Start (Direct API)
 
 The domain model is an immutable record graph. All mutation happens through the

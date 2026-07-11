@@ -1,6 +1,8 @@
 # Poly Syntax
 
-`Poly.Syntax` contains the shared abstract syntax tree (AST) model and reusable analysis infrastructure used by `Interpretation`, `Validation`, and `Data/Modeling` analyzers.
+`Poly.Syntax` contains the shared abstract syntax tree (AST) model and reusable analysis infrastructure used by `Interpretation`, `Validation`, and `DomainModeling` analyzers.
+
+**Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — especially analysis metadata and **node replacement** (`SetNodeReplacement` / `GetNodeReplacement`).
 
 ## Core Types
 

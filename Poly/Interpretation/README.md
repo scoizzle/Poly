@@ -2,6 +2,8 @@
 
 Semantic analysis and VM execution for programs expressed as `Poly.Syntax.Nodes` ASTs.
 
+**Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — boundaries, node replacement, direct AST→VM (read before inventing parallel paths).
+
 The module turns a syntax tree into a runnable program: analysis passes attach metadata and diagnostics, then the direct AST-to-VM-ABI emitter produces an executable delegate. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior** for the platform — not the legacy LINQ expression generator or removed tree-walker.
 
 ---

@@ -2,11 +2,14 @@
 
 **Before performing analysis or making changes to any section of this repository:**
 
-1. Identify the relevant section(s) below.
-2. Examine the corresponding decision documents in `docs/decisions/` (start with `docs/decisions/README.md` for the index and guidelines).
-3. If a significant change would benefit from a new decision, create one following the process in `docs/decisions/README.md`.
+1. **Read [`docs/CORE.md`](docs/CORE.md)** — purpose, module boundaries, and **existing critical system support** (analysis metadata, **node replacement**, direct AST→VM, domain lowering, subjects, MCP). Do not invent parallel rewriters, evaluators, or ABI fallbacks when CORE already names the platform mechanism.
+2. Identify the relevant section(s) below.
+3. Examine the corresponding decision documents in `docs/decisions/` (start with `docs/decisions/README.md` for the index and guidelines).
+4. If a significant change would benefit from a new decision, create one following the process in `docs/decisions/README.md`.
 
 This ensures major directional choices are respected and prevents repeated re-litigation of core decisions.
+
+**Doc roles:** `docs/CORE.md` = mechanisms and “use this, not that.” This file = principles, placement, build/test ops. `docs/decisions/` = why. `docs/plans/` = execution work only.
 
 ## Core Principles
 
@@ -32,11 +35,13 @@ The expanded rationale, history, and examples of how these principles have been 
 
 ## Overview & Architecture
 
+**Canonical short map:** [`docs/CORE.md`](docs/CORE.md) (read first).
+
 **Goal:** Neurosymbolic platform — models codify discovered algorithms and heuristics as composable macros in the AST (the primary symbolic/serializable IR), validated by the VM (canonical execution semantics), compiled to native backends. The AST is the model-facing symbolic form; `DirectVmAbiEmitter` performs direct AST-to-VM-ABI lowering without an intermediate primitive flattening step. Architecture described in `docs/decisions/2026-05-31-neurosymbolic-platform-vision.md` (with 2026-07-06 clarification), `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`, and `docs/decisions/2026-07-04-primitives-as-canonical-ir.md`. TFM: `net10.0`, nullable enabled, zero external dependencies in core.
 
-**Before working in this area:** Review `docs/decisions/` (especially decisions related to overall architecture, module boundaries, VM design, and the neurosymbolic platform vision). The AST is the symbolic primary; the VM ABI is the execution target.
+**Before working in this area:** Read `docs/CORE.md`, then review `docs/decisions/` (especially overall architecture, module boundaries, VM design, neurosymbolic vision). The AST is the symbolic primary; the VM ABI is the execution target.
 
-- `Poly/` — core DSL: Syntax (AST as symbolic IR), Interpretation (VM execution), Synthesis (macros), Introspection, Validation, Data/Modeling, Text.
+- `Poly/` — core DSL: Syntax (AST as symbolic IR), Interpretation (VM execution), Synthesis (macros), Introspection, Validation, DomainModeling (V3), Text.
 - `Poly.Benchmarks/` — example entry point. (FluentApiExample.cs is fully commented out — do not treat it as a reference.)
 - `Poly.Tests/` — unit tests using **TUnit** (not xUnit/NUnit).
 
@@ -188,7 +193,7 @@ The full rationale for these exact rules lives in (or should be added to) `docs/
 | VM execution engine         | `Interpretation/Vm/` — see `Poly/Interpretation/Vm/README.md` |
 | Canonical lowering          | `Interpretation/Vm/` — see `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` |
 | Validation rules            | `Validation/Rules/` (register in `Validation/Rule.cs`) |
-| Data-model constraints      | `Data/Modeling/Validation/` |
+| Domain model / evolution    | `DomainModeling/` (see also `docs/CORE.md`) |
 | Shared helpers              | `Extensions/` |
 
 ## Key Architectural Decisions
@@ -197,12 +202,13 @@ The full rationale for these exact rules lives in (or should be added to) `docs/
 
 Before performing analysis or making changes to **any** section:
 
+- Read **`docs/CORE.md`** (mechanisms and anti-reinvention).
 - Consult the decisions in `docs/decisions/` that correspond to that area (see `docs/decisions/README.md`).
 - In particular, review `docs/decisions/2026-core-engineering-principles.md` (the foundational "why we do things this way" decisions).
 
-Major decisions (such as the 2026 immutable core + evolution layer work, the neurosymbolic platform vision with 2026-07-06 clarification, direct AST-to-VM-ABI lowering, and VM as canonical semantics) are documented there. The 2026-07-06 docs cleanup pass further solidified: AST as primary symbolic/serializable IR; direct lowering as the execution path; no information loss on lowering. When you make a significant cross-cutting choice, add or update the corresponding decision record and reference it from here and from the relevant section above.
+Major decisions (such as the 2026 immutable core + evolution layer work, the neurosymbolic platform vision with 2026-07-06 clarification, direct AST-to-VM-ABI lowering, and VM as canonical semantics) are documented there. The 2026-07-06 docs cleanup pass further solidified: AST as primary symbolic/serializable IR; direct lowering as the execution path; no information loss on lowering. When you make a significant cross-cutting choice, add or update the corresponding decision record and reference it from here and from the relevant section above. If the change alters a platform mechanism listed in CORE, update CORE in the same change.
 
-AGENTS.md contains the *operational* rules. `docs/decisions/` contains the *rationale and history*. Both are required reading.
+**Doc roles:** `docs/CORE.md` = *what machinery to use*; AGENTS.md = *principles + ops*; `docs/decisions/` = *rationale and history*; `docs/plans/` = *execution only*.
 
 ## Coding Style
 

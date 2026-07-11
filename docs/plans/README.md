@@ -2,7 +2,8 @@
 
 Execution-oriented planning — roadmaps, phase breakdowns, task trackers.
 
-Architectural rationale lives in **`docs/decisions/`**. Module maps live in **`Poly/*/README.md`**.
+**Not plans:** platform mechanisms and “use this, not that” → **[`docs/CORE.md`](../CORE.md)**.  
+Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/README.md`**.
 
 ## Active plans
 
@@ -13,8 +14,14 @@ Architectural rationale lives in **`docs/decisions/`**. Module maps live in **`P
 | [First V3 consumer spike](v2-to-v3/spikes/first-v3-consumer.md) | Named M2 consumer + happy path |
 | [MCP guiding principles](v2-to-v3/spikes/mcp-guiding-principles.md) | Agent-tool design for V3 MCP |
 | [V2 → V3 Workstreams](v2-to-v3/workstreams/) | Workstream detail (WS8 pull for policy/eval) |
-| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — **[WS8 suite](v2-to-v3/simple-agent-tasks/ws8-README.md)** next; WP7/WP8 superseded |
+| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — **[WS8 Phase B A+](v2-to-v3/simple-agent-tasks/ws8-README.md)** (#6d–#6h invariants, then #7–#11); WP7/WP8 superseded |
 | [Orchestration Guide](v2-to-v3/orchestration-guide.md) | Multi-agent operating model |
+
+## Deferred (do not execute yet)
+
+| Plan | Role |
+|------|------|
+| [**`Poly.Ast` + `Poly.Analysis` module split**](poly-ast-analysis-module-split.md) | Rename/split today’s `Poly.Syntax` into IR (`Ast`) + analysis framework (`Analysis`). **Blocked on** current V2→V3/WS8 stability and clean working tree. Nodes stay **out of** Interpretation. |
 
 ## Interpretation (current)
 

@@ -2,15 +2,19 @@
 
 `Poly.Introspection` defines the provider-based type abstraction used by analysis and code generation.
 
+**Platform map:** [`docs/CORE.md`](../../docs/CORE.md) §3.5 — goal, providers, CLR as first host, what not to reinvent.
+
 ## Purpose
 
-Instead of coupling directly to CLR reflection everywhere, Poly resolves types through interfaces:
+**Strategic goal:** Let **Interpretation simulate programs against any reasonable type system on any reasonable platform.** The core contracts are host-neutral; platforms plug in as `ITypeDefinitionProvider` implementations. The CLR under `CommonLanguageRuntime/` is the first working host, not the end state.
+
+Instead of coupling analysis and backends to one runtime’s reflection API, Poly resolves types through interfaces:
 
 - `ITypeDefinition`
 - `ITypeMember`
 - `ITypeDefinitionProvider`
 
-This allows composition of multiple type sources while keeping consumers (for example analyzers) provider-agnostic.
+This allows composition of multiple type sources while keeping consumers (for example analyzers) provider-agnostic and portable as new hosts appear.
 
 ## Core Interfaces
 

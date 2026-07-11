@@ -10,6 +10,8 @@ These documents exist so that:
 - Future work respects previously agreed constraints (especially around the domain model).
 - We avoid repeatedly re-litigating the same big decisions.
 
+**Start elsewhere for mechanisms:** Platform purpose, module boundaries, and “use this existing support, do not reinvent” live in **[`docs/CORE.md`](../CORE.md)**. This directory holds the *why* of major choices; CORE holds the *what to use*.
+
 ## Guidelines
 
 - Only major, cross-cutting decisions should live here.

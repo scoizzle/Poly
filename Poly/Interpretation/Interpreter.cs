@@ -50,6 +50,16 @@ public static class Interpreter {
         _analyzer.Analyze(node);
 
     /// <summary>
+    /// Analyze and compile using a custom type definition provider.
+    /// Enables custom type definitions to be used during analysis.
+    /// to be used during analysis without modifying the standard provider stack.
+    /// </summary>
+    public static VmProgram Compile(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) {
+        var analysis = _analyzer.Analyze(node, typeDefinitions: typeDefinitions);
+        return DirectVmAbiEmitter.Emit(node, analysis, mode);
+    }
+
+    /// <summary>
     /// Analyze and compile using the primary direct AST-to-VM-ABI lowering path.
     /// This is the supported way to produce a runnable <see cref="VmProgram"/>.
     /// </summary>

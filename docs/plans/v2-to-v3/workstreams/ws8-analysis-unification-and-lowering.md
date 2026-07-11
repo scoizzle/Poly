@@ -3,20 +3,14 @@
 **Phase**: 2  
 **Priority**: **Support the first V3 consumer** (not “match V2”)  
 **Owner**: TBD — claim on `master-roadmap.md`  
-**Status**: **Active** — foundation Done; **review residuals In Progress** (MCP honesty + domain-attached policy test)  
-**Last Updated**: 2026-07-10 (code review)
+**Status**: **Active** — Phase A Done; **Phase B A+** (MCP agent loop) queued  
+**Last Updated**: 2026-07-10
 
-> **Consumer-driven (July 2026):** M1–M4 cutover complete. WS8 = runtime truth for policies/DE.
+> **Suite:** [`simple-agent-tasks/ws8-README.md`](../simple-agent-tasks/ws8-README.md)
 >
-> **Suite + review:** [`simple-agent-tasks/ws8-README.md`](../simple-agent-tasks/ws8-README.md)
+> **Phase A (Done):** policy VM tests (incl. domain-attached), DE matrix, VM-primary evaluator, honest `get_policy_expression`, contract rules spike.
 >
-> | # | Task | Review status |
-> |---|------|----------------|
-> | 1 | `ws8-e2e-policy-vm-eval.md` | **In Progress** — need domain-attached policy test |
-> | 2 | `ws8-domainexpression-lower-smoke-matrix.md` | Done* (lower inventory) |
-> | 3 | `ws8-policyevaluator-vm-primary.md` | Done* |
-> | 4 | `wp5-optional-mcp-evaluate-policy.md` | **In Progress** — tool must not claim VM eval without doing it |
-> | 5 | `ws8-inventory-contract-interface-rules.md` | Done (docs) |
+> **Phase B A+:** #6 spike Done; **next #6b–6d** (harden negatives, demote Emit, subject invariants) + **#7a** expression contract → #7–#11 implement/smoke/honesty.
 
 ## Goal
 

@@ -1,74 +1,98 @@
 # WS8 Micro-Task Suite — Analysis Unification & Lowering
 
 **Parent workstream:** [`../workstreams/ws8-analysis-unification-and-lowering.md`](../workstreams/ws8-analysis-unification-and-lowering.md)  
-**Last Updated:** 2026-07-10 (code review annotations)  
-**Context:** M1–M4 cutover complete. WS8 = **WP5 runtime truth** for policies/DomainExpression.
+**Last Updated:** 2026-07-11  
+**Context:** M1–M4 cutover complete. Phase A Done; Phase B A+ — spike + 6b/6c done; remaining invariants + MCP implement.
 
 ## Goal
 
 ```
 DomainExpression / Policy  →  DomainExpressionLoweringPass  →  Syntax AST
-  →  Interpreter.Compile (DirectVmAbiEmitter)  →  Execute with CLR record args
+  →  Interpreter.Compile (DirectVmAbiEmitter)  →  Execute with CLR record / sample subject
 ```
 
-## Code review (2026-07-10) — summary
-
-| Area | Grade | Finding |
-|------|-------|---------|
-| `PolicyEvaluator` VM-primary | **B+** | Right API split; recompiles every `Evaluate` call (nit) |
-| Policy VM tests | **B−** | Bare `Policy` + records work on VM; **no domain attach** (DomainFactory/evolve) |
-| DE smoke matrix | **C+** | Inventory + lower-only gaps OK; several tests only assert `node != null` |
-| MCP `evaluate_policy` | **D** | **Critical:** name/description claim VM true/false; code only looks up policy metadata |
-| Contract rules spike | **A−** | Docs-only, appropriate |
-
-**In Progress first** (do not start new work until closed):
-
-~~1. **`wp5-optional-mcp-evaluate-policy`** — honesty fix (implement eval or rename tool)~~ ✅ **Done** — renamed to `get_policy_expression` with honest description
-~~2. **`ws8-e2e-policy-vm-eval`** — add domain-attached policy test (Factory → evolve → evaluate)~~ ✅ **Done** — `Policy_DomainAttached_EvaluatesFromDomainGraph` + `Policy_DomainAttached_ComplexGuardExtractedFromDomain` added
+MCP: **add_policy** → **get_policy_expression** (inspect) → **evaluate_policy** (VM bool).
 
 ---
 
-## Foundation (do not re-litigate)
+## Phase A — Foundation (Done)
 
-| Deliverable | Evidence |
-|-------------|----------|
-| DE → Syntax AST | `DomainExpressionLoweringPass.cs` |
-| Raw DE → VM | `DomainExpressionVmExecutionTests.cs` |
-| Lower unit tests | `DomainExpressionLoweringPassTests.cs` |
-| Shared analysis / VM | Interpretation module |
+| Pri | Task | Status |
+|-----|------|--------|
+| 1–5 | e2e policy, DE matrix, VM-primary, `get_policy_expression`, contract inventory | [x] Done |
 
-## Queue status
+---
 
-| Pri | Task | Status | Review note |
-|-----|------|--------|-------------|
-| **1** | [`ws8-e2e-policy-vm-eval.md`](ws8-e2e-policy-vm-eval.md) | [x] **Done** | Domain-attached tests added (`Policy_DomainAttached_*`). Full Factory→evolve→evaluate path proven. |
-| **2** | [`ws8-domainexpression-lower-smoke-matrix.md`](ws8-domainexpression-lower-smoke-matrix.md) | [x] **Done** | Lower inventory solid; Owned/Date/Rel = lower-only gaps documented |
-| **3** | [`ws8-policyevaluator-vm-primary.md`](ws8-policyevaluator-vm-primary.md) | [x] **Done** | VM-primary `Evaluate`; dual-oracle isolated |
-| **4** | [`wp5-optional-mcp-evaluate-policy.md`](wp5-optional-mcp-evaluate-policy.md) | [x] **Done** | **Honesty fix:** renamed to `get_policy_expression` — name/description match behavior (inspection only). VM eval deferred to WP5. |
-| **5** | [`ws8-inventory-contract-interface-rules.md`](ws8-inventory-contract-interface-rules.md) | [x] **Done** | Spike OK; no codegen |
-| Later | Full contract interface gen | — | WP9 when consumer pulls |
+## Phase B — A+ agent loop
 
-## Deferred (out of active queue)
+### B0 — Spike + invariants (before / with implement)
+
+| Pri | Task | Status | Why |
+|-----|------|--------|-----|
+| **6** | [`ws8-spike-policy-sample-subject.md`](ws8-spike-policy-sample-subject.md) | [x] Done | Records/StrictBag OK; Dict/Expando unsafe; null `int?` throws |
+| **6b** | [`ws8-spike-harden-negative-subject-tests.md`](ws8-spike-harden-negative-subject-tests.md) | [x] Done | `MatchNumeric` + Age≥18 not `1L` |
+| **6c** | [`ws8-spike-demote-emit-until-proven.md`](ws8-spike-demote-emit-until-proven.md) | [x] Done | Primary = non-nullable bag; Emit unproven |
+| **6d** | [`ws8-invariant-policy-subject-types.md`](ws8-invariant-policy-subject-types.md) | [ ] **Next** | Product subject helper + defaults |
+| **6e** | [`ws8-spike-bool-abi-adult-assert.md`](ws8-spike-bool-abi-adult-assert.md) | [ ] Not Started | Adult assert must catch **`bool true`**, not only `1L` |
+| **6f** | [`ws8-spike-matchnumeric-positive-control.md`](ws8-spike-matchnumeric-positive-control.md) | [ ] Not Started | Prove `MatchNumeric` true on working subject |
+| **6g** | [`ws8-invariant-policy-property-name-alignment.md`](ws8-invariant-policy-property-name-alignment.md) | [ ] Not Started | Property names: domain / expression / subject align |
+| **6h** | [`ws8-invariant-no-dict-expando-subjects.md`](ws8-invariant-no-dict-expando-subjects.md) | [ ] Not Started | Reject Dict/Expando at factory or Evaluate boundary |
+| **7a** | [`ws8-mcp-add-policy-expression-contract.md`](ws8-mcp-add-policy-expression-contract.md) | [ ] Not Started | Constrained expression JSON for agents |
+
+### B1 — MCP implement
+
+| Pri | Task | Status | Depends |
+|-----|------|--------|---------|
+| **7** | [`ws8-mcp-add-policy.md`](ws8-mcp-add-policy.md) | [ ] Not Started | Prefer 7a |
+| **8** | [`ws8-mcp-evaluate-policy-vm.md`](ws8-mcp-evaluate-policy-vm.md) | [ ] Not Started | 6d (+ 6e–6h as ready); prefer 7 |
+| **9** | [`ws8-mcp-policy-e2e-smoke.md`](ws8-mcp-policy-e2e-smoke.md) | [ ] Not Started | 7 + 8 |
+| **10** | [`ws8-a-plus-polish.md`](ws8-a-plus-polish.md) | [ ] Not Started | After 8–9 |
+| **11** | [`ws8-invariant-mcp-tool-honesty.md`](ws8-invariant-mcp-tool-honesty.md) | [ ] Not Started | After 8 |
+
+**Suggested order:** **6d** (can parallel **6e**, **6f**) → **6g/6h** with or after 6d → **7a → 7 → 8 → 9 → 10/11**.
+
+### Invariants (do not lose)
+
+| # | Invariant |
+|---|-----------|
+| I1 | No `Dictionary` / `ExpandoObject` as PolicyEvaluator subjects |
+| I2 | No null nullable value types on subjects (`int?` null throws) |
+| I3 | Missing keys → non-null defaults (0, `""`), not null |
+| I4 | MCP tool name/description/success match behavior |
+| I5 | Policy PropertyAccess names align with subject (and domain) property names |
+| I6 | Fail-closed tests cover int **and** long **and** bool-true ABI where relevant |
+
+### A+ definition of done
+
+- [ ] MCP never claims eval without returning a VM bool
+- [ ] Agent can attach a policy without core test hacks
+- [ ] Agent can evaluate sample values true/false
+- [ ] Subject builder enforces I1–I3, I5
+- [ ] One MCP-only e2e smoke
+- [ ] Domain-attached core tests still green
+
+---
+
+## Deferred
 
 | Item | Why |
 |------|-----|
-| Full action/effect program lowering | No consumer |
-| Dictionary entity simulation | Interpretation owns later |
-| New DE node kinds | Call site + test only |
-| µop redesign | On demand |
+| Full DE VM for DateOp / Owned / Rel | Documented gaps |
+| Contract **codegen** | WP9 |
+| Action/effect program lowering | Separate |
+| Reflection.Emit subject gen | Unproven until optional green spike |
+| Compile-once PolicyEvaluator cache | Perf unless measured |
 
-## Rules for executors
+## Rules
 
-1. **No domain-specific VM opcodes** — generic Syntax only.
-2. **Tests with C# records** OK.
-3. Prefer extending existing tests.
+1. No domain-specific VM opcodes.  
+2. Tool names/descriptions must match behavior.  
+3. Constrained `add_policy` expression — no free-form AST bags.  
 4. File `agent-summaries/ws8-*.md` on completion.
-5. **MCP tool names/descriptions must match behavior** (no false “evaluates via VM”).
-6. Finish **In Progress** before Not Started / WP9.
 
 ## Related
 
+- `spikes/policy-sample-subject.md`
+- `spikes/mcp-guiding-principles.md`
 - `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`
 - `docs/decisions/2026-06-08-domain-lowering-boundary.md`
-- `docs/plans/v2-to-v3/spikes/first-v3-consumer.md`
-- `docs/plans/v2-to-v3/master-roadmap.md`

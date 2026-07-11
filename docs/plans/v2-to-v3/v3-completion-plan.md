@@ -449,9 +449,24 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 | `simple-agent-tasks/wp7-port-v2-tests-batch1.md` | WP7 | **Superseded** |
 | `simple-agent-tasks/wp7-port-v2-demos-batch1.md` | WP7 | **Superseded** |
 | `simple-agent-tasks/wp8-delete-v2-gate-check.md` | WP8 | **Done** ✅ — V2 tree deleted |
-| `simple-agent-tasks/ws8-e2e-policy-vm-eval.md` | WP5/WS8 | **Not started** ← **next** |
-| `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md` | WP5/WS8 | Not started |
-| `simple-agent-tasks/wp5-optional-mcp-evaluate-policy.md` | WP5 | Not started (pull) |
+| `simple-agent-tasks/ws8-e2e-policy-vm-eval.md` | WP5/WS8 | **Done** (domain-attached included) |
+| `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md` | WP5/WS8 | **Done** |
+| `simple-agent-tasks/ws8-policyevaluator-vm-primary.md` | WP5/WS8 | **Done** |
+| `simple-agent-tasks/wp5-optional-mcp-evaluate-policy.md` | WP5/WS8 | **Done** Path B (`get_policy_expression`) |
+| `simple-agent-tasks/ws8-spike-policy-sample-subject.md` | WP5/WS8 A+ | **Done** (see #6b–6d follow-ups) |
+| `simple-agent-tasks/ws8-spike-harden-negative-subject-tests.md` | WP5/WS8 A+ | **Done** |
+| `simple-agent-tasks/ws8-spike-demote-emit-until-proven.md` | WP5/WS8 A+ | **Done** |
+| `simple-agent-tasks/ws8-invariant-policy-subject-types.md` | WP5/WS8 A+ | **Not started** ← **next** |
+| `simple-agent-tasks/ws8-spike-bool-abi-adult-assert.md` | WP5/WS8 A+ | Not started (bool true ABI) |
+| `simple-agent-tasks/ws8-spike-matchnumeric-positive-control.md` | WP5/WS8 A+ | Not started |
+| `simple-agent-tasks/ws8-invariant-policy-property-name-alignment.md` | WP5/WS8 A+ | Not started |
+| `simple-agent-tasks/ws8-invariant-no-dict-expando-subjects.md` | WP5/WS8 A+ | Not started |
+| `simple-agent-tasks/ws8-mcp-add-policy-expression-contract.md` | WP5/WS8 A+ | Not started |
+| `simple-agent-tasks/ws8-mcp-add-policy.md` | WP5/WS8 A+ | Not started |
+| `simple-agent-tasks/ws8-mcp-evaluate-policy-vm.md` | WP5/WS8 A+ | Not started |
+| `simple-agent-tasks/ws8-mcp-policy-e2e-smoke.md` | WP5/WS8 A+ | Not started |
+| `simple-agent-tasks/ws8-a-plus-polish.md` | WP5/WS8 A+ | Not started |
+| `simple-agent-tasks/ws8-invariant-mcp-tool-honesty.md` | WP5/WS8 A+ | Not started |
 | `simple-agent-tasks/ws4-agent-trace-reading-guide.md` | Polish | Not started |
 
 ---

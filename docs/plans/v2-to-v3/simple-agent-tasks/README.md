@@ -1,7 +1,7 @@
 # Simple Agent Tasks (Micro-Tasks for Smaller Models)
 
 **Purpose**: Small, self-contained tasks for lower-context / cheaper agents.  
-**Last Updated**: 2026-07-10 (WS8 code review — residuals In Progress)
+**Last Updated**: 2026-07-10 (WS8 A+ micro-tasks queued)
 
 ## Operating rule (mandatory)
 
@@ -26,35 +26,42 @@ When none are In Progress, take **Not Started** from the tables below.
 | Milestone | Status |
 |-----------|--------|
 | **M1–M4** Cutover (V3 only, V2 deleted) | ✅ Done |
-| **WS8 / WP5** Runtime truth | 🟡 Partial — review residuals open |
+| **WS8 Phase A** Foundation (policy VM, honesty Path B) | ✅ Done |
+| **WS8 Phase B** A+ agent loop | 🟡 6–6c Done; **next 6d + 6e–6h invariants** then MCP 7–11 |
 
-### In Progress first (code review 2026-07-10)
+### In Progress
 
-| Pri | Task | Residual |
-|-----|------|----------|
-| **1** | [`wp5-optional-mcp-evaluate-policy.md`](wp5-optional-mcp-evaluate-policy.md) | **Critical:** `evaluate_policy` claims VM true/false; only does metadata lookup — implement eval **or** rename/honest description |
-| **2** | [`ws8-e2e-policy-vm-eval.md`](ws8-e2e-policy-vm-eval.md) | **High:** add DomainFactory → evolve `AddPolicyToEntity` → evaluate from domain graph test |
+_None._
 
-Do **not** start new Not Started work until these are Done.
+### Next — WS8 Phase B (A+ package)
 
-### WS8 suite status
+**Full index:** [`ws8-README.md`](ws8-README.md)
 
-| Pri | Task | Status |
-|-----|------|--------|
-| 1 | [`ws8-e2e-policy-vm-eval.md`](ws8-e2e-policy-vm-eval.md) | [~] In Progress (domain-attach residual) |
-| 2 | [`ws8-domainexpression-lower-smoke-matrix.md`](ws8-domainexpression-lower-smoke-matrix.md) | [x] Done* (lower inventory; VM gaps documented) |
-| 3 | [`ws8-policyevaluator-vm-primary.md`](ws8-policyevaluator-vm-primary.md) | [x] Done* (VM-primary; optional README nit) |
-| 4 | [`wp5-optional-mcp-evaluate-policy.md`](wp5-optional-mcp-evaluate-policy.md) | [~] In Progress (**honesty**) |
-| 5 | [`ws8-inventory-contract-interface-rules.md`](ws8-inventory-contract-interface-rules.md) | [x] Done (docs spike) |
-| Later | [`ws4-agent-trace-reading-guide.md`](ws4-agent-trace-reading-guide.md) | Polish |
+| Pri | Task | Goal |
+|-----|------|------|
+| **6–6c** | Spike + harden + demote Emit | ✅ Done |
+| **6d** | [`ws8-invariant-policy-subject-types.md`](ws8-invariant-policy-subject-types.md) | **Next** — subject helper + defaults |
+| **6e** | [`ws8-spike-bool-abi-adult-assert.md`](ws8-spike-bool-abi-adult-assert.md) | Adult assert: `bool true` **or** `1L` |
+| **6f** | [`ws8-spike-matchnumeric-positive-control.md`](ws8-spike-matchnumeric-positive-control.md) | MatchNumeric true on working subject |
+| **6g** | [`ws8-invariant-policy-property-name-alignment.md`](ws8-invariant-policy-property-name-alignment.md) | Expression/subject/domain name alignment |
+| **6h** | [`ws8-invariant-no-dict-expando-subjects.md`](ws8-invariant-no-dict-expando-subjects.md) | Reject Dict/Expando at boundary |
+| **7a** | [`ws8-mcp-add-policy-expression-contract.md`](ws8-mcp-add-policy-expression-contract.md) | Constrained expression contract |
+| **7–9** | add_policy → evaluate_policy → MCP e2e smoke | Not started |
+| **10–11** | polish + tool honesty invariant | Not started |
 
-\*See task file for review caveats / optional follow-ups.
+**Order:** **6d** (parallel **6e**, **6f**) → **6g/6h** → **7a → 7 → 8 → 9 → 10/11**.
 
-### Code review highlights (do not ignore)
+### WS8 Phase A (done)
 
-- **MCP:** Tool descriptions must match behavior — no false “evaluates via VM.”
-- **Tests:** Bare `Policy` + records ≠ domain-authored policy e2e.
-- **Smoke matrix:** “Lowers without throwing” is gap inventory, not full VM coverage.
+| Task | Status |
+|------|--------|
+| [`ws8-e2e-policy-vm-eval.md`](ws8-e2e-policy-vm-eval.md) | Done (incl. domain-attached) |
+| [`ws8-domainexpression-lower-smoke-matrix.md`](ws8-domainexpression-lower-smoke-matrix.md) | Done* |
+| [`ws8-policyevaluator-vm-primary.md`](ws8-policyevaluator-vm-primary.md) | Done* |
+| [`wp5-optional-mcp-evaluate-policy.md`](wp5-optional-mcp-evaluate-policy.md) | Done Path B (`get_policy_expression`) |
+| [`ws8-inventory-contract-interface-rules.md`](ws8-inventory-contract-interface-rules.md) | Done |
+
+\*Optional polish in task #10.
 
 ### Done (cutover)
 

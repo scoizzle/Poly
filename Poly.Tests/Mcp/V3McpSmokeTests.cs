@@ -173,4 +173,39 @@ public class V3McpSmokeTests {
         await Assert.That(response.Affordances).IsNotNull();
         await Assert.That(response.Affordances).Contains("create_domain_session");
     }
+
+    [Test]
+    public async Task AddPropertyToMissingEntity_ReportsFailure_WithoutBumpingRevision() {
+        var (sessionId, state) = McpSessionStore.Create("Test");
+        var originalRevision = state.Revision;
+
+        var response = V3EvolveTool.AddProperty(sessionId, "NonExistent", "Status", "Text");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("No changes applied");
+        await Assert.That(response.Revision).IsEqualTo(originalRevision); // not bumped
+        await Assert.That(response.Affordances).IsNotNull();
+    }
+
+    [Test]
+    public async Task AddStageToMissingEntity_ReportsFailure() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Add entity, then try adding a stage to a different entity that doesn't exist
+        V3EvolveTool.AddEntity(sessionId, "Order");
+        var response = V3EvolveTool.AddStage(sessionId, "NonExistent", "Draft");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("No changes applied");
+    }
+
+    [Test]
+    public async Task AddActionToMissingEntity_ReportsFailure() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        V3EvolveTool.AddEntity(sessionId, "Order");
+        var response = V3EvolveTool.AddAction(sessionId, "NonExistent", "Submit");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("No changes applied");
+    }
 }

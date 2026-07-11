@@ -341,7 +341,32 @@ internal sealed class V3EvolveTool {
             successAffordances: ["add_relationship", "get_entity_detail", "get_domain_overview"]);
     }
 
-    // ── Shared helper ───────────────────────────────────────────
+    // ── Shared helpers ──────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a structural fingerprint of a domain for no-op detection.
+    /// Two domains with the same fingerprint have the same types, relationships,
+    /// and entity structures (property/stage/action counts). This lets us detect
+    /// when an evolve operation had zero effective change (e.g. adding a property
+    /// to a non-existent entity, which silently no-ops in the current evolution layer).
+    /// </summary>
+    private static string GetFingerprint(Domain domain) {
+        var typeCounts = $"T:{domain.Types.Count}|R:{domain.Relationships.Count}";
+        var entityDetails = domain.Types
+            .OfType<Entity>()
+            .OrderBy(e => e.Name)
+            .Select(e => {
+                var props = $"P{e.Properties.Count}";
+                var stages = string.Join(",", e.Stages.OrderBy(s => s.Name)
+                    .Select(s => $"{s.Name}({s.Actions.Count}a)"));
+                var actions = $"A{e.Actions.Count}";
+                var stageActions = e.Stages.Sum(s => s.Actions.Count);
+                return $"{e.Name}:{props}|[{stages}]|{actions}(+{stageActions}sa)";
+            });
+        return entityDetails.Any()
+            ? $"{typeCounts}|{string.Join(",", entityDetails)}"
+            : typeCounts;
+    }
 
     private static V3Response Evolve(
         string sessionId,
@@ -352,6 +377,9 @@ internal sealed class V3EvolveTool {
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
+
+        // Snapshot fingerprint before mutation to detect silent no-ops
+        var before = GetFingerprint(state.Domain);
 
         var result = new DomainEvolution(state.Domain).Evolve();
         result = mutate(result);
@@ -378,6 +406,21 @@ internal sealed class V3EvolveTool {
                 Revision: state.Revision,
                 Diagnostics: diagnostics.Count > 0 ? diagnostics : null,
                 Affordances: ["get_domain_analysis", "get_domain_overview"]
+            );
+        }
+
+        // Guard: detect silent no-ops — evolution "succeeded" but nothing changed.
+        // This happens when DomainChange types silently no-op (e.g. adding a property
+        // to a non-existent entity via UpdateEntity returning false).
+        // Fail honestly instead of reporting success and bumping the revision.
+        var after = GetFingerprint(outcome.Root);
+        if (before == after) {
+            return new V3Response(
+                Success: false,
+                Message: "No changes applied: target entity not found or change had no effect. Check that the entity name is correct.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Affordances: ["get_domain_overview", "get_entity_detail"]
             );
         }
 

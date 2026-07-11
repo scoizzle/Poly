@@ -130,7 +130,7 @@ See **[orchestration-guide.md](orchestration-guide.md)**.
 |-------|-------|--------|
 | **Phase 1** | Evolution foundation + proofs + expressiveness audit | **Complete** (hygiene: WS4/WS6 only) |
 | **Phase 2** | Capabilities the **first V3 consumer** needs (e2e eval, codegen, traces) | **Active** — pull by M2, not V2 parity |
-| **Phase 3** | **First consumer on V3** + freeze V2 | **Not started** — highest leverage |
+| **Phase 3** | **First consumer on V3** + freeze V2 | **Active** — WP1–WP4 implemented; WP6 freeze pending |
 | **Phase 4** | Expressiveness as **pulled by** that consumer / next scenarios | Design ready; no speculative ports |
 | **Phase 5** | **Delete V2** + doc cleanup | After M2 proven |
 
@@ -167,12 +167,14 @@ See **[orchestration-guide.md](orchestration-guide.md)**.
 - Shared analysis substrate
 - VM execution good enough for proofs
 - `PolicyEvaluator` path exists
+- **Direct domain API surface** — queries, evolve façade, bootstrap factory, documented in DomainModeling README ✅
+- **Curated MCP on V3** — session/query/evolve tools (11 tools, structured results, affordances) ✅
 
 ### Open — only if M2 needs it
 
 Ordered by pull from **MCP + direct API** (`spikes/first-v3-consumer.md`):
 
-1. **Direct domain API surface** — thin, composable, naturally named ops over `Evolve`/`Apply` + query projections (implementation work under Phase 3; may live next to DomainModeling, not only in MCP)
+1. ~~**Direct domain API surface** — thin, composable, naturally named ops over `Evolve`/`Apply` + query projections~~ ✅ **Done**
 2. **E2E DomainExpression → VM** — when policy/guard tools need runtime truth (`ws8-e2e-policy-vm-eval.md`)
 3. **Trace quality for agents** — WS4 guide + gaps dogfood hits (`ws4-agent-trace-reading-guide.md`)
 4. **Smoke matrix** for lowering regressions (`ws8-domainexpression-lower-smoke-matrix.md`)
@@ -195,12 +197,12 @@ Ordered by pull from **MCP + direct API** (`spikes/first-v3-consumer.md`):
 
 - [x] First consumer **named** (MCP + direct API)
 - [x] MCP **guiding principles** documented (research + Poly bar)
-- [ ] Direct API uses only `Poly.DomainModeling` (+ Syntax/Interpretation as needed)
-- [ ] MCP tools call that API only (no `Poly.Data.Modeling` mutators)
-- [ ] Tool surface follows principles (curated count, descriptions, concise responses, affordances, recoverable errors)
-- [ ] Multi-step evolve with analysis error → rollback + usable diagnostics
-- [ ] TUnit covers direct-API happy path + failure/rollback
-- [ ] Policy/calculation on VM when a tool needs runtime truth
+- [x] Direct API uses only `Poly.DomainModeling` (+ Syntax/Interpretation as needed)
+- [x] MCP tools call that API only (no `Poly.Data.Modeling` mutators)
+- [x] Tool surface follows principles (curated count, descriptions, concise responses, affordances, recoverable errors)
+- [x] Multi-step evolve with analysis error → rollback + usable diagnostics
+- [x] TUnit covers direct-API happy path + failure/rollback
+- [ ] Policy/calculation on VM when a tool needs runtime truth (WP5 — pull)
 - [ ] **V2 freeze declared** in this roadmap + AGENTS.md note: no new V2 features
 - [ ] Inventory of remaining V2 references (tests, demos, old DomainTools) with deletion plan
 
@@ -233,41 +235,39 @@ Design refs: `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-nav
 
 | Order | Package | Status |
 |-------|---------|--------|
-| WP1 | V3 builtins + sever PolicyEvaluator V2 | **In Progress** — follow-ups on micro-tasks (factory failure path, grep gate) |
-| WP2 | Direct API queries + happy-path tests | **In Progress** — README Root; failure tests |
-| WP3 | Correctness net (rollback + policy VM) | **In Progress** — rollback suite mostly green; optional hardening |
-| WP4 | Curated MCP rewrite | **In Progress** — structured responses; drop bad batch tool; smoke tests |
-| WP5 | Runtime truth polish | pull — **only after** WP1–WP4 In Progress closed |
-| WP6–8 | Freeze → port demos → delete V2 | after M2 |
+| WP1 | V3 builtins + sever PolicyEvaluator V2 | ✅ **Done** |
+| WP2 | Direct API queries + happy-path tests | ✅ **Done** |
+| WP3 | Correctness net (rollback suite) | ✅ **Done** (policy VM e2e still pull) |
+| WP4 | Curated MCP rewrite | ✅ **Done** — no-op honesty gap closed (fingerprint guard) |
+| WP5 | Runtime truth polish | pull — `ws8-e2e-policy-vm-eval` etc. |
+| WP6 | V2 freeze declaration | ⬜ **next** — `wp6-declare-v2-freeze.md` |
+| WP7 | Aggressive V2 test/demo port | ⬜ inventory → batches |
+| WP8 | Delete V2 | ⬜ after gate check |
 | WP9 | Actor / rules / contract gen / visual | pull only |
 
-**Executor rule:** Complete **In Progress** micro-task follow-ups first (`simple-agent-tasks/README.md`). Do not start new Not Started breadth while those remain open.
+**Executor rule:** WP1–WP4 **Done**. Start **Next suite** in `simple-agent-tasks/README.md` (WP6 freeze first).
 
 ### Orchestrator
 
-1. ~~Name the first V3 consumer~~ → **Done**
-2. ~~MCP principles~~ → **Done**
-3. ~~Completion plan / gap inventory~~ → **Done** (`v3-completion-plan.md`)
-4. Drive **WP1 → WP4** micro-tasks; WP5/WS8 only if tools need eval
-5. Freeze relative to M2 green
+1. ~~Name consumer / MCP principles / completion plan / WP1–WP4~~ → **Done**
+2. Drive **Next suite** micro-tasks (freeze → inventory → port → optional policy e2e → delete gate)
 
 ### Executor
 
-1. Pick **`wp1-*` then `wp2-*` then `wp3-*` / `ws8-e2e-*` then `wp4-*`** from `simple-agent-tasks/`.
-2. Skip superseded `ws1-*` / `ws2-*` / old `ws3-add-*`.
-3. Do not add DomainChange types without a direct-API call site + test.
-4. Do not port V2 DomainTools 1:1.
+1. Pick from **Next suite** table in `simple-agent-tasks/README.md` (top first).
+2. Skip superseded `ws1-*` / `ws2-research-*` / `ws3-add-*`.
+3. Port aggressively; no new V2 features.
+4. Do not port DomainTools 1:1.
 
 ### Recommended sequence
 
 ```
-1. WP1 — builtins + no V2 under DomainModeling
-2. WP2 — query projections + happy-path evolve tests
-3. WP3 — rollback suite + policy VM e2e
-4. WP4 — MCP session/overview/evolve (curated) + retire V2 tools path
-5. Dogfood → refine descriptions
-6. WP6 freeze → WP7 demos → WP8 delete V2
-7. WP9 only when consumer pulls
+1–4. WP1–WP4  ✅ Done
+5. WP6 freeze declaration
+6. WP7 inventory → test batch1 → demo batch1
+7. Optional: ws8 policy VM e2e / DE smoke / MCP evaluate_policy
+8. WP8 delete gate → delete V2
+9. WP9 only when consumer pulls
 ```
 
 ---
@@ -283,14 +283,14 @@ Design refs: `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-nav
 | First V3 consumer named | ✅ |
 | MCP guiding principles | ✅ |
 | **V3 completion plan (gaps + WPs)** | ✅ |
-| WP1 builtins / no V2 in DomainModeling | ⬜ |
-| WP2 direct query API | ⬜ |
-| WP3 test matrix | ⬜ |
-| WP4 MCP on V3 (M2) | ⬜ |
+| WP1 builtins / no V2 in DomainModeling | ✅ **Done** |
+| WP2 direct query API | ✅ **Done** |
+| WP3 test matrix | ✅ **Done** |
+| WP4 MCP on V3 (M2 authoring) | ✅ **Done** |
 | V2 frozen | ⬜ |
 | V2 deleted | ⬜ |
 
-**Bottom line:** Foundation is done. Execution order is **WP1→WP4** in `v3-completion-plan.md`. Win condition is **MCP + direct API on V3 + delete V2**, not V2 parity.
+**Bottom line:** M2 authoring path (direct API + curated MCP) is **Done**. Next: freeze V2 → port/delete remnants → optional policy VM e2e.
 
 ---
 

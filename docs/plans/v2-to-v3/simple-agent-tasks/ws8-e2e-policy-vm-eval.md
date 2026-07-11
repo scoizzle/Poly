@@ -1,49 +1,41 @@
 # Micro-Task: E2E policy evaluation on the VM
 
-**Parent Workstream**: WS8  
-**Difficulty**: Medium (still small-model friendly if steps followed)  
+**Parent**: WP5 / WS8  
+**Difficulty**: Medium  
 **Estimated Tokens**: ~8k  
-**Status**: [ ] Not Started
+**Status**: [ ] Not Started  
+**Pull when**: vertical slice needs runtime policy truth (or after WP6 if dogfood asks for EvaluatePolicy)
 
 ## Objective
 
-Prove one complete path: V3 domain with a simple policy → `DomainExpression` lower → `Interpreter.Compile` → execute with an entity argument → assert boolean/long result.
+Prove one complete path: V3 domain with a simple policy → lower → VM execute with a **C# record** argument → true/false.
 
-## Context You Need
+## Context (current code)
 
-- `docs/decisions/2026-06-08-domain-lowering-boundary.md` (domain → generic AST only)
-- `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`
-- `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs`
-- `Poly/DomainModeling/Lowering/PolicyEvaluator.cs` (if present — extend or mirror)
-- `Poly/Interpretation/Interpreter.cs` — `Compile` / `Execute` / `SetArgs`
-- Existing evolution or policy tests under `Poly.Tests/DomainModeling/`
+- Bootstrap: `Poly.DomainModeling.Bootstrap.DomainFactory`
+- Evolve: `DomainEvolution` / `EvolutionBuilder.AddPolicyToEntity(...)`
+- Lower: `Poly.DomainModeling.Lowering.DomainExpressionLoweringPass`
+- Eval helper: `PolicyEvaluator.CompileVMPredicate<T>` / `Evaluate` (dual LINQ+VM oracle OK)
+- Execution: `Interpreter.Compile` / `Execute` / `SetArgs`
+- Tests already cover raw DE → VM; this task attaches a **Policy on a domain entity** and evaluates via PolicyEvaluator or equivalent
 
 ## Exact Steps
 
-1. Find how policies attach today (entity or stage `Policy` + `DomainExpression`).
-2. Build a **minimal** domain in a test (builders or `DomainEvolution.Evolve()`):
-   - One entity with one int/long property (e.g. `Age`).
-   - One policy: `Age >= 18` (or equivalent with existing comparison `DomainExpression` nodes).
-3. Lower the policy expression to Syntax AST via the existing lowering pass.
-4. `Interpreter.Compile(node, CompilationMode.NoDebug)` then `Execute` with `SetArgs` (or the project’s current arg convention) supplying a matching CLR object or domain instance as used by `PolicyEvaluator`.
-5. Assert true for Age=20, false for Age=10 (or long 0/1 ABI equivalents).
-6. Name the test clearly: e.g. `Policy_AgeGuard_EvaluatesOnVm`.
+1. Create domain via `DomainFactory.Create(...)` with an entity that has a numeric property (use builtin `Number` or map to int on a CLR record — match existing `PersonRecord` patterns in `DomainExpressionVmExecutionTests` if useful).
+2. Attach policy: e.g. `Age >= 18` using `DomainExpression` comparison nodes + `AddPolicyToEntity`.
+3. Compile/evaluate with `PolicyEvaluator.CompileVMPredicate<TEntity>` against records with Age=20 (true) and Age=10 (false). Prefer VM path; dual-oracle `Evaluate` is acceptable if already green.
+4. Name test: `Policy_AgeGuard_EvaluatesOnVm` (or similar) under `Poly.Tests/DomainModeling/Lowering/`.
+5. No domain-specific VM opcodes.
 
 ## Verification
 
-- [ ] `dotnet build` of solution or `Poly.Tests` succeeds
-- [ ] New test passes under TUnit
-- [ ] No domain-specific VM opcodes introduced
-- [ ] Test does not depend on Trace/DebugHook
-
-## Output
-
-- One new test file or methods in an existing DomainModeling lowering/execution test class
-- Brief note in your agent-summary if `PolicyEvaluator` needed a small fix
+- [ ] Build green
+- [ ] New tests pass under TUnit
+- [ ] No `Poly.Data.Modeling`
+- [ ] No Trace/DebugHook dependency
 
 ## Out of Scope
 
+- MCP EvaluatePolicy tool (optional follow-up micro-task if dogfood needs it)
 - Contract interface generation
-- MCP tools
-- Perf work
-- New DomainExpression node kinds (use existing comparisons)
+- Dictionary instance simulation (Interpretation owns later)

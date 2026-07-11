@@ -18,7 +18,7 @@ Tools live in `Poly.Mcp/Tools/` and use only V3 types (`Poly.DomainModeling`, no
 | `add_action_to_stage` | `V3EvolveTool` | Assigns action to a stage |
 | `add_relationship` | `V3EvolveTool` | Adds a relationship between entities |
 
-Session/worskpace state lives in `Poly.Mcp/Sessions/` — not in DomainModeling core.
+Session/workspace state lives in `Poly.Mcp/Sessions/` — not in DomainModeling core.
 
 ## Deprecated (V2 — not registered in product path)
 

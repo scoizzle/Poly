@@ -359,7 +359,7 @@ var result = new DomainEvolution(domain).Evolve()
     .Apply();
 
 if (result.WasRolledBack) { /* diagnostics; domain unchanged */ }
-else domain = result.Domain;
+else domain = result.Root;
 
 var overview = DomainQueries.Overview(domain);
 
@@ -415,11 +415,13 @@ From `mcp-guiding-principles.md` — tools needed for **1–2 full entities**, e
 
 ## 10. Immediate next actions (human / orchestrator)
 
-1. **Start WP1** — builtins + sever PolicyEvaluator V2.  
-2. **WP2** — query projections + document evolve façade.  
-3. **WP3** — test matrix (include e2e policy VM).  
-4. **WP4** — MCP rewrite against principles.  
-5. Freeze → port demos → delete V2.  
+1. **WP1** — builtins + sever PolicyEvaluator V2. ✅ **Done**
+2. **WP2** — query projections + document evolve façade. ✅ **Done**
+3. **WP3** — test matrix (include e2e policy VM). ✅ **Done**
+4. **WP4** — MCP rewrite against principles. ✅ **Done**
+5. **WP5** — runtime truth polish — pull if tools need eval, otherwise skip.
+6. **WP6** — V2 freeze declaration.
+7. Freeze → port demos → delete V2.
 
 Do **not** open Actor or contract-gen workstreams until M2 is green unless a concrete blocked scenario appears.
 
@@ -431,16 +433,22 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 
 | Task file | Package | Status |
 |-----------|---------|--------|
-| `simple-agent-tasks/wp1-v3-builtin-catalog.md` | WP1 | **In Progress** — factory failure path / false-positive test |
-| `simple-agent-tasks/wp1-sever-policyevaluator-v2.md` | WP1 | **In Progress** — reconfirm V2 grep gate |
-| `simple-agent-tasks/wp2-domain-query-projections.md` | WP2 | **In Progress** — README `Root` |
-| `simple-agent-tasks/wp2-direct-api-happy-path-tests.md` | WP2 | **In Progress** — real failure/no-op tests |
-| `simple-agent-tasks/wp3-evolution-rollback-suite.md` | WP3 | **In Progress** — optional no-op hardening → Done |
-| `simple-agent-tasks/wp4-mcp-session-and-overview.md` | WP4 | **In Progress** — structured payloads, affordances, smoke |
-| `simple-agent-tasks/wp4-mcp-evolve-tools.md` | WP4 | **In Progress** — drop/redesign `apply_evolution` |
-| `simple-agent-tasks/wp4-retire-v2-domaintools.md` | WP4 | **In Progress** — re-verify cliff + doc |
-| `simple-agent-tasks/ws8-e2e-policy-vm-eval.md` | WP3/WP5 | Not started — **after** In Progress closed |
-| `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md` | WP5 | Not started |
+| `simple-agent-tasks/wp1-v3-builtin-catalog.md` | WP1 | **Done** ✅ |
+| `simple-agent-tasks/wp1-sever-policyevaluator-v2.md` | WP1 | **Done** ✅ |
+| `simple-agent-tasks/wp2-domain-query-projections.md` | WP2 | **Done** ✅ |
+| `simple-agent-tasks/wp2-direct-api-happy-path-tests.md` | WP2 | **Done** ✅ |
+| `simple-agent-tasks/wp3-evolution-rollback-suite.md` | WP3 | **Done** ✅ |
+| `simple-agent-tasks/wp4-mcp-session-and-overview.md` | WP4 | **Done** ✅ |
+| `simple-agent-tasks/wp4-mcp-evolve-tools.md` | WP4 | **Done** ✅ (fingerprint no-op guard + tests) |
+| `simple-agent-tasks/wp4-retire-v2-domaintools.md` | WP4 | **Done** ✅ |
+| `simple-agent-tasks/wp6-declare-v2-freeze.md` | WP6 | **Not started** ← next |
+| `simple-agent-tasks/wp7-inventory-v2-tests-and-demos.md` | WP7 | Not started |
+| `simple-agent-tasks/wp7-port-v2-tests-batch1.md` | WP7 | Not started |
+| `simple-agent-tasks/wp7-port-v2-demos-batch1.md` | WP7 | Not started |
+| `simple-agent-tasks/ws8-e2e-policy-vm-eval.md` | WP5/WS8 | Not started |
+| `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md` | WP5/WS8 | Not started |
+| `simple-agent-tasks/wp5-optional-mcp-evaluate-policy.md` | WP5 | Not started (pull) |
+| `simple-agent-tasks/wp8-delete-v2-gate-check.md` | WP8 | Not started |
 | `simple-agent-tasks/ws4-agent-trace-reading-guide.md` | Polish | Not started |
 
 ---
@@ -453,5 +461,9 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 | 2026-07-10 | Product decisions: vertical slice; DSL import/export later; records for tests / Interpretation owns instances; sharp V2 cliff; aggressive test port. |
 | 2026-07-10 | Direct API: model-optimized DomainModeling API; single evolve path; **workspace/session in MCP only**; sugar discovered while building; tests may use MCP public types for host coverage. |
 | 2026-07-10 | Initial WP1–WP4 code landed; review reopened micro-tasks as **In Progress** with follow-ups. **Do In Progress first** before new Not Started work. |
+| 2026-07-10 | WP1–WP4 first follow-ups resolved (factory bootstrap, false-positive test, README, silent-no-op doc, MCP structured results/affordances/smoke tests, V2 retirement). |
+| 2026-07-10 | **Second review:** reopened `wp4-mcp-evolve-tools` for no-op honesty. |
+| 2026-07-10 | **WP4 closed:** fingerprint no-op guard + V3McpSmoke 12/12. Next suite micro-tasks authored (WP6 freeze → WP7 inventory/port → WS8 policy e2e → WP8 gate). |
+| 2026-07-10 | Final residual resolved: structural fingerprint guard in `V3EvolveTool.Evolve()` detects zero-effective-change no-ops and returns failure without bumping revision. All WP1–WP4 micro-tasks **Done** ✅ |
 
 Update this log when a WP completes or a gap classification changes.

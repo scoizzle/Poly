@@ -1,41 +1,28 @@
-# Micro-Task: DomainExpression lowering smoke matrix
+# Micro-Task: DomainExpression lower smoke matrix
 
-**Parent Workstream**: WS8  
-**Difficulty**: Small Model Friendly  
+**Parent**: WP5 / WS8  
+**Difficulty**: Small–Medium  
 **Estimated Tokens**: ~6k  
-**Status**: [ ] Not Started
+**Status**: [ ] Not Started  
+**Depends on**: Prefer after or with `ws8-e2e-policy-vm-eval` if overlapping
 
 ## Objective
 
-Add or extend tests that assert **every** `DomainExpression` factory/kind lowers to a non-null Syntax `Node` without throwing (smoke matrix), catching regressions when WS8 continues.
-
-## Context You Need
-
-- `Poly/DomainModeling/DomainExpression.cs` (and nested expression types)
-- `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs`
-- Existing tests: search `DomainExpressionLowering` under `Poly.Tests`
+Regression table: each **M2-relevant** `DomainExpression` node kind lowers and (where feasible) executes on VM without throwing.
 
 ## Exact Steps
 
-1. List all concrete `DomainExpression` subtypes / factory methods.
-2. For each, build a minimal expression (literals + one property access as needed).
-3. Run the lowering pass; assert result is non-null `Node` (and optionally a loose type check).
-4. Prefer one parameterized / theory-style test or a clear matrix of named tests (`Method_Condition_ExpectedResult` style).
-5. Do **not** require VM execution in this task (that is `ws8-e2e-policy-vm-eval.md`).
+1. Inventory node kinds in `DomainExpression.cs` (Property, Parameter, Literal, arithmetic, comparisons, And/Or/Not, Exists, DateOp, RelationshipNav, Owned).
+2. For each kind used by policies/authoring smoke: one lower smoke and one VM execute where already supported.
+3. Skip or mark `[Ignore]` / documented gap only if lowering throws by design — list gaps in agent-summary.
+4. Prefer extending `DomainExpressionVmExecutionTests` / lowering tests rather than a new framework.
 
 ## Verification
 
-- [ ] Build green
-- [ ] New/updated tests pass
-- [ ] No production code changes unless a clear lowering bug blocks the matrix (fix the bug if trivial)
-
-## Output
-
-- Tests under `Poly.Tests/DomainModeling/Lowering/` (or adjacent)
-- Agent summary noting any kinds that still fail / are skipped with reason
+- [ ] Matrix covered or gaps listed
+- [ ] Tests green
+- [ ] No new DE node kinds without a consumer
 
 ## Out of Scope
 
-- Contract interfaces
-- Evolution layer
-- Perf
+- Full action/effect program lowering

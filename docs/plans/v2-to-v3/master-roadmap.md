@@ -248,10 +248,10 @@ Design refs: `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-nav
 | WP6 | V2 freeze declaration | ✅ **Done** |
 | WP7 | Aggressive V2 test/demo port | ✅ **Superseded** — deleted rather than staged port |
 | WP8 | Delete V2 | ✅ **Done** (tree removed; commit if still unstaged) |
-| **WP5** | Runtime truth polish | ⬜ **next** — policy VM e2e / DE smoke |
+| **WP5 / WS8** | Runtime truth polish | 🟡 **In Progress residuals** — MCP eval honesty + domain-attached policy test (`ws8-README.md`) |
 | WP9 | Actor / rules / contract gen / visual | pull only |
 
-**Executor rule:** M1–M4 complete. Pick **Next** from `simple-agent-tasks/README.md` (start at `ws8-e2e-policy-vm-eval`). Skip superseded WP7/WP8 micro-tasks.
+**Executor rule:** M1–M4 complete. Finish **WS8 In Progress residuals first** ([`ws8-README.md`](simple-agent-tasks/ws8-README.md): MCP `evaluate_policy` honesty, then domain-attached policy test). Skip superseded WP7/WP8 micro-tasks.
 
 ### Orchestrator
 
@@ -292,9 +292,9 @@ Design refs: `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-nav
 | WP1–WP4 M2 authoring path | ✅ **Done** |
 | V2 frozen | ✅ **Done** |
 | V2 deleted | ✅ **Done** (2026-07-10; verify commit on branch) |
-| Policy / expression e2e productized | ⬜ WP5 |
+| Policy / expression e2e productized | 🟡 Bare Policy→VM ✅; domain-attach + honest MCP eval still open |
 
-**Bottom line:** Cutover complete (M1–M4). **Next focus is WP5 runtime truth** (policy on VM + DE smoke), not more V2 port work.
+**Bottom line:** Cutover complete (M1–M4). WS8 foundation Done; **close review residuals** (MCP honesty, domain-attached policy test) before WP9.
 
 ---
 

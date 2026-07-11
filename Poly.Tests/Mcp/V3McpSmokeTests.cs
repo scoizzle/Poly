@@ -1,4 +1,5 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
@@ -207,5 +208,50 @@ public class V3McpSmokeTests {
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("No changes applied");
+    }
+
+    [Test]
+    public async Task GetPolicyExpression_FindsPolicyOnEntity() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Build a domain with a policy
+        V3EvolveTool.AddEntity(sessionId, "Person");
+        V3EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+        V3EvolveTool.AddEntity(sessionId, "Person"); // no-op duplicate handled
+
+        // Add policy via direct evolve
+        var session = McpSessionStore.TryGet(sessionId, out var state);
+        var evolve = new DomainEvolution(state.Domain);
+        var result = evolve.Evolve()
+            .AddPolicyToEntity("Person", "Adult",
+                DomainExpression.GreaterThanOrEqual(
+                    DomainExpression.Property("Age"),
+                    DomainExpression.Literal(18)))
+            .Apply();
+        if (result.Succeeded)
+            McpSessionStore.Update(sessionId, result.Root, result.Analysis);
+
+        var response = V3EvalTool.GetPolicyExpression(sessionId, "Person", "Adult");
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsNotNull();
+    }
+
+    [Test]
+    public async Task GetPolicyExpression_MissingPolicy_ReturnsNotFound() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Person");
+
+        var response = V3EvalTool.GetPolicyExpression(sessionId, "Person", "NonExistent");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task GetPolicyExpression_MissingEntity_ReturnsNotFound() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = V3EvalTool.GetPolicyExpression(sessionId, "NonExistent", "Any");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("not found");
     }
 }

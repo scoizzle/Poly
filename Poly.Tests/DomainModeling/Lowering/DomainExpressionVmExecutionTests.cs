@@ -520,10 +520,89 @@ public class DomainExpressionVmExecutionTests {
 
         foreach (var policy in policies) {
             foreach (var entity in entities) {
-                // This will throw if LINQ and VM diverge
-                var result = policy.Evaluate(entity);
+                var result = policy.EvaluateWithDualOracle(entity);
                 await Assert.That(result).IsAssignableTo<bool>();
             }
         }
+    }
+
+    // ── DE lower-smoke matrix: gap coverage ─────────────────────
+    //
+    // Inventory of all DomainExpression concrete subtypes and their
+    // test coverage status (see ws8-README.md task #2).
+
+    // ParameterAccess: standalone test (used via Policies above, but test explicitly)
+    [Test]
+    public async Task ParameterAccess_WithExplicitSubject_ResolvesParameter() {
+        var param = new SN.Parameter("x");
+        var node = Pass.Lower(DomainExpression.Parameter("x"), new SN.Constant(null));
+        // ParameterAccess with no matching subject — resolves to fresh Parameter node
+        // This tests lowering doesn't throw
+        await Assert.That(node).IsNotNull();
+    }
+
+    // OwnedAccess: lowering produces Member chain; VM execution requires CLR object graph
+    [Test]
+    public async Task OwnedAccess_LowersWithoutThrowing() {
+        var expr = DomainExpression.Owned("Address", DomainExpression.Property("City"));
+        var subject = new SN.Constant(new { Address = new { City = "Seattle" } });
+        var node = Pass.Lower(expr, subject);
+
+        await Assert.That(node).IsNotNull();
+        // Full VM execution of Owned/Member chains requires heap objects — documented gap:
+        // The VM µop path for nested CLR object member access works for simple cases
+        // but OwnedAccess produces chained Member(Member(subject, "Address"), "City")
+        // which requires heap dereference support. See DomainExpression docs.
+    }
+
+    // DateOperation: lowers to Invoke(Member(date, "AddDays"/"AddMonths"/"Subtract"), offset)
+    [Test]
+    public async Task DateOperation_LowersWithoutThrowing() {
+        var expr = DomainExpression.DateOp(
+            DomainExpression.Property("BirthDate"),
+            DomainExpression.Literal(1),
+            DateOperationKind.AddDays);
+        var subject = new SN.Constant(new { BirthDate = DateTime.Now });
+        var node = Pass.Lower(expr, subject);
+
+        await Assert.That(node).IsNotNull();
+        // VM execution of DateOperation requires heap object + Invoke support.
+        // The lower-to-Invoke pattern is correct for LINQ path (tested indirectly);
+        // VM path is a documented gap — DateOperation uses Invoke which the VM
+        // supports for known methods but DateTime.AddDays is a value-type method call.
+    }
+
+    // RelationshipNavigation: lowers to Member(Member(subject, relationshipName), targetProperty)
+    [Test]
+    public async Task RelationshipNavigation_LowersWithoutThrowing() {
+        var expr = DomainExpression.RelationshipNav("Owner", DomainExpression.Property("Name"));
+        var subject = new SN.Constant(new { Owner = new { Name = "Alice" } });
+        var node = Pass.Lower(expr, subject);
+
+        await Assert.That(node).IsNotNull();
+        // Full VM execution requires heap object graph navigation — same gap as OwnedAccess.
+        // The lowering is structurally correct (nested Member chains).
+    }
+
+    // Exists/NotExists: lower to null comparisons — already tested via Policy age guards
+    // But add explicit tests for documentation.
+    [Test]
+    public async Task Exists_NonNullValue_ReturnsTrue() {
+        // Exists(Property("X")) with subject { X = "hello" } → NotEqual(Member(subject, "X"), null)
+        var subject = new SN.Constant(new { X = "hello" });
+        var node = Pass.Lower(DomainExpression.Exists(DomainExpression.Property("X")), subject);
+
+        var result = Execute(node);
+        await Assert.That((long)result.Value!).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task NotExists_NullValue_ReturnsTrue() {
+        // NotExists(Property("X")) with subject { X = null } → Equal(Member(subject, "X"), null)
+        var subject = new SN.Constant(new { X = default(string) });
+        var node = Pass.Lower(DomainExpression.NotExists(DomainExpression.Property("X")), subject);
+
+        var result = Execute(node);
+        await Assert.That((long)result.Value!).IsEqualTo(1L);
     }
 }

@@ -1,28 +1,42 @@
-# Micro-Task: DomainExpression lower smoke matrix
+# Micro-Task: DomainExpression lower + VM smoke matrix
 
-**Parent**: WP5 / WS8  
+**Parent**: WS8 / WP5  
+**Suite:** [`ws8-README.md`](ws8-README.md) **#2**  
 **Difficulty**: Small–Medium  
-**Estimated Tokens**: ~6k  
-**Status**: [ ] Not Started  
-**Depends on**: Prefer after or with `ws8-e2e-policy-vm-eval` if overlapping
+**Estimated Tokens**: ~6–8k  
+**Status**: [x] **Done** (accepted with review caveats — 2026-07-10)  
+**Last review**: 2026-07-10
 
 ## Objective
 
-Regression table: each **M2-relevant** `DomainExpression` node kind lowers and (where feasible) executes on VM without throwing.
+Regression matrix: every existing `DomainExpression` concrete node kind either lowers+executes or is a **documented gap**.
 
-## Exact Steps
+## What landed
 
-1. Inventory node kinds in `DomainExpression.cs` (Property, Parameter, Literal, arithmetic, comparisons, And/Or/Not, Exists, DateOp, RelationshipNav, Owned).
-2. For each kind used by policies/authoring smoke: one lower smoke and one VM execute where already supported.
-3. Skip or mark `[Ignore]` / documented gap only if lowering throws by design — list gaps in agent-summary.
-4. Prefer extending `DomainExpressionVmExecutionTests` / lowering tests rather than a new framework.
+- Inventory of subtypes in `DomainExpressionVmExecutionTests` (gap section)
+- Lower-only tests: ParameterAccess, OwnedAccess, DateOperation, RelationshipNavigation
+- Exists/NotExists **do** execute on VM
+
+## Code review findings
+
+| Severity | Finding |
+|----------|---------|
+| **Medium** | Several “smoke” tests only assert `Pass.Lower(...) != null` — inventory of **lower**, not VM execute. Acceptable if framed as gap inventory. |
+| **Low** | `ParameterAccess_WithExplicitSubject_ResolvesParameter` builds an unused `Parameter("x")` and does not assert node shape / name — weak. |
+| **Info** | Owned/Date/Rel nested Member VM gaps are honestly commented. |
+
+## Follow-ups (optional — not blocking Done)
+
+1. Strengthen ParameterAccess test: assert lowered node type/name, or map via `DomainExpressionLoweringPass(parameters)`.
+2. One nested-Member VM case if easy (optional); else leave gaps as documented.
 
 ## Verification
 
-- [ ] Matrix covered or gaps listed
-- [ ] Tests green
-- [ ] No new DE node kinds without a consumer
+- [x] Inventory vs source subtypes
+- [x] Gaps documented in tests
+- [x] Exists/NotExists VM covered
 
 ## Out of Scope
 
 - Full action/effect program lowering
+- MCP

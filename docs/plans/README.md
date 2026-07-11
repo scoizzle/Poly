@@ -13,7 +13,7 @@ Architectural rationale lives in **`docs/decisions/`**. Module maps live in **`P
 | [First V3 consumer spike](v2-to-v3/spikes/first-v3-consumer.md) | Named M2 consumer + happy path |
 | [MCP guiding principles](v2-to-v3/spikes/mcp-guiding-principles.md) | Agent-tool design for V3 MCP |
 | [V2 → V3 Workstreams](v2-to-v3/workstreams/) | Workstream detail (WS8 pull for policy/eval) |
-| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — **next: `ws8-e2e-policy-vm-eval`**, DE smoke; WP7/WP8 superseded |
+| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — **[WS8 suite](v2-to-v3/simple-agent-tasks/ws8-README.md)** next; WP7/WP8 superseded |
 | [Orchestration Guide](v2-to-v3/orchestration-guide.md) | Multi-agent operating model |
 
 ## Interpretation (current)

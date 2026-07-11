@@ -410,9 +410,6 @@ internal sealed class V3EvolveTool {
         }
 
         // Guard: detect silent no-ops — evolution "succeeded" but nothing changed.
-        // This happens when DomainChange types silently no-op (e.g. adding a property
-        // to a non-existent entity via UpdateEntity returning false).
-        // Fail honestly instead of reporting success and bumping the revision.
         var after = GetFingerprint(outcome.Root);
         if (before == after) {
             return new V3Response(
@@ -431,6 +428,59 @@ internal sealed class V3EvolveTool {
             SessionId: sessionId,
             Revision: state.Revision + 1,
             Affordances: successAffordances
+        );
+    }
+}
+
+/// <summary>
+/// Tools for inspecting policy metadata (guard expressions) on domain entities.
+/// Full VM-based policy evaluation with record-building from JSON args is deferred
+/// to WP5 — see `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`.
+/// </summary>
+[McpServerToolType]
+internal sealed class V3EvalTool {
+    /// <summary>
+    /// Returns the guard expression text of a named policy on an entity.
+    /// Use this to inspect what condition a policy enforces (e.g. "Age >= 18").
+    /// Full VM evaluation with property values is not yet available — use this
+    /// to read the expression and reason about it in context.
+    /// </summary>
+    [McpServerTool(Name = "get_policy_expression"), Description("Returns the guard expression text of a named policy on an entity for inspection.")]
+    public static V3Response GetPolicyExpression(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity that has the policy")] string entityName,
+        [Description("Name of the policy to inspect")] string policyName) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return new V3Response(
+                Success: false,
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+
+        var entity = state.Domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal));
+        if (entity is null)
+            return new V3Response(
+                Success: false,
+                Message: $"Entity '{entityName}' not found.",
+                SessionId: sessionId,
+                Affordances: ["get_domain_overview", "add_entity"]);
+
+        var policy = entity.Policies
+            .FirstOrDefault(p => string.Equals(p.Name, policyName, StringComparison.Ordinal));
+        if (policy is null)
+            return new V3Response(
+                Success: false,
+                Message: $"Policy '{policyName}' not found on entity '{entityName}'.",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+
+        return new V3Response(
+            Success: true,
+            Message: $"Policy '{policyName}' on '{entityName}': {policy.Expression}",
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: new { policyName = policy.Name, entityName = entity.Name, expression = policy.Expression.ToString() },
+            Affordances: ["get_entity_detail", "get_domain_overview"]
         );
     }
 }

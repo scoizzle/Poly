@@ -16,6 +16,7 @@ builder.Services
     .WithStdioServerTransport()
     .WithTools<V3SessionTool>()
     .WithTools<V3QueryTool>()
-    .WithTools<V3EvolveTool>();
+    .WithTools<V3EvolveTool>()
+    .WithTools<V3EvalTool>();
 
 await builder.Build().RunAsync();

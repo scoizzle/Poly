@@ -9,6 +9,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
+| [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | WP-A–J: fail-loud evolve, VM invoke, MCP honesty, fail-closed nodes, orphan keep/kill — **prefer for next execution** (trust stack **layer 1**; T2 dogfood is later — [trust ADR](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)) |
 | [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | Milestones M1–M4 (**complete**), quality bar, readiness; **next = WP5 runtime** |
 | [**V3 Completion Plan**](v2-to-v3/v3-completion-plan.md) | Work packages WP1–WP9; day-to-day gaps |
 | [First V3 consumer spike](v2-to-v3/spikes/first-v3-consumer.md) | Named M2 consumer + happy path |

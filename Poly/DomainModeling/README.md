@@ -2,7 +2,7 @@
 
 This directory contains the **V3 immutable core** for domain modeling.
 
-**Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — domain → generic AST, policy subjects, no parallel rewriters/ABI hacks.
+**Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — domain → generic AST; extend via analysis + node replacement, not ABI forks.
 
 ## Quick Start (Direct API)
 

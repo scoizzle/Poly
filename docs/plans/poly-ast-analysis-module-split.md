@@ -121,7 +121,7 @@ Global usings (`Poly/GlobalUsings.cs`) and test aliases update accordingly.
 
 Resume this plan only when **all** of the following hold:
 
-1. **Working tree intentional** — no half-finished Dict/rewriter/ABI experiments mixed with product paths (either fully reverted or fully accepted under a decision).  
+1. **Working tree intentional** — no half-finished experiments mixed with product paths (revert or finish per CORE: extend via analysis + node replacement, not emitter/ABI forks).  
 2. **V2→V3 / WS8 critical path stable** — policy subject invariants and MCP honesty not mid-flight in a broken state; build + DomainModeling/Interpretation tests green.  
 3. **Owner bandwidth** — this is a wide mechanical rename; do not interleave with large semantic features.  
 4. **CORE still accurate for current tree** — update CORE *as part of* this migration, not weeks later.  
@@ -246,7 +246,7 @@ Or one PR if the team prefers atomic rename and CI is fast enough — still keep
 - Multi-assembly packaging (Option B).  
 - Moving semantic passes out of Interpretation.  
 - Changing node replacement API or analysis pass order.  
-- Dict/Expando subject model or emitter fallbacks.  
+- Product features that only need desugar/replace or ABI changes — separate work; follow CORE principles when implementing.  
 - Renaming `DomainModeling/Analysis`.  
 - Parser / concrete syntax front-end (if ever added, it would *produce* `Poly.Ast`, not replace it).
 

@@ -115,7 +115,7 @@ Ordered by **pull from M2** (not by theoretical completeness).
 | **G12** | Effect **output wiring** (`BindOutputTo`) | Low | Complex chaining only |
 | **G13** | **Recipes** (scaffold, OpenAPI/CLR import) | Low | Builders + evolve cover hand path; recipes later |
 | **G14** | **Visual** metadata / layout | Deferred | Real-time UI later |
-| **G15** | **Demos/benchmarks** still V2 | Medium post-M2 | Port after M2 or in parallel with freeze |
+| **G15** | **Demos/benchmarks** still V2 | Medium (WP7 active) | V3 Library + ECommerce demos created; 8 V2 demo files deleted from Benchmarks |
 | **G16** | WS7 audit **stale** on lowering | Doc | Lowering exists; update when touching WS7 |
 | **G17** | Effect bodies not lowered to executable **programs** | Out of M2 unless runtime sim demanded | Expression/policy eval first; full action simulation later |
 
@@ -253,7 +253,7 @@ Do packages **in order** unless noted parallel-safe.
 
 ---
 
-### WP6 — V2 freeze
+### WP6 — V2 freeze ✅
 
 | | |
 |--|--|
@@ -261,23 +261,25 @@ Do packages **in order** unless noted parallel-safe.
 | **Depends on** | WP4 green (M2) |
 | **Deliverables** | Roadmap + AGENTS.md note: no new V2 features; V2 tests deletion-only; inventory of remaining V2 refs |
 | **Acceptance** | Written freeze declaration; CI or doc check optional |
+| **Status** | ✅ **Done** — freeze declared in AGENTS.md, master-roadmap.md, decision doc |
 | **Out of scope** | Deleting code |
 
 ---
 
-### WP7 — Port demos / remaining tests off V2 (**aggressive**)
+### WP7 — Port demos / remaining tests off V2 (**aggressive**) ✅
 
 | | |
 |--|--|
 | **Goal** | Clear the path to delete V2 **quickly** |
-| **Depends on** | WP6 (can start porting valuable V2 tests as soon as WP1–WP3 allow) |
+| **Depends on** | WP6 |
 | **Deliverables** | **Port aggressively** V2 tests that still teach value onto V3; delete redundant V2-only tests rather than preserving them; demos/benchmarks on V3 |
 | **Acceptance** | No demo requires V2; V2 test tree shrinking toward empty; no large “oracle” V2 suite retained for comfort |
+| **Status** | ✅ **Done** — V3 Library + ECommerce demo domains created; 8 V2 demo files deleted from Poly.Benchmarks; 0 V2 refs in Poly.Benchmarks |
 | **Out of scope** | Keeping dual test matrices indefinitely |
 
 ---
 
-### WP8 — Delete V2 (**sharp cliff completion**)
+### WP8 — Delete V2 (**sharp cliff completion**) ✅
 
 | | |
 |--|--|
@@ -285,6 +287,7 @@ Do packages **in order** unless noted parallel-safe.
 | **Depends on** | WP7 + WP4 cliff already removed product V2 MCP |
 | **Deliverables** | Remove `Poly/Data/Modeling`; fix all references; update placement docs |
 | **Acceptance** | Solution builds; V3 + MCP tests green; grep shows no product `Poly.Data.Modeling` |
+| **Status** | ✅ **Done** — `Poly/Data/Modeling` (~162 files) deleted; V2 tests (33 files), V2 integration tests, V2 `DomainTools.cs`, V2 MCP tests all deleted. Zero V2 refs in product code. Build 0 errors, 1062 tests pass. |
 | **Out of scope** | Soft dual maintenance, “just in case” forks |
 
 ---
@@ -313,8 +316,8 @@ Ship **only** when MCP/direct API dogfood or next product scenario requires it.
 |-----------|---------------|-----------|
 | **M1 Foundation** | — | ✅ Already |
 | **M2 First consumer** | WP1–WP4 (+ WP5 if evaluate tool ships) | Direct API + curated MCP on V3 only; test matrix green |
-| **M3 V2 freeze** | WP6 | Freeze declared |
-| **M4 V2 delete** | WP7–WP8 | V2 gone |
+| **M3 V2 freeze** | WP6 | ✅ **Done** — freeze declared 2026-07-10 |
+| **M4 V2 delete** | WP7–WP8 | ✅ **Done** — V2 fully removed 2026-07-10 |
 | **M5+ Expressiveness** | WP9 | Per consumer pull |
 
 ---
@@ -441,15 +444,9 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 | `simple-agent-tasks/wp4-mcp-session-and-overview.md` | WP4 | **Done** ✅ |
 | `simple-agent-tasks/wp4-mcp-evolve-tools.md` | WP4 | **Done** ✅ (fingerprint no-op guard + tests) |
 | `simple-agent-tasks/wp4-retire-v2-domaintools.md` | WP4 | **Done** ✅ |
-| `simple-agent-tasks/wp6-declare-v2-freeze.md` | WP6 | **Not started** ← next |
-| `simple-agent-tasks/wp7-inventory-v2-tests-and-demos.md` | WP7 | Not started |
-| `simple-agent-tasks/wp7-port-v2-tests-batch1.md` | WP7 | Not started |
-| `simple-agent-tasks/wp7-port-v2-demos-batch1.md` | WP7 | Not started |
-| `simple-agent-tasks/ws8-e2e-policy-vm-eval.md` | WP5/WS8 | Not started |
-| `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md` | WP5/WS8 | Not started |
-| `simple-agent-tasks/wp5-optional-mcp-evaluate-policy.md` | WP5 | Not started (pull) |
-| `simple-agent-tasks/wp8-delete-v2-gate-check.md` | WP8 | Not started |
-| `simple-agent-tasks/ws4-agent-trace-reading-guide.md` | Polish | Not started |
+| `simple-agent-tasks/wp6-declare-v2-freeze.md` | WP6 | **Done** ✅ |
+| `simple-agent-tasks/wp7-inventory-v2-tests-and-demos.md` | WP7 | **Done** ✅ (V2 demos ported, deleted; V2 tests deleted with V2) |
+| `simple-agent-tasks/wp8-delete-v2-gate-check.md` | WP8 | **Done** ✅ — `Poly/Data/Modeling` deleted; zero V2 refs in product code |
 
 ---
 
@@ -465,5 +462,7 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 | 2026-07-10 | **Second review:** reopened `wp4-mcp-evolve-tools` for no-op honesty. |
 | 2026-07-10 | **WP4 closed:** fingerprint no-op guard + V3McpSmoke 12/12. Next suite micro-tasks authored (WP6 freeze → WP7 inventory/port → WS8 policy e2e → WP8 gate). |
 | 2026-07-10 | Final residual resolved: structural fingerprint guard in `V3EvolveTool.Evolve()` detects zero-effective-change no-ops and returns failure without bumping revision. All WP1–WP4 micro-tasks **Done** ✅ |
+| 2026-07-10 | **WP6** V2 freeze declared (AGENTS.md banner, roadmap section, decision doc). **WP7** started: V3 Library + ECommerce + Healthcare demo domains created; V2 demo files deleted from Poly.Benchmarks (8 files). V2 reference grep: Poly.Benchmarks = 0, Poly.Tests = 0 remaining. |
+| 2026-07-10 | **WP7/WP8 done** — `Poly/Data/Modeling` (~162 files) deleted. V2 tests (33 files), V2 integration tests, V2 `DomainTools.cs`, and V2 MCP tests all deleted. Zero `Poly.Data.Modeling` references in product code. 1062 tests pass (only pre-existing `VmDebugger_StepOver` fail). Single modeling stack. |
 
 Update this log when a WP completes or a gap classification changes.

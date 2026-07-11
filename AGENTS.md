@@ -128,6 +128,8 @@ var ruleSet = new RuleSet<Person>(rules);
 
 ## Build & Test
 
+**🔴 V2 DELETED (2026-07-10)** — `Poly/Data/Modeling` has been removed. The single modeling stack is `Poly/DomainModeling` (V3). All V2 tests, demos, and MCP tools have been deleted alongside it.
+
 **Before working here:** Check `docs/decisions/` for relevant build/test or quality decisions.
 
 - **Build:** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`

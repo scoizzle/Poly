@@ -1,15 +1,6 @@
-using System;
-using System.CommandLine;
-using System.IO;
-
 using BenchmarkDotNet.Running;
 
 using Poly.Benchmarks;
-using Poly.Benchmarks.DomainModeling;
-using Poly.Benchmarks.DomainModeling.Demos;
-using Poly.Data.Modeling;
-using Poly.Data.Modeling.Analysis;
-using Poly.Interpretation.CSharp;
 
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 return 0;

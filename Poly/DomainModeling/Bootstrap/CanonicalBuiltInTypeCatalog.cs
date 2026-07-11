@@ -5,7 +5,6 @@ namespace Poly.DomainModeling.Bootstrap;
 
 /// <summary>
 /// Defines the canonical set of built-in primitive types for the domain model.
-/// This is the V3 replacement for <c>Poly.Data.Modeling.TypeSystem.CanonicalBuiltInTypeCatalog</c>.
 ///
 /// The catalog produces <see cref="DomainChange"/> objects (specifically <see cref="AddPrimitiveTypeChange"/>)
 /// that can be applied through the standard evolution pipeline — no V2 mutation API required.

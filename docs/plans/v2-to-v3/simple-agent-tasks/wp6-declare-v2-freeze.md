@@ -3,7 +3,7 @@
 **Parent**: WP6 (`v3-completion-plan.md`)  
 **Difficulty**: Small (docs + grep inventory)  
 **Estimated Tokens**: ~4k  
-**Status**: [ ] Not Started
+**Status**: [x] **Done** — freeze declared in AGENTS.md (Build & Test: 🔴 V2 FREEZE), master-roadmap.md (new 🔴 V2 Freeze section + inventory), decision doc (status line updated). M3 milestone ✅. WP7 ready.
 
 ## Objective
 

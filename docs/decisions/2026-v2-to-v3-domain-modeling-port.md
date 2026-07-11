@@ -1,7 +1,7 @@
 # ADR / Planning Document: V2 → V3 Domain Modeling Port (Immutable Core + Preserved Evolution)
 
 **Date:** 2026-05-31 (initial)  
-**Status:** Living Plan — **July 2026: Phase 1 complete; V2 has zero product consumers; first consumer = MCP + direct domain API; then freeze/delete V2 (not live MCP migration / full parity)**  
+**Status:** Living Plan — **July 2026: V2 frozen (2026-07-10); WP1–WP4 complete; V3 is the only modeling stack; WP7 port/delete in progress toward M4.**  
 **Owner:** Primary author  
 **Execution plan:** `docs/plans/v2-to-v3/master-roadmap.md` (milestones) + **`docs/plans/v2-to-v3/v3-completion-plan.md`** (gaps + WP1–WP9 implementation order)  
 **First consumer spike:** `docs/plans/v2-to-v3/spikes/first-v3-consumer.md`  

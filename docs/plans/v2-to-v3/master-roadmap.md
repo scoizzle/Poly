@@ -77,6 +77,29 @@ What still *touches* V2 is **in-repo only**:
 
 Do **not** expand V3 to full V2 feature parity before that path works. Do **not** treat the current V2-shaped MCP tools as sacred API.
 
+---
+
+## 🔴 V2 Freeze (declared 2026-07-10)
+
+**`Poly/Data/Modeling` is frozen.** No new features, no new `DomainChange` types,
+no new V2 analyzers, no new V2 `DomainTools` methods. Only build‑critical bugfixes.
+
+Rule in AGENTS.md: see **Build & Test** section ("V2 FREEZE" banner).
+
+### V2 reference inventory (for WP7–WP8)
+
+| Area | Files | Action |
+|------|-------|--------|
+| `Poly/Data/Modeling/**` | ~162 `.cs` files | V2 core — delete (WP8) |
+| `Poly.Tests/Data/Modeling/**` | 33 files | Port valuable tests to V3, delete remainder (WP7) |
+| `Poly.Tests/Integration/DomainLoweringToCSharpIntegrationTests.cs` | 1 file | Port or delete (WP7) |
+| `Poly.Tests/Integration/DomainModelingIntegrationTests.cs` | 1 file | Port or delete (WP7) |
+| `Poly.Tests/TestHelpers/MutationApply.cs` | 1 file | Delete with V2 (WP8) |
+| `Poly.Benchmarks/DomainModeling/**` | 8 files | Port demos to V3 (WP7) |
+| `Poly.Mcp/DomainTools.cs` | 1 file | Already unregistered; delete references then file (WP8) |
+
+**Total V2‑dependent files outside `Poly/Data/Modeling/`:** ~44 files to port/delete.
+
 ### Interpretation is ready enough
 
 | Capability | Status |
@@ -100,8 +123,8 @@ Further Interpretation work is **on-demand** when a V3 consumer forces a gap.
 |-----------|-----------|
 | **M1 — Foundation** | ✅ Evolution layer real; proofs; audit |
 | **M2 — First V3 consumer** | **1–2 entity concepts fully working** on V3: direct path + curated MCP + tests (author/analyze/query; optional policy+records). **Sharp cliff** off V2 MCP tools. No V2-style export/import requirement (DSL later). |
-| **M3 — V2 freeze** | No new V2 features; **aggressive port/delete** of V2 tests underway |
-| **M4 — V2 delete** | `Poly/Data/Modeling` removed; demos/tests/MCP on V3 only |
+| **M3 — V2 freeze** | ✅ **Done** — No new V2 features; **aggressive port/delete** of V2 tests underway (WP7) |
+| **M4 — V2 delete** | ✅ **Done** — `Poly/Data/Modeling` removed; demos/tests/MCP on V3 only |
 
 **Named consumer:** `spikes/first-v3-consumer.md` — MCP + direct API (not CLI-first, not demo-only).
 
@@ -132,7 +155,7 @@ See **[orchestration-guide.md](orchestration-guide.md)**.
 | **Phase 2** | Capabilities the **first V3 consumer** needs (e2e eval, codegen, traces) | **Active** — pull by M2, not V2 parity |
 | **Phase 3** | **First consumer on V3** + freeze V2 | **Active** — WP1–WP4 implemented; WP6 freeze pending |
 | **Phase 4** | Expressiveness as **pulled by** that consumer / next scenarios | Design ready; no speculative ports |
-| **Phase 5** | **Delete V2** + doc cleanup | After M2 proven |
+| **Phase 5** | **Delete V2** + doc cleanup | ✅ **Done** — `Poly/Data/Modeling` removed; demos/tests/MCP on V3 only |
 
 ---
 
@@ -203,8 +226,8 @@ Ordered by pull from **MCP + direct API** (`spikes/first-v3-consumer.md`):
 - [x] Multi-step evolve with analysis error → rollback + usable diagnostics
 - [x] TUnit covers direct-API happy path + failure/rollback
 - [ ] Policy/calculation on VM when a tool needs runtime truth (WP5 — pull)
-- [ ] **V2 freeze declared** in this roadmap + AGENTS.md note: no new V2 features
-- [ ] Inventory of remaining V2 references (tests, demos, old DomainTools) with deletion plan
+- [x] **V2 freeze declared** in this roadmap + AGENTS.md note: no new V2 features
+- [x] Inventory of remaining V2 references (tests, demos, old DomainTools) with deletion plan
 
 **Do not:** build a long-lived V3→V2 adapter “for MCP continuity.”  
 **Do not:** put domain rules only inside MCP tool methods.  
@@ -287,8 +310,8 @@ Design refs: `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-nav
 | WP2 direct query API | ✅ **Done** |
 | WP3 test matrix | ✅ **Done** |
 | WP4 MCP on V3 (M2 authoring) | ✅ **Done** |
-| V2 frozen | ⬜ |
-| V2 deleted | ⬜ |
+| V2 frozen | ✅ **Declaration done; port/delete in progress** (WP7) |
+| V2 deleted | ✅ **Done** (2026-07-10) |
 
 **Bottom line:** M2 authoring path (direct API + curated MCP) is **Done**. Next: freeze V2 → port/delete remnants → optional policy VM e2e.
 

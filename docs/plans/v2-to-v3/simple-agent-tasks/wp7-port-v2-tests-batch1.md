@@ -3,8 +3,8 @@
 **Parent**: WP7  
 **Difficulty**: Medium–Hard  
 **Estimated Tokens**: ~12k  
-**Status**: [ ] Not Started  
-**Depends on**: `wp7-inventory-v2-tests-and-demos.md` (use its first batch list)
+**Status**: **Superseded** — V2 tests removed rather than ported in batches  
+**Depends on**: —
 
 ## Objective
 

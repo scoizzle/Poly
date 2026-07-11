@@ -8,12 +8,12 @@ Architectural rationale lives in **`docs/decisions/`**. Module maps live in **`P
 
 | Plan | Role |
 |------|------|
-| [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | Milestones M1–M4, quality bar, readiness checklist |
-| [**V3 Completion Plan**](v2-to-v3/v3-completion-plan.md) | **Day-to-day execution:** gaps G1–G17, work packages WP1–WP9, acceptance criteria |
-| [First V3 consumer spike](v2-to-v3/spikes/first-v3-consumer.md) | Named M2 consumer + happy path + out of scope |
-| [MCP guiding principles](v2-to-v3/spikes/mcp-guiding-principles.md) | Agent-tool research + Poly constraints for MCP rewrite |
-| [V2 → V3 Workstreams](v2-to-v3/workstreams/) | Workstream detail (`ws8-*` pull-only; WS1 foundation complete) |
-| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — **`wp1-*`…`wp4-*` first**, then `ws8-*` / `ws4-*` if pulled |
+| [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | Milestones M1–M4 (**complete**), quality bar, readiness; **next = WP5 runtime** |
+| [**V3 Completion Plan**](v2-to-v3/v3-completion-plan.md) | Work packages WP1–WP9; day-to-day gaps |
+| [First V3 consumer spike](v2-to-v3/spikes/first-v3-consumer.md) | Named M2 consumer + happy path |
+| [MCP guiding principles](v2-to-v3/spikes/mcp-guiding-principles.md) | Agent-tool design for V3 MCP |
+| [V2 → V3 Workstreams](v2-to-v3/workstreams/) | Workstream detail (WS8 pull for policy/eval) |
+| [V2 → V3 Simple Agent Tasks](v2-to-v3/simple-agent-tasks/) | Micro-tasks — **next: `ws8-e2e-policy-vm-eval`**, DE smoke; WP7/WP8 superseded |
 | [Orchestration Guide](v2-to-v3/orchestration-guide.md) | Multi-agent operating model |
 
 ## Interpretation (current)

@@ -1,46 +1,49 @@
 # Simple Agent Tasks (Micro-Tasks for Smaller Models)
 
 **Purpose**: Small, self-contained tasks for lower-context / cheaper agents.  
-**Last Updated**: 2026-07-10 (WP4 closed; next suite queued)
+**Last Updated**: 2026-07-10 (M1–M4 complete in tree; focus → WP5 runtime)
 
 ## Operating rule (mandatory)
 
 **Continue with In Progress tasks first.**  
-When none are In Progress, take **Not Started** in the priority table below.
+When none are In Progress, take **Not Started** from the **Next** table below.
 
 | Mark | Meaning |
 |------|---------|
 | `[ ] Not Started` | Ready to pick |
 | `[~] In Progress` | Finish follow-ups before anything else |
 | `[x] Done` | Closed |
+| **Superseded** | Leapfrogged by later work — do not execute |
 
 ---
 
 ## Current Focus (July 2026)
 
 **Completion plan:** [`../v3-completion-plan.md`](../v3-completion-plan.md)  
-**M2 authoring path:** WP1–WP4 **Done** (MCP + direct API vertical slice).
+**Master roadmap:** [`../master-roadmap.md`](../master-roadmap.md)
+
+| Milestone | Status |
+|-----------|--------|
+| **M1** Foundation | ✅ Done |
+| **M2** First consumer (direct API + MCP) | ✅ Done |
+| **M3** V2 freeze | ✅ Done |
+| **M4** V2 delete | ✅ Done in tree (`Poly/Data/Modeling` removed; V2 tests/demos/MCP DomainTools gone) |
 
 ### In Progress
 
-_None — WP4 no-op residual closed (fingerprint guard + tests)._
+_None._
 
-### Next suite (pick in order)
+### Next (pick in order)
 
 | Pri | Task | Package | Goal |
 |-----|------|---------|------|
-| **1** | [`wp6-declare-v2-freeze.md`](wp6-declare-v2-freeze.md) | WP6 | Formal V2 freeze + inventory for port |
-| **2** | [`wp7-inventory-v2-tests-and-demos.md`](wp7-inventory-v2-tests-and-demos.md) | WP7 | Prioritized port/delete list → `spikes/v2-port-inventory.md` |
-| **3** | [`wp7-port-v2-tests-batch1.md`](wp7-port-v2-tests-batch1.md) | WP7 | First aggressive test port/delete batch |
-| **4** | [`wp7-port-v2-demos-batch1.md`](wp7-port-v2-demos-batch1.md) | WP7 | One demo/benchmark off V2 |
-| **5** | [`ws8-e2e-policy-vm-eval.md`](ws8-e2e-policy-vm-eval.md) | WP5/WS8 | Policy on domain + VM eval with C# record |
-| **6** | [`ws8-domainexpression-lower-smoke-matrix.md`](ws8-domainexpression-lower-smoke-matrix.md) | WP5/WS8 | DE node smoke matrix |
-| **7** | [`wp5-optional-mcp-evaluate-policy.md`](wp5-optional-mcp-evaluate-policy.md) | WP5 | MCP tool only if dogfood needs it |
-| **8** | [`wp8-delete-v2-gate-check.md`](wp8-delete-v2-gate-check.md) | WP8 | Ready-to-delete? write readiness spike |
-| Later | `ws4-agent-trace-reading-guide.md` | Polish | Trace UX docs |
-| Later | `ws8-inventory-v2-contract-interface-rules.md` | Pull only | Contract gen prep |
+| **1** | [`ws8-e2e-policy-vm-eval.md`](ws8-e2e-policy-vm-eval.md) | WP5 / WS8 | Policy on V3 domain + VM eval with C# record |
+| **2** | [`ws8-domainexpression-lower-smoke-matrix.md`](ws8-domainexpression-lower-smoke-matrix.md) | WP5 / WS8 | DomainExpression lower/execute smoke matrix |
+| **3** | [`wp5-optional-mcp-evaluate-policy.md`](wp5-optional-mcp-evaluate-policy.md) | WP5 | MCP `evaluate_policy` tool — only if dogfood needs it |
+| **4** | [`ws4-agent-trace-reading-guide.md`](ws4-agent-trace-reading-guide.md) | Polish | Evolution trace guide for agents |
+| Later | [`ws8-inventory-v2-contract-interface-rules.md`](ws8-inventory-v2-contract-interface-rules.md) | Pull only | Contract gen prep — only if a consumer demands it |
 
-### Done (M2 foundation)
+### Done (cutover complete)
 
 | Task | Notes |
 |------|--------|
@@ -52,8 +55,20 @@ _None — WP4 no-op residual closed (fingerprint guard + tests)._
 | `wp4-mcp-session-and-overview.md` | Session + structured queries |
 | `wp4-mcp-evolve-tools.md` | Atomic evolve + no-op honesty |
 | `wp4-retire-v2-domaintools.md` | V3 registration cliff |
+| `wp6-declare-v2-freeze.md` | AGENTS + roadmap freeze |
 
-**Skip:** all `ws1-*` / `ws2-research-*` / `ws3-add-*` — superseded.
+### Superseded (do not run)
+
+These were leapfrogged by a full V2 purge (delete rather than staged inventory/port):
+
+| Task | Why |
+|------|-----|
+| `wp7-inventory-v2-tests-and-demos.md` | V2 tests/demos already removed |
+| `wp7-port-v2-tests-batch1.md` | No V2 test tree left to port |
+| `wp7-port-v2-demos-batch1.md` | V3 demos under `Poly/DomainModeling/Examples/Demos/`; old benchmarks demos deleted |
+| `wp8-delete-v2-gate-check.md` | V2 core already deleted; gate was the delete |
+
+Also skip: all old `ws1-*` / `ws2-research-*` / `ws3-add-*` foundation tasks.
 
 ---
 
@@ -61,15 +76,15 @@ _None — WP4 no-op residual closed (fingerprint guard + tests)._
 
 - One task = one small, verifiable change.
 - Prefer implementation + tests over design.
-- Port aggressively; delete redundant V2 tests.
 - DomainModeling never owns MCP workspace; MCP never owns domain rules.
+- No new V2 code — V2 is gone; do not resurrect `Poly/Data/Modeling`.
 
 ## How to Use
 
-1. Claim one Not Started task from the **Next suite** table (top first).
-2. Follow Exact Steps; leave status Done only when Verification is checked.
+1. Claim one **Next** task (top first) unless an In Progress residual exists.
+2. Follow Exact Steps; mark Done only when Verification is checked.
 3. File `agent-summaries/` on completion.
-4. Orchestrators update this README when a WP finishes.
+4. Orchestrators keep this README aligned with the master roadmap.
 
 ## Related
 

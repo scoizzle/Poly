@@ -445,8 +445,14 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 | `simple-agent-tasks/wp4-mcp-evolve-tools.md` | WP4 | **Done** ✅ (fingerprint no-op guard + tests) |
 | `simple-agent-tasks/wp4-retire-v2-domaintools.md` | WP4 | **Done** ✅ |
 | `simple-agent-tasks/wp6-declare-v2-freeze.md` | WP6 | **Done** ✅ |
-| `simple-agent-tasks/wp7-inventory-v2-tests-and-demos.md` | WP7 | **Done** ✅ (V2 demos ported, deleted; V2 tests deleted with V2) |
-| `simple-agent-tasks/wp8-delete-v2-gate-check.md` | WP8 | **Done** ✅ — `Poly/Data/Modeling` deleted; zero V2 refs in product code |
+| `simple-agent-tasks/wp7-inventory-v2-tests-and-demos.md` | WP7 | **Done** ✅ / leapfrog delete |
+| `simple-agent-tasks/wp7-port-v2-tests-batch1.md` | WP7 | **Superseded** |
+| `simple-agent-tasks/wp7-port-v2-demos-batch1.md` | WP7 | **Superseded** |
+| `simple-agent-tasks/wp8-delete-v2-gate-check.md` | WP8 | **Done** ✅ — V2 tree deleted |
+| `simple-agent-tasks/ws8-e2e-policy-vm-eval.md` | WP5/WS8 | **Not started** ← **next** |
+| `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md` | WP5/WS8 | Not started |
+| `simple-agent-tasks/wp5-optional-mcp-evaluate-policy.md` | WP5 | Not started (pull) |
+| `simple-agent-tasks/ws4-agent-trace-reading-guide.md` | Polish | Not started |
 
 ---
 
@@ -464,5 +470,6 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 | 2026-07-10 | Final residual resolved: structural fingerprint guard in `V3EvolveTool.Evolve()` detects zero-effective-change no-ops and returns failure without bumping revision. All WP1–WP4 micro-tasks **Done** ✅ |
 | 2026-07-10 | **WP6** V2 freeze declared (AGENTS.md banner, roadmap section, decision doc). **WP7** started: V3 Library + ECommerce + Healthcare demo domains created; V2 demo files deleted from Poly.Benchmarks (8 files). V2 reference grep: Poly.Benchmarks = 0, Poly.Tests = 0 remaining. |
 | 2026-07-10 | **WP7/WP8 done** — `Poly/Data/Modeling` (~162 files) deleted. V2 tests (33 files), V2 integration tests, V2 `DomainTools.cs`, and V2 MCP tests all deleted. Zero `Poly.Data.Modeling` references in product code. 1062 tests pass (only pre-existing `VmDebugger_StepOver` fail). Single modeling stack. |
+| 2026-07-10 | **Docs sync:** simple-agent-tasks README + master roadmap + plans README retargeted — M1–M4 complete; next = WP5 (`ws8-e2e-policy-vm-eval`). WP7 batch tasks marked Superseded. |
 
 Update this log when a WP completes or a gap classification changes.

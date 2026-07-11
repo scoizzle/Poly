@@ -56,49 +56,31 @@ MCP tools + workspace/session (thin consumer)
 
 ## Strategic reality (July 2026)
 
-### Zero product consumers of V2
+### V3 is the only modeling stack
 
-**V2 (`Poly/Data/Modeling`) has no product consumers today.** Nothing outside the repo (and no live agent/MCP deployment we depend on) requires V2 behavior, DTOs, or mutators.
-
-What still *touches* V2 is **in-repo only**:
+**V2 (`Poly/Data/Modeling`) has been deleted** (M4). Product path:
 
 | Area | Role |
 |------|------|
-| `Poly/Data/Modeling/**` | Legacy implementation |
-| `Poly.Mcp/DomainTools.cs` | V2-shaped prototype — **not** a live consumer constraint |
-| `Poly.Benchmarks/DomainModeling/**` | Demos against V2 |
-| `Poly.Tests/Data/Modeling/**`, some integration tests | Regression net for V2 |
+| `Poly/DomainModeling/**` | Immutable domain model + evolution + queries + bootstrap |
+| `Poly.Mcp/Tools/` + `Sessions/` | Curated MCP consumer (V3 only) |
+| `Poly.Tests/DomainModeling/**`, `Poly.Tests/Mcp/` | Correctness net for V3 |
+| `Poly/DomainModeling/Examples/` | V3 demos |
 
-**Implication:** This is still the low-risk rewrite window. Success is **not** “migrate live MCP without breakage.” Success is:
+**Implication:** Do not reintroduce V2. Invest only in V3 (direct API + MCP). Expand expressiveness when a real consumer pulls it — not for parity theater.
 
-1. **V3 is the only modeling stack we invest in**
-2. **First real consumer** = **MCP on a direct V3 domain API** (see spike) — rewrite, not a compatibility shim
-3. **V2 is frozen, then deleted** when that consumer works
-
-Do **not** expand V3 to full V2 feature parity before that path works. Do **not** treat the current V2-shaped MCP tools as sacred API.
+Do **not** treat archived V2-shaped plans or old DomainTools designs as sacred API.
 
 ---
 
-## 🔴 V2 Freeze (declared 2026-07-10)
+## 🔴 V2 Freeze → Delete (2026-07-10)
 
-**`Poly/Data/Modeling` is frozen.** No new features, no new `DomainChange` types,
-no new V2 analyzers, no new V2 `DomainTools` methods. Only build‑critical bugfixes.
+**Freeze (M3):** Declared in AGENTS.md — no new V2 investment.  
+**Delete (M4):** ✅ **`Poly/Data/Modeling` removed** from the tree; V2 tests, V2 benchmark demos, and `Poly.Mcp/DomainTools.cs` removed. Product path is V3-only (`Poly/DomainModeling` + V3 MCP tools).
 
-Rule in AGENTS.md: see **Build & Test** section ("V2 FREEZE" banner).
+Do **not** reintroduce `Poly/Data/Modeling`. Demos live under `Poly/DomainModeling/Examples/` (and V3 MCP) as needed.
 
-### V2 reference inventory (for WP7–WP8)
-
-| Area | Files | Action |
-|------|-------|--------|
-| `Poly/Data/Modeling/**` | ~162 `.cs` files | V2 core — delete (WP8) |
-| `Poly.Tests/Data/Modeling/**` | 33 files | Port valuable tests to V3, delete remainder (WP7) |
-| `Poly.Tests/Integration/DomainLoweringToCSharpIntegrationTests.cs` | 1 file | Port or delete (WP7) |
-| `Poly.Tests/Integration/DomainModelingIntegrationTests.cs` | 1 file | Port or delete (WP7) |
-| `Poly.Tests/TestHelpers/MutationApply.cs` | 1 file | Delete with V2 (WP8) |
-| `Poly.Benchmarks/DomainModeling/**` | 8 files | Port demos to V3 (WP7) |
-| `Poly.Mcp/DomainTools.cs` | 1 file | Already unregistered; delete references then file (WP8) |
-
-**Total V2‑dependent files outside `Poly/Data/Modeling/`:** ~44 files to port/delete.
+Historical inventory (pre-delete, for provenance only): ~162 V2 core files + ~44 dependent test/demo/MCP files — **deleted rather than staged port.**
 
 ### Interpretation is ready enough
 
@@ -123,8 +105,8 @@ Further Interpretation work is **on-demand** when a V3 consumer forces a gap.
 |-----------|-----------|
 | **M1 — Foundation** | ✅ Evolution layer real; proofs; audit |
 | **M2 — First V3 consumer** | **1–2 entity concepts fully working** on V3: direct path + curated MCP + tests (author/analyze/query; optional policy+records). **Sharp cliff** off V2 MCP tools. No V2-style export/import requirement (DSL later). |
-| **M3 — V2 freeze** | ✅ **Done** — No new V2 features; **aggressive port/delete** of V2 tests underway (WP7) |
-| **M4 — V2 delete** | ✅ **Done** — `Poly/Data/Modeling` removed; demos/tests/MCP on V3 only |
+| **M3 — V2 freeze** | ✅ **Done** — AGENTS + roadmap freeze; no new V2 work |
+| **M4 — V2 delete** | ✅ **Done** — `Poly/Data/Modeling` removed; V2 tests/demos/`DomainTools` gone; V3-only product path |
 
 **Named consumer:** `spikes/first-v3-consumer.md` — MCP + direct API (not CLI-first, not demo-only).
 
@@ -151,11 +133,11 @@ See **[orchestration-guide.md](orchestration-guide.md)**.
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| **Phase 1** | Evolution foundation + proofs + expressiveness audit | **Complete** (hygiene: WS4/WS6 only) |
-| **Phase 2** | Capabilities the **first V3 consumer** needs (e2e eval, codegen, traces) | **Active** — pull by M2, not V2 parity |
-| **Phase 3** | **First consumer on V3** + freeze V2 | **Active** — WP1–WP4 implemented; WP6 freeze pending |
-| **Phase 4** | Expressiveness as **pulled by** that consumer / next scenarios | Design ready; no speculative ports |
-| **Phase 5** | **Delete V2** + doc cleanup | ✅ **Done** — `Poly/Data/Modeling` removed; demos/tests/MCP on V3 only |
+| **Phase 1** | Evolution foundation + proofs + expressiveness audit | **Complete** |
+| **Phase 2** | Capabilities the first V3 consumer needs (e2e eval, codegen, traces) | **Pull** — policy VM e2e still open (WP5) |
+| **Phase 3** | First consumer on V3 + freeze V2 | **Complete** — WP1–WP4 + WP6 |
+| **Phase 4** | Expressiveness as pulled by consumers | Design ready; no speculative ports |
+| **Phase 5** | Delete V2 + doc cleanup | **Complete** — V2 tree removed (WP7/WP8 leapfrog delete) |
 
 ---
 
@@ -243,54 +225,55 @@ Design refs: `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-nav
 
 ---
 
-## Phase 5 (delete V2)
+## Phase 5 (delete V2) — complete
 
-- Remove or isolate `Poly/Data/Modeling`
-- Rewrite/delete V2-only tests, demos, `Poly.Mcp/DomainTools.cs` V2 paths
-- Update AGENTS.md placement rules if needed
-- Celebrate end of dual stack
+- [x] Remove `Poly/Data/Modeling`
+- [x] Remove V2-only tests, demos, `Poly.Mcp/DomainTools.cs`
+- [x] V3 demos under `Poly/DomainModeling/Examples/` as needed
+- Remaining: keep docs/AGENTS freeze language until any leftover references are scrubbed; do not reintroduce V2
 
 ---
 
 ## Immediate starting point
 
-**Authoritative gap list + packages:** [`v3-completion-plan.md`](v3-completion-plan.md)
+**Authoritative gap list + packages:** [`v3-completion-plan.md`](v3-completion-plan.md)  
+**Micro-tasks:** [`simple-agent-tasks/README.md`](simple-agent-tasks/README.md)
 
 | Order | Package | Status |
 |-------|---------|--------|
 | WP1 | V3 builtins + sever PolicyEvaluator V2 | ✅ **Done** |
 | WP2 | Direct API queries + happy-path tests | ✅ **Done** |
-| WP3 | Correctness net (rollback suite) | ✅ **Done** (policy VM e2e still pull) |
-| WP4 | Curated MCP rewrite | ✅ **Done** — no-op honesty gap closed (fingerprint guard) |
-| WP5 | Runtime truth polish | pull — `ws8-e2e-policy-vm-eval` etc. |
-| WP6 | V2 freeze declaration | ⬜ **next** — `wp6-declare-v2-freeze.md` |
-| WP7 | Aggressive V2 test/demo port | ⬜ inventory → batches |
-| WP8 | Delete V2 | ⬜ after gate check |
+| WP3 | Correctness net (rollback suite) | ✅ **Done** |
+| WP4 | Curated MCP rewrite | ✅ **Done** |
+| WP6 | V2 freeze declaration | ✅ **Done** |
+| WP7 | Aggressive V2 test/demo port | ✅ **Superseded** — deleted rather than staged port |
+| WP8 | Delete V2 | ✅ **Done** (tree removed; commit if still unstaged) |
+| **WP5** | Runtime truth polish | ⬜ **next** — policy VM e2e / DE smoke |
 | WP9 | Actor / rules / contract gen / visual | pull only |
 
-**Executor rule:** WP1–WP4 **Done**. Start **Next suite** in `simple-agent-tasks/README.md` (WP6 freeze first).
+**Executor rule:** M1–M4 complete. Pick **Next** from `simple-agent-tasks/README.md` (start at `ws8-e2e-policy-vm-eval`). Skip superseded WP7/WP8 micro-tasks.
 
 ### Orchestrator
 
-1. ~~Name consumer / MCP principles / completion plan / WP1–WP4~~ → **Done**
-2. Drive **Next suite** micro-tasks (freeze → inventory → port → optional policy e2e → delete gate)
+1. ~~Name consumer / MCP principles / completion plan / WP1–WP4 / freeze / delete~~ → **Done**
+2. Drive **WP5** micro-tasks (policy e2e, DE smoke; optional MCP evaluate tool)
+3. Ensure V2 purge is **committed** if still only in the working tree
 
 ### Executor
 
-1. Pick from **Next suite** table in `simple-agent-tasks/README.md` (top first).
-2. Skip superseded `ws1-*` / `ws2-research-*` / `ws3-add-*`.
-3. Port aggressively; no new V2 features.
-4. Do not port DomainTools 1:1.
+1. Pick from **Next** table in `simple-agent-tasks/README.md` (top first).
+2. Skip superseded `wp7-*` / `wp8-delete-*` / old `ws1-*` foundation tasks.
+3. Do not reintroduce `Poly/Data/Modeling`.
+4. No speculative Actor/contract gen without a consumer.
 
 ### Recommended sequence
 
 ```
-1–4. WP1–WP4  ✅ Done
-5. WP6 freeze declaration
-6. WP7 inventory → test batch1 → demo batch1
-7. Optional: ws8 policy VM e2e / DE smoke / MCP evaluate_policy
-8. WP8 delete gate → delete V2
-9. WP9 only when consumer pulls
+1–4. WP1–WP4   ✅ Done (M2)
+5.   WP6 freeze ✅ Done (M3)
+6.   WP7–WP8    ✅ Done via full delete (M4)
+7.   WP5        ← next: ws8-e2e-policy-vm-eval → DE smoke → optional MCP eval
+8.   WP9        only when consumer pulls
 ```
 
 ---
@@ -300,20 +283,18 @@ Design refs: `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-nav
 | Item | Status |
 |------|--------|
 | Evolution layer real | ✅ |
-| Proofs / audit | ✅ (WS7 living; lowering notes partially stale — see completion plan §2) |
-| DE → AST / VM ready enough | ✅ (pass + VM tests exist) |
+| Proofs / audit | ✅ (WS7 living) |
+| DE → AST / VM ready enough | ✅ |
 | **Zero V2 product consumers** | ✅ |
 | First V3 consumer named | ✅ |
 | MCP guiding principles | ✅ |
 | **V3 completion plan (gaps + WPs)** | ✅ |
-| WP1 builtins / no V2 in DomainModeling | ✅ **Done** |
-| WP2 direct query API | ✅ **Done** |
-| WP3 test matrix | ✅ **Done** |
-| WP4 MCP on V3 (M2 authoring) | ✅ **Done** |
-| V2 frozen | ✅ **Declaration done; port/delete in progress** (WP7) |
-| V2 deleted | ✅ **Done** (2026-07-10) |
+| WP1–WP4 M2 authoring path | ✅ **Done** |
+| V2 frozen | ✅ **Done** |
+| V2 deleted | ✅ **Done** (2026-07-10; verify commit on branch) |
+| Policy / expression e2e productized | ⬜ WP5 |
 
-**Bottom line:** M2 authoring path (direct API + curated MCP) is **Done**. Next: freeze V2 → port/delete remnants → optional policy VM e2e.
+**Bottom line:** Cutover complete (M1–M4). **Next focus is WP5 runtime truth** (policy on VM + DE smoke), not more V2 port work.
 
 ---
 

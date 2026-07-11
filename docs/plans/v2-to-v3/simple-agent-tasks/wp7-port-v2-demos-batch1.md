@@ -3,8 +3,8 @@
 **Parent**: WP7  
 **Difficulty**: Medium  
 **Estimated Tokens**: ~10k  
-**Status**: [ ] Not Started  
-**Depends on**: inventory (`spikes/v2-port-inventory.md`)
+**Status**: **Superseded** — V2 benchmark demos deleted; V3 demos under `Poly/DomainModeling/Examples/Demos/`  
+**Depends on**: —
 
 ## Objective
 

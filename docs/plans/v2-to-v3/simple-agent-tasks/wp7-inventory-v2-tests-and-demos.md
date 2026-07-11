@@ -3,8 +3,8 @@
 **Parent**: WP7  
 **Difficulty**: Medium (read-only + markdown deliverable)  
 **Estimated Tokens**: ~8k  
-**Status**: [ ] Not Started  
-**Depends on**: WP6 freeze preferred but not required
+**Status**: **Superseded** — V2 test/demo trees deleted wholesale (M4); no inventory file needed  
+**Depends on**: —
 
 ## Objective
 

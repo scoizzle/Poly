@@ -3,8 +3,8 @@
 **Parent**: WP8  
 **Difficulty**: Small  
 **Estimated Tokens**: ~4k  
-**Status**: [ ] Not Started  
-**Depends on**: WP7 batches advanced enough that product/demo paths are V3-only
+**Status**: **Superseded** — `Poly/Data/Modeling` already removed; treat M4 as Done (commit purge if still unstaged)  
+**Depends on**: —
 
 ## Objective
 

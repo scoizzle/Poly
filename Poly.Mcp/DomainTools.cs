@@ -1,3 +1,5 @@
+#pragma warning disable CS0618 // V2 legacy — retained for WP8 deletion reference, not registered in Program.cs
+
 using System.Collections;
 using System.Collections.Concurrent;
 using System.ComponentModel;
@@ -18,6 +20,10 @@ using Poly.Introspection;
 using Poly.Syntax;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
+
+// DEPRECATED: V2-shaped DomainTools. The V3 product path uses tools in Tools/V3DomainTools.cs.
+// These types remain in the assembly for WP8 (delete) but are NOT registered in Program.cs.
+// No new features should be added here. See docs/plans/v2-to-v3/master-roadmap.md Phase 5.
 
 namespace Poly.Mcp;
 

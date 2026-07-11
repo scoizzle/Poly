@@ -1,0 +1,195 @@
+using Poly.Syntax.Analysis;
+
+namespace Poly.DomainModeling.Queries;
+
+// ── Record types for query results ────────────────────────────────────────
+
+/// <summary>
+/// High-level overview of a domain model: name and type/relationship counts.
+/// </summary>
+public sealed record DomainOverview(
+    string Name,
+    int EntityCount,
+    int EventCount,
+    int RelationshipCount,
+    int PrimitiveTypeCount,
+    int ValueTypeCount
+);
+
+/// <summary>
+/// Detailed projection of an entity for inspection and agent queries.
+/// </summary>
+public sealed record EntityDetail(
+    string Name,
+    IReadOnlyList<PropertyDetail> Properties,
+    IReadOnlyList<StageDetail> Stages,
+    IReadOnlyList<ActionDetail> Actions,
+    IReadOnlyList<PolicyDetail> Policies,
+    string? ParentEntityName
+);
+
+/// <summary>
+/// Lightweight property info for query results.
+/// </summary>
+public sealed record PropertyDetail(
+    string Name,
+    string TypeName,
+    int ConstraintCount
+);
+
+/// <summary>
+/// Lightweight stage info for query results.
+/// </summary>
+public sealed record StageDetail(
+    string Name,
+    string? ParentStageName,
+    IReadOnlyList<string> ActionNames,
+    IReadOnlyList<string> PolicyNames
+);
+
+/// <summary>
+/// Lightweight action info for query results.
+/// </summary>
+public sealed record ActionDetail(
+    string Name,
+    IReadOnlyList<string> ParameterNames,
+    IReadOnlyList<string> PolicyNames,
+    int EffectCount
+);
+
+/// <summary>
+/// Lightweight policy info for query results.
+/// </summary>
+public sealed record PolicyDetail(
+    string Name
+);
+
+/// <summary>
+/// Summarized analysis diagnostics for agent consumption.
+/// </summary>
+public sealed record AnalysisSummary(
+    int ErrorCount,
+    int WarningCount,
+    int InfoCount,
+    bool HasStructuralFailure,
+    IReadOnlyList<string> Messages
+);
+
+// ── Query helpers ─────────────────────────────────────────────────────────
+
+/// <summary>
+/// Model-optimized query projections over a <see cref="Domain"/>.
+///
+/// These are pure functions — no session, no workspace, no MCP types.
+/// Consumers (tests, MCP tools, UI) all use the same projection surface.
+/// </summary>
+public static class DomainQueries {
+    /// <summary>
+    /// Returns a high-level overview of the domain.
+    /// </summary>
+    public static DomainOverview Overview(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+
+        var entities = domain.Types.OfType<Entity>().ToList();
+        var primitives = domain.Types.OfType<PrimitiveType>().ToList();
+        var valueTypes = domain.Types.OfType<ValueType>().ToList();
+        var eventTypes = domain.Types.OfType<Event>().ToList();
+
+        return new DomainOverview(
+            Name: domain.Name,
+            EntityCount: entities.Count,
+            EventCount: eventTypes.Count,
+            RelationshipCount: domain.Relationships.Count,
+            PrimitiveTypeCount: primitives.Count,
+            ValueTypeCount: valueTypes.Count
+        );
+    }
+
+    /// <summary>
+    /// Returns a detailed projection of an entity by name, or null if not found.
+    /// </summary>
+    public static EntityDetail? GetEntity(Domain domain, string entityName) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentException.ThrowIfNullOrWhiteSpace(entityName);
+
+        var entity = domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal));
+
+        if (entity is null)
+            return null;
+
+        return new EntityDetail(
+            Name: entity.Name,
+            Properties: entity.Properties
+                .Select(p => new PropertyDetail(
+                    p.Name,
+                    p.Type.TypeName,
+                    p.Constraints.Count))
+                .ToList(),
+            Stages: entity.Stages
+                .Select(s => new StageDetail(
+                    s.Name,
+                    s.Parent?.StageName,
+                    s.Actions.Select(a => a.Name).ToList(),
+                    s.Policies.Select(p => p.Name).ToList()))
+                .ToList(),
+            Actions: entity.Actions
+                .Select(a => new ActionDetail(
+                    a.Name,
+                    a.Parameters.Select(p => p.Name).ToList(),
+                    a.Policies.Select(p => p.Name).ToList(),
+                    a.Effects.Count))
+                .ToList(),
+            Policies: entity.Policies
+                .Select(p => new PolicyDetail(p.Name))
+                .ToList(),
+            ParentEntityName: entity.ParentEntityName
+        );
+    }
+
+    /// <summary>
+    /// Lists the names of all entities in the domain.
+    /// </summary>
+    public static IReadOnlyList<string> ListEntities(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+        return domain.Types.OfType<Entity>().Select(e => e.Name).ToList();
+    }
+
+    /// <summary>
+    /// Lists the names of all primitive types in the domain.
+    /// </summary>
+    public static IReadOnlyList<string> ListPrimitives(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+        return domain.Types.OfType<PrimitiveType>().Select(p => p.Name).ToList();
+    }
+
+    /// <summary>
+    /// Summarizes an <see cref="AnalysisResult"/> into a concise agent-friendly form.
+    /// </summary>
+    public static AnalysisSummary GetAnalysisSummary(AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(analysis);
+
+        var errors = analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .ToList();
+
+        var warnings = analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Warning)
+            .ToList();
+
+        var infos = analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Information)
+            .ToList();
+
+        return new AnalysisSummary(
+            ErrorCount: errors.Count,
+            WarningCount: warnings.Count,
+            InfoCount: infos.Count,
+            HasStructuralFailure: analysis.HasStructuralFailure,
+            Messages: errors.Concat(warnings)
+                .Take(10)
+                .Select(d => $"[{d.Severity}] {d.Message}")
+                .ToList()
+        );
+    }
+}

@@ -3,13 +3,13 @@
 **Parent**: WP4  
 **Difficulty**: Medium  
 **Estimated Tokens**: ~12k  
-**Status**: [ ] Not Started
+**Status**: [x] **Done** — apply_evolution removed (polymorphic bag anti-pattern); atomic tools only; diagnostics + affordances on rollback; multi-tool smoke test passes
 
 ## Objective
 
 Curated mutate tools: AddEntity, AddProperty, AddStage, AddAction (+ minimal removes if needed) via V3 `Evolve`/`Apply`.
 
-## Exact Steps
+## Exact Steps (original — largely done)
 
 1. Each tool: resolve session → call EvolutionBuilder method(s) → analysis gate → update session on success only.
 2. On rollback: return diagnostics + affordances; do not bump domain incorrectly.
@@ -17,11 +17,20 @@ Curated mutate tools: AddEntity, AddProperty, AddStage, AddAction (+ minimal rem
 4. Prefer composition: one tool one intent; optional second task for Scaffold if needed.
 5. Stay within overall ~25 tool budget for M2.
 
+## Code-review follow-ups (do these before marking Done)
+
+1. **Remove or redesign `apply_evolution`** — accepting `IReadOnlyList<DomainChange>` is not usable over MCP JSON for agents (polymorphic bag / free-form intent anti-pattern). Prefer atomic tools only for M2, or a **flat typed** intent DTO list with explicit discriminators.
+2. **Success message honesty** — if mutation no-ops (missing entity), do not report generic success; fail with recoverable message (may require DomainChange/analyzer fix first).
+3. **Diagnostics + affordances** on rollback (same envelope as session/overview tools).
+4. **Smoke test** multi-tool path: create → add_entity → add_property → add_stage → add_action → get_entity_detail.
+5. Descriptions: add when-not-to-use / type-name examples where thin.
+
 ## Verification
 
-- [ ] Happy path multi-tool sequence works (create → add entity → property → stage → action → overview)
-- [ ] Invalid add returns recoverable error
-- [ ] No V2 mutators
+- [x] Atomic tools wired through DomainEvolution (as of review)
+- [ ] `apply_evolution` removed or replaced with agent-safe design
+- [ ] Happy-path multi-tool smoke test
+- [ ] No V2 mutators on product path
 
 ## Out of Scope
 

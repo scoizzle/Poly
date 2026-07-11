@@ -2,6 +2,8 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Poly.Mcp.Tools;
+
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Logging.AddConsole(consoleLogOptions => {
@@ -12,6 +14,8 @@ builder.Logging.AddConsole(consoleLogOptions => {
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithToolsFromAssembly();
+    .WithTools<V3SessionTool>()
+    .WithTools<V3QueryTool>()
+    .WithTools<V3EvolveTool>();
 
 await builder.Build().RunAsync();

@@ -427,19 +427,21 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 
 ## 11. Micro-task index
 
+**Rule:** Finish **In Progress** follow-ups before starting Not Started / later WPs. See `simple-agent-tasks/README.md`.
+
 | Task file | Package | Status |
 |-----------|---------|--------|
-| `simple-agent-tasks/wp1-v3-builtin-catalog.md` | WP1 | Not started |
-| `simple-agent-tasks/wp1-sever-policyevaluator-v2.md` | WP1 | Not started |
-| `simple-agent-tasks/wp2-domain-query-projections.md` | WP2 | Not started |
-| `simple-agent-tasks/wp2-direct-api-happy-path-tests.md` | WP2 | Not started |
-| `simple-agent-tasks/wp3-evolution-rollback-suite.md` | WP3 | Not started |
-| `simple-agent-tasks/ws8-e2e-policy-vm-eval.md` | WP3/WP5 | Not started (exists) |
-| `simple-agent-tasks/wp4-mcp-session-and-overview.md` | WP4 | Not started |
-| `simple-agent-tasks/wp4-mcp-evolve-tools.md` | WP4 | Not started |
-| `simple-agent-tasks/wp4-retire-v2-domaintools.md` | WP4 | Not started |
-| `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md` | WP5 | Not started (exists) |
-| `simple-agent-tasks/ws4-agent-trace-reading-guide.md` | Polish | Not started (exists) |
+| `simple-agent-tasks/wp1-v3-builtin-catalog.md` | WP1 | **In Progress** — factory failure path / false-positive test |
+| `simple-agent-tasks/wp1-sever-policyevaluator-v2.md` | WP1 | **In Progress** — reconfirm V2 grep gate |
+| `simple-agent-tasks/wp2-domain-query-projections.md` | WP2 | **In Progress** — README `Root` |
+| `simple-agent-tasks/wp2-direct-api-happy-path-tests.md` | WP2 | **In Progress** — real failure/no-op tests |
+| `simple-agent-tasks/wp3-evolution-rollback-suite.md` | WP3 | **In Progress** — optional no-op hardening → Done |
+| `simple-agent-tasks/wp4-mcp-session-and-overview.md` | WP4 | **In Progress** — structured payloads, affordances, smoke |
+| `simple-agent-tasks/wp4-mcp-evolve-tools.md` | WP4 | **In Progress** — drop/redesign `apply_evolution` |
+| `simple-agent-tasks/wp4-retire-v2-domaintools.md` | WP4 | **In Progress** — re-verify cliff + doc |
+| `simple-agent-tasks/ws8-e2e-policy-vm-eval.md` | WP3/WP5 | Not started — **after** In Progress closed |
+| `simple-agent-tasks/ws8-domainexpression-lower-smoke-matrix.md` | WP5 | Not started |
+| `simple-agent-tasks/ws4-agent-trace-reading-guide.md` | Polish | Not started |
 
 ---
 
@@ -450,5 +452,6 @@ Do **not** open Actor or contract-gen workstreams until M2 is green unless a con
 | 2026-07-10 | Plan created from code audit + consumer/MCP principles. WS7 lowering gap marked stale (pass + VM tests exist). |
 | 2026-07-10 | Product decisions: vertical slice; DSL import/export later; records for tests / Interpretation owns instances; sharp V2 cliff; aggressive test port. |
 | 2026-07-10 | Direct API: model-optimized DomainModeling API; single evolve path; **workspace/session in MCP only**; sugar discovered while building; tests may use MCP public types for host coverage. |
+| 2026-07-10 | Initial WP1–WP4 code landed; review reopened micro-tasks as **In Progress** with follow-ups. **Do In Progress first** before new Not Started work. |
 
 Update this log when a WP completes or a gap classification changes.

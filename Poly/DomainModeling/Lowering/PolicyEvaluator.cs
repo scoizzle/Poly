@@ -1,4 +1,3 @@
-using Poly.Data.Modeling;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ControlFlow;

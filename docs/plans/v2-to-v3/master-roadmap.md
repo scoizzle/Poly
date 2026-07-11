@@ -233,13 +233,15 @@ Design refs: `docs/decisions/2026-06-phase4-dynamic-calculation-and-readonly-nav
 
 | Order | Package | Status |
 |-------|---------|--------|
-| WP1 | V3 builtins + sever PolicyEvaluator V2 | ⬜ start here |
-| WP2 | Direct API queries + evolve façade docs/tests | ⬜ |
-| WP3 | Correctness net (rollback + policy VM) | ⬜ |
-| WP4 | Curated MCP rewrite | ⬜ |
-| WP5 | Runtime truth polish | pull |
+| WP1 | V3 builtins + sever PolicyEvaluator V2 | **In Progress** — follow-ups on micro-tasks (factory failure path, grep gate) |
+| WP2 | Direct API queries + happy-path tests | **In Progress** — README Root; failure tests |
+| WP3 | Correctness net (rollback + policy VM) | **In Progress** — rollback suite mostly green; optional hardening |
+| WP4 | Curated MCP rewrite | **In Progress** — structured responses; drop bad batch tool; smoke tests |
+| WP5 | Runtime truth polish | pull — **only after** WP1–WP4 In Progress closed |
 | WP6–8 | Freeze → port demos → delete V2 | after M2 |
 | WP9 | Actor / rules / contract gen / visual | pull only |
+
+**Executor rule:** Complete **In Progress** micro-task follow-ups first (`simple-agent-tasks/README.md`). Do not start new Not Started breadth while those remain open.
 
 ### Orchestrator
 

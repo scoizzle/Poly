@@ -182,7 +182,7 @@ Module README: `Poly/Introspection/README.md`.
 | Principles (values) | `AGENTS.md` + `docs/decisions/2026-core-engineering-principles.md` |
 | Trust bar + first-customer strategy (T1–T3; product via domain + modules) | [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Why of a major choice | `docs/decisions/README.md` |
-| Active execution work | `docs/plans/v2-to-v3/vertical-slice-finish-plan.md` (remaining V3 product slices); `docs/plans/2026-07-11-review-fix-plan.md` (Slice 0 honesty detail) |
+| Active execution work | `docs/plans/v2-to-v3/simple-agent-tasks/vs-README.md` (post-M2 picks); `docs/plans/v2-to-v3/vertical-slice-finish-plan.md` (status) |
 | Module detail | `Poly/*/README.md`, `docs/interpretation/*` |
 | Introspection detail | `Poly/Introspection/README.md`, `docs/technical/introspection.md` |
 | Historical / may be stale | `docs/ARCHITECTURE.md` — prefer this file + module READMEs for truth |

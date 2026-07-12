@@ -5,7 +5,7 @@
 **Parent:** Slice 3  
 **Difficulty:** Small–Medium  
 **Estimated Context:** ~6k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — EvaluatePolicy MCP tool (Age subject)  
 
 ## Objective
 

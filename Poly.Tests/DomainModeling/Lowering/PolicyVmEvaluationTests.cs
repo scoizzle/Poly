@@ -195,4 +195,59 @@ public class PolicyVmEvaluationTests {
         await Assert.That(vm(new Order("Active", 50))).IsFalse();
         await Assert.That(vm(new Order("Cancelled", 200))).IsFalse();
     }
+
+    // ── Slice 2 — Policy runtime (direct API only) ─────────────────
+
+    // 2.3: Evaluate product path — true and false on same policy
+    [Test]
+    public async Task Evaluate_AgePolicy_TrueAndFalse_ExpectedResults() {
+        var policy = new Policy("Adult",
+            DomainExpression.GreaterThanOrEqual(
+                DomainExpression.Property("Age"),
+                DomainExpression.Literal(18)));
+
+        await Assert.That(policy.Evaluate(new Person("Alice", 25))).IsTrue();
+        await Assert.That(policy.Evaluate(new Person("Bob", 15))).IsFalse();
+        await Assert.That(policy.Evaluate(new Person("Boundary", 18))).IsTrue();
+    }
+
+    // 2.4: Property name alignment — mismatch gives wrong result
+    [Test]
+    public async Task PropertyName_Mismatch_GivesIncorrectResult() {
+        // Policy references "Years" (not "Age") but subject has property "Age".
+        // The VM reads "Years" from the record, but records don't have "Years".
+        // This should produce a wrong/zero result — documenting that names must match.
+        var policy = new Policy("Adult",
+            DomainExpression.GreaterThanOrEqual(
+                DomainExpression.Property("Years"), // does NOT match Person.Age
+                DomainExpression.Literal(18)));
+
+        // Compiles but evaluates incorrectly because "Years" is not a property
+        var fn = policy.CompileVMPredicate<Person>();
+        // A nonexistent property reads as 0 (default long), so 0 >= 18 is false
+        await Assert.That(fn(new Person("Adult", 25))).IsFalse();
+        await Assert.That(fn(new Person("Child", 5))).IsFalse();
+    }
+
+    // 2.5: Domain-attached policy on canonical Person entity
+    // (Primary coverage in DomainValidatedEvaluationTests.DomainEntity_Property_ValidatedAndEvaluated_VmPipeline)
+    // This test uses the ClrTypeEntityMapping path for entity creation.
+    [Test]
+    public async Task DomainAttached_CanonicalPerson_EvaluatesTrueAndFalse() {
+        var domain = DomainFactory.Create("Demo",
+            b => b.AddEntityFrom<Person>("Person")
+                .AddPolicyToEntity("Person", "Adult",
+                    DomainExpression.GreaterThanOrEqual(
+                        DomainExpression.Property("Age"),
+                        DomainExpression.Literal(18))));
+
+        var entity = domain.Types.OfType<Entity>().Single();
+        var policy = entity.Policies.Single();
+
+        // Evaluate through domain-validated overload
+        var vm = policy.CompileVMPredicate<Person>(entity);
+        await Assert.That(vm(new Person("Adult", 25))).IsTrue();
+        await Assert.That(vm(new Person("Minor", 15))).IsFalse();
+        await Assert.That(vm(new Person("Boundary", 18))).IsTrue();
+    }
 }

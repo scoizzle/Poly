@@ -5,7 +5,7 @@
 **Parent:** Slice 2  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~4k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — PropertyName_Mismatch_GivesIncorrectResult + PolicyEvaluator doc  
 
 ## Objective
 

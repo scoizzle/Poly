@@ -25,6 +25,11 @@ namespace Poly.DomainModeling.Lowering;
 /// <para><b>Subjects</b> must be types with real CLR properties (records, POCOs).
 /// For test subject factories and ad-hoc property bags, see
 /// <c>Poly.Tests.TestHelpers.PolicyTestSubjects</c>.</para>
+///
+/// <para><b>Property name alignment:</b> Domain property name, <c>DomainExpression.PropertyAccess</c>
+/// name, and subject CLR property name must match exactly (case-sensitive). A policy using
+/// <c>Property("Age")</c> will read the subject's <c>Age</c> property — a typo like
+/// <c>Property("Ages")</c> silently reads <c>0</c> (default) instead of failing.</para>
 /// </summary>
 public static class PolicyEvaluator {
 

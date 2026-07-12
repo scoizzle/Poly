@@ -28,17 +28,19 @@ When none are In Progress, take the **first Not Started** task from the **curren
 
 | Slice | Goal | Status |
 |-------|------|--------|
-| **0** Honesty | Fail-loud, tool honesty, PolicySubject, EmitInvoke | ✅ **Required Done** — optional 0.1d, 0.2a |
-| **1** Structure | Verify path + pin Person/Order | 🟡 **1.1 Done**; **next 1.2** |
-| **2** Policy API | Subject + true/false + domain-attached e2e | after 1.2 |
-| **3** Policy MCP | add_policy → evaluate_policy → smoke | after Slice 2 |
-| **M2** Docs checkpoint | Mark M2 closed | after Slice 3 |
+| **0** Honesty | Fail-loud, tool honesty, PolicySubject, EmitInvoke | ✅ Done |
+| **1** Structure | Verify path + pin Person | ✅ Done |
+| **2** Policy API | Subject + true/false + domain-attached e2e | ✅ Done |
+| **3** Policy MCP | add_policy → evaluate_policy → smoke | ✅ Done |
+| **M2** | First consumer vertical slice | ✅ **Done** (1175 green) |
 
-**Do not pick Slice 4/5** (effects / relationships) unless an orchestrator reopens them.
+**Do not pick Slice 4/5** unless an orchestrator reopens them.
 
-**Next:** [`vs-s1-pin-canonical-entity.md`](vs-s1-pin-canonical-entity.md) **(1.2)** → Slice 2 `vs-s2-*`.  
-
-Optional polish: **0.2a** README row (still “Places an existing action”); **0.1d** remove-zero-match.
+**Next (post-M2):** see [`vs-README.md`](vs-README.md) — prefer  
+1. [`vs-pm2-evaluate-policy-sample-bag.md`](vs-pm2-evaluate-policy-sample-bag.md) multi-property sample  
+2. [`vs-pm2-add-policy-evaluate-affordance.md`](vs-pm2-add-policy-evaluate-affordance.md) affordance  
+3. Optional [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md)  
+4. Naming cleanup [`../../post-v2-delete-naming-cleanup.md`](../../post-v2-delete-naming-cleanup.md)
 
 ---
 

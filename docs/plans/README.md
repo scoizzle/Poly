@@ -24,7 +24,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
-| [**`Poly.Ast` + `Poly.Analysis` module split**](poly-ast-analysis-module-split.md) | Rename/split today’s `Poly.Syntax` into IR (`Ast`) + analysis framework (`Analysis`). **Blocked on** current V2→V3/WS8 stability and clean working tree. Nodes stay **out of** Interpretation. |
+| [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` / “V3 stack” labels now that V2 is gone — MCP types, demos, `UseV3*`, active prose. **After** M2 / between idle slices; not the daily `vs-*` queue |
+| [**`Poly.Ast` + `Poly.Analysis` module split**](poly-ast-analysis-module-split.md) | Rename/split today’s `Poly.Syntax` into IR (`Ast`) + analysis framework (`Analysis`). **Blocked on** DomainModeling product stability and clean working tree. Nodes stay **out of** Interpretation. |
 
 ## Interpretation (current)
 

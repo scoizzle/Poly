@@ -116,7 +116,7 @@ Non-negotiable. Each principle has a **one-line rule** and a short **how** for a
 
 Module boundaries, pipeline, and anti-reinvention rules: **[`docs/CORE.md`](docs/CORE.md)** — do not restate them here.
 
-Layout sketch: `Poly/` (core library), `Poly.Tests/` (TUnit), `Poly.Benchmarks/`, `Poly.Mcp/`. Modeling stack is **V3 only** (`DomainModeling`); `Poly/Data/Modeling` is gone.
+Layout sketch: `Poly/` (core library), `Poly.Tests/` (TUnit), `Poly.Benchmarks/`, `Poly.Mcp/`. Modeling stack is **`DomainModeling` only** (`Poly/Data/Modeling` / V2 is gone). Product types still named `V3*` are legacy labels — cleanup plan: [`docs/plans/post-v2-delete-naming-cleanup.md`](docs/plans/post-v2-delete-naming-cleanup.md) (after M2; do not invent V4).
 
 ---
 

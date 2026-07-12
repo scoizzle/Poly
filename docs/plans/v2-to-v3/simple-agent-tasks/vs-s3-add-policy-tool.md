@@ -5,7 +5,7 @@
 **Parent:** Slice 3  
 **Difficulty:** Small–Medium  
 **Estimated Context:** ~5k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — AddPolicy MCP tool with flat args + contract parser  
 
 ## Objective
 

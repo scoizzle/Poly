@@ -59,7 +59,7 @@ TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 - `DomainModeling` → `Syntax` for pure lowering (`DomainExpressionLoweringPass`)
 - `PolicyEvaluator` (under DomainModeling) **bridges** to Interpretation/VM for evaluate/compile — that is intentional consumption of the platform, not a license to fork the ABI
 - `Introspection` ↛ `Interpretation`
-- V2 `Poly/Data/Modeling` is **deleted** — only V3 DomainModeling remains
+- V2 `Poly/Data/Modeling` is **deleted** — only **DomainModeling** remains (legacy “V3” label = current stack; rename plan: [`plans/post-v2-delete-naming-cleanup.md`](plans/post-v2-delete-naming-cleanup.md))
 
 **Placement (where new code goes):** see Placement Rules in `AGENTS.md`. Name types for **what they are**, not which GoF pattern they resemble.
 

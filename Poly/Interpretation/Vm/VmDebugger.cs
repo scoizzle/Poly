@@ -189,22 +189,25 @@ public sealed class VmDebugger : IDisposable {
     // ── Result capture ───────────────────────────────────────
 
     private DebugResult CaptureResult() {
+        // Use the snapshot already captured in the hook (CurrentLocals) rather than
+        // re-reading from state.Stack.RawSlots, which may contain dirty ArrayPool
+        // data if the emitter hasn't flushed variables yet.
         var r = new DebugResult(
             Node: _state.CurrentAstNode ?? new Constant(0L),
-            Locals: GetLocals(_state),
+            Locals: CurrentLocals,
             IsSuspend: _state.Status == InterpreterStatus.Suspended);
         CurrentNode = r.Node;
-        CurrentLocals = r.Locals;
         return r;
     }
 
     private DebugResult CaptureCompleted() {
+        // Use CurrentLocals (set by the last hook invocation) — at completion
+        // the hook has already captured the final state.
         var r = new DebugResult(
             Node: _state.CurrentAstNode ?? new Constant(0L),
-            Locals: GetLocals(_state),
+            Locals: CurrentLocals,
             IsCompleted: true);
         CurrentNode = r.Node;
-        CurrentLocals = r.Locals;
         return r;
     }
 

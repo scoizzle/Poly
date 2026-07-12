@@ -4,7 +4,7 @@
 **Parent:** Slice 2  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~4k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — Evaluate<bool> + IsTrue/IsFalse assertions  
 
 ## Objective
 

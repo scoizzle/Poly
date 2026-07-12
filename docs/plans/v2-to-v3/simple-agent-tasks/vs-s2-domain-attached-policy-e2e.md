@@ -5,7 +5,7 @@
 **Parent:** Slice 2  
 **Difficulty:** Small–Medium  
 **Estimated Context:** ~6k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — DomainAttached_CanonicalPerson_EvaluatesTrueAndFalse  
 
 ## Objective
 

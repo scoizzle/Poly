@@ -11,7 +11,16 @@ namespace Poly.Interpretation.Vm;
 /// by doubling when full and returns its buffer to the pool on <see cref="Dispose"/>.
 /// </remarks>
 public sealed class ValueStack(int initialSlots = 256) : IDisposable {
-    private long[] _slots = ArrayPool<long>.Shared.Rent(initialSlots);
+    private long[] _slots = ClearRented(ArrayPool<long>.Shared.Rent(initialSlots));
+
+    private static long[] ClearRented(long[] buffer) {
+#if DEBUG
+        Array.Clear(buffer);
+#else
+        Array.Clear(buffer, 0, buffer.Length);
+#endif
+        return buffer;
+    }
 
     /// <summary>Current stack height (number of elements).</summary>
     public int StackPointer { get; private set; }

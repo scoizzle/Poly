@@ -105,7 +105,7 @@ Further Interpretation work is **on-demand** when a V3 consumer forces a gap.
 | Milestone | Done when |
 |-----------|-----------|
 | **M1 — Foundation** | ✅ Evolution layer real; proofs; audit |
-| **M2 — First V3 consumer** | **1–2 entity concepts fully working** on V3: direct path + curated MCP + tests (author/analyze/query; optional policy+records). **Sharp cliff** off V2 MCP tools. No V2-style export/import requirement (DSL later). |
+| **M2 — First V3 consumer** | ✅ **Done** (2026-07-12) — structure + policy direct API + MCP `add_policy`/`evaluate_policy` (Person/Age slice); suite green. See `vertical-slice-finish-plan.md` + `vs-README.md`. |
 | **M3 — V2 freeze** | ✅ **Done** — AGENTS + roadmap freeze; no new V2 work |
 | **M4 — V2 delete** | ✅ **Done** — `Poly/Data/Modeling` removed; V2 tests/demos/`DomainTools` gone; V3-only product path |
 

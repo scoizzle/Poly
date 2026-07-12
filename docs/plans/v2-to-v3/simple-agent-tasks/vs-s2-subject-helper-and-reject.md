@@ -5,7 +5,7 @@
 **Parent:** Slice 2  
 **Difficulty:** Small–Medium  
 **Estimated Context:** ~5k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — already satisfied by S0.3 + PolicyTestSubjects  
 
 ## Objective
 

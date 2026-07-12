@@ -5,7 +5,7 @@
 **Parent:** Slice 3  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~3k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — MCP README updated with 3 new tools  
 
 ## Objective
 

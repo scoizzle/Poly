@@ -4,7 +4,7 @@
 **Depends on:** **#0.2** Done  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~2k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] **Done** (2026-07-12) — README: “Creates a new action on a stage”.  
 
 ## Objective
 

@@ -2,7 +2,7 @@
 
 **Status:** Active  
 **Date:** 2026-07-11  
-**Updated:** 2026-07-12 — Slice 0 Done; 1.1 structure verify Done; next 1.2 pin entity → Slice 2; optional 0.1d/0.2a  
+**Updated:** 2026-07-12 — M2 Done (slices 0–3); debugger StepOver fixed; post-M2: multi-property evaluate sample, affordances, naming cleanup  
 **Source:** Full-system review (`/tmp/grok-review-01ce9db4.md` and module deep-dives)  
 **Lens:** AGENTS.md §1–§7 + `docs/CORE.md`  
 **Not this plan:** Multi-host completeness, JIT, effect framework completion, Syntax→Ast module split.
@@ -234,16 +234,17 @@ WP-J  first effect (optional)
 |----|--------|-------|
 | A | ✅ Done | instanceExpr + dual-oracle — vs **0.4** |
 | B | ✅ Core Done | optional B7 remove-zero-match — vs **0.1d** |
-| C | ✅ Done | residual README **0.2a** |
+| C | ✅ Done | stage-action create honesty |
 | D | ✅ Done | Validate + ValidateType — vs **0.3** |
 | E | Pending | P1 fail-closed unshipped VM nodes |
-| F | Pending | P1 DiffDays after A (A done — pull when needed) |
-| G | ✅ Done | MCP README V3-only — vs **0.5** (+ nit **0.2a**) |
+| F | Pending | P1 DiffDays when needed |
+| G | ✅ Done | README V3-only + stage-action wording |
 | H | Pending | P2 orphan keep/kill |
 | I | Pending | P2 Introspection hygiene |
 | J | Pending | P3 first effect |
+| **Dbg** | ✅ Done | CaptureResult + ValueStack clear — suite green |
 
-**Slice 0 required → Done. Slice 1.1 verify → Done. Next: pin canonical entity (1.2) → Slice 2–3 (vs-README).**
+**M2 Done (slices 0–3).** Post-M2: pm2-1 multi-property evaluate sample; pm2-2 affordances; optional 0.1d; naming cleanup.
 
 Update this table as packages close. Link PRs / commits in Notes.
 

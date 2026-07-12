@@ -5,7 +5,7 @@
 **Parent:** Slice 3  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~4k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — 5 MCP smoke tests covering add/evaluate  
 
 ## Objective
 

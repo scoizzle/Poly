@@ -270,4 +270,76 @@ public class V3McpSmokeTests {
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
+
+    // ── add_policy / evaluate_policy MCP tools (Slice 3) ────────────
+
+    [Test]
+    public async Task AddPolicy_SimplePropertyComparison_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Person");
+        V3EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+
+        var response = V3EvalTool.AddPolicy(sessionId, "Person", "Adult",
+            property: "Age", op: ">=", value: 18);
+
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("Adult");
+
+        // Verify via get_policy_expression
+        var expr = V3EvalTool.GetPolicyExpression(sessionId, "Person", "Adult");
+        await Assert.That(expr.Success).IsTrue();
+    }
+
+    [Test]
+    public async Task AddPolicy_ToMissingEntity_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = V3EvalTool.AddPolicy(sessionId, "NonExistent", "Any",
+            property: "Age", op: ">=", value: 18);
+
+        await Assert.That(response.Success).IsFalse();
+    }
+
+    [Test]
+    public async Task AddPolicy_InvalidExpression_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Person");
+
+        var response = V3EvalTool.AddPolicy(sessionId, "Person", "Bad",
+            property: "", op: ">=", value: 18);
+
+        await Assert.That(response.Success).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_AgeGuard_ReturnsTrueForAdult() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Person");
+        V3EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+
+        // Add policy via the new tool
+        V3EvalTool.AddPolicy(sessionId, "Person", "Adult",
+            property: "Age", op: ">=", value: 18);
+        // Add another for broader coverage
+        V3EvolveTool.AddEntity(sessionId, "Order");
+        V3EvolveTool.AddProperty(sessionId, "Order", "Total", "Number");
+
+        var adult = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult", age: 25);
+        await Assert.That(adult.Success).IsTrue();
+        await Assert.That(adult.Message).Contains("true");
+
+        var minor = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult", age: 15);
+        await Assert.That(minor.Success).IsTrue();
+        await Assert.That(minor.Message).Contains("false");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_MissingPolicy_ReturnsNotFound() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Person");
+
+        var response = V3EvalTool.EvaluatePolicy(sessionId, "Person", "NonExistent", age: 25);
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("not found");
+    }
 }

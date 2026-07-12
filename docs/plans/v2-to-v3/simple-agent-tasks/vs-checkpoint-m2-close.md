@@ -4,7 +4,7 @@
 **Depends on:** Slice 0–3 all Done (3.5 Done)  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~3k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — 1175 tests green; all tracking docs updated  
 
 ## Objective
 

@@ -167,7 +167,9 @@ Domain with Entity + Property + Policy(DomainExpression)
 
 **Done when:** S2.1–S2.5 green; agent-facing claim “policies evaluate on VM” is true **on direct API**.
 
-**Status:** 🟡 Core tests exist; product enforcement + invariants incomplete.
+**Status:** ✅ **Done** — S2.1–S2.5 complete; `Evaluate`/`CompileVMPredicate` guard; true/false e2e; name alignment doc; domain-attached Person; 1155 tests green.
+
+**Next:** Slice 3 — MCP policy product loop.
 
 ---
 
@@ -195,17 +197,18 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 
 **Done when:** S3.1–S3.5 green → **M2 product-complete** for first consumer happy path steps 1–6.
 
-**Status:** ⬜ Not started (get_policy_expression exists; add/evaluate do not).
+**Status:** ✅ **Done** — contract parser, `add_policy`, `evaluate_policy` (Age sample subject), smokes, README. Suite **1175** green.
+
+**Known thin edge (honest for Person):** `evaluate_policy` sample subject is **Age-only** — follow-up **pm2-1** for multi-property bags.
 
 ---
 
 ### ── Checkpoint: M2 closed ──
 
-After Slice 3:
+**✅ Closed 2026-07-12.**
 
-- Update `master-roadmap.md` / `v3-completion-plan.md`: M2 **Done** with vertical policy loop.  
-- WP5 “runtime truth” treated **Done** for policy path.  
-- Remaining work is **not** “finish V2→V3”; it is **product generation / T2** and **WP9 pull-only**.
+- Slices 0–3 + honesty/debugger polish complete.  
+- Remaining work is **post-M2**: multi-property evaluate sample, affordances, naming cleanup, first effect when pulled, T2 dogfood — not “finish V2→V3”.
 
 ---
 
@@ -253,6 +256,8 @@ After Slice 3:
 | T2 product domain + generated modules | Trust ADR — **after** M2 + generation loop |
 | DSL export/import | Deferred (first-v3-consumer) |
 | Fail-closed all VM POC nodes | Review WP-E — pull when a slice hits them |
+| **Flaky `VmDebugger_StepOver_TraversesStatements`** | [`simple-agent-tasks/vs-fix-vmdebugger-stepover-locals.md`](simple-agent-tasks/vs-fix-vmdebugger-stepover-locals.md) — CaptureResult re-reads dirty ArrayPool slots |
+| **Rename V3\* product identifiers** | [`../post-v2-delete-naming-cleanup.md`](../post-v2-delete-naming-cleanup.md) — after M2 / idle; not mixed with feature slices |
 
 ---
 
@@ -260,11 +265,12 @@ After Slice 3:
 
 | Order | Focus | Parallel OK? |
 |-------|--------|--------------|
-| 1 | **Slice 1.2** pin canonical entity (Person or Order) | **Active next** |
-| 2 | **Slice 2** policy runtime (direct API) | After 1.2 |
-| 3 | **Slice 3** policy MCP loop | After Slice 2 |
-| 4 | Declare M2 complete | After Slice 3 |
-| — | Optional: 0.1d remove-zero-match; 0.2a README nit | Anytime |
+| ✅ | Slices 0–3 + M2 checkpoint | **Complete** — 1175 tests green |
+| 1 | **pm2-1** multi-property evaluate sample bag | Post-M2 agent leverage |
+| 2 | **pm2-2** add_policy → evaluate_policy affordance | Tiny UX |
+| 3 | Optional **0.1d** remove-zero-match | Anytime |
+| 4 | **Naming cleanup** R0–R1 | Idle tree — [`../post-v2-delete-naming-cleanup.md`](../post-v2-delete-naming-cleanup.md) |
+| 5 | **Slice 4** first effect | Named product scenario only |
 
 **Simple agents:** execute only from [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md) (`vs-s0-*` … `vs-s3-*`). Older `ws8-*` files are optional reference; **this document owns slice exit criteria**.
 
@@ -274,17 +280,18 @@ After Slice 3:
 
 | Slice | Status | Notes |
 |-------|--------|-------|
-| 0 Honesty | ✅ **Done** | Optional polish: 0.1d, 0.2a |
-| 1 Structure | ✅ **Done** | Coverage verified; **Person** pinned as canonical |
-| 2 Policy API | 🟡 **Active** | Start vs-s2-* tasks |
-| 3 Policy MCP | ⬜ | M2 close |
-| 4 First effect | ⬜ Deferred | |
+| 0 Honesty | ✅ **Done** | Optional: 0.1d |
+| 1 Structure | ✅ **Done** | **Person** pinned |
+| 2 Policy API | ✅ **Done** | Direct API VM policy e2e |
+| 3 Policy MCP | ✅ **Done** | add/evaluate/smoke; Age sample |
+| **M2** | ✅ **Done** | First consumer vertical slice |
+| polish-dbg / 0.2a | ✅ **Done** | Suite 1175 green |
+| pm2-1 | ⬜ | Multi-property evaluate sample bag |
+| pm2-2 | ⬜ | add_policy → evaluate_policy affordance |
+| 4 First effect | ⬜ Deferred | Named scenario |
 | 5 Relationship | ⬜ Pull | |
+| Naming cleanup | ⬜ | post-v2-delete-naming-cleanup |
 
-Update this table when a slice exits.
-
----
-
-## 7. One-line recap
+**M2 product-complete.** Next: post-M2 pm2-1 / pm2-2 or naming cleanup when idle.
 
 > **V2 is dead. Finish V3 by shipping one honest vertical path at a time: honesty → structure → policy on direct API → policy on MCP → then optional effects/links — never breadth before the active slice is fully green.**

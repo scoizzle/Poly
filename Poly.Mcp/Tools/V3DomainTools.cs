@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ModelContextProtocol.Server;
@@ -6,6 +7,7 @@ using ModelContextProtocol.Server;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
 using Poly.Syntax.Analysis;
@@ -351,7 +353,7 @@ internal sealed class V3EvolveTool {
     /// when an evolve operation had zero effective change (e.g. adding a property
     /// to a non-existent entity, which silently no-ops in the current evolution layer).
     /// </summary>
-    private static string GetFingerprint(Domain domain) {
+    internal static string GetFingerprint(Domain domain) {
         var typeCounts = $"T:{domain.Types.Count}|R:{domain.Relationships.Count}";
         var entityDetails = domain.Types
             .OfType<Entity>()
@@ -443,8 +445,6 @@ internal sealed class V3EvalTool {
     /// <summary>
     /// Returns the guard expression text of a named policy on an entity.
     /// Use this to inspect what condition a policy enforces (e.g. "Age >= 18").
-    /// Full VM evaluation with property values is not yet available — use this
-    /// to read the expression and reason about it in context.
     /// </summary>
     [McpServerTool(Name = "get_policy_expression"), Description("Returns the guard expression text of a named policy on an entity for inspection.")]
     public static V3Response GetPolicyExpression(
@@ -483,5 +483,164 @@ internal sealed class V3EvalTool {
             Data: new { policyName = policy.Name, entityName = entity.Name, expression = policy.Expression.ToString() },
             Affordances: ["get_entity_detail", "get_domain_overview"]
         );
+    }
+
+    /// <summary>
+    /// Adds a policy with a simple property comparison guard to an entity.
+    /// For composite expressions (AND/OR/NOT), use the structured contract fields.
+    /// </summary>
+    [McpServerTool(Name = "add_policy"), Description("Adds a policy with a guard expression to an entity. Simple comparison: provide property, op (==, !=, >, >=, <, <=), and value. Composite: provide 'and', 'or', or 'not' with sub-expressions.")]
+    public static V3Response AddPolicy(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("Policy name (e.g. 'Adult', 'LargeActive')")] string policyName,
+        [Description("Property name for comparison (e.g. 'Age', 'Total'). Required for property comparisons.")] string? property = null,
+        [Description("Comparison operator: ==, !=, >, >=, <, <=")] string? op = null,
+        [Description("Literal value for comparison or standalone literal")] object? value = null,
+        [Description("JSON string for composite 'and' sub-expressions, e.g. [{\"property\":\"A\",\"op\":\">=\",\"value\":1},{\"property\":\"B\",\"op\":\"<\",\"value\":5}]")] string? and = null,
+        [Description("JSON string for composite 'or' sub-expressions")] string? or = null,
+        [Description("JSON string for 'not' sub-expression, e.g. {\"property\":\"X\",\"op\":\">=\",\"value\":18}")] string? not = null) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return new V3Response(
+                Success: false,
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+
+        // Build contract from tool arguments
+        PolicyExpressionContract contract;
+        try {
+            contract = BuildContract(property, op, value, and, or, not);
+        }
+        catch (Exception ex) {
+            return new V3Response(
+                Success: false,
+                Message: $"Invalid policy expression: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail", "get_domain_overview"]);
+        }
+
+        DomainExpression expression;
+        try {
+            expression = PolicyExpressionParser.Parse(contract);
+        }
+        catch (Exception ex) {
+            return new V3Response(
+                Success: false,
+                Message: $"Invalid policy expression: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail", "get_domain_overview"]);
+        }
+
+        // Evolve — evolution gate handles rollback; fingerprint not needed
+        // since AddPolicyToEntity fails loud when entity is missing (S0.1).
+        var result = new DomainEvolution(state.Domain).Evolve()
+            .AddPolicyToEntity(entityName, policyName, expression)
+            .Apply();
+
+        if (!result.Succeeded) {
+            return new V3Response(
+                Success: false,
+                Message: $"Evolution rolled back: {result.FailureSummary ?? "Analysis failed"}",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Affordances: ["get_domain_analysis", "get_domain_overview"]);
+        }
+
+        McpSessionStore.Update(sessionId, result.Root, result.Analysis);
+        return new V3Response(
+            Success: true,
+            Message: $"Policy '{policyName}' added to entity '{entityName}'.",
+            SessionId: sessionId,
+            Revision: state.Revision + 1,
+            Affordances: ["get_entity_detail", "get_policy_expression"]);
+    }
+
+    /// <summary>
+    /// Evaluates a named policy on an entity against a sample subject with the given Age.
+    /// Returns the boolean result (true/false) from the VM.
+    /// </summary>
+    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject with the given Age. Returns true if the policy passes, false otherwise.")]
+    public static V3Response EvaluatePolicy(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity that has the policy")] string entityName,
+        [Description("Name of the policy to evaluate")] string policyName,
+        [Description("Age value for the sample subject")] int age) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return new V3Response(
+                Success: false,
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+
+        var entity = state.Domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal));
+        if (entity is null)
+            return new V3Response(
+                Success: false,
+                Message: $"Entity '{entityName}' not found.",
+                SessionId: sessionId,
+                Affordances: ["get_domain_overview", "add_entity"]);
+
+        var policy = entity.Policies
+            .FirstOrDefault(p => string.Equals(p.Name, policyName, StringComparison.Ordinal));
+        if (policy is null)
+            return new V3Response(
+                Success: false,
+                Message: $"Policy '{policyName}' not found on entity '{entityName}'.",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+
+        // Build a sample subject with the given Age
+        var subject = new EvaluationSubject(age);
+
+        bool result;
+        try {
+            result = policy.Evaluate(subject);
+        }
+        catch (Exception ex) {
+            return new V3Response(
+                Success: false,
+                Message: $"Evaluation failed: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_policy_expression", "get_entity_detail"]);
+        }
+
+        return new V3Response(
+            Success: true,
+            Message: result ? "Policy passed (true)." : "Policy failed (false).",
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: new { policyName, entityName, age, result },
+            Affordances: ["get_policy_expression", "get_entity_detail"]);
+    }
+
+    /// <summary>
+    /// Minimal subject with a single <c>Age</c> property for MCP policy evaluation.
+    /// </summary>
+    private sealed record EvaluationSubject(int Age);
+
+    // ── Private helpers ─────────────────────────────────────────
+
+    private static PolicyExpressionContract BuildContract(
+        string? property, string? op, object? value,
+        string? and, string? or, string? not) {
+        if (and is not null)
+            return new PolicyExpressionContract { And = ParseContractArray(and) };
+        if (or is not null)
+            return new PolicyExpressionContract { Or = ParseContractArray(or) };
+        if (not is not null)
+            return new PolicyExpressionContract { Not = ParseContractSingle(not) };
+        if (property is not null)
+            return new PolicyExpressionContract { Property = property, Op = op, Value = value };
+        throw new ArgumentException("No expression provided. Specify property+op+value, or a composite (and/or/not).");
+    }
+
+    private static PolicyExpressionContract[] ParseContractArray(string json) {
+        var arr = System.Text.Json.JsonSerializer.Deserialize<PolicyExpressionContract[]>(json);
+        return arr ?? throw new ArgumentException("Failed to parse composite expression array.");
+    }
+
+    private static PolicyExpressionContract ParseContractSingle(string json) {
+        var obj = System.Text.Json.JsonSerializer.Deserialize<PolicyExpressionContract>(json);
+        return obj ?? throw new ArgumentException("Failed to parse composite expression.");
     }
 }

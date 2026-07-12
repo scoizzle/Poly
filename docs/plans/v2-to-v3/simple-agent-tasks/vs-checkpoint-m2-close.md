@@ -14,13 +14,12 @@ Docs only: record that the first V3 consumer vertical slice (structure + policy 
 
 - `docs/plans/v2-to-v3/vertical-slice-finish-plan.md` — tracking table
 - `docs/plans/v2-to-v3/master-roadmap.md` — M2 row
-- `docs/plans/v2-to-v3/v3-completion-plan.md` — milestone mapping (optional)
+- `docs/plans/v2-to-v3/master-roadmap.md` — milestones
 
 ## Exact Steps
 
 1. Update vertical-slice tracking table: Slices 0–3 Done; M2 closed note.
 2. Update master-roadmap: M2 first consumer **Done** (with one-line “policy MCP loop” note).
-3. Optionally mark WP5 policy path Done in v3-completion-plan.
 4. Update `vs-README.md` “Next task” to **deferred / orchestrator for Slice 4**.
 5. Do not start Slice 4/5 in this task.
 

@@ -13,7 +13,8 @@
 | Domain boundary | Domain constructs lower to **generic** AST/opcodes (`2026-06-08-domain-lowering-boundary.md`) |
 | Decisions | `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`, `2026-07-04-primitives-as-canonical-ir.md` (historical title; body is direct AST path), `Poly/Interpretation/README.md` |
 
-**Active product planning** is DomainModeling V2→V3: `docs/plans/v2-to-v3/master-roadmap.md`.
+**Active product planning:** `docs/plans/v2-to-v3/simple-agent-tasks/vs-README.md` (M2 Done).  
+**Archived migration plans:** `docs/plans/archive/v2-to-v3-migration/`.
 
 ## What was archived
 

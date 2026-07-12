@@ -1,20 +1,20 @@
 # V3 Finish Plan — One Vertical Slice at a Time
 
-**Status:** Active  
-**Last Updated:** 2026-07-12 — Slice 0 status corrected to match code review (not all Done)  
-**Purpose:** Task out **what remains** after V2 delete, ordered as **fully implemented vertical slices** (not work-package breadth).  
-**Authority:** Day-to-day execution order for finishing the V2→V3 *product* migration.  
+**Status:** Active (M2 **Done** — post-M2 expansion)  
+**Last Updated:** 2026-07-12 — M2 closed; migration inventory archived  
+**Purpose:** Product vertical-slice status after V2 delete.  
+**Authority:** Status + post-M2 calendar. **Pick work from** [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md).  
 **Related:**
 
 | Doc | Role |
 |-----|------|
-| [`master-roadmap.md`](master-roadmap.md) | Milestones M1–M4 (delete **done**) |
-| [`v3-completion-plan.md`](v3-completion-plan.md) | Historical WP1–WP9 gap inventory |
+| [`master-roadmap.md`](master-roadmap.md) | Milestones (M2 **Done**) |
+| [`../archive/v2-to-v3-migration/designs/v3-completion-plan.md`](../archive/v2-to-v3-migration/designs/v3-completion-plan.md) | Archived WP inventory — **do not execute** |
 | [`2026-07-11-review-fix-plan.md`](../2026-07-11-review-fix-plan.md) | Trust layer 1 honesty (feeds Slice 0) |
-| [`../decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) | First customer; generation funds platform |
+| [`../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) | First customer; generation funds platform |
 | [`spikes/first-v3-consumer.md`](spikes/first-v3-consumer.md) | MCP + direct API quality bar |
 | **[`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md)** | **Simple-agent pick queue** (one micro-task at a time) |
-| [`simple-agent-tasks/ws8-README.md`](simple-agent-tasks/ws8-README.md) | Older policy tasks (prefer `vs-*`) |
+| [Archived migration](../archive/v2-to-v3-migration/README.md) | WS8/WP/ws micro-tasks — **do not execute** |
 
 ---
 
@@ -105,7 +105,7 @@ Slice 5  Relationship (optional)     ── only if product needs second entity 
 | **S0.4** | Instance `EmitInvoke` sequences **receiver** | Dual-oracle instance method VM test | ✅ **Done** |
 | **S0.5** | MCP README V3-only honesty | No V2 DomainTools claim; tool table complete | ✅ **Done** |
 
-**Status:** ✅ **Required Done.** Optional polish: 0.1d, 0.2a.
+**Status:** Active (M2 **Done** — post-M2 expansion)  
 
 **Next:** Slice 1 (verify structure path + pin canonical entity)
 
@@ -133,7 +133,7 @@ create session / DomainFactory
 
 **Done when:** S1.1–S1.2 closed.
 
-**Status:** ✅ **Done** — Person pinned; coverage verified.
+**Status:** Active (M2 **Done** — post-M2 expansion)  
 
 **Micro-tasks:** [`vs-s1-verify-structure-path.md`](simple-agent-tasks/vs-s1-verify-structure-path.md) ✅ · [`vs-s1-pin-canonical-entity.md`](simple-agent-tasks/vs-s1-pin-canonical-entity.md) ✅
 
@@ -167,7 +167,7 @@ Domain with Entity + Property + Policy(DomainExpression)
 
 **Done when:** S2.1–S2.5 green; agent-facing claim “policies evaluate on VM” is true **on direct API**.
 
-**Status:** ✅ **Done** — S2.1–S2.5 complete; `Evaluate`/`CompileVMPredicate` guard; true/false e2e; name alignment doc; domain-attached Person; 1155 tests green.
+**Status:** Active (M2 **Done** — post-M2 expansion)  
 
 **Next:** Slice 3 — MCP policy product loop.
 
@@ -197,7 +197,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 
 **Done when:** S3.1–S3.5 green → **M2 product-complete** for first consumer happy path steps 1–6.
 
-**Status:** ✅ **Done** — contract parser, `add_policy`, `evaluate_policy` (Age sample subject), smokes, README. Suite **1175** green.
+**Status:** Active (M2 **Done** — post-M2 expansion)  
 
 **Known thin edge (honest for Person):** `evaluate_policy` sample subject is **Age-only** — follow-up **pm2-1** for multi-property bags.
 
@@ -224,7 +224,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | **S4.3** | Direct API helper + optional MCP later | Call site + test |
 
 **Pull trigger:** First-customer product needs mutable behavior, not only guards.  
-**Status:** ⬜ Deferred until Slice 3 done (unless a hard product need forces earlier).
+**Status:** Active (M2 **Done** — post-M2 expansion)  
 
 ---
 
@@ -239,7 +239,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | **S5.3** | DE relationship navigation only if policy needs it | Lower + VM or fail closed |
 
 **Pull trigger:** Canonical slice needs link (e.g. Order→Customer).  
-**Status:** ⬜ Pull-only.
+**Status:** Active (M2 **Done** — post-M2 expansion)  
 
 ---
 

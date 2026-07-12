@@ -1,6 +1,6 @@
 # Plan: Split `Poly.Syntax` → `Poly.Ast` + `Poly.Analysis`
 
-**Status:** **Deferred** — do not execute while V2→V3 / WS8 runtime work and working-tree cleanup are in progress.  
+**Status:** **Deferred** — do not execute while post-M2 product work (or large renames) is in flight; prefer clean tree.  
 **Created:** 2026-07-11  
 **Resume when:** Current platform work is stable (see [Preconditions](#preconditions)).  
 **Type:** Structural refactor / namespace migration (behavior-preserving).  

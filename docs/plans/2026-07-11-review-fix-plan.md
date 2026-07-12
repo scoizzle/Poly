@@ -254,8 +254,8 @@ Update this table as packages close. Link PRs / commits in Notes.
 
 | Doc | Relation |
 |-----|----------|
-| `docs/plans/v2-to-v3/v3-completion-plan.md` | V3 WP5+ runtime work; this plan is **correctness hardening** from the July 2026 system review — do not reopen V2. |
-| `docs/plans/v2-to-v3/simple-agent-tasks/vs-README.md` | **Simple-agent entry point** — Slice 1 active after Slice 0 Done |
+| `docs/plans/v2-to-v3/simple-agent-tasks/vs-README.md` | **Simple-agent entry point** — M2 Done; post-M2 picks |
+| `docs/plans/archive/v2-to-v3-migration/` | Superseded WP/ws/WS8 — do not execute |
 | `docs/CORE.md` | Update only if mechanisms change (e.g. fail-closed policy for unshipped nodes). |
 | Review artifacts | `/tmp/grok-review-01ce9db4.md` (consolidated findings) |
 

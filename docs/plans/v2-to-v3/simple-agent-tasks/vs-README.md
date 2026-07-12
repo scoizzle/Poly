@@ -106,17 +106,11 @@
 
 ---
 
-## Map from older ws8-* tasks
+## Archived pre-vs micro-tasks
 
-If both exist, **prefer `vs-*`** (this suite owns order). Older files are specs/history:
-
-| vs task | Related ws8 (optional reading) |
-|---------|--------------------------------|
-| 0.3, 2.1 | `ws8-invariant-policy-subject-types.md`, `ws8-invariant-no-dict-expando-subjects.md` |
-| 2.2 | `ws8-spike-bool-abi-adult-assert.md` |
-| 2.3 | `ws8-spike-matchnumeric-positive-control.md` |
-| 2.4 | `ws8-invariant-policy-property-name-alignment.md` |
-| 3.1–3.5 | `ws8-mcp-add-policy*.md`, `ws8-mcp-evaluate-policy-vm.md`, etc. |
+WP/ws/WS8 micro-tasks moved to  
+[`../../archive/v2-to-v3-migration/simple-agent-tasks/`](../../archive/v2-to-v3-migration/simple-agent-tasks/).  
+**Do not execute** — use this `vs-*` suite only.
 
 ---
 

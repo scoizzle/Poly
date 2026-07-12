@@ -9,7 +9,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
-| [**V3 finish — vertical slices**](v2-to-v3/vertical-slice-finish-plan.md) | **Prefer for remaining V2→V3 product work** — Slice 0 honesty → 1 structure → 2 policy API → 3 policy MCP (M2 close) → optional effects/links |
+| [**V3 finish — vertical slices**](v2-to-v3/vertical-slice-finish-plan.md) | Remaining product work as slices 0–3 |
+| [**Simple-agent queue (`vs-*`)**](v2-to-v3/simple-agent-tasks/vs-README.md) | **Pick order for smaller agents** — one micro-task file at a time |
 | [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Trust layer 1 detail (feeds **Slice 0**); WP-A–J |
 | [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | Milestones M1–M4 (delete **complete**); M2 product close via vertical slices |
 | [**V3 Completion Plan**](v2-to-v3/v3-completion-plan.md) | Historical WP1–WP9 inventory; execution order superseded by vertical-slice plan for remaining work |

@@ -13,7 +13,8 @@
 | [`2026-07-11-review-fix-plan.md`](../2026-07-11-review-fix-plan.md) | Trust layer 1 honesty (feeds Slice 0) |
 | [`../decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) | First customer; generation funds platform |
 | [`spikes/first-v3-consumer.md`](spikes/first-v3-consumer.md) | MCP + direct API quality bar |
-| [`simple-agent-tasks/ws8-README.md`](simple-agent-tasks/ws8-README.md) | Policy micro-tasks (maps into Slice 2–3) |
+| **[`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md)** | **Simple-agent pick queue** (one micro-task at a time) |
+| [`simple-agent-tasks/ws8-README.md`](simple-agent-tasks/ws8-README.md) | Older policy tasks (prefer `vs-*`) |
 
 ---
 
@@ -259,7 +260,7 @@ After Slice 3:
 | 4 | **Slice 3** full | Needs Slice 2 |
 | 5 | Declare M2 complete; open Slice 4 only if pulled | — |
 
-Micro-task files under `simple-agent-tasks/ws8-*` remain valid **task specs** for Slice 2–3; **this document owns order and “slice done”**.
+**Simple agents:** execute only from [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md) (`vs-s0-*` … `vs-s3-*`). Older `ws8-*` files are optional reference; **this document owns slice exit criteria**.
 
 ---
 

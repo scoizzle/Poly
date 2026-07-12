@@ -1,7 +1,7 @@
 # V3 Finish Plan — One Vertical Slice at a Time
 
 **Status:** Active  
-**Last Updated:** 2026-07-11  
+**Last Updated:** 2026-07-12 — Slice 0 status corrected to match code review (not all Done)  
 **Purpose:** Task out **what remains** after V2 delete, ordered as **fully implemented vertical slices** (not work-package breadth).  
 **Authority:** Day-to-day execution order for finishing the V2→V3 *product* migration.  
 **Related:**
@@ -92,19 +92,24 @@ Slice 5  Relationship (optional)     ── only if product needs second entity 
 
 **In scope (tasks):**
 
-| ID | Task | Exit check | Source |
+| ID | Task | Exit check | Status |
 |----|------|------------|--------|
-| **S0.1** | Fail-loud evolution when entity/stage/action target missing | `Apply` fails / rolls back; flip silent-no-op tests | Review WP-B |
-| **S0.2** | Decide + implement `add_action_to_stage` semantics (assign vs create); align MCP description | One smoke asserts real behavior | Review WP-C |
-| **S0.3** | Wire `PolicySubject.Validate` into `PolicyEvaluator` product path | Dict/Expando rejected on `Evaluate`/`CompileVM` | Review WP-D + ws8 6d/6h |
-| **S0.4** | Fix instance CLR `EmitInvoke` (receiver sequenced) + dual-oracle test | Instance method VM == LINQ | Review WP-A |
-| **S0.5** | MCP README V3-only honesty (no ghost V2 DomainTools) | README matches tree | Review WP-G |
+| **S0.1** | Fail-loud evolution when entity/stage/action target missing | `RequireUpdate` + rollback | ✅ **Done** |
+| **S0.1a** | Surface evalErrors as `EVOLUTION_TARGET` Error diagnostics | Inject before `Diagnostics` Lazy | ✅ **Done** |
+| **S0.1b** | Fail-loud missing **stage/property** (child targets) | Child existence check + tests | ✅ **Done** |
+| **S0.1c** | RequireUpdate on remaining ApplyTo paths | All Update* ApplyTo use `RequireUpdate` | ✅ **Done** |
+| **S0.1d** | Fail-loud remove-by-name zero match *(optional)* | Remove missing child name fails if parent exists | ⬜ Optional — vs **0.1d** |
+| **S0.2** | `add_action_to_stage` honesty (create stage-local) | Tool Description + code + test | ✅ **Done** |
+| **S0.2a** | MCP README row matches create semantics *(nit)* | Not “places existing” | ⬜ Optional — vs **0.2a** |
+| **S0.3** | Wire `PolicySubject` into product evaluate/compile | Dict/Expando rejected | ✅ **Done** |
+| **S0.4** | Instance `EmitInvoke` sequences **receiver** | Dual-oracle instance method VM test | ✅ **Done** |
+| **S0.5** | MCP README V3-only honesty | No V2 DomainTools claim; tool table complete | ✅ **Done** |
 
-**Out of scope for Slice 0:** fail-closed every unshipped VM node, Text/Validation kill, full DiffDays, effect execution.
+**Status:** ✅ **Required Done.** Optional polish: 0.1d, 0.2a.
 
-**Done when:** S0.1–S0.5 green; structure MCP smoke still green.
+**Next:** Slice 1 (verify structure path + pin canonical entity)
 
-**Status:** ⬜ Not started as a bundled slice (pieces exist as review plan WPs).
+**Micro-tasks:** [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md)
 
 ---
 
@@ -119,19 +124,20 @@ create session / DomainFactory
   → bad evolve → rollback + diagnostics
 ```
 
-**Likely already green** — reaffirm, do not rebuild.
-
-| ID | Task | Exit check |
-|----|------|------------|
-| **S1.1** | Inventory: `DomainAuthoringHappyPathTests`, evolution rollback, `V3McpSmokeTests` cover the story | Checklist in PR or this file § status |
-| **S1.2** | Close gaps only if S1.1 finds holes (e.g. stage parent, primitive type name in MCP) | Targeted tests |
-| **S1.3** | Pin **canonical entity name** for remaining slices: **Person** (Age, stages) *or* **Order** — one primary | Documented here + demo aligns |
+| ID | Task | Exit check | Status |
+|----|------|------------|--------|
+| **S1.1** | Verify structure e2e coverage (inventory + fill gaps) | Checklist + tests green | ✅ **Done** — summary + `GetDomainAnalysis_ReportsNoErrors_ForValidDomain` |
+| **S1.2** | Pin **canonical entity** for Slice 2–3: **Person** | Documented in vs-README + this plan | ✅ **Done** — **Person** (simplest numeric property `Age`) |
 
 **Out of scope:** policies, relationships, effects execution.
 
-**Done when:** S1.1–S1.3 closed; agent can structure-author via MCP without lying tools (depends on S0.2).
+**Done when:** S1.1–S1.2 closed.
 
-**Status:** 🟡 Mostly done — treat as **verify + pin entity**, not a rebuild.
+**Status:** ✅ **Done** — Person pinned; coverage verified.
+
+**Micro-tasks:** [`vs-s1-verify-structure-path.md`](simple-agent-tasks/vs-s1-verify-structure-path.md) ✅ · [`vs-s1-pin-canonical-entity.md`](simple-agent-tasks/vs-s1-pin-canonical-entity.md) ✅
+
+**Next:** Slice 2 — Policy runtime (direct API only)
 
 ---
 
@@ -254,11 +260,11 @@ After Slice 3:
 
 | Order | Focus | Parallel OK? |
 |-------|--------|--------------|
-| 1 | **Slice 0** S0.1–S0.5 | S0.4 (VM) ∥ S0.1–S0.3 (domain) |
-| 2 | **Slice 1** verify + pin Person/Order | After or with S0.2 |
-| 3 | **Slice 2** full | Needs S0.3; S0.4 if methods used |
-| 4 | **Slice 3** full | Needs Slice 2 |
-| 5 | Declare M2 complete; open Slice 4 only if pulled | — |
+| 1 | **Slice 1.2** pin canonical entity (Person or Order) | **Active next** |
+| 2 | **Slice 2** policy runtime (direct API) | After 1.2 |
+| 3 | **Slice 3** policy MCP loop | After Slice 2 |
+| 4 | Declare M2 complete | After Slice 3 |
+| — | Optional: 0.1d remove-zero-match; 0.2a README nit | Anytime |
 
 **Simple agents:** execute only from [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md) (`vs-s0-*` … `vs-s3-*`). Older `ws8-*` files are optional reference; **this document owns slice exit criteria**.
 
@@ -268,9 +274,9 @@ After Slice 3:
 
 | Slice | Status | Notes |
 |-------|--------|-------|
-| 0 Honesty | ⬜ | Review fix plan WP-A–D, G |
-| 1 Structure | 🟡 Verify | Pin canonical entity |
-| 2 Policy API | 🟡 | Finish invariants + product enforce |
+| 0 Honesty | ✅ **Done** | Optional polish: 0.1d, 0.2a |
+| 1 Structure | ✅ **Done** | Coverage verified; **Person** pinned as canonical |
+| 2 Policy API | 🟡 **Active** | Start vs-s2-* tasks |
 | 3 Policy MCP | ⬜ | M2 close |
 | 4 First effect | ⬜ Deferred | |
 | 5 Relationship | ⬜ Pull | |

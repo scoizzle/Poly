@@ -1,7 +1,7 @@
 # Simple Agent Tasks (Micro-Tasks for Smaller Models)
 
 **Purpose:** Small, self-contained tasks for lower-context / cheaper agents.  
-**Last Updated:** 2026-07-11  
+**Last Updated:** 2026-07-12  
 
 ## Operating rule (mandatory)
 
@@ -26,17 +26,19 @@ When none are In Progress, take the **first Not Started** task from the **curren
 
 **Parent plan:** [`../vertical-slice-finish-plan.md`](../vertical-slice-finish-plan.md)
 
-| Slice | Goal | First task |
-|-------|------|------------|
-| **0** Honesty | Fail-loud evolve, tool honesty, PolicySubject, EmitInvoke | [`vs-s0-fail-loud-evolution.md`](vs-s0-fail-loud-evolution.md) |
-| **1** Structure | Verify path + pin Person/Order | after Slice 0 |
-| **2** Policy API | Subject + true/false + domain-attached e2e | after 0.3 + Slice 1 |
+| Slice | Goal | Status |
+|-------|------|--------|
+| **0** Honesty | Fail-loud, tool honesty, PolicySubject, EmitInvoke | ✅ **Required Done** — optional 0.1d, 0.2a |
+| **1** Structure | Verify path + pin Person/Order | 🟡 **1.1 Done**; **next 1.2** |
+| **2** Policy API | Subject + true/false + domain-attached e2e | after 1.2 |
 | **3** Policy MCP | add_policy → evaluate_policy → smoke | after Slice 2 |
 | **M2** Docs checkpoint | Mark M2 closed | after Slice 3 |
 
 **Do not pick Slice 4/5** (effects / relationships) unless an orchestrator reopens them.
 
-**Next task right now:** open [`vs-README.md`](vs-README.md) and take the first `[ ]` in order (starts at **0.1**).
+**Next:** [`vs-s1-pin-canonical-entity.md`](vs-s1-pin-canonical-entity.md) **(1.2)** → Slice 2 `vs-s2-*`.  
+
+Optional polish: **0.2a** README row (still “Places an existing action”); **0.1d** remove-zero-match.
 
 ---
 

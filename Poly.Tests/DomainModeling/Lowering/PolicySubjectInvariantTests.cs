@@ -62,6 +62,31 @@ public class PolicySubjectInvariantTests {
         await Assert.That(msg).IsNull();
     }
 
+    // ── ValidateType (compile-time guard for CompileVMPredicate) ─
+
+    [Test]
+    public async Task ValidateType_Dictionary_Throws() {
+        await Assert.That(() => PolicySubject.ValidateType<Dictionary<string, object?>>())
+            .Throws<ArgumentException>();
+    }
+
+    [Test]
+    public async Task ValidateType_Record_Passes() {
+        await Assert.That(() => PolicySubject.ValidateType<PolicyTestSubjects.SampleAgeSubject>())
+            .ThrowsNothing();
+    }
+
+    [Test]
+    public async Task CompileVMPredicate_Dictionary_Throws() {
+        var policy = new Policy("Age18",
+            DomainExpression.GreaterThanOrEqual(
+                DomainExpression.Property("Age"),
+                DomainExpression.Literal(18)));
+
+        await Assert.That(() => policy.CompileVMPredicate<Dictionary<string, object?>>())
+            .Throws<ArgumentException>();
+    }
+
     // ── SampleFromAge ──────────────────────────────────────────
 
     [Test]

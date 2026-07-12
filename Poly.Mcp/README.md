@@ -6,20 +6,17 @@ Tools live in `Poly.Mcp/Tools/` and use only V3 types (`Poly.DomainModeling`, no
 
 | Tool | Class | Purpose |
 |------|-------|---------|
-| `create_domain_session` | `V3SessionTool` | Creates a bootstrapped domain session |
-| `list_sessions` | `V3SessionTool` | Lists active sessions |
+| `create_domain_session` | `V3SessionTool` | Creates a bootstrapped domain session with built-in primitive types |
+| `list_sessions` | `V3SessionTool` | Lists active domain sessions |
 | `get_domain_overview` | `V3QueryTool` | Returns domain overview with entity/primitive/relationship counts |
 | `get_entity_detail` | `V3QueryTool` | Returns entity properties, stages, actions, policies |
-| `get_domain_analysis` | `V3QueryTool` | Returns analysis diagnostics |
+| `get_domain_analysis` | `V3QueryTool` | Returns analysis diagnostics (errors, warnings, info) |
 | `add_entity` | `V3EvolveTool` | Adds a new entity type |
-| `add_property` | `V3EvolveTool` | Adds a property to an entity |
-| `add_stage` | `V3EvolveTool` | Adds a lifecycle stage |
-| `add_action` | `V3EvolveTool` | Adds an action |
-| `add_action_to_stage` | `V3EvolveTool` | Assigns action to a stage |
+| `add_property` | `V3EvolveTool` | Adds a property to an existing entity |
+| `add_stage` | `V3EvolveTool` | Adds a lifecycle stage (optionally with parent) |
+| `add_action` | `V3EvolveTool` | Adds an action/operation to an entity |
+| `add_action_to_stage` | `V3EvolveTool` | Places an existing action on a stage |
 | `add_relationship` | `V3EvolveTool` | Adds a relationship between entities |
+| `get_policy_expression` | `V3EvalTool` | Returns the guard expression text of a policy |
 
-Session/workspace state lives in `Poly.Mcp/Sessions/` — not in DomainModeling core.
-
-## Deprecated (V2 — not registered in product path)
-
-`DomainTools.cs` contains the old V2-shaped tool surface (~80 tools, `Poly.Data.Modeling` dependency). These classes remain in the assembly for reference but are **not registered** in `Program.cs`. No new features should be added here. See `docs/plans/v2-to-v3/master-roadmap.md` Phase 5 for deletion plan.
+All tools use V3 types only (`Poly.DomainModeling`). V2 (`Poly.Data.Modeling`) has been fully removed. Session/workspace state lives in `Poly.Mcp/Sessions/` — not in DomainModeling core.

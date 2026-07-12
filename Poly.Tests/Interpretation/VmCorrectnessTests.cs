@@ -52,6 +52,53 @@ public class VmCorrectnessTests {
     //  A. Structured Combinatorial
     // ═══════════════════════════════════════════════════════════════
 
+    private sealed record InvokeTarget(int Value) {
+        public int Triple() => Value * 3;
+        public int Add(int x) => Value + x;
+    }
+
+    [Test]
+    public async Task InstanceMethod_InvokeMember_Triple_DualOracle() {
+        // Proves that Invoke(Member(instance, "Triple")) sequences the
+        // receiver correctly in the emitted expression tree.
+        var target = new InvokeTarget(7);
+        var instanceParam = new Parameter("inst", TypeReference.To<InvokeTarget>());
+        var tripleInvoke = new Invoke(new Member(instanceParam, "Triple"));
+
+        // VM path
+        var vmProg = Interpreter.Compile(tripleInvoke);
+        using var vmExec = Interpreter.Execute(vmProg, s => s.SetArgs(target));
+        var vmResult = vmExec.Result.GetValue<long>();
+
+        // LINQ path (reference)
+        var linqParam = Expr.Parameter(typeof(InvokeTarget), "inst");
+        var linqCall = Expr.Call(linqParam, typeof(InvokeTarget).GetMethod(nameof(InvokeTarget.Triple))!);
+        var linqLambda = Expr.Lambda<Func<InvokeTarget, long>>(Expr.Convert(linqCall, typeof(long)), linqParam);
+        var linqResult = linqLambda.Compile()(target);
+
+        await Assert.That(vmResult).IsEqualTo(linqResult);
+    }
+
+    [Test]
+    public async Task InstanceMethod_InvokeMember_WithArg_DualOracle() {
+        // Instance method with arguments
+        var target = new InvokeTarget(10);
+        var instanceParam = new Parameter("inst", TypeReference.To<InvokeTarget>());
+        var addInvoke = new Invoke(new Member(instanceParam, "Add"), new Constant(5));
+
+        var vmProg = Interpreter.Compile(addInvoke);
+        using var vmExec = Interpreter.Execute(vmProg, s => s.SetArgs(target));
+        var vmResult = vmExec.Result.GetValue<long>();
+
+        var linqParam = Expr.Parameter(typeof(InvokeTarget), "inst");
+        var linqCall = Expr.Call(linqParam, typeof(InvokeTarget).GetMethod(nameof(InvokeTarget.Add))!,
+            Expr.Constant(5));
+        var linqLambda = Expr.Lambda<Func<InvokeTarget, long>>(Expr.Convert(linqCall, typeof(long)), linqParam);
+        var linqResult = linqLambda.Compile()(target);
+
+        await Assert.That(vmResult).IsEqualTo(linqResult);
+    }
+
     [Test]
     public async Task SetArgs_NullArg_ReturnsZero() {
         var x = new Parameter("x", TypeReference.To<int>());

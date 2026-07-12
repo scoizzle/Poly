@@ -919,6 +919,10 @@ public class DomainEvolutionApplicatorTests {
             .AddStage("Loan", "Returned")
             .AddStage("Loan", "Renewed", "Active")
             .AddStage("Loan", "Lost", "Active")
+            // Book stages
+            .AddStage("Book", "Available")
+            .AddStage("Book", "Borrowed")
+            .AddStage("Book", "Damaged")
             // Relationships
             .AddRelationship("MemberLoans", "Member", "Loan", RelationshipCardinality.OneToMany)
             .AddRelationship("BookLoans", "Book", "Loan", RelationshipCardinality.OneToMany)

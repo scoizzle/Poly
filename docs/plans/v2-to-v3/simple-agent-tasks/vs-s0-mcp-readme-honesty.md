@@ -4,7 +4,7 @@
 **Parent:** Slice 0  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~2k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] **Done** (2026-07-12) — V2 DomainTools section removed; tool table includes `get_policy_expression`; V3-only note.  
 
 ## Objective
 

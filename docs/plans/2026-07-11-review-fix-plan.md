@@ -2,6 +2,7 @@
 
 **Status:** Active  
 **Date:** 2026-07-11  
+**Updated:** 2026-07-12 — Slice 0 Done; 1.1 structure verify Done; next 1.2 pin entity → Slice 2; optional 0.1d/0.2a  
 **Source:** Full-system review (`/tmp/grok-review-01ce9db4.md` and module deep-dives)  
 **Lens:** AGENTS.md §1–§7 + `docs/CORE.md`  
 **Not this plan:** Multi-host completeness, JIT, effect framework completion, Syntax→Ast module split.
@@ -41,17 +42,20 @@ Ordered for dependency and risk. Each package is one or more **§4 loops**: one 
 
 ### WP-A — VM invoke correctness (P0)
 
-**Why first:** Unblocks date ops, method-backed domain expressions, and honest dual-oracle for CLR interop.
+**Status:** ✅ **Done** (vs **0.4**) — `instanceExpr` sequenced + dual-oracle instance method tests.
 
-| Step | Work | Tests |
+**Why:** Unblocks date ops, method-backed domain expressions, and honest dual-oracle for CLR interop.
+
+| Step | Work | Status |
 |------|------|--------|
-| A1 | Fix `EmitInvoke` so instance receiver evaluation is sequenced into the returned expression tree (`DirectVmAbiEmitter.EmitInvoke`: include `instanceExpr` before args/call). | New dual-oracle VM test: e.g. `Invoke(Member(Constant("ab"), "get_Length"))` or a small instance method on a test type; assert VM == LINQ == expected. |
-| A2 | Cover static invoke + one ref-type return (heap handle) if not already covered. | Dual-oracle |
-| A3 | If `char`/small scalar arg marshaling fails on real methods (e.g. `IndexOf(char)`), fix `TryValueToLong` / arg convert path in the same loop — only if A1 test pulls it in. | Extend test matrix only when red |
+| A1 | Sequence `instanceExpr` into returned expression tree before args/call | ✅ Done |
+| A1b | `Convert` heap object to declaring type for `Expression.Call` | ✅ Done |
+| A2 | Dual-oracle instance method (+ arg) tests | ✅ Done — VmCorrectnessTests |
+| A3 | `char`/small scalar marshal only if a test goes red | ⬜ Pull |
 
-**Exit:** Green dual-oracle for at least one instance and one static CLR method via `Interpreter.Compile` / `Execute`.
+**Exit:** ✅ Green dual-oracle instance CLR methods with receiver evaluation.
 
-**Files (expected):** `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs`, `Poly.Tests/Interpretation/*` (new or extend `VmCorrectnessTests` / `DirectVmAbiEmitterTests`).
+**Files:** `DirectVmAbiEmitter.cs`, `Poly.Tests/Interpretation/*`.
 
 ---
 
@@ -59,47 +63,36 @@ Ordered for dependency and risk. Each package is one or more **§4 loops**: one 
 
 **Why:** Silent success breaks end-to-end honesty for every non-MCP caller; fingerprint is a band-aid.
 
-| Step | Work | Tests |
-|------|------|--------|
-| B1 | When `UpdateEntity` / `UpdateType` / `UpdateRelationship` return `false`, reject the change (throw from `ApplyTo` **or** attach structural Error diagnostic before gate — prefer domain-owned diagnostics so `EvolutionResult.RolledBack` stays the single story). | Flip `EvolutionRollbackTests.SilentNoOp_*` to expect **failure** / non-success. |
-| B2 | `UpdateAction`: return `false` when action name not found (even if entity exists). Same for stage update when stage name absent (no silent identity transform). | Missing-action / missing-stage reject tests |
-| B3 | After B1–B2 green for direct API, slim or keep MCP fingerprint as defense-in-depth only (optional). | Existing MCP smoke still green |
+| Step | Work | Status / tests |
+|------|------|----------------|
+| B1 | `RequireUpdate` when `Update*` returns false; Apply rolls back | ✅ Done |
+| B2 | `UpdateAction` false when action missing | ✅ Done |
+| B3 | MCP fingerprint as defense-in-depth only (optional) | Optional |
+| **B4** | Inject `evalErrors` as `EVOLUTION_TARGET` Error diagnostics | ✅ Done — vs **0.1a** |
+| **B5** | Child stage/property/relationship-stage missing → false | ✅ Done — vs **0.1b** + tests |
+| **B6** | `RequireUpdate` on remaining ApplyTo paths | ✅ Done — vs **0.1c** |
+| **B7** | Remove-by-name zero match fails loud *(optional)* | ⬜ vs **0.1d** |
 
-**Exit:** `DomainEvolution.Apply` never reports success for “add property to missing entity” / “attach to missing action.”
+**Exit (core + child transform):** ✅  
+**Optional:** B7 remove-filter silent success.
 
-**Files (expected):** `DomainMutationContext.cs`, `DomainChange.cs` (ApplyTo), `DomainEvolution.cs` if diagnostics merge needed, evolution tests.
+**Slice 0 required Done.** Optional: **0.1d** remove-zero-match; **0.2a** README nit.
 
 ---
 
 ### WP-C — MCP `add_action_to_stage` honesty (P0)
 
-**Pick one product decision (do not leave both half-true):**
+**Status:** ✅ **Done** (vs **0.2**) — tool Description = create stage-local; code creates empty stage action; unit test locks behavior.
 
-| Option | Behavior | When to choose |
-|--------|----------|----------------|
-| **C-assign** | Stage holds / references the **existing** entity-level action (same name, shared definition or true assign). | Demos and agents expect “action then place on stage.” |
-| **C-create** | Tool creates a **stage-local** empty action; rename/reword tool + description (no “assigns existing”). | Stage-local actions are intentional and separate. |
-
-| Step | Work | Tests |
-|------|------|--------|
-| C1 | Implement chosen semantics in `AddActionToStageChange` + MCP description. | MCP smoke: after `add_action` + `add_action_to_stage`, assert stage action identity / effects / parameters per chosen option. |
-| C2 | Align `V3ECommerceDomain` / demos if they assumed the wrong story. | Demo still analyzes clean |
-
-**Exit:** Tool description, `DomainChange` description, and model state agree; one smoke assertion locks it.
-
-**Files:** `DomainChange.cs`, `V3DomainTools.cs`, MCP smoke tests, possibly demos.
+**Residual:** README table still says “Places an existing action” → optional vs **0.2a**.
 
 ---
 
 ### WP-D — Policy subject enforcement (P0, tiny)
 
-| Step | Work | Tests |
-|------|------|--------|
-| D1 | Call `PolicySubject.Validate` (or compile-time `typeof(TEntity)` check) at start of `CompileVMPredicate` / `Evaluate`. | Existing `PolicySubjectInvariantTests` remain; add one product-path reject if missing. |
+**Status:** ✅ **Done** (vs **0.3**) — `Validate` on `Evaluate`; `ValidateType<T>` on `CompileVMPredicate`; invariant tests.
 
-**Exit:** Dict/Expando subjects cannot reach VM eval via product API without failure.
-
-**Files:** `PolicyEvaluator.cs`, `PolicySubject.cs` if API tweak needed.
+**Files:** `PolicyEvaluator.cs`, `PolicySubject.cs`.
 
 ---
 
@@ -239,16 +232,18 @@ WP-J  first effect (optional)
 
 | WP | Status | Notes |
 |----|--------|-------|
-| A | Pending | P0 |
-| B | Pending | P0 |
-| C | Pending | P0 — needs assign vs create decision |
-| D | Pending | P0 tiny |
-| E | Pending | P1 |
-| F | Pending | P1 after A |
-| G | Pending | P1 docs |
-| H | Pending | P2 |
-| I | Pending | P2 targeted |
-| J | Pending | P3 optional |
+| A | ✅ Done | instanceExpr + dual-oracle — vs **0.4** |
+| B | ✅ Core Done | optional B7 remove-zero-match — vs **0.1d** |
+| C | ✅ Done | residual README **0.2a** |
+| D | ✅ Done | Validate + ValidateType — vs **0.3** |
+| E | Pending | P1 fail-closed unshipped VM nodes |
+| F | Pending | P1 DiffDays after A (A done — pull when needed) |
+| G | ✅ Done | MCP README V3-only — vs **0.5** (+ nit **0.2a**) |
+| H | Pending | P2 orphan keep/kill |
+| I | Pending | P2 Introspection hygiene |
+| J | Pending | P3 first effect |
+
+**Slice 0 required → Done. Slice 1.1 verify → Done. Next: pin canonical entity (1.2) → Slice 2–3 (vs-README).**
 
 Update this table as packages close. Link PRs / commits in Notes.
 
@@ -259,7 +254,7 @@ Update this table as packages close. Link PRs / commits in Notes.
 | Doc | Relation |
 |-----|----------|
 | `docs/plans/v2-to-v3/v3-completion-plan.md` | V3 WP5+ runtime work; this plan is **correctness hardening** from the July 2026 system review — do not reopen V2. |
-| `docs/plans/v2-to-v3/simple-agent-tasks/ws8-*` | Policy/eval micro-tasks; WP-D/F may absorb remaining honesty items. |
+| `docs/plans/v2-to-v3/simple-agent-tasks/vs-README.md` | **Simple-agent entry point** — Slice 1 active after Slice 0 Done |
 | `docs/CORE.md` | Update only if mechanisms change (e.g. fail-closed policy for unshipped nodes). |
 | Review artifacts | `/tmp/grok-review-01ce9db4.md` (consolidated findings) |
 

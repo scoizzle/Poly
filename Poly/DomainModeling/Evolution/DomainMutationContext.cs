@@ -2,6 +2,11 @@ using Poly.DomainModeling;
 
 namespace Poly.DomainModeling.Evolution;
 
+/// <summary>
+/// Mutable snapshot of a <see cref="Domain"/> used during change application.
+/// Collects errors when changes target missing entities, stages, or actions
+/// — these are surfaced as structural failures in the evolution result.
+/// </summary>
 internal sealed class DomainMutationContext {
     public string DomainName { get; set; }
 
@@ -18,6 +23,12 @@ internal sealed class DomainMutationContext {
     /// Used by DomainEvolution.GetAffectedNodes instead of a post-hoc switch over DomainChange subtypes.
     /// </summary>
     public List<Node> ModifiedNodes { get; } = new();
+
+    /// <summary>
+    /// Errors collected during change application — e.g. targeting a missing entity, stage, or action.
+    /// Checked after all changes are applied; any errors cause structural failure (rollback).
+    /// </summary>
+    public List<string> Errors { get; } = new();
 
     public DomainMutationContext(Domain source) {
         DomainName = source.Name;
@@ -81,22 +92,30 @@ internal sealed class DomainMutationContext {
                     var updatedEntity = e with { Actions = updatedActions };
                     Types[i] = updatedEntity;
                     ModifiedNodes.Add(updatedEntity);
+                    return true;
                 }
-                else if (searchStages) {
-                    var updatedStages = e.Stages.Select(s => {
-                        if (s.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))) {
-                            var stageActions = s.Actions.Select(a =>
-                                string.Equals(a.Name, actionName, StringComparison.Ordinal) ? transform(a) : a
-                            ).ToList();
-                            return s with { Actions = stageActions };
-                        }
-                        return s;
-                    }).ToList();
-                    var updatedEntity = e with { Stages = updatedStages };
-                    Types[i] = updatedEntity;
-                    ModifiedNodes.Add(updatedEntity);
+
+                if (searchStages) {
+                    var foundInStage = e.Stages.Any(s => s.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal)));
+                    if (foundInStage) {
+                        var updatedStages = e.Stages.Select(s => {
+                            if (s.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))) {
+                                var stageActions = s.Actions.Select(a =>
+                                    string.Equals(a.Name, actionName, StringComparison.Ordinal) ? transform(a) : a
+                                ).ToList();
+                                return s with { Actions = stageActions };
+                            }
+                            return s;
+                        }).ToList();
+                        var updatedEntity = e with { Stages = updatedStages };
+                        Types[i] = updatedEntity;
+                        ModifiedNodes.Add(updatedEntity);
+                        return true;
+                    }
                 }
-                return true;
+
+                // Entity found but action not found at entity or stage level
+                return false;
             }
         }
         return false;
@@ -105,6 +124,10 @@ internal sealed class DomainMutationContext {
     public bool UpdateStage(string entityName, string stageName, Func<Stage, Stage> transform) {
         for (int i = 0; i < Types.Count; i++) {
             if (Types[i] is Entity e && string.Equals(e.Name, entityName, StringComparison.Ordinal)) {
+                // Check that the named stage actually exists
+                if (!e.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)))
+                    return false;
+
                 var updatedStages = e.Stages.Select(s =>
                     string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s
                 ).ToList();
@@ -120,6 +143,10 @@ internal sealed class DomainMutationContext {
     public bool UpdateProperty(string entityName, string propertyName, Func<Property, Property> transform) {
         for (int i = 0; i < Types.Count; i++) {
             if (Types[i] is Entity e && string.Equals(e.Name, entityName, StringComparison.Ordinal)) {
+                // Check that the named property actually exists
+                if (!e.Properties.Any(p => string.Equals(p.Name, propertyName, StringComparison.Ordinal)))
+                    return false;
+
                 var updatedProps = e.Properties.Select(p =>
                     string.Equals(p.Name, propertyName, StringComparison.Ordinal) ? transform(p) : p
                 ).ToList();
@@ -136,6 +163,10 @@ internal sealed class DomainMutationContext {
         var idx = Relationships.FindIndex(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
         if (idx >= 0) {
             var r = Relationships[idx];
+            // Check that the named stage actually exists
+            if (!r.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)))
+                return false;
+
             var updatedStages = r.Stages.Select(s =>
                 string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s
             ).ToList();
@@ -215,5 +246,15 @@ internal sealed class DomainMutationContext {
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// If <paramref name="updateResult"/> is false, records a descriptive error
+    /// message. Called by <c>ApplyTo</c> methods after Update* returns false.
+    /// The error causes <see cref="ApplyChanges"/> to produce a structural failure.
+    /// </summary>
+    public void RequireUpdate(bool updateResult, string failureMessage) {
+        if (!updateResult)
+            Errors.Add(failureMessage);
     }
 }

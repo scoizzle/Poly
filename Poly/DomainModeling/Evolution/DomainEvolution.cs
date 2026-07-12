@@ -30,7 +30,7 @@ public sealed class DomainEvolution {
     public EvolutionResult Apply(IReadOnlyList<DomainChange> changes, AnalysisResult? priorAnalysis = null) {
         var start = DateTime.UtcNow;
 
-        var (proposed, modifiedNodes) = ApplyChanges(_current, changes);
+        var (proposed, modifiedNodes, evalErrors) = ApplyChanges(_current, changes);
 
         var analysis = priorAnalysis is null
             ? DomainModelAnalyzer.Analyze(proposed)
@@ -57,6 +57,20 @@ public sealed class DomainEvolution {
             }
         }
 
+        // Inject evalErrors (missing-target failures from RequireUpdate) into the
+        // analysis diagnostic stream as first-class Error diagnostics so they appear
+        // in FailureSummary, trace, and MCP responses.
+        if (evalErrors.Count > 0) {
+            var diagnosticsDict = analysis.GetDiagnosticsDictionary();
+            foreach (var err in evalErrors) {
+                if (!diagnosticsDict.TryGetValue(proposed.Id, out var bucket)) {
+                    bucket = new List<Diagnostic>();
+                    diagnosticsDict[proposed.Id] = bucket;
+                }
+                bucket.Add(new Diagnostic(proposed, DiagnosticSeverity.Error, err, "EVOLUTION_TARGET"));
+            }
+        }
+
         var hasErrors = analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
         var hasStructuralFailure = analysis.HasStructuralFailure;
         var duration = DateTime.UtcNow - start;
@@ -64,10 +78,11 @@ public sealed class DomainEvolution {
 
         // A structural failure means the model is invalid at a fundamental level.
         // Per current design, this is treated as a hard rejection.
-        // We also reject on any other errors.
-        return (hasErrors || hasStructuralFailure)
-            ? EvolutionResult.RolledBack(_current, analysis, trace)
-            : EvolutionResult.Success(proposed, analysis, trace);
+        // We also reject on any other errors or missing-target failures.
+        if (hasErrors || hasStructuralFailure)
+            return EvolutionResult.RolledBack(_current, analysis, trace);
+
+        return EvolutionResult.Success(proposed, analysis, trace);
     }
 
     /// <summary>
@@ -77,10 +92,10 @@ public sealed class DomainEvolution {
     /// </summary>
     public EvolutionBuilder Evolve() => new(this, _current);
 
-    private (Domain Domain, IReadOnlyList<Node> ModifiedNodes) ApplyChanges(
+    private (Domain Domain, IReadOnlyList<Node> ModifiedNodes, IReadOnlyList<string> Errors) ApplyChanges(
         Domain current, IReadOnlyList<DomainChange> changes) {
         if (changes.Count == 0)
-            return (current, []);
+            return (current, [], []);
 
         var context = new DomainMutationContext(current);
 
@@ -88,7 +103,7 @@ public sealed class DomainEvolution {
             change.ApplyTo(context);
         }
 
-        return (context.ToDomain(), context.ModifiedNodes);
+        return (context.ToDomain(), context.ModifiedNodes, context.Errors);
     }
 
     private EvolutionTrace BuildTrace(

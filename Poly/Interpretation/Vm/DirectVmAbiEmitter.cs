@@ -2026,27 +2026,37 @@ public static class DirectVmAbiEmitter {
                         var instanceObj = Call(ctx.HeapLocal,
                             typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
                             Convert(ctx.RingVar(instanceSlot), typeof(int)));
-                        callExpr = Call(instanceObj, methodInfo, methodArgs);
+                        // Convert from 'object' to the declaring type so Expression.Call
+                        // can resolve the method. This is a no-op cast at runtime for
+                        // reference types but satisfies Expression tree type validation.
+                        var declaringType = methodInfo.DeclaringType!;
+                        callExpr = Call(Convert(instanceObj, declaringType), methodInfo, methodArgs);
                     }
 
                     int slot = ctx.AllocSlot();
                     ctx.RingDepth = slot + 1;
 
+                    // Build the full expression sequence: instance → args → call → result
+                    var fullBody = new List<Expression>();
+                    if (instanceExpr is not null)
+                        fullBody.Add(instanceExpr);
+                    fullBody.AddRange(argExprs);
+
                     // Convert result to ABI (value types unboxed, ref types heap-allocated)
                     var resultType = methodInfo.ReturnType;
                     if (resultType == typeof(void)) {
-                        return Block(argExprs.Concat([callExpr]));
+                        fullBody.Add(callExpr);
+                        return Block(fullBody);
                     }
                     if (resultType.IsValueType) {
-                        return Block(argExprs.Concat([
-                            Assign(ctx.RingVar(slot), Convert(callExpr, typeof(long)))]));
+                        fullBody.Add(Assign(ctx.RingVar(slot), Convert(callExpr, typeof(long))));
+                        return Block(fullBody);
                     }
                     // Reference type return: allocate on heap
-                    var heapHandle = Call(ctx.HeapLocal,
-                        typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
-                        Convert(callExpr, typeof(object)));
-                    return Block(argExprs.Concat([
-                        Assign(ctx.RingVar(slot), Convert(heapHandle, typeof(long)))]));
+                    fullBody.Add(Assign(ctx.RingVar(slot),
+                        Convert(Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
+                            Convert(callExpr, typeof(object))), typeof(long))));
+                    return Block(fullBody);
                 }
             }
             // If method resolution fails, throw a clear error

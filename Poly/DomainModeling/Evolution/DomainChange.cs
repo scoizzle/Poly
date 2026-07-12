@@ -70,7 +70,9 @@ public sealed record AddPropertyToEntityChange(
     Property Property
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with { Properties = e.Properties.Append(Property).ToList() });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with { Properties = e.Properties.Append(Property).ToList() }),
+            $"Entity '{EntityName}' not found — cannot add property '{Property.Name}'");
     }
 
     internal override string GetDescription() => $"Add property '{Property.Name}' ({Property.Type.TypeName}) to Entity '{EntityName}'";
@@ -81,9 +83,11 @@ public sealed record RemovePropertyFromEntityChange(
     string PropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            Properties = e.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                Properties = e.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot remove property '{PropertyName}'");
     }
 
     internal override string GetDescription() => $"RemoveProperty({EntityName}.{PropertyName})";
@@ -98,9 +102,11 @@ public sealed record AddStageChange(
     StageReference? Parent = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            Stages = e.Stages.Append(new Stage(Name, Parent, [], [], [], [])).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                Stages = e.Stages.Append(new Stage(Name, Parent, [], [], [], [])).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot add stage '{Name}'");
     }
 
     internal override string GetDescription() => $"Add Stage '{Name}' to Entity '{EntityName}'";
@@ -111,9 +117,11 @@ public sealed record RemoveStageChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            Stages = e.Stages.Where(s => !string.Equals(s.Name, Name, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                Stages = e.Stages.Where(s => !string.Equals(s.Name, Name, StringComparison.Ordinal)).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot remove stage '{Name}'");
     }
 
     internal override string GetDescription() => $"RemoveStage({EntityName}.{Name})";
@@ -124,9 +132,11 @@ public sealed record AddActionChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            Actions = e.Actions.Append(new Action(Name, InvocationResult.Void, [], [], [])).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                Actions = e.Actions.Append(new Action(Name, InvocationResult.Void, [], [], [])).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot add action '{Name}'");
     }
 
     internal override string GetDescription() => $"Add Action '{Name}' to Entity '{EntityName}'";
@@ -137,9 +147,11 @@ public sealed record RemoveActionChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            Actions = e.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                Actions = e.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot remove action '{Name}'");
     }
 
     internal override string GetDescription() => $"RemoveAction({EntityName}.{Name})";
@@ -154,9 +166,11 @@ public sealed record AddEffectToActionChange(
     Effect Effect
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateAction(EntityName, ActionName, a => a with {
-            Effects = a.Effects.Append(Effect).ToList()
-        }, searchStages: true);
+        context.RequireUpdate(
+            context.UpdateAction(EntityName, ActionName, a => a with {
+                Effects = a.Effects.Append(Effect).ToList()
+            }, searchStages: true),
+            $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot add effect");
     }
 
     internal override string GetDescription() => $"Add effect to Action '{ActionName}' on Entity '{EntityName}'";
@@ -167,7 +181,9 @@ public sealed record AddPolicyToEntityChange(
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with { Policies = e.Policies.Append(Policy).ToList() });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with { Policies = e.Policies.Append(Policy).ToList() }),
+            $"Entity '{EntityName}' not found — cannot add policy '{Policy.Name}'");
     }
 
     internal override string GetDescription() => $"AddPolicyToEntity({EntityName}.{Policy.Name})";
@@ -182,7 +198,9 @@ public sealed record AddPolicyToStageChange(
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateStage(EntityName, StageName, s => s with { Policies = s.Policies.Append(Policy).ToList() });
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with { Policies = s.Policies.Append(Policy).ToList() }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add policy '{Policy.Name}'");
     }
 
     internal override string GetDescription() => $"Add Policy '{Policy.Name}' to Stage '{StageName}' on Entity '{EntityName}'";
@@ -194,9 +212,11 @@ public sealed record AddPolicyToActionChange(
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateAction(EntityName, ActionName, a => a with {
-            Policies = a.Policies.Append(Policy).ToList()
-        }, searchStages: true);
+        context.RequireUpdate(
+            context.UpdateAction(EntityName, ActionName, a => a with {
+                Policies = a.Policies.Append(Policy).ToList()
+            }, searchStages: true),
+            $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot add policy '{Policy.Name}'");
     }
 
     internal override string GetDescription() => $"Add Policy '{Policy.Name}' to Action '{ActionName}' on Entity '{EntityName}'";
@@ -207,9 +227,11 @@ public sealed record RemovePolicyFromEntityChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            Policies = e.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                Policies = e.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot remove policy '{PolicyName}'");
     }
 
     internal override string GetDescription() => $"RemovePolicyFromEntity({EntityName}.{PolicyName})";
@@ -224,9 +246,11 @@ public sealed record RemovePolicyFromStageChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateStage(EntityName, StageName, s => s with {
-            Policies = s.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                Policies = s.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot remove policy '{PolicyName}'");
     }
 
     internal override string GetDescription() => $"RemovePolicyFromStage({EntityName}.{StageName}.{PolicyName})";
@@ -238,9 +262,11 @@ public sealed record RemovePolicyFromActionChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateAction(EntityName, ActionName, a => a with {
-            Policies = a.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
-        }, searchStages: true);
+        context.RequireUpdate(
+            context.UpdateAction(EntityName, ActionName, a => a with {
+                Policies = a.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
+            }, searchStages: true),
+            $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot remove policy '{PolicyName}'");
     }
 
     internal override string GetDescription() => $"Remove Policy '{PolicyName}' from Action '{ActionName}' on Entity '{EntityName}'";
@@ -252,9 +278,11 @@ public sealed record AddParameterToActionChange(
     Property Parameter
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateAction(EntityName, ActionName, a => a with {
-            Parameters = a.Parameters.Append(Parameter).ToList()
-        }, searchStages: true);
+        context.RequireUpdate(
+            context.UpdateAction(EntityName, ActionName, a => a with {
+                Parameters = a.Parameters.Append(Parameter).ToList()
+            }, searchStages: true),
+            $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot add parameter '{Parameter.Name}'");
     }
 
     internal override string GetDescription() => $"Add parameter '{Parameter.Name}' to Action '{ActionName}' on Entity '{EntityName}'";
@@ -266,9 +294,11 @@ public sealed record AddOnEntryEffectToStageChange(
     Effect Effect
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateStage(EntityName, StageName, s => s with {
-            OnEntryEffects = s.OnEntryEffects.Append(Effect).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                OnEntryEffects = s.OnEntryEffects.Append(Effect).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add OnEntry effect");
     }
 
     internal override string GetDescription() => $"Add OnEntry effect to Stage '{StageName}' on Entity '{EntityName}'";
@@ -280,9 +310,11 @@ public sealed record AddOnExitEffectToStageChange(
     Effect Effect
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateStage(EntityName, StageName, s => s with {
-            OnExitEffects = s.OnExitEffects.Append(Effect).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                OnExitEffects = s.OnExitEffects.Append(Effect).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add OnExit effect");
     }
 
     internal override string GetDescription() => $"AddOnExitEffectToStage({EntityName}.{StageName})";
@@ -323,9 +355,11 @@ public sealed record RemoveParameterFromActionChange(
     string ParameterName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateAction(EntityName, ActionName, a => a with {
-            Parameters = a.Parameters.Where(p => !string.Equals(p.Name, ParameterName, StringComparison.Ordinal)).ToList()
-        }, searchStages: true);
+        context.RequireUpdate(
+            context.UpdateAction(EntityName, ActionName, a => a with {
+                Parameters = a.Parameters.Where(p => !string.Equals(p.Name, ParameterName, StringComparison.Ordinal)).ToList()
+            }, searchStages: true),
+            $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot remove parameter '{ParameterName}'");
     }
 
     internal override string GetDescription() => $"Remove parameter '{ParameterName}' from Action '{ActionName}' on Entity '{EntityName}'";
@@ -337,9 +371,11 @@ public sealed record RemoveEffectFromActionChange(
     Effect EffectToRemove
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateAction(EntityName, ActionName, a => a with {
-            Effects = a.Effects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
-        }, searchStages: true);
+        context.RequireUpdate(
+            context.UpdateAction(EntityName, ActionName, a => a with {
+                Effects = a.Effects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
+            }, searchStages: true),
+            $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot remove effect");
     }
 
     internal override string GetDescription() => $"Remove effect from Action '{ActionName}' on Entity '{EntityName}'";
@@ -351,9 +387,11 @@ public sealed record RemoveOnEntryEffectFromStageChange(
     Effect EffectToRemove
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateStage(EntityName, StageName, s => s with {
-            OnEntryEffects = s.OnEntryEffects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                OnEntryEffects = s.OnEntryEffects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot remove OnEntry effect");
     }
 
     internal override string GetDescription() => $"RemoveOnEntryEffectFromStage({EntityName}.{StageName})";
@@ -365,9 +403,11 @@ public sealed record RemoveOnExitEffectFromStageChange(
     Effect EffectToRemove
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateStage(EntityName, StageName, s => s with {
-            OnExitEffects = s.OnExitEffects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                OnExitEffects = s.OnExitEffects.Where(eff => !ReferenceEquals(eff, EffectToRemove)).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot remove OnExit effect");
     }
 
     internal override string GetDescription() => $"RemoveOnExitEffectFromStage({EntityName}.{StageName})";
@@ -379,7 +419,9 @@ public sealed record SetActionResultChange(
     InvocationResult Result
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateAction(EntityName, ActionName, a => a with { Result = Result }, searchStages: true);
+        context.RequireUpdate(
+            context.UpdateAction(EntityName, ActionName, a => a with { Result = Result }, searchStages: true),
+            $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot set result");
     }
 
     internal override string GetDescription() => $"Set result for Action '{ActionName}' on Entity '{EntityName}'";
@@ -436,7 +478,9 @@ public sealed record AddEventReferenceToEntityChange(
     DomainTypeReference EventReference
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with { Events = e.Events.Append(EventReference).ToList() });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with { Events = e.Events.Append(EventReference).ToList() }),
+            $"Entity '{EntityName}' not found — cannot add event reference '{EventReference.TypeName}'");
     }
 
     internal override string GetDescription() => $"AddEventReferenceToEntity({EntityName}.{EventReference.TypeName})";
@@ -447,9 +491,11 @@ public sealed record RemoveEventReferenceFromEntityChange(
     string EventName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            Events = e.Events.Where(er => !string.Equals(er.TypeName, EventName, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                Events = e.Events.Where(er => !string.Equals(er.TypeName, EventName, StringComparison.Ordinal)).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot remove event reference '{EventName}'");
     }
 
     internal override string GetDescription() => $"RemoveEventReferenceFromEntity({EntityName}.{EventName})";
@@ -488,9 +534,11 @@ public sealed record AddActionToStageChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateStage(EntityName, StageName, s => s with {
-            Actions = s.Actions.Append(new Action(Name, InvocationResult.Void, [], [], [])).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                Actions = s.Actions.Append(new Action(Name, InvocationResult.Void, [], [], [])).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add action '{Name}'");
     }
 
     internal override string GetDescription() => $"Add Action '{Name}' to Stage '{StageName}' on Entity '{EntityName}'";
@@ -502,9 +550,11 @@ public sealed record RemoveActionFromStageChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateStage(EntityName, StageName, s => s with {
-            Actions = s.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                Actions = s.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot remove action '{Name}'");
     }
 
     internal override string GetDescription() => $"Remove Action '{Name}' from Stage '{StageName}' on Entity '{EntityName}'";
@@ -532,9 +582,11 @@ public sealed record AddPropertyToRelationshipChange(
     Property Property
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateRelationship(RelationshipName, r => r with {
-            Properties = r.Properties.Append(Property).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateRelationship(RelationshipName, r => r with {
+                Properties = r.Properties.Append(Property).ToList()
+            }),
+            $"Relationship '{RelationshipName}' not found — cannot add property '{Property.Name}'");
     }
 
     internal override string GetDescription() => $"Add property '{Property.Name}' to Relationship '{RelationshipName}'";
@@ -545,9 +597,11 @@ public sealed record RemovePropertyFromRelationshipChange(
     string PropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateRelationship(RelationshipName, r => r with {
-            Properties = r.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateRelationship(RelationshipName, r => r with {
+                Properties = r.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
+            }),
+            $"Relationship '{RelationshipName}' not found — cannot remove property '{PropertyName}'");
     }
 
     internal override string GetDescription() => $"Remove property '{PropertyName}' from Relationship '{RelationshipName}'";
@@ -562,9 +616,11 @@ public sealed record AddConstraintToPropertyChange(
     Constraint Constraint
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateProperty(EntityName, PropertyName, p => p with {
-            Constraints = p.Constraints.Append(Constraint).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateProperty(EntityName, PropertyName, p => p with {
+                Constraints = p.Constraints.Append(Constraint).ToList()
+            }),
+            $"Property '{PropertyName}' on Entity '{EntityName}' not found — cannot add constraint");
     }
 
     internal override string GetDescription() => $"Add constraint {Constraint.GetType().Name} to property '{PropertyName}' on Entity '{EntityName}'";
@@ -576,9 +632,11 @@ public sealed record RemoveConstraintFromPropertyChange(
     Constraint Constraint
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateProperty(EntityName, PropertyName, p => p with {
-            Constraints = p.Constraints.Where(c => !ReferenceEquals(c, Constraint)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateProperty(EntityName, PropertyName, p => p with {
+                Constraints = p.Constraints.Where(c => !ReferenceEquals(c, Constraint)).ToList()
+            }),
+            $"Property '{PropertyName}' on Entity '{EntityName}' not found — cannot remove constraint");
     }
 
     internal override string GetDescription() => $"Remove constraint from property '{PropertyName}' on Entity '{EntityName}'";
@@ -592,7 +650,9 @@ public sealed record AddConstraintToDomainTypeChange(
     Constraint Constraint
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateType(TypeName, t => t with { Constraints = t.Constraints.Append(Constraint).ToList() });
+        context.RequireUpdate(
+            context.UpdateType(TypeName, t => t with { Constraints = t.Constraints.Append(Constraint).ToList() }),
+            $"Type '{TypeName}' not found — cannot add constraint");
     }
 
     internal override string GetDescription() => $"Add constraint {Constraint.GetType().Name} to type '{TypeName}'";
@@ -603,9 +663,11 @@ public sealed record RemoveConstraintFromDomainTypeChange(
     Constraint Constraint
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateType(TypeName, t => t with {
-            Constraints = t.Constraints.Where(c => !ReferenceEquals(c, Constraint)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateType(TypeName, t => t with {
+                Constraints = t.Constraints.Where(c => !ReferenceEquals(c, Constraint)).ToList()
+            }),
+            $"Type '{TypeName}' not found — cannot remove constraint");
     }
 
     internal override string GetDescription() => $"Remove constraint from type '{TypeName}'";
@@ -616,7 +678,9 @@ public sealed record AddPropertyToEventChange(
     Property Property
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateType(EventName, t => t with { Properties = t.Properties.Append(Property).ToList() });
+        context.RequireUpdate(
+            context.UpdateType(EventName, t => t with { Properties = t.Properties.Append(Property).ToList() }),
+            $"Event '{EventName}' not found — cannot add property '{Property.Name}'");
     }
 
     internal override string GetDescription() => $"Add property '{Property.Name}' to Event '{EventName}'";
@@ -627,9 +691,11 @@ public sealed record RemovePropertyFromEventChange(
     string PropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateType(EventName, t => t with {
-            Properties = t.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateType(EventName, t => t with {
+                Properties = t.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
+            }),
+            $"Event '{EventName}' not found — cannot remove property '{PropertyName}'");
     }
 
     internal override string GetDescription() => $"Remove property '{PropertyName}' from Event '{EventName}'";
@@ -641,7 +707,9 @@ public sealed record ChangePropertyTypeChange(
     DomainTypeReference NewType
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateProperty(EntityName, PropertyName, p => p with { Type = NewType });
+        context.RequireUpdate(
+            context.UpdateProperty(EntityName, PropertyName, p => p with { Type = NewType }),
+            $"Property '{PropertyName}' on Entity '{EntityName}' not found — cannot change type");
     }
 
     internal override string GetDescription() => $"Change property '{PropertyName}' type on Entity '{EntityName}'";
@@ -655,12 +723,14 @@ public sealed record SetRelationshipShapeChange(
     bool? NewSourceOwnsTarget = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateRelationship(RelationshipName, r => r with {
-            Source = NewSource ?? r.Source,
-            Target = NewTarget ?? r.Target,
-            Cardinality = NewCardinality ?? r.Cardinality,
-            SourceOwnsTarget = NewSourceOwnsTarget ?? r.SourceOwnsTarget
-        });
+        context.RequireUpdate(
+            context.UpdateRelationship(RelationshipName, r => r with {
+                Source = NewSource ?? r.Source,
+                Target = NewTarget ?? r.Target,
+                Cardinality = NewCardinality ?? r.Cardinality,
+                SourceOwnsTarget = NewSourceOwnsTarget ?? r.SourceOwnsTarget
+            }),
+            $"Relationship '{RelationshipName}' not found — cannot update shape");
     }
 
     internal override string GetDescription() => $"Update relationship shape for '{RelationshipName}'";
@@ -674,9 +744,11 @@ public sealed record SetPrimitiveTypeCategoryChange(
     TypeCategory NewCategory
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateType(TypeName, t => t is PrimitiveType pt
-            ? pt with { TypeCategory = NewCategory }
-            : t);
+        context.RequireUpdate(
+            context.UpdateType(TypeName, t => t is PrimitiveType pt
+                ? pt with { TypeCategory = NewCategory }
+                : t),
+            $"Type '{TypeName}' not found — cannot set category");
     }
 
     internal override string GetDescription() => $"Set primitive type '{TypeName}' category to {NewCategory}";
@@ -687,9 +759,11 @@ public sealed record AddEventSubscriptionChange(
     EventSubscription Subscription
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            EventSubscriptions = e.EventSubscriptions.Append(Subscription).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                EventSubscriptions = e.EventSubscriptions.Append(Subscription).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot add event subscription");
     }
 
     internal override string GetDescription() =>
@@ -702,12 +776,14 @@ public sealed record RemoveEventSubscriptionChange(
     string HandlerActionName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            EventSubscriptions = e.EventSubscriptions.Where(s =>
-                !(string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                  && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal))
-            ).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                EventSubscriptions = e.EventSubscriptions.Where(s =>
+                    !(string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                      && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal))
+                ).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot remove event subscription");
     }
 
     internal override string GetDescription() =>
@@ -721,14 +797,16 @@ public sealed record AddEventSubscriptionCorrelationChange(
     EventCorrelationBinding Binding
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            EventSubscriptions = e.EventSubscriptions.Select(s =>
-                string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
-                    ? s with { Correlations = s.Correlations.Append(Binding).ToList() }
-                    : s
-            ).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                EventSubscriptions = e.EventSubscriptions.Select(s =>
+                    string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                    && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
+                        ? s with { Correlations = s.Correlations.Append(Binding).ToList() }
+                        : s
+                ).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot add correlation binding");
     }
 
     internal override string GetDescription() =>
@@ -742,18 +820,20 @@ public sealed record RemoveEventSubscriptionCorrelationChange(
     string EventPropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            EventSubscriptions = e.EventSubscriptions.Select(s =>
-                string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
-                    ? s with {
-                        Correlations = s.Correlations.Where(b =>
-                        !string.Equals(b.EventPropertyName, EventPropertyName, StringComparison.Ordinal)
-                    ).ToList()
-                    }
-                    : s
-            ).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                EventSubscriptions = e.EventSubscriptions.Select(s =>
+                    string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                    && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
+                        ? s with {
+                            Correlations = s.Correlations.Where(b =>
+                            !string.Equals(b.EventPropertyName, EventPropertyName, StringComparison.Ordinal)
+                        ).ToList()
+                        }
+                        : s
+                ).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot remove correlation binding");
     }
 
     internal override string GetDescription() =>
@@ -767,14 +847,16 @@ public sealed record SetEventSubscriptionRoutingModeChange(
     EventSubscriptionRoutingMode RoutingMode
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            EventSubscriptions = e.EventSubscriptions.Select(s =>
-                string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
-                    ? s with { RoutingMode = RoutingMode }
-                    : s
-            ).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                EventSubscriptions = e.EventSubscriptions.Select(s =>
+                    string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                    && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
+                        ? s with { RoutingMode = RoutingMode }
+                        : s
+                ).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot set routing mode");
     }
 
     internal override string GetDescription() =>
@@ -788,14 +870,16 @@ public sealed record SetEventSubscriptionEventParameterChange(
     string EventParameterName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with {
-            EventSubscriptions = e.EventSubscriptions.Select(s =>
-                string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
-                    ? s with { EventParameterName = EventParameterName }
-                    : s
-            ).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                EventSubscriptions = e.EventSubscriptions.Select(s =>
+                    string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
+                    && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
+                        ? s with { EventParameterName = EventParameterName }
+                        : s
+                ).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot set event parameter name");
     }
 
     internal override string GetDescription() =>
@@ -807,9 +891,11 @@ public sealed record AddStageToRelationshipChange(
     Stage Stage
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateRelationship(RelationshipName, r => r with {
-            Stages = r.Stages.Append(Stage).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateRelationship(RelationshipName, r => r with {
+                Stages = r.Stages.Append(Stage).ToList()
+            }),
+            $"Relationship '{RelationshipName}' not found — cannot add stage '{Stage.Name}'");
     }
 
     internal override string GetDescription() => $"Add stage '{Stage.Name}' to relationship '{RelationshipName}'";
@@ -820,9 +906,11 @@ public sealed record RemoveStageFromRelationshipChange(
     string StageName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateRelationship(RelationshipName, r => r with {
-            Stages = r.Stages.Where(s => !string.Equals(s.Name, StageName, StringComparison.Ordinal)).ToList()
-        });
+        context.RequireUpdate(
+            context.UpdateRelationship(RelationshipName, r => r with {
+                Stages = r.Stages.Where(s => !string.Equals(s.Name, StageName, StringComparison.Ordinal)).ToList()
+            }),
+            $"Relationship '{RelationshipName}' not found — cannot remove stage '{StageName}'");
     }
 
     internal override string GetDescription() => $"Remove stage '{StageName}' from relationship '{RelationshipName}'";
@@ -833,7 +921,9 @@ public sealed record AddPolicyToRelationshipChange(
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.AddPolicyToRelationship(RelationshipName, Policy);
+        context.RequireUpdate(
+            context.AddPolicyToRelationship(RelationshipName, Policy),
+            $"Relationship '{RelationshipName}' not found — cannot add policy '{Policy.Name}'");
     }
 
     internal override string GetDescription() => $"Add policy '{Policy.Name}' to relationship '{RelationshipName}'";
@@ -844,7 +934,9 @@ public sealed record RemovePolicyFromRelationshipChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.RemovePolicyFromRelationship(RelationshipName, PolicyName);
+        context.RequireUpdate(
+            context.RemovePolicyFromRelationship(RelationshipName, PolicyName),
+            $"Relationship '{RelationshipName}' not found — cannot remove policy '{PolicyName}'");
     }
 
     internal override string GetDescription() => $"Remove policy '{PolicyName}' from relationship '{RelationshipName}'";
@@ -855,7 +947,9 @@ public sealed record SetEntityParentChange(
     string? ParentEntityName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.UpdateEntity(EntityName, e => e with { ParentEntityName = ParentEntityName });
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with { ParentEntityName = ParentEntityName }),
+            $"Entity '{EntityName}' not found — cannot set parent");
     }
 
     internal override string GetDescription() =>
@@ -899,7 +993,7 @@ public sealed record AddContractEndpointChange(
     internal override void ApplyTo(DomainMutationContext context) {
         var idx = context.ImportedContracts.FindIndex(c =>
             string.Equals(c.Name, ContractName, StringComparison.Ordinal));
-        if (idx < 0) return;
+        if (idx < 0) { context.RequireUpdate(false, $"Contract '{ContractName}' not found — cannot add endpoint"); return; }
         var updated = context.ImportedContracts[idx] with {
             Endpoints = context.ImportedContracts[idx].Endpoints.Append(Endpoint).ToList()
         };

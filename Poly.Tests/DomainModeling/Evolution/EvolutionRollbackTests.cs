@@ -1,6 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
+using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 
@@ -228,37 +229,172 @@ public class EvolutionRollbackTests {
         await Assert.That(infoCount).IsGreaterThanOrEqualTo(2);
     }
 
-    // ── Documented behavior: silent-no-op on missing target ────────────────
-    //
-    // Adding a property/stage/action to a non-existent entity via
-    // AddPropertyToEntityChange etc. currently completes without error.
-    // The DomainChange.ApplyTo calls UpdateEntity which returns false
-    // silently when the entity is not found, and the analysis gate does
-    // not catch it because no structural/semantic error is produced.
-    //
-    // This means "add property to NonExistent" currently succeeds with
-    // zero effect, not a rollback. This is a known gap:
-    //   - DomainChange.ApplyTo should issue a diagnostic when UpdateEntity
-    //     returns false (missing target)
-    //   - The analyzer could catch dangling references at the entity level
-    //
-    // For M2, this is acceptable because the domain authoring tools
-    // (add_entity → add_property chain) always target entities that exist.
-    // Fix deferred to post-M2 analyzer hardening (WP9 or later).
+    // ── Missing-target fail-loud (RequireUpdate + evalErrors → rollback) ───
 
     [Test]
-    public async Task SilentNoOp_AddPropertyToMissingEntity_SucceedsWithNoEffect() {
-        // Use an empty domain (no builtins) to clearly show no types were added
+    public async Task Apply_AddPropertyToMissingEntity_FailsLoudAndRollsBack() {
         var domain = new Domain("Test", [], []);
         var result = new DomainEvolution(domain).Evolve()
             .AddPropertyToEntity("NonExistent",
                 new Property("X", new DomainTypeReference("Text"), []))
             .Apply();
 
-        // This "succeeds" with no effect — the change is silently ignored
-        // because DomainMutationContext.UpdateEntity returns false.
-        // This is documented behavior; a future analyzer pass should fail-loud.
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+        await Assert.That(result.Root).IsSameReferenceAs(domain);
+    }
+
+    // ── Missing child target fails loud ─────────────────────────────
+    // When entity exists but stage/property doesn't, Apply must fail.
+
+    [Test]
+    public async Task AddActionToMissingStage_OnExistingEntity_FailsLoud() {
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order").AddStage("Order", "Active"));
+
+        // Try adding action to a stage that doesn't exist
+        var result = new DomainEvolution(original).Evolve()
+            .AddActionToStage("Order", "NonExistentStage", "Submit")
+            .Apply();
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+        await Assert.That(result.Root).IsSameReferenceAs(original);
+    }
+
+    [Test]
+    public async Task AddPolicyToMissingStage_OnExistingEntity_FailsLoud() {
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order"));
+
+        var result = new DomainEvolution(original).Evolve()
+            .AddStage("Order", "Active")
+            .AddPolicyToStage("Order", "NonExistentStage", "Guard",
+                DomainExpression.GreaterThanOrEqual(
+                    DomainExpression.Property("Total"),
+                    DomainExpression.Literal(0)))
+            .Apply();
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+    }
+
+    [Test]
+    public async Task RemovePolicyFromMissingStage_OnExistingEntity_FailsLoud() {
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order"));
+
+        var withStage = new DomainEvolution(original).Evolve()
+            .AddStage("Order", "Active")
+            .AddPolicyToStage("Order", "Active", "G", DomainExpression.Literal(true))
+            .Apply();
+        await Assert.That(withStage.Succeeded).IsTrue();
+
+        // Now target a non-existent stage for removal
+        var result = new DomainEvolution(withStage.Root)
+            .Apply([new RemovePolicyFromStageChange("Order", "NonExistentStage", "G")]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+    }
+
+    [Test]
+    public async Task AddOnEntryEffectToMissingStage_OnExistingEntity_FailsLoud() {
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order").AddStage("Order", "Active"));
+
+        var result = new DomainEvolution(original).Evolve()
+            .AddOnEntryEffect("Order", "MissingStage", new StageTransitionEffect(new StageReference("Active")))
+            .Apply();
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+    }
+
+    [Test]
+    public async Task ChangeTypeOfMissingProperty_OnExistingEntity_FailsLoud() {
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order")
+                .AddPropertyToEntity("Order", new Property("Name", new DomainTypeReference("Text"), [])));
+
+        // ChangePropertyTypeChange goes through UpdateProperty which now fails
+        // when the property name doesn't exist on the entity.
+        var result = new DomainEvolution(original)
+            .Apply([new ChangePropertyTypeChange("Order", "NonExistentProp",
+                new DomainTypeReference("Number"))]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+    }
+
+    [Test]
+    public async Task AddConstraintToMissingProperty_OnExistingEntity_FailsLoud() {
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order"));
+
+        var result = new DomainEvolution(original)
+            .Apply([new AddConstraintToPropertyChange("Order", "NonExistent",
+                new RequiredConstraint())]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+    }
+
+    [Test]
+    public async Task SuccessfulStageUpdate_StillWorks() {
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order").AddStage("Order", "Active"));
+
+        // Adding action to an existing stage should still succeed
+        var result = new DomainEvolution(original).Evolve()
+            .AddActionToStage("Order", "Active", "Submit")
+            .Apply();
+
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root.Types.OfType<Entity>()).IsEmpty();
+        var entity = result.Root.Types.OfType<Entity>().Single();
+        var stage = entity.Stages.Single();
+        await Assert.That(stage.Actions.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task AddActionToStage_CreatesNewStageLocalAction_NotEntityLevel() {
+        // Proves that AddActionToStageChange creates a new stage-local Action,
+        // not referencing an entity-level action with the same name.
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order")
+                .AddStage("Order", "Active")
+                .AddAction("Order", "Submit"));
+
+        // Entity has an action "Submit" at entity level; also place one on stage
+        var result = new DomainEvolution(original).Evolve()
+            .AddActionToStage("Order", "Active", "Submit")
+            .Apply();
+
+        await Assert.That(result.Succeeded).IsTrue();
+        var entity = result.Root.Types.OfType<Entity>().Single();
+
+        // Entity-level action is untouched
+        await Assert.That(entity.Actions.Count).IsEqualTo(1);
+        await Assert.That(entity.Actions[0].Name).IsEqualTo("Submit");
+        await Assert.That(entity.Actions[0].Effects).IsEmpty();
+
+        // Stage gets its own new action (empty, same name)
+        var stage = entity.Stages.Single();
+        await Assert.That(stage.Actions.Count).IsEqualTo(1);
+        await Assert.That(stage.Actions[0].Name).IsEqualTo("Submit");
+        await Assert.That(stage.Actions[0].Effects).IsEmpty();
+    }
+
+    [Test]
+    public async Task SuccessfulPropertyUpdate_StillWorks() {
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order")
+                .AddPropertyToEntity("Order", new Property("Name", new DomainTypeReference("Text"), [])));
+
+        var result = new DomainEvolution(original)
+            .Apply([new ChangePropertyTypeChange("Order", "Name",
+                new DomainTypeReference("Text"))]);
+
+        await Assert.That(result.Succeeded).IsTrue();
     }
 }

@@ -4,7 +4,7 @@
 **Parent:** Slice 0  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~5k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] **Done** (2026-07-12) — Description = create stage-local; code creates empty stage action; test `AddActionToStage_CreatesNewStageLocalAction_NotEntityLevel`. Residual: README row still wrong → **#0.2a**.  
 
 ## Objective
 

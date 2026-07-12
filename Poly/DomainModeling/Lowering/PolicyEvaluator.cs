@@ -31,9 +31,11 @@ public static class PolicyEvaluator {
     /// <summary>
     /// Compiles <paramref name="policy"/> into a <c>Func&lt;TEntity, bool&gt;</c>
     /// using the <b>VM</b> (direct AST lowering). This is the primary product path.
+    /// Validates the subject type via <see cref="PolicySubject.ValidateType{T}"/>.
     /// </summary>
     public static Func<TEntity, bool> CompileVMPredicate<TEntity>(this Policy policy) {
         ArgumentNullException.ThrowIfNull(policy);
+        PolicySubject.ValidateType<TEntity>();
 
         var entityParam = new Parameter("entity", TypeReference.To<TEntity>());
         var pass = new DomainExpressionLoweringPass();
@@ -52,8 +54,10 @@ public static class PolicyEvaluator {
     /// Evaluates <paramref name="policy"/> against <paramref name="entity"/>
     /// on the <b>VM</b> (direct AST lowering — canonical path).
     /// Returns <c>true</c> if the policy's guard expression is satisfied.
+    /// Validates the subject type via <see cref="PolicySubject.Validate"/>.
     /// </summary>
     public static bool Evaluate<TEntity>(this Policy policy, TEntity entity) {
+        PolicySubject.Validate(entity);
         var predicate = policy.CompileVMPredicate<TEntity>();
         return predicate(entity);
     }

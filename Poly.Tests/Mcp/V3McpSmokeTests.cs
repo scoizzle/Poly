@@ -46,6 +46,22 @@ public class V3McpSmokeTests {
     }
 
     [Test]
+    public async Task GetDomainAnalysis_ReportsNoErrors_ForValidDomain() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Evolve a domain with valid structure
+        V3EvolveTool.AddEntity(sessionId, "Order");
+        V3EvolveTool.AddProperty(sessionId, "Order", "Status", "Text");
+
+        var response = V3QueryTool.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsTypeOf<AnalysisData>();
+
+        var data = (AnalysisData)response.Data!;
+        await Assert.That(data.ErrorCount).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task AddEntityTool_CreatesEntity() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
@@ -182,7 +198,7 @@ public class V3McpSmokeTests {
 
         var response = V3EvolveTool.AddProperty(sessionId, "NonExistent", "Status", "Text");
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("No changes applied");
+        await Assert.That(response.Message).Contains("Evolution rolled back");
         await Assert.That(response.Revision).IsEqualTo(originalRevision); // not bumped
         await Assert.That(response.Affordances).IsNotNull();
     }
@@ -196,7 +212,7 @@ public class V3McpSmokeTests {
         var response = V3EvolveTool.AddStage(sessionId, "NonExistent", "Draft");
 
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("No changes applied");
+        await Assert.That(response.Message).Contains("Evolution rolled back");
     }
 
     [Test]
@@ -207,7 +223,7 @@ public class V3McpSmokeTests {
         var response = V3EvolveTool.AddAction(sessionId, "NonExistent", "Submit");
 
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("No changes applied");
+        await Assert.That(response.Message).Contains("Evolution rolled back");
     }
 
     [Test]

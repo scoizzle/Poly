@@ -26,6 +26,22 @@ public static class PolicySubject {
     }
 
     /// <summary>
+    /// Validates <typeparamref name="T"/> at compile time — rejects forbidden
+    /// subject types (Dictionary, ExpandoObject) without needing an instance.
+    /// Throws <see cref="ArgumentException"/> if the type is forbidden.
+    /// </summary>
+    public static void ValidateType<T>() {
+        var type = typeof(T);
+        if (typeof(System.Collections.IDictionary).IsAssignableFrom(type) ||
+            typeof(System.Collections.Generic.IDictionary<string, object?>).IsAssignableFrom(type) ||
+            type == typeof(System.Dynamic.ExpandoObject)) {
+            throw new ArgumentException(
+                $"Subject type '{type.Name}' is not supported. " +
+                "Subjects must have real CLR properties (records, POCOs).");
+        }
+    }
+
+    /// <summary>
     /// Attempts to validate a subject. Returns <c>null</c> if valid, or an error
     /// message string if the subject type is unsupported.
     /// </summary>

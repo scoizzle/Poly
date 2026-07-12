@@ -1,7 +1,7 @@
 # Vertical Slice Micro-Tasks (Simple Agents)
 
 **Parent plan:** [`../vertical-slice-finish-plan.md`](../vertical-slice-finish-plan.md)  
-**Last Updated:** 2026-07-11  
+**Last Updated:** 2026-07-12  
 **Audience:** Smaller / cheaper agents — one file per claim, tiny reading list.
 
 ## Operating rules (mandatory)
@@ -31,26 +31,29 @@
 
 ### Slice 0 — Honesty foundation
 
-| # | Task | File | Parallel | Blocks |
-|---|------|------|----------|--------|
-| **0.1** | Fail-loud evolution | [`vs-s0-fail-loud-evolution.md`](vs-s0-fail-loud-evolution.md) | ∥ 0.4, 0.5 | Slice 2–3 evolve honesty |
-| **0.2** | `add_action_to_stage` honesty | [`vs-s0-add-action-to-stage-honesty.md`](vs-s0-add-action-to-stage-honesty.md) | after/with 0.1 | MCP structure truth |
-| **0.3** | Wire PolicySubject into PolicyEvaluator | [`vs-s0-wire-policy-subject-validate.md`](vs-s0-wire-policy-subject-validate.md) | ∥ 0.1 | **Slice 2** |
-| **0.4** | Fix instance EmitInvoke | [`vs-s0-fix-emit-invoke-instance.md`](vs-s0-fix-emit-invoke-instance.md) | ∥ 0.1 | method-backed DE |
-| **0.5** | MCP README V3-only | [`vs-s0-mcp-readme-honesty.md`](vs-s0-mcp-readme-honesty.md) | anytime in Slice 0 | docs honesty |
+| # | Task | File | Status | Notes |
+|---|------|------|--------|-------|
+| **0.1** | Fail-loud evolution (core) | [`vs-s0-fail-loud-evolution.md`](vs-s0-fail-loud-evolution.md) | **[x]** | RequireUpdate + rollback |
+| **0.1a** | Surface evalErrors in diagnostics | [`vs-s0-fail-loud-surface-eval-errors.md`](vs-s0-fail-loud-surface-eval-errors.md) | **[x]** | `EVOLUTION_TARGET` inject |
+| **0.1b** | Fail-loud missing stage/property (child) | [`vs-s0-fail-loud-child-targets.md`](vs-s0-fail-loud-child-targets.md) | **[x]** | Child existence check + tests |
+| **0.1c** | RequireUpdate on remaining ApplyTo | [`vs-s0-fail-loud-remaining-applyto.md`](vs-s0-fail-loud-remaining-applyto.md) | **[x]** | All Update* ApplyTo wrapped |
+| **0.1d** | Fail-loud remove-by-name zero match *(optional)* | [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md) | **[ ]** | Remove property/stage/action when name missing still succeeds if parent exists |
+| **0.2** | `add_action_to_stage` honesty | [`vs-s0-add-action-to-stage-honesty.md`](vs-s0-add-action-to-stage-honesty.md) | **[x]** | Description + create-semantics test |
+| **0.2a** | MCP README row for stage action *(nit)* | [`vs-s0-mcp-readme-add-action-to-stage.md`](vs-s0-mcp-readme-add-action-to-stage.md) | **[ ]** | README still “Places an existing action” |
+| **0.3** | Wire PolicySubject fully | [`vs-s0-wire-policy-subject-validate.md`](vs-s0-wire-policy-subject-validate.md) | **[x]** | Validate + ValidateType |
+| **0.4** | Fix instance EmitInvoke (receiver in Block) | [`vs-s0-fix-emit-invoke-instance.md`](vs-s0-fix-emit-invoke-instance.md) | **[x]** | instanceExpr + dual-oracle |
+| **0.5** | MCP README V3-only | [`vs-s0-mcp-readme-honesty.md`](vs-s0-mcp-readme-honesty.md) | **[x]** | Done |
 
-**Slice 0 done when:** 0.1–0.5 all `[x]`.
+**Slice 0 required:** ✅ **Done.** Optional: **0.1d**, **0.2a** (do not block Slice 1).
 
-### Slice 1 — Structure path (verify + pin)
+### Slice 1 — Structure path (verify + pin) ✅ Done
 
-| # | Task | File |
-|---|------|------|
-| **1.1** | Verify structure e2e coverage | [`vs-s1-verify-structure-path.md`](vs-s1-verify-structure-path.md) |
-| **1.2** | Pin canonical entity (Person **or** Order) | [`vs-s1-pin-canonical-entity.md`](vs-s1-pin-canonical-entity.md) |
+| # | Task | File | Status | Notes |
+|---|------|------|--------|-------|
+| **1.1** | Verify structure e2e coverage | [`vs-s1-verify-structure-path.md`](vs-s1-verify-structure-path.md) | **[x]** | Inventory + GetDomainAnalysis smoke |
+| **1.2** | Pin canonical entity (Person **or** Order) | [`vs-s1-pin-canonical-entity.md`](vs-s1-pin-canonical-entity.md) | **[x]** | **Person** — simplest numeric (Age), most test coverage |
 
-**Slice 1 done when:** 1.1–1.2 `[x]`. Prefer after 0.2 so stage-action story is honest.
-
-### Slice 2 — Policy runtime (direct API only)
+### Slice 2 — Policy runtime (direct API only) ← **active**
 
 | # | Task | File | Depends |
 |---|------|------|---------|
@@ -101,6 +104,40 @@ If both exist, **prefer `vs-*`** (this suite owns order). Older files are specs/
 
 ---
 
+## Canonical entity
+
+**Person** — the canonical vertical-slice entity for all remaining policy work.
+
+### Rationale
+
+| Factor | Person | Order |
+|--------|--------|-------|
+| Policy property simplicity | `Age` (int) — simplest numeric guard | `Total` (decimal), `Status` (string) — more complex |
+| Policy test files | 3 (`PolicyVmEvaluationTests`, `DomainValidatedEvaluationTests`, `EntityMutationRoundTripTests`) | 1 (`PolicyVmEvaluationTests`) |
+| Mutation round-trip tests | 3 (`EntityMutationRoundTripTests`) | 0 |
+| Type-mapper examples | Primary (`DomainTypeMapperTests`) | Secondary |
+| ECommerce demo usage | Present (Library: Person base) | Core (`V3ECommerceDomain`) |
+| Natural lifecycle stages | born → child → adult → senior | cart → pending → paid → shipped → delivered |
+
+Person Age is the **minimum expressive type** for proving policy evaluation. Policy guards like `Age >= 18` compile to a single `Member(Parameter, "Age")` → `GreaterThanOrEqual` node — no composite or cross-property logic.
+
+### Test files using Person
+
+- `Poly.Tests/DomainModeling/Lowering/PolicyVmEvaluationTests.cs` — `Person(string Name, int Age)`
+- `Poly.Tests/DomainModeling/Lowering/DomainValidatedEvaluationTests.cs` — `Person(string Name, int Age)`
+- `Poly.Tests/DomainModeling/Evolution/EntityMutationRoundTripTests.cs` — `Person(string Name, int Age)`
+- `Poly.Tests/TestHelpers/DomainTypeMapperTests.cs` — primary example type
+
 ## Next task right now
 
-**Start at `vs-s0-fail-loud-evolution.md` (0.1)** unless something is already `[~] In Progress`.
+**Slice 1 done.** Start **Slice 2** policy API:
+
+1. **`vs-s2-subject-helper-and-reject.md` (2.1)** ← **pick this**  
+2. Then `vs-s2-bool-abi-adult-assert.md` (2.2)  
+3. Then `vs-s2-policy-true-false-e2e.md` (2.3)  
+4. Then `vs-s2-property-name-alignment.md` (2.4)  
+5. Then `vs-s2-domain-attached-policy-e2e.md` (2.5)
+
+**Optional polish (anytime, do not block Slice 1–2):**  
+- **0.2a** [`vs-s0-mcp-readme-add-action-to-stage.md`](vs-s0-mcp-readme-add-action-to-stage.md) — README still “Places an existing action”  
+- **0.1d** [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md) — remove-by-name zero match

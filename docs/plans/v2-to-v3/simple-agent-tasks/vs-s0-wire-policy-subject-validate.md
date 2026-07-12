@@ -4,7 +4,7 @@
 **Parent:** Slice 0  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~4k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] **Done** (2026-07-12) — `Validate` on `Evaluate`; `ValidateType<T>` on `CompileVMPredicate`; invariant tests for both.  
 
 ## Objective
 

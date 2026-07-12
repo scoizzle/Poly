@@ -34,11 +34,11 @@ MCP: **add_policy** → **get_policy_expression** (inspect) → **evaluate_polic
 | **6** | [`ws8-spike-policy-sample-subject.md`](ws8-spike-policy-sample-subject.md) | [x] Done | Records/StrictBag OK; Dict/Expando unsafe; null `int?` throws |
 | **6b** | [`ws8-spike-harden-negative-subject-tests.md`](ws8-spike-harden-negative-subject-tests.md) | [x] Done | `MatchNumeric` + Age≥18 not `1L` |
 | **6c** | [`ws8-spike-demote-emit-until-proven.md`](ws8-spike-demote-emit-until-proven.md) | [x] Done | Primary = non-nullable bag; Emit unproven |
-| **6d** | [`ws8-invariant-policy-subject-types.md`](ws8-invariant-policy-subject-types.md) | [ ] **Next** | Product subject helper + defaults |
+| **6d** | [`ws8-invariant-policy-subject-types.md`](ws8-invariant-policy-subject-types.md) | [x] **Accurate** | Superceded by product `ClrTypeEntityMapping` + `PolicySubject.Validate` + `DomainValidatedEvaluationTests`. Dict/Expando rejected at evaluation boundary; test-only StrictBag/helpers in `PolicyTestSubjects`. |
 | **6e** | [`ws8-spike-bool-abi-adult-assert.md`](ws8-spike-bool-abi-adult-assert.md) | [ ] Not Started | Adult assert must catch **`bool true`**, not only `1L` |
 | **6f** | [`ws8-spike-matchnumeric-positive-control.md`](ws8-spike-matchnumeric-positive-control.md) | [ ] Not Started | Prove `MatchNumeric` true on working subject |
-| **6g** | [`ws8-invariant-policy-property-name-alignment.md`](ws8-invariant-policy-property-name-alignment.md) | [ ] Not Started | Property names: domain / expression / subject align |
-| **6h** | [`ws8-invariant-no-dict-expando-subjects.md`](ws8-invariant-no-dict-expando-subjects.md) | [ ] Not Started | Reject Dict/Expando at factory or Evaluate boundary |
+| **6g** | [`ws8-invariant-policy-property-name-alignment.md`](ws8-invariant-policy-property-name-alignment.md) | [x] **Accurate** | Domain property names proven via `ClrTypeEntityMapping.ToDomainProperty` using CLR reflection — property names align by construction. |
+| **6h** | [`ws8-invariant-no-dict-expando-subjects.md`](ws8-invariant-no-dict-expando-subjects.md) | [x] **Accurate** | `PolicySubject.Validate` rejects Dict/Expando at evaluation boundary. `Evaluator.Evaluate<T>` calls it. |
 | **7a** | [`ws8-mcp-add-policy-expression-contract.md`](ws8-mcp-add-policy-expression-contract.md) | [ ] Not Started | Constrained expression JSON for agents |
 
 ### B1 — MCP implement

@@ -4,7 +4,13 @@
 **Parent:** [`../vertical-slice-finish-plan.md`](../vertical-slice-finish-plan.md) Slice 0  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~6k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] **Done** (2026-07-12) — `RequireUpdate` + `DomainMutationContext.Errors`; `Apply` rolls back when `evalErrors.Count > 0`. Test: `SilentNoOp_AddPropertyToMissingEntity_NowFailsLoud`.  
+
+**Residuals → dedicated tasks (do not reopen this file):**  
+(1) **#0.1a** — ✅ Done (`EVOLUTION_TARGET` inject)  
+(2) **#0.1b** — ✅ Done (child stage/property/relationship-stage)  
+(3) **#0.1c** — ✅ Done (all Update* RequireUpdate)  
+(4) **#0.1d** — ⬜ Optional remove-by-name zero match — [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md)  
 
 ## Objective
 

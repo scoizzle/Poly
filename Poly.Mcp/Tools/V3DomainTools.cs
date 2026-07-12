@@ -306,9 +306,10 @@ internal sealed class V3EvolveTool {
     }
 
     /// <summary>
-    /// Assigns an existing action to a specific stage of an entity.
+    /// Creates a new action on a stage. The action is placed directly on the stage
+    /// and available only within that stage's lifecycle.
     /// </summary>
-    [McpServerTool(Name = "add_action_to_stage"), Description("Assigns an existing action to a specific stage, making it available only in that stage.")]
+    [McpServerTool(Name = "add_action_to_stage"), Description("Creates a new action on a stage. The action is placed directly on the stage and available only within that stage's lifecycle.")]
     public static V3Response AddActionToStage(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,

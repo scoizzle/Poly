@@ -4,7 +4,7 @@
 **Parent:** Slice 0  
 **Difficulty:** Small–Medium  
 **Estimated Context:** ~6k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] **Done** (2026-07-12) — `instanceExpr` sequenced into `fullBody` before args/call; `Convert` to declaring type; dual-oracle tests `InstanceMethod_InvokeMember_Triple_DualOracle` and `WithArg`.
 
 ## Objective
 

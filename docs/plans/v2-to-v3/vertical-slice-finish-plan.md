@@ -288,10 +288,11 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | polish-dbg / 0.2a | ✅ **Done** | Suite 1175 green |
 | pm2-1 | ⬜ | Multi-property evaluate sample bag |
 | pm2-2 | ⬜ | add_policy → evaluate_policy affordance |
+| **MCP gaps** | 📋 **[Plan: `mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md)** | ~14 new tools across 4 phases (actions, effects, remove, policy depth) |
 | 4 First effect | ⬜ Deferred | Named scenario |
 | 5 Relationship | ⬜ Pull | |
 | Naming cleanup | ⬜ | post-v2-delete-naming-cleanup |
 
-**M2 product-complete.** Next: post-M2 pm2-1 / pm2-2 or naming cleanup when idle.
+**M2 product-complete.** Next: post-M2 MCP tool gaps (Phase 1: action/effect tools), pm2-1, pm2-2, or naming cleanup when idle.
 
 > **V2 is dead. Finish V3 by shipping one honest vertical path at a time: honesty → structure → policy on direct API → policy on MCP → then optional effects/links — never breadth before the active slice is fully green.**

@@ -1,9 +1,9 @@
 # V3 Completion Plan — Gaps, Work Packages, Execution Order
 
-**Status:** Active  
-**Last Updated:** 2026-07-10  
-**Purpose:** Single implementation plan for finishing V3 as the only domain modeling stack — from current code to M2 (MCP + direct API), then freeze/delete V2, then pull-only expressiveness.  
-**Authority:** Complements `master-roadmap.md` (milestones). This doc owns **what is missing**, **ordered work packages**, **acceptance criteria**, and **micro-task seeds**.  
+**Status:** Active (inventory)  
+**Last Updated:** 2026-07-11  
+**Purpose:** Gap inventory and WP0–WP9 history for finishing V3 as the only domain modeling stack.  
+**Authority:** Complements `master-roadmap.md` (milestones). **Day-to-day remaining execution order:** [`vertical-slice-finish-plan.md`](vertical-slice-finish-plan.md) (one vertical slice fully implemented at a time). This doc retains **what was missing**, **WP history**, and **micro-task seeds**.  
 **Related:**
 - `spikes/first-v3-consumer.md` — named consumer
 - `spikes/mcp-guiding-principles.md` — MCP design rules

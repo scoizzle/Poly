@@ -2,9 +2,10 @@
 
 **Status**: Active  
 **Last Updated**: 2026-07-10  
-**Purpose**: Canonical entry point for execution planning.  
+**Purpose**: Canonical entry point for milestones and quality bar.  
 **Related**:
-- **`docs/plans/v2-to-v3/v3-completion-plan.md`** — **implementation gaps + work packages (WP0–WP9)**; use this for day-to-day execution order
+- **`docs/plans/v2-to-v3/vertical-slice-finish-plan.md`** — **day-to-day remaining work** (one vertical slice fully green at a time; M2 product close)
+- **`docs/plans/v2-to-v3/v3-completion-plan.md`** — historical gaps + WP0–WP9 inventory (WP1–WP4/6–8 done)
 - `docs/decisions/2026-v2-to-v3-domain-modeling-port.md` (strategic plan)
 - `docs/decisions/2026-core-engineering-principles.md`
 - `docs/decisions/2026-05-31-evolution-layer-design.md`
@@ -134,7 +135,7 @@ See **[orchestration-guide.md](orchestration-guide.md)**.
 | Phase | Focus | Status |
 |-------|-------|--------|
 | **Phase 1** | Evolution foundation + proofs + expressiveness audit | **Complete** |
-| **Phase 2** | Capabilities the first V3 consumer needs (e2e eval, codegen, traces) | **Pull** — policy VM e2e still open (WP5) |
+| **Phase 2** | Capabilities the first V3 consumer needs (e2e eval, codegen, traces) | **Active via vertical slices** — structure path green; policy MCP loop open ([vertical-slice-finish-plan](vertical-slice-finish-plan.md)) |
 | **Phase 3** | First consumer on V3 + freeze V2 | **Complete** — WP1–WP4 + WP6 |
 | **Phase 4** | Expressiveness as pulled by consumers | Design ready; no speculative ports |
 | **Phase 5** | Delete V2 + doc cleanup | **Complete** — V2 tree removed (WP7/WP8 leapfrog delete) |

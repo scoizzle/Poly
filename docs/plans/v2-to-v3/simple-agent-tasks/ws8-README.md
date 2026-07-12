@@ -1,6 +1,7 @@
 # WS8 Micro-Task Suite — Analysis Unification & Lowering
 
 **Parent workstream:** [`../workstreams/ws8-analysis-unification-and-lowering.md`](../workstreams/ws8-analysis-unification-and-lowering.md)  
+**Slice ownership:** Phase B maps to **Slice 2–3** in [`../vertical-slice-finish-plan.md`](../vertical-slice-finish-plan.md) (do Slice 0 honesty first when it unblocks).  
 **Last Updated:** 2026-07-11  
 **Context:** M1–M4 cutover complete. Phase A Done; Phase B A+ — spike + 6b/6c done; remaining invariants + MCP implement.
 

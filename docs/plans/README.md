@@ -9,9 +9,10 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
-| [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | WP-A–J: fail-loud evolve, VM invoke, MCP honesty, fail-closed nodes, orphan keep/kill — **prefer for next execution** (trust stack **layer 1**; T2 dogfood is later — [trust ADR](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)) |
-| [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | Milestones M1–M4 (**complete**), quality bar, readiness; **next = WP5 runtime** |
-| [**V3 Completion Plan**](v2-to-v3/v3-completion-plan.md) | Work packages WP1–WP9; day-to-day gaps |
+| [**V3 finish — vertical slices**](v2-to-v3/vertical-slice-finish-plan.md) | **Prefer for remaining V2→V3 product work** — Slice 0 honesty → 1 structure → 2 policy API → 3 policy MCP (M2 close) → optional effects/links |
+| [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Trust layer 1 detail (feeds **Slice 0**); WP-A–J |
+| [**V2 → V3 Master Roadmap**](v2-to-v3/master-roadmap.md) | Milestones M1–M4 (delete **complete**); M2 product close via vertical slices |
+| [**V3 Completion Plan**](v2-to-v3/v3-completion-plan.md) | Historical WP1–WP9 inventory; execution order superseded by vertical-slice plan for remaining work |
 | [First V3 consumer spike](v2-to-v3/spikes/first-v3-consumer.md) | Named M2 consumer + happy path |
 | [MCP guiding principles](v2-to-v3/spikes/mcp-guiding-principles.md) | Agent-tool design for V3 MCP |
 | [V2 → V3 Workstreams](v2-to-v3/workstreams/) | Workstream detail (WS8 pull for policy/eval) |

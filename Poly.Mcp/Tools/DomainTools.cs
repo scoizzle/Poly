@@ -20,7 +20,7 @@ namespace Poly.Mcp.Tools;
 /// Response envelope for V3 MCP tool responses.
 /// Combines a concise human-readable message with structured data for agents/UI.
 /// </summary>
-internal sealed record V3Response(
+internal sealed record DomainToolResponse(
     [property: JsonPropertyName("success")] bool Success,
     [property: JsonPropertyName("message")] string Message,
     [property: JsonPropertyName("sessionId")] string? SessionId = null,
@@ -90,17 +90,17 @@ internal sealed record AnalysisData(
 /// Tools for managing V3 domain sessions.
 /// </summary>
 [McpServerToolType]
-internal sealed class V3SessionTool {
+internal sealed class SessionTool {
     /// <summary>
     /// Creates a new domain session with the canonical built-in primitive types.
     /// The bootstrapped domain includes: Boolean, Number, Text, Date, Time, DateTime, Duration, Uuid, Binary.
     /// Returns a sessionId that must be passed to other tools.
     /// </summary>
     [McpServerTool(Name = "create_domain_session"), Description("Creates a new bootstrapped domain session with built-in primitive types.")]
-    public static V3Response CreateDomainSession(
+    public static DomainToolResponse CreateDomainSession(
         [Description("Name for the new domain (e.g. 'Orders', 'Inventory')")] string domainName) {
         var (sessionId, state) = McpSessionStore.Create(domainName);
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: $"Domain '{domainName}' created with built-in types.",
             SessionId: sessionId,
@@ -113,13 +113,13 @@ internal sealed class V3SessionTool {
     /// Lists all active domain sessions.
     /// </summary>
     [McpServerTool(Name = "list_sessions"), Description("Lists all active domain sessions.")]
-    public static V3Response ListSessions() {
+    public static DomainToolResponse ListSessions() {
         var sessions = McpSessionStore.ListSessions();
         if (sessions.Count == 0)
-            return new V3Response(Success: true, Message: "No active sessions.", Affordances: ["create_domain_session"]);
+            return new DomainToolResponse(Success: true, Message: "No active sessions.", Affordances: ["create_domain_session"]);
 
         var ids = string.Join(", ", sessions);
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: sessions.Count == 1
                 ? $"1 active session: {ids}"
@@ -133,12 +133,12 @@ internal sealed class V3SessionTool {
 /// Tools for querying V3 domain state.
 /// </summary>
 [McpServerToolType]
-internal sealed class V3QueryTool {
+internal sealed class QueryTool {
     /// <summary>
     /// Returns a high-level overview of the domain: entity/primitive/relationship counts and entity names.
     /// </summary>
     [McpServerTool(Name = "get_domain_overview"), Description("Returns a high-level overview of the domain model (entity/primitive/relationship counts and entity names).")]
-    public static V3Response GetDomainOverview(
+    public static DomainToolResponse GetDomainOverview(
         [Description("Session ID returned by create_domain_session")] string sessionId) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
@@ -151,7 +151,7 @@ internal sealed class V3QueryTool {
             overview.EventCount, overview.ValueTypeCount
         );
 
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: $"Domain '{overview.Name}': {overview.EntityCount} entities, {overview.PrimitiveTypeCount} primitives, {overview.RelationshipCount} relationships.",
             SessionId: sessionId,
@@ -167,7 +167,7 @@ internal sealed class V3QueryTool {
     /// Returns details about a specific entity: properties, stages, actions, and policies.
     /// </summary>
     [McpServerTool(Name = "get_entity_detail"), Description("Returns detailed information about a specific entity (properties, stages, actions, policies).")]
-    public static V3Response GetEntityDetail(
+    public static DomainToolResponse GetEntityDetail(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to inspect")] string entityName) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
@@ -175,7 +175,7 @@ internal sealed class V3QueryTool {
 
         var detail = DomainQueries.GetEntity(state.Domain, entityName);
         if (detail is null)
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Entity '{entityName}' not found.",
                 SessionId: sessionId,
@@ -191,7 +191,7 @@ internal sealed class V3QueryTool {
             detail.ParentEntityName
         );
 
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: $"Entity '{entityName}': {detail.Properties.Count} properties, {detail.Stages.Count} stages, {detail.Actions.Count} actions.",
             SessionId: sessionId,
@@ -205,13 +205,13 @@ internal sealed class V3QueryTool {
     /// Returns the domain's analysis diagnostics: error/warning/info counts and the most important messages.
     /// </summary>
     [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics for the current domain state (errors, warnings, info).")]
-    public static V3Response GetDomainAnalysis(
+    public static DomainToolResponse GetDomainAnalysis(
         [Description("Session ID")] string sessionId) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (state.LatestAnalysis is null)
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: "No analysis available.",
                 SessionId: sessionId,
@@ -228,7 +228,7 @@ internal sealed class V3QueryTool {
             ? $"{summary.ErrorCount} error(s), {summary.WarningCount} warning(s). See diagnostics for details."
             : $"{summary.InfoCount} info(s), {summary.WarningCount} warning(s). No errors.";
 
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: message,
             SessionId: sessionId,
@@ -241,7 +241,7 @@ internal sealed class V3QueryTool {
         );
     }
 
-    private static V3Response Failure_NotFound(string sessionId) =>
+    private static DomainToolResponse Failure_NotFound(string sessionId) =>
         new(Success: false, Message: $"Session '{sessionId}' not found.",
             Affordances: ["create_domain_session", "list_sessions"]);
 }
@@ -252,12 +252,12 @@ internal sealed class V3QueryTool {
 /// On rollback, the response includes diagnostics and affordances.
 /// </summary>
 [McpServerToolType]
-internal sealed class V3EvolveTool {
+internal sealed class EvolveTool {
     /// <summary>
     /// Adds a new entity type to the domain.
     /// </summary>
     [McpServerTool(Name = "add_entity"), Description("Adds a new entity type to the domain. The entity starts with no properties, stages, or actions.")]
-    public static V3Response AddEntity(
+    public static DomainToolResponse AddEntity(
         [Description("Session ID")] string sessionId,
         [Description("Name of the new entity (e.g. 'Order', 'Customer')")] string entityName) {
         return Evolve(sessionId, builder => builder.AddEntity(entityName),
@@ -268,7 +268,7 @@ internal sealed class V3EvolveTool {
     /// Adds a property to an existing entity.
     /// </summary>
     [McpServerTool(Name = "add_property"), Description("Adds a property to an existing entity. The type must be a built-in primitive (Text, Number, Boolean, DateTime, etc.) or another known type.")]
-    public static V3Response AddProperty(
+    public static DomainToolResponse AddProperty(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to add the property to")] string entityName,
         [Description("Name of the new property")] string propertyName,
@@ -282,7 +282,7 @@ internal sealed class V3EvolveTool {
     /// Adds a lifecycle stage to an entity.
     /// </summary>
     [McpServerTool(Name = "add_stage"), Description("Adds a lifecycle stage to an entity. Optionally specify a parent stage for stage hierarchies.")]
-    public static V3Response AddStage(
+    public static DomainToolResponse AddStage(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
         [Description("Name of the new stage (e.g. 'Draft', 'Active', 'Archived')")] string stageName,
@@ -299,7 +299,7 @@ internal sealed class V3EvolveTool {
     /// Adds an action/operation to an entity.
     /// </summary>
     [McpServerTool(Name = "add_action"), Description("Adds an action/operation to an entity. Actions model behaviors like 'Submit', 'Approve', 'Cancel'.")]
-    public static V3Response AddAction(
+    public static DomainToolResponse AddAction(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
         [Description("Name of the new action (e.g. 'Submit', 'Approve', 'Cancel')")] string actionName) {
@@ -312,7 +312,7 @@ internal sealed class V3EvolveTool {
     /// and available only within that stage's lifecycle.
     /// </summary>
     [McpServerTool(Name = "add_action_to_stage"), Description("Creates a new action on a stage. The action is placed directly on the stage and available only within that stage's lifecycle.")]
-    public static V3Response AddActionToStage(
+    public static DomainToolResponse AddActionToStage(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
         [Description("Name of the stage")] string stageName,
@@ -325,7 +325,7 @@ internal sealed class V3EvolveTool {
     /// Adds a relationship between two entity types.
     /// </summary>
     [McpServerTool(Name = "add_relationship"), Description("Adds a relationship between two entity types. Cardinality options: OneToOne, OneToMany, ManyToMany.")]
-    public static V3Response AddRelationship(
+    public static DomainToolResponse AddRelationship(
         [Description("Session ID")] string sessionId,
         [Description("Name of the relationship")] string relationshipName,
         [Description("Source entity name")] string sourceEntityName,
@@ -371,12 +371,12 @@ internal sealed class V3EvolveTool {
             : typeCounts;
     }
 
-    private static V3Response Evolve(
+    private static DomainToolResponse Evolve(
         string sessionId,
         Func<EvolutionBuilder, EvolutionBuilder> mutate,
         IReadOnlyList<string>? successAffordances = null) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
@@ -402,7 +402,7 @@ internal sealed class V3EvolveTool {
                 .ToList();
             diagnostics.AddRange(errorMessages);
 
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Evolution rolled back: {outcome.FailureSummary ?? "Analysis failed"}",
                 SessionId: sessionId,
@@ -415,7 +415,7 @@ internal sealed class V3EvolveTool {
         // Guard: detect silent no-ops — evolution "succeeded" but nothing changed.
         var after = GetFingerprint(outcome.Root);
         if (before == after) {
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: "No changes applied: target entity not found or change had no effect. Check that the entity name is correct.",
                 SessionId: sessionId,
@@ -425,7 +425,7 @@ internal sealed class V3EvolveTool {
         }
 
         McpSessionStore.Update(sessionId, outcome.Root, outcome.Analysis);
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: "Change applied successfully.",
             SessionId: sessionId,
@@ -441,18 +441,18 @@ internal sealed class V3EvolveTool {
 /// to WP5 — see `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`.
 /// </summary>
 [McpServerToolType]
-internal sealed class V3PolicyTool {
+internal sealed class PolicyTool {
     /// <summary>
     /// Returns the guard expression text of a named policy on an entity.
     /// Use this to inspect what condition a policy enforces (e.g. "Age >= 18").
     /// </summary>
     [McpServerTool(Name = "get_policy_expression"), Description("Returns the guard expression text of a named policy on an entity for inspection.")]
-    public static V3Response GetPolicyExpression(
+    public static DomainToolResponse GetPolicyExpression(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
         [Description("Name of the policy to inspect")] string policyName) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
@@ -460,7 +460,7 @@ internal sealed class V3PolicyTool {
         var entity = state.Domain.Types.OfType<Entity>()
             .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal));
         if (entity is null)
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Entity '{entityName}' not found.",
                 SessionId: sessionId,
@@ -469,13 +469,13 @@ internal sealed class V3PolicyTool {
         var policy = entity.Policies
             .FirstOrDefault(p => string.Equals(p.Name, policyName, StringComparison.Ordinal));
         if (policy is null)
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Policy '{policyName}' not found on entity '{entityName}'.",
                 SessionId: sessionId,
                 Affordances: ["get_entity_detail"]);
 
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: $"Policy '{policyName}' on '{entityName}': {policy.Expression}",
             SessionId: sessionId,
@@ -490,7 +490,7 @@ internal sealed class V3PolicyTool {
     /// For composite expressions (AND/OR/NOT), use the structured contract fields.
     /// </summary>
     [McpServerTool(Name = "add_policy"), Description("Adds a policy with a guard expression to an entity. Simple comparison: provide property, op (==, !=, >, >=, <, <=), and value. Composite: provide 'and', 'or', or 'not' with sub-expressions.")]
-    public static V3Response AddPolicy(
+    public static DomainToolResponse AddPolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
         [Description("Policy name (e.g. 'Adult', 'LargeActive')")] string policyName,
@@ -501,7 +501,7 @@ internal sealed class V3PolicyTool {
         [Description("JSON string for composite 'or' sub-expressions")] string? or = null,
         [Description("JSON string for 'not' sub-expression, e.g. {\"property\":\"X\",\"op\":\">=\",\"value\":18}")] string? not = null) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
@@ -512,7 +512,7 @@ internal sealed class V3PolicyTool {
             contract = BuildContract(property, op, value, and, or, not);
         }
         catch (Exception ex) {
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Invalid policy expression: {ex.Message}",
                 SessionId: sessionId,
@@ -524,7 +524,7 @@ internal sealed class V3PolicyTool {
             expression = PolicyExpressionParser.Parse(contract);
         }
         catch (Exception ex) {
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Invalid policy expression: {ex.Message}",
                 SessionId: sessionId,
@@ -538,7 +538,7 @@ internal sealed class V3PolicyTool {
             .Apply();
 
         if (!result.Succeeded) {
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Evolution rolled back: {result.FailureSummary ?? "Analysis failed"}",
                 SessionId: sessionId,
@@ -547,12 +547,12 @@ internal sealed class V3PolicyTool {
         }
 
         McpSessionStore.Update(sessionId, result.Root, result.Analysis);
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: $"Policy '{policyName}' added to entity '{entityName}'.",
             SessionId: sessionId,
             Revision: state.Revision + 1,
-            Affordances: ["get_entity_detail", "get_policy_expression"]);
+            Affordances: ["get_entity_detail", "get_policy_expression", "evaluate_policy"]);
     }
 
     /// <summary>
@@ -562,14 +562,14 @@ internal sealed class V3PolicyTool {
     /// Returns the boolean result (true/false) from the VM.
     /// </summary>
     [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject. Provide 'age' for simple Age-based policies, or 'properties' as a JSON object for multi-property entities. Returns true if the policy passes, false otherwise.")]
-    public static V3Response EvaluatePolicy(
+    public static DomainToolResponse EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
         [Description("Name of the policy to evaluate")] string policyName,
         [Description("Age value for the sample subject (convenience for Age-based policies)")] int? age = null,
         [Description("JSON object of property values, e.g. \"{\\\"Status\\\":\\\"Active\\\",\\\"Total\\\":200}\"")] string? properties = null) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
@@ -577,7 +577,7 @@ internal sealed class V3PolicyTool {
         var entity = state.Domain.Types.OfType<Entity>()
             .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal));
         if (entity is null)
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Entity '{entityName}' not found.",
                 SessionId: sessionId,
@@ -586,7 +586,7 @@ internal sealed class V3PolicyTool {
         var policy = entity.Policies
             .FirstOrDefault(p => string.Equals(p.Name, policyName, StringComparison.Ordinal));
         if (policy is null)
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Policy '{policyName}' not found on entity '{entityName}'.",
                 SessionId: sessionId,
@@ -608,7 +608,7 @@ internal sealed class V3PolicyTool {
             }
         }
         catch (Exception ex) {
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Invalid subject: {ex.Message}",
                 SessionId: sessionId,
@@ -621,7 +621,7 @@ internal sealed class V3PolicyTool {
             result = instance.EvaluatePolicy(policy);
         }
         catch (Exception ex) {
-            return new V3Response(
+            return new DomainToolResponse(
                 Success: false,
                 Message: $"Evaluation failed: {ex.Message}",
                 SessionId: sessionId,
@@ -630,7 +630,7 @@ internal sealed class V3PolicyTool {
 
         var data = new { policyName, entityName, age, properties, result };
 
-        return new V3Response(
+        return new DomainToolResponse(
             Success: true,
             Message: result ? "Policy passed (true)." : "Policy failed (false).",
             SessionId: sessionId,

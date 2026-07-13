@@ -207,6 +207,14 @@ internal sealed class DomainMutationContext {
         return null;
     }
 
+    public Relationship? FindRelationship(string name) {
+        foreach (var r in Relationships) {
+            if (string.Equals(r.Name, name, StringComparison.Ordinal))
+                return r;
+        }
+        return null;
+    }
+
     public DomainType? FindType(string name) {
         for (int i = 0; i < Types.Count; i++) {
             if (string.Equals(Types[i].Name, name, StringComparison.Ordinal))
@@ -255,6 +263,15 @@ internal sealed class DomainMutationContext {
     /// </summary>
     public void RequireUpdate(bool updateResult, string failureMessage) {
         if (!updateResult)
+            Errors.Add(failureMessage);
+    }
+
+    /// <summary>
+    /// Records an error if <paramref name="targetExists"/> is false, indicating
+    /// a remove-by-name found no matching child on an existing parent.
+    /// </summary>
+    public void RequireTarget(bool targetExists, string failureMessage) {
+        if (!targetExists)
             Errors.Add(failureMessage);
     }
 }

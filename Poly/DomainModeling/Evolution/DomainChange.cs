@@ -83,6 +83,12 @@ public sealed record RemovePropertyFromEntityChange(
     string PropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is not null && !entity.Properties.Any(p => string.Equals(p.Name, PropertyName, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Property '{PropertyName}' not found on Entity '{EntityName}' — nothing to remove");
+            return;
+        }
         context.RequireUpdate(
             context.UpdateEntity(EntityName, e => e with {
                 Properties = e.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
@@ -117,6 +123,12 @@ public sealed record RemoveStageChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is not null && !entity.Stages.Any(s => string.Equals(s.Name, Name, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Stage '{Name}' not found on Entity '{EntityName}' — nothing to remove");
+            return;
+        }
         context.RequireUpdate(
             context.UpdateEntity(EntityName, e => e with {
                 Stages = e.Stages.Where(s => !string.Equals(s.Name, Name, StringComparison.Ordinal)).ToList()
@@ -147,6 +159,12 @@ public sealed record RemoveActionChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is not null && !entity.Actions.Any(a => string.Equals(a.Name, Name, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Action '{Name}' not found on Entity '{EntityName}' — nothing to remove");
+            return;
+        }
         context.RequireUpdate(
             context.UpdateEntity(EntityName, e => e with {
                 Actions = e.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
@@ -227,6 +245,12 @@ public sealed record RemovePolicyFromEntityChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is not null && !entity.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Policy '{PolicyName}' not found on Entity '{EntityName}' — nothing to remove");
+            return;
+        }
         context.RequireUpdate(
             context.UpdateEntity(EntityName, e => e with {
                 Policies = e.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
@@ -246,6 +270,15 @@ public sealed record RemovePolicyFromStageChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is not null) {
+            var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, StageName, StringComparison.Ordinal));
+            if (stage is not null && !stage.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
+                context.RequireTarget(false,
+                    $"Policy '{PolicyName}' not found on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
+                return;
+            }
+        }
         context.RequireUpdate(
             context.UpdateStage(EntityName, StageName, s => s with {
                 Policies = s.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
@@ -262,6 +295,16 @@ public sealed record RemovePolicyFromActionChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is not null) {
+            var action = entity.Actions.FirstOrDefault(a => string.Equals(a.Name, ActionName, StringComparison.Ordinal))
+                ?? entity.Stages.SelectMany(s => s.Actions).FirstOrDefault(a => string.Equals(a.Name, ActionName, StringComparison.Ordinal));
+            if (action is not null && !action.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
+                context.RequireTarget(false,
+                    $"Policy '{PolicyName}' not found on Action '{ActionName}' of Entity '{EntityName}' — nothing to remove");
+                return;
+            }
+        }
         context.RequireUpdate(
             context.UpdateAction(EntityName, ActionName, a => a with {
                 Policies = a.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
@@ -550,6 +593,15 @@ public sealed record RemoveActionFromStageChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is not null) {
+            var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, StageName, StringComparison.Ordinal));
+            if (stage is not null && !stage.Actions.Any(a => string.Equals(a.Name, Name, StringComparison.Ordinal))) {
+                context.RequireTarget(false,
+                    $"Action '{Name}' not found on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
+                return;
+            }
+        }
         context.RequireUpdate(
             context.UpdateStage(EntityName, StageName, s => s with {
                 Actions = s.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
@@ -597,6 +649,12 @@ public sealed record RemovePropertyFromRelationshipChange(
     string PropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var rel = context.FindRelationship(RelationshipName);
+        if (rel is not null && !rel.Properties.Any(p => string.Equals(p.Name, PropertyName, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Property '{PropertyName}' not found on Relationship '{RelationshipName}' — nothing to remove");
+            return;
+        }
         context.RequireUpdate(
             context.UpdateRelationship(RelationshipName, r => r with {
                 Properties = r.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
@@ -906,6 +964,12 @@ public sealed record RemoveStageFromRelationshipChange(
     string StageName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var rel = context.FindRelationship(RelationshipName);
+        if (rel is not null && !rel.Stages.Any(s => string.Equals(s.Name, StageName, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Stage '{StageName}' not found on Relationship '{RelationshipName}' — nothing to remove");
+            return;
+        }
         context.RequireUpdate(
             context.UpdateRelationship(RelationshipName, r => r with {
                 Stages = r.Stages.Where(s => !string.Equals(s.Name, StageName, StringComparison.Ordinal)).ToList()
@@ -934,6 +998,12 @@ public sealed record RemovePolicyFromRelationshipChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var rel = context.FindRelationship(RelationshipName);
+        if (rel is not null && !rel.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Policy '{PolicyName}' not found on Relationship '{RelationshipName}' — nothing to remove");
+            return;
+        }
         context.RequireUpdate(
             context.RemovePolicyFromRelationship(RelationshipName, PolicyName),
             $"Relationship '{RelationshipName}' not found — cannot remove policy '{PolicyName}'");

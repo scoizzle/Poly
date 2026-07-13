@@ -2179,4 +2179,89 @@ public class DomainEvolutionApplicatorTests {
         var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
         await Assert.That(order.Properties.Count).IsEqualTo(1);
     }
+
+    // ── 0.1d: Remove-by-name zero-match fail-loud ────────────────
+
+    [Test]
+    public async Task RemoveProperty_MissingName_FailsWithClearError() {
+        var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var entity = new Entity("Order", [new Property("Total", new DomainTypeReference("Int"), [])], [], [], [], []);
+        var start = new Domain("Test", [entity, text], []);
+
+        var change = new RemovePropertyFromEntityChange("Order", "NonExistent");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
+        await Assert.That(result.FailureSummary).Contains("nothing to remove");
+    }
+
+    [Test]
+    public async Task RemoveStage_MissingName_FailsWithClearError() {
+        var entity = new Entity("Order", [], [], [], [],
+            Stages: [new Stage("Draft", null, [], [], [], [])]);
+        var start = new Domain("Test", [entity], []);
+
+        var change = new RemoveStageChange("Order", "NonExistent");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
+        await Assert.That(result.FailureSummary).Contains("nothing to remove");
+    }
+
+    [Test]
+    public async Task RemoveAction_MissingName_FailsWithClearError() {
+        var entity = new Entity("Order", [], [], [
+            new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])
+        ], [], []);
+        var start = new Domain("Test", [entity], []);
+
+        var change = new RemoveActionChange("Order", "NonExistent");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
+        await Assert.That(result.FailureSummary).Contains("nothing to remove");
+    }
+
+    [Test]
+    public async Task RemovePolicy_MissingName_FailsWithClearError() {
+        var policy = new Policy("Adult", DomainExpression.Literal(true));
+        var entity = new Entity("Person", [], [], [], Policies: [policy], Stages: []);
+        var start = new Domain("Test", [entity], []);
+
+        var change = new RemovePolicyFromEntityChange("Person", "NonExistent");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found on Entity 'Person'");
+        await Assert.That(result.FailureSummary).Contains("nothing to remove");
+    }
+
+    [Test]
+    public async Task Remove_ExistingProperty_Succeeds() {
+        var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var entity = new Entity("Order", [new Property("Status", new DomainTypeReference("Text"), [])], [], [], [], []);
+        var start = new Domain("Test", [entity, text], []);
+
+        var change = new RemovePropertyFromEntityChange("Order", "Status");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.Types.OfType<Entity>().Single().Properties).IsEmpty();
+    }
+
+    [Test]
+    public async Task Remove_ExistingStage_Succeeds() {
+        var entity = new Entity("Order", [], [], [], [],
+            Stages: [new Stage("Draft", null, [], [], [], [])]);
+        var start = new Domain("Test", [entity], []);
+
+        var change = new RemoveStageChange("Order", "Draft");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.Types.OfType<Entity>().Single().Stages).IsEmpty();
+    }
 }

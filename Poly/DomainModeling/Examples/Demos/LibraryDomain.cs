@@ -9,7 +9,7 @@ namespace Poly.DomainModeling.Examples.Demos;
 /// This mirrors the V2 LibraryDomain demo but uses only V3 types and the
 /// <see cref="DomainFactory"/> / <see cref="EvolutionBuilder"/> fluent API.
 /// </summary>
-public static class V3LibraryDomain {
+public static class LibraryDomain {
     public static Domain Build() =>
         DomainFactory.Create("Library Management System", builder =>
             builder

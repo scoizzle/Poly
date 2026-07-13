@@ -37,7 +37,7 @@
 | **0.1a** | Surface evalErrors in diagnostics | [`vs-s0-fail-loud-surface-eval-errors.md`](vs-s0-fail-loud-surface-eval-errors.md) | **[x]** | `EVOLUTION_TARGET` inject |
 | **0.1b** | Fail-loud missing stage/property (child) | [`vs-s0-fail-loud-child-targets.md`](vs-s0-fail-loud-child-targets.md) | **[x]** | Child existence check + tests |
 | **0.1c** | RequireUpdate on remaining ApplyTo | [`vs-s0-fail-loud-remaining-applyto.md`](vs-s0-fail-loud-remaining-applyto.md) | **[x]** | All Update* ApplyTo wrapped |
-| **0.1d** | Fail-loud remove-by-name zero match *(optional)* | [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md) | **[ ]** | Remove property/stage/action when name missing still succeeds if parent exists |
+| **0.1d** | Fail-loud remove-by-name zero match *(optional)* | [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md) | **[x]** | `RequireTarget` helper; RemoveProperty/Stage/Action/Policy fail when child missing |
 | **0.2** | `add_action_to_stage` honesty | [`vs-s0-add-action-to-stage-honesty.md`](vs-s0-add-action-to-stage-honesty.md) | **[x]** | Description + create-semantics test |
 | **0.2a** | MCP README row for stage action *(nit)* | [`vs-s0-mcp-readme-add-action-to-stage.md`](vs-s0-mcp-readme-add-action-to-stage.md) | **[ ]** | README still “Places an existing action” |
 | **0.3** | Wire PolicySubject fully | [`vs-s0-wire-policy-subject-validate.md`](vs-s0-wire-policy-subject-validate.md) | **[x]** | Validate + ValidateType |
@@ -92,9 +92,9 @@
 | # | Task | File | Status | Notes |
 |---|------|------|--------|-------|
 | **pm2-1** | Multi-property MCP sample subject for `evaluate_policy` | [`vs-pm2-evaluate-policy-sample-bag.md`](vs-pm2-evaluate-policy-sample-bag.md) | **[x]** | McpSubjectBag (8 props); JSON + backward-compat Age; 1178 green |
-| **pm2-2** | Affordance: `add_policy` success → include `evaluate_policy` | [`vs-pm2-add-policy-evaluate-affordance.md`](vs-pm2-add-policy-evaluate-affordance.md) | **[ ]** | Success affordances currently omit evaluate |
+| **pm2-2** | Affordance: `add_policy` success → include `evaluate_policy` | [`vs-pm2-add-policy-evaluate-affordance.md`](vs-pm2-add-policy-evaluate-affordance.md) | **[x]** | `add_policy` response now includes `evaluate_policy` affordance |
 | **pm2-3** | First effect execution (Slice 4) | (use vertical-slice S4 / open when pulled) | **[ ]** | Pull when product needs behavior beyond guards |
-| **pm2-4** | Naming cleanup drop V3\* | [`../../post-v2-delete-naming-cleanup.md`](../../post-v2-delete-naming-cleanup.md) | **[ ]** | Idle green tree; R0–R4 phases |
+| **pm2-4** | Naming cleanup drop V3\* | [`../../post-v2-delete-naming-cleanup.md`](../../post-v2-delete-naming-cleanup.md) | **[x]** | R0–R2 done: MCP tools, demos, analyzer extensions renamed |
 
 ### Deferred (do not pick without scenario)
 

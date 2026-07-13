@@ -13,7 +13,7 @@ namespace Poly.Mcp.Sessions;
 /// No V2 types, no revision snapshot history.
 /// Workspace/session management lives here in MCP — not in DomainModeling.
 /// </summary>
-internal sealed record V3SessionState(
+internal sealed record McpSessionState(
     Domain Domain,
     AnalysisResult? LatestAnalysis,
     long Revision
@@ -25,13 +25,13 @@ internal sealed record V3SessionState(
 /// Bootstrap uses <see cref="DomainFactory.Create"/> from the DomainModeling API.
 /// </summary>
 internal static class McpSessionStore {
-    private static readonly ConcurrentDictionary<string, V3SessionState> Sessions = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, McpSessionState> Sessions = new(StringComparer.Ordinal);
     private static readonly Lock StoreLock = new();
 
     /// <summary>
     /// Creates a new session with a bootstrapped domain.
     /// </summary>
-    public static (string SessionId, V3SessionState State) Create(string domainName, string? preferredSessionId = null) {
+    public static (string SessionId, McpSessionState State) Create(string domainName, string? preferredSessionId = null) {
         lock (StoreLock) {
             var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)
                 ? Guid.NewGuid().ToString("N")
@@ -39,7 +39,7 @@ internal static class McpSessionStore {
 
             var domain = DomainFactory.Create(domainName);
             var analysis = DomainModelAnalyzer.Analyze(domain);
-            var state = new V3SessionState(domain, analysis, Revision: 0);
+            var state = new McpSessionState(domain, analysis, Revision: 0);
             Sessions[sessionId] = state;
             return (sessionId, state);
         }
@@ -48,7 +48,7 @@ internal static class McpSessionStore {
     /// <summary>
     /// Gets an existing session by ID. Returns false if not found.
     /// </summary>
-    public static bool TryGet(string sessionId, out V3SessionState session) {
+    public static bool TryGet(string sessionId, out McpSessionState session) {
         if (string.IsNullOrWhiteSpace(sessionId)) {
             session = null!;
             return false;
@@ -60,7 +60,7 @@ internal static class McpSessionStore {
     /// Atomically updates a session with a new domain and analysis result.
     /// Bumps the revision. Throws if the session doesn't exist.
     /// </summary>
-    public static V3SessionState Update(string sessionId, Domain newDomain, AnalysisResult analysis) {
+    public static McpSessionState Update(string sessionId, Domain newDomain, AnalysisResult analysis) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
 
@@ -68,7 +68,7 @@ internal static class McpSessionStore {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 throw new InvalidOperationException($"Session '{sessionId}' not found.");
 
-            var next = new V3SessionState(newDomain, analysis, current.Revision + 1);
+            var next = new McpSessionState(newDomain, analysis, current.Revision + 1);
             Sessions[sessionId] = next;
             return next;
         }

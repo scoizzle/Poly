@@ -10,7 +10,7 @@ namespace Poly.DomainModeling.Examples.Demos;
 /// <see cref="DomainFactory"/> / <see cref="EvolutionBuilder"/> fluent API.
 /// Contract/recipe integration is V2-specific and omitted here.
 /// </summary>
-public static class V3ECommerceDomain {
+public static class ECommerceDomain {
     public static Domain Build() =>
         DomainFactory.Create("E-commerce Order Processing", builder =>
             builder

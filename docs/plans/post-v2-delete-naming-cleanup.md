@@ -1,7 +1,7 @@
 # Plan: Post–V2-Delete Naming Cleanup (drop “V3” / “V2” product labels)
 
-**Status:** Deferred — schedule **after Slice 1–3 / M2 product close** (or in a dedicated rename PR between slices if the tree is green and idle)  
-**Date:** 2026-07-12  
+**Status:** Done — R0–R2 complete. All product `V3*` type names eliminated.  
+**Date:** 2026-07-13  
 **Why:** V2 (`Poly.Data.Modeling`) is **gone**. “V3” was a **migration version** relative to V2. Keeping `V3*` type names, `UseV3*`, and “V3 MCP” prose teaches agents and humans a second system that no longer exists. The product surface is simply **DomainModeling + MCP**.
 
 **Entry for simple agents when this plan is opened:** this file + micro-tasks under `docs/plans/v2-to-v3/simple-agent-tasks/rn-*` (to be added when execution starts).  

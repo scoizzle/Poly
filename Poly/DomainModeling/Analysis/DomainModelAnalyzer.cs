@@ -9,7 +9,7 @@ namespace Poly.DomainModeling.Analysis;
 public static class DomainModelAnalyzer {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseIncrementalAnalysis()
-        .UseV3DomainModelValidation()
+        .UseDomainModelValidation()
         .Build();
 
     public static AnalysisResult Analyze(Domain domain) {
@@ -27,7 +27,7 @@ public static class DomainModelAnalyzer {
 
 public static class DomainModelAnalysisBuilderExtensions {
     extension(AnalyzerBuilder builder) {
-        public AnalyzerBuilder UseV3DomainModelAnalysisPipeline() {
+        public AnalyzerBuilder UseDomainModelAnalysisPipeline() {
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
@@ -48,7 +48,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             return builder;
         }
 
-        public AnalyzerBuilder UseV3DomainModelValidation() =>
-            builder.UseV3DomainModelAnalysisPipeline();
+        public AnalyzerBuilder UseDomainModelValidation() =>
+            builder.UseDomainModelAnalysisPipeline();
     }
 }

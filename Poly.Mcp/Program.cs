@@ -14,9 +14,9 @@ builder.Logging.AddConsole(consoleLogOptions => {
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithTools<V3SessionTool>()
-    .WithTools<V3QueryTool>()
-    .WithTools<V3EvolveTool>()
-    .WithTools<V3PolicyTool>();
+    .WithTools<SessionTool>()
+    .WithTools<QueryTool>()
+    .WithTools<EvolveTool>()
+    .WithTools<PolicyTool>();
 
 await builder.Build().RunAsync();

@@ -1,5 +1,3 @@
-using System.Collections.Frozen;
-
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -14,7 +12,6 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     public const string Id = "TypeDefinitionNode";
     public string PassName => Id;
     private readonly Dictionary<string, AstTypeDefinition> _types = new();
-    private FrozenDictionary<string, AstTypeDefinition>? _frozen;
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<TypeDefinitionNodeAnalyzer>(node)) {
@@ -33,17 +30,8 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
         this.AnalyzeChildren(context, node);
     }
 
-    /// <summary>
-    /// Freezes the type definitions for thread-safe read access.
-    /// Call this after all TypeDefinitionNodes have been analyzed.
-    /// </summary>
-    public void Freeze() {
-        _frozen = _types.ToFrozenDictionary();
-    }
-
     public ITypeDefinition? GetTypeDefinition(string typeName) {
-        var dict = _frozen ?? (IReadOnlyDictionary<string, AstTypeDefinition>)_types;
-        return dict.TryGetValue(typeName, out var def) ? def : null;
+        return _types.TryGetValue(typeName, out var def) ? def : null;
     }
 
     public ITypeDefinition? GetTypeDefinition(Type type) {
@@ -53,8 +41,7 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     }
 
     public IEnumerable<ITypeDefinition> GetTypeDefinitions() {
-        var dict = _frozen ?? (IReadOnlyDictionary<string, AstTypeDefinition>)_types;
-        return dict.Values;
+        return _types.Values;
     }
 }
 

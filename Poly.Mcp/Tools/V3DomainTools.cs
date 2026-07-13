@@ -639,7 +639,6 @@ internal sealed class V3EvalTool {
             var typeDefAnalyzer = new TypeDefinitionNodeAnalyzer();
             var ctx = AnalysisContext.CreateDefault();
             typeDefAnalyzer.Analyze(ctx, typeDefNode);
-            typeDefAnalyzer.Freeze();
 
             // Use the analyzer as the type provider — it resolves Subject
             // and falls through to CLR registry for primitive types internally.

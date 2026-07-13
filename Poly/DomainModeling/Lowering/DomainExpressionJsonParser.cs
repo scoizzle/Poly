@@ -3,10 +3,9 @@ using System.Text.Json;
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
-/// Direct JSON → <see cref="DomainExpression"/> parser. Accepts the same JSON
-/// shapes as <see cref="PolicyExpressionContract"/> serialization but produces
-/// <see cref="DomainExpression"/> nodes directly — no intermediate record, no
-/// custom <see cref="System.Text.Json.Serialization.JsonConverter"/>.
+/// Direct JSON → <see cref="DomainExpression"/> parser. Produces
+/// <see cref="DomainExpression"/> nodes directly from JSON strings with no
+/// intermediate record or custom converters.
 ///
 /// <para>All <see cref="JsonElement"/> values are normalized to proper CLR types
 /// (int/long/bool/string/null) during parsing, so the resulting expression tree

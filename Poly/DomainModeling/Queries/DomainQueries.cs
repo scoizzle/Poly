@@ -75,6 +75,17 @@ public sealed record AnalysisSummary(
     IReadOnlyList<string> Messages
 );
 
+/// <summary>
+/// Lightweight relationship info for query results.
+/// </summary>
+public sealed record RelationshipSummary(
+    string Name,
+    string SourceEntityName,
+    string TargetEntityName,
+    string Cardinality,
+    bool SourceOwnsTarget
+);
+
 // ── Query helpers ─────────────────────────────────────────────────────────
 
 /// <summary>
@@ -161,6 +172,20 @@ public static class DomainQueries {
     public static IReadOnlyList<string> ListPrimitives(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         return domain.Types.OfType<PrimitiveType>().Select(p => p.Name).ToList();
+    }
+
+    /// <summary>
+    /// Lists all relationships in the domain with source, target, cardinality, and ownership.
+    /// </summary>
+    public static IReadOnlyList<RelationshipSummary> ListRelationships(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+        return domain.Relationships.Select(r => new RelationshipSummary(
+            r.Name,
+            r.Source.TypeName,
+            r.Target.TypeName,
+            r.Cardinality.ToString(),
+            r.SourceOwnsTarget
+        )).ToList();
     }
 
     /// <summary>

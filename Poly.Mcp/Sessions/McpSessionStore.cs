@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
+using Poly.DomainModeling.Evolution;
 using Poly.Syntax.Analysis;
 
 namespace Poly.Mcp.Sessions;
@@ -57,20 +58,36 @@ internal static class McpSessionStore {
     }
 
     /// <summary>
-    /// Atomically updates a session with a new domain and analysis result.
-    /// Bumps the revision. Throws if the session doesn't exist.
+    /// Atomically reads, mutates, and writes a session. The entire read-modify-write
+    /// cycle holds <see cref="StoreLock"/>, preventing the lost-update race that occurs
+    /// when callers do an unprotected <see cref="TryGet"/> → evolve → <see cref="Update"/>.
     /// </summary>
-    public static McpSessionState Update(string sessionId, Domain newDomain, AnalysisResult analysis) {
+    /// <param name="sessionId">Session to mutate.</param>
+    /// <param name="mutate">Receives the current <see cref="Domain"/>; returns a
+    /// <see cref="EvolutionResult"/> from <c>DomainEvolution.Apply()</c>.</param>
+    /// <returns>The evolution result, or <c>null</c> if the session was not found.</returns>
+    public static EvolutionResult? Evolve(
+        string sessionId,
+        Func<Domain, EvolutionResult> mutate) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
 
         lock (StoreLock) {
             if (!Sessions.TryGetValue(sessionId, out var current))
-                throw new InvalidOperationException($"Session '{sessionId}' not found.");
+                return null;
 
-            var next = new McpSessionState(newDomain, analysis, current.Revision + 1);
+            var outcome = mutate(current.Domain);
+            if (!outcome.Succeeded) {
+                // On failure, keep the current state unchanged (revision unchanged).
+                // Overwrite the analysis result though — the failed analysis diagnostics
+                // are useful for debugging.
+                Sessions[sessionId] = current with { LatestAnalysis = outcome.Analysis };
+                return outcome;
+            }
+
+            var next = new McpSessionState(outcome.Root, outcome.Analysis, current.Revision + 1);
             Sessions[sessionId] = next;
-            return next;
+            return outcome;
         }
     }
 

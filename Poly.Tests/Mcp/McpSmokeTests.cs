@@ -235,17 +235,14 @@ public class McpSmokeTests {
         EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
         EvolveTool.AddEntity(sessionId, "Person"); // no-op duplicate handled
 
-        // Add policy via direct evolve
-        var session = McpSessionStore.TryGet(sessionId, out var state);
-        var evolve = new DomainEvolution(state.Domain);
-        var result = evolve.Evolve()
-            .AddPolicyToEntity("Person", "Adult",
-                DomainExpression.GreaterThanOrEqual(
-                    DomainExpression.Property("Age"),
-                    DomainExpression.Literal(18)))
-            .Apply();
-        if (result.Succeeded)
-            McpSessionStore.Update(sessionId, result.Root, result.Analysis);
+        // Add policy via direct evolve — uses atomic Evolve for concurrency safety
+        McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddPolicyToEntity("Person", "Adult",
+                    DomainExpression.GreaterThanOrEqual(
+                        DomainExpression.Property("Age"),
+                        DomainExpression.Literal(18)))
+                .Apply());
 
         var response = PolicyTool.GetPolicyExpression(sessionId, "Person", "Adult");
         await Assert.That(response.Success).IsTrue();
@@ -537,5 +534,151 @@ public class McpSmokeTests {
             properties: "{\"Age\":0}");
         await Assert.That(always.Success).IsTrue();
         await Assert.That(always.Message).Contains("true");
+    }
+
+    // ── Batch/plural evolve tools ─────────────────────────────────
+
+    [Test]
+    public async Task AddProperties_Batch_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Product");
+
+        var response = EvolveTool.AddProperties(sessionId, "Product",
+            """[{"name":"SKU","typeName":"Text"},{"name":"Price","typeName":"Number"},{"name":"InStock","typeName":"Boolean"}]""");
+
+        await Assert.That(response.Success).IsTrue();
+
+        var detail = QueryTool.GetEntityDetail(sessionId, "Product");
+        await Assert.That(detail.Data).IsTypeOf<EntityDetailData>();
+        var d = (EntityDetailData)detail.Data!;
+        await Assert.That(d.Properties.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task AddStages_Batch_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Order");
+
+        var response = EvolveTool.AddStages(sessionId, "Order",
+            """[{"name":"Draft"},{"name":"Confirmed"},{"name":"Shipped"},{"name":"Delivered"}]""");
+
+        await Assert.That(response.Success).IsTrue();
+
+        var detail = QueryTool.GetEntityDetail(sessionId, "Order");
+        var d = (EntityDetailData)detail.Data!;
+        await Assert.That(d.Stages.Count).IsEqualTo(4);
+        await Assert.That(d.Stages[0].Name).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task AddActionsToStages_Batch_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.AddStages(sessionId, "Order", """[{"name":"Draft"},{"name":"Confirmed"}]""");
+        EvolveTool.AddAction(sessionId, "Order", "Submit");
+        EvolveTool.AddAction(sessionId, "Order", "Cancel");
+
+        var response = EvolveTool.AddActionsToStages(sessionId, "Order",
+            """[{"stageName":"Draft","actionName":"Submit"},{"stageName":"Draft","actionName":"Cancel"}]""");
+
+        await Assert.That(response.Success).IsTrue();
+
+        var detail = QueryTool.GetEntityDetail(sessionId, "Order");
+        var d = (EntityDetailData)detail.Data!;
+        var draftStage = d.Stages.First(s => s.Name == "Draft");
+        await Assert.That(draftStage.Actions).Contains("Submit");
+        await Assert.That(draftStage.Actions).Contains("Cancel");
+    }
+
+    // ── Domain snapshot ───────────────────────────────────────────
+
+    [Test]
+    public async Task GetDomainSnapshot_ReturnsAllEntitiesAndRelationships() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.AddProperties(sessionId, "Order",
+            """[{"name":"Total","typeName":"Number"}]""");
+        EvolveTool.AddStages(sessionId, "Order", """[{"name":"Draft"},{"name":"Confirmed"}]""");
+        EvolveTool.AddEntity(sessionId, "Customer");
+        EvolveTool.AddRelationship(sessionId, "OrderCustomer", "Order", "Customer", "ManyToOne");
+
+        var response = QueryTool.GetDomainSnapshot(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsNotNull();
+    }
+
+    // ── Relationships ─────────────────────────────────────────────
+
+    [Test]
+    public async Task GetRelationships_All_ReturnsAllEdges() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.AddEntity(sessionId, "Customer");
+        EvolveTool.AddRelationship(sessionId, "OrderCustomer", "Order", "Customer", "ManyToOne");
+
+        var response = QueryTool.GetRelationships(sessionId);
+        await Assert.That(response.Success).IsTrue();
+    }
+
+    [Test]
+    public async Task GetRelationships_FilteredByEntity_ReturnsOnlyMatching() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.AddEntity(sessionId, "Customer");
+        EvolveTool.AddEntity(sessionId, "Product");
+        EvolveTool.AddRelationship(sessionId, "OrderCustomer", "Order", "Customer", "ManyToOne");
+        EvolveTool.AddRelationship(sessionId, "OrderProduct", "Order", "Product");
+
+        var response = QueryTool.GetRelationships(sessionId, entityName: "Customer");
+        await Assert.That(response.Success).IsTrue();
+    }
+
+    // ── Constraints ───────────────────────────────────────────────
+
+    [Test]
+    public async Task AddConstraint_Range_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Product");
+        EvolveTool.AddProperty(sessionId, "Product", "Price", "Number");
+
+        var response = EvolveTool.AddConstraint(sessionId, "Product", "Price", "Range",
+            """{"min":0}""");
+
+        await Assert.That(response.Success).IsTrue();
+
+        var constraints = EvolveTool.GetConstraints(sessionId, "Product");
+        await Assert.That(constraints.Success).IsTrue();
+    }
+
+    [Test]
+    public async Task AddConstraint_Required_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Customer");
+        EvolveTool.AddProperty(sessionId, "Customer", "Name", "Text");
+
+        var response = EvolveTool.AddConstraint(sessionId, "Customer", "Name", "Required");
+
+        await Assert.That(response.Success).IsTrue();
+
+        var constraints = EvolveTool.GetConstraints(sessionId, "Customer");
+        await Assert.That(constraints.Success).IsTrue();
+    }
+
+    [Test]
+    public async Task GetConstraints_FiltersByProperty() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Product");
+        EvolveTool.AddProperty(sessionId, "Product", "Price", "Number");
+        EvolveTool.AddProperty(sessionId, "Product", "SKU", "Text");
+        EvolveTool.AddConstraint(sessionId, "Product", "Price", "Range", """{"min":0}""");
+        EvolveTool.AddConstraint(sessionId, "Product", "SKU", "Required");
+
+        // All constraints
+        var all = EvolveTool.GetConstraints(sessionId, "Product");
+        await Assert.That(all.Success).IsTrue();
+
+        // Filtered by property
+        var filtered = EvolveTool.GetConstraints(sessionId, "Product", propertyName: "Price");
+        await Assert.That(filtered.Success).IsTrue();
     }
 }

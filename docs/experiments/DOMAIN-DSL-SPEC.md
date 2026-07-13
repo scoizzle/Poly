@@ -98,6 +98,61 @@ This keeps the current MCP ergonomics for machines while giving humans and LLMs 
 
 The main cost is building and maintaining a parser and printer. That is acceptable because the result is a first-class domain artifact instead of a transport-shaped snapshot.
 
+### Downstream Benefits (Remarks)
+
+The DSL is not just a modeling format — it is a **machine-readable specification** that enables deterministic code generation across the full stack. These benefits are emergent: the DSL grammar does not encode them, but the committed domain IR makes them straightforward to derive.
+
+**API generation from lowering passes.** Every backend protocol becomes a lowering pass that reads the committed domain IR and emits protocol-specific artifacts:
+
+```
+DSL → DomainMutationIntent[] → Committed Domain IR
+                                      │
+                    ┌─────────────────┼─────────────────┐
+                    ▼                 ▼                  ▼
+             REST lowering      gRPC lowering      GraphQL lowering
+```
+
+Each lowering pass translates the same IR into its target format. `SKU: Text required write once` becomes `required: true, readOnly: true` in OpenAPI — no per-protocol hand-rewriting.
+
+**HATEOAS as an emergent property.** The stage machine *is* the link generator. An entity in stage `Submitted` exposes only the actions declared on that stage as links. No hand-authored `if state == "Draft" then emit Submit link` logic. The API layer walks the current stage's outgoing action edges and emits `_links` for each. HATEOAS becomes trivial because the lifecycle graph is already encoded in the domain model.
+
+**RBAC-constrained links.** When actions carry `permit` blocks (Phase 2+), the API layer filters `_links` by evaluating each action's permit against the authenticated actor. A `PurchaseOrder` in `Submitted` returns different links for a warehouse worker (`Ship`) vs. a customer service rep (`Confirm`, `Cancel`, `AddLineItem`) vs. the ordering customer (`Cancel`). Role checks, HATEOAS links, and domain authorization stay in sync because they share a single source of truth: the DSL.
+
+**Permit as expression subject switch.** `permit` is not a new expression language. It is a syntactic position that changes the evaluation subject from entity state to actor identity. The expression inside the block — `role == "Warehouse"`, `this.customer`, a named actor policy — uses the same `DomainExpression` grammar as entity policies, but resolves property names against the actor instead of the entity:
+
+```
+// Entity policy — expression evaluates against entity state
+HasStock: policy QuantityOnHand > 0
+
+// Actor policy — expression evaluates against actor identity
+CustomerService: policy role == "Customer Service"
+
+// Permit — expression evaluates against actor, can reference entity relationships
+Ship: action -> Shipped
+  permit actor: Employee role == "Customer Service"
+  permit this.customer
+```
+
+Three syntactic forms, one expression grammar. The lowering pass uses the same evaluation engine for all three — only the variable binding context changes. No separate RBAC DSL, no duplicate filter logic.
+
+**Schema-first validation.** Property constraints (`range`, `length`, `pattern`, `required`, `write once`) map directly to request validation rules. The API layer can reject invalid input before it reaches domain logic — but the rules themselves are defined once in the DSL and compiled into middleware, not duplicated across validation libraries.
+
+**Database schema generation.** Entities map to tables, properties to columns, constraints to column constraints, relationships to foreign keys, and `owned` relationships to cascading deletes. A single DSL file can produce both the API contract and the database migration.
+
+**Policies as query predicates.** Every policy is a named Boolean expression over entity properties — which is exactly what a query filter is. The policy name becomes the query parameter or GraphQL field name; the expression compiles directly into a `WHERE` clause, an Elasticsearch filter, or a search index predicate:
+
+```
+IsActiveSupplier: policy IsActive == true
+// → GET /suppliers?isActive=true
+// → SQL: SELECT * FROM suppliers WHERE IsActive = true
+
+IsLowStock: policy QuantityOnHand < 5
+// → GET /inventory?isLowStock=true  (reorder list)
+// → GraphQL: query { lowStockItems { ... } }
+```
+
+Policies serve triple duty: they guard actions, they filter HATEOAS links, and they become the search/query surface. The lowering pass derives all three from a single declaration — no separate query DSL or duplicate filter logic.
+
 ## Rejected or Secondary Options
 
 ### Intent log
@@ -136,13 +191,21 @@ IDL-like formats are useful inspiration, especially decorators/annotations, but 
 
 Every declaration in the Poly DSL follows a single uniform pattern: **`Name: Kind Details`**. The kind keyword tells the parser and reader what the declaration *is* in the domain. Properties are the unmarked default — a bare type name implies a property. All other concepts use an explicit kind keyword.
 
+The domain modeling system has two core primitives:
+
+- **Value** — no identity, no lifecycle. Compared by content. Declared with `value Name { ... }`.
+- **Entity** — has identity, a lifecycle (stages), and can own relationships. Declared with `entity Name { ... }`.
+
+Every other concept is either a member of an entity (property, stage, action, policy), a member of a value (property), or a specialization of entity. **Actor** (`actor Name { ... }`) is an entity specialization — it inherits all entity capabilities (properties, stages, actions, policies) and adds identity, claims, and role-based policy evaluation.
+
 | Syntax | Kind | Example |
 |---|---|---|
 | `Name: Type mod...` (bare type + modifiers) | Property or Relationship | `SKU: Text length(1, 50)` |
 | `Name: stage { ... }` | Stage | `Active: stage { ... }` |
 | `Name: action -> Target` | Action with transition | `Submit: action -> Confirmed` |
 | `Name: policy expr` | Policy guard | `HasStock: policy Qty > 0` |
-| `Name: actor { ... }` | Actor (specialized entity) | `Customer: actor { ... }` |
+| `actor Name { ... }` | Actor (specialized entity) | `actor Customer { ... }` |
+| `value Name { ... }` | Value type | `value Money { ... }` |
 
 This pattern has several advantages:
 
@@ -152,7 +215,7 @@ This pattern has several advantages:
 - **Self-describing syntax** — the kind keyword disambiguates at a glance, without consulting docs.
 - **Extensible** — new domain concepts (aggregate, projection, process manager) adopt the same pattern with new kind keywords, no grammar changes needed.
 - **LLM-friendly** — a uniform declaration pattern is easier for LLMs to emit correctly than position-dependent or context-sensitive syntax.
-- **Actor is an entity** — `Customer: actor { ... }` inherits all entity capabilities (properties, stages, actions, policies) plus actor-specific features (identity, claims, roles). The kind keyword is the specialization mechanism.
+- **Actor is an entity** — `actor Customer { ... }` inherits all entity capabilities (properties, stages, actions, policies) plus actor-specific features (identity, claims, roles). The kind keyword is the specialization mechanism.
 
 Stages are **cyclical** by design. The DSL does not use a linear pipeline notation. Instead, transitions are expressed on actions:
 
@@ -183,6 +246,63 @@ name: one Supplier             // one-to-one, no ownership
 
 This replaces the MCP's separate `add_relationship` tool and `sourceOwnsTarget` boolean with a single line that reads naturally.
 
+### Property Constraint Modifiers
+
+Properties accept two categories of inline modifiers:
+
+**Value constraints** — validate the property's value:
+
+| Modifier | Example | Meaning |
+|---|---|---|
+| `range(min, max)` | `UnitCost: Number range(0, )` | Value must be ≥ 0 (max omitted = unbounded) |
+| `length(min, max)` | `Code: Text length(3, 3)` | String must be exactly 3 characters |
+| `pattern(regex)` | `Email: Text pattern("[^@]+@[^@]+")` | String must match the regex |
+
+**Mutation constraints** — govern when the property can be set:
+
+| Modifier | Example | Meaning |
+|---|---|---|
+| `required` | `SKU: Text required` | Must be set before the entity can leave its initial stage |
+| `write once` | `OrderNumber: Text required write once` | Can be set once at creation; immutable after |
+
+Modifiers chain on the same line: `SKU: Text required write once`, `Email: Text pattern(...) required`. The parser reads them left to right; order does not affect semantics.
+
+### Action Signatures
+
+Actions have three forms, adding detail as needed:
+
+**Phase 1 — Simple stage transition:**
+
+```
+Submit: action -> Submitted
+```
+
+The action takes no parameters and returns no result. The `-> Target` declares the target stage.
+
+**Phase 2 — Parameterized with optional return type:**
+
+```
+AddLineItem: action(price: Money, quantity: Number) -> OrderLineItem
+```
+
+Parameters are typed and comma-separated within parentheses. The `-> ReturnType` is optional — omit it for void actions. Parameters can carry inline constraints just like properties:
+
+```
+CreateOrder: action(currency: Text length(3, 3))
+```
+
+**Phase 2 — With effect block:**
+
+```
+Submit: action -> Submitted {
+  assign submittedAt to now
+}
+```
+
+The block body describes the side effects produced by the action. Effects include `assign` (mutate a property), `yield create` (produce a new entity), and `transition` (explicit stage change — implied by `-> Target` when not overridden in the block).
+
+Parameters and return types feed directly into API generation: a parameterized action becomes a request body schema, and a return type becomes a response schema. The lowering pass has all the information it needs to produce typed API contracts.
+
 ### Phase 1 Example: Supply Chain Domain
 
 A concrete example of the minimal Phase 1 surface, derived from a real MCP session:
@@ -191,12 +311,12 @@ A concrete example of the minimal Phase 1 surface, derived from a real MCP sessi
 domain SupplyChain
 
 entity Product {
-  SKU: Text
-  Name: Text
-  UnitCost: Number range(0, )
-  MSRP: Number range(0, )
+  SKU: Text required write once
+  Name: Text required
+  UnitCost: Number range(0, ) required
+  MSRP: Number range(0, ) required
   ReorderPoint: Number
-  IsHazardous: Boolean
+  IsHazardous: Boolean write once
   WeightKg: Number
 
   suppliers: many Supplier
@@ -217,12 +337,12 @@ entity Product {
 }
 
 entity Supplier {
-  SupplierCode: Text
-  Name: Text
+  SupplierCode: Text required write once
+  Name: Text required
   ContactEmail: Text pattern("[^@]+@[^@]+")
   LeadTimeDays: Number range(0, )
   Rating: Number range(0, 5)
-  CountryOfOrigin: Text
+  CountryOfOrigin: Text write once
   IsActive: Boolean
 
   products: many Product
@@ -248,11 +368,11 @@ entity Supplier {
 }
 
 entity Warehouse {
-  WarehouseCode: Text
-  Name: Text
-  Address: Text
+  WarehouseCode: Text required write once
+  Name: Text required
+  Address: Text required
   CapacityCubicMeters: Number
-  IsTemperatureControlled: Boolean
+  IsTemperatureControlled: Boolean write once
 
   items: many InventoryItem
   servedStores: many Store
@@ -271,11 +391,11 @@ entity Warehouse {
 }
 
 entity PurchaseOrder {
-  OrderNumber: Text
-  OrderDate: DateTime
+  OrderNumber: Text required write once
+  OrderDate: DateTime required write once
   ExpectedDeliveryDate: Date
-  TotalCost: Number range(0, )
-  CurrencyCode: Text
+  TotalCost: Number range(0, ) required
+  CurrencyCode: Text write once
 
   shipments: many owned Shipment
 
@@ -300,7 +420,7 @@ entity PurchaseOrder {
 }
 
 entity Shipment {
-  TrackingNumber: Text
+  TrackingNumber: Text required write once
   EstimatedArrivalDate: Date
   ActualArrivalDate: Date
   ShippingMethod: Text
@@ -318,10 +438,10 @@ entity Shipment {
 }
 
 entity InventoryItem {
-  BatchNumber: Text
-  QuantityOnHand: Number range(0, )
+  BatchNumber: Text required write once
+  QuantityOnHand: Number range(0, ) required
   QuantityReserved: Number range(0, )
-  ExpiryDate: Date
+  ExpiryDate: Date write once
   BinLocation: Text
 
   Available: stage {
@@ -340,11 +460,11 @@ entity InventoryItem {
 }
 
 entity Store {
-  StoreCode: Text
-  Name: Text
-  Address: Text
-  Region: Text
-  Format: Text
+  StoreCode: Text required write once
+  Name: Text required
+  Address: Text required
+  Region: Text required
+  Format: Text write once
 
   warehouses: many Warehouse
 
@@ -360,8 +480,8 @@ entity Store {
 }
 
 entity Category {
-  CategoryCode: Text
-  Name: Text
+  CategoryCode: Text required write once
+  Name: Text required
   Description: Text
 
   products: many Product
@@ -376,28 +496,43 @@ entity Category {
 
 ### Phase 2+ Example: E-Commerce with Actors & Permits
 
-The aspirational surface covering actors, permits, richer effects, and value types:
+The aspirational surface covering actors, permits, richer effects, and value types.
+
+The domain modeling system has two core primitives: **Entity** and **Value**.
+
+- **Value** types have no identity and no lifecycle. They are compared by their contents. `Currency`, `Money`, `Email` — these describe data shapes, not domain objects.
+- **Entity** types have identity, a lifecycle (stages), and can own relationships. `Product`, `Supplier`, `Order` are entities.
+- **Actor** is an entity specialization. `actor Customer { ... }` is shorthand for `entity Customer { ... }` plus identity, claims, and role-based policy evaluation. Actors inherit all entity capabilities — properties, stages, actions, policies — and add actor-specific features.
+
+**Permit expressions.** `permit` blocks use the same `DomainExpression` grammar as entity and actor policies. The `permit` keyword simply changes the evaluation subject from entity state to actor identity. See the Downstream Benefits remarks for details on the expression model.
 
 ```poly
 domain ECommerce
 
+// Value types — no identity, no lifecycle, compared by content
 value Currency {
-  code: Text length(3, 3)
-  symbol: Text
-  name: Text
+  code: Text length(3, 3) required
+  symbol: Text required
+  name: Text required
 }
 
 value Money {
-  amount: Number range(0, )
-  currency: Currency
+  amount: Number range(0, ) required
+  currency: Currency required
 }
 
+// Actor — an entity specialized for identity and role-based access
 actor User {
-  email: Text pattern("[^@]+@[^@]+") length(5, 254)
+  email: Text pattern("[^@]+@[^@]+") length(5, 254) required
 }
 
 actor Employee : User {
-  badgeNumber: Text
+  badgeNumber: Text required write once
+  role: Text required
+
+  // Actor-scoped policies — same expression syntax, different subject
+  CustomerService: policy role == "Customer Service"
+  Warehouse: policy role == "Warehouse"
 }
 
 actor Customer : User {
@@ -411,60 +546,51 @@ actor Customer : User {
 }
 
 entity Order {
-  customer: one Customer
-    constraint write once
-  createdAt: DateTime
-    constraint write once
+  customer: one Customer required write once
+  createdAt: DateTime required write once
   submittedAt: DateTime
-    constraint required when Submitted
+    // Phase 2+: required when Submitted
   shippedAt: DateTime
-    constraint required when Shipped
-  total: Money
+    // Phase 2+: required when Shipped
+  total: Money required
 
   Draft: stage {
     AddLineItem: action(price: Money) {
       assign total to total + price
     }
-      permit { CustomerServiceEmployee }
+      permit Employee.CustomerService
 
     Submit: action -> Submitted {
       assign submittedAt to now
     }
-      permit { this.customer, CustomerServiceEmployee }
+      permit this.customer
+      permit Employee.CustomerService
 
     Cancel: action -> Cancelled {}
-      permit { this.customer, CustomerServiceEmployee }
+      permit this.customer
+      permit Employee.CustomerService
   }
 
   Submitted: stage {
     AddLineItem: action(price: Money) {
       assign total to total + price
     }
-      permit { CustomerServiceEmployee }
+      permit Employee.CustomerService
 
     Ship: action -> Shipped {
       assign shippedAt to now
     }
-      permit { WarehouseEmployee }
+      permit Employee.Warehouse
 
     Cancel: action -> Cancelled {
       assign canceledAt to now
     }
-      permit { this.customer, CustomerServiceEmployee }
+      permit this.customer
+      permit Employee.CustomerService
   }
 
   Shipped: stage {}
   Cancelled: stage {}
-}
-
-policy CustomerServiceEmployee {
-  actor is Employee
-  actor in role "Customer Service"
-}
-
-policy WarehouseEmployee {
-  actor is Employee
-  actor in role "Warehouse"
 }
 ```
 
@@ -482,9 +608,9 @@ policy WarehouseEmployee {
 
 The DSL must eventually cover the real domain surface. Priority is ordered by Phase:
 
-- **Phase 1:** entities, properties (bare type with inline constraint modifiers), relationships as entity-typed properties (`one`/`many`, optional `owned`, implicit reverse navigation), stages (cyclical graph), actions with stage transitions, policies (property comparison and composite boolean)
+- **Phase 1:** entities, properties (bare type with inline value constraints `range`/`length`/`pattern` and mutation constraints `required`/`write once`), relationships as entity-typed properties (`one`/`many`, optional `owned`, implicit reverse navigation), stages (cyclical graph), actions with stage transitions, policies (property comparison and composite boolean)
 - **Phase 2:** actors (specialized entities with identity/claims/roles), action parameters and effect blocks, event declarations, richer effects
-- **Phase 3:** comments and annotations, `permit` blocks (actor/RBAC guards), migration/versioning support
+- **Phase 3:** comments and annotations, `permit` expression subject switch (inline `permit` using the existing `DomainExpression` grammar, scoped to actor identity), compatibility aliases(inline `permit` using the existing `DomainExpression` grammar, scoped to actor identity), compatibility aliases, migration/versioning support
 
 ## Canonical Printing Rules
 
@@ -635,7 +761,7 @@ These are documented constraints, not parser enforcement in Phase 1. Formal vali
    - entity
    - property (bare type: `Name: Type`) — when the type is another entity, it is a relationship
    - relationship modifiers inline on properties (`one`/`many`, optional `owned`)
-   - inline constraint modifiers on properties (`range`, `length`, `pattern`)
+   - inline constraint modifiers on properties (`range`, `length`, `pattern` for value constraints; `required`, `write once` for mutation constraints)
    - stage (`Name: stage { ... }`)
    - action with stage transition (`Name: action -> Target`)
    - policy — property comparison and composite boolean (`Name: policy expr`)
@@ -648,8 +774,9 @@ These are documented constraints, not parser enforcement in Phase 1. Formal vali
 
 Add:
 
-- actor specialization (`Name: actor { ... }`) — inherits entity grammar plus identity, claims, roles
-- action parameters and effect blocks (`assign`, `yield create`)
+- value types (`value Name { ... }`) — the second core primitive alongside entity; no identity, no lifecycle, compared by content
+- actor specialization (`actor Name { ... }`) — an entity with identity, claims, and role-based policy evaluation; inherits all entity grammar (properties, stages, actions, policies)
+- action parameters and return types (`Name: action(Param: Type, ...) -> ReturnType`); effect blocks (`assign`, `yield create`)
 - event declarations and subscriptions
 - actor identity configuration
 - richer effects (Create, PublishEvent, TransitionStage)
@@ -661,7 +788,7 @@ Add:
 - comments/annotations
 - compatibility aliases
 - migration/versioning support
-- `permit` blocks on actions (actor/RBAC guards)
+- `permit` expression subject switch (inline `permit` using the existing `DomainExpression` grammar, scoped to actor identity)
 
 ## Recommendation Summary
 

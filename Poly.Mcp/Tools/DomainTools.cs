@@ -6,6 +6,7 @@ using ModelContextProtocol.Server;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Bootstrap;
+using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
@@ -241,6 +242,80 @@ internal sealed class QueryTool {
         );
     }
 
+    /// <summary>
+    /// Returns a complete snapshot of the domain: all entities with full detail
+    /// (properties, stages, actions, policies) plus relationships and analysis.
+    /// </summary>
+    [McpServerTool(Name = "get_domain_snapshot"), Description("Returns a complete snapshot of the domain model: all entities with full detail, relationships, and analysis diagnostics.")]
+    public static DomainToolResponse GetDomainSnapshot(
+        [Description("Session ID")] string sessionId) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+
+        var entities = state.Domain.Types.OfType<Entity>().Select(e => {
+            var detail = DomainQueries.GetEntity(state.Domain, e.Name)!;
+            return new {
+                name = e.Name,
+                properties = detail.Properties.Select(p => new { p.Name, p.TypeName, p.ConstraintCount }),
+                stages = detail.Stages.Select(s => new { s.Name, parent = s.ParentStageName, actions = s.ActionNames }),
+                actions = detail.Actions.Select(a => new { a.Name, a.ParameterNames, a.EffectCount }),
+                policies = detail.Policies.Select(p => p.Name)
+            };
+        }).ToList();
+
+        var relationships = DomainQueries.ListRelationships(state.Domain);
+
+        var data = new {
+            domainName = state.Domain.Name,
+            revision = state.Revision,
+            primitiveTypes = state.Domain.Types.OfType<PrimitiveType>().Select(p => p.Name).ToList(),
+            entities,
+            relationships,
+            analysis = state.LatestAnalysis is not null
+                ? new {
+                    errors = state.LatestAnalysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error),
+                    warnings = state.LatestAnalysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning)
+                }
+                : null
+        };
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: $"Snapshot of '{state.Domain.Name}': {entities.Count} entities, {relationships.Count} relationships.",
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: data,
+            Affordances: ["get_entity_detail", "get_domain_analysis"]
+        );
+    }
+
+    /// <summary>
+    /// Lists all relationships in the domain, optionally filtered by entity name.
+    /// </summary>
+    [McpServerTool(Name = "get_relationships"), Description("Lists all relationships in the domain. Optionally filter by entity name to show relationships where that entity is source or target.")]
+    public static DomainToolResponse GetRelationships(
+        [Description("Session ID")] string sessionId,
+        [Description("Optional entity name filter — only show relationships involving this entity")] string? entityName = null) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+
+        var all = DomainQueries.ListRelationships(state.Domain);
+
+        var filtered = entityName is not null
+            ? all.Where(r => string.Equals(r.SourceEntityName, entityName, StringComparison.Ordinal)
+                          || string.Equals(r.TargetEntityName, entityName, StringComparison.Ordinal)).ToList()
+            : all;
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: $"{filtered.Count} relationship(s)" + (entityName is not null ? $" involving '{entityName}'." : "."),
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: filtered,
+            Affordances: ["add_relationship", "get_entity_detail"]
+        );
+    }
+
     private static DomainToolResponse Failure_NotFound(string sessionId) =>
         new(Success: false, Message: $"Session '{sessionId}' not found.",
             Affordances: ["create_domain_session", "list_sessions"]);
@@ -344,6 +419,122 @@ internal sealed class EvolveTool {
             successAffordances: ["add_relationship", "get_entity_detail", "get_domain_overview"]);
     }
 
+    // ── Batch/plural tools ──────────────────────────────────────
+
+    /// <summary>
+    /// Adds multiple properties to an entity in a single atomic batch.
+    /// </summary>
+    [McpServerTool(Name = "add_properties"), Description("Adds multiple properties to an entity in a single atomic batch. Provide a JSON array of {name, typeName} objects.")]
+    public static DomainToolResponse AddProperties(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("JSON array of property objects: [{\"name\":\"Age\",\"typeName\":\"Number\"},...]")] string properties) {
+        PropertySpec[] specs;
+        try {
+            specs = JsonSerializer.Deserialize<PropertySpec[]>(properties)
+                ?? throw new ArgumentException("Properties array must not be null.");
+            if (specs.Length == 0)
+                throw new ArgumentException("Properties array must not be empty.");
+        }
+        catch (Exception ex) when (ex is not ArgumentException) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Invalid properties JSON: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: ex.Message,
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+        }
+
+        return Evolve(sessionId, builder => {
+            foreach (var s in specs)
+                builder = builder.AddPropertyToEntity(entityName,
+                    new Property(s.Name, new DomainTypeReference(s.TypeName), []));
+            return builder;
+        }, successAffordances: ["add_property", "add_stage", "get_entity_detail"]);
+    }
+
+    /// <summary>
+    /// Adds multiple lifecycle stages to an entity in a single atomic batch.
+    /// </summary>
+    [McpServerTool(Name = "add_stages"), Description("Adds multiple lifecycle stages to an entity in a single atomic batch. Provide a JSON array of {name, parentStageName?} objects.")]
+    public static DomainToolResponse AddStages(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("JSON array of stage objects: [{\"name\":\"Draft\"},{\"name\":\"Review\",\"parentStageName\":\"Draft\"},...]")] string stages) {
+        StageSpec[] specs;
+        try {
+            specs = JsonSerializer.Deserialize<StageSpec[]>(stages)
+                ?? throw new ArgumentException("Stages array must not be null.");
+            if (specs.Length == 0)
+                throw new ArgumentException("Stages array must not be empty.");
+        }
+        catch (Exception ex) when (ex is not ArgumentException) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Invalid stages JSON: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: ex.Message,
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+        }
+
+        return Evolve(sessionId, builder => {
+            foreach (var s in specs)
+                builder = s.ParentStageName is not null
+                    ? builder.AddStage(entityName, s.Name, s.ParentStageName)
+                    : builder.AddStage(entityName, s.Name);
+            return builder;
+        }, successAffordances: ["add_action", "add_action_to_stage", "get_entity_detail"]);
+    }
+
+    /// <summary>
+    /// Places multiple actions onto stages in a single atomic batch.
+    /// </summary>
+    [McpServerTool(Name = "add_actions_to_stages"), Description("Places multiple actions onto stages in a single atomic batch. Provide a JSON array of {stageName, actionName} objects.")]
+    public static DomainToolResponse AddActionsToStages(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("JSON array of action-stage pairs: [{\"stageName\":\"Draft\",\"actionName\":\"Submit\"},...]")] string actions) {
+        ActionToStageSpec[] specs;
+        try {
+            specs = JsonSerializer.Deserialize<ActionToStageSpec[]>(actions)
+                ?? throw new ArgumentException("Actions array must not be null.");
+            if (specs.Length == 0)
+                throw new ArgumentException("Actions array must not be empty.");
+        }
+        catch (Exception ex) when (ex is not ArgumentException) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Invalid actions JSON: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: ex.Message,
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+        }
+
+        return Evolve(sessionId, builder => {
+            foreach (var s in specs)
+                builder = builder.AddActionToStage(entityName, s.StageName, s.ActionName);
+            return builder;
+        }, successAffordances: ["add_action", "get_entity_detail"]);
+    }
+
     // ── Shared helpers ──────────────────────────────────────────
 
     /// <summary>
@@ -360,11 +551,12 @@ internal sealed class EvolveTool {
             .OrderBy(e => e.Name)
             .Select(e => {
                 var props = $"P{e.Properties.Count}";
+                var constraints = e.Properties.Sum(p => p.Constraints.Count);
                 var stages = string.Join(",", e.Stages.OrderBy(s => s.Name)
                     .Select(s => $"{s.Name}({s.Actions.Count}a)"));
                 var actions = $"A{e.Actions.Count}";
                 var stageActions = e.Stages.Sum(s => s.Actions.Count);
-                return $"{e.Name}:{props}|[{stages}]|{actions}(+{stageActions}sa)";
+                return $"{e.Name}:{props}({constraints}c)|[{stages}]|{actions}(+{stageActions}sa)";
             });
         return entityDetails.Any()
             ? $"{typeCounts}|{string.Join(",", entityDetails)}"
@@ -375,26 +567,35 @@ internal sealed class EvolveTool {
         string sessionId,
         Func<EvolutionBuilder, EvolutionBuilder> mutate,
         IReadOnlyList<string>? successAffordances = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        // Snapshot read for session-not-found check and fingerprint.
+        // The actual mutation happens atomically inside McpSessionStore.Evolve.
+        if (!McpSessionStore.TryGet(sessionId, out var snapshot))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
 
-        // Snapshot fingerprint before mutation to detect silent no-ops
-        var before = GetFingerprint(state.Domain);
+        var before = GetFingerprint(snapshot.Domain);
+        var preRevision = snapshot.Revision;
 
-        var result = new DomainEvolution(state.Domain).Evolve();
-        result = mutate(result);
-        var outcome = result.Apply();
+        var outcome = McpSessionStore.Evolve(sessionId, domain => {
+            var result = new DomainEvolution(domain).Evolve();
+            result = mutate(result);
+            return result.Apply();
+        });
+
+        // Session was just validated above; null shouldn't happen but guard anyway.
+        if (outcome is null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
 
         if (!outcome.Succeeded) {
-            // Build enriched diagnostics from the analysis result
             var diagnostics = outcome.FailureSummary is not null
                 ? new List<string> { outcome.FailureSummary }
                 : new List<string>();
 
-            // Add up to 3 additional error messages for context
             var errorMessages = outcome.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
                 .Take(3)
@@ -406,33 +607,156 @@ internal sealed class EvolveTool {
                 Success: false,
                 Message: $"Evolution rolled back: {outcome.FailureSummary ?? "Analysis failed"}",
                 SessionId: sessionId,
-                Revision: state.Revision,
+                Revision: preRevision,
                 Diagnostics: diagnostics.Count > 0 ? diagnostics : null,
                 Affordances: ["get_domain_analysis", "get_domain_overview"]
             );
         }
 
-        // Guard: detect silent no-ops — evolution "succeeded" but nothing changed.
+        // Guard: detect silent no-ops
         var after = GetFingerprint(outcome.Root);
         if (before == after) {
             return new DomainToolResponse(
                 Success: false,
                 Message: "No changes applied: target entity not found or change had no effect. Check that the entity name is correct.",
                 SessionId: sessionId,
-                Revision: state.Revision,
+                Revision: preRevision,
                 Affordances: ["get_domain_overview", "get_entity_detail"]
             );
         }
 
-        McpSessionStore.Update(sessionId, outcome.Root, outcome.Analysis);
+        // McpSessionStore.Evolve already committed the update atomically.
         return new DomainToolResponse(
             Success: true,
             Message: "Change applied successfully.",
             SessionId: sessionId,
-            Revision: state.Revision + 1,
+            Revision: preRevision + 1,
             Affordances: successAffordances
         );
     }
+
+    // ── Batch tool spec types ───────────────────────────────────
+
+    private sealed record PropertySpec(
+        [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name,
+        [property: System.Text.Json.Serialization.JsonPropertyName("typeName")] string TypeName);
+    private sealed record StageSpec(
+        [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name,
+        [property: System.Text.Json.Serialization.JsonPropertyName("parentStageName")] string? ParentStageName = null);
+    private sealed record ActionToStageSpec(
+        [property: System.Text.Json.Serialization.JsonPropertyName("stageName")] string StageName,
+        [property: System.Text.Json.Serialization.JsonPropertyName("actionName")] string ActionName);
+
+    // ── Constraint tools ────────────────────────────────────────
+
+    /// <summary>
+    /// Adds a validation constraint to a property on an entity.
+    /// </summary>
+    [McpServerTool(Name = "add_constraint"), Description("Adds a validation constraint to a property. Supported types: Range (min/max), Required, Length (min/max), Pattern (regex), Unique.")]
+    public static DomainToolResponse AddConstraint(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("Name of the property")] string propertyName,
+        [Description("Constraint type: Range, Required, Length, Pattern, Unique")] string constraintType,
+        [Description("JSON config for the constraint, e.g. {\"min\":0,\"max\":100} for Range, {\"min\":5,\"max\":50} for Length, {\"regex\":\"^[a-z]+$\"} for Pattern")] string? config = null) {
+        Constraint constraint;
+        try {
+            constraint = BuildConstraint(constraintType, config);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Invalid constraint: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+        }
+
+        return Evolve(sessionId, builder =>
+                builder.AddConstraintToProperty(entityName, propertyName, constraint),
+            successAffordances: ["get_entity_detail", "get_domain_analysis"]);
+    }
+
+    /// <summary>
+    /// Lists all constraints on an entity's properties.
+    /// </summary>
+    [McpServerTool(Name = "get_constraints"), Description("Lists all constraints on an entity's properties. Optionally filter by property name.")]
+    public static DomainToolResponse GetConstraints(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("Optional property name filter")] string? propertyName = null) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+
+        var entity = state.Domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal));
+        if (entity is null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Entity '{entityName}' not found.",
+                SessionId: sessionId,
+                Affordances: ["get_domain_overview"]);
+
+        var constraints = entity.Properties
+            .Where(p => propertyName is null || string.Equals(p.Name, propertyName, StringComparison.Ordinal))
+            .SelectMany(p => p.Constraints.Select(c => new {
+                property = p.Name,
+                type = c.GetType().Name.Replace("Constraint", ""),
+                detail = FormatConstraint(c)
+            }))
+            .ToList();
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: $"{constraints.Count} constraint(s) on entity '{entityName}'.",
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: constraints,
+            Affordances: ["add_constraint", "get_entity_detail"]
+        );
+    }
+
+    private static Constraint BuildConstraint(string type, string? config) {
+        var cfg = config is not null
+            ? JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(config)
+            : null;
+
+        return type switch {
+            "Range" => new RangeConstraint(
+                cfg?.TryGetValue("min", out var min) == true ? NormalizeJsonElement(min) : null,
+                cfg?.TryGetValue("max", out var max) == true ? NormalizeJsonElement(max) : null),
+            "Required" => new RequiredConstraint(),
+            "Length" => new LengthConstraint(
+                cfg?.TryGetValue("min", out var lmin) == true ? lmin.GetInt32() : 0,
+                cfg?.TryGetValue("max", out var lmax) == true ? lmax.GetInt32() : int.MaxValue),
+            "Pattern" => new PatternConstraint(
+                cfg?.TryGetValue("regex", out var rx) == true ? rx.GetString()! : throw new ArgumentException("Pattern requires 'regex' config.")),
+            "Unique" => new UniqueConstraint(),
+            _ => throw new ArgumentException($"Unknown constraint type '{type}'. Supported: Range, Required, Length, Pattern, Unique.")
+        };
+    }
+
+    private static object? NormalizeJsonElement(JsonElement je) => je.ValueKind switch {
+        JsonValueKind.Number when je.TryGetInt32(out var i) => i,
+        JsonValueKind.Number when je.TryGetInt64(out var l) => l,
+        JsonValueKind.Number => je.GetDecimal(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.String => je.GetString(),
+        JsonValueKind.Null => null,
+        _ => je.GetRawText()
+    };
+
+    private static string FormatConstraint(Constraint c) => c switch {
+        RangeConstraint r => $"Range(min={r.Minimum}, max={r.Maximum})",
+        RequiredConstraint => "Required",
+        LengthConstraint l => $"Length(min={l.MinLength}, max={l.MaxLength})",
+        PatternConstraint p => $"Pattern({p.Pattern})",
+        UniqueConstraint => "Unique",
+        _ => c.GetType().Name
+    };
 }
 
 /// <summary>
@@ -495,12 +819,7 @@ internal sealed class PolicyTool {
         [Description("Name of the entity")] string entityName,
         [Description("Policy name (e.g. 'Adult', 'LargeActive')")] string policyName,
         [Description("JSON expression string. Comparison: {\"property\":\"Age\",\"op\":\">=\",\"value\":18}. Composite: {\"and\":[{...},{...}]}, {\"or\":[...]}, {\"not\":{...}}. Literal: {\"literal\":true}.")] string expression) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Session '{sessionId}' not found.",
-                Affordances: ["create_domain_session", "list_sessions"]);
-
+        // Parse the expression eagerly — this is pure and doesn't depend on session state.
         DomainExpression domainExpr;
         try {
             domainExpr = DomainExpressionJsonParser.ParseJson(expression);
@@ -513,25 +832,34 @@ internal sealed class PolicyTool {
                 Affordances: ["get_entity_detail", "get_domain_overview"]);
         }
 
-        var result = new DomainEvolution(state.Domain).Evolve()
-            .AddPolicyToEntity(entityName, policyName, domainExpr)
-            .Apply();
+        // Atomic read-modify-write through McpSessionStore.Evolve.
+        var outcome = McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddPolicyToEntity(entityName, policyName, domainExpr)
+                .Apply());
 
-        if (!result.Succeeded) {
+        if (outcome is null)
             return new DomainToolResponse(
                 Success: false,
-                Message: $"Evolution rolled back: {result.FailureSummary ?? "Analysis failed"}",
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+
+        if (!outcome.Succeeded) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Evolution rolled back: {outcome.FailureSummary ?? "Analysis failed"}",
                 SessionId: sessionId,
-                Revision: state.Revision,
                 Affordances: ["get_domain_analysis", "get_domain_overview"]);
         }
 
-        McpSessionStore.Update(sessionId, result.Root, result.Analysis);
+        // Need the session to get the revision for the response.
+        // We know it exists because outcome is non-null.
+        McpSessionStore.TryGet(sessionId, out var state);
         return new DomainToolResponse(
             Success: true,
             Message: $"Policy '{policyName}' added to entity '{entityName}'.",
             SessionId: sessionId,
-            Revision: state.Revision + 1,
+            Revision: state?.Revision ?? 0,
             Affordances: ["get_entity_detail", "get_policy_expression", "evaluate_policy"]);
     }
 

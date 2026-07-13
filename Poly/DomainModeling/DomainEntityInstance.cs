@@ -28,23 +28,39 @@ namespace Poly.DomainModeling;
 public sealed record DomainEntityInstance {
     private readonly Dictionary<string, object?> _values;
     private readonly TypeDefinitionNodeAnalyzer _typeDefAnalyzer;
+    private readonly List<DomainEntityInstance> _createdChildren = [];
+    private readonly List<PublishEventEffect> _publishedEvents = [];
 
     private DomainEntityInstance(
         Entity entity,
         Dictionary<string, object?> values,
         TypeDefinitionNodeAnalyzer typeDefAnalyzer,
-        string? currentStage) {
+        string? currentStage,
+        Domain? domain = null) {
         Entity = entity;
         _values = values;
         _typeDefAnalyzer = typeDefAnalyzer;
         CurrentStage = currentStage;
+        Domain = domain;
     }
+
+    /// <summary>The domain model this instance belongs to (null for standalone instances).</summary>
+    public Domain? Domain { get; }
 
     /// <summary>The domain entity definition this instance was created from.</summary>
     public Entity Entity { get; }
 
     /// <summary>The current lifecycle stage, if the entity defines stages.</summary>
     public string? CurrentStage { get; private set; }
+
+    /// <summary>Whether this instance has been deleted by a <see cref="DeleteEntityInstance"/> effect.</summary>
+    public bool IsDeleted { get; private set; }
+
+    /// <summary>Child instances created by <see cref="CreateEntityInstance"/> effects.</summary>
+    public IReadOnlyList<DomainEntityInstance> CreatedChildren => _createdChildren;
+
+    /// <summary>Events published by <see cref="PublishEventEffect"/> during action execution.</summary>
+    public IReadOnlyList<PublishEventEffect> PublishedEvents => _publishedEvents;
 
     /// <summary>
     /// Creates a new instance of <paramref name="entity"/> with the given
@@ -60,7 +76,8 @@ public sealed record DomainEntityInstance {
     /// on the entity or a required property is missing with no default.</exception>
     public static DomainEntityInstance Create(
         Entity entity,
-        IReadOnlyDictionary<string, object?>? propertyValues = null) {
+        IReadOnlyDictionary<string, object?>? propertyValues = null,
+        Domain? domain = null) {
         ArgumentNullException.ThrowIfNull(entity);
 
         var entityPropNames = new HashSet<string>(
@@ -107,7 +124,7 @@ public sealed record DomainEntityInstance {
 
         var currentStage = entity.Stages.FirstOrDefault()?.Name;
 
-        return new DomainEntityInstance(entity, values, typeDefAnalyzer, currentStage);
+        return new DomainEntityInstance(entity, values, typeDefAnalyzer, currentStage, domain);
     }
 
     /// <summary>
@@ -219,10 +236,16 @@ public sealed record DomainEntityInstance {
                 TransitionStage(transition.TargetStage.StageName);
                 break;
             case CreateEntityInstance create:
-                CreateInstance(create);
+                CreateChildInstance(create);
                 break;
             case InvokeActionEffect invoke:
                 CallAction(invoke.ActionName);
+                break;
+            case DeleteEntityInstance:
+                IsDeleted = true;
+                break;
+            case PublishEventEffect publish:
+                _publishedEvents.Add(publish);
                 break;
         }
     }
@@ -232,22 +255,42 @@ public sealed record DomainEntityInstance {
             CurrentStage = targetStageName;
     }
 
-    private void CreateInstance(CreateEntityInstance createEffect) {
-        var targetEntity = Entity; // current: creates same entity type
-        foreach (var binding in createEffect.Initializers) {
-            var prop = targetEntity.Properties.FirstOrDefault(
-                p => string.Equals(p.Name, binding.PropertyName, StringComparison.Ordinal));
-            if (prop is null) continue;
+    /// <summary>
+    /// Creates a child entity instance from a <see cref="CreateEntityInstance"/>
+    /// effect. Looks up the target entity by type name — first from the parent
+    /// <see cref="Domain"/> if available, otherwise falls back to the current
+    /// entity (same-type creation). Initializer expressions are evaluated
+    /// against the <em>parent</em> instance and bound to the child's properties.
+    /// </summary>
+    private void CreateChildInstance(CreateEntityInstance createEffect) {
+        var targetTypeName = createEffect.Type.TypeName;
 
+        // Resolve target entity definition
+        Entity targetEntity;
+        if (Domain is not null) {
+            targetEntity = Domain.Types.OfType<Entity>()
+                .FirstOrDefault(e => string.Equals(e.Name, targetTypeName, StringComparison.Ordinal))
+                ?? throw new InvalidOperationException(
+                    $"Entity type '{targetTypeName}' not found in domain '{Domain.Name}'.");
+        }
+        else {
+            targetEntity = Entity; // same-type creation when no domain reference
+        }
+
+        // Evaluate initializers against the parent instance
+        var initialValues = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var binding in createEffect.Initializers) {
             var lowered = new DomainExpressionLoweringPass().Lower(
                 binding.Expression,
                 new Parameter("entity", new TypeReference(Entity.Name)));
-
             var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { _values }));
-            _values[binding.PropertyName] = exec.Result.GetValue<object>();
+            initialValues[binding.PropertyName] = exec.Result.GetValue<object>();
         }
+
+        var child = Create(targetEntity, initialValues, Domain);
+        _createdChildren.Add(child);
     }
 
     /// <summary>

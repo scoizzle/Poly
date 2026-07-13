@@ -65,7 +65,7 @@ providers.Add(analyzer);  // analyzer itself IS the provider
 |----|------|------------|
 | **P1.1** | `Interpreter.Analyze` / `Interpreter.Compile` construct `AnalysisContext` with a `TypeDefinitionProviderCollection` instead of bare `ClrTypeDefinitionRegistry.Shared`. After the standard pass list completes, freeze `TypeDefinitionNodeAnalyzer` (if present) and add it to the collection. | `context.TypeDefinitions` resolves AST types by name after analysis. |
 | **P1.2** | `Interpreter.Analyze` / `Interpreter.Compile` accept optional pre-built `TypeDefinitionProviderCollection`. When provided, it replaces the default (caller manages lifetime, can pre-populate). | Caller-supplied providers are used when specified. |
-| **P1.3** | The `evaluate_policy` MCP tool uses the new path instead of building its own ad-hoc `TypeDefinitionNode`→`AstTypeDefinition`→compile. | Old tests pass; MCP policy eval works identically. |
+| **P1.3** | The `evaluate_policy` MCP tool uses `TypeDefinitionNodeAnalyzer` directly as a provider: analyze the `TypeDefinitionNode` in isolation, then pass the analyzer as the type provider to `Interpreter.Compile`. (Full pipeline integration via `Block` composition is deferred — the emitter needs a `TypeDefinitionNode` no-op handler.) | Old tests pass; MCP policy eval works identically. |
 
 **Dependencies:** None (pure refactor).  
 **Risk:** Low — no new types. The analyzer already is a provider.  

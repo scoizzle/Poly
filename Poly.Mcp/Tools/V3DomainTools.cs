@@ -11,7 +11,6 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
 using Poly.Mcp.Sessions;
 using Poly.Syntax.Analysis;
 using Poly.Syntax.Nodes;
@@ -599,9 +598,7 @@ internal sealed class V3EvalTool {
         // Build a sample subject — a Dictionary backed by an AstTypeDefinition
         // that mirrors the entity's property structure.
         Dictionary<string, object?> subjectValues;
-        ITypeDefinitionProvider provider;
         try {
-            // Parse and validate property names before building the type definition
             var entityPropNames = new HashSet<string>(entity.Properties.Select(p => p.Name), StringComparer.OrdinalIgnoreCase);
             subjectValues = new Dictionary<string, object?>(StringComparer.Ordinal);
 
@@ -619,30 +616,6 @@ internal sealed class V3EvalTool {
                     throw new ArgumentException("Entity has no 'Age' property.");
                 subjectValues["Age"] = age.Value;
             }
-
-            // Build property definition nodes for the entity's properties
-            var propDefs = new List<PropertyDefinitionNode>();
-            foreach (var ep in entity.Properties) {
-                var clrType = DomainTypeToClrType(ep.Type.TypeName);
-                propDefs.Add(new PropertyDefinitionNode(
-                    ep.Name,
-                    new ClrTypeReference(clrType),
-                    Getter: new PropertyGetterDefinitionNode()));
-            }
-
-            // Build a TypeDefinitionNode representing the subject
-            var typeDefNode = new TypeDefinitionNode(
-                Name: "Subject",
-                Properties: [.. propDefs]);
-
-            // Analyze it with TypeDefinitionNodeAnalyzer to create an AstTypeDefinition
-            var typeDefAnalyzer = new TypeDefinitionNodeAnalyzer();
-            var ctx = AnalysisContext.CreateDefault();
-            typeDefAnalyzer.Analyze(ctx, typeDefNode);
-
-            // Use the analyzer as the type provider — it resolves Subject
-            // and falls through to CLR registry for primitive types internally.
-            provider = typeDefAnalyzer;
         }
         catch (Exception ex) {
             return new V3Response(
@@ -654,13 +627,35 @@ internal sealed class V3EvalTool {
 
         bool result;
         try {
+            // Build property definition nodes for the entity's properties
+            var propDefs = new List<PropertyDefinitionNode>();
+            foreach (var ep in entity.Properties) {
+                var clrType = DomainTypeToClrType(ep.Type.TypeName);
+                propDefs.Add(new PropertyDefinitionNode(
+                    ep.Name,
+                    new ClrTypeReference(clrType),
+                    Getter: new PropertyGetterDefinitionNode()));
+            }
+
+            var typeDefNode = new TypeDefinitionNode(
+                Name: "Subject",
+                Properties: [.. propDefs]);
+
+            // Analyze the TypeDefinitionNode in isolation to populate
+            // the TypeDefinitionNodeAnalyzer's type store, then use it as
+            // the provider so TypeAndMemberResolutionPass can resolve "Subject"
+            // and its members during compilation.
+            var typeDefAnalyzer = new TypeDefinitionNodeAnalyzer();
+            var ctx = AnalysisContext.CreateDefault();
+            typeDefAnalyzer.Analyze(ctx, typeDefNode);
+
             // Lower the policy expression with an AST-typed parameter
             var entityParam = new Parameter("entity", new TypeReference("Subject"));
             var pass = new DomainExpressionLoweringPass();
             var lowered = pass.Lower(policy.Expression, entityParam);
 
-            // Compile with the custom provider that includes the AST type definition
-            var compiled = Interpreter.Compile(lowered, provider);
+            // Compile with the custom provider that includes AST types
+            var compiled = Interpreter.Compile(lowered, typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { subjectValues }));
             result = exec.Result.GetValue<bool>();

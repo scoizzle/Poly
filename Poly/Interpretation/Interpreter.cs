@@ -21,6 +21,7 @@ namespace Poly.Interpretation;
 /// </summary>
 public static class Interpreter {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
+        .UseTypeDefinitionNodeAnalyzer()
         .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()

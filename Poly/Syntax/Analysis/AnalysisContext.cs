@@ -1,5 +1,7 @@
 namespace Poly.Syntax.Analysis;
 
+using Poly.Introspection;
+
 /// <summary>
 /// Provides context for analysis operations, including type definitions and metadata storage.
 /// </summary>
@@ -14,7 +16,9 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// Initializes a new instance with type definitions.
     /// </summary>
     public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisSettings? settings = null) {
-        TypeDefinitions = typeDefinitions;
+        TypeDefinitions = typeDefinitions is TypeDefinitionProviderCollection tpc
+            ? tpc
+            : new TypeDefinitionProviderCollection(typeDefinitions);
         Metadata = new NodeMetadataStore();
         Diagnostics = new Dictionary<NodeId, List<Diagnostic>>();
         Settings = settings ?? AnalysisSettings.Default;
@@ -23,7 +27,9 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisResult priorAnalysis, AnalysisSettings? settings = null) {
         ArgumentNullException.ThrowIfNull(priorAnalysis);
 
-        TypeDefinitions = typeDefinitions;
+        TypeDefinitions = typeDefinitions is TypeDefinitionProviderCollection tpc
+            ? tpc
+            : new TypeDefinitionProviderCollection(typeDefinitions);
         Metadata = new NodeMetadataStore(priorAnalysis.GetMetadataStore());
         Diagnostics = priorAnalysis.GetDiagnosticsDictionary();
         Settings = settings ?? priorAnalysis.SettingsUsed;
@@ -46,8 +52,11 @@ public sealed class AnalysisContext : INodeMetadataProvider {
 
     /// <summary>
     /// Gets the type definition provider used for resolving type information.
+    /// This is always a <see cref="TypeDefinitionProviderCollection"/> — providers
+    /// registered during analysis (e.g. AST type definitions from
+    /// <c>TypeDefinitionNodeAnalyzer</c>) are added to this collection.
     /// </summary>
-    public ITypeDefinitionProvider TypeDefinitions { get; }
+    public TypeDefinitionProviderCollection TypeDefinitions { get; }
 
     /// <summary>
     /// Reports a diagnostic for the specified node.

@@ -1,5 +1,7 @@
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Syntax.Analysis;
+using Poly.Syntax.Nodes;
 
 namespace Poly.Interpretation.Analysis.Semantics;
 
@@ -12,6 +14,7 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     public const string Id = "TypeDefinitionNode";
     public string PassName => Id;
     private readonly Dictionary<string, AstTypeDefinition> _types = new();
+    private TypeDefinitionProviderCollection? _lastRegisteredCollection;
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<TypeDefinitionNodeAnalyzer>(node)) {
@@ -19,11 +22,17 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
         }
 
         if (node is TypeDefinitionNode typeDef) {
+            if (context.TypeDefinitions != _lastRegisteredCollection) {
+                context.TypeDefinitions.Add(this);
+                _lastRegisteredCollection = context.TypeDefinitions;
+            }
             var definition = new AstTypeDefinition(typeDef, this);
             _types[typeDef.FullName] = definition;
 
-            // Store the type definition in context metadata
-            context.SetResolvedType(node, definition);
+            // Store the type definition in context metadata for resolution
+            // by other passes (e.g. ThisReferenceContextPass) and for
+            // GetResolvedType queries.
+            context.SetMetadata(node, new TypeDefinitionMetadata(definition));
         }
 
         // Analyze children (properties, methods, etc.)
@@ -50,6 +59,13 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
 /// <see cref="TypeDefinitionNodeAnalyzer"/> during analysis.</summary>
 /// <param name="TypeDefinition">The resolved type definition.</param>
 public sealed record TypeDefinitionMetadata(ITypeDefinition TypeDefinition) : IAnalysisMetadata;
+
+public static class TypeDefinitionNodeAnalyzerExtensions {
+    public static AnalyzerBuilder UseTypeDefinitionNodeAnalyzer(this AnalyzerBuilder builder) {
+        builder.AddAnalyzer(new TypeDefinitionNodeAnalyzer());
+        return builder;
+    }
+}
 
 /// <summary>
 /// ITypeDefinition implementation backed by a TypeDefinitionNode AST.

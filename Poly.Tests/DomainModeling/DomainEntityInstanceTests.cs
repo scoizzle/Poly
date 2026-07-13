@@ -16,9 +16,9 @@ public class DomainEntityInstanceTests {
                 DomainExpression.Literal(18L)));
 
         var isActive = new Policy("IsActive",
-            DomainExpression.GreaterThanOrEqual(
-                DomainExpression.Property("Age"),
-                DomainExpression.Literal(1L)));
+            DomainExpression.Equal(
+                DomainExpression.Property("Active"),
+                DomainExpression.Literal(true)));
 
         var activate = new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [],
             Effects: [new StageTransitionEffect(new StageReference("Active"))],
@@ -77,7 +77,7 @@ public class DomainEntityInstanceTests {
     public async Task CallAction_WithPassingGuards_Succeeds() {
         var entity = CreatePersonEntity();
         var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Age"] = 25L });
+            new Dictionary<string, object?> { ["Active"] = true, ["Age"] = 25L });
 
         var result = instance.CallAction("Activate");
 
@@ -90,7 +90,7 @@ public class DomainEntityInstanceTests {
     public async Task CallAction_WithFailingGuard_Fails() {
         var entity = CreatePersonEntity();
         var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Age"] = 0L });
+            new Dictionary<string, object?> { ["Active"] = false, ["Age"] = 25L });
 
         var result = instance.CallAction("Activate");
 

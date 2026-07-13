@@ -704,8 +704,8 @@ public static class DirectVmAbiEmitter {
         var rv = CompileValue(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
         if (eq && AreHeapValues(ctx, left, right)) {
-            var lo = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(lv, typeof(int)));
-            var ro = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(rv, typeof(int)));
+            var lo = HeapValueToObject(lv, ctx);
+            var ro = HeapValueToObject(rv, ctx);
             var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
             return cf == Equal ? ec : Not(ec);
         }
@@ -722,8 +722,8 @@ public static class DirectVmAbiEmitter {
         var rv = CompileValue(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
         if (eq && AreHeapValues(ctx, left, right)) {
-            var lo = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(lv, typeof(int)));
-            var ro = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(rv, typeof(int)));
+            var lo = HeapValueToObject(lv, ctx);
+            var ro = HeapValueToObject(rv, ctx);
             var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
             return Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
                                 cf == Equal ? Constant(0L) : Constant(1L));
@@ -777,8 +777,8 @@ public static class DirectVmAbiEmitter {
 
         bool eq = cf == Equal || cf == NotEqual;
         if (eq && AreHeapValues(ctx, left, right)) {
-            var lo = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(ctx.RingVar(leftSlot), typeof(int)));
-            var ro = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, Convert(ctx.RingVar(rightSlot), typeof(int)));
+            var lo = HeapValueToObject(ctx.RingVar(leftSlot), ctx);
+            var ro = HeapValueToObject(ctx.RingVar(rightSlot), ctx);
             var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
             ctx.RingDepth = d + 1;
             return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
@@ -833,11 +833,9 @@ public static class DirectVmAbiEmitter {
         bool isEquality = comparisonFactory == Equal
                        || comparisonFactory == NotEqual;
         if (isEquality && AreHeapValues(ctx, left, right)) {
-            // Read both objects from heap and compare
-            var leftObj = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
-                Convert(ctx.RingVar(leftResult), typeof(int)));
-            var rightObj = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
-                Convert(ctx.RingVar(rightResult), typeof(int)));
+            // Read both objects from heap and compare — handle 0 maps to null.
+            var leftObj = HeapValueToObject(ctx.RingVar(leftResult), ctx);
+            var rightObj = HeapValueToObject(ctx.RingVar(rightResult), ctx);
             var equalCheck = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!,
                 leftObj, rightObj);
             var result = Assign(ctx.RingVar(d),
@@ -867,12 +865,21 @@ public static class DirectVmAbiEmitter {
         return Block(leftExpr, rightExpr, simpleResult);
     }
 
-    /// <summary>Check if both nodes likely produce heap reference values that
+    /// <summary>Converts a long value (heap handle or 0 for null) to an object
+    /// reference suitable for comparison. Handle 0 maps to CLR null rather
+    /// than being dereferenced via <c>Heap.UnsafeGet</c>.</summary>
+    private static Expression HeapValueToObject(Expression handle, AbiCtx ctx) {
+        var intHandle = Convert(handle, typeof(int));
+        var deref = Call(ctx.HeapLocal,
+            typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, intHandle);
+        return Condition(Equal(handle, Constant(0L)),
+            Constant(null, typeof(object)),
+            deref);
+    }
 
     /// <summary>Check if both nodes likely produce heap reference values that
     /// should be compared by value rather than handle.</summary>
     private static bool AreHeapValues(AbiCtx ctx, Node left, Node right) {
-        // Check analysis metadata for value representation
         if (ctx.Analysis is not null) {
             var leftRep = ctx.Analysis.GetValueRepresentation(left);
             var rightRep = ctx.Analysis.GetValueRepresentation(right);
@@ -880,10 +887,8 @@ public static class DirectVmAbiEmitter {
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;
         }
-        // Heuristic: string constants produce heap handles
         if (left is Constant cl && cl.Value is string) return true;
         if (right is Constant cr && cr.Value is string) return true;
-        // Member access on CLR objects may produce heap values
         if (left is Member) return true;
         if (right is Member) return true;
         return false;

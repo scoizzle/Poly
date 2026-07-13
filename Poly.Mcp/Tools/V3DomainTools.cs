@@ -9,11 +9,8 @@ using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
-using Poly.Interpretation;
-using Poly.Interpretation.Analysis.Semantics;
 using Poly.Mcp.Sessions;
 using Poly.Syntax.Analysis;
-using Poly.Syntax.Nodes;
 
 namespace Poly.Mcp.Tools;
 
@@ -595,26 +592,19 @@ internal sealed class V3EvalTool {
                 SessionId: sessionId,
                 Affordances: ["get_entity_detail"]);
 
-        // Build a sample subject — a Dictionary backed by an AstTypeDefinition
-        // that mirrors the entity's property structure.
+        // Parse subject values from tool arguments.
         Dictionary<string, object?> subjectValues;
         try {
-            var entityPropNames = new HashSet<string>(entity.Properties.Select(p => p.Name), StringComparer.OrdinalIgnoreCase);
             subjectValues = new Dictionary<string, object?>(StringComparer.Ordinal);
 
             if (properties is not null) {
                 var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(properties)
                     ?? throw new ArgumentException("Failed to parse properties JSON.");
-                foreach (var (key, je) in parsed) {
-                    if (!entityPropNames.Contains(key))
-                        throw new ArgumentException($"Unknown property '{key}'. Allowed: {string.Join(", ", entityPropNames)}.");
+                foreach (var (key, je) in parsed)
                     subjectValues[key] = JsonElementToClrValue(je);
-                }
             }
             else if (age.HasValue) {
-                if (!entityPropNames.Contains("Age"))
-                    throw new ArgumentException("Entity has no 'Age' property.");
-                subjectValues["Age"] = age.Value;
+                subjectValues["Age"] = (long)age.Value;
             }
         }
         catch (Exception ex) {
@@ -627,38 +617,8 @@ internal sealed class V3EvalTool {
 
         bool result;
         try {
-            // Build property definition nodes for the entity's properties
-            var propDefs = new List<PropertyDefinitionNode>();
-            foreach (var ep in entity.Properties) {
-                var clrType = DomainTypeToClrType(ep.Type.TypeName);
-                propDefs.Add(new PropertyDefinitionNode(
-                    ep.Name,
-                    new ClrTypeReference(clrType),
-                    Getter: new PropertyGetterDefinitionNode()));
-            }
-
-            var typeDefNode = new TypeDefinitionNode(
-                Name: "Subject",
-                Properties: [.. propDefs]);
-
-            // Analyze the TypeDefinitionNode in isolation to populate
-            // the TypeDefinitionNodeAnalyzer's type store, then use it as
-            // the provider so TypeAndMemberResolutionPass can resolve "Subject"
-            // and its members during compilation.
-            var typeDefAnalyzer = new TypeDefinitionNodeAnalyzer();
-            var ctx = AnalysisContext.CreateDefault();
-            typeDefAnalyzer.Analyze(ctx, typeDefNode);
-
-            // Lower the policy expression with an AST-typed parameter
-            var entityParam = new Parameter("entity", new TypeReference("Subject"));
-            var pass = new DomainExpressionLoweringPass();
-            var lowered = pass.Lower(policy.Expression, entityParam);
-
-            // Compile with the custom provider that includes AST types
-            var compiled = Interpreter.Compile(lowered, typeDefAnalyzer);
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { subjectValues }));
-            result = exec.Result.GetValue<bool>();
+            var instance = DomainEntityInstance.Create(entity, subjectValues);
+            result = instance.EvaluatePolicy(policy);
         }
         catch (Exception ex) {
             return new V3Response(
@@ -761,22 +721,6 @@ internal sealed class V3EvalTool {
         System.Text.Json.JsonValueKind.String => je.GetString(),
         System.Text.Json.JsonValueKind.Null => null,
         _ => je.GetRawText()
-    };
-
-    /// <summary>
-    /// Maps domain primitive type names to CLR types for subject bag properties.
-    /// </summary>
-    private static Type DomainTypeToClrType(string domainTypeName) => domainTypeName switch {
-        "Text" => typeof(string),
-        "Number" => typeof(long),
-        "Boolean" => typeof(bool),
-        "DateTime" => typeof(DateTime),
-        "Date" => typeof(DateOnly),
-        "Time" => typeof(TimeOnly),
-        "Duration" => typeof(TimeSpan),
-        "Uuid" => typeof(Guid),
-        "Decimal" => typeof(decimal),
-        _ => typeof(object),
     };
 
     /// <summary>

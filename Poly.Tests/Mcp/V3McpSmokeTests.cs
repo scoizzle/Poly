@@ -404,6 +404,50 @@ public class V3McpSmokeTests {
         var response = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult",
             properties: "{\"NonExistent\":42}");
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("Unknown property");
+        await Assert.That(response.Message).Contains("does not exist on entity");
+    }
+
+    // ── ws8-6e: Bool ABI adult assert ────────────────────────────
+
+    [Test]
+    public async Task EvaluatePolicy_BooleanGuard_EqualsTrue_ReturnsTrue() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Flag");
+        V3EvolveTool.AddProperty(sessionId, "Flag", "Enabled", "Boolean");
+
+        V3EvalTool.AddPolicy(sessionId, "Flag", "IsEnabled",
+            property: "Enabled", op: "==", value: true);
+
+        var pass = V3EvalTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
+            properties: "{\"Enabled\":true}");
+        await Assert.That(pass.Success).IsTrue();
+        await Assert.That(pass.Message).Contains("true");
+
+        var fail = V3EvalTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
+            properties: "{\"Enabled\":false}");
+        await Assert.That(fail.Success).IsTrue();
+        await Assert.That(fail.Message).Contains("false");
+    }
+
+    // ── ws8-6f: MatchNumeric positive control ────────────────────
+
+    [Test]
+    public async Task EvaluatePolicy_GreaterThanOrEqual_MatchNumeric_ReturnsTrue() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Item");
+        V3EvolveTool.AddProperty(sessionId, "Item", "Score", "Number");
+
+        V3EvalTool.AddPolicy(sessionId, "Item", "HighScore",
+            property: "Score", op: ">=", value: 100);
+
+        var pass = V3EvalTool.EvaluatePolicy(sessionId, "Item", "HighScore",
+            properties: "{\"Score\":100}");
+        await Assert.That(pass.Success).IsTrue();
+        await Assert.That(pass.Message).Contains("true");
+
+        var fail = V3EvalTool.EvaluatePolicy(sessionId, "Item", "HighScore",
+            properties: "{\"Score\":99}");
+        await Assert.That(fail.Success).IsTrue();
+        await Assert.That(fail.Message).Contains("false");
     }
 }

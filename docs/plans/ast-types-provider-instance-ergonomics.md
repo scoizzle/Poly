@@ -1,7 +1,7 @@
 # AST Types as First-Class Provider + Domain Instance Ergonomics
 
-**Date:** 2026-07-12  
-**Status:** Proposal — post-M2 capability expansion  
+**Date:** 2026-07-13  
+**Status:** Active — Phase 1–3 complete, Phase 4 in progress  
 **Depends on:** `TypeDefinitionNodeAnalyzer` (exists), `ITypeDefinitionProvider` (exists), `PolicyEvaluator` (exists), `DomainExpressionLoweringPass` (exists)  
 **Anti-patterns to avoid:**
 - **#005 (second-system effect):** Wire AST types through existing Introspection seams — do not build a parallel type registry or a second emitter path.  
@@ -26,11 +26,11 @@ Meanwhile, the domain model has entities, properties, stages, and actions — bu
 Five incremental phases, each building on the last. No phase forces framework completeness — only the thinest slice that unblocks the next.
 
 ```text
-Phase 1  AST types as proper Introspection provider   ── register + resolve like CLR types
-Phase 2  Type-safe dictionary access + defaults       ── coercion, missing-key handling
-Phase 3  Domain instance lifecycle                    ── create, read properties, evaluate
-Phase 4  Policy eval as product demo                  ── MCP tool for arbitrary entity/policy eval
-Phase 5  Onboarding quickstart                        ── one-file end-to-end walkthrough
+Phase 1  AST types as proper Introspection provider   ✅ Done — TypeDefinitionNodeAnalyzer self-registers on context
+Phase 2  Type-safe dictionary access + defaults       ✅ Done — DictionaryBackedValue.CoerceRead, field EmitRead/EmitWrite
+Phase 3  Domain instance lifecycle                    ✅ Done — DomainEntityInstance + EvaluatePolicy + CallAction
+Phase 4  Policy eval as MCP product demo              🔄 In progress — P4.1, P4.2, P4.4
+Phase 5  Onboarding quickstart                        ⬜ Deferred
 ```
 
 ---
@@ -140,10 +140,23 @@ providers.Add(analyzer);  // analyzer itself IS the provider
 
 | ID | Task | Exit check |
 |----|------|------------|
-| **P4.1** | Refactor `V3EvalTool.evaluate_policy` to use `DomainEntityInstance` (Phase 3) instead of ad-hoc `Subject` type. Accept `entityName` (must be a domain entity, not arbitrary). Accept `stageName?` (optional stage context). Accept `policyName` (must be a policy attached to that entity/stage). | MCP tool resolves entity from session, creates instance, evaluates named policy. |
-| **P4.2** | Add `evaluate_action_guard` MCP tool (or extend `evaluate_policy` with `actionContext`). Given entity name + optional stage + action name + property values, evaluates all guard policies on that action and returns per-policy pass/fail. | Agent can ask "will `Confirm` on this `Order` instance pass its guards?" before calling the action. |
-| **P4.3** | Add `create_entity_instance` MCP tool. Given session ID + entity name + JSON property values, returns instance ID (for subsequent eval calls) + validation errors. Instance lives in session-scoped store (in-memory for now). | Agent can create an instance, then reference it by ID in subsequent tool calls. |
-| **P4.4** | Add `debug_policy` MCP tool. Given session ID + entity name + instance ID + policy name, compiles the policy expression and returns the VM step trace (via `VmDebugger`) with per-node values. | Agent can step through policy evaluation node by node. |
+| **P4.1** | Refactor `V3EvalTool.evaluate_policy` to use `DomainEntityInstance` instead of ad-hoc `TypeDefinitionNode`→`AstTypeDefinition`→compile. | ✅ Done — `evaluate_policy` now calls `DomainEntityInstance.Create(entity, subjectValues).EvaluatePolicy(policy)`. |
+| **P4.2** | Add `evaluate_action_guard` MCP tool. | ⬜ Deferred — guarded by `CallAction` already tested in direct API; MCP surface is thin wrapper when needed. |
+| **P4.3** | Add `create_entity_instance` MCP tool with session-scoped store. | ⬜ Deferred — in-memory instance store is future-platform work. |
+| **P4.4** | Add `debug_policy` MCP tool via `VmDebugger`. | ⬜ Deferred — `VmDebugger` exists but step-through API needs a clean stateless wrapper. |
+
+### ws8 Spike Coverage (verified)
+
+| Spike | Status |
+|-------|--------|
+| **6d** — PolicySubject types | ✅ Done |
+| **6e** — Bool ABI adult assert | ✅ Verified — `EvaluatePolicy_BooleanGuard_EqualsTrue_ReturnsTrue` passes |
+| **6f** — MatchNumeric positive control | ✅ Verified — `EvaluatePolicy_GreaterThanOrEqual_MatchNumeric_ReturnsTrue` passes |
+| **6g** — Policy property name alignment | ✅ Done |
+| **6h** — No dict/expando subjects | ✅ Done |
+| **7** — MCP add-policy | ✅ Done |
+| **8** — MCP evaluate-policy VM | ✅ Done (now uses `DomainEntityInstance`) |
+| **9** — MCP policy e2e smoke | ✅ Done (`V3McpSmokeTests`)
 
 **Dependencies:** Phase 3.  
 **Risk:** Medium — new MCP tools mean new serialization boundaries, error paths, and description maintenance.  

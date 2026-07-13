@@ -4,7 +4,7 @@
 **Parent:** Post-M2  
 **Difficulty:** Small–Medium  
 **Estimated Context:** ~6k tokens  
-**Status:** [ ] Not Started  
+**Status:** [x] Done — McpSubjectBag with 8 properties; JSON properties arg; backward-compat Age; 3 new MCP smoke tests  
 
 ## Objective
 

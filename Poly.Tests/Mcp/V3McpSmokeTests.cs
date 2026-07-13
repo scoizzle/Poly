@@ -317,18 +317,16 @@ public class V3McpSmokeTests {
         V3EvolveTool.AddEntity(sessionId, "Person");
         V3EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
 
-        // Add policy via the new tool
         V3EvalTool.AddPolicy(sessionId, "Person", "Adult",
             property: "Age", op: ">=", value: 18);
-        // Add another for broader coverage
-        V3EvolveTool.AddEntity(sessionId, "Order");
-        V3EvolveTool.AddProperty(sessionId, "Order", "Total", "Number");
 
-        var adult = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult", age: 25);
+        var adult = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult",
+            properties: "{\"Age\":25}");
         await Assert.That(adult.Success).IsTrue();
         await Assert.That(adult.Message).Contains("true");
 
-        var minor = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult", age: 15);
+        var minor = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult",
+            properties: "{\"Age\":15}");
         await Assert.That(minor.Success).IsTrue();
         await Assert.That(minor.Message).Contains("false");
     }
@@ -341,5 +339,71 @@ public class V3McpSmokeTests {
         var response = V3EvalTool.EvaluatePolicy(sessionId, "Person", "NonExistent", age: 25);
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_MultiProperty_OrderTotalStatus_EvaluatesCorrectly() {
+        // Proves evaluate_policy works with non-Age properties via JSON properties arg
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Order");
+        V3EvolveTool.AddProperty(sessionId, "Order", "Total", "Number");
+        V3EvolveTool.AddProperty(sessionId, "Order", "Status", "Text");
+
+        V3EvalTool.AddPolicy(sessionId, "Order", "LargeActive",
+            and: "[{\"property\":\"Total\",\"op\":\">\",\"value\":100},{\"property\":\"Status\",\"op\":\"==\",\"value\":\"Active\"}]");
+
+        // Pass with Total > 100 and Status == "Active"
+        var pass = V3EvalTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+            properties: "{\"Total\":200,\"Status\":\"Active\"}");
+        await Assert.That(pass.Success).IsTrue();
+        await Assert.That(pass.Message).Contains("true");
+
+        // Fail with Total <= 100
+        var failTotal = V3EvalTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+            properties: "{\"Total\":50,\"Status\":\"Active\"}");
+        await Assert.That(failTotal.Success).IsTrue();
+        await Assert.That(failTotal.Message).Contains("false");
+
+        // Fail with wrong Status
+        var failStatus = V3EvalTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+            properties: "{\"Total\":200,\"Status\":\"Cancelled\"}");
+        await Assert.That(failStatus.Success).IsTrue();
+        await Assert.That(failStatus.Message).Contains("false");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_MultiProperty_ProductStock_EvaluatesCorrectly() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Product");
+        V3EvolveTool.AddProperty(sessionId, "Product", "Stock", "Number");
+
+        V3EvalTool.AddPolicy(sessionId, "Product", "PositiveStock",
+            property: "Stock", op: ">=", value: 0);
+
+        var pass = V3EvalTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
+            properties: "{\"Stock\":10}");
+        await Assert.That(pass.Success).IsTrue();
+        await Assert.That(pass.Message).Contains("true");
+
+        var fail = V3EvalTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
+            properties: "{\"Stock\":-1}");
+        await Assert.That(fail.Success).IsTrue();
+        await Assert.That(fail.Message).Contains("false");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_InvalidProperty_ReturnsClearError() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        V3EvolveTool.AddEntity(sessionId, "Person");
+        V3EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+
+        V3EvalTool.AddPolicy(sessionId, "Person", "Adult",
+            property: "Age", op: ">=", value: 18);
+
+        // Providing a property that doesn't exist on the entity
+        var response = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult",
+            properties: "{\"NonExistent\":42}");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("Unknown property");
     }
 }

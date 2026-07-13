@@ -292,7 +292,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | 3 Policy MCP | ✅ **Done** | add/evaluate/smoke; Age sample |
 | **M2** | ✅ **Done** | First consumer vertical slice |
 | polish-dbg / 0.2a | ✅ **Done** | Suite 1175 green |
-| pm2-1 | ⬜ | Multi-property evaluate sample bag |
+| pm2-1 | ✅ **Done** | Multi-property evaluate via `McpSubjectBag` (8 props) + JSON `properties` arg |
 | pm2-2 | ⬜ | add_policy → evaluate_policy affordance |
 | **MCP gaps** | 📋 **[Plan: `mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md)** | ~14 new tools across 4 phases (actions, effects, remove, policy depth) |
 | 4 First effect | ⬜ Deferred | Named scenario |

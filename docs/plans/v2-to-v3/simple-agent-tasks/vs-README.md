@@ -91,7 +91,7 @@
 
 | # | Task | File | Status | Notes |
 |---|------|------|--------|-------|
-| **pm2-1** | Multi-property MCP sample subject for `evaluate_policy` | [`vs-pm2-evaluate-policy-sample-bag.md`](vs-pm2-evaluate-policy-sample-bag.md) | **[ ]** | Today Age-only; honest for Person Adult, not Total/Status |
+| **pm2-1** | Multi-property MCP sample subject for `evaluate_policy` | [`vs-pm2-evaluate-policy-sample-bag.md`](vs-pm2-evaluate-policy-sample-bag.md) | **[x]** | McpSubjectBag (8 props); JSON + backward-compat Age; 1178 green |
 | **pm2-2** | Affordance: `add_policy` success → include `evaluate_policy` | [`vs-pm2-add-policy-evaluate-affordance.md`](vs-pm2-add-policy-evaluate-affordance.md) | **[ ]** | Success affordances currently omit evaluate |
 | **pm2-3** | First effect execution (Slice 4) | (use vertical-slice S4 / open when pulled) | **[ ]** | Pull when product needs behavior beyond guards |
 | **pm2-4** | Naming cleanup drop V3\* | [`../../post-v2-delete-naming-cleanup.md`](../../post-v2-delete-naming-cleanup.md) | **[ ]** | Idle green tree; R0–R4 phases |
@@ -140,7 +140,7 @@ Person Age is the **minimum expressive type** for proving policy evaluation. Pol
 
 ## Next task right now
 
-**M2 product-complete** (structure + policy API + policy MCP). Full suite **1175** green.
+**M2 product-complete** (structure + policy API + policy MCP). Full suite **1178** green.
 
 **Recommended post-M2 picks (in order of leverage):**
 

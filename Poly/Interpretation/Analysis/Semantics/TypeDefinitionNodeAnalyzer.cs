@@ -283,6 +283,8 @@ internal sealed class AstParameterDefinition : IParameter {
 
 /// <summary>
 /// ITypeProperty implementation backed by a PropertyDefinitionNode AST.
+/// At runtime the declaring type is dictionary-backed (IDictionary&lt;string, object&gt;),
+/// so the Read delegate indexes into the dictionary by property name.
 /// </summary>
 internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstTypeDefinition declaring) : ITypeProperty {
     private readonly PropertyDefinitionNode _node = node;
@@ -294,15 +296,44 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
     public IEnumerable<IParameter> Parameters => _node.IndexParameters is null ? [] : _declaring.MapParameters(_node.IndexParameters);
 
-    public MemberReadDelegate? Read => null;
-    public MemberWriteDelegate? Write => null;
-    public MemberWriteDelegate? Initialize => null;
-
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => _node.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;
     public bool IsStatic => _node.IsStatic;
 
     public Mutability Mutability => _node.Mutability;
+
+    /// <summary>
+    /// Emits an expression that reads this property from a <c>Dictionary&lt;string, object?&gt;</c>
+    /// using the indexer. Returns <see cref="System.Reflection.Missing.Value"/> boxed to <c>object</c>
+    /// when the key is not present (matching the VM's convention for missing members).
+    /// </summary>
+    public System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) {
+        if (instance is null) return null;
+        var dictType = typeof(Dictionary<string, object?>);
+        var contains = dictType.GetMethod("ContainsKey", [typeof(string)])!;
+        var getItem = dictType.GetMethod("get_Item", [typeof(string)])!;
+        var typed = System.Linq.Expressions.Expression.Convert(instance, dictType);
+        var containsCall = System.Linq.Expressions.Expression.Call(typed, contains,
+            System.Linq.Expressions.Expression.Constant(Name));
+        var value = System.Linq.Expressions.Expression.Call(typed, getItem,
+            System.Linq.Expressions.Expression.Constant(Name));
+        var missing = System.Linq.Expressions.Expression.Convert(
+            System.Linq.Expressions.Expression.Field(null,
+                typeof(System.Reflection.Missing).GetField(nameof(System.Reflection.Missing.Value))!),
+            typeof(object));
+        return System.Linq.Expressions.Expression.Condition(containsCall, value, missing);
+    }
+
+    public System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) {
+        if (instance is null) return null;
+        var dictType = typeof(Dictionary<string, object?>);
+        var typed = System.Linq.Expressions.Expression.Convert(instance, dictType);
+        var setItem = dictType.GetMethod("set_Item", [typeof(string), typeof(object)])!;
+        return System.Linq.Expressions.Expression.Block(
+            System.Linq.Expressions.Expression.Call(typed, setItem,
+                System.Linq.Expressions.Expression.Constant(Name), value),
+            instance);
+    }
 }
 
 /// <summary>
@@ -337,10 +368,6 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
     public ITypeDefinition MemberTypeDefinition => _fieldType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
     public IEnumerable<IParameter> Parameters => [];
-
-    public MemberReadDelegate? Read => null;
-    public MemberWriteDelegate? Write => null;
-    public MemberWriteDelegate? Initialize => null;
 
     public AccessModifier AccessModifier => _node.AccessModifier;
     public LifetimeModifier LifetimeModifier => _node.IsStatic ? LifetimeModifier.Static : LifetimeModifier.Instance;

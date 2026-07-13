@@ -81,4 +81,28 @@ public interface ITypeMember {
     /// See <see cref="Mutability"/> for details and values.
     /// </summary>
     Mutability Mutability { get; }
+
+    /// <summary>
+    /// Returns an <see cref="Expression"/> that reads this member's value from
+    /// <paramref name="instance"/>, or <c>null</c> if the member is not readable.
+    /// The returned expression must produce <c>object?</c> (boxed value types,
+    /// reference types directly, <c>null</c> for missing/zero).
+    /// For static members <paramref name="instance"/> may be <c>null</c>.
+    /// Default implementation returns <c>null</c> (not readable).
+    /// </summary>
+    System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) => null;
+
+    /// <summary>
+    /// Returns <c>true</c> when <see cref="LifetimeModifier"/> is <see cref="LifetimeModifier.Static"/>.
+    /// </summary>
+    bool IsStatic => LifetimeModifier == LifetimeModifier.Static;
+
+    /// <summary>
+    /// Returns an <see cref="Expression"/> that writes <paramref name="value"/> to
+    /// this member on <paramref name="instance"/>, or <c>null</c> if not writable.
+    /// <paramref name="instance"/> and <paramref name="value"/> are typed as <c>object?</c>.
+    /// For static members <paramref name="instance"/> may be <c>null</c>.
+    /// Default implementation returns <c>null</c> (not writable).
+    /// </summary>
+    System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) => null;
 }

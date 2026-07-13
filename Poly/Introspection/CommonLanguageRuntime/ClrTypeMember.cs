@@ -15,5 +15,37 @@ internal abstract class ClrTypeMember : ITypeMember {
     ITypeDefinition ITypeMember.DeclaringTypeDefinition => DeclaringTypeDefinition;
     IEnumerable<IParameter> ITypeMember.Parameters => Parameters;
 
+    /// <summary>
+    /// Returns <c>true</c> when this member is readable. A member is considered
+    /// readable when <see cref="EmitRead"/> returns a non-null expression for a
+    /// non-null instance (for instance members) or null instance (for static members).
+    /// </summary>
+    public bool CanRead => ((ITypeMember)this).EmitRead(
+        System.Linq.Expressions.Expression.Default(typeof(object))) is not null;
+
+    /// <summary>
+    /// Returns <c>true</c> when this member can be written after construction.
+    /// Returns <c>false</c> for readonly/init-only members and compile-time constants.
+    /// </summary>
+    public bool CanWrite => (Mutability & Mutability.ReadOnlyAfterInit) != Mutability.ReadOnlyAfterInit;
+
+    /// <summary>
+    /// Returns <c>true</c> when the member can be written during initialization
+    /// (readonly fields, init-only setters, etc.).
+    /// </summary>
+    public bool CanInitialize => (Mutability & Mutability.ReadOnlyAfterInit) == Mutability.ReadOnlyAfterInit;
+
+    /// <summary>
+    /// Reads this member's value from <paramref name="instance"/> as an expression tree,
+    /// or returns <c>null</c> if not readable. Override in derived types.
+    /// </summary>
+    public virtual System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) => null;
+
+    /// <summary>
+    /// Writes <paramref name="value"/> to this member on <paramref name="instance"/>
+    /// as an expression tree, or returns <c>null</c> if not writable. Override in derived types.
+    /// </summary>
+    public virtual System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) => null;
+
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

@@ -26,17 +26,6 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
         FieldInfo = fieldInfo;
 
         _isVolatile = fieldInfo.GetRequiredCustomModifiers().Any(t => t == typeof(IsVolatile));
-
-        Read = BuildFieldGetter(fieldInfo);
-
-        if (fieldInfo.IsInitOnly || fieldInfo.IsLiteral) {
-            Initialize = BuildFieldSetter(fieldInfo);
-            Write = null;
-        }
-        else {
-            Write = BuildFieldSetter(fieldInfo);
-            Initialize = null;
-        }
     }
 
     /// <summary>
@@ -64,9 +53,7 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
     /// </summary>
     public FieldInfo FieldInfo { get; }
 
-    public MemberReadDelegate? Read { get; }
-    public MemberWriteDelegate? Write { get; }
-    public MemberWriteDelegate? Initialize { get; }
+    /* Read/Write delegates removed — emitter uses FieldInfo directly */
 
     public override Mutability Mutability {
         get {
@@ -90,64 +77,23 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 
-    private static MemberReadDelegate BuildFieldGetter(FieldInfo field) {
-        // Open generic declaring types or pointer/by-ref field types cannot
-        // be used with expression trees. Fall back to FieldInfo.GetValue.
-        if (field.DeclaringType?.ContainsGenericParameters == true
-            || field.FieldType.IsPointer
-            || field.FieldType.IsByRef)
-            return (owner, _) => field.GetValue(field.IsStatic ? null : owner);
-
-        var target = Expression.Parameter(typeof(object), "target");
-        var args = Expression.Parameter(typeof(object?[]), "_");
-
-        Expression fieldAccess = field.IsStatic
-            ? Expression.Field(null, field)
-            : Expression.Field(Expression.Convert(target, field.DeclaringType!), field);
-
-        if (fieldAccess.Type.IsValueType)
-            fieldAccess = Expression.Convert(fieldAccess, typeof(object));
-
-        return Expression.Lambda<MemberReadDelegate>(fieldAccess, target, args).Compile();
+    public override System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) {
+        if (FieldInfo.IsStatic || instance is not null) {
+            var typedInst = FieldInfo.IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, FieldInfo.DeclaringType!);
+            var access = System.Linq.Expressions.Expression.Field(typedInst, FieldInfo);
+            return FieldInfo.FieldType.IsValueType
+                ? System.Linq.Expressions.Expression.Convert(access, typeof(object))
+                : access;
+        }
+        return null;
     }
 
-    private static MemberWriteDelegate BuildFieldSetter(FieldInfo field) {
-        var target = Expression.Parameter(typeof(object), "target");
-        var value = Expression.Parameter(typeof(object), "value");
-        var args = Expression.Parameter(typeof(object?[]), "_");
-
-        if (field.DeclaringType?.ContainsGenericParameters == true
-            || field.FieldType.IsPointer
-            || field.FieldType.IsByRef)
-            return (owner, val, _) => {
-                field.SetValue(field.IsStatic ? null : owner, val);
-                return owner;
-            };
-
-        // Expression.Assign cannot write to readonly/const fields.
-        // Fall back to FieldInfo.SetValue which bypasses the check.
-        if (field.IsInitOnly || field.IsLiteral) {
-            return (owner, val, _) => {
-                field.SetValue(field.IsStatic ? null : owner, val);
-                return owner;
-            };
-        }
-
-        if (!field.IsStatic && field.DeclaringType!.IsValueType) {
-            var unboxed = Expression.Variable(field.DeclaringType, "unboxed");
-            var loadExpr = Expression.Assign(unboxed, Expression.Convert(target, field.DeclaringType));
-            var fieldAssign = Expression.Assign(Expression.Field(unboxed, field), Expression.Convert(value, field.FieldType));
-            return Expression.Lambda<MemberWriteDelegate>(
-                Expression.Block([unboxed], loadExpr, fieldAssign, Expression.Convert(unboxed, typeof(object))),
-                target, value, args).Compile();
-        }
-
-        Expression fieldAccess = Expression.Field(
-            field.IsStatic ? null : Expression.Convert(target, field.DeclaringType!),
-            field);
-
-        return Expression.Lambda<MemberWriteDelegate>(
-            Expression.Block(Expression.Assign(fieldAccess, Expression.Convert(value, field.FieldType)), target),
-            target, value, args).Compile();
+    public override System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) {
+        if (FieldInfo.IsInitOnly || FieldInfo.IsLiteral) return null;
+        var typedInst = FieldInfo.IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, FieldInfo.DeclaringType!);
+        var access = System.Linq.Expressions.Expression.Field(typedInst, FieldInfo);
+        var val = System.Linq.Expressions.Expression.Convert(value, FieldInfo.FieldType);
+        var assign = System.Linq.Expressions.Expression.Assign(access, val);
+        return FieldInfo.IsStatic ? assign : System.Linq.Expressions.Expression.Block(assign, instance!);
     }
 }

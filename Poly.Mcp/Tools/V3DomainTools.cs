@@ -9,8 +9,12 @@ using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
+using Poly.Interpretation;
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
 using Poly.Mcp.Sessions;
 using Poly.Syntax.Analysis;
+using Poly.Syntax.Nodes;
 
 namespace Poly.Mcp.Tools;
 
@@ -556,15 +560,18 @@ internal sealed class V3EvalTool {
     }
 
     /// <summary>
-    /// Evaluates a named policy on an entity against a sample subject with the given Age.
+    /// Evaluates a policy's guard expression against a sample subject.
+    /// Provide <c>age</c> for simple Age-based policies, or <c>properties</c>
+    /// as a JSON object for multi-property entities (e.g. {"Status":"Active","Total":200}).
     /// Returns the boolean result (true/false) from the VM.
     /// </summary>
-    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject with the given Age. Returns true if the policy passes, false otherwise.")]
+    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject. Provide 'age' for simple Age-based policies, or 'properties' as a JSON object for multi-property entities. Returns true if the policy passes, false otherwise.")]
     public static V3Response EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
         [Description("Name of the policy to evaluate")] string policyName,
-        [Description("Age value for the sample subject")] int age) {
+        [Description("Age value for the sample subject (convenience for Age-based policies)")] int? age = null,
+        [Description("JSON object of property values, e.g. \"{\\\"Status\\\":\\\"Active\\\",\\\"Total\\\":200}\"")] string? properties = null) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return new V3Response(
                 Success: false,
@@ -589,12 +596,75 @@ internal sealed class V3EvalTool {
                 SessionId: sessionId,
                 Affordances: ["get_entity_detail"]);
 
-        // Build a sample subject with the given Age
-        var subject = new EvaluationSubject(age);
+        // Build a sample subject — a Dictionary backed by an AstTypeDefinition
+        // that mirrors the entity's property structure.
+        Dictionary<string, object?> subjectValues;
+        ITypeDefinitionProvider provider;
+        try {
+            // Parse and validate property names before building the type definition
+            var entityPropNames = new HashSet<string>(entity.Properties.Select(p => p.Name), StringComparer.OrdinalIgnoreCase);
+            subjectValues = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+            if (properties is not null) {
+                var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(properties)
+                    ?? throw new ArgumentException("Failed to parse properties JSON.");
+                foreach (var (key, je) in parsed) {
+                    if (!entityPropNames.Contains(key))
+                        throw new ArgumentException($"Unknown property '{key}'. Allowed: {string.Join(", ", entityPropNames)}.");
+                    subjectValues[key] = JsonElementToClrValue(je);
+                }
+            }
+            else if (age.HasValue) {
+                if (!entityPropNames.Contains("Age"))
+                    throw new ArgumentException("Entity has no 'Age' property.");
+                subjectValues["Age"] = age.Value;
+            }
+
+            // Build property definition nodes for the entity's properties
+            var propDefs = new List<PropertyDefinitionNode>();
+            foreach (var ep in entity.Properties) {
+                var clrType = DomainTypeToClrType(ep.Type.TypeName);
+                propDefs.Add(new PropertyDefinitionNode(
+                    ep.Name,
+                    new ClrTypeReference(clrType),
+                    Getter: new PropertyGetterDefinitionNode()));
+            }
+
+            // Build a TypeDefinitionNode representing the subject
+            var typeDefNode = new TypeDefinitionNode(
+                Name: "Subject",
+                Properties: [.. propDefs]);
+
+            // Analyze it with TypeDefinitionNodeAnalyzer to create an AstTypeDefinition
+            var typeDefAnalyzer = new TypeDefinitionNodeAnalyzer();
+            var ctx = AnalysisContext.CreateDefault();
+            typeDefAnalyzer.Analyze(ctx, typeDefNode);
+            typeDefAnalyzer.Freeze();
+
+            // Use the analyzer as the type provider — it resolves Subject
+            // and falls through to CLR registry for primitive types internally.
+            provider = typeDefAnalyzer;
+        }
+        catch (Exception ex) {
+            return new V3Response(
+                Success: false,
+                Message: $"Invalid subject: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail", "get_domain_overview"]);
+        }
 
         bool result;
         try {
-            result = policy.Evaluate(subject);
+            // Lower the policy expression with an AST-typed parameter
+            var entityParam = new Parameter("entity", new TypeReference("Subject"));
+            var pass = new DomainExpressionLoweringPass();
+            var lowered = pass.Lower(policy.Expression, entityParam);
+
+            // Compile with the custom provider that includes the AST type definition
+            var compiled = Interpreter.Compile(lowered, provider);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { subjectValues }));
+            result = exec.Result.GetValue<bool>();
         }
         catch (Exception ex) {
             return new V3Response(
@@ -604,19 +674,16 @@ internal sealed class V3EvalTool {
                 Affordances: ["get_policy_expression", "get_entity_detail"]);
         }
 
+        var data = new { policyName, entityName, age, properties, result };
+
         return new V3Response(
             Success: true,
             Message: result ? "Policy passed (true)." : "Policy failed (false).",
             SessionId: sessionId,
             Revision: state.Revision,
-            Data: new { policyName, entityName, age, result },
+            Data: data,
             Affordances: ["get_policy_expression", "get_entity_detail"]);
     }
-
-    /// <summary>
-    /// Minimal subject with a single <c>Age</c> property for MCP policy evaluation.
-    /// </summary>
-    private sealed record EvaluationSubject(int Age);
 
     // ── Private helpers ─────────────────────────────────────────
 
@@ -635,12 +702,100 @@ internal sealed class V3EvalTool {
     }
 
     private static PolicyExpressionContract[] ParseContractArray(string json) {
-        var arr = System.Text.Json.JsonSerializer.Deserialize<PolicyExpressionContract[]>(json);
-        return arr ?? throw new ArgumentException("Failed to parse composite expression array.");
+        var arr = System.Text.Json.JsonSerializer.Deserialize<PolicyExpressionContract[]>(json, _contractOptions);
+        if (arr is null) throw new ArgumentException("Failed to parse composite expression array.");
+        return arr;
     }
 
     private static PolicyExpressionContract ParseContractSingle(string json) {
-        var obj = System.Text.Json.JsonSerializer.Deserialize<PolicyExpressionContract>(json);
-        return obj ?? throw new ArgumentException("Failed to parse composite expression.");
+        var obj = System.Text.Json.JsonSerializer.Deserialize<PolicyExpressionContract>(json, _contractOptions);
+        if (obj is null) throw new ArgumentException("Failed to parse composite expression.");
+        return obj;
     }
+
+    private static readonly System.Text.Json.JsonSerializerOptions _contractOptions = new() {
+        Converters = { new JsonValueNormalizingConverter() }
+    };
+
+    /// <summary>
+    /// Custom JSON converter that recursively converts <see cref="JsonElement"/> values
+    /// in <see cref="PolicyExpressionContract.Value"/> to primitive types (int, bool, string).
+    /// Without this, JSON-deserialized contracts store <c>object?</c> as <c>JsonElement</c>
+    /// which the VM's <c>TryValueToLong</c> cannot handle.
+    /// </summary>
+    private sealed class JsonValueNormalizingConverter : System.Text.Json.Serialization.JsonConverter<PolicyExpressionContract> {
+        public override PolicyExpressionContract? Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options) {
+            // Use a custom options that doesn't include this converter recursively to avoid infinite recursion
+            // for nested And/Or/Not properties
+            var doc = System.Text.Json.JsonDocument.ParseValue(ref reader);
+            return ParseContractFromElement(doc.RootElement);
+        }
+
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, PolicyExpressionContract value, System.Text.Json.JsonSerializerOptions options) {
+            System.Text.Json.JsonSerializer.Serialize(writer, value);
+        }
+
+        private static PolicyExpressionContract ParseContractFromElement(System.Text.Json.JsonElement element) {
+            var result = new PolicyExpressionContract();
+
+            if (element.TryGetProperty("property", out var prop))
+                result = result with { Property = prop.GetString() };
+            if (element.TryGetProperty("op", out var op))
+                result = result with { Op = op.GetString() };
+            if (element.TryGetProperty("value", out var val))
+                result = result with { Value = JsonElementToPrimitive(val) };
+            if (element.TryGetProperty("literal", out var lit))
+                result = result with { Literal = JsonElementToPrimitive(lit) };
+
+            if (element.TryGetProperty("and", out var andEl) && andEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                result = result with { And = andEl.EnumerateArray().Select(ParseContractFromElement).ToArray() };
+            if (element.TryGetProperty("or", out var orEl) && orEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                result = result with { Or = orEl.EnumerateArray().Select(ParseContractFromElement).ToArray() };
+            if (element.TryGetProperty("not", out var notEl) && notEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+                result = result with { Not = ParseContractFromElement(notEl) };
+
+            return result;
+        }
+    }
+
+    private static object? JsonElementToPrimitive(System.Text.Json.JsonElement je) => je.ValueKind switch {
+        System.Text.Json.JsonValueKind.Number when je.TryGetInt32(out var i) => i,
+        System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
+        System.Text.Json.JsonValueKind.Number => je.GetDecimal(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        System.Text.Json.JsonValueKind.String => je.GetString(),
+        System.Text.Json.JsonValueKind.Null => null,
+        _ => je.GetRawText()
+    };
+
+    /// <summary>
+    /// Maps domain primitive type names to CLR types for subject bag properties.
+    /// </summary>
+    private static Type DomainTypeToClrType(string domainTypeName) => domainTypeName switch {
+        "Text" => typeof(string),
+        "Number" => typeof(long),
+        "Boolean" => typeof(bool),
+        "DateTime" => typeof(DateTime),
+        "Date" => typeof(DateOnly),
+        "Time" => typeof(TimeOnly),
+        "Duration" => typeof(TimeSpan),
+        "Uuid" => typeof(Guid),
+        "Decimal" => typeof(decimal),
+        _ => typeof(object),
+    };
+
+    /// <summary>
+    /// Converts a JSON element to a CLR value for subject bag properties.
+    /// </summary>
+    private static object? JsonElementToClrValue(System.Text.Json.JsonElement je) => je.ValueKind switch {
+        System.Text.Json.JsonValueKind.Number when je.TryGetInt32(out var i) => (long)i,
+        System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
+        System.Text.Json.JsonValueKind.Number => (long)je.GetDecimal(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        System.Text.Json.JsonValueKind.String => je.GetString(),
+        System.Text.Json.JsonValueKind.Null => null,
+        _ => je.GetRawText()
+    };
 }

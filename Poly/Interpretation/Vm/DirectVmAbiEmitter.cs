@@ -1076,7 +1076,9 @@ public static class DirectVmAbiEmitter {
     }
 
     /// <summary>Emit the resolved member access expression and store the result
-    /// on the ring.  Handles property getters, field reads, methods (e.g. ToString), and constructors.</summary>
+    /// on the ring.  Uses the member's <see cref="ITypeMember.EmitRead"/> hook so
+    /// the emitter stays provider-agnostic — CLR types, AST-backed types, and
+    /// future provider types each return their own expression trees.</summary>
     private static Expression EmitResolvedMember(
         ITypeMember resolved,
         Expression? instanceObj,
@@ -1084,37 +1086,22 @@ public static class DirectVmAbiEmitter {
         AbiCtx ctx,
         Expression instanceExpr) {
 
-        // Property access via Read delegate
-        if (resolved is ITypeProperty prop && prop.Read is not null) {
-            var emptyArgs = NewArrayBounds(typeof(object), Constant(0));
-            Expression readCall = instanceObj is not null
-                ? Invoke(Constant(prop.Read), instanceObj, emptyArgs)
-                : Invoke(Constant(prop.Read), Constant(null, typeof(object)), emptyArgs);
+        // Polymorphic EmitRead — each ITypeMember implementation provides its
+        // own expression tree. CLR properties use Property(inst, propInfo),
+        // AST properties use Dictionary indexer, fields use Field(inst, fieldInfo).
+        if (resolved.EmitRead(instanceObj) is Expression readExpr) {
             return Block(instanceExpr, Assign(ctx.RingVar(resultSlot),
-                ConvertMemberResult(readCall, resolved, ctx)));
+                ConvertMemberResult(readExpr, resolved, ctx)));
         }
 
-        // Field access via Read delegate
-        if (resolved is ITypeField field && field.Read is not null) {
-            var emptyArgs = NewArrayBounds(typeof(object), Constant(0));
-            Expression readCall = instanceObj is not null
-                ? Invoke(Constant(field.Read), instanceObj, emptyArgs)
-                : Invoke(Constant(field.Read), Constant(null, typeof(object)), emptyArgs);
-            return Block(instanceExpr, Assign(ctx.RingVar(resultSlot),
-                ConvertMemberResult(readCall, resolved, ctx)));
-        }
-
-        // Method access (e.g. ToString, GetHashCode) — invoke via MethodInfo
+        // Parameterless method call (e.g. ToString, GetHashCode) — invoke via MethodInfo.
+        // Methods don't have an EmitRead path; they need explicit invocation.
         if (resolved is ITypeMethod method) {
-            // Get the MethodInfo from CLR metadata
             var clrMethod = resolved as ClrMethod;
             var methodInfo = clrMethod?.MethodInfo;
             if (methodInfo is not null && methodInfo.GetParameters().Length == 0) {
-                // Parameterless method call: instance.Method()
-                // For value types, the instance may be boxed (object) — unbox first
                 Expression? instanceForCall = instanceObj;
                 if (instanceObj is not null && methodInfo.DeclaringType?.IsValueType == true) {
-                    // Unbox: Convert(instanceObj, declaringType) casts object→Int64 etc.
                     instanceForCall = Convert(instanceObj, methodInfo.DeclaringType);
                 }
                 Expression resultExpr = instanceForCall is not null

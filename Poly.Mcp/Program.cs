@@ -17,6 +17,6 @@ builder.Services
     .WithTools<V3SessionTool>()
     .WithTools<V3QueryTool>()
     .WithTools<V3EvolveTool>()
-    .WithTools<V3EvalTool>();
+    .WithTools<V3PolicyTool>();
 
 await builder.Build().RunAsync();

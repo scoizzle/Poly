@@ -247,7 +247,7 @@ public class V3McpSmokeTests {
         if (result.Succeeded)
             McpSessionStore.Update(sessionId, result.Root, result.Analysis);
 
-        var response = V3EvalTool.GetPolicyExpression(sessionId, "Person", "Adult");
+        var response = V3PolicyTool.GetPolicyExpression(sessionId, "Person", "Adult");
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsNotNull();
     }
@@ -257,7 +257,7 @@ public class V3McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
         V3EvolveTool.AddEntity(sessionId, "Person");
 
-        var response = V3EvalTool.GetPolicyExpression(sessionId, "Person", "NonExistent");
+        var response = V3PolicyTool.GetPolicyExpression(sessionId, "Person", "NonExistent");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
@@ -266,7 +266,7 @@ public class V3McpSmokeTests {
     public async Task GetPolicyExpression_MissingEntity_ReturnsNotFound() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var response = V3EvalTool.GetPolicyExpression(sessionId, "NonExistent", "Any");
+        var response = V3PolicyTool.GetPolicyExpression(sessionId, "NonExistent", "Any");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
@@ -279,14 +279,14 @@ public class V3McpSmokeTests {
         V3EvolveTool.AddEntity(sessionId, "Person");
         V3EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
 
-        var response = V3EvalTool.AddPolicy(sessionId, "Person", "Adult",
+        var response = V3PolicyTool.AddPolicy(sessionId, "Person", "Adult",
             property: "Age", op: ">=", value: 18);
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("Adult");
 
         // Verify via get_policy_expression
-        var expr = V3EvalTool.GetPolicyExpression(sessionId, "Person", "Adult");
+        var expr = V3PolicyTool.GetPolicyExpression(sessionId, "Person", "Adult");
         await Assert.That(expr.Success).IsTrue();
     }
 
@@ -294,7 +294,7 @@ public class V3McpSmokeTests {
     public async Task AddPolicy_ToMissingEntity_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var response = V3EvalTool.AddPolicy(sessionId, "NonExistent", "Any",
+        var response = V3PolicyTool.AddPolicy(sessionId, "NonExistent", "Any",
             property: "Age", op: ">=", value: 18);
 
         await Assert.That(response.Success).IsFalse();
@@ -305,7 +305,7 @@ public class V3McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
         V3EvolveTool.AddEntity(sessionId, "Person");
 
-        var response = V3EvalTool.AddPolicy(sessionId, "Person", "Bad",
+        var response = V3PolicyTool.AddPolicy(sessionId, "Person", "Bad",
             property: "", op: ">=", value: 18);
 
         await Assert.That(response.Success).IsFalse();
@@ -317,15 +317,15 @@ public class V3McpSmokeTests {
         V3EvolveTool.AddEntity(sessionId, "Person");
         V3EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
 
-        V3EvalTool.AddPolicy(sessionId, "Person", "Adult",
+        V3PolicyTool.AddPolicy(sessionId, "Person", "Adult",
             property: "Age", op: ">=", value: 18);
 
-        var adult = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult",
+        var adult = V3PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
             properties: "{\"Age\":25}");
         await Assert.That(adult.Success).IsTrue();
         await Assert.That(adult.Message).Contains("true");
 
-        var minor = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult",
+        var minor = V3PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
             properties: "{\"Age\":15}");
         await Assert.That(minor.Success).IsTrue();
         await Assert.That(minor.Message).Contains("false");
@@ -336,7 +336,7 @@ public class V3McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
         V3EvolveTool.AddEntity(sessionId, "Person");
 
-        var response = V3EvalTool.EvaluatePolicy(sessionId, "Person", "NonExistent", age: 25);
+        var response = V3PolicyTool.EvaluatePolicy(sessionId, "Person", "NonExistent", age: 25);
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
@@ -349,23 +349,23 @@ public class V3McpSmokeTests {
         V3EvolveTool.AddProperty(sessionId, "Order", "Total", "Number");
         V3EvolveTool.AddProperty(sessionId, "Order", "Status", "Text");
 
-        V3EvalTool.AddPolicy(sessionId, "Order", "LargeActive",
+        V3PolicyTool.AddPolicy(sessionId, "Order", "LargeActive",
             and: "[{\"property\":\"Total\",\"op\":\">\",\"value\":100},{\"property\":\"Status\",\"op\":\"==\",\"value\":\"Active\"}]");
 
         // Pass with Total > 100 and Status == "Active"
-        var pass = V3EvalTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+        var pass = V3PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
             properties: "{\"Total\":200,\"Status\":\"Active\"}");
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
         // Fail with Total <= 100
-        var failTotal = V3EvalTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+        var failTotal = V3PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
             properties: "{\"Total\":50,\"Status\":\"Active\"}");
         await Assert.That(failTotal.Success).IsTrue();
         await Assert.That(failTotal.Message).Contains("false");
 
         // Fail with wrong Status
-        var failStatus = V3EvalTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+        var failStatus = V3PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
             properties: "{\"Total\":200,\"Status\":\"Cancelled\"}");
         await Assert.That(failStatus.Success).IsTrue();
         await Assert.That(failStatus.Message).Contains("false");
@@ -377,15 +377,15 @@ public class V3McpSmokeTests {
         V3EvolveTool.AddEntity(sessionId, "Product");
         V3EvolveTool.AddProperty(sessionId, "Product", "Stock", "Number");
 
-        V3EvalTool.AddPolicy(sessionId, "Product", "PositiveStock",
+        V3PolicyTool.AddPolicy(sessionId, "Product", "PositiveStock",
             property: "Stock", op: ">=", value: 0);
 
-        var pass = V3EvalTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
+        var pass = V3PolicyTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
             properties: "{\"Stock\":10}");
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        var fail = V3EvalTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
+        var fail = V3PolicyTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
             properties: "{\"Stock\":-1}");
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
@@ -397,11 +397,11 @@ public class V3McpSmokeTests {
         V3EvolveTool.AddEntity(sessionId, "Person");
         V3EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
 
-        V3EvalTool.AddPolicy(sessionId, "Person", "Adult",
+        V3PolicyTool.AddPolicy(sessionId, "Person", "Adult",
             property: "Age", op: ">=", value: 18);
 
         // Providing a property that doesn't exist on the entity
-        var response = V3EvalTool.EvaluatePolicy(sessionId, "Person", "Adult",
+        var response = V3PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
             properties: "{\"NonExistent\":42}");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("does not exist on entity");
@@ -415,15 +415,15 @@ public class V3McpSmokeTests {
         V3EvolveTool.AddEntity(sessionId, "Flag");
         V3EvolveTool.AddProperty(sessionId, "Flag", "Enabled", "Boolean");
 
-        V3EvalTool.AddPolicy(sessionId, "Flag", "IsEnabled",
+        V3PolicyTool.AddPolicy(sessionId, "Flag", "IsEnabled",
             property: "Enabled", op: "==", value: true);
 
-        var pass = V3EvalTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
+        var pass = V3PolicyTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
             properties: "{\"Enabled\":true}");
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        var fail = V3EvalTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
+        var fail = V3PolicyTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
             properties: "{\"Enabled\":false}");
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
@@ -437,15 +437,15 @@ public class V3McpSmokeTests {
         V3EvolveTool.AddEntity(sessionId, "Item");
         V3EvolveTool.AddProperty(sessionId, "Item", "Score", "Number");
 
-        V3EvalTool.AddPolicy(sessionId, "Item", "HighScore",
+        V3PolicyTool.AddPolicy(sessionId, "Item", "HighScore",
             property: "Score", op: ">=", value: 100);
 
-        var pass = V3EvalTool.EvaluatePolicy(sessionId, "Item", "HighScore",
+        var pass = V3PolicyTool.EvaluatePolicy(sessionId, "Item", "HighScore",
             properties: "{\"Score\":100}");
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        var fail = V3EvalTool.EvaluatePolicy(sessionId, "Item", "HighScore",
+        var fail = V3PolicyTool.EvaluatePolicy(sessionId, "Item", "HighScore",
             properties: "{\"Score\":99}");
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");

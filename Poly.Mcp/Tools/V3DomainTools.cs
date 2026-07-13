@@ -441,7 +441,7 @@ internal sealed class V3EvolveTool {
 /// to WP5 — see `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`.
 /// </summary>
 [McpServerToolType]
-internal sealed class V3EvalTool {
+internal sealed class V3PolicyTool {
     /// <summary>
     /// Returns the guard expression text of a named policy on an entity.
     /// Use this to inspect what condition a policy enforces (e.g. "Age >= 18").

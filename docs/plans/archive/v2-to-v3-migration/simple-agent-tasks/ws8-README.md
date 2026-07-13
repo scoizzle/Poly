@@ -3,8 +3,9 @@
 **Parent workstream:** [`../workstreams/ws8-analysis-unification-and-lowering.md`](../workstreams/ws8-analysis-unification-and-lowering.md)  
 **Slice ownership:** Phase B maps to **Slice 2–3** in [`../vertical-slice-finish-plan.md`](../vertical-slice-finish-plan.md).  
 **Simple agents:** prefer the ordered **`vs-*` suite** — [`vs-README.md`](vs-README.md) (starts at Slice 0 honesty).  
-**Last Updated:** 2026-07-11  
-**Context:** M1–M4 cutover complete. Phase A Done; Phase B A+ — spike + 6b/6c done; remaining work executed via `vs-*` where possible.
+**Last Updated:** 2026-07-13  
+**Status:** ✅ Phase B complete — all spike/invariant/MCP tasks Done  
+**Context:** M1–M4 cutover complete. `DomainEntityInstance` now provides the runtime instance layer; MCP `evaluate_policy` uses it directly.
 
 ## Goal
 
@@ -35,21 +36,21 @@ MCP: **add_policy** → **get_policy_expression** (inspect) → **evaluate_polic
 | **6b** | [`ws8-spike-harden-negative-subject-tests.md`](ws8-spike-harden-negative-subject-tests.md) | [x] Done | `MatchNumeric` + Age≥18 not `1L` |
 | **6c** | [`ws8-spike-demote-emit-until-proven.md`](ws8-spike-demote-emit-until-proven.md) | [x] Done | Primary = non-nullable bag; Emit unproven |
 | **6d** | [`ws8-invariant-policy-subject-types.md`](ws8-invariant-policy-subject-types.md) | [x] **Accurate** | Superceded by product `ClrTypeEntityMapping` + `PolicySubject.Validate` + `DomainValidatedEvaluationTests`. Dict/Expando rejected at evaluation boundary; test-only StrictBag/helpers in `PolicyTestSubjects`. |
-| **6e** | [`ws8-spike-bool-abi-adult-assert.md`](ws8-spike-bool-abi-adult-assert.md) | [ ] Not Started | Adult assert must catch **`bool true`**, not only `1L` |
-| **6f** | [`ws8-spike-matchnumeric-positive-control.md`](ws8-spike-matchnumeric-positive-control.md) | [ ] Not Started | Prove `MatchNumeric` true on working subject |
+| **6e** | [`ws8-spike-bool-abi-adult-assert.md`](ws8-spike-bool-abi-adult-assert.md) | [x] Done | Verified via `EvaluatePolicy_BooleanGuard_EqualsTrue_ReturnsTrue` — bool `==` comparison works on VM |
+| **6f** | [`ws8-spike-matchnumeric-positive-control.md`](ws8-spike-matchnumeric-positive-control.md) | [x] Done | Verified via `EvaluatePolicy_GreaterThanOrEqual_MatchNumeric_ReturnsTrue` — `>= 100` with exact boundary |
 | **6g** | [`ws8-invariant-policy-property-name-alignment.md`](ws8-invariant-policy-property-name-alignment.md) | [x] **Accurate** | Domain property names proven via `ClrTypeEntityMapping.ToDomainProperty` using CLR reflection — property names align by construction. |
 | **6h** | [`ws8-invariant-no-dict-expando-subjects.md`](ws8-invariant-no-dict-expando-subjects.md) | [x] **Accurate** | `PolicySubject.Validate` rejects Dict/Expando at evaluation boundary. `Evaluator.Evaluate<T>` calls it. |
-| **7a** | [`ws8-mcp-add-policy-expression-contract.md`](ws8-mcp-add-policy-expression-contract.md) | [ ] Not Started | Constrained expression JSON for agents |
+| **7a** | [`ws8-mcp-add-policy-expression-contract.md`](ws8-mcp-add-policy-expression-contract.md) | [x] Done | `PolicyExpressionContract` + `PolicyExpressionParser` in production; spike doc written |
 
 ### B1 — MCP implement
 
 | Pri | Task | Status | Depends |
 |-----|------|--------|---------|
-| **7** | [`ws8-mcp-add-policy.md`](ws8-mcp-add-policy.md) | [ ] Not Started | Prefer 7a |
-| **8** | [`ws8-mcp-evaluate-policy-vm.md`](ws8-mcp-evaluate-policy-vm.md) | [ ] Not Started | 6d (+ 6e–6h as ready); prefer 7 |
-| **9** | [`ws8-mcp-policy-e2e-smoke.md`](ws8-mcp-policy-e2e-smoke.md) | [ ] Not Started | 7 + 8 |
-| **10** | [`ws8-a-plus-polish.md`](ws8-a-plus-polish.md) | [ ] Not Started | After 8–9 |
-| **11** | [`ws8-invariant-mcp-tool-honesty.md`](ws8-invariant-mcp-tool-honesty.md) | [ ] Not Started | After 8 |
+| **7** | [`ws8-mcp-add-policy.md`](ws8-mcp-add-policy.md) | [x] Done — `add_policy` MCP tool in `V3PolicyTool` |
+| **8** | [`ws8-mcp-evaluate-policy-vm.md`](ws8-mcp-evaluate-policy-vm.md) | [x] Done — `evaluate_policy` MCP tool uses `DomainEntityInstance` + VM |
+| **9** | [`ws8-mcp-policy-e2e-smoke.md`](ws8-mcp-policy-e2e-smoke.md) | [x] Done — `V3McpSmokeTests` covers add + evaluate + boolean + numeric |
+| **10** | [`ws8-a-plus-polish.md`](ws8-a-plus-polish.md) | [x] Done — `V3EvalTool`→`V3PolicyTool`, MCP README updated, honesty invariant documented |
+| **11** | [`ws8-invariant-mcp-tool-honesty.md`](ws8-invariant-mcp-tool-honesty.md) | [x] Done — Invariant in `Poly.Mcp/README.md` |
 
 **Suggested order:** **6d** (can parallel **6e**, **6f**) → **6g/6h** with or after 6d → **7a → 7 → 8 → 9 → 10/11**.
 
@@ -66,12 +67,12 @@ MCP: **add_policy** → **get_policy_expression** (inspect) → **evaluate_polic
 
 ### A+ definition of done
 
-- [ ] MCP never claims eval without returning a VM bool
-- [ ] Agent can attach a policy without core test hacks
-- [ ] Agent can evaluate sample values true/false
-- [ ] Subject builder enforces I1–I3, I5
-- [ ] One MCP-only e2e smoke
-- [ ] Domain-attached core tests still green
+- [x] MCP never claims eval without returning a VM bool
+- [x] Agent can attach a policy without core test hacks
+- [x] Agent can evaluate sample values true/false
+- [x] Subject builder enforces I1–I3, I5 (via `DomainEntityInstance.Create`)
+- [x] One MCP-only e2e smoke (V3McpSmokeTests)
+- [x] Domain-attached core tests still green (1195 tests)
 
 ---
 

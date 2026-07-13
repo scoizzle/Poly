@@ -307,34 +307,34 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
 
     /// <summary>
     /// Emits an expression that reads this property from a <c>Dictionary&lt;string, object?&gt;</c>
-    /// using the indexer. Returns <see cref="System.Reflection.Missing.Value"/> boxed to <c>object</c>
-    /// when the key is not present (matching the VM's convention for missing members).
+    /// using the indexer. Coerces the stored value to the property's target type.
+    /// Returns the property's <c>DefaultValue</c> (or <see cref="System.Reflection.Missing.Value"/>)
+    /// when the key is not present.
     /// </summary>
-    public System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) {
+    public Expression? EmitRead(Expression? instance) {
         if (instance is null) return null;
         var dictType = typeof(Dictionary<string, object?>);
         var contains = dictType.GetMethod("ContainsKey", [typeof(string)])!;
         var getItem = dictType.GetMethod("get_Item", [typeof(string)])!;
-        var typed = System.Linq.Expressions.Expression.Convert(instance, dictType);
-        var containsCall = System.Linq.Expressions.Expression.Call(typed, contains,
-            System.Linq.Expressions.Expression.Constant(Name));
-        var value = System.Linq.Expressions.Expression.Call(typed, getItem,
-            System.Linq.Expressions.Expression.Constant(Name));
-        var missing = System.Linq.Expressions.Expression.Convert(
-            System.Linq.Expressions.Expression.Field(null,
-                typeof(System.Reflection.Missing).GetField(nameof(System.Reflection.Missing.Value))!),
-            typeof(object));
-        return System.Linq.Expressions.Expression.Condition(containsCall, value, missing);
+        var typed = Expression.Convert(instance, dictType);
+        var rawValue = Expression.Call(typed, getItem, Expression.Constant(Name));
+        object? def = _node.DefaultValue is Constant c ? c.Value : System.Reflection.Missing.Value;
+        var fallback = Expression.Convert(Expression.Constant(def), typeof(object));
+        var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
+        return Expression.Condition(
+            Expression.Call(typed, contains, Expression.Constant(Name)),
+            value,
+            fallback);
     }
 
-    public System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) {
+    public Expression? EmitWrite(Expression? instance, Expression value) {
         if (instance is null) return null;
         var dictType = typeof(Dictionary<string, object?>);
-        var typed = System.Linq.Expressions.Expression.Convert(instance, dictType);
+        var typed = Expression.Convert(instance, dictType);
         var setItem = dictType.GetMethod("set_Item", [typeof(string), typeof(object)])!;
-        return System.Linq.Expressions.Expression.Block(
-            System.Linq.Expressions.Expression.Call(typed, setItem,
-                System.Linq.Expressions.Expression.Constant(Name), value),
+        return Expression.Block(
+            Expression.Call(typed, setItem, Expression.Constant(Name),
+                Expression.Convert(value, typeof(object))),
             instance);
     }
 }
@@ -377,8 +377,71 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
     public bool IsStatic => _node.IsStatic;
 
     public Mutability Mutability => _node.Mutability;
+
+    public Expression? EmitRead(Expression? instance) {
+        if (instance is null) return null;
+        var dictType = typeof(Dictionary<string, object?>);
+        var contains = dictType.GetMethod("ContainsKey", [typeof(string)])!;
+        var getItem = dictType.GetMethod("get_Item", [typeof(string)])!;
+        var typed = Expression.Convert(instance, dictType);
+        var rawValue = Expression.Call(typed, getItem, Expression.Constant(Name));
+        object? def = _node.DefaultValue is Constant c ? c.Value : System.Reflection.Missing.Value;
+        var fallback = Expression.Convert(Expression.Constant(def), typeof(object));
+        var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
+        return Expression.Condition(
+            Expression.Call(typed, contains, Expression.Constant(Name)),
+            value,
+            fallback);
+    }
+
+    public Expression? EmitWrite(Expression? instance, Expression value) {
+        if (instance is null) return null;
+        var dictType = typeof(Dictionary<string, object?>);
+        var typed = Expression.Convert(instance, dictType);
+        var setItem = dictType.GetMethod("set_Item", [typeof(string), typeof(object)])!;
+        return Expression.Block(
+            Expression.Call(typed, setItem, Expression.Constant(Name),
+                Expression.Convert(value, typeof(object))),
+            instance);
+    }
 }
 
+/// <summary>
+/// Helper for reading/writing values from dictionary-backed AST type instances.
+/// Provides type coercion so stored values (e.g. <c>int</c>) are correctly
+/// converted to the declared member type (e.g. <c>long</c> for Number).
+/// </summary>
+internal static class DictionaryBackedValue {
+    /// <summary>
+    /// Emits an expression that coerces a dictionary value (typed <c>object?</c>)
+    /// to the target member's declared type. For primitive types this uses
+    /// <see cref="Convert"/> methods (e.g. <c>Convert.ToInt64</c>); for
+    /// reference types the value passes through unchanged.
+    /// </summary>
+    internal static Expression CoerceRead(Expression dictValue, ITypeDefinition targetType) {
+        var primitive = targetType.PrimitiveType;
+        if (primitive is null) return dictValue;
+
+        var convertMethod = primitive.Value switch {
+            PrimitiveType.Int64 => typeof(Convert).GetMethod(nameof(Convert.ToInt64), [typeof(object)]),
+            PrimitiveType.Int32 => typeof(Convert).GetMethod(nameof(Convert.ToInt32), [typeof(object)]),
+            PrimitiveType.Int16 => typeof(Convert).GetMethod(nameof(Convert.ToInt16), [typeof(object)]),
+            PrimitiveType.Int8 => typeof(Convert).GetMethod("ToSByte", [typeof(object)]),
+            PrimitiveType.Float64 => typeof(Convert).GetMethod(nameof(Convert.ToDouble), [typeof(object)]),
+            PrimitiveType.Float32 => typeof(Convert).GetMethod(nameof(Convert.ToSingle), [typeof(object)]),
+            PrimitiveType.Decimal => typeof(Convert).GetMethod(nameof(Convert.ToDecimal), [typeof(object)]),
+            PrimitiveType.Boolean => typeof(Convert).GetMethod(nameof(Convert.ToBoolean), [typeof(object)]),
+            PrimitiveType.String => typeof(Convert).GetMethod(nameof(Convert.ToString), [typeof(object)]),
+            PrimitiveType.Char => typeof(Convert).GetMethod(nameof(Convert.ToChar), [typeof(object)]),
+            _ => null
+        };
+
+        if (convertMethod is not null)
+            return Expression.Convert(Expression.Call(null, convertMethod, dictValue), typeof(object));
+
+        return dictValue;
+    }
+}
 
 
 /// <summary>

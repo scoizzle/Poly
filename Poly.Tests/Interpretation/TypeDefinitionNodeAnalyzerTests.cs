@@ -176,4 +176,128 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(resolvedType.Properties.Select(static property => property.Name).ToArray())
             .IsEquivalentTo(new[] { "Name", "Version" });
     }
+
+    // ── Phase 2: coercion, defaults, field read/write ─────────────
+
+    [Test]
+    public async Task AstProperty_EmitRead_CoercesIntToLong() {
+        // When a domain property is Number (→ long CLR type) but the
+        // dictionary stores an int, EmitRead should coerce it to long.
+        var typeNode = new TypeDefinitionNode(
+            "Item", "Sample",
+            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeNode);
+
+        var prop = analyzer.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var dict = new Dictionary<string, object?> { ["Count"] = 42 };
+        var readExpr = prop.EmitRead(Expression.Constant(dict));
+        var lambda = Expression.Lambda<Func<object>>(readExpr!);
+        var result = lambda.Compile()();
+
+        await Assert.That(result).IsTypeOf<long>();
+        await Assert.That((long)result!).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task AstProperty_EmitRead_UsesDefaultValueWhenKeyMissing() {
+        var typeNode = new TypeDefinitionNode(
+            "Item", "Sample",
+            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64),
+                DefaultValue: new Constant(10L))]);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeNode);
+
+        var prop = analyzer.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var dict = new Dictionary<string, object?>(); // empty — no "Count" key
+        var readExpr = prop.EmitRead(Expression.Constant(dict));
+        var lambda = Expression.Lambda<Func<object>>(readExpr!);
+        var result = lambda.Compile()();
+
+        await Assert.That(result).IsTypeOf<long>();
+        await Assert.That((long)result!).IsEqualTo(10L);
+    }
+
+    [Test]
+    public async Task AstProperty_EmitRead_ReturnsMissingValueWhenNoDefaultAndKeyMissing() {
+        var typeNode = new TypeDefinitionNode(
+            "Item", "Sample",
+            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeNode);
+
+        var prop = analyzer.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var dict = new Dictionary<string, object?>();
+        var readExpr = prop.EmitRead(Expression.Constant(dict));
+        var lambda = Expression.Lambda<Func<object>>(readExpr!);
+        var result = lambda.Compile()();
+
+        await Assert.That(result).IsEqualTo(System.Reflection.Missing.Value);
+    }
+
+    [Test]
+    public async Task AstField_EmitRead_WritesAndReadsValue() {
+        var typeNode = new TypeDefinitionNode(
+            "Item", "Sample",
+            Fields: [new FieldDefinitionNode("Tag", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeNode);
+
+        var field = analyzer.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var dict = new Dictionary<string, object?> { ["Tag"] = 99L };
+        var readExpr = field.EmitRead(Expression.Constant(dict));
+        var lambda = Expression.Lambda<Func<object>>(readExpr!);
+        var result = lambda.Compile()();
+
+        await Assert.That(result).IsTypeOf<long>();
+        await Assert.That((long)result!).IsEqualTo(99L);
+    }
+
+    [Test]
+    public async Task AstField_EmitWrite_ModifiesDictionary() {
+        var typeNode = new TypeDefinitionNode(
+            "Item", "Sample",
+            Fields: [new FieldDefinitionNode("Tag", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeNode);
+
+        var field = analyzer.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var dict = new Dictionary<string, object?>();
+        var valueConst = Expression.Convert(Expression.Constant(77L), typeof(object));
+        var writeExpr = field.EmitWrite(Expression.Constant(dict), valueConst);
+        var lambda = Expression.Lambda<Action>(writeExpr!);
+        lambda.Compile()();
+
+        await Assert.That(dict["Tag"]).IsEqualTo(77L);
+    }
+
+    [Test]
+    public async Task AstField_EmitRead_CoercesIntToLong() {
+        var typeNode = new TypeDefinitionNode(
+            "Item", "Sample",
+            Fields: [new FieldDefinitionNode("Score", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeNode);
+
+        var field = analyzer.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var dict = new Dictionary<string, object?> { ["Score"] = 7 };
+        var readExpr = field.EmitRead(Expression.Constant(dict));
+        var lambda = Expression.Lambda<Func<object>>(readExpr!);
+        var result = lambda.Compile()();
+
+        await Assert.That(result).IsTypeOf<long>();
+        await Assert.That((long)result!).IsEqualTo(7L);
+    }
 }

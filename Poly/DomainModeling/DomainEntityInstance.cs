@@ -150,12 +150,15 @@ public sealed record DomainEntityInstance {
 
     /// <summary>
     /// Attempts to call <paramref name="actionName"/> on this instance.
-    /// Evaluates all guard policies attached to the action. Returns a result
-    /// indicating whether guards passed and which (if any) failed.
+    /// Evaluates all guard policies, then executes each effect in sequence.
     ///
-    /// <para>Effect execution (stage transitions, entity creation, event
-    /// publishing) is deferred to a future slice — currently only guard
-    /// evaluation is performed.</para>
+    /// <para><b>VM-executable effects</b> (<see cref="AssignEffect"/>,
+    /// <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>) are
+    /// lowered to Syntax AST, compiled, and executed via the VM.</para>
+    ///
+    /// <para><b>Direct-execution effects</b> (<see cref="StageTransitionEffect"/>,
+    /// <see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>)
+    /// mutate the instance directly.</para>
     /// </summary>
     public ActionCallResult CallAction(string actionName) {
         var action = Entity.Actions
@@ -163,48 +166,88 @@ public sealed record DomainEntityInstance {
         if (action is null)
             return ActionCallResult.Missing(Entity.Name, actionName);
 
+        // ── Evaluate all guard policies ─────────────────────────
         var failures = new List<string>();
-        foreach (var guard in action.Policies) {
-            if (!EvaluatePolicy(guard))
-                failures.Add(guard.Name);
-        }
+        foreach (var guard in action.Policies)
+            if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
 
         if (failures.Count > 0)
             return ActionCallResult.Blocked(actionName, failures);
 
-        // Stage- and entity-level guard policies
         var stage = Entity.Stages.FirstOrDefault(
             s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
-        if (stage is not null) {
-            foreach (var guard in stage.Policies) {
-                if (!EvaluatePolicy(guard))
-                    failures.Add(guard.Name);
-            }
-        }
+        if (stage is not null)
+            foreach (var guard in stage.Policies)
+                if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
 
         if (failures.Count > 0)
             return ActionCallResult.Blocked(actionName, failures);
 
-        foreach (var guard in Entity.Policies) {
-            if (!EvaluatePolicy(guard))
-                failures.Add(guard.Name);
-        }
+        foreach (var guard in Entity.Policies)
+            if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
 
         if (failures.Count > 0)
             return ActionCallResult.Blocked(actionName, failures);
 
-        // Effects are deferred (Slice 4) — but stage transitions on the action
-        // that target a known stage update CurrentStage.
+        // ── Execute effects ─────────────────────────────────────
+        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
+        var effectPass = new EffectLoweringPass(Entity, subjectParam);
+
         foreach (var effect in action.Effects) {
-            if (effect is StageTransitionEffect transition) {
-                var targetName = transition.TargetStage.StageName;
-                if (Entity.Stages.Any(s => string.Equals(s.Name, targetName, StringComparison.Ordinal))) {
-                    CurrentStage = targetName;
-                }
-            }
+            ExecuteEffect(effect, effectPass);
         }
 
         return ActionCallResult.Ok(actionName, CurrentStage);
+    }
+
+    /// <summary>
+    /// Executes a single effect. VM-executable effects go through
+    /// lowering → compile → execute; direct-execution effects mutate
+    /// the instance in place.
+    /// </summary>
+    private void ExecuteEffect(Effect effect, EffectLoweringPass effectPass) {
+        var lowered = effectPass.TryLowerVmNode(effect);
+        if (lowered is not null) {
+            var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { _values }));
+            return;
+        }
+
+        switch (effect) {
+            case StageTransitionEffect transition:
+                TransitionStage(transition.TargetStage.StageName);
+                break;
+            case CreateEntityInstance create:
+                CreateInstance(create);
+                break;
+            case InvokeActionEffect invoke:
+                CallAction(invoke.ActionName);
+                break;
+        }
+    }
+
+    private void TransitionStage(string targetStageName) {
+        if (Entity.Stages.Any(s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal)))
+            CurrentStage = targetStageName;
+    }
+
+    private void CreateInstance(CreateEntityInstance createEffect) {
+        var targetEntity = Entity; // current: creates same entity type
+        foreach (var binding in createEffect.Initializers) {
+            var prop = targetEntity.Properties.FirstOrDefault(
+                p => string.Equals(p.Name, binding.PropertyName, StringComparison.Ordinal));
+            if (prop is null) continue;
+
+            var lowered = new DomainExpressionLoweringPass().Lower(
+                binding.Expression,
+                new Parameter("entity", new TypeReference(Entity.Name)));
+
+            var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { _values }));
+            _values[binding.PropertyName] = exec.Result.GetValue<object>();
+        }
     }
 
     /// <summary>

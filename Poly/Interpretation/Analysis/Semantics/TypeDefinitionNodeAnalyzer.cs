@@ -333,8 +333,7 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
         var typed = Expression.Convert(instance, dictType);
         var setItem = dictType.GetMethod("set_Item", [typeof(string), typeof(object)])!;
         return Expression.Block(
-            Expression.Call(typed, setItem, Expression.Constant(Name),
-                Expression.Convert(value, typeof(object))),
+            Expression.Call(typed, setItem, Expression.Constant(Name), value),
             instance);
     }
 }
@@ -400,8 +399,7 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
         var typed = Expression.Convert(instance, dictType);
         var setItem = dictType.GetMethod("set_Item", [typeof(string), typeof(object)])!;
         return Expression.Block(
-            Expression.Call(typed, setItem, Expression.Constant(Name),
-                Expression.Convert(value, typeof(object))),
+            Expression.Call(typed, setItem, Expression.Constant(Name), value),
             instance);
     }
 }

@@ -1463,6 +1463,61 @@ public static class DirectVmAbiEmitter {
                 Assign(ctx.RingVar(arrSlot), val));
         }
 
+        if (a.Destination is Member member) {
+            // Compile instance and value, then write through EmitWrite on
+            // the resolved ITypeMember (handles dictionary-backed AST types,
+            // CLR properties, etc.).
+            var resolved = ctx.Analysis?.GetResolvedMember(member);
+            if (resolved is null)
+                throw new NotSupportedException(
+                    $"Assignment to unresolved member '{member.MemberName}'");
+
+            int d = ctx.RingDepth;
+            var instanceExpr = CompileNode(member.Value, ctx);
+            int instanceSlot = ctx.RingDepth - 1;
+            var valueExpr = CompileNode(a.Value, ctx);
+            int valueSlot = ctx.RingDepth - 1;
+
+            Expression instanceObj;
+            var declaringTypeDef = resolved.DeclaringTypeDefinition;
+            bool isValueType = declaringTypeDef is ClrTypeDefinition clrDef
+                && clrDef.RuntimeType.IsValueType;
+            if (isValueType)
+                instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
+            else
+                instanceObj = Call(ctx.HeapLocal,
+                    typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                    Convert(ctx.RingVar(instanceSlot), typeof(int)));
+
+            // Coerce the ABI value (long ring slot) to the member's CLR type
+            // before calling EmitWrite. Value types are unboxed from long;
+            // reference types are dereferenced from the heap.
+            var memberTypeDef = resolved.MemberTypeDefinition;
+            var clrMemberType = memberTypeDef.GetRuntimeType();
+            Expression writeValue;
+            if (clrMemberType is not null && clrMemberType.IsValueType) {
+                if (clrMemberType == typeof(bool))
+                    writeValue = Condition(Equal(ctx.RingVar(valueSlot), Constant(0L)),
+                        Constant(false, typeof(object)),
+                        Constant(true, typeof(object)));
+                else
+                    writeValue = Convert(Convert(ctx.RingVar(valueSlot), clrMemberType), typeof(object));
+            }
+            else {
+                writeValue = Call(ctx.HeapLocal,
+                    typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                    Convert(ctx.RingVar(valueSlot), typeof(int)));
+            }
+
+            var writeExpr = resolved.EmitWrite(instanceObj, writeValue);
+            var outSlot = ctx.AllocSlot();
+            ctx.RingDepth = outSlot + 1;
+            return Block(instanceExpr, valueExpr,
+                writeExpr ?? throw new NotSupportedException(
+                    $"Member '{member.MemberName}' does not support EmitWrite"),
+                Assign(ctx.RingVar(outSlot), ctx.RingVar(valueSlot)));
+        }
+
         if (a.Destination is not Variable destVar) {
             throw new NotSupportedException(
                 $"Assignment destination must be a Variable or IndexAccess, got {a.Destination.GetType().Name}");

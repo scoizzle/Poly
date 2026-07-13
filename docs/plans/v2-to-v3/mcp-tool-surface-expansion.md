@@ -489,3 +489,15 @@ See the **[unified execution table](#when-to-build-unified-execution-plan)** abo
 5. All tools consume the same `DomainChange[]`, `PolicyExpressionContract`, and analysis infrastructure — no divergence
 
 **Total with all paths:** ~14 individual MCP tools + 2 DSL tools + 4 simulation/debug tools + 6 pipeline visibility tools + `evaluate_policy`.
+
+---
+
+## 🔗 Related plans (2026-07-13 agent feedback)
+
+Three companion plans were created from agent-driven domain modeling feedback. These address concrete gaps discovered during a ~150-call supply chain modeling session:
+
+| Plan | Focus | Overlaps with this doc |
+|------|-------|----------------------|
+| [`mcp-mutation-safety.md`](../../mcp-mutation-safety.md) | Parallel call safety, idempotency, rollback diagnostics, stage ordering | `diff_state` tool (covered here); concurrency model (new) |
+| [`mcp-batch-snapshot-efficiency.md`](../../mcp-batch-snapshot-efficiency.md) | Bulk/plural endpoints (`add_properties`, `add_stages`, `add_actions_to_stages`), `get_domain_snapshot` | DSL batch-apply path (this doc); plural endpoints are a complementary approach |
+| [`mcp-domain-inspection-completeness.md`](../../mcp-domain-inspection-completeness.md) | `get_relationships`, `add_constraint`/`get_constraints`, constraint analysis integration | Relationship and constraint tools are new; not covered here |

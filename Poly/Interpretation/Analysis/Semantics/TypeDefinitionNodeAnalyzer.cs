@@ -23,7 +23,7 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
             _types[typeDef.FullName] = definition;
 
             // Store the type definition in context metadata
-            context.SetMetadata(node, new TypeDefinitionMetadata(definition));
+            context.SetResolvedType(node, definition);
         }
 
         // Analyze children (properties, methods, etc.)

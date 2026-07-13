@@ -514,13 +514,6 @@ public static class DirectVmAbiEmitter {
         return copy;
     }
 
-    /// <summary>Find the highest set bit position (0-based) for a positive power of two.</summary>
-    private static int BitScanReverse(long v) {
-        int pos = 0;
-        while (v > 1) { v >>= 1; pos++; }
-        return pos;
-    }
-
     // ── CompileValue: expression-returning compilation ────────────
 
     /// <summary>Compile a node to an Expression that produces its value on the
@@ -633,14 +626,6 @@ public static class DirectVmAbiEmitter {
             return Call(BitConverterDoubleToInt64Bits,
                 factory(Call(BitConverterInt64BitsToDouble, leftVal),
                         Call(BitConverterInt64BitsToDouble, rightVal)));
-        if (right is Constant rc && TryValueToLong(rc.Value, out long rv) && rv > 0 && (rv & (rv - 1)) == 0) {
-            if (factory.Method.Name == nameof(Expression.Modulo))
-                return Expression.And(leftVal, Constant(rv - 1));
-            if (factory.Method.Name == nameof(Expression.Divide))
-                return Expression.RightShift(leftVal, Constant(BitScanReverse(rv)));
-            if (factory.Method.Name == nameof(Expression.Multiply))
-                return Expression.LeftShift(leftVal, Constant(BitScanReverse(rv)));
-        }
         var rhs = rightVal;
         if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
         return factory(leftVal, rhs);
@@ -772,24 +757,6 @@ public static class DirectVmAbiEmitter {
             return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d), resultBits));
         }
 
-        if (right is Constant rc && TryValueToLong(rc.Value, out long rv) && rv > 0 && (rv & (rv - 1)) == 0) {
-            if (factory.Method.Name == nameof(Expression.Modulo)) {
-                ctx.RingDepth = d + 1;
-                return Block(leftCompiled, rightCompiled,
-                    Assign(ctx.RingVar(d), Expression.And(ctx.RingVar(leftSlot), Constant(rv - 1))));
-            }
-            if (factory.Method.Name == nameof(Expression.Divide)) {
-                ctx.RingDepth = d + 1;
-                return Block(leftCompiled, rightCompiled,
-                    Assign(ctx.RingVar(d), Expression.RightShift(ctx.RingVar(leftSlot), Constant(BitScanReverse(rv)))));
-            }
-            if (factory.Method.Name == nameof(Expression.Multiply)) {
-                ctx.RingDepth = d + 1;
-                return Block(leftCompiled, rightCompiled,
-                    Assign(ctx.RingVar(d), Expression.LeftShift(ctx.RingVar(leftSlot), Constant(BitScanReverse(rv)))));
-            }
-        }
-
         Expression rhs = ctx.RingVar(rightSlot);
         if (factory == LeftShift || factory == RightShift)
             rhs = Convert(rhs, typeof(int));
@@ -841,14 +808,6 @@ public static class DirectVmAbiEmitter {
             return SpillToRing(Call(BitConverterDoubleToInt64Bits,
                 factory(Call(BitConverterInt64BitsToDouble, leftVal),
                         Call(BitConverterInt64BitsToDouble, rightVal))), ctx);
-        if (right is Constant rc && TryValueToLong(rc.Value, out long rv) && rv > 0 && (rv & (rv - 1)) == 0) {
-            if (factory.Method.Name == nameof(Expression.Modulo))
-                return SpillToRing(Expression.And(leftVal, Constant(rv - 1)), ctx);
-            if (factory.Method.Name == nameof(Expression.Divide))
-                return SpillToRing(Expression.RightShift(leftVal, Constant(BitScanReverse(rv))), ctx);
-            if (factory.Method.Name == nameof(Expression.Multiply))
-                return SpillToRing(Expression.LeftShift(leftVal, Constant(BitScanReverse(rv))), ctx);
-        }
         var rhs = rightVal;
         if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
         return SpillToRing(factory(leftVal, rhs), ctx);

@@ -30,7 +30,7 @@ Phase 1  AST types as proper Introspection provider   ✅ Done — TypeDefinitio
 Phase 2  Type-safe dictionary access + defaults       ✅ Done — DictionaryBackedValue.CoerceRead, field EmitRead/EmitWrite
 Phase 3  Domain instance lifecycle                    ✅ Done — DomainEntityInstance + EvaluatePolicy + CallAction
 Phase 4  Policy eval as MCP product demo              🔄 In progress — P4.1, P4.2, P4.4
-Phase 5  Onboarding quickstart                        ⬜ Deferred
+Phase 5  Onboarding quickstart                        ✅ Done — `demo/` project; one `dotnet run`
 ```
 
 ---

@@ -39,7 +39,7 @@
 | **0.1c** | RequireUpdate on remaining ApplyTo | [`vs-s0-fail-loud-remaining-applyto.md`](vs-s0-fail-loud-remaining-applyto.md) | **[x]** | All Update* ApplyTo wrapped |
 | **0.1d** | Fail-loud remove-by-name zero match *(optional)* | [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md) | **[x]** | `RequireTarget` helper; RemoveProperty/Stage/Action/Policy fail when child missing |
 | **0.2** | `add_action_to_stage` honesty | [`vs-s0-add-action-to-stage-honesty.md`](vs-s0-add-action-to-stage-honesty.md) | **[x]** | Description + create-semantics test |
-| **0.2a** | MCP README row for stage action *(nit)* | [`vs-s0-mcp-readme-add-action-to-stage.md`](vs-s0-mcp-readme-add-action-to-stage.md) | **[ ]** | README still “Places an existing action” |
+| **0.2a** | MCP README row for stage action *(nit)* | [`vs-s0-mcp-readme-add-action-to-stage.md`](vs-s0-mcp-readme-add-action-to-stage.md) | **[x]** | README: "Creates a new action on a stage" |
 | **0.3** | Wire PolicySubject fully | [`vs-s0-wire-policy-subject-validate.md`](vs-s0-wire-policy-subject-validate.md) | **[x]** | Validate + ValidateType |
 | **0.4** | Fix instance EmitInvoke (receiver in Block) | [`vs-s0-fix-emit-invoke-instance.md`](vs-s0-fix-emit-invoke-instance.md) | **[x]** | instanceExpr + dual-oracle |
 | **0.5** | MCP README V3-only | [`vs-s0-mcp-readme-honesty.md`](vs-s0-mcp-readme-honesty.md) | **[x]** | Done |
@@ -85,7 +85,7 @@
 |---|------|------|--------|-------|
 | **polish-dbg** | Fix flaky `VmDebugger_StepOver_TraversesStatements` | [`vs-fix-vmdebugger-stepover-locals.md`](vs-fix-vmdebugger-stepover-locals.md) | **[x]** | CaptureResult → hook snapshot + `ValueStack` clear on rent |
 | **0.2a** | MCP README `add_action_to_stage` wording | [`vs-s0-mcp-readme-add-action-to-stage.md`](vs-s0-mcp-readme-add-action-to-stage.md) | **[x]** | README: “Creates a new action on a stage” |
-| **0.1d** | Remove-by-name zero match fail-loud | [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md) | **[ ]** | Optional evolve honesty |
+| **0.1d** | Remove-by-name zero-match fail-loud | [`vs-s0-fail-loud-remove-zero-match.md`](vs-s0-fail-loud-remove-zero-match.md) | **[x]** | `RequireTarget` helper; 6 tests |
 
 ### Post-M2 (orchestrator picks by scenario)
 

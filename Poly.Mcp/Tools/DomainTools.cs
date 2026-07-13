@@ -486,30 +486,24 @@ internal sealed class PolicyTool {
     }
 
     /// <summary>
-    /// Adds a policy with a simple property comparison guard to an entity.
-    /// For composite expressions (AND/OR/NOT), use the structured contract fields.
+    /// Adds a policy with a guard expression to an entity. Accepts a single JSON
+    /// expression string supporting comparisons, composites, and literals.
     /// </summary>
-    [McpServerTool(Name = "add_policy"), Description("Adds a policy with a guard expression to an entity. Simple comparison: provide property, op (==, !=, >, >=, <, <=), and value. Composite: provide 'and', 'or', or 'not' with sub-expressions.")]
+    [McpServerTool(Name = "add_policy"), Description("Adds a policy with a guard expression to an entity. Provide 'expression' as a JSON string: {\"property\":\"Age\",\"op\":\">=\",\"value\":18} for comparisons, {\"and\":[...]}/{\"or\":[...]}/{\"not\":{...}} for composites, or {\"literal\":true} for always-true guards.")]
     public static DomainToolResponse AddPolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
         [Description("Policy name (e.g. 'Adult', 'LargeActive')")] string policyName,
-        [Description("Property name for comparison (e.g. 'Age', 'Total'). Required for property comparisons.")] string? property = null,
-        [Description("Comparison operator: ==, !=, >, >=, <, <=")] string? op = null,
-        [Description("Literal value for comparison or standalone literal")] object? value = null,
-        [Description("JSON string for composite 'and' sub-expressions, e.g. [{\"property\":\"A\",\"op\":\">=\",\"value\":1},{\"property\":\"B\",\"op\":\"<\",\"value\":5}]")] string? and = null,
-        [Description("JSON string for composite 'or' sub-expressions")] string? or = null,
-        [Description("JSON string for 'not' sub-expression, e.g. {\"property\":\"X\",\"op\":\">=\",\"value\":18}")] string? not = null) {
+        [Description("JSON expression string. Comparison: {\"property\":\"Age\",\"op\":\">=\",\"value\":18}. Composite: {\"and\":[{...},{...}]}, {\"or\":[...]}, {\"not\":{...}}. Literal: {\"literal\":true}.")] string expression) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
 
-        // Build contract from tool arguments
-        PolicyExpressionContract contract;
+        DomainExpression domainExpr;
         try {
-            contract = BuildContract(property, op, value, and, or, not);
+            domainExpr = DomainExpressionJsonParser.ParseJson(expression);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -519,22 +513,8 @@ internal sealed class PolicyTool {
                 Affordances: ["get_entity_detail", "get_domain_overview"]);
         }
 
-        DomainExpression expression;
-        try {
-            expression = PolicyExpressionParser.Parse(contract);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Invalid policy expression: {ex.Message}",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail", "get_domain_overview"]);
-        }
-
-        // Evolve — evolution gate handles rollback; fingerprint not needed
-        // since AddPolicyToEntity fails loud when entity is missing (S0.1).
         var result = new DomainEvolution(state.Domain).Evolve()
-            .AddPolicyToEntity(entityName, policyName, expression)
+            .AddPolicyToEntity(entityName, policyName, domainExpr)
             .Apply();
 
         if (!result.Succeeded) {
@@ -640,77 +620,6 @@ internal sealed class PolicyTool {
     }
 
     // ── Private helpers ─────────────────────────────────────────
-
-    private static PolicyExpressionContract BuildContract(
-        string? property, string? op, object? value,
-        string? and, string? or, string? not) {
-        if (and is not null)
-            return new PolicyExpressionContract { And = ParseContractArray(and) };
-        if (or is not null)
-            return new PolicyExpressionContract { Or = ParseContractArray(or) };
-        if (not is not null)
-            return new PolicyExpressionContract { Not = ParseContractSingle(not) };
-        if (property is not null)
-            return new PolicyExpressionContract { Property = property, Op = op, Value = value };
-        throw new ArgumentException("No expression provided. Specify property+op+value, or a composite (and/or/not).");
-    }
-
-    private static PolicyExpressionContract[] ParseContractArray(string json) {
-        var arr = System.Text.Json.JsonSerializer.Deserialize<PolicyExpressionContract[]>(json, _contractOptions);
-        if (arr is null) throw new ArgumentException("Failed to parse composite expression array.");
-        return arr;
-    }
-
-    private static PolicyExpressionContract ParseContractSingle(string json) {
-        var obj = System.Text.Json.JsonSerializer.Deserialize<PolicyExpressionContract>(json, _contractOptions);
-        if (obj is null) throw new ArgumentException("Failed to parse composite expression.");
-        return obj;
-    }
-
-    private static readonly System.Text.Json.JsonSerializerOptions _contractOptions = new() {
-        Converters = { new JsonValueNormalizingConverter() }
-    };
-
-    /// <summary>
-    /// Custom JSON converter that recursively converts <see cref="JsonElement"/> values
-    /// in <see cref="PolicyExpressionContract.Value"/> to primitive types (int, bool, string).
-    /// Without this, JSON-deserialized contracts store <c>object?</c> as <c>JsonElement</c>
-    /// which the VM's <c>TryValueToLong</c> cannot handle.
-    /// </summary>
-    private sealed class JsonValueNormalizingConverter : System.Text.Json.Serialization.JsonConverter<PolicyExpressionContract> {
-        public override PolicyExpressionContract? Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options) {
-            // Use a custom options that doesn't include this converter recursively to avoid infinite recursion
-            // for nested And/Or/Not properties
-            var doc = System.Text.Json.JsonDocument.ParseValue(ref reader);
-            return ParseContractFromElement(doc.RootElement);
-        }
-
-        public override void Write(System.Text.Json.Utf8JsonWriter writer, PolicyExpressionContract value, System.Text.Json.JsonSerializerOptions options) {
-            System.Text.Json.JsonSerializer.Serialize(writer, value);
-        }
-
-        private static PolicyExpressionContract ParseContractFromElement(System.Text.Json.JsonElement element) {
-            var result = new PolicyExpressionContract();
-
-            if (element.TryGetProperty("property", out var prop))
-                result = result with { Property = prop.GetString() };
-            if (element.TryGetProperty("op", out var op))
-                result = result with { Op = op.GetString() };
-            if (element.TryGetProperty("value", out var val))
-                result = result with { Value = JsonElementToPrimitive(val) };
-            if (element.TryGetProperty("literal", out var lit))
-                result = result with { Literal = JsonElementToPrimitive(lit) };
-
-            if (element.TryGetProperty("and", out var andEl) && andEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-                result = result with { And = andEl.EnumerateArray().Select(ParseContractFromElement).ToArray() };
-            if (element.TryGetProperty("or", out var orEl) && orEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-                result = result with { Or = orEl.EnumerateArray().Select(ParseContractFromElement).ToArray() };
-            if (element.TryGetProperty("not", out var notEl) && notEl.ValueKind == System.Text.Json.JsonValueKind.Object)
-                result = result with { Not = ParseContractFromElement(notEl) };
-
-            return result;
-        }
-    }
 
     private static object? JsonElementToPrimitive(System.Text.Json.JsonElement je) => je.ValueKind switch {
         System.Text.Json.JsonValueKind.Number when je.TryGetInt32(out var i) => i,

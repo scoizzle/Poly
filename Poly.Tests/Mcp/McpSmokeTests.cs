@@ -280,7 +280,7 @@ public class McpSmokeTests {
         EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
 
         var response = PolicyTool.AddPolicy(sessionId, "Person", "Adult",
-            property: "Age", op: ">=", value: 18);
+            expression: """{"property":"Age","op":">=","value":18}""");
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("Adult");
@@ -296,7 +296,7 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var response = PolicyTool.AddPolicy(sessionId, "NonExistent", "Any",
-            property: "Age", op: ">=", value: 18);
+            expression: """{"property":"Age","op":">=","value":18}""");
 
         await Assert.That(response.Success).IsFalse();
     }
@@ -307,7 +307,7 @@ public class McpSmokeTests {
         EvolveTool.AddEntity(sessionId, "Person");
 
         var response = PolicyTool.AddPolicy(sessionId, "Person", "Bad",
-            property: "", op: ">=", value: 18);
+            expression: """{"property":"","op":">=","value":18}""");
 
         await Assert.That(response.Success).IsFalse();
     }
@@ -319,7 +319,7 @@ public class McpSmokeTests {
         EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
 
         PolicyTool.AddPolicy(sessionId, "Person", "Adult",
-            property: "Age", op: ">=", value: 18);
+            expression: """{"property":"Age","op":">=","value":18}""");
 
         var adult = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
             properties: "{\"Age\":25}");
@@ -351,7 +351,7 @@ public class McpSmokeTests {
         EvolveTool.AddProperty(sessionId, "Order", "Status", "Text");
 
         PolicyTool.AddPolicy(sessionId, "Order", "LargeActive",
-            and: "[{\"property\":\"Total\",\"op\":\">\",\"value\":100},{\"property\":\"Status\",\"op\":\"==\",\"value\":\"Active\"}]");
+            expression: """{"and":[{"property":"Total","op":">","value":100},{"property":"Status","op":"==","value":"Active"}]}""");
 
         // Pass with Total > 100 and Status == "Active"
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
@@ -379,7 +379,7 @@ public class McpSmokeTests {
         EvolveTool.AddProperty(sessionId, "Product", "Stock", "Number");
 
         PolicyTool.AddPolicy(sessionId, "Product", "PositiveStock",
-            property: "Stock", op: ">=", value: 0);
+            expression: """{"property":"Stock","op":">=","value":0}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
             properties: "{\"Stock\":10}");
@@ -399,7 +399,7 @@ public class McpSmokeTests {
         EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
 
         PolicyTool.AddPolicy(sessionId, "Person", "Adult",
-            property: "Age", op: ">=", value: 18);
+            expression: """{"property":"Age","op":">=","value":18}""");
 
         // Providing a property that doesn't exist on the entity
         var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
@@ -417,7 +417,7 @@ public class McpSmokeTests {
         EvolveTool.AddProperty(sessionId, "Flag", "Enabled", "Boolean");
 
         PolicyTool.AddPolicy(sessionId, "Flag", "IsEnabled",
-            property: "Enabled", op: "==", value: true);
+            expression: """{"property":"Enabled","op":"==","value":true}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
             properties: "{\"Enabled\":true}");
@@ -439,7 +439,7 @@ public class McpSmokeTests {
         EvolveTool.AddProperty(sessionId, "Item", "Score", "Number");
 
         PolicyTool.AddPolicy(sessionId, "Item", "HighScore",
-            property: "Score", op: ">=", value: 100);
+            expression: """{"property":"Score","op":">=","value":100}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Item", "HighScore",
             properties: "{\"Score\":100}");
@@ -450,5 +450,92 @@ public class McpSmokeTests {
             properties: "{\"Score\":99}");
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
+    }
+
+    /// <summary>
+    /// Regression test: all expression shapes (comparison, composite and/or/not,
+    /// literal) parse and evaluate correctly through the unified JSON parser.
+    /// </summary>
+    [Test]
+    public async Task AddPolicy_AllJsonExpressionShapes_EvaluateCorrectly() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Person");
+        EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+        EvolveTool.AddProperty(sessionId, "Person", "Active", "Boolean");
+
+        // Comparison (>= operator)
+        var r1 = PolicyTool.AddPolicy(sessionId, "Person", "Adult",
+            expression: """{"property":"Age","op":">=","value":18}""");
+        await Assert.That(r1.Success).IsTrue();
+
+        // Boolean equality
+        var r2 = PolicyTool.AddPolicy(sessionId, "Person", "IsActive",
+            expression: """{"property":"Active","op":"==","value":true}""");
+        await Assert.That(r2.Success).IsTrue();
+
+        // Composite AND
+        var r3 = PolicyTool.AddPolicy(sessionId, "Person", "ActiveAdult",
+            expression: """{"and":[{"property":"Age","op":">=","value":18},{"property":"Active","op":"==","value":true}]}""");
+        await Assert.That(r3.Success).IsTrue();
+
+        // Composite NOT
+        var r4 = PolicyTool.AddPolicy(sessionId, "Person", "NotAdult",
+            expression: """{"not":{"property":"Age","op":">=","value":18}}""");
+        await Assert.That(r4.Success).IsTrue();
+
+        // Literal
+        var r5 = PolicyTool.AddPolicy(sessionId, "Person", "Always",
+            expression: """{"literal":true}""");
+        await Assert.That(r5.Success).IsTrue();
+
+        // Evaluate: Adult (Age >= 18)
+        var pass = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
+            properties: "{\"Age\":25}");
+        await Assert.That(pass.Success).IsTrue();
+        await Assert.That(pass.Message).Contains("true");
+
+        var edge = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
+            properties: "{\"Age\":18}");
+        await Assert.That(edge.Success).IsTrue();
+        await Assert.That(edge.Message).Contains("true");
+
+        var fail = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
+            properties: "{\"Age\":15}");
+        await Assert.That(fail.Success).IsTrue();
+        await Assert.That(fail.Message).Contains("false");
+
+        // Evaluate: IsActive (Active == true)
+        var activePass = PolicyTool.EvaluatePolicy(sessionId, "Person", "IsActive",
+            properties: "{\"Active\":true, \"Age\":25}");
+        await Assert.That(activePass.Success).IsTrue();
+        await Assert.That(activePass.Message).Contains("true");
+
+        var activeFail = PolicyTool.EvaluatePolicy(sessionId, "Person", "IsActive",
+            properties: "{\"Active\":false, \"Age\":25}");
+        await Assert.That(activeFail.Success).IsTrue();
+        await Assert.That(activeFail.Message).Contains("false");
+
+        // Evaluate: ActiveAdult (AND)
+        var andPass = PolicyTool.EvaluatePolicy(sessionId, "Person", "ActiveAdult",
+            properties: "{\"Age\":25,\"Active\":true}");
+        await Assert.That(andPass.Success).IsTrue();
+        await Assert.That(andPass.Message).Contains("true");
+
+        var andFail = PolicyTool.EvaluatePolicy(sessionId, "Person", "ActiveAdult",
+            properties: "{\"Age\":25,\"Active\":false}");
+        await Assert.That(andFail.Success).IsTrue();
+        await Assert.That(andFail.Message).Contains("false");
+
+        // Evaluate: NotAdult (NOT Age >= 18)
+        var notPass = PolicyTool.EvaluatePolicy(sessionId, "Person", "NotAdult",
+            properties: "{\"Age\":15}");
+        await Assert.That(notPass.Success).IsTrue();
+        await Assert.That(notPass.Message).Contains("true");
+
+        // Evaluate: Always (literal true)
+        var always = PolicyTool.EvaluatePolicy(sessionId, "Person", "Always",
+            properties: "{\"Age\":0}");
+        await Assert.That(always.Success).IsTrue();
+        await Assert.That(always.Message).Contains("true");
     }
 }

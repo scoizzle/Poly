@@ -390,7 +390,7 @@ internal static class AstTypeReferenceResolver {
 
         return typeNode switch {
             PrimitiveTypeReference prim => ResolvePrimitive(prim.PrimitiveId, prim.IsNullable, clr),
-            NamedTypeReference named => provider.GetTypeDefinition(named.FullName) ?? clr.GetTypeDefinition<object>(),
+            NamedTypeReference named => provider.GetDeferredTypeDefinitionResolver(named.FullName).Value,
             OptionalTypeReference opt => ResolveOptional(opt, provider, clr),
             CollectionTypeReference col => ResolveCollection(col, provider, clr),
             MapTypeReference map => ResolveMap(map, provider, clr),

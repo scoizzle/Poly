@@ -23,15 +23,21 @@
 | Milestone | Status |
 |-----------|--------|
 | M1 Foundation (evolution, proofs) | ✅ Done |
-| M2 First consumer (structure path) | 🟡 **Partial** — bootstrap, evolve, query, MCP structure tools, demos exist; **policy product loop incomplete** |
+| M2 First consumer (vertical slices 0–3) | ✅ **Done** — bootstrap, evolve, query, structure MCP, policy VM eval, domain-attached policy, add/evaluate MCP tools; 1175 tests |
 | M3 V2 freeze | ✅ Done |
 | M4 V2 delete | ✅ Done |
 
 **V2 is gone.** “Finish the migration” no longer means porting V2. It means **finish V3 as a trustworthy product path** one **vertical slice** at a time, then pull expressiveness only when a slice or first customer needs it.
 
 ```text
-Done:   V2 deleted · bootstrap · evolve structure · query · MCP session/structure · DE lower · policy VM tests (core)
-Open:   honesty gaps · full policy product loop (API + MCP) · effect execution · derived modules / T2 dogfood
+Done:   V2 deleted · bootstrap · evolve structure · query · MCP session/structure · DE lower · policy VM tests (core) ·
+       honesty (fail-loud, MCP desc, subject guard, EmitInvoke) ·
+       domain-attached policy eval · add/evaluate MCP tools ·
+       pipeline visibility tools planned · 1175 tests green
+Open:   MCP Phase1–4 tools (actions, effects, remove, events) ·
+       DSL batch apply · simulation/debug tools ·
+       actionable analysis suggestions · Capture mode (reverse-engineering) ·
+       effect execution (Slice 4) · T2 dogfood
 ```
 
 ---
@@ -63,12 +69,12 @@ Every open slice exits only when **all** of the following are true for that slic
 Not T2 dogfood. Not every analyzer. **Product-complete for V2→V3** means:
 
 - [x] V2 deleted  
-- [ ] Slice 0 honesty for the sold path  
-- [ ] Slice 1 structure path reaffirmed green (may already be)  
-- [ ] Slice 2 policy runtime on direct API product-enforced  
-- [ ] Slice 3 policy MCP agent loop green  
+- [x] Slice 0 honesty for the sold path  
+- [x] Slice 1 structure path reaffirmed green  
+- [x] Slice 2 policy runtime on direct API product-enforced  
+- [x] Slice 3 policy MCP agent loop green  
 
-After that: **M2 fully closed**; further work is **WP9 / trust T2**, not “migration.”
+**M2 fully closed** (1175 tests, 0 failures). Further work is **post-M2 expansion**: MCP tool gaps, DSL, simulation/debug, actionable suggestions, Capture mode, effect execution.
 
 ---
 
@@ -105,7 +111,7 @@ Slice 5  Relationship (optional)     ── only if product needs second entity 
 | **S0.4** | Instance `EmitInvoke` sequences **receiver** | Dual-oracle instance method VM test | ✅ **Done** |
 | **S0.5** | MCP README V3-only honesty | No V2 DomainTools claim; tool table complete | ✅ **Done** |
 
-**Status:** Active (M2 **Done** — post-M2 expansion)  
+**Status:** ✅ **Done.**
 
 **Next:** Slice 1 (verify structure path + pin canonical entity)
 
@@ -133,7 +139,7 @@ create session / DomainFactory
 
 **Done when:** S1.1–S1.2 closed.
 
-**Status:** Active (M2 **Done** — post-M2 expansion)  
+**Status:** ✅ **Done.**
 
 **Micro-tasks:** [`vs-s1-verify-structure-path.md`](simple-agent-tasks/vs-s1-verify-structure-path.md) ✅ · [`vs-s1-pin-canonical-entity.md`](simple-agent-tasks/vs-s1-pin-canonical-entity.md) ✅
 
@@ -167,7 +173,7 @@ Domain with Entity + Property + Policy(DomainExpression)
 
 **Done when:** S2.1–S2.5 green; agent-facing claim “policies evaluate on VM” is true **on direct API**.
 
-**Status:** Active (M2 **Done** — post-M2 expansion)  
+**Status:** ✅ **Done.**
 
 **Next:** Slice 3 — MCP policy product loop.
 
@@ -224,7 +230,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | **S4.3** | Direct API helper + optional MCP later | Call site + test |
 
 **Pull trigger:** First-customer product needs mutable behavior, not only guards.  
-**Status:** Active (M2 **Done** — post-M2 expansion)  
+**Status:** ⬜ **Deferred** (post-M2 pull)  
 
 ---
 
@@ -239,7 +245,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | **S5.3** | DE relationship navigation only if policy needs it | Lower + VM or fail closed |
 
 **Pull trigger:** Canonical slice needs link (e.g. Order→Customer).  
-**Status:** Active (M2 **Done** — post-M2 expansion)  
+**Status:** ⬜ **Deferred** (post-M2 pull)  
 
 ---
 

@@ -28,11 +28,11 @@ We need a format that is easier to read, easier to diff, easier for LLMs to emit
 ### 2. Stages as Declarative Lifecycle Nodes
 - Stages are first-class lifecycle nodes that form a directed graph (not a linear pipeline). Cyclical transitions (e.g., `Suspended -> Active` via `Reinstate`) are valid and common.
 - Stage transitions and policies will be expressed declaratively, with transitions driven by actions rather than implicit ordering.
-- The DSL declares stages as an ordered list; transition edges are expressed on actions (`action Name -> Target`).
+- The DSL declares stages as an ordered list; transition edges are expressed on actions (`transition to Target`).
 
 ### 3. Effects: Expressive but Decoupled
 - Effects must be expressive and composable, but should not introduce complexity or coupling that holds back the rest of the system.
-- Focus on a small, powerful set of effect types (Assign, Create, Delete, PublishEvent, TransitionStage).
+- Focus on a small, powerful set of effect types: `assign` (mutate a property), `return create` (produce and return a new entity), `transition to` (stage change), and `publish` (emit an event).
 
 ### 4. Relationships as Properties
 - Relationships are entity-typed properties: `orders: many owned Order`. Cardinality is expressed through `one`/`many` modifiers; ownership through optional `owned`.
@@ -114,7 +114,7 @@ DSL → DomainMutationIntent[] → Committed Domain IR
 
 Each lowering pass translates the same IR into its target format. `SKU: Text required write once` becomes `required: true, readOnly: true` in OpenAPI — no per-protocol hand-rewriting.
 
-**HATEOAS as an emergent property.** The stage machine *is* the link generator. An entity in stage `Submitted` exposes only the actions declared on that stage as links. No hand-authored `if state == "Draft" then emit Submit link` logic. The API layer walks the current stage's outgoing action edges and emits `_links` for each. HATEOAS becomes trivial because the lifecycle graph is already encoded in the domain model.
+**HATEOAS as an emergent property.** The stage machine *is* the link generator. An entity in stage `Submitted` exposes only the actions declared on that stage (or via `when`) as links. No hand-authored `if state == "Draft" then emit Submit link` logic. The API layer walks the current stage's outgoing action edges and emits `_links` for each. HATEOAS becomes trivial because the lifecycle graph is already encoded in the domain model.
 
 **RBAC-constrained links.** When actions carry `permit` blocks (Phase 2+), the API layer filters `_links` by evaluating each action's permit against the authenticated actor. A `PurchaseOrder` in `Submitted` returns different links for a warehouse worker (`Ship`) vs. a customer service rep (`Confirm`, `Cancel`, `AddLineItem`) vs. the ordering customer (`Cancel`). Role checks, HATEOAS links, and domain authorization stay in sync because they share a single source of truth: the DSL.
 
@@ -122,18 +122,32 @@ Each lowering pass translates the same IR into its target format. `SKU: Text req
 
 ```
 // Entity policy — expression evaluates against entity state
-HasStock: policy QuantityOnHand > 0
+HasStock: policy { QuantityOnHand > 0 }
 
 // Actor policy — expression evaluates against actor identity
-CustomerService: policy role == "Customer Service"
+CustomerService: policy { role == "Customer Service" }
 
 // Permit — expression evaluates against actor, can reference entity relationships
-Ship: action -> Shipped
-  permit actor: Employee role == "Customer Service"
-  permit this.customer
+Ship: action when Submitted {
+  transition to Shipped
+  permit Employee.Warehouse
+}
 ```
 
 Three syntactic forms, one expression grammar. The lowering pass uses the same evaluation engine for all three — only the variable binding context changes. No separate RBAC DSL, no duplicate filter logic.
+
+**Policy composition.** Complex conditions are composed inside named policies using `and`/`or`/`not`. The `when` clause on actions stays a flat list of names — no inline expression nesting at the call site:
+
+```
+IsAvailable: policy { QuantityOnHand > 0 and not IsExpired }
+IsExpired: policy { ExpiryDate < now }
+
+Reserve: action when Available, IsAvailable {
+  transition to Reserved
+}
+```
+
+If the composition of `IsAvailable` changes, every action that references it inherits the update automatically. Complexity lives in policies; actions name them.
 
 **Schema-first validation.** Property constraints (`range`, `length`, `pattern`, `required`, `write once`) map directly to request validation rules. The API layer can reject invalid input before it reaches domain logic — but the rules themselves are defined once in the DSL and compiled into middleware, not duplicated across validation libraries.
 
@@ -142,11 +156,11 @@ Three syntactic forms, one expression grammar. The lowering pass uses the same e
 **Policies as query predicates.** Every policy is a named Boolean expression over entity properties — which is exactly what a query filter is. The policy name becomes the query parameter or GraphQL field name; the expression compiles directly into a `WHERE` clause, an Elasticsearch filter, or a search index predicate:
 
 ```
-IsActiveSupplier: policy IsActive == true
+IsActiveSupplier: policy { IsActive == true }
 // → GET /suppliers?isActive=true
 // → SQL: SELECT * FROM suppliers WHERE IsActive = true
 
-IsLowStock: policy QuantityOnHand < 5
+IsLowStock: policy { QuantityOnHand < 5 }
 // → GET /inventory?isLowStock=true  (reorder list)
 // → GraphQL: query { lowStockItems { ... } }
 ```
@@ -189,23 +203,25 @@ IDL-like formats are useful inspiration, especially decorators/annotations, but 
 
 ### Syntax Philosophy: `Name: Kind`
 
-Every declaration in the Poly DSL follows a single uniform pattern: **`Name: Kind Details`**. The kind keyword tells the parser and reader what the declaration *is* in the domain. Properties are the unmarked default — a bare type name implies a property. All other concepts use an explicit kind keyword.
+Every declaration in the Poly DSL follows a single uniform pattern: **`Name: Kind Details`**. The name comes first, a colon separates, and the kind keyword tells the parser what the declaration *is* in the domain. Properties are the unmarked default — a bare type name implies a property. All other concepts, including the top-level types themselves, use an explicit kind keyword.
 
 The domain modeling system has two core primitives:
 
-- **Value** — no identity, no lifecycle. Compared by content. Declared with `value Name { ... }`.
-- **Entity** — has identity, a lifecycle (stages), and can own relationships. Declared with `entity Name { ... }`.
+- **Value** — no identity, no lifecycle. Compared by content. Declared with `Name: value { ... }`.
+- **Entity** — has identity, a lifecycle (stages), and can own relationships. Declared with `Name: entity { ... }`.
 
-Every other concept is either a member of an entity (property, stage, action, policy), a member of a value (property), or a specialization of entity. **Actor** (`actor Name { ... }`) is an entity specialization — it inherits all entity capabilities (properties, stages, actions, policies) and adds identity, claims, and role-based policy evaluation.
+Every other concept is either a member of an entity (property, stage, action, policy, event), a member of a value (property), or a specialization of entity. **Actor** (`Name: actor { ... }`) is an entity specialization — it inherits all entity capabilities (properties, stages, actions, policies) and adds identity, claims, and role-based policy evaluation. Actor inheritance uses the parent type: `Name: actor ParentType { ... }`.
 
 | Syntax | Kind | Example |
 |---|---|---|
+| `Name: entity { ... }` | Entity type | `Product: entity { ... }` |
+| `Name: value { ... }` | Value type | `Money: value { ... }` |
+| `Name: actor { ... }` | Actor (specialized entity) | `Customer: actor { ... }` |
 | `Name: Type mod...` (bare type + modifiers) | Property or Relationship | `SKU: Text length(1, 50)` |
 | `Name: stage { ... }` | Stage | `Active: stage { ... }` |
-| `Name: action -> Target` | Action with transition | `Submit: action -> Confirmed` |
-| `Name: policy expr` | Policy guard | `HasStock: policy Qty > 0` |
-| `actor Name { ... }` | Actor (specialized entity) | `actor Customer { ... }` |
-| `value Name { ... }` | Value type | `value Money { ... }` |
+| `Name: action ...` | Action | `Submit: action transition to Submitted` |
+| `Name: policy { expr }` | Policy guard | `HasStock: policy { Qty > 0 }` |
+| `Name: event { ... }` | Event (Phase 2+) | `OrderShipped: event { ... }` |
 
 This pattern has several advantages:
 
@@ -215,17 +231,17 @@ This pattern has several advantages:
 - **Self-describing syntax** — the kind keyword disambiguates at a glance, without consulting docs.
 - **Extensible** — new domain concepts (aggregate, projection, process manager) adopt the same pattern with new kind keywords, no grammar changes needed.
 - **LLM-friendly** — a uniform declaration pattern is easier for LLMs to emit correctly than position-dependent or context-sensitive syntax.
-- **Actor is an entity** — `actor Customer { ... }` inherits all entity capabilities (properties, stages, actions, policies) plus actor-specific features (identity, claims, roles). The kind keyword is the specialization mechanism.
+- **Actor is an entity** — `Customer: actor { ... }` inherits all entity capabilities (properties, stages, actions, policies) plus actor-specific features (identity, claims, roles). Actor inheritance uses the parent type after the kind keyword: `Employee: actor User { ... }`.
 
-Stages are **cyclical** by design. The DSL does not use a linear pipeline notation. Instead, transitions are expressed on actions:
+Stages are **cyclical** by design:
 
 ```
 Active: stage {
-  Suspend: action -> Suspended
+  Suspend: action transition to Suspended
 }
 Suspended: stage {
-  Reinstate: action -> Active    // backward transition = cycle
-  Blacklist: action -> Blacklisted
+  Reinstate: action transition to Active    // backward transition = cycle
+  Blacklist: action transition to Blacklisted
 }
 ```
 
@@ -274,10 +290,20 @@ Actions have three forms, adding detail as needed:
 **Phase 1 — Simple stage transition:**
 
 ```
-Submit: action -> Submitted
+Submit: action transition to Submitted
 ```
 
-The action takes no parameters and returns no result. The `-> Target` declares the target stage.
+**Zero-ceremony transition:** When the action name matches the target stage name by convention (`Submit` → `Submitted`, `Cancel` → `Cancelled`, `Ship` → `Shipped`), the transition is inferred. The action block can be empty:
+
+```
+Draft: stage {
+  Submit: {}
+  Cancel: {}
+}
+Confirmed: stage {
+  Ship: {}
+}
+```
 
 **Phase 2 — Parameterized with optional return type:**
 
@@ -285,21 +311,69 @@ The action takes no parameters and returns no result. The `-> Target` declares t
 AddLineItem: action(price: Money, quantity: Number) -> OrderLineItem
 ```
 
-Parameters are typed and comma-separated within parentheses. The `-> ReturnType` is optional — omit it for void actions. Parameters can carry inline constraints just like properties:
+Parameters are typed and comma-separated within parentheses. The `-> ReturnType` is optional — omit it for void actions. Parameters can carry inline constraints just like properties.
+
+**Phase 2 — With effect block and explicit transition:**
 
 ```
-CreateOrder: action(currency: Text length(3, 3))
-```
-
-**Phase 2 — With effect block:**
-
-```
-Submit: action -> Submitted {
+Submit: action {
+  transition to Submitted
   assign submittedAt to now
 }
 ```
 
-The block body describes the side effects produced by the action. Effects include `assign` (mutate a property), `yield create` (produce a new entity), and `transition` (explicit stage change — implied by `-> Target` when not overridden in the block).
+The block body describes the side effects produced by the action, enclosed in `{ }`. Effects include `assign` (mutate a property), `return create` (produce and return a new entity), and `transition to` (stage change).
+
+**Preconditions and postconditions** use `when` and `then` keywords:
+
+- **`when` before the block** — preconditions. Must be true to execute the action. Used for stage restrictions and guard policies. Policies can be inverted with `not`.
+- **`then` after the block** — postconditions. Must be true after execution; if false, the action rolls back. May contain inline expressions or named policies.
+
+```
+// Precondition only
+Suspend: action when Active, HighRatedSupplier {
+  transition to Suspended
+}
+
+// Inverted policy: action available only when the policy does NOT pass
+Suspend: action when Active, not HighRatedSupplier {
+  transition to Suspended
+}
+
+// Postcondition only: shippedAt must be set
+Ship: action {
+  transition to Shipped
+  assign shippedAt to now
+} then shippedAt != null
+
+// Both pre- and postconditions
+Reserve: action when Available, HasStock, not IsExpired {
+  assign QuantityReserved to QuantityReserved + 1
+} then QuantityOnHand >= 0
+```
+
+**Multi-stage actions** use `when` as a precondition to list all valid stages:
+
+```
+action Cancel when Draft, Submitted, Confirmed {
+  transition to Cancelled
+  assign canceledAt to now
+} permit this.customer
+  permit Employee.CustomerService
+```
+
+An action declared directly inside a stage block inherits that stage as an implicit precondition. Listing additional stage names in the precondition `when` extends validity to those stages:
+
+```
+// Inside the Active stage block — inherits Active, adds Suspended
+Active: stage {
+  Suspend: action when Suspended, HighRatedSupplier {
+    transition to Suspended
+  }
+}
+```
+
+Blocks are always delimited by `{ }` — never by whitespace indentation. The parser uses braces for all structural grouping.
 
 Parameters and return types feed directly into API generation: a parameterized action becomes a request body schema, and a return type becomes a response schema. The lowering pass has all the information it needs to produce typed API contracts.
 
@@ -310,7 +384,7 @@ A concrete example of the minimal Phase 1 surface, derived from a real MCP sessi
 ```poly
 domain SupplyChain
 
-entity Product {
+Product: entity {
   SKU: Text required write once
   Name: Text required
   UnitCost: Number range(0, ) required
@@ -324,19 +398,19 @@ entity Product {
   inventory: many owned InventoryItem
 
   Draft: stage {
-    Activate: action -> Active
+    Activate: {}
   }
   Active: stage {
-    UpdatePricing: action
-    Discontinue: action -> Discontinued
+    UpdatePricing: {}
+    Discontinue: {}
   }
   Discontinued: stage {
-    Archive: action -> Archived
+    Archive: {}
   }
   Archived: stage {}
 }
 
-entity Supplier {
+Supplier: entity {
   SupplierCode: Text required write once
   Name: Text required
   ContactEmail: Text pattern("[^@]+@[^@]+")
@@ -349,25 +423,27 @@ entity Supplier {
   orders: many owned PurchaseOrder
 
   Prospective: stage {
-    Approve: action -> Approved
+    Approve: {}
   }
   Approved: stage {
-    Activate: action -> Active
+    Activate: {}
   }
   Active: stage {
-    Suspend: action -> Suspended
+    Suspend: action when not HighRatedSupplier {
+      transition to Suspended
+    }
   }
   Suspended: stage {
-    Reinstate: action -> Active
-    Blacklist: action -> Blacklisted
+    Reinstate: action transition to Active
+    Blacklist: action transition to Blacklisted
   }
   Blacklisted: stage {}
 
-  IsActiveSupplier: policy IsActive == true
-  HighRatedSupplier: policy Rating >= 4
+  IsActiveSupplier: policy { IsActive == true }
+  HighRatedSupplier: policy { Rating >= 4 }
 }
 
-entity Warehouse {
+Warehouse: entity {
   WarehouseCode: Text required write once
   Name: Text required
   Address: Text required
@@ -378,19 +454,19 @@ entity Warehouse {
   servedStores: many Store
 
   Planned: stage {
-    Open: action -> Operational
+    Open: {}
   }
   Operational: stage {
-    ScheduleMaintenance: action -> Maintenance
-    Decommission: action -> Decommissioned
+    ScheduleMaintenance: action transition to Maintenance
+    Decommission: action transition to Decommissioned
   }
   Maintenance: stage {
-    Reopen: action -> Operational
+    Reopen: action transition to Operational
   }
   Decommissioned: stage {}
 }
 
-entity PurchaseOrder {
+PurchaseOrder: entity {
   OrderNumber: Text required write once
   OrderDate: DateTime required write once
   ExpectedDeliveryDate: Date
@@ -400,44 +476,49 @@ entity PurchaseOrder {
   shipments: many owned Shipment
 
   Draft: stage {
-    Submit: action -> Submitted
+    Submit: {}
   }
+
+  // Multi-stage action — valid from any listed stage
+  action Cancel when Draft, Submitted, Confirmed {
+    transition to Cancelled
+  }
+
   Submitted: stage {
-    Confirm: action -> Confirmed
-    Cancel: action -> Cancelled
+    Confirm: {}
   }
   Confirmed: stage {
-    Ship: action -> Shipped
+    Ship: {}
   }
   Shipped: stage {
-    Receive: action -> Received
+    Receive: {}
   }
   Received: stage {
-    Return: action -> Returned
+    Return: action transition to Returned
   }
   Cancelled: stage {}
   Returned: stage {}
 }
 
-entity Shipment {
+Shipment: entity {
   TrackingNumber: Text required write once
   EstimatedArrivalDate: Date
   ActualArrivalDate: Date
   ShippingMethod: Text
 
   Planned: stage {
-    Dispatch: action -> InTransit
+    Dispatch: {}
   }
   InTransit: stage {
-    MarkDelivered: action -> Delivered
+    MarkDelivered: action transition to Delivered
   }
   Delivered: stage {
-    Verify: action -> Verified
+    Verify: {}
   }
   Verified: stage {}
 }
 
-entity InventoryItem {
+InventoryItem: entity {
   BatchNumber: Text required write once
   QuantityOnHand: Number range(0, ) required
   QuantityReserved: Number range(0, )
@@ -445,21 +526,23 @@ entity InventoryItem {
   BinLocation: Text
 
   Available: stage {
-    Reserve: action -> Reserved
-    MarkDamaged: action -> Damaged
-    MarkExpired: action -> Expired
+    Reserve: action when HasStock {
+      transition to Reserved
+    }
+    MarkDamaged: action transition to Damaged
+    MarkExpired: action transition to Expired
   }
   Reserved: stage {}
   Damaged: stage {}
   Expired: stage {}
   Depleted: stage {}
 
-  HasStock: policy QuantityOnHand > 0
-  HasMinimumStock: policy QuantityOnHand >= 10
-  IsLowStock: policy QuantityOnHand < 5
+  HasStock: policy { QuantityOnHand > 0 }
+  HasMinimumStock: policy { QuantityOnHand >= 10 }
+  IsLowStock: policy { QuantityOnHand < 5 }
 }
 
-entity Store {
+Store: entity {
   StoreCode: Text required write once
   Name: Text required
   Address: Text required
@@ -469,17 +552,17 @@ entity Store {
   warehouses: many Warehouse
 
   Planned: stage {
-    Open: action -> Active
+    Open: {}
   }
   Active: stage {
-    Close: action -> Closed
-    Relocate: action -> Relocated
+    Close: action transition to Closed
+    Relocate: action transition to Relocated
   }
   Closed: stage {}
   Relocated: stage {}
 }
 
-entity Category {
+Category: entity {
   CategoryCode: Text required write once
   Name: Text required
   Description: Text
@@ -487,11 +570,10 @@ entity Category {
   products: many Product
 
   Active: stage {
-    Archive: action -> Archived
+    Archive: {}
   }
   Archived: stage {}
 }
-
 ```
 
 ### Phase 2+ Example: E-Commerce with Actors & Permits
@@ -502,7 +584,7 @@ The domain modeling system has two core primitives: **Entity** and **Value**.
 
 - **Value** types have no identity and no lifecycle. They are compared by their contents. `Currency`, `Money`, `Email` — these describe data shapes, not domain objects.
 - **Entity** types have identity, a lifecycle (stages), and can own relationships. `Product`, `Supplier`, `Order` are entities.
-- **Actor** is an entity specialization. `actor Customer { ... }` is shorthand for `entity Customer { ... }` plus identity, claims, and role-based policy evaluation. Actors inherit all entity capabilities — properties, stages, actions, policies — and add actor-specific features.
+- **Actor** is an entity specialization. `Customer: actor { ... }` is shorthand for `Customer: entity { ... }` plus identity, claims, and role-based policy evaluation. Actors inherit all entity capabilities — properties, stages, actions, policies — and add actor-specific features.
 
 **Permit expressions.** `permit` blocks use the same `DomainExpression` grammar as entity and actor policies. The `permit` keyword simply changes the evaluation subject from entity state to actor identity. See the Downstream Benefits remarks for details on the expression model.
 
@@ -510,42 +592,42 @@ The domain modeling system has two core primitives: **Entity** and **Value**.
 domain ECommerce
 
 // Value types — no identity, no lifecycle, compared by content
-value Currency {
+Currency: value {
   code: Text length(3, 3) required
   symbol: Text required
   name: Text required
 }
 
-value Money {
+Money: value {
   amount: Number range(0, ) required
   currency: Currency required
 }
 
 // Actor — an entity specialized for identity and role-based access
-actor User {
+User: actor {
   email: Text pattern("[^@]+@[^@]+") length(5, 254) required
 }
 
-actor Employee : User {
+Employee: actor User {
   badgeNumber: Text required write once
   role: Text required
 
   // Actor-scoped policies — same expression syntax, different subject
-  CustomerService: policy role == "Customer Service"
-  Warehouse: policy role == "Warehouse"
+  CustomerService: policy { role == "Customer Service" }
+  Warehouse: policy { role == "Warehouse" }
 }
 
-actor Customer : User {
+Customer: actor User {
   orders: many owned Order
 
   Active: stage {
     CreateOrder: action {
-      yield create new order in orders
+      return create order in orders
     }
   }
 }
 
-entity Order {
+Order: entity {
   customer: one Customer required write once
   createdAt: DateTime required write once
   submittedAt: DateTime
@@ -557,36 +639,41 @@ entity Order {
   Draft: stage {
     AddLineItem: action(price: Money) {
       assign total to total + price
-    }
       permit Employee.CustomerService
+    }
 
-    Submit: action -> Submitted {
+    Submit: action {
+      transition to Submitted
       assign submittedAt to now
+      permit this.customer
+      permit Employee.CustomerService
     }
-      permit this.customer
-      permit Employee.CustomerService
 
-    Cancel: action -> Cancelled {}
+    Cancel: action {
+      transition to Cancelled
       permit this.customer
       permit Employee.CustomerService
+    }
   }
 
   Submitted: stage {
     AddLineItem: action(price: Money) {
       assign total to total + price
-    }
       permit Employee.CustomerService
+    }
 
-    Ship: action -> Shipped {
+    Ship: action {
+      transition to Shipped
       assign shippedAt to now
-    }
       permit Employee.Warehouse
-
-    Cancel: action -> Cancelled {
-      assign canceledAt to now
     }
+
+    Cancel: action {
+      transition to Cancelled
+      assign canceledAt to now
       permit this.customer
       permit Employee.CustomerService
+    }
   }
 
   Shipped: stage {}
@@ -610,7 +697,7 @@ The DSL must eventually cover the real domain surface. Priority is ordered by Ph
 
 - **Phase 1:** entities, properties (bare type with inline value constraints `range`/`length`/`pattern` and mutation constraints `required`/`write once`), relationships as entity-typed properties (`one`/`many`, optional `owned`, implicit reverse navigation), stages (cyclical graph), actions with stage transitions, policies (property comparison and composite boolean)
 - **Phase 2:** actors (specialized entities with identity/claims/roles), action parameters and effect blocks, event declarations, richer effects
-- **Phase 3:** comments and annotations, `permit` expression subject switch (inline `permit` using the existing `DomainExpression` grammar, scoped to actor identity), compatibility aliases(inline `permit` using the existing `DomainExpression` grammar, scoped to actor identity), compatibility aliases, migration/versioning support
+- **Phase 3:** comments and annotations, `permit` expression subject switch (inline `permit` using the existing `DomainExpression` grammar, scoped to actor identity), compatibility aliases, migration/versioning support
 
 ## Canonical Printing Rules
 
@@ -665,17 +752,17 @@ JSON import/export can remain available for compatibility and programmatic autom
 ```
 // Applying this fragment to an existing session adds one entity.
 // The other 8 entities remain untouched. No deletions.
-entity ReturnAuthorization {
+ReturnAuthorization: entity {
   ReturnCode: Text
   Reason: Text
   order: one PurchaseOrder
 
   Draft: stage {
-    Submit: action -> Submitted
+    Submit: {}
   }
   Submitted: stage {
-    Approve: action -> Approved
-    Deny: action -> Denied
+    Approve: action transition to Approved
+    Deny: action transition to Denied
   }
   Approved: stage {}
   Denied: stage {}
@@ -758,13 +845,16 @@ These are documented constraints, not parser enforcement in Phase 1. Formal vali
 
 1. Define the minimal grammar for:
    - domain
-   - entity
+   - entity (`Name: entity { ... }`) — the `Name: kind` format applied at the top level
    - property (bare type: `Name: Type`) — when the type is another entity, it is a relationship
    - relationship modifiers inline on properties (`one`/`many`, optional `owned`)
    - inline constraint modifiers on properties (`range`, `length`, `pattern` for value constraints; `required`, `write once` for mutation constraints)
    - stage (`Name: stage { ... }`)
-   - action with stage transition (`Name: action -> Target`)
-   - policy — property comparison and composite boolean (`Name: policy expr`)
+   - action with `transition to` syntax; zero-ceremony inferred transitions (`{}`) when action name matches stage name by convention
+   - multi-stage actions with `when` clause
+   - `when` (precondition) and `then` (postcondition) clauses on actions
+   - policy — named Boolean expression (`Name: policy { expr }`); optionally parameterized (`Name: policy(param: Type, ...) { expr }`)
+   - unified predicate lists in `when`/`then` accept stage names, policy names, and inverted policies (`not PolicyName`)
 2. Build a parser that emits `DomainMutationIntent[]`.
 3. Build a canonical printer from the committed domain model.
 4. Round-trip those supported constructs.
@@ -774,10 +864,10 @@ These are documented constraints, not parser enforcement in Phase 1. Formal vali
 
 Add:
 
-- value types (`value Name { ... }`) — the second core primitive alongside entity; no identity, no lifecycle, compared by content
-- actor specialization (`actor Name { ... }`) — an entity with identity, claims, and role-based policy evaluation; inherits all entity grammar (properties, stages, actions, policies)
-- action parameters and return types (`Name: action(Param: Type, ...) -> ReturnType`); effect blocks (`assign`, `yield create`)
-- event declarations and subscriptions
+- value types (`Name: value { ... }`) — the second core primitive alongside entity; no identity, no lifecycle, compared by content
+- actor specialization (`Name: actor [Parent] { ... }`) — an entity with identity, claims, and role-based policy evaluation; inherits all entity grammar (properties, stages, actions, policies)
+- action parameters and return types (`action(Param: Type, ...) -> ReturnType`); `return` for value and `return create` for entity production; effect blocks (`assign`, `publish`)
+- event declarations within entities (`Name: event { ... }`); event subscriptions with implicit publisher subject
 - actor identity configuration
 - richer effects (Create, PublishEvent, TransitionStage)
 
@@ -786,9 +876,9 @@ Add:
 Add:
 
 - comments/annotations
+- `permit` expression subject switch (inline `permit` using the existing `DomainExpression` grammar, scoped to actor identity)
 - compatibility aliases
 - migration/versioning support
-- `permit` expression subject switch (inline `permit` using the existing `DomainExpression` grammar, scoped to actor identity)
 
 ## Recommendation Summary
 

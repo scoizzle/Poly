@@ -19,12 +19,13 @@ We need a format that is easier to read, easier to diff, easier for LLMs to emit
 4. Produce stable, line-oriented diffs.
 5. Allow comments and future annotations.
 6. Avoid adding core dependencies.
-## Simplification and Refactoring Plan
+## Design Principles
 
-### 1. Actor as Syntactic Sugar on Entity
-- `actor` is not an engine primitive. It lowers to `entity` plus actor-specific metadata (identity columns, claims, role-based policy evaluation).
-- `Name: actor { ... }` declares a standalone actor — the entity's properties form the identity surface.
-- `Name: actor Parent { ... }` declares an actor that extends the parent actor's identity, inheriting its properties. `Employee: actor User` means "Employee is an actor that is a User."
+### 1. Actors Are First-Class DSL Primitives
+- `actor` is a top-level declaration keyword in the DSL, alongside `entity` and `value`.
+- In the engine, an actor lowers to `entity` plus actor-specific metadata (identity columns, claims, role-based policy evaluation). Three DSL keywords, two engine primitives.
+- `Name: actor { ... }` declares a standalone actor.
+- `Name: Parent { ... }` extends an existing entity or actor. If `Parent` is an actor, the child inherits actor-ness automatically — no `actor` keyword needed. `Employee: User` means "Employee extends User" — if `User` is an actor, `Employee` is too.
 
 ### 2. Stages as Declarative Lifecycle Nodes
 - Stages are first-class lifecycle nodes that form a directed graph (not a linear pipeline). Cyclical transitions (e.g., `Suspended -> Active` via `Reinstate`) are valid and common.
@@ -33,10 +34,10 @@ We need a format that is easier to read, easier to diff, easier for LLMs to emit
 
 ### 3. Effects: Expressive but Decoupled
 - Effects must be expressive and composable, but should not introduce complexity or coupling that holds back the rest of the system.
-- Focus on a small, powerful set of effect types: `assign` (mutate a property), `return create` (produce and return a new entity), `transition to` (stage change), and `publish` (emit an event).
+- Focus on a small, powerful set of effect types: `assign` (mutate a property), `create` (create and return a new entity), `transition to` (stage change), and `publish` (emit an event).
 
 ### 4. Relationships as Properties
-- Relationships are entity-typed properties: `orders: many owned Order`. Cardinality is expressed through `one`/`many` modifiers; ownership through optional `owned`.
+- Relationships are entity-typed properties: `orders: many owned Order`. Cardinality is expressed through `many` (collection) vs bare (singular) modifiers; ownership through optional `owned`.
 - The owning side declares the edge. The domain engine synthesizes an implicit reverse navigation property on the owned entity — no separate back-reference declaration is required.
 - The MCP's `add_relationship` tool and `sourceOwnsTarget` boolean are replaced by a single property line.
 
@@ -113,7 +114,7 @@ DSL → DomainMutationIntent[] → Committed Domain IR
              REST lowering      gRPC lowering      GraphQL lowering
 ```
 
-Each lowering pass translates the same IR into its target format. `SKU: Text required write once` becomes `required: true, readOnly: true` in OpenAPI — no per-protocol hand-rewriting.
+Each lowering pass translates the same IR into its target format. `SKU: Text required` becomes `required: true, readOnly: true` in OpenAPI — no per-protocol hand-rewriting.
 
 **HATEOAS as an emergent property.** The stage machine *is* the link generator. An entity in stage `Submitted` exposes only the actions declared on that stage (or via `when`) as links. No hand-authored `if state == "Draft" then emit Submit link` logic. The API layer walks the current stage's outgoing action edges and emits `_links` for each. HATEOAS becomes trivial because the lifecycle graph is already encoded in the domain model.
 
@@ -121,25 +122,24 @@ Each lowering pass translates the same IR into its target format. `SKU: Text req
 
 **Actor authorization through policies.** Policies are the single concept. There is no separate `permit policy` keyword. The engine infers evaluation context from where a policy is declared: a policy on an actor entity (`Employee`) evaluates against the actor's properties; a policy on a regular entity (`Order`) evaluates against the entity's properties. The reserved name `actor` refers to the authenticated actor within policy expressions, allowing entity policies to mix entity and actor references:
 
-```
+```swift
 // Policy on an actor entity — evaluates against the actor
-Warehouse: policy { role == "Warehouse" }
+Warehouse: policy { role is "Warehouse" }
 
 // Policy on a regular entity — evaluates against the entity
 HasStock: policy { QuantityOnHand > 0 }
 
 // Policy on a regular entity that references the actor via actor keyword
-OwnedByCaller: policy { customer == actor }
+OwnedByCaller: policy { customer is actor }
 ```
 
 Actions reference policies by name in `require` — qualified names for cross-entity references (`Employee.Warehouse`), unqualified for same-entity policies (`OwnedByCaller`, `HasStock`). The engine evaluates each policy against its declaring entity:
 
-```
+```swift
 Ship: action
   when Submitted
-  require HasStock
-  require Employee.Warehouse
-  require OwnedByCaller
+  require HasStock, OwnedByCaller          // two policies on the entity (AND)
+  require Employee.Warehouse               // OR actor policy (warehouse bypass)
 {
   transition to Shipped
 }
@@ -149,9 +149,9 @@ Two keywords, two distinct jobs: `when` gates lifecycle stage; `require` gates p
 
 **External policy resolution.** A policy declaration may defer its expression body to an external resolver. The `external` modifier signals that the policy's evaluation logic lives outside the DSL — in a database, a tenant configuration store, or a remote authorization service:
 
-```
+```swift
 // Inline — expression evaluated directly by the engine
-Warehouse: policy { role == "Warehouse" }
+Warehouse: policy { role is "Warehouse" }
 
 // External — expression resolved at runtime by a registered resolver
 Warehouse: policy external
@@ -165,7 +165,7 @@ External policies enable multi-tenant authorization where role definitions diffe
 
 **Policy composition.** Complex conditions are composed inside named policies using C# conditional expression syntax (`&&`/`||`/`!`) with word aliases (`and`/`or`/`not`). The `require` clause on actions stays a flat list of names — no inline expression nesting at the call site:
 
-```
+```swift
 IsAvailable: policy { QuantityOnHand > 0 and not IsExpired }
 IsExpired: policy { ExpiryDate < DateTime.Now }
 
@@ -179,14 +179,14 @@ Reserve: action
 
 If the composition of `IsAvailable` changes, every action that references it inherits the update automatically. Complexity lives in policies; actions name them.
 
-**Schema-first validation.** Property constraints (`range`, `length`, `pattern`, `required`, `write once`) map directly to request validation rules. The API layer can reject invalid input before it reaches domain logic — but the rules themselves are defined once in the DSL and compiled into middleware, not duplicated across validation libraries.
+**Schema-first validation.** Property constraints (`range`, `length`, `pattern`, `required`, `unique`) map directly to request validation rules. The API layer can reject invalid input before it reaches domain logic — but the rules themselves are defined once in the DSL and compiled into middleware, not duplicated across validation libraries.
 
 **Database schema generation.** Entities map to tables, properties to columns, constraints to column constraints, relationships to foreign keys, and `owned` relationships to cascading deletes. A single DSL file can produce both the API contract and the database migration.
 
 **Policies as query predicates.** Every policy is a named Boolean expression over entity properties — which is exactly what a query filter is. The policy name becomes the query parameter or GraphQL field name; the expression compiles directly into a `WHERE` clause, an Elasticsearch filter, or a search index predicate:
 
-```
-IsActiveSupplier: policy { IsActive == true }
+```swift
+IsActiveSupplier: policy { IsActive is true }
 // → GET /suppliers?isActive=true
 // → SQL: SELECT * FROM suppliers WHERE IsActive = true
 
@@ -235,14 +235,13 @@ IDL-like formats are useful inspiration, especially decorators/annotations, but 
 
 Every declaration in the Poly DSL follows a single uniform pattern: **`Name: Kind Details`**. The name comes first, a colon separates, and the kind keyword tells the parser what the declaration *is* in the domain. Properties are the unmarked default — a bare type name implies a property. All other concepts, including the top-level types themselves, use an explicit kind keyword.
 
-The domain modeling system has two engine primitives:
+The DSL has three top-level declaration keywords, which lower to two engine primitives:
 
 - **Value** — no identity, no lifecycle. Compared by content. Declared with `Name: value { ... }`.
 - **Entity** — has identity, a lifecycle (stages), and can own relationships. Declared with `Name: entity { ... }`.
+- **Actor** — an entity that participates in authorization. Declared with `Name: actor { ... }`. Lowers to `entity` plus actor metadata (identity columns, claims, role-based policy evaluation).
 
-`actor` is syntactic sugar on `entity` — an actor *is* an entity with additional authorization constraints. Declaring `Name: actor { ... }` lowers to `entity` plus actor metadata (identity columns, claims tables, auth middleware). The engine has two primitives; the DSL has three declaration keywords for human clarity.
-
-**Actor identity extension.** `Name: actor Parent { ... }` declares an actor that asserts it is a `Parent` — it inherits the parent's identity properties and adds its own. `Employee: actor User { ... }` means "Employee is an actor that is a User" — `Employee` participates in authorization, carries `User`'s identity properties (`email`, etc.), and adds its own (`badgeNumber`, `role`). An `Employee` satisfies any policy that checks `User`.
+**Entity extension.** `Name: Parent { ... }` extends an existing entity or actor — it inherits the parent's identity properties and adds its own. If the parent is an actor, the child is an actor too without repeating the `actor` keyword. `Employee: User { ... }` means "Employee extends User" — `Employee` inherits `User`'s identity properties (`email`, etc.) and adds its own (`badgeNumber`, `role`). An `Employee` satisfies any policy that checks `User`. The explicit `Name: actor Parent { ... }` form is also valid where needed (e.g. extending a plain entity into an actor).
 
 Every other concept is a member of an entity or actor (property, stage, action, policy, event, function) or a member of a value (property). DSL keywords like `stage`, `action`, `policy`, and `event` are human-facing sugar — they all lower to entity members in the engine.
 
@@ -250,8 +249,8 @@ Every other concept is a member of an entity or actor (property, stage, action, 
 |---|---|---|
 | `Name: entity { ... }` | Entity type | `Product: entity { ... }` |
 | `Name: value { ... }` | Value type | `Money: value { ... }` |
+| `Name: Parent { ... }` | Extends a parent entity/actor (inherits its kind) | `Employee: User { ... }` |
 | `Name: actor { ... }` | Actor (entity + auth constraints; Phase 2+) | `User: actor { ... }` |
-| `Name: actor Parent { ... }` | Actor extending parent identity (Phase 2+) | `Employee: actor User { ... }` |
 | `Name: Type mod...` (bare type + modifiers) | Property or Relationship | `SKU: Text length(1, 50)` |
 | `Name: stage { ... }` | Stage | `Active: stage { ... }` |
 | `Name: action { ... }` | Action (may mutate, has when and require) | `Submit: action { ... }` |
@@ -262,46 +261,81 @@ Every other concept is a member of an entity or actor (property, stage, action, 
 
 This pattern has several advantages:
 
-- **Relationships are properties** — when a property's type is another entity or actor, it is a relationship. Cardinality and ownership are expressed through `one`/`many` and `owned` modifiers: `orders: many owned Order`, `manager: one Employee`. No separate `relationship` keyword or declaration block.
+- **Relationships are properties** — when a property's type is another entity or actor, it is a relationship. Cardinality and ownership are expressed through `many` and `owned` modifiers: `orders: many owned Order`, `manager: Employee`. No separate `relationship` keyword or declaration block.
 - **Implicit reverse navigation** — when an entity is `owned` by another, the domain engine synthesizes a reverse navigation property on the owned entity. The modeler only declares the owning side.
 - **Zero ceremony for properties and actions** — `Submit: {}` inside a stage is a zero-ceremony action with implicit transition. `Name: Type` is a property with no keyword noise.
 - **Self-describing syntax** — the kind keyword disambiguates at a glance, without consulting docs.
 - **Extensible** — new domain concepts adopt the same `Name: Kind { ... }` pattern. No grammar changes needed.
 - **LLM-friendly** — a uniform declaration pattern is easier for LLMs to emit correctly than position-dependent or context-sensitive syntax.
-- **Actor is sugar on entity** — `actor` is not an engine primitive; it lowers to `entity` plus actor constraints. It signals to lowering passes that this type drives authorization, identity columns, and claims tables. `Name: actor Parent { ... }` extends the parent actor's identity — inheriting its properties and adding new ones. Policies declared on an actor evaluate against the actor's properties and are referenced via `require`. `actor` is also a reserved keyword in policy expressions, resolving to the authenticated caller.
+- **Actor is a first-class DSL primitive** — `actor` lowers to `entity` plus actor metadata in the engine. It signals to lowering passes that this type drives authorization, identity columns, and claims tables. `Name: Parent { ... }` extends a parent entity/actor — inheriting its properties and kind. If the parent is an actor, the child inherits actor-ness. Policies declared on an actor evaluate against the actor's properties and are referenced via `require`. `actor` is also a reserved keyword in policy expressions, resolving to the authenticated caller.
 
-Stages are **cyclical** by design:
+Stages are **cyclical** by design, and can optionally define **entry** and **exit** actions — effects that fire automatically on stage transition. Entry `require` guards prevent entering the stage; exit `require` guards prevent leaving. This is the natural place for stage-specific data constraints (e.g. "property must be set before entering this stage"):
 
-```
-Active: stage {
-  Suspend: action {
-    transition to Suspended
+```swift
+Account: entity {
+  accountNumber: Text required unique       // always NOT NULL, immutable
+  closedAt: DateTime                          // optional at top level
+
+  Active: stage {
+    entry
+      require CanActivate
+    {
+      assign activatedAt to DateTime.Now
+    }
+
+    exit
+      require { balance is 0 }               // can't leave Active with non-zero balance
+    { }
+
+    Suspend: action {
+      transition to Suspended
+    }
+  }
+
+  Suspended: stage {
+    entry { assign suspendedAt to DateTime.Now }
+
+    Reinstate: action { transition to Active }
+    Blacklist: action { transition to Blacklisted }
+  }
+
+  Closed: stage {
+    entry require { closedAt is not null }   // stage-specific NOT NULL
+    { assign closedAt to DateTime.Now }
   }
 }
-Suspended: stage {
-  Reinstate: action {
-    transition to Active    // backward transition = cycle
-  }
-  Blacklist: action {
-    transition to Blacklisted
-  }
-}
 ```
+
+`require` on entry blocks transition into the stage; `require` on exit blocks transition out. They cannot contain `when` or `transition to`. Entry/exit fire automatically — no action invocation needed. An entry block on the initial stage runs at entity creation.
+
+**Stage data shorthand.** A flat list of property names after `require` expands to `is not null` checks for each:
+
+```swift
+// Verbose:
+entry require { shippedAt is not null }
+       require { trackingNumber is not null }
+       require { carrier is not null }
+
+// Shorthand — expands to the same three checks:
+entry require shippedAt, trackingNumber, carrier
+```
+
+The shorthand works for both entry and exit blocks. It only produces `is not null` assertions — for complex expressions (`is not null and carrier != "UPS"`), use the brace-delimited form.
 
 ### Relationship Syntax
 
 Relationships are properties whose type is another entity. Cardinality and ownership are expressed inline:
 
-```
+```swift
 name: many owned Order         // one-to-many, source owns target
 name: many Order               // one-to-many, no ownership
-name: one owned Supplier       // one-to-one, source owns target
-name: one Supplier             // one-to-one, no ownership
+name: owned Supplier           // one-to-one, source owns target
+name: Supplier                 // one-to-one, no ownership (cardinality is the default)
 ```
 
 **Ownership** (`owned`) means the source entity owns the target: deleting the source cascades to the target. The domain engine synthesizes an implicit reverse navigation property on the owned entity. A modeler may optionally name the reverse side for documentation, but the parser detects that it matches an existing `owned` edge and treats it as an alias, not a second relationship.
 
-**Cardinality** is handled by `one` (reference) vs `many` (collection). The parser infers the full cardinality type from these keywords — no separate enumeration is needed.
+**Cardinality** is handled by `many` (collection) vs bare reference (singular). The parser infers the full cardinality type from presence of the `many` keyword — no separate enumeration is needed.
 
 This replaces the MCP's separate `add_relationship` tool and `sourceOwnsTarget` boolean with a single line that reads naturally.
 
@@ -317,15 +351,41 @@ Properties accept two categories of inline modifiers:
 | `length(min, max)` | `Code: Text length(3, 3)` | String must be exactly 3 characters |
 | `pattern(regex)` | `Email: Text pattern("[^@]+@[^@]+")` | String must match the regex |
 
-**Mutation constraints** — govern when the property can be set:
+**Mutation constraints** — govern whether the property can be null and when it can be set:
 
 | Modifier | Example | Meaning |
 |---|---|---|
-| `required` | `SKU: Text required` | Must be set before the entity can leave its initial stage |
-| `write once` | `OrderNumber: Text required write once` | Can be set once at creation; immutable after |
+| `required` | `SKU: Text required` | NOT NULL — set at creation, immutable thereafter |
 | `unique` | `Email: Text required unique` | Value must be unique across all instances of the entity |
 
-Modifiers chain on the same line: `SKU: Text required unique write once`, `Email: Text pattern(...) required unique`. The parser reads them left to right; order does not affect semantics.
+**Stage-specific data constraints** belong in the stage's entry `require` block, not on the property declaration:
+
+```swift
+Account: entity {
+  closedAt: DateTime                    // optional at the property level
+
+  Closed: stage {
+    entry require { closedAt is not null }    // required to enter this stage
+    { assign closedAt to DateTime.Now }
+  }
+}
+```
+
+Modifiers chain on the same line: `SKU: Text required unique`, `Email: Text pattern(...) required`. The parser reads them left to right; order does not affect semantics.
+
+Constraint parameters support named arguments for clarity and partial application. Unnamed positional arguments are also valid for single-parameter cases:
+
+```swift
+range(min: 0)       // ≥ 0, no upper bound
+range(min: 1, max: 100)  // 1 to 100
+range(0)            // positional shorthand for range(min: 0)
+range(0, )          // also valid, trailing comma for min-only
+pattern("[^@]+@[^@]+")  // single parameter — positional is natural
+length(3)           // shorthand for length(min: 3)
+length(min: 2, max: 10) // named for clarity
+```
+
+The canonical printer normalizes all forms to named syntax to avoid ambiguity.
 
 ### Action Signatures
 
@@ -333,7 +393,7 @@ Actions have three forms, adding detail as needed:
 
 **Zero-ceremony:** Inside a stage block, `Submit: {}` infers the transition from the action name (`Submit` → `Submitted`):
 
-```
+```swift
 Draft: stage {
   Submit: {}
   Cancel: {}
@@ -345,37 +405,135 @@ Confirmed: stage {
 
 **Action with body:** The `action` keyword marks a mutating operation. The body contains effects enclosed in `{ }`:
 
-```
+```swift
 Submit: action {
   transition to Submitted
   assign submittedAt to DateTime.Now
 }
 ```
 
-Effects include `transition to` (stage change), `assign` (mutate a property), `return create` (produce and return a new entity), and `publish` (emit an event). Primitives expose static members via dot notation (`DateTime.Now`, `Date.Today`).
+### Effect Types
 
-**Parameterized with return type:** Parameters appear in `()` after the name, return type uses `->`:
+Action bodies can contain the following effects, each expressing a different category of domain behavior:
 
+| Effect | Syntax | Meaning |
+|---|---|---|
+| **Stage transition** | `transition to Stage` | Move the entity to a named lifecycle stage |
+| **Property mutation** | `assign property to expr` | Set a property to a computed value |
+| **Create entity** | `create Entity { props }` | Create and return a new top-level entity |
+| **Create in collection (with local)** | `create varName in relationship { props }` | Create a new entity, bind to local, add to owned collection |
+| **Create in collection** | `create in relationship { props }` | Create a new entity and add it to an owned collection — no local binding needed |
+| **Publish event** | `publish EventName { props }` | Emit a domain event with attached data |
+
+**Stage transition.** Moves the entity to a new lifecycle stage. Must target a valid stage on the entity:
+
+```swift
+transition to Submitted
+transition to Cancelled
 ```
+
+**Property mutation.** Assigns a value to a property. The right side may be a literal, a property reference, an expression, or a static member:
+
+```swift
+assign submittedAt to DateTime.Now
+assign total to total + price
+assign status to "Active"
+```
+
+**Create entity.** Creates a new entity and returns it from the action. The body braces specify initial property values:
+
+```swift
+create OrderLineItem { price: price, quantity: quantity }
+```
+
+The new entity is created in its initial stage. Properties not listed in the initializer use their type's default. Required properties must be provided.
+
+**Create in owned relationship.** Creates a new entity and atomically adds it to a `many owned` relationship collection on the current entity. The `in` keyword links the new entity to the collection. The entity type is inferred from the relationship's target type:
+
+```swift
+// No local — entity is created and added, no reference needed
+create in entries {
+  kind: "Deposit"
+  amount: amount
+  postedAt: DateTime.Now
+}
+
+// With local — needed for subsequent use
+create entry in entries {
+  kind: "Deposit"
+  amount: amount
+}
+return entry.entryId
+```
+
+The local variable name is optional. When omitted, the entity is created as a side effect only. When present, it binds the created entity for subsequent expressions.
+
+The relationship must be declared as `owned` on the current entity:
+
+```swift
+Customer: actor {
+  orders: many owned Order      // owned relationship
+
+  Active: stage {
+    CreateOrder: action(price: Money) {
+      create in orders {
+        customer: this
+        total: price
+      }
+    }
+  }
+}
+```
+
+The `in relationship` clause resolves against the entity's owned relationships at parse time.
+
+**Publish event.** Emits a domain event. The event type must be declared on the entity. The body braces specify event payload properties:
+
+```swift
+publish OrderShipped { order: this }
+publish TransactionPosted { transaction: this }
+```
+
+**Implicit returns.** When an action or function declares a return type (`-> Type`), the last statement in the body is implicitly the return value. The parser verifies the last statement's produced type matches the declared type — mismatches are parse errors:
+
+```swift
+// Action with return type — last statement is implicit return
+Submit: action -> Transaction {
+  assign postedAt to DateTime.Now
+  create Transaction { kind: "Deposit", amount: amount }    // ← implicit return
+}
+
+// Action without return type — no implicit return
+Suspend: action {
+  transition to Suspended
+}
+
+// Function — last expression is implicit return
+totalValue() -> Number {
+  QuantityOnHand * UnitCost                                  // ← implicit return
+}
+```
+
+A `return` keyword is valid for early exits or explicitness, but the standard pattern omits it. Functions with `->` must end with an expression of the declared type.
+
+`create` is an effect, not a return statement. Actions with `-> Type` use the last `create` statement (standalone or `in relationship`) as the implicit return value. Actions without `->` can also contain `create` — it produces the entity as a side effect, populating an owned relationship or spawning a new top-level record:
+
+**Parameterized with return type.** Parameters appear in `()` after the name, return type uses `->`:
+
+```swift
 AddLineItem: action(price: Money, quantity: Number) -> OrderLineItem {
   assign total to total + price
-  return create OrderLineItem { price: price, quantity: quantity }
+  create OrderLineItem { price: price, quantity: quantity }  // ← implicit return
 }
 ```
 
-**Read-only functions:** A bare `() -> Type` without the `action` keyword is a pure, read-only function. May contain only `return`:
+Parameters and return types feed directly into API generation: a parameterized action becomes a request body schema, and a return type becomes a response schema. The lowering pass has all the information it needs to produce typed API contracts.
 
-```
-totalValue() -> Number {
-  return QuantityOnHand * UnitCost
-}
-```
+### Stage Gates
 
-Functions cannot contain `assign`, `transition to`, `publish`, `when`, or `require`. They compile to expression nodes only.
+Stage gates use the `when` keyword before the action body. `when` accepts stage names only — it declares which lifecycle stages the action is available in. `when` may appear multiple times for logical grouping; all `when` lines are evaluated together (OR semantics — the action is available in any listed stage).
 
-**Stage gates** use the `when` keyword before the action body. `when` accepts stage names only — it declares which lifecycle stages the action is available in. `when` may appear multiple times for logical grouping; all `when` lines are evaluated together (OR semantics — the action is available in any listed stage).
-
-```
+```swift
 // Single stage
 Cancel: action
   when Draft
@@ -393,7 +551,7 @@ Cancel: action
 
 An action declared directly inside a stage block inherits that stage as an implicit gate. Additional `when` lines extend availability to other stages:
 
-```
+```swift
 Active: stage {
   Suspend: action
     when Suspended     // inherits Active, adds Suspended
@@ -403,58 +561,82 @@ Active: stage {
 }
 ```
 
-**Policy guards** use the `require` keyword before the action body. `require` accepts policy names (including qualified cross-entity names like `Employee.Warehouse`) and inverted policies (`!PolicyName` or `not PolicyName`). `require` may appear multiple times for logical grouping; all `require` lines are evaluated together (AND semantics — all policies must be satisfied).
+**Policy guards** use the `require` keyword before the action body. `require` accepts a comma-separated list of policy names (including qualified cross-entity names like `Employee.Warehouse`) and inverted policies (`!PolicyName` or `not PolicyName`). Multiple policies on the same `require` line are AND — all must pass. Multiple `require` lines are OR — any line that fully satisfies its policies authorizes the action. Lines may repeat for logical grouping.
 
-Authorization is not a separate clause. Policies on actor entities define actor-scoped guards, and actions reference them in `require` alongside entity policies. The engine evaluates each policy against its declaring entity.
+This same semantics model — AND within a group, OR across groups — allows flexible authorization:
 
-```
-// Entity policy only
+```swift
+// Single line, single policy (trivial AND of one)
 Reserve: action
   require HasStock
 {
   transition to Reserved
 }
 
-// Inverted policy
+// Single line, two policies (AND — both must pass)
+Reserve: action
+  require HasStock, IsAvailable
+{
+  transition to Reserved
+}
+
+// Two lines (OR — either path authorizes)
+Cancel: action
+  require OwnedByCaller
+  require Employee.CustomerService
+{
+  transition to Cancelled
+}
+
+// Mixed: (A AND B) OR (C)
+Cancel: action
+  require OwnedByCaller, CustomerApproved
+  require Employee.CustomerService
+{
+  transition to Cancelled
+}
+
+// Inverted policy in a group
 Suspend: action
   require not HighRatedSupplier
 {
   transition to Suspended
 }
+```
 
+Authorization is not a separate clause. Policies on actor entities define actor-scoped guards, and actions reference them in `require` alongside entity policies. The engine evaluates each policy against its declaring entity.
+
+```swift
 // Business rule + actor policy — cross-entity reference evaluates against Employee
 Ship: action
   when Submitted
-  require HasStock
-  require Employee.Warehouse
+  require HasStock, Employee.Warehouse
 {
   transition to Shipped
   assign shippedAt to DateTime.Now
 }
 
-// Authorization only — anonymous welcome if no require lines are present.
-// The presence of an actor policy reference in require gates authentication.
+// Authorization only — anonymous welcome if no require lines are present
 BrowseCatalog: action
   when Active
 {
   // public — no require = no auth required
 }
-```
 
 **Full action with both gates:**
 
-```
+```swift
 Cancel: action
-  when Draft, Submitted, Confirmed    // stage gates (OR)
-  require OwnedByCaller               // entity policy (AND)
-  require Employee.CustomerService    // actor policy (AND)
+  when Draft, Submitted, Confirmed       // stage gates (OR)
+  require OwnedByCaller, CustomerApproved  // (AND) entity + policy
+  require Employee.CustomerService         // (OR) actor policy
 {
   transition to Cancelled
   assign canceledAt to DateTime.Now
 }
 ```
 
-`when` is OR (any listed stage), `require` is AND (all policies must pass). Stage gates and policy guards are two orthogonal dimensions — an action must be in a valid stage AND satisfy all required policies to execute.
+`when` is OR across stage names (any listed stage). `require` is AND within a line (comma-separated policies), OR across lines. Stage gates and policy guards are two orthogonal dimensions — an action must be in a valid stage AND satisfy at least one `require` line.
 
 ### Policy Expression Grammar
 
@@ -462,15 +644,15 @@ Policy expressions inside `{ }` follow a subset of the C# conditional expression
 
 | Category | Operators | Example |
 |---|---|---|
-| **Comparison** | `==` `!=` `>` `>=` `<` `<=` | `Age >= 18`, `Status == "Active"` |
+| **Comparison** | `is` / `is not`, `>` `>=` `<` `<=` (`==` `!=` also valid as C# aliases) | `Age >= 18`, `Status is "Active"` |
 | **Boolean logic** | `&&` / `and`, `||` / `or`, `!` / `not` (C# and word aliases) | `Qty > 0 and not IsExpired` |
 | **Grouping** | `( )` | `(A and B) or C` |
 | **Literals** | numbers, `true`/`false`, strings (double-quoted), `null` | `42`, `true`, `"Warehouse"`, `null` |
 | **Property references** | unqualified property name on the declaring entity | `QuantityOnHand`, `customer` |
-| **Reserved identifiers** | `actor` (authenticated caller) | `customer == actor` |
+| **Reserved identifiers** | `actor` (authenticated caller), `this` (current entity instance) | `customer is actor`, `owner: this` |
 | **Static members** | `Type.Member` on primitives | `DateTime.Now`, `Date.Today` |
 
-Precedence: `!`/`not` → comparisons (`==`, `!=`, `>`, `>=`, `<`, `<=`) → `&&`/`and` → `||`/`or`. Parentheses override.
+Precedence: `!`/`not` → comparisons (`is`/`is not`/`==`/`!=`, `>`, `>=`, `<`, `<=`) → `&&`/`and` → `||`/`or`. Parentheses override.
 
 `&&`/`||`/`!` and `and`/`or`/`not` are interchangeable within the same expression — the canonical printer normalizes to the word form.
 
@@ -481,20 +663,35 @@ Type checking is deferred to lowering — the parser accepts syntactically valid
 Names referenced in `when` and `require` clauses are resolved hierarchically:
 
 1. **Current entity** — look for a matching stage name (`when` only) or policy name in the declaring entity.
-2. **Parent entity** — if the entity extends another (e.g. `Employee: actor User`), look in the parent. An `Employee` satisfies `require User.SomePolicy` because it inherits `User`'s policies.
+2. **Parent entity** — if the entity extends another (e.g. `Employee: User`), look in the parent. An `Employee` satisfies `require User.SomePolicy` because it inherits `User`'s policies.
 3. **Domain level** — reserved names defined at the domain scope (currently `actor`, resolving to the authenticated caller).
+
+**`this`** is a reserved keyword that resolves to the current entity instance. Available in action bodies, policy expressions, and initializer blocks:
+
+```swift
+// In policy expressions — compare property against the entity itself
+OwnedByCaller: policy { customer is actor }
+
+// In action bodies and create initializers — reference the owning entity
+create order in orders {
+  customer: this
+}
+
+// In event payloads
+publish OrderShipped { order: this }
+```
 
 Primitive types expose static members via dot notation: `DateTime.Now`, `Date.Today`, `Text.Empty`. These resolve against the type, not the domain scope — no new keywords are added to the global namespace.
 
 Qualified names (`Employee.Warehouse`) bypass the hierarchy and resolve directly against the named entity. Unqualified names walk current → parent → domain.
 
-Actor identity extension drives resolution: `Employee: actor User` means every policy declared on `User` is available to `Employee`. `require Warehouse` on an action resolves against `Employee` first, then `User` — so `Warehouse` declared on `Employee` shadows a `Warehouse` declared on `User`.
+Actor identity extension drives resolution: `Employee: User` means every policy declared on `User` is available to `Employee`. `require Warehouse` on an action resolves against `Employee` first, then `User` — so `Warehouse` declared on `Employee` shadows a `Warehouse` declared on `User`.
 
 ### Namespace Rules
 
 Properties, policies, stages, and actions share a single namespace per entity. `HasStock` cannot simultaneously name a property and a policy on `InventoryItem`. Entity names are globally unique across the domain.
 
-```
+```swift
 // Error — HasStock is both a property and a policy
 InventoryItem: entity {
   HasStock: Boolean
@@ -506,26 +703,24 @@ Duplicate names within the same entity are parse errors. This prevents LLM-gener
 
 Blocks are always delimited by `{ }` — never by whitespace indentation. The parser uses braces for all structural grouping.
 
-Parameters and return types feed directly into API generation: a parameterized action becomes a request body schema, and a return type becomes a response schema. The lowering pass has all the information it needs to produce typed API contracts.
-
 ### Phase 1 Example: Supply Chain Domain
 
 A concrete example of the minimal Phase 1 surface, derived from a real MCP session:
 
-```poly
+```swift
 domain SupplyChain
 
 Product: entity {
-  SKU: Text required unique write once
+  SKU: Text required unique
   Name: Text required
   UnitCost: Number range(0, ) required
   MSRP: Number range(0, ) required
   ReorderPoint: Number
-  IsHazardous: Boolean write once
+  IsHazardous: Boolean
   WeightKg: Number
 
   suppliers: many Supplier
-  category: one Category
+  category: Category
   inventory: many owned InventoryItem
 
   Draft: stage {
@@ -536,18 +731,20 @@ Product: entity {
     Discontinue: {}
   }
   Discontinued: stage {
+    entry require SKU, Name, UnitCost
+    { }
     Archive: {}
   }
   Archived: stage {}
 }
 
 Supplier: entity {
-  SupplierCode: Text required unique write once
+  SupplierCode: Text required unique
   Name: Text required
   ContactEmail: Text pattern("[^@]+@[^@]+")
   LeadTimeDays: Number range(0, )
   Rating: Number range(0, 5)
-  CountryOfOrigin: Text write once
+  CountryOfOrigin: Text
   IsActive: Boolean
 
   products: many Product
@@ -570,18 +767,21 @@ Supplier: entity {
     Reinstate: action transition to Active
     Blacklist: action transition to Blacklisted
   }
-  Blacklisted: stage {}
+  Blacklisted: stage {
+    entry require SupplierCode, Name
+    { }
+  }
 
-  IsActiveSupplier: policy { IsActive == true }
+  IsActiveSupplier: policy { IsActive is true }
   HighRatedSupplier: policy { Rating >= 4 }
 }
 
 Warehouse: entity {
-  WarehouseCode: Text required unique write once
+  WarehouseCode: Text required unique
   Name: Text required
   Address: Text required
   CapacityCubicMeters: Number
-  IsTemperatureControlled: Boolean write once
+  IsTemperatureControlled: Boolean
 
   items: many InventoryItem
   servedStores: many Store
@@ -596,15 +796,18 @@ Warehouse: entity {
   Maintenance: stage {
     Reopen: action transition to Operational
   }
-  Decommissioned: stage {}
+  Decommissioned: stage {
+    entry require WarehouseCode
+    { }
+  }
 }
 
 PurchaseOrder: entity {
-  OrderNumber: Text required unique write once
-  OrderDate: DateTime required write once
+  OrderNumber: Text required unique
+  OrderDate: DateTime required
   ExpectedDeliveryDate: Date
   TotalCost: Number range(0, ) required
-  CurrencyCode: Text write once
+  CurrencyCode: Text
 
   shipments: many owned Shipment
 
@@ -620,6 +823,8 @@ PurchaseOrder: entity {
   }
 
   Submitted: stage {
+    entry require ExpectedDeliveryDate
+    { }
     Confirm: {}
   }
   Confirmed: stage {
@@ -631,12 +836,15 @@ PurchaseOrder: entity {
   Received: stage {
     Return: action transition to Returned
   }
-  Cancelled: stage {}
+  Cancelled: stage {
+    entry require OrderNumber, OrderDate, TotalCost
+    { }
+  }
   Returned: stage {}
 }
 
 Shipment: entity {
-  TrackingNumber: Text required unique write once
+  TrackingNumber: Text required unique
   EstimatedArrivalDate: Date
   ActualArrivalDate: Date
   ShippingMethod: Text
@@ -645,22 +853,28 @@ Shipment: entity {
     Dispatch: {}
   }
   InTransit: stage {
+    entry require TrackingNumber
+    { }
     MarkDelivered: action transition to Delivered
   }
   Delivered: stage {
+    entry require ActualArrivalDate
+    { }
     Verify: {}
   }
   Verified: stage {}
 }
 
 InventoryItem: entity {
-  BatchNumber: Text required write once
+  BatchNumber: Text required
   QuantityOnHand: Number range(0, ) required
   QuantityReserved: Number range(0, )
-  ExpiryDate: Date write once
+  ExpiryDate: Date
   BinLocation: Text
 
   Available: stage {
+    entry require BatchNumber
+    { }
     Reserve: action
       require HasStock
     {
@@ -672,7 +886,10 @@ InventoryItem: entity {
   Reserved: stage {}
   Damaged: stage {}
   Expired: stage {}
-  Depleted: stage {}
+  Depleted: stage {
+    entry require QuantityOnHand, QuantityReserved
+    { }
+  }
 
   HasStock: policy { QuantityOnHand > 0 }
   HasMinimumStock: policy { QuantityOnHand >= 10 }
@@ -680,11 +897,11 @@ InventoryItem: entity {
 }
 
 Store: entity {
-  StoreCode: Text required unique write once
+  StoreCode: Text required unique
   Name: Text required
   Address: Text required
   Region: Text required
-  Format: Text write once
+  Format: Text
 
   warehouses: many Warehouse
 
@@ -692,6 +909,8 @@ Store: entity {
     Open: {}
   }
   Active: stage {
+    entry require StoreCode, Name, Address, Region
+    { }
     Close: action transition to Closed
     Relocate: action transition to Relocated
   }
@@ -700,7 +919,7 @@ Store: entity {
 }
 
 Category: entity {
-  CategoryCode: Text required unique write once
+  CategoryCode: Text required unique
   Name: Text required
   Description: Text
 
@@ -719,11 +938,11 @@ The aspirational surface covering actors, authorization, richer effects, and val
 
 - **Value** types have no identity and no lifecycle. They are compared by their contents. `Currency`, `Money`, `Email` — these describe data shapes, not domain objects.
 - **Entity** types have identity, a lifecycle (stages), and can own relationships. `Product`, `Order`, `Shipment` are entities.
-- **Actor** is sugar on `entity`. An actor is an entity that participates in authorization — it has identity, claims, and role-based policy evaluation. `Employee: actor { ... }` declares a standalone actor; `Employee: actor User { ... }` declares an actor that extends `User`'s identity, inheriting its properties.
+- **Actor** is a first-class DSL primitive that lowers to an entity with authorization metadata — identity columns, claims, role-based policy evaluation. `User: actor { ... }` declares an actor; `Employee: User { ... }` extends `User` and inherits actor-ness automatically. `Employee: actor User { ... }` is also valid (explicit) but unnecessary when the parent is already an actor.
 
 **Authorization through policies.** Policies are the single declaration kind — no `permit policy` keyword. A policy on an actor entity evaluates against the actor. A policy on a regular entity evaluates against the entity. The reserved name `actor` refers to the authenticated actor within policy expressions, enabling entity policies to reference actor identity. Actions reference policies by qualified or unqualified name in `require`; stage gates use `when`.
 
-```poly
+```swift
 domain ECommerce
 
 // Value types — no identity, no lifecycle, compared by content
@@ -738,41 +957,39 @@ Money: value {
   currency: Currency required
 }
 
-// Actor — fancy entity with auth constraints. Identity properties go here.
+// User is an actor — identity + authorization baseline
 User: actor {
   email: Text pattern("[^@]+@[^@]+") length(5, 254) required unique
 }
 
-// Actor extending User — inherits User's identity, adds Employee-specific properties
-Employee: actor User {
-  badgeNumber: Text required unique write once
+// Extends User — inherits identity properties AND actor-ness
+Employee: User {
+  badgeNumber: Text required unique
   role: Text required
 
   // Policies on actor — evaluate against the actor's properties
-  CustomerService: policy { role == "Customer Service" }
-  Warehouse: policy { role == "Warehouse" }
+  CustomerService: policy { role is "Customer Service" }
+  Warehouse: policy { role is "Warehouse" }
 }
 
-Customer: actor User {
+Customer: User {
   orders: many owned Order
 
   Active: stage {
     CreateOrder: action {
-      return create order in orders
+      create order in orders { customer: this }
     }
   }
 }
 
 Order: entity {
-  customer: one Customer required write once
-  createdAt: DateTime required write once
+  customer: Customer required
+  createdAt: DateTime required
   submittedAt: DateTime
-    // Phase 2+: required when Submitted
   shippedAt: DateTime
-    // Phase 2+: required when Shipped
   total: Money required
 
-  OwnedByCaller: policy { customer == actor }
+  OwnedByCaller: policy { customer is actor }
 
   Draft: stage {
     AddLineItem: action(price: Money)
@@ -798,6 +1015,9 @@ Order: entity {
   }
 
   Submitted: stage {
+    entry require submittedAt
+    { }
+
     AddLineItem: action(price: Money)
       require Employee.CustomerService
     {
@@ -820,7 +1040,10 @@ Order: entity {
     }
   }
 
-  Shipped: stage {}
+  Shipped: stage {
+    entry require shippedAt
+    { }
+  }
   Cancelled: stage {}
 }
 ```
@@ -839,7 +1062,7 @@ Order: entity {
 
 The DSL must eventually cover the real domain surface. Priority is ordered by Phase:
 
-- **Phase 1:** entities, properties (bare type with inline value constraints `range`/`length`/`pattern` and mutation constraints `required`/`write once`/`unique`), relationships as entity-typed properties (`one`/`many`, optional `owned`, implicit reverse navigation), stages (cyclical graph), actions with stage transitions (`when` for stage gates, `require` for policy guards), policies (property comparison and composite boolean)
+- **Phase 1:** entities, properties (bare type with inline value constraints `range`/`length`/`pattern` and mutation constraint `required`/`unique`), relationships as entity-typed properties (`one`/`many`, optional `owned`, implicit reverse navigation), stages (cyclical graph, entry/exit with `require`), actions with stage transitions (`when` for stage gates, `require` for policy guards), policies (property comparison and composite boolean)
 - **Phase 2:** actors (`Name: actor { ... }` — first-class declaration with identity/claims/roles, inherits all entity grammar), actor-scoped authorization via `require` referencing actor policies, action parameters and effect blocks, event declarations, richer effects
 - **Phase 3:** comments and annotations, `require` actor type references (e.g. `require User` without a policy — means "caller must be an instance of User"), compatibility aliases, migration/versioning support
 
@@ -893,13 +1116,13 @@ JSON import/export can remain available for compatibility and programmatic autom
 - Re-declaring something with different details produces an **error** with the conflicting line number.
 - Partial import does **not** support deletion — there is no implicit removal of undented entities.
 
-```
+```swift
 // Applying this fragment to an existing session adds one entity.
 // The other 8 entities remain untouched. No deletions.
 ReturnAuthorization: entity {
-  ReturnCode: Text required write once
+  ReturnCode: Text required
   Reason: Text required
-  order: one PurchaseOrder
+  order: PurchaseOrder
 
   Draft: stage {
     Submit: {}
@@ -933,7 +1156,7 @@ Parse and commit errors must reference DSL line numbers, not internal `DomainMut
 
 ### 3. Reference Validation — All At Once (P1)
 
-Cross-entity type references (`category: one Category`, `inventory: many owned InventoryItem`) are resolved at the end of the parse pass. Forward references are accepted. All unresolved references are reported together, not one at a time. This avoids whack-a-mole error fixing.
+Cross-entity type references (`category: Category`, `inventory: many owned InventoryItem`) are resolved at the end of the parse pass. Forward references are accepted. All unresolved references are reported together, not one at a time.
 
 ### 4. Whitespace Resilience (P1)
 
@@ -943,13 +1166,13 @@ Indentation is cosmetic, not structural. The parser accepts 2-space, 4-space, or
 
 The first non-comment line of a DSL file must be a version pragma:
 
-```
+```swift
 # poly-dsl v1
 ```
 
 or
 
-```
+```swift
 domain SupplyChain format v1
 ```
 
@@ -959,7 +1182,7 @@ The parser uses this to select the correct grammar. Without a pragma, evolving t
 
 Comments survive `parse → print`. At minimum, structural comments attached to declarations:
 
-```
+```swift
 entity Product {
   // Pricing fields
   UnitCost: Number range(0, )
@@ -984,9 +1207,108 @@ Enforced at parse time:
 - **Single namespace per entity** — properties, policies, stages, and actions share one namespace. Duplicate names are parse errors.
 - **Entity names** are globally unique across the domain.
 - **Name resolution** is hierarchical: current entity → parent entity → domain scope. Qualified names (`Employee.Warehouse`) resolve directly against the named entity.
-- **Actor inheritance** — policies declared on a parent actor (`User`) are available to extending actors (`Employee`). An unqualified name on `Employee` shadows the parent's name.
+- **Actor inheritance** — policies declared on a parent actor (`User`) are available to extending children (`Employee: User`). An unqualified name on the child shadows the parent's name.
 
 See [Name Resolution](#name-resolution) and [Namespace Rules](#namespace-rules) for details.
+
+## Third-Party Contracts
+
+Domains don't exist in isolation. Real models must integrate with ERPs, CRMs, payment gateways, shipping carriers, and other external systems whose schemas live outside Poly. The DSL needs a vocabulary for declaring and consuming these external contracts without pretending they're native domain primitives.
+
+### Problem
+
+External schemas have different constraints from Poly domain models:
+
+- No lifecycle (stages, transitions)
+- May have mutable state that Poly would model as immutable
+- Ownership and cardinality are implicit
+- Fields may be optional when Poly would require them
+- Schema versioning is controlled by the external party
+
+Mixing imported schemas directly into domain declarations creates coupling — upstream spec changes break the domain model. The DSL needs an explicit **Anti-Corruption Layer (ACL)**: imports are scoped to their own namespace and mapped into local domain objects through bindings. Domain logic never references imported types directly.
+
+### Existing Engine Model
+
+The domain engine already models imported external APIs:
+
+- **`ImportedContract`** — a named reference to an imported API spec (e.g. OpenAPI). Has a `SourceKind` (InternalDomain / ExternalProvider), `SourceIdentifier` (URL, file path), and `Version`. Contains `ContractEndpoint`s.
+- **`ContractEndpoint`** — a single operation from the imported spec. Has a `Kind` (Operation / Event), `Direction` (Inbound / Outbound), and a `PayloadType` (the request/response body type from the spec).
+- **`ContractBinding`** — connects a domain action to an imported endpoint. Carries `ContractFieldMap[]` entries mapping `RemoteFieldName ↔ LocalFieldName`.
+- **`ContractIntegrationAnalyzer`** — validates bindings: endpoints exist, actions exist, types are compatible, field maps are non-empty.
+
+The seam is the **Anti-Corruption Layer**: imports are always scoped; bindings are always field-mapped.
+
+### Import as Scoped Namespace
+
+Every import lives in its own scope. Imported types are never referenced directly in domain entities or actions — bindings are the enforcement mechanism:
+
+```swift
+import "https://erp.example.com/openapi/v2.json" version 2 as Erp
+
+// Erp.InvoicePayload exists but is not directly consumable.
+// Local domain objects are the only valid parameter types.
+```
+
+**Rules:**
+- Imported types are accessible only through qualified names (`Erp.InvoicePayload`). Using an imported type directly as a property or action parameter type is a parse error.
+- The import resolver fetches the spec and extracts endpoints. Each endpoint becomes a qualified name (`Erp.SubmitInvoice`).
+- Payload types are internal to the import — the domain never consumes them directly.
+
+### Bind Block Scope
+
+`bind Left to Right { ... }` establishes two scopes for every `map` line inside, and the ordering determines data flow:
+
+| Line | Meaning | Flow |
+|---|---|---|
+| `bind Erp.SubmitInvoice to order` | Endpoint produces, domain consumes | Inbound |
+| `bind order to Erp.CustomerNotification` | Domain produces, endpoint consumes | Outbound |
+
+`map a to b` always reads as "map Left.a to Right.b" — no dot notation on either side. Direction is explicit in the bind line ordering, not inferred from endpoint metadata.
+
+**Inbound** (endpoint → parameter):
+
+```swift
+SubmitInvoice: action(order: OrderInvoice) -> OrderConfirmation
+  bind Erp.SubmitInvoice to order {
+    map invoiceNumber   to invoiceNumber      // payload → order (identity)
+    map total           to totalAmount        // payload.total → order.totalAmount (rename)
+  }
+{
+  transition to Submitted
+}
+```
+
+**Outbound** (parameter → endpoint):
+
+```swift
+NotifyCustomer: action(order: OrderInvoice)
+  bind order to Erp.CustomerNotification {
+    map customerEmail   to email              // order.customerEmail → payload.email
+    map customerName    to name               // identity
+    map totalAmount     to amountDue          // rename
+  }
+{
+  publish OrderNotified
+}
+```
+
+**Key rule:**
+- `bind Left to Right` — Left is always the data source, Right is the data target.
+- Inside `{ }`, `map a to b` means "map Left.a to Right.b" — no qualified prefixes.
+- When field names match, the line declares identity mapping. Renames are explicit.
+- If Erp renames `invoiceNumber` to `invoiceId`, the stale `map` line fails at parse time — the domain action body never changes. The ACL absorbs the drift.
+
+### Open Questions
+
+1. **Where does import resolution run?** MCP session could fetch and cache specs; CLI could need a registry or file path. Implementation concern.
+
+2. **Multiple bindings per action.** An action could bind to multiple endpoints (e.g. listen on two contracts). The `bind` keyword should repeat.
+
+3. **Complex field paths.** Nested maps like `shipTo.address.city to shippingAddress.city` — dot notation on both sides for nested access. `ContractFieldMap.RemoteFieldName` is a string; the engine resolves the path.
+
+4. **Version pinning.** An import tied to version 2 fails stale maps against a v3 spec at parse time. This is the ACL's primary leverage — external changes become compile-time errors, not runtime surprises.
+
+This section is exploratory — the bind syntax above is a first draft. The key constraint is that the ACL is non-negotiable: imported types never appear in domain declarations. The engine's `ContractBinding` + `ContractFieldMap` primitives already enforce this at the data level; the DSL's job is to surface it in authoring format.
 
 ## Implementation Strategy
 
@@ -997,12 +1319,12 @@ See [Name Resolution](#name-resolution) and [Namespace Rules](#namespace-rules) 
    - entity (`Name: entity { ... }`) — the `Name: kind` format applied at the top level
    - property (bare type: `Name: Type`) — when the type is another entity, it is a relationship
    - relationship modifiers inline on properties (`one`/`many`, optional `owned`)
-   - inline constraint modifiers on properties (`range`, `length`, `pattern` for value constraints; `required`, `write once`, `unique` for mutation constraints)
-   - stage (`Name: stage { ... }`)
+   - inline constraint modifiers on properties (`range`, `length`, `pattern` for value constraints; `required`, `unique` for mutation constraints)
+   - stage (`Name: stage { ... }`); optional entry/exit action blocks (`entry { }`, `exit { }`)
    - action with `transition to` syntax; zero-ceremony inferred transitions (`{}`) when action name matches stage name by convention
    - multi-stage actions with `when` clause
    - `when` (stage gate) — accepts stage names only; repeatable; OR semantics
-   - `require` (policy guard) — accepts policy names and inverted policies (`!` or `not` prefix); repeatable; AND semantics
+   - `require` (policy guard) — comma-separated policies within a line are AND, multiple lines are OR; accepts `!` or `not` prefix; repeatable for logical grouping
 - policy — named Boolean expression (`Name: policy { expr }`); optionally external (`Name: policy external`) for runtime-resolved authorization
 2. Build a parser that emits `DomainMutationIntent[]`.
 3. Build a canonical printer from the committed domain model.
@@ -1014,8 +1336,8 @@ See [Name Resolution](#name-resolution) and [Namespace Rules](#namespace-rules) 
 Add:
 
 - value types (`Name: value { ... }`) — the second core primitive alongside entity; no identity, no lifecycle, compared by content
-- actor specialization (`Name: actor [Parent] { ... }`) — an entity with identity, claims, and role-based policy evaluation; inherits all entity grammar (properties, stages, actions, policies)
-- action parameters and return types (`action(Param: Type, ...) -> ReturnType`); `return` for value and `return create` for entity production; effect blocks (`assign`, `publish`)
+- actor specialization (`Name: actor { ... }` — entity with identity, claims, and role-based policy evaluation; inherits all entity grammar; may also extend a parent via `Name: Parent { ... }` which inherits actor-ness when the parent is an actor)
+- action parameters and return types (`action(Param: Type, ...) -> ReturnType`); implicit return from last `create` statement; effect blocks (`assign`, `publish`)
 - event declarations within entities (`Name: event { ... }`); event subscriptions with implicit publisher subject
 - actor identity configuration
 - richer effects (Create, PublishEvent, TransitionStage)

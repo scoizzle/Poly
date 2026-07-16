@@ -1,0 +1,251 @@
+// ============================================================
+// Franchise CRM — Poly DSL Domain Model
+// Modeled against v0.3 Settled Specification
+// ============================================================
+
+domain FranchiseCRM: service
+
+// ============================================================
+// Value types
+// ============================================================
+
+Money: value {
+  amount: Number range(0, ) required
+  currency: Text length(3, 3) required
+}
+
+Address: value {
+  street: Text
+  city: Text
+  state: Text
+  postalCode: Text
+  country: Text
+}
+
+ContractTerms: value {
+  signedAt: DateTime required
+  effectiveFrom: DateTime required
+  effectiveTo: DateTime
+  monthlyRate: Money
+  termMonths: Number range(1, )
+}
+
+// ============================================================
+// Actor — people who act in the system
+// ============================================================
+
+Employee: actor {
+  name: Text required
+  email: Text required unique
+  role: Text                          // "admin", "manager", "agent", "tech"
+  phone: Text
+
+  franchise: Franchise required
+  assignedCustomer: Customer          // optionally assigned to a specific customer
+
+  // Policies
+  IsManager: policy { role is "manager" }
+  IsAdmin: policy { role is "admin" }
+
+  Active: stage { }
+  Inactive: stage { }
+}
+
+// ============================================================
+// Franchise
+// ============================================================
+
+Franchise: entity {
+  name: Text required unique
+  code: Text required unique
+  address: Address
+
+  territories: many Territory
+  customers: many Customer
+  employees: many Employee
+  comments: many Comment
+
+  Active: stage { }
+  Suspended: stage { }
+  Terminated: stage { }
+}
+
+// ============================================================
+// Territory & Region
+// ============================================================
+
+Territory: entity {
+  name: Text required
+  code: Text required
+
+  franchise: Franchise required
+  regions: many Region
+  comments: many Comment
+
+  Active: stage { }
+  Inactive: stage { }
+}
+
+Region: entity {
+  name: Text required
+
+  territory: Territory required
+  comments: many Comment
+
+  Active: stage { }
+  Inactive: stage { }
+}
+
+// ============================================================
+// Customer — has a CRM pipeline lifecycle
+// ============================================================
+
+Customer: entity {
+  name: Text required
+  code: Text required unique
+  email: Text pattern("[^@]+@[^@]+")
+  phone: Text
+  address: Address
+  contract: ContractTerms
+
+  franchise: Franchise required
+  territory: Territory
+  parentCustomer: Customer                               // hierarchical grouping
+  childCustomers: many Customer                          // sub-groups, locations
+  projects: many Project
+  employees: many Employee                                // their people
+  comments: many Comment                                  // our notes about them
+
+  // --- Lifecycle ---
+
+  Prospect: stage {
+    // Lead/opportunity — not yet a customer
+    ConvertToCustomer: action
+      require Employee.IsManager
+    {
+      // contract is signed during this transition
+      transition to Active
+    }
+    Lost: action { transition to Closed }
+  }
+
+  Active: stage {
+    // Signed contract, active customer
+
+    // When a Prospect customer signs a contract,
+    // the franchise should track the pipeline conversion
+    When a childCustomer transitions from Prospect to Active,
+    the parent should see it and can react.
+    when childCustomers.Active {
+      assign contract to event.contract
+    }
+
+    RenewContract: action {
+      transition to Active                              // refresh contract terms
+    }
+    MarkInactive: action { transition to Inactive }
+  }
+
+  Inactive: stage {
+    // Not currently buying, but still a relationship
+    Reactivate: action { transition to Active }
+    Close: action { transition to Closed }
+  }
+
+  Closed: stage {
+    // Lost, terminated, or otherwise done
+    // Preserved for record-keeping
+  }
+}
+
+// ============================================================
+// Project
+// ============================================================
+
+Project: entity {
+  name: Text required
+  code: Text required
+  description: Text
+  budget: Money
+
+  customer: Customer required
+  requestsForService: many RequestForService
+  comments: many Comment
+
+  New: stage {
+    Start: action { transition to InProgress }
+  }
+  InProgress: stage {
+    // Subscribe: when all RFSes are completed, auto-complete
+    when requestsForService.Completed {
+      // Check if all RFSes are completed
+      // transition to Completed happens via an action or guard
+    }
+    Complete: action { transition to Completed }
+    Cancel: action { transition to Cancelled }
+  }
+  Completed: stage { }
+  Cancelled: stage { }
+}
+
+// ============================================================
+// Request for Service
+// ============================================================
+
+RequestForService: entity {
+  title: Text required
+  description: Text
+  priority: Text                        // "low", "medium", "high", "urgent"
+
+  project: Project required
+  lineItems: many owned LineItem
+  comments: many Comment
+
+  Submitted: stage {
+    Assign: action { transition to Assigned }
+    Cancel: action { transition to Cancelled }
+  }
+  Assigned: stage {
+    StartWork: action { transition to InProgress }
+  }
+  InProgress: stage {
+    CompleteWork: action { transition to Completed }
+  }
+  Completed: stage {
+    // All line items should be approved before this
+    MarkInvoiced: action { transition to Invoiced }
+  }
+  Cancelled: stage { }
+  Invoiced: stage { }
+}
+
+// ============================================================
+// Line Item
+// ============================================================
+
+LineItem: entity {
+  description: Text required
+  quantity: Number range(0, ) required
+  unitPrice: Money required
+
+  requestForService: RequestForService required
+  comments: many Comment
+
+  Planned: stage { }
+  InProgress: stage { }
+  Completed: stage { }
+  Approved: stage { }
+}
+
+// ============================================================
+// Comment — owned by any entity above
+// ============================================================
+
+Comment: entity {
+  author: Text required
+  body: Text required
+  createdAt: DateTime
+
+  Created: stage { }
+  Updated: stage { }
+}

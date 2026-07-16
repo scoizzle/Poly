@@ -1,0 +1,267 @@
+// ============================================================
+// Poly DSL — Phone Call Domain
+// Modeled against v0.3 Settled Specification
+// No events, no publish, no subscribe to, no workflows.
+// Every observable thing is an entity entering a stage.
+// ============================================================
+
+domain Telephony: service
+
+// --- Value types (no identity, compared by content) ---
+
+PhoneNumber: value {
+  number: Text length(4, 15) required
+  countryCode: Text length(1, 4) required
+}
+
+Duration: value {
+  seconds: Number range(0, ) required
+
+  // Pure value functions with domain constraints
+  add(other: Duration) -> Duration {
+    require { this.seconds >= 0 and other.seconds >= 0 }
+    Duration { seconds: this.seconds + other.seconds }
+  }
+}
+
+Money: value {
+  amount: Number range(0, ) required
+  currency: Text length(3, 3) required
+
+  add(other: Money) -> Money {
+    require { this.currency is other.currency }
+    Money { amount: this.amount + other.amount, currency: this.currency }
+  }
+}
+
+// --- Actor (entity that participates in authorization) ---
+
+Subscriber: actor {
+  primaryNumber: PhoneNumber required unique
+  displayName: Text
+  role: Text                                    // "admin", "agent", "premium", "basic"
+  voicemailEnabled: Boolean
+  planType: Text
+  monthlyRate: Money
+
+  // Policies evaluate against the actor instance at runtime
+  CanTransfer: policy { role is "admin" or role is "agent" }
+  CanConference: policy { role is "admin" or role is "premium" }
+  HasVoicemail: policy { voicemailEnabled is true }
+
+  // Functions (pure, read-only)
+  isEligibleForPromotion() -> Boolean {
+    this.monthlyRate.amount > 50
+  }
+
+  Active: stage { }
+  Suspended: stage { }
+  Cancelled: stage { }
+}
+
+// --- Call entity (the core lifecycle) ---
+
+Call: entity {
+  caller: Subscriber required
+  callee: Subscriber required
+  startTime: DateTime
+  answeredTime: DateTime
+  endTime: DateTime
+  duration: Duration
+  isRecording: Boolean
+  outcome: Text                       // "completed", "failed", "voicemail", "canceled"
+
+  // --- Functions ---
+
+  callDuration() -> Duration {
+    Duration { seconds: (endTime - startTime).totalSeconds }
+  }
+
+  // --- Lifecycle stages ---
+
+  Dialing: stage {
+    entry { assign startTime to DateTime.Now }
+
+    Connect: action { transition to Ringing }
+    Fail: action {
+      assign outcome to "failed"
+      transition to Ended
+    }
+  }
+
+  Ringing: stage {
+    Answer: action {
+      assign answeredTime to DateTime.Now
+      transition to Connected
+    }
+    Busy: action {
+      assign outcome to "failed"
+      transition to Ended
+    }
+    SendToVoicemail: action
+      require Subscriber.HasVoicemail
+    {
+      assign outcome to "voicemail"
+      transition to Voicemail
+    }
+    Ignore: action {
+      assign outcome to "canceled"
+      transition to Ended
+    }
+  }
+
+  Connected: stage {
+    Hold: action { transition to OnHold }
+    Transfer: action
+      require Subscriber.CanTransfer
+    {
+      transition to Transferring
+    }
+    AddParticipant: action
+      require Subscriber.CanConference
+    {
+      transition to Conference
+    }
+    ToggleRecording: action {
+      assign isRecording to not isRecording
+    }
+    HangUp: action {
+      assign endTime to DateTime.Now
+      assign outcome to "completed"
+      transition to Ended
+    }
+  }
+
+  OnHold: stage {
+    Resume: action { transition to Connected }
+    HangUp: action {
+      assign outcome to "completed"
+      transition to Ended
+    }
+  }
+
+  Conference: stage {
+    RemoveParticipant: action { transition to Connected }
+    HangUp: action {
+      assign outcome to "completed"
+      transition to Ended
+    }
+  }
+
+  Transferring: stage {
+    CompleteTransfer: action { transition to Connected }
+    TransferFailed: action { transition to Connected }
+    HangUp: action {
+      assign outcome to "completed"
+      transition to Ended
+    }
+  }
+
+  Voicemail: stage {
+    LeaveMessage: action {
+      assign outcome to "voicemail"
+      transition to Ended
+    }
+    HangUp: action { transition to Ended }
+  }
+
+  Ended: stage {
+    entry {
+      assign endTime to DateTime.Now
+      assign duration to this.callDuration()
+    }
+  }
+}
+
+// --- Call detail record (created by Call when it ends) ---
+
+CallDetailRecord: entity {
+  call: Call required
+  callerNumber: PhoneNumber required
+  calleeNumber: PhoneNumber required
+  startTime: DateTime required
+  answeredTime: DateTime
+  endTime: DateTime
+  outcome: Text
+  duration: Duration
+  rate: Money
+
+  Created: stage { }
+}
+
+// --- Billing account (subscribes to its calls' stage transitions) ---
+
+BillingAccount: entity {
+  subscriber: Subscriber required
+  calls: many owned Call
+  balance: Money
+  totalMinutes: Number
+
+  // Functions
+  calculateCallCost(call: Call) -> Money {
+    Money { amount: call.duration.seconds * 0.05, currency: "USD" }
+  }
+
+  appliedRate(call: Call) -> Number {
+    call.duration.seconds * this.subscriber.monthlyRate.amount / 100
+  }
+
+  Active: stage {
+    // Subscription: when any Call in my calls collection enters Ended,
+    // update my balance. The 'event' variable is the transitioning Call.
+    when calls.Ended {
+      assign balance to balance.subtract(this.calculateCallCost(event))
+      assign totalMinutes to totalMinutes + event.duration.seconds / 60
+      // Create the CDR as a side effect
+      create CallDetailRecord {
+        call: event
+        callerNumber: event.caller.primaryNumber
+        calleeNumber: event.callee.primaryNumber
+        startTime: event.startTime
+        answeredTime: event.answeredTime
+        endTime: event.endTime
+        outcome: event.outcome
+        duration: event.duration
+        rate: this.calculateCallCost(event)
+      }
+    }
+  }
+
+  Suspended: stage {
+    when calls.Ended {
+      // Even when suspended, log the call but don't charge
+      create CallDetailRecord {
+        call: event
+        callerNumber: event.caller.primaryNumber
+        calleeNumber: event.callee.primaryNumber
+        startTime: event.startTime
+        answeredTime: event.answeredTime
+        endTime: event.endTime
+        outcome: event.outcome
+        duration: event.duration
+        rate: Money { amount: 0, currency: "USD" }
+      }
+    }
+  }
+
+  Closed: stage { }
+}
+
+// ============================================================
+// What this demonstrates about the model:
+//
+// • Value types (PhoneNumber, Duration, Money) with pure functions
+//   and require guards on operations
+// • Actor (Subscriber) with policies evaluated at runtime
+// • Policy-qualified guards on actions: require Subscriber.CanTransfer
+// • Entity lifecycle with 10 stages covering all call states
+// • Stage subscriptions: BillingAccount subscribes to Call.Ended
+//   via the calls relationship — automatic correlation, no events
+// • Scoped subscriptions: Active stage charges, Suspended stage
+//   logs without charging — subscription scope tracks lifecycle
+// • create effect in entry blocks and subscription bodies
+// • Entity functions for derived computation
+// • Cross-entity mutation rule preserved: Call owns its own
+//   transition; BillingAccount reacts via subscription, never
+//   directly mutates Call
+// ============================================================

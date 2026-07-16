@@ -23,7 +23,7 @@ We need a format that is easier to read, easier to diff, easier for LLMs to emit
 
 ### 1. Actors Are First-Class DSL Primitives
 - `actor` is a top-level declaration keyword in the DSL, alongside `entity` and `value`.
-- In the engine, an actor lowers to `entity` plus actor-specific metadata (identity columns, claims, role-based policy evaluation). Three DSL keywords, two engine primitives.
+- In the engine, an actor lowers to `entity` plus actor-specific metadata (identity columns, claims, role-based policy evaluation). Value and entity/actor cover all stateful domain concepts.
 - `Name: actor { ... }` declares a standalone actor.
 - `Name: Parent { ... }` extends an existing entity or actor. If `Parent` is an actor, the child inherits actor-ness automatically — no `actor` keyword needed. `Employee: User` means "Employee extends User" — if `User` is an actor, `Employee` is too.
 
@@ -34,7 +34,7 @@ We need a format that is easier to read, easier to diff, easier for LLMs to emit
 
 ### 3. Effects: Expressive but Decoupled
 - Effects must be expressive and composable, but should not introduce complexity or coupling that holds back the rest of the system.
-- Focus on a small, powerful set of effect types: `assign` (mutate a property), `create` (create and return a new entity), `transition to` (stage change), and `publish` (emit an event).
+- Focus on a small, powerful set of effect types: `assign` (mutate a property), `create` (create and return a new entity), `transition to` (stage change), and `invoke` (call an action on a reachable entity).
 
 ### 4. Relationships as Properties
 - Relationships are entity-typed properties: `orders: many owned Order`. Cardinality is expressed through `many` (collection) vs bare (singular) modifiers; ownership through optional `owned`.
@@ -45,8 +45,8 @@ We need a format that is easier to read, easier to diff, easier for LLMs to emit
 - The command pattern is retained for transactional mutation support, but the intent and command systems will be unified or closely aligned to reduce duplication and complexity.
 
 ### 6. Cross-Entity Mutation
-- The system will not support direct cross-entity property mutation. Instead, well-named actions should encapsulate all required mutations.
-- Event subscriptions remain a future requirement and will be designed to fit this simplified model.
+- The system does not support direct cross-entity property mutation. Instead, `invoke target.Action(params)` calls an action on a reachable entity, and `when property Stage` subscribes to related entity lifecycle transitions.
+- An entity can only be the subject of its own effects — the analyzer enforces this at parse time.
 
 ---
 
@@ -84,6 +84,32 @@ The DSL should parse to `DomainMutationIntent[]`, and export should be printable
 `MCP tools -> JSON arguments / JSON responses`
 
 This keeps the current MCP ergonomics for machines while giving humans and LLMs a better representation.
+
+## Authoring Architecture
+
+The `.poly` file is the shared serialization format for four authoring paths, each converging through the same analyzer:
+
+```
+Human (visual)     Human (text)       Agent (MCP)         Agent (text)
+      │                 │                 │                   │
+  Card Editor      .poly + LSP      MCP Tools          .poly + LSP
+      │                 │                 │                   │
+      └─────────────────┴─────────────────┴───────────────────┘
+                                │
+                    Domain Analyzer (shared)
+                                │
+                          .poly file (VCS, diff, review)
+```
+
+**Human visual (primary).** A Blueprint-style card editor displays entities as cards, stages as nodes, relationships and subscriptions as visual connection lines. The human never types DSL keywords — they drag connections between cards, add properties to property lists, and configure stage transitions through dropdowns. The card editor serializes to `.poly` text.
+
+**Human text (power users).** A developer opens a `.poly` file directly and edits it with full LSP support — syntax highlighting, completions on relationship paths, inline diagnostics for unresolved references or unreachable subscriptions. The LSP server pushes the same diagnostics the analyzer produces.
+
+**Agent MCP (exploration).** An LLM agent uses MCP tools (`add_entity`, `add_stage`, `add_relationship`, `get_domain_analysis`) to incrementally discover and decompose an unknown codebase. Each mutation is validated by the analyzer. The agent exports a `.poly` file as a checkpoint or handoff artifact.
+
+**Agent text (generation).** An LLM agent writes DSL text directly — one statement at a time, receiving LSP diagnostics after each edit. The feedback loop is identical to a human's: write, see the diagnostic, fix, repeat. The agent doesn't need MCP for construction; it just needs programmatic access to LSP diagnostic output.
+
+All four paths produce the same `.poly` format and are validated by the same analyzer. The canonical printer ensures stable output regardless of which path produced the model.
 
 ## Why the DSL is the right fit
 
@@ -235,29 +261,101 @@ IDL-like formats are useful inspiration, especially decorators/annotations, but 
 
 Every declaration in the Poly DSL follows a single uniform pattern: **`Name: Kind Details`**. The name comes first, a colon separates, and the kind keyword tells the parser what the declaration *is* in the domain. Properties are the unmarked default — a bare type name implies a property. All other concepts, including the top-level types themselves, use an explicit kind keyword.
 
-The DSL has three top-level declaration keywords, which lower to two engine primitives:
+The DSL has three top-level type declaration keywords, which map to three engine primitives:
 
 - **Value** — no identity, no lifecycle. Compared by content. Declared with `Name: value { ... }`.
 - **Entity** — has identity, a lifecycle (stages), and can own relationships. Declared with `Name: entity { ... }`.
 - **Actor** — an entity that participates in authorization. Declared with `Name: actor { ... }`. Lowers to `entity` plus actor metadata (identity columns, claims, role-based policy evaluation).
 
+The `domain` header precedes the types and declares the domain name plus an optional execution kind:
+
+```swift
+domain FranchiseCRM                   // implicit :service
+domain Grep: cli                      // explicit :cli
+domain PaymentCore: library           // explicit :library
+```
+
+The kind tells the lowering pass which execution model to target. A `cli` domain produces a synchronous executable with a `main()` entry point. A `service` domain produces a long-running process with async event handling and durable storage. A `library` domain produces a reusable package with no entry point. Default is `service`.
+
+The domain kind also determines the **durability profile** of its entities. Entities in different domains with different durability needs are separated at the domain boundary and composed at the application level:
+
+| Kind | Durability | Storage profile | Entity lifetime | Use case |
+|---|---|---|---|---|
+| `service` | Durable | Transactional, ACID, survives restarts | Persistent | CRM, orders, inventory |
+| `cli` | Ephemeral | Transient, process-lifetime only | Process exits → reclaimed | grep, one-shot tools |
+| `library` | Depends on consumer | No storage of its own | N/A | Reusable types |
+
+A single application can compose multiple domains with different durability profiles. The platform routes each domain's entities to the appropriate storage provider. If an entity needs different durability than its sibling entities, it belongs in a separate domain.
+
+```swift
+// Durable — survives restarts
+domain MyApp.CRM: service
+
+Customer: entity { name: Text; orders: many Order }
+Order: entity { total: Money }
+```
+
+```swift
+// Ephemeral — one-shot execution
+domain MyApp.Reporting: cli
+
+ReportRun: entity { generatedAt: DateTime }
+```
+
+```swift
+// Volatile — session state, TTL-based
+domain MyApp.Sessions: service
+
+Session: entity { token: Text; expiresAt: DateTime }
+```
+
+**Library distribution and import.** A `library` domain is a distributable Poly artifact — a self-contained package that other domains can reference via `import`. The `import` resolves against a package registry at build time, providing version resolution and contract validation:
+
+```swift
+// Poly Package: acme-crm v2.1.0 — distributed as a .poly package
+domain AcmeCRM: library
+
+Customer: entity { ... }
+Project: entity { ... }
+```
+
+```swift
+// Consumer domain — imports and extends the library
+domain MyFranchise: service
+
+import "acme-crm" version 2
+
+Customer: AcmeCRM.Customer {
+  franchiseId: Text required
+}
+```
+
+The analyzer validates that imported contracts haven't drifted, extensions obey library constraints, and version compatibility holds. Library domains cannot have runtime dispatch (no subscriptions that require live event loops) — they define types and behaviors that service domains assemble into running systems.
+
+This establishes a supply chain: `library` types are built and distributed by platform teams; `service` domains compose them into deployable applications; `cli` domains wrap services for single-shot execution.
+
 **Entity extension.** `Name: Parent { ... }` extends an existing entity or actor — it inherits the parent's identity properties and adds its own. If the parent is an actor, the child is an actor too without repeating the `actor` keyword. `Employee: User { ... }` means "Employee extends User" — `Employee` inherits `User`'s identity properties (`email`, etc.) and adds its own (`badgeNumber`, `role`). An `Employee` satisfies any policy that checks `User`. The explicit `Name: actor Parent { ... }` form is also valid where needed (e.g. extending a plain entity into an actor).
 
-Every other concept is a member of an entity or actor (property, stage, action, policy, event, function) or a member of a value (property). DSL keywords like `stage`, `action`, `policy`, and `event` are human-facing sugar — they all lower to entity members in the engine.
+Every other concept is a member of an entity or actor (property, stage, action, policy, function) or a member of a value (property, function).
 
 | Syntax | Kind | Example |
 |---|---|---|
+| `domain Name[: kind]` | Domain header | `domain Grep: cli` |
 | `Name: entity { ... }` | Entity type | `Product: entity { ... }` |
 | `Name: value { ... }` | Value type | `Money: value { ... }` |
 | `Name: Parent { ... }` | Extends a parent entity/actor (inherits its kind) | `Employee: User { ... }` |
-| `Name: actor { ... }` | Actor (entity + auth constraints; Phase 2+) | `User: actor { ... }` |
+| `Name: actor { ... }` | Actor (entity + auth; Phase 2+) | `User: actor { ... }` |
 | `Name: Type mod...` (bare type + modifiers) | Property or Relationship | `SKU: Text length(1, 50)` |
-| `Name: stage { ... }` | Stage | `Active: stage { ... }` |
-| `Name: action { ... }` | Action (may mutate, has when and require) | `Submit: action { ... }` |
-| `Name() -> Type { ... }` | Function (read-only, no effects) | `totalValue() -> Number { ... }` |
-| `Name: policy { expr }` | Named Boolean expression (inline) | `HasStock: policy { Qty > 0 }` |
-| `Name: policy external` | Named Boolean expression (external resolver) | `Warehouse: policy external` |
-| `Name: event { ... }` | Event (Phase 2+) | `OrderShipped: event { ... }` |
+| `Name: stage { ... }` | Lifecycle stage | `Active: stage { ... }` |
+| `Name: action { ... }` | Action (may mutate, has when/require) | `Submit: action { ... }` |
+| `Name() -> Type { ... }` | Function (pure, no effects) | `totalValue() -> Number { ... }` |
+| `Name: policy { expr }` | Named Boolean expression | `HasStock: policy { Qty > 0 }` |
+| `Name: policy external` | External policy (runtime resolver) | `Warehouse: policy external` |
+| `invoke target.Action(params)` | Call action on reachable entity | `invoke customer.SendConfirmation(id)` |
+| `start EntityName(params)` | Factory/initialization pattern | `start FulfillOrder(order)` |
+| `schedule at expr { effects }` | Execute effects at future time | `schedule at endDate { transition to Completed }` |
+| `when property Stage { effects }` | React to related entity's stage transition | `when calls Ended { assign total to event.duration }` |
+| `for var in coll where cond { effects }` | Iterate and apply effects per element | `for line in lines where line.matches(p) { create MatchLine{content:line.text} }` |
 
 This pattern has several advantages:
 
@@ -416,16 +514,19 @@ Submit: action {
 
 Action bodies can contain the following effects, each expressing a different category of domain behavior:
 
-| Effect | Syntax | Meaning |
+| Effect | Syntax | Semantics |
 |---|---|---|
-| **Stage transition** | `transition to Stage` | Move the entity to a named lifecycle stage |
-| **Property mutation** | `assign property to expr` | Set a property to a computed value |
-| **Create entity** | `create Entity { props }` | Create and return a new top-level entity |
-| **Create in collection (with local)** | `create varName in relationship { props }` | Create a new entity, bind to local, add to owned collection |
-| **Create in collection** | `create in relationship { props }` | Create a new entity and add it to an owned collection — no local binding needed |
-| **Publish event** | `publish EventName { props }` | Emit a domain event with attached data |
+| **Stage transition** | `transition to StageName` | Move entity to named lifecycle stage |
+| **Property mutation** | `assign property to expr` | Set entity property to computed value |
+| **Create entity** | `create Entity { props }` | Create new entity in its initial stage |
+| **Create in collection** | `create in rel { props }` | Create child, add to owned collection |
+| **Create with local** | `create name in rel { props }` | Create child, bind to local variable |
+| **Iteration** | `for var in coll where cond { effects }` | Execute effects per element in filtered collection |
+| **Schedule** | `schedule at expr { effects }` | Execute effects at a future time |
+| **Invoke action** | `invoke target.Action(params)` | Call action on reachable entity instance |
+| **Start entity** | `start EntityName(params)` | Initialize new entity (factory pattern) |
 
-**Stage transition.** Moves the entity to a new lifecycle stage. Must target a valid stage on the entity:
+**Stage transition.** Moves the entity to a new lifecycle stage. Must target a valid stage on the entity. Stage transitions are inherently observable — any entity with a `when property Stage` subscription on the transitioning entity will be notified. No separate `publish` construct is needed.
 
 ```swift
 transition to Submitted
@@ -487,11 +588,93 @@ Customer: actor {
 
 The `in relationship` clause resolves against the entity's owned relationships at parse time.
 
-**Publish event.** Emits a domain event. The event type must be declared on the entity. The body braces specify event payload properties:
+**Stage transitions are inherently observable.** When an action calls `transition to StageName`, that transition itself is observable by any entity that has a relationship path to the transitioning entity. No separate `publish` effect or event declaration is needed — the fact of the transition, the target stage, the transitioning entity's identity, and the timestamp are all available to subscribers.
+
+**`when property StageName` — React to related entity transitions.** An entity subscribes to stage transitions on related entities using `when property StageName` inside its own stage block:
 
 ```swift
-publish OrderShipped { order: this }
-publish TransactionPosted { transaction: this }
+Order: entity {
+  payment: Payment
+  items: many InventoryItem
+
+  Submitted: stage {
+    // React when the specific Payment I'm related to enters Received
+    when payment Received {
+      assign paidAt to DateTime.Now
+    }
+    // React when any of my items enters Reserved
+    when items Reserved {
+      assign itemsReserved to items.all(i => i.stage is Reserved)
+    }
+  }
+}
+```
+
+The subscription is **scoped to the subscriber's current stage** — leaving the stage removes the subscription automatically. The `event` variable inside a `when` block refers to the transitioning entity instance. Correlation is automatic via the declared relationship path — no correlation keys, no event payload, no `subscribe to`.
+
+**Collection-aware subscriptions.** The `when` keyword supports quantifiers for `many` relationships:
+
+| Syntax | Behavior |
+|---|---|
+| `when path Stage { effects }` | Fires per element — each time any related entity enters `Stage` |
+| `when any path Stage { effects }` | Fires once when at least one related entity is in `Stage` |
+| `when all path Stage { effects }` | Fires once when every related entity is in `Stage` |
+| `when all path not Stage { effects }` | Fires once when no related entity is in `Stage` (inverse) |
+
+Multiple stages can be listed: `when all targets Scanned, Errored { transition to Exiting }`. The condition is "all targets are in Scanned or Errored." The `not` form inverts: `when all targets not Scanned, Errored { }` means "all targets are still outside the terminal stages."
+
+```poly
+GrepExecution: entity {
+  targets: many SearchTarget
+
+  Scanning: stage {
+    // Per-element — fire each time a target errors
+    when any targets Errored {
+      assign exitCode to 2
+    }
+    // Collective — fire once when all targets reach a terminal stage
+    when all targets Scanned, Errored, Skipped {
+      transition to Exiting
+    }
+  }
+}
+```
+
+The analyzer validates that the quantifier targets a `many` relationship, all stage names exist on the target type, and collective conditions are reachable.
+
+**`schedule at expr { effects }` — Time-based effects.** A scheduled effect executes a block of effects at a specified future time:
+
+```swift
+InService: stage {
+  entry {
+    schedule at inServiceEndDate {
+      transition to Completed
+    }
+  }
+  exit {
+    // Schedule is automatically cancelled when leaving the stage
+  }
+}
+```
+
+The time expression must produce a `DateTime`. The schedule fires once. Leaving the stage that declared the schedule automatically cancels it. If the `at` expression references entity properties, the schedule is evaluated at the time of stage entry — property changes after entry do not automatically reschedule (an explicit `schedule` call in an action can update it).
+
+**Iteration.** The `for` construct iterates over a collection, optionally filtered by `where`, with effects applied per element:
+
+```swift
+for line in this.content.lines where line.matches(this.pattern) {
+  create MatchLine { content: line.text }
+}
+```
+
+`for var in collection where cond { effects }` — every modeler recognizes the pattern. The analyzer infers the loop variable's type from the collection element type. If the effect creates an entity, the analyzer infers which owned collection to add it to by matching the created type to the entity's relationships.
+
+Without a filter:
+
+```swift
+for item in this.backlog {
+  assign item.priority to "high"
+}
 ```
 
 **Implicit returns.** When an action or function declares a return type (`-> Type`), the last statement in the body is implicitly the return value. The parser verifies the last statement's produced type matches the declared type — mismatches are parse errors:
@@ -644,6 +827,7 @@ Policy expressions inside `{ }` follow a subset of the C# conditional expression
 
 | Category | Operators | Example |
 |---|---|---|
+| **Match expression** | `match { cond -> value, else -> value }` | `exitCode: match { hasMatches() -> 0, else -> 1 }` |
 | **Comparison** | `is` / `is not`, `>` `>=` `<` `<=` (`==` `!=` also valid as C# aliases) | `Age >= 18`, `Status is "Active"` |
 | **Boolean logic** | `&&` / `and`, `||` / `or`, `!` / `not` (C# and word aliases) | `Qty > 0 and not IsExpired` |
 | **Grouping** | `( )` | `(A and B) or C` |
@@ -651,6 +835,31 @@ Policy expressions inside `{ }` follow a subset of the C# conditional expression
 | **Property references** | unqualified property name on the declaring entity | `QuantityOnHand`, `customer` |
 | **Reserved identifiers** | `actor` (authenticated caller), `this` (current entity instance) | `customer is actor`, `owner: this` |
 | **Static members** | `Type.Member` on primitives | `DateTime.Now`, `Date.Today` |
+
+### Collection operations
+
+Query-style operations on `many`-typed properties:
+
+```swift
+items.all(i => i.stage is Completed)       // Boolean — all match
+items.any(i => i.priority is "high")       // Boolean — any matches
+items.count                                 // Number
+items.sum(i => i.total)                    // value type
+items.first(i => i.isUrgent)               // entity or null
+items.filter(i => i.priority is "high")    // collection
+```
+
+### Match expressions
+
+Pattern matching for branching logic without control flow:
+
+```swift
+exitCode: match {
+  this.hasMatches()  -> 0
+  this.exitCode is 2 -> 2
+  else               -> 1
+}
+```
 
 Precedence: `!`/`not` → comparisons (`is`/`is not`/`==`/`!=`, `>`, `>=`, `<`, `<=`) → `&&`/`and` → `||`/`or`. Parentheses override.
 
@@ -666,7 +875,13 @@ Names referenced in `when` and `require` clauses are resolved hierarchically:
 2. **Parent entity** — if the entity extends another (e.g. `Employee: User`), look in the parent. An `Employee` satisfies `require User.SomePolicy` because it inherits `User`'s policies.
 3. **Domain level** — reserved names defined at the domain scope (currently `actor`, resolving to the authenticated caller).
 
-**`this`** is a reserved keyword that resolves to the current entity instance. Available in action bodies, policy expressions, and initializer blocks:
+**`this`** is a reserved keyword that resolves to the current execution context:
+
+- **In an entity action body** — the entity instance
+- **In a policy expression on an entity** — the entity instance
+- **In an initializer block** — the entity being created
+- **In a subscription body (`when property Stage`)** — the subscriber entity instance (not the transitioning entity). The transitioning entity is accessed via the implicit `event` variable.
+- **In a value function body** — the value instance
 
 ```swift
 // In policy expressions — compare property against the entity itself
@@ -677,8 +892,16 @@ create order in orders {
   customer: this
 }
 
-// In event payloads
-publish OrderShipped { order: this }
+// In entry/exit blocks — reference the entity instance
+entry {
+  assign activatedAt to DateTime.Now
+}
+
+// In subscription bodies — this is the subscriber entity instance
+// event is the transitioning entity
+when payment Received {
+  require { this.balance > 0 }
+}
 ```
 
 Primitive types expose static members via dot notation: `DateTime.Now`, `Date.Today`, `Text.Empty`. These resolve against the type, not the domain scope — no new keywords are added to the global namespace.
@@ -932,13 +1155,17 @@ Category: entity {
 }
 ```
 
-### Phase 2+ Example: E-Commerce with Actors & Authorization
+### Phase 2+ Example: E-Commerce with Actors, Authorization, Events & Workflows
 
-The aspirational surface covering actors, authorization, richer effects, and value types.
+*(This example uses the older event/workflow model. The current spec replaces `event`/`publish`/`subscribe to` with `when property Stage` subscriptions and `schedule at` for time-based triggers. See `docs/experiments/examples/phone-call.poly` and `docs/experiments/examples/franchise-crm.poly` for current models.)*
+
+The aspirational surface covering actors, authorization, richer effects, value types, events, and workflow-driven sagas.
 
 - **Value** types have no identity and no lifecycle. They are compared by their contents. `Currency`, `Money`, `Email` — these describe data shapes, not domain objects.
 - **Entity** types have identity, a lifecycle (stages), and can own relationships. `Product`, `Order`, `Shipment` are entities.
 - **Actor** is a first-class DSL primitive that lowers to an entity with authorization metadata — identity columns, claims, role-based policy evaluation. `User: actor { ... }` declares an actor; `Employee: User { ... }` extends `User` and inherits actor-ness automatically. `Employee: actor User { ... }` is also valid (explicit) but unnecessary when the parent is already an actor.
+- **Event** types are declared inside entity blocks. Events carry implicit subject metadata (the publishing entity's identity plus timestamp). Entities publish events via `publish` effects in actions. Workflows subscribe to events via `subscribe` blocks, with automatic correlation via the relationship graph from the event's subject to the workflow's input type.
+- **Workflow** is a top-level declaration that models processing graphs and sagas. Workflows subscribe to events, execute typed processing stages, and can publish events themselves.
 
 **Authorization through policies.** Policies are the single declaration kind — no `permit policy` keyword. A policy on an actor entity evaluates against the actor. A policy on a regular entity evaluates against the entity. The reserved name `actor` refers to the authenticated actor within policy expressions, enabling entity policies to reference actor identity. Actions reference policies by qualified or unqualified name in `require`; stage gates use `when`.
 
@@ -1045,8 +1272,91 @@ Order: entity {
     { }
   }
   Cancelled: stage {}
+
+  // Events — subject is implicitly the Order instance
+  OrderSubmitted: event { }
+  OrderShipped: event {
+    trackingNumber: Text
+    shippedAt: DateTime
+  }
+  OrderFulfilled: event {
+    fulfilledAt: DateTime
+  }
+}
+
+InventoryItem: entity {
+  order: Order required
+  quantityOnHand: Number range(0, ) required
+
+  // Events — subject is implicitly the InventoryItem instance
+  // 'order' (Order) is implicit from the subject's this.order relationship
+  Reserved: event {
+    quantity: Number
+  }
+  OutOfStock: event {
+    requestedQuantity: Number
+  }
+
+  Available: stage {
+    Reserve: action
+      require { quantityOnHand >= requestedQuantity }
+    {
+      publish Reserved {
+        quantity: requestedQuantity
+      }
+      assign quantityOnHand to quantityOnHand - requestedQuantity
+      transition to Reserved
+    }
+    MarkOutOfStock: action {
+      publish OutOfStock {
+        requestedQuantity: requestedQuantity
+      }
+    }
+  }
+  Reserved: stage {}
+}
+
+// Workflow orchestrates fulfillment via event subscriptions
+// Correlation is automatic: InventoryItem.subject.order -> Order = workflow input
+FulfillOrder: workflow Order -> FulfillmentResult {
+  subscribe to Inventory.Reserved {
+    // Inventory reserved — workflow runtime marks this event as received
+    // Stage guards evaluate automatically when all required events arrive
+  }
+  subscribe to Inventory.OutOfStock {
+    // Out of stock — trigger escalation workflow
+    start StockoutEscalation(this.input)
+  }
+
+  ReserveInventory: stage Order -> InventoryReserved {
+    rollback { transition to ReleaseInventory }
+  }
+  ShipOrder: stage InventoryReserved -> ShipmentConfirmation {
+    rollback { transition to CancelShipment }
+  }
+  ConfirmDelivery: stage ShipmentConfirmation -> FulfillmentResult {
+    publish Order.OrderFulfilled {
+      fulfilledAt: DateTime.Now
+    }
+  }
 }
 ```
+
+*(Previous drafts of this spec included `workflow` as a separate top-level type, an `event` keyword, `publish`/`subscribe to` effects, and a dedicated event infrastructure. During design validation against real domains (phone call, franchise CRM, grep), these constructs proved redundant: every observable behavior maps to an entity entering a stage, relationships provide the correlation fabric, and time-based transitions are handled by `schedule at`. The current model — entities, values, actors, `when property Stage` for subscriptions, `schedule at` for timers — covers all cases with fewer primitives. See `docs/experiments/examples/` for worked models of phone-call, franchise-crm, and grep domains.)*
+
+## Deployment Modes
+
+The DSL model is independent of how it executes. The same domain — entities, stages, subscriptions, `schedule at` — runs in three deployment modes, selected by the runtime configuration, not by the domain definition:
+
+| Mode | Stage transition delivery | Schedule persistence | Use case |
+|---|---|---|---|
+| **In-memory** | Synchronous in-process dispatch | None — timer held in process memory | Unit testing, simulator, `cli` domains |
+| **Queue-backed** | At-least-once delivery via durable queue | Timer stored alongside queue | Production async processing |
+| **Database outbox** | Transactional outbox table — stage change + event in same DB transaction | Timer persisted in entity row (`schedule_at` column) | Transactional reliability without distributed transactions |
+
+A `cli` domain defaults to in-memory. A `service` domain defaults to database outbox. A `library` domain has no runtime — it's compile-time only.
+
+The mode does not change the model. An entity's `when targets Scanned` subscription and a `schedule at endDate { transition to Completed }` work identically in all three modes — only the delivery and durability differ.
 
 ## Syntax Principles
 
@@ -1063,8 +1373,8 @@ Order: entity {
 The DSL must eventually cover the real domain surface. Priority is ordered by Phase:
 
 - **Phase 1:** entities, properties (bare type with inline value constraints `range`/`length`/`pattern` and mutation constraint `required`/`unique`), relationships as entity-typed properties (`one`/`many`, optional `owned`, implicit reverse navigation), stages (cyclical graph, entry/exit with `require`), actions with stage transitions (`when` for stage gates, `require` for policy guards), policies (property comparison and composite boolean)
-- **Phase 2:** actors (`Name: actor { ... }` — first-class declaration with identity/claims/roles, inherits all entity grammar), actor-scoped authorization via `require` referencing actor policies, action parameters and effect blocks, event declarations, richer effects
-- **Phase 3:** comments and annotations, `require` actor type references (e.g. `require User` without a policy — means "caller must be an instance of User"), compatibility aliases, migration/versioning support
+- **Phase 2:** value types (`Name: value { ... }`) with pure functions and `require` guards; actors (`Name: actor { ... }` — entity with authorization, inherits all entity grammar); action parameters and return types (`action(Param: Type) -> ReturnType`); entity functions (`Name() -> Type { expression }`); stage subscriptions (`when property StageName { effects }` with automatic correlation via relationship graph); `schedule at expr { effects }` for time-based transitions; `for var in coll where cond { effects }` for collection iteration and bulk creation; collection query operations (`all`, `any`, `sum`, `count`, `first`, `filter`); `match` expressions for pattern matching; cross-entity mutation rule enforcement; `invoke` effect for calling actions on reachable entity instances
+- **Phase 3:** comments and annotations round-trip; `require` actor type references; compatibility aliases; migration/versioning support; ACL/import syntax; lowering passes (REST, OpenAPI, schema generation); scoped export (windowed DSL for agents); agent-driven decomposition affordances
 
 ## Canonical Printing Rules
 
@@ -1142,6 +1452,31 @@ ReturnAuthorization: entity {
 
 This is safe by construction — applying a partial import can only add. Full domain definitions (all entities declared) can be used for greenfield or full reconciliation, but the additive-only constraint makes partial imports trustworthy for iterative evolution.
 
+### Scoped Export (Windowed DSL)
+
+`ExportDomainDsl` accepts an optional scope parameter, returning a valid DSL fragment instead of the full model. This lets agents request exactly the slice they need without consuming the entire domain in context:
+
+| Scope | Description | Use case |
+|---|---|---|
+| `by-entity: name` | One or more named entities + their events, stages, policies | Agent analyzing a single concept |
+| `by-depth: N` | Entity + its relationships up to N hops from a seed | Agent understanding a bounded context |
+| `by-workflow: name` | The workflow + every entity, event, and type it references | Agent debugging a saga |
+| `by-event-flow: EventName` | Publish site, all subscriptions, all workflows they reach | Agent tracing impact of a change |
+| `full` | Complete domain (default) | Checkpointing, persistence, handoff between sessions |
+
+```swift
+// Agent requests just the FulfillOrder workflow and everything it touches
+ExportDomainDsl(sessionId, scope: "by-workflow: FulfillOrder")
+
+// Returns only:
+// - The FulfillOrder workflow with its subscriptions and stages
+// - The entities/types referenced by the workflow (Order, InventoryItem, etc.)
+// - The events the workflow subscribes to (Inventory.Reserved, etc.)
+// - Nothing else — even if the domain has 50 other entities
+```
+
+Scoped output is a valid DSL fragment that can be imported back. The printer walks the dependency graph from the scope seed outward, including every type reachable through declared references, relationships, and subscriptions. The agent works in a small window, requests the next window when needed — the bounded domain size makes reasoning tractable within a fixed context budget.
+
 ## DSL Affordances
 
 Key design affordances the parser and printer must address, derived from real MCP session experience:
@@ -1200,7 +1535,31 @@ The parser detects type mismatches in policy expressions (e.g., comparing a `Tex
 
 The printer emits only what exists. If an entity has no policies, no empty `policies` block or trailing whitespace is emitted. This keeps diff noise low — adding a policy adds exactly one line, not structural reformatting.
 
-### 9. Naming Rules (P3)
+### 10. Agent-Driven Decomposition (P2)
+
+The DSL is designed for **incremental discovery via MCP tools**, not just bulk import/export. An agent exploring an unknown codebase follows this workflow, guided by analyzer diagnostics at every step:
+
+1. **Discover a core concept** → `add_entity` with its known properties
+2. **Find related types** → `add_property`, `add_relationship`, `add_event`
+3. **Run analysis** → `get_domain_analysis` reports unresolved references, missing types, reachability issues
+4. **Follow diagnostics** → each diagnostic is a concrete todo item: "type 'Order' not found" → add Order
+5. **Add behavior when stable** → `add_stage`, `add_action`, `add_policy`
+6. **Wire orchestration last** → `add_workflow`, `add_subscription` — events and relationships already exist
+
+At every step the domain is valid. Partial models parse successfully — they carry unresolved references and unreachable subscriptions as diagnostics, not fatal errors. The agent treats each diagnostic as the next thing to investigate.
+
+```swift
+// Agent's session, step by step:
+// Step 1: add_entity("InventoryItem")
+// Step 2: add_property("InventoryItem", "quantityOnHand", "Number")
+// Step 3: add_property("InventoryItem", "order", "Order")
+// Step 4: get_domain_analysis() → diagnostic: "type 'Order' not found"
+// Step 5: add_entity("Order")  // follows the diagnostic
+```
+
+**The DSL is the recording, not the workflow.** The MCP tools are the exploration surface; the canonical DSL export is what the agent produces after learning enough to emit a coherent block. An agent may build a model entirely through MCP mutations and only call `ExportDomainDsl` at checkpoint boundaries or session handoff.
+
+### 11. Naming Rules (P3)
 
 Enforced at parse time:
 
@@ -1210,6 +1569,39 @@ Enforced at parse time:
 - **Actor inheritance** — policies declared on a parent actor (`User`) are available to extending children (`Employee: User`). An unqualified name on the child shadows the parent's name.
 
 See [Name Resolution](#name-resolution) and [Namespace Rules](#namespace-rules) for details.
+
+## Poly Library Import
+
+`library`-kind domains are the primary distribution mechanism for reusable Poly artifacts. The Poly package registry stores and versions these libraries:
+
+```swift
+// Publishing a library
+// acme-crm v2.1.0 — built and distributed by the platform team
+domain AcmeCRM: library
+
+Customer: entity { ... }
+Project: entity { ... }
+```
+
+```swift
+// Consuming a library at build time
+domain MyFranchise: service
+
+import "acme-crm" version 2
+
+// Extend library types
+Customer: AcmeCRM.Customer {
+  franchiseId: Text required
+}
+```
+
+The analyzer at import time:
+- Resolves the imported library against the package registry
+- Validates version compatibility (major version pinning)
+- Checks that extensions don't violate base type constraints
+- Reports contract drift as compile-time diagnostics
+
+Library imports are distinct from external API imports. A library import pulls in Poly types — entities, values, actors, stages, actions, policies — all within the same type system. An API import (see Third-Party Contracts) pulls in external schemas as opaque payloads behind an Anti-Corruption Layer.
 
 ## Third-Party Contracts
 
@@ -1315,50 +1707,54 @@ This section is exploratory — the bind syntax above is a first draft. The key 
 ### Phase 1
 
 1. Define the minimal grammar for:
-   - domain
-   - entity (`Name: entity { ... }`) — the `Name: kind` format applied at the top level
-   - property (bare type: `Name: Type`) — when the type is another entity, it is a relationship
-   - relationship modifiers inline on properties (`one`/`many`, optional `owned`)
-   - inline constraint modifiers on properties (`range`, `length`, `pattern` for value constraints; `required`, `unique` for mutation constraints)
-   - stage (`Name: stage { ... }`); optional entry/exit action blocks (`entry { }`, `exit { }`)
-   - action with `transition to` syntax; zero-ceremony inferred transitions (`{}`) when action name matches stage name by convention
-   - multi-stage actions with `when` clause
-   - `when` (stage gate) — accepts stage names only; repeatable; OR semantics
-   - `require` (policy guard) — comma-separated policies within a line are AND, multiple lines are OR; accepts `!` or `not` prefix; repeatable for logical grouping
-- policy — named Boolean expression (`Name: policy { expr }`); optionally external (`Name: policy external`) for runtime-resolved authorization
-2. Build a parser that emits `DomainMutationIntent[]`.
-3. Build a canonical printer from the committed domain model.
-4. Round-trip those supported constructs.
-5. Expose `ExportDomainDsl(sessionId)` and `ImportDomainDsl(text, sessionId?)` as MCP tools.
+   - `domain Name[: kind]` header (kinds: `service`, `cli`, `library`; default `service`)
+   - `Name: entity { ... }` — entity type
+   - Property: `Name: Type` (bare type) — when the type is another entity, it is a relationship
+   - Relationship modifiers inline on properties: `many`, `owned`
+   - Constraint modifiers on properties: `range`, `length`, `pattern`, `required`, `unique`
+   - Stage: `Name: stage { ... }`; optional entry/exit blocks with `require` shorthand
+   - Action: `transition to` syntax; zero-ceremony `{}` when action name matches stage name by convention
+   - Multi-stage actions with `when` clause (stage gate — stage names only, OR semantics)
+   - `require` (policy guard) — comma-separated policies AND within line, OR across lines; accepts `not` prefix
+   - Policy: `Name: policy { expression }`; optionally `Name: policy external`
+2. Build parser emitting `DomainMutationIntent[]` → committed domain
+3. Build canonical printer from committed domain
+4. Round-trip supported constructs
+5. Expose `ExportDomainDsl(sessionId)` and `ImportDomainDsl(text)` as MCP tools
 
 ### Phase 2
 
 Add:
 
-- value types (`Name: value { ... }`) — the second core primitive alongside entity; no identity, no lifecycle, compared by content
-- actor specialization (`Name: actor { ... }` — entity with identity, claims, and role-based policy evaluation; inherits all entity grammar; may also extend a parent via `Name: Parent { ... }` which inherits actor-ness when the parent is an actor)
-- action parameters and return types (`action(Param: Type, ...) -> ReturnType`); implicit return from last `create` statement; effect blocks (`assign`, `publish`)
-- event declarations within entities (`Name: event { ... }`); event subscriptions with implicit publisher subject
-- actor identity configuration
-- richer effects (Create, PublishEvent, TransitionStage)
+- Value types: `Name: value { ... }` with pure functions and `require` guards
+- Actors: `Name: actor { ... }` with authorization policies; entity extension via `Name: Parent { ... }`
+- Action parameters and return types: `action(Param: Type) -> ReturnType`; implicit return from last `create` statement
+- Effect blocks: `assign`, `create`, `create in`, `invoke`, `schedule`
+- Entity functions: `Name() -> Type { expression }` — pure, read-only, no effects
+- `when property StageName { effects }` — stage subscriptions scoped to subscriber's current stage; automatic correlation via relationship graph
+- Collection-aware subscriptions with quantifiers: `when all path Stage, Stage { ... }`, `when any path Stage { ... }`
+- `schedule at expr { effects }` — time-based effect execution; auto-cancelled on stage exit
+- `for var in coll where cond { effects }` — collection iteration with filter
+- Collection query operations: `all`, `any`, `sum`, `count`, `first`, `filter`
+- `match` expressions for pattern matching: `value: match { cond -> result, else -> result }`
+- `domain Name[: kind]` header with `kind` validation (`service`, `cli`, `library`)
+- Three deployment modes: in-memory, queue-backed, database outbox
+- Cross-entity mutation rule enforcement
+- Actor policy resolution in `require` on actions
+- Implicit `event` variable in `when property Stage` subscription bodies
+- MCP tools for all constructs
 
 ### Phase 3
 
 Add:
 
-- comments/annotations
-- compatibility aliases
-- migration/versioning support
-
-## Recommendation Summary
-
-The recommended path is:
-
-1. **Keep JSON for machine-facing MCP calls.**
-2. **Introduce a Poly DSL for human-facing import/export.**
-3. **Parse DSL into `DomainMutationIntent[]`.**
-4. **Print DSL canonically from the committed domain model.**
-
-That gives Poly a format that is semantic, compact, reviewable, and consistent with the transactional architecture already in place.
+- Library imports: `import "package-name" version N` — Poly-to-Poly package resolution, version compatibility validation, type extension checks
+- Comments/annotations round-trip
+- Compatibility aliases
+- Migration/versioning support
+- ACL / external API import syntax (exploratory — see Third-Party Contracts section)
+- Lowering passes (REST, OpenAPI, schema generation)
+- Scoped export (windowed DSL for agents)
+- Agent-driven decomposition workflows
 
 

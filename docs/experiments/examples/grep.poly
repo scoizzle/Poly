@@ -1,0 +1,193 @@
+// ============================================================
+// grep — Poly DSL Domain Model
+// ============================================================
+
+domain Grep: cli
+
+// ============================================================
+// Value types
+// ============================================================
+
+Pattern: value {
+  expression: Text length(1, ) required
+  isCaseInsensitive: Boolean
+  isFixedString: Boolean               // -F, treat as literal not regex
+  isPerlRegex: Boolean                 // -P
+
+  name() -> Text {
+    this.expression
+  }
+}
+
+GrepOptions: value {
+  showLineNumbers: Boolean
+  showFilenames: Boolean
+  showByteOffsets: Boolean
+  maxCount: Number range(1, )
+  contextBefore: Number range(0, )
+  contextAfter: Number range(0, )
+  invertMatch: Boolean                 // -v
+  recursive: Boolean                   // -r
+  onlyMatching: Boolean                // -o
+  binaryAsText: Boolean
+}
+
+MatchLine: value {
+  lineNumber: Number range(1, )
+  byteOffset: Number range(0, )
+  content: Text required
+  contextBefore: Text
+  contextAfter: Text
+
+  output() -> Text {
+    // How this line is printed depends on GrepOptions
+    this.content
+  }
+}
+
+ExitCode: value {
+  code: Number range(0, 2) required    // 0=found, 1=not found, 2=error
+
+  label() -> Text {
+    match {
+      this.code is 0 -> "matched"
+      this.code is 1 -> "no-match"
+      else -> "error"
+    }
+  }
+}
+
+// ============================================================
+// SearchTarget — a file or stdin to be searched
+// ============================================================
+
+SearchTarget: entity {
+  path: Text                            // file path or "stdin"
+  isBinary: Boolean
+  content: Text                         // full content read from the source
+  matchedLines: many MatchLine          // lines that matched
+
+  // Functions
+  totalMatches() -> Number {
+    this.matchedLines.count
+  }
+
+  Pending: stage {
+    // File discovered but not yet processed
+    Open: action { transition to Opening }
+    Skip: action {
+      assign isBinary to true
+      transition to Skipped
+    }
+  }
+
+  Opening: stage {
+    entry { assign content to io.readFile(this.path) }
+
+    Read: action { transition to Reading }
+    Fail: action { transition to Errored }
+  }
+
+  Reading: stage {
+    entry {
+      // Scan each line against the pattern
+      for line in this.content.lines where line.matches(this.pattern) {
+        create MatchLine { content: line.text }
+      }
+    }
+    Close: action { transition to Scanned }
+    Error: action { transition to Errored }
+  }
+
+  Scanned: stage { }
+  Skipped: stage { }
+  Errored: stage { }
+}
+
+// ============================================================
+// GrepExecution — a single invocation of grep
+// ============================================================
+
+GrepExecution: entity {
+  pattern: Pattern required
+  options: GrepOptions
+  targets: many SearchTarget
+  exitCode: Number
+  outputLines: many Text
+
+  // Functions
+  hasMatches() -> Boolean {
+    this.targets.any(t => t.stage is Scanned and t.totalMatches() > 0)
+  }
+
+  totalMatchCount() -> Number {
+    this.targets.sum(t => t.totalMatches())
+  }
+
+  // --- Lifecycle ---
+
+  Created: stage {
+    // Arguments parsed, execution begins
+    Run: action { transition to Scanning }
+    Fail: action {
+      assign exitCode to 2
+      transition to Exited
+    }
+  }
+
+  Scanning: stage {
+    // Searching through targets. Multiple targets may be
+    // opened, read, and scanned concurrently or sequentially.
+
+    // Collective — fire once when all targets reach a terminal stage
+    when all targets Scanned, Errored, Skipped {
+      transition to Exiting
+    }
+
+    // Per-element — fire when any target errors
+    when any targets Errored {
+      assign exitCode to 2
+      transition to Exiting
+    }
+
+    Finish: action { transition to Exiting }
+  }
+
+  Exiting: stage {
+    entry {
+      // Determine exit code
+      assign exitCode to match {
+        this.hasMatches()  -> 0
+        this.exitCode is 2 -> 2
+        else                -> 1
+      }
+    }
+  }
+
+  Exited: stage {
+    entry {
+      // Exit code is set; program terminates
+      // io.exit(this.exitCode)
+    }
+  }
+}
+
+// ============================================================
+// What this demonstrates:
+//
+// • grep maps to two entities: GrepExecution (the process)
+//   and SearchTarget (each file being searched).
+// • The lifecycle mirrors execution: Created → Scanning → Exited.
+// • SearchTarget has its own sub-lifecycle per file.
+// • Subscriptions: GrepExecution reacts to targets via
+//   when all targets Scanned, Errored, Skipped / when any targets Errored.
+// • Value types capture options, patterns, and output as pure data
+//   with no identity.
+// • The actual regex matching happens in implementation code,
+//   not in the DSL — functions delegate to the runtime.
+// • Exit code is a function of the accumulated results.
+//
+// The model decomposes grep into its essential state machine
+// without owning the implementation of regex or file I/O.
+// Those live in the lowering layer.
+// ============================================================

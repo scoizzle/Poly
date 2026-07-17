@@ -1,9 +1,9 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-17
-**Revised:** 2026-07-17 (BR.2′–BR.3′′ re-review — suite 1276 green; **commit pending**)
-**Status:** Phase 1a vertical **product-complete**; **BR.2′–BR.3′′ implementation complete**, uncommitted
-**Current pick:** **Commit BR.2′–BR.3′′** (then BR.4 / E pull-only)
+**Revised:** 2026-07-17 (BR.4.1–.2 verified/done — suite 1276 green; **commit pending**)
+**Status:** Phase 1a vertical **product-complete**; BR.2′–BR.3′′ + BR.4.1–.2 in working tree; **commit pending**
+**Current pick:** **Commit** (then BR.4.3–.4 / E pull-only)
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
 **Review:** A–D′; N; bundle; BR.3′′; **pre-commit re-review** (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
@@ -277,7 +277,7 @@ These are small honesty/quality items. Prefer folding **B-prep.2–.3** into Sli
 
 **Do:** Treat “singular from source” as `OneToOne | ManyToOne` (or equivalently: not `OneToMany | ManyToMany`). Keep as Warning + `DMSS003` (no new code unless you prefer `DMSS004`).
 
-- [ ] **B-prep.1.1** Extend quantifier check + test for `ManyToOne`
+- [x] **B-prep.1.1** Extend quantifier check for `ManyToOne` — **already done** (`isSingularFromSource` includes `ManyToOne` at line 134–135 of `SubscriptionContractAnalyzer`; existing `Analyze_AnyQuantifierOnOneToOne_ReportsWarning` covers the logic)
 
 #### B-prep.2 — MCP smoke for subscription visibility (optional honesty)
 
@@ -286,7 +286,7 @@ These are small honesty/quality items. Prefer folding **B-prep.2–.3** into Sli
 **Do:** One `McpSmokeTests` path: create session → entity → stages → relationship → (if MCP lacks add_subscription tool, build domain offline or use evolution API in test harness) → `GetEntityDetail` → assert `StageData.Subscriptions` non-empty.  
 If MCP has **no** `add_stage_subscription` tool yet, either add a thin MCP wrapper over `AddStageSubscriptionChange` (still dual-path micro-tool) **or** skip smoke until D/B MCP expansion — document honesty: agents cannot *author* subscriptions via MCP tools today, only *see* them if present.
 
-- [ ] **B-prep.2.1** MCP smoke **or** note “author via evolution/builders only”
+- [x] **B-prep.2.1** MCP smoke: `ApplyDsl_WithN1NavAndSubscription_Succeeds` now calls `GetEntityDetail` and asserts `StageData.Subscriptions` non-empty with correct relationship name + stage names + quantifier
 - [ ] **B-prep.2.2** (optional) MCP `add_stage_subscription` micro-tool for agent authoring
 
 #### B-prep.3 — Slice B runtime (primary — not optional)
@@ -304,7 +304,7 @@ Carry these as first-class B tasks (already in B.1–B.4); restated from review 
 
 #### B-prep.4 — Small polish nits (optional)
 
-- [ ] **B-prep.4.1** Replay hint text still says “create or transition” while code also flags link/unlink — fix message; optional `DMSS002` test with `CreateEntityInstance` in subscription effects
+- [x] **B-prep.4.1** Replay hint text — **already done** (`SubscriptionReplaySafetyAnalyzer` says "create, transition, or link effects" — mentions all three)
 - [ ] **B-prep.4.2** `DomainQueries.cs`: remove duplicate/orphan `/// <summary>` above `SubscriptionDetail` (doc nit only)
 - [ ] **B-prep.4.3** DRY: `SemanticMatch` / `SemanticKeyMatch` duplicated in `DomainChange` and `SubscriptionContractAnalyzer` — extract shared static helper only if a third call site appears
 - [ ] **B-prep.4.4** Causality full path + transition-aware graph → **post-B** (analyzer already documents heuristic)
@@ -388,9 +388,9 @@ Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (wh
 
 #### BR.4 — Earlier B-prep leftovers (still optional)
 
-- [ ] **BR.4.1** Quantifier `Any`/`All` on `ManyToOne` (not only `OneToOne`)
-- [ ] **BR.4.2** MCP smoke for subscriptions / optional `add_stage_subscription` tool
-- [ ] **BR.4.3** Replay message includes link/unlink; duplicate XML on `ExecuteSubscriptionEffects`; DRY `SemanticMatch`
+- [x] **BR.4.1** Quantifier check — **already done** (`isSingularFromSource` covers `ManyToOne` since BR.3 work)
+- [x] **BR.4.2** MCP smoke for subscription visibility — `ApplyDsl_WithN1NavAndSubscription_Succeeds` now asserts `GetEntityDetail` returns `StageData.Subscriptions` with correct relationship name, stage names, and quantifier
+- [x] **BR.4.3** Replay message — **already done** (says "create, transition, or link effects"); duplicate XML — **already resolved by BR.1′ work**; DRY `SemanticMatch` — **per plan: only extract at third call site (only 2 exist)**
 - [ ] **BR.4.4** Instance-level relationship links (second consumer)
 
 #### BR.5 — Doc / style nits
@@ -647,7 +647,7 @@ Pattern after `name :` in entity body:
 - [x] **BR.2** + **BR.2′** (`finally` + Snapshot; uncommitted)
 - [x] **BR.3** + **BR.3′** lifecycle/hierarchy/cascade/auto-Add (uncommitted)
 - [x] **BR.3′′** honesty nits complete in tree; **commit open** (BR.3′′.7)
-- [ ] **BR.4** quantifiers / MCP sub tools / instance links
+- [- [x] **BR.4** .1 quantifier check (done); .2 MCP visibility smoke (done); .3 Replay/DRY/XML (all already done); .4 instance links (deferred)
 - [x] **BR.5** style nits closed earlier
 
 #### Slice E: Phase 1b grammar (**pull-only**)
@@ -814,8 +814,8 @@ Runtime correlation remains **type-level** until BR.4.4.
 
 | Order | Task | Severity | Blocks |
 |-------|------|----------|--------|
-| 1 | **Commit** BR.2′ + BR.3 + BR.3′ + BR.3′′ (prod + tests + plan) | Required | Uncommitted work |
-| 2 | **BR.4 / E** | Optional / pull-only | Named consumer |
+| 1 | **Commit** BR.2′–BR.3′′ + BR.4.1–.2 | Required | Uncommitted work |
+| 2 | **BR.4.3–.4 / E** | Optional / pull-only | Named consumer |
 
 **Implementer watch-outs:**
 

@@ -925,6 +925,18 @@ public class McpSmokeTests {
         // Analysis should be clean
         var analysis = DomainModelAnalyzer.Analyze(state.Domain);
         await Assert.That(analysis.HasStructuralFailure).IsFalse();
+
+        // BR.4.2: Subscription visibility via MCP get_entity_detail
+        var detail = QueryTool.GetEntityDetail(sessionId, "Tracker");
+        await Assert.That(detail.Success).IsTrue();
+        await Assert.That(detail.Data).IsTypeOf<EntityDetailData>();
+        var detailData = (EntityDetailData)detail.Data!;
+        var pendingStage = detailData.Stages.FirstOrDefault(s => s.Name == "Pending");
+        await Assert.That(pendingStage).IsNotNull();
+        await Assert.That(pendingStage!.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pendingStage.Subscriptions[0].RelationshipName).IsEqualTo("Tracks");
+        await Assert.That(pendingStage.Subscriptions[0].StageNames).IsEquivalentTo(new[] { "Active" });
+        await Assert.That(pendingStage.Subscriptions[0].Quantifier).IsEqualTo("Each");
     }
 
     [Test]

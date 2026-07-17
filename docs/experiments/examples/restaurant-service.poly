@@ -1,0 +1,573 @@
+// ============================================================
+// Poly DSL — Restaurant Service Domain
+// Modeled against v0.3 Settled Specification
+// No events, no publish, no subscribe to, no workflows.
+// Every observable thing is an entity entering a stage.
+// ============================================================
+
+domain Bistro: service
+
+// ============================================================
+// Value types (no identity, compared by content)
+// ============================================================
+
+Money: value {
+  amount: Number range(0, ) required
+  currency: Text length(3, 3) required
+
+  // Pure value functions with domain constraints
+  add(other: Money) -> Money {
+    require { this.currency is other.currency }
+    Money { amount: this.amount + other.amount, currency: this.currency }
+  }
+
+  subtract(other: Money) -> Money {
+    require { this.currency is other.currency and this.amount >= other.amount }
+    Money { amount: this.amount - other.amount, currency: this.currency }
+  }
+
+  scale(factor: Number) -> Money {
+    Money { amount: this.amount * factor, currency: this.currency }
+  }
+}
+
+TableCode: value {
+  zone: Text                    // "dining-room", "patio", "bar", "vip-lounge"
+  number: Number range(1, 99) required
+}
+
+Duration: value {
+  minutes: Number range(0, ) required
+}
+
+// ============================================================
+// Actor (entity that participates in authorization)
+// ============================================================
+
+Employee: actor {
+  employeeId: Text required unique
+  name: Text required
+  role: Text                    // "waitstaff", "chef", "manager", "host"
+  startDate: Date
+  isAlcoholCertified: Boolean
+  isFoodSafetyCertified: Boolean
+
+  // Policies evaluate against the actor instance at runtime
+  IsWaitstaff: policy { role is "waitstaff" }
+  IsChef: policy { role is "chef" }
+  IsManager: policy { role is "manager" }
+  IsHost: policy { role is "host" }
+  CanServeAlcohol: policy { isAlcoholCertified is true }
+  CanHandleFood: policy { isFoodSafetyCertified is true }
+
+  // Functions (pure, read-only)
+  yearsOfService() -> Number {
+    (Date.Today - this.startDate).totalDays / 365
+  }
+
+  isEligibleForPromotion() -> Boolean {
+    this.yearsOfService() >= 2
+  }
+
+  // --- Lifecycle ---
+
+  Active: stage { }
+  OnBreak: stage {
+    Return: action { transition to Active }
+  }
+  OnLeave: stage {
+    Reinstate: action { transition to Active }
+  }
+  Terminated: stage { }
+}
+
+// ============================================================
+// Table — physical dining table with occupancy lifecycle
+// ============================================================
+
+Table: entity {
+  tableCode: TableCode required unique
+  capacity: Number range(1, 20) required
+  section: Text                 // "dining-room", "patio", "bar", "vip-lounge"
+  isAccessible: Boolean
+  assignedServer: Employee
+  activeOrder: Order
+
+  Available: stage {
+    entry { assign assignedServer to null }
+
+    Seat: action(guests: Number, server: Employee)
+      require { guests <= capacity }
+    {
+      assign assignedServer to server
+      transition to Occupied
+    }
+
+    Reserve: action {
+      transition to Reserved
+    }
+  }
+
+  Occupied: stage {
+    // Reactive — when the table's active order is paid, clear the table
+    when activeOrder.Paid {
+      assign assignedServer to null
+      transition to Available
+    }
+
+    TransferServer: action(newServer: Employee) {
+      assign assignedServer to newServer
+    }
+
+    ClearForWalkIn: action { transition to Available }
+  }
+
+  Reserved: stage {
+    Arrive: action(guests: Number, server: Employee)
+      require { guests <= capacity }
+    {
+      assign assignedServer to server
+      transition to Occupied
+    }
+
+    CancelReservation: action { transition to Available }
+  }
+}
+
+// ============================================================
+// MenuItem — what the restaurant serves
+// ============================================================
+
+MenuItem: entity {
+  name: Text required unique
+  description: Text
+  category: Text required       // "appetizer", "entree", "dessert", "beverage", "side"
+  price: Money required
+  prepTimeMinutes: Number range(0, ) required
+  isSeasonal: Boolean
+  ingredients: many Ingredient
+
+  Available: stage {
+    entry require name, price
+    { }
+
+    UpdatePricing: action(newPrice: Money) {
+      assign price to newPrice
+    }
+
+    Discontinue: action { transition to Unavailable }
+  }
+
+  Unavailable: stage {
+    Relist: action { transition to Available }
+  }
+}
+
+// ============================================================
+// Ingredient — stock-kept item used in menu items
+// ============================================================
+
+Ingredient: entity {
+  name: Text required unique
+  quantityOnHand: Number range(0, ) required
+  unit: Text required           // "lbs", "oz", "each", "cups"
+  reorderPoint: Number range(0, ) required
+  lastRestocked: DateTime
+
+  // Policies
+  HasStock: policy { quantityOnHand > 0 }
+  NeedsReorder: policy { quantityOnHand <= reorderPoint }
+  IsFresh: policy { (DateTime.Now - this.lastRestocked).totalDays <= 7 }
+
+  InStock: stage {
+    Consume: action(amount: Number)
+      require HasStock
+    {
+      assign quantityOnHand to quantityOnHand - amount
+      when quantityOnHand <= reorderPoint {
+        transition to LowStock
+      }
+    }
+
+    Restock: action(amount: Number) {
+      assign quantityOnHand to quantityOnHand + amount
+      assign lastRestocked to DateTime.Now
+    }
+  }
+
+  LowStock: stage {
+    entry {
+      // Manager is auto-notified via subscription
+    }
+
+    Restock: action(amount: Number) {
+      assign quantityOnHand to quantityOnHand + amount
+      assign lastRestocked to DateTime.Now
+      transition to InStock
+    }
+
+    MarkOut: action { transition to OutOfStock }
+  }
+
+  OutOfStock: stage {
+    entry {
+      // Menu items using this ingredient are auto-marked unavailable
+    }
+
+    Restock: action(amount: Number) {
+      assign quantityOnHand to amount
+      assign lastRestocked to DateTime.Now
+      transition to InStock
+    }
+  }
+}
+
+// ============================================================
+// OrderLineItem — a single line on an order
+// ============================================================
+
+OrderLineItem: entity {
+  menuItemName: Text required
+  menuItem: MenuItem
+  quantity: Number range(1, ) required
+  unitPrice: Money required
+  specialInstructions: Text
+  isVoided: Boolean
+
+  // Functions
+  subtotal() -> Money {
+    this.unitPrice.scale(this.quantity)
+  }
+
+  Active: stage {
+    Void: action
+      require Employee.IsManager
+    {
+      assign isVoided to true
+      transition to Voided
+    }
+  }
+  Voided: stage { }
+}
+
+// ============================================================
+// Order — the core lifecycle
+// From creation through service to payment and close
+// ============================================================
+
+Order: entity {
+  table: Table required
+  server: Employee required
+  items: many owned OrderLineItem
+  guestCount: Number range(1, ) required
+  notes: Text
+  subtotal: Money
+  tax: Money
+  total: Money
+  gratuity: Money
+  createdAt: DateTime
+  completedAt: DateTime
+
+  // --- Functions ---
+
+  itemCount() -> Number {
+    this.items.count
+  }
+
+  calculateSubtotal() -> Money {
+    this.items
+      .filter(i => not i.isVoided)
+      .sum(i => i.subtotal())
+  }
+
+  calculateTax(rate: Number) -> Money {
+    this.calculateSubtotal().scale(rate / 100)
+  }
+
+  // --- Lifecycle stages ---
+
+  Open: stage {
+    entry { assign createdAt to DateTime.Now }
+
+    AddItem: action(item: OrderLineItem) {
+      create in items {
+        menuItemName: item.menuItemName
+        menuItem: item.menuItem
+        quantity: item.quantity
+        unitPrice: item.unitPrice
+        specialInstructions: item.specialInstructions
+      }
+    }
+
+    RemoveItem: action(itemName: Text) {
+      for line in this.items where line.menuItemName is itemName {
+        assign line.quantity to line.quantity - 1
+      }
+    }
+
+    SubmitToKitchen: action
+      require { this.items.count > 0 }
+    {
+      transition to InKitchen
+    }
+
+    Cancel: action
+      require Employee.IsManager
+    {
+      transition to Cancelled
+    }
+  }
+
+  InKitchen: stage {
+    MarkReady: action
+      require Employee.IsChef
+    {
+      transition to ReadyForService
+    }
+
+    VoidLineItem: action(itemName: Text)
+      require Employee.IsManager
+    {
+      for item in this.items where item.menuItemName is itemName {
+        invoke item.Void()
+      }
+    }
+
+    AddNote: action(note: Text) {
+      assign notes to note
+    }
+  }
+
+  ReadyForService: stage {
+    ServeToTable: action
+      require Employee.IsWaitstaff
+    {
+      transition to Served
+    }
+  }
+
+  Served: stage {
+    CheckBack: action {
+      // "How is everything tasting?" — interaction, no transition
+    }
+
+    RefillBeverages: action { }
+
+    AddExtraItem: action(item: OrderLineItem) {
+      create in items {
+        menuItemName: item.menuItemName
+        menuItem: item.menuItem
+        quantity: item.quantity
+        unitPrice: item.unitPrice
+      }
+    }
+
+    RequestBill: action { transition to Billing }
+
+    Cancel: action
+      require Employee.IsManager
+    {
+      transition to Cancelled
+    }
+  }
+
+  Billing: stage {
+    CalculateTotal: action(taxRate: Number) {
+      assign subtotal to this.calculateSubtotal()
+      assign tax to this.calculateTax(taxRate)
+      assign total to subtotal.add(tax)
+    }
+
+    ProcessPayment: action(method: Text, tipAmount: Money) {
+      assign gratuity to tipAmount
+      assign total to total.add(tipAmount)
+      assign completedAt to DateTime.Now
+      transition to Paid
+    }
+
+    SplitCheck: action(splits: Number) {
+      assign total to this.calculateSubtotal().scale(1 / splits)
+    }
+
+    CallManager: action
+      require Employee.IsManager
+    {
+      // Manager handles guest dispute
+    }
+  }
+
+  Paid: stage {
+    entry { assign completedAt to DateTime.Now }
+  }
+
+  Cancelled: stage {
+    entry { assign completedAt to DateTime.Now }
+  }
+}
+
+// ============================================================
+// KitchenTicket — what the kitchen sees and fulfills
+// ============================================================
+
+KitchenTicket: entity {
+  order: Order required
+  tableCode: TableCode required
+  items: many owned TicketLineItem
+  firedAt: DateTime
+  completedAt: DateTime
+  priority: Text                    // "normal", "rush", "fire"
+
+  Pending: stage {
+    entry {
+      assign firedAt to DateTime.Now
+      assign priority to "normal"
+    }
+
+    StartPrep: action
+      require Employee.IsChef
+    {
+      transition to InProgress
+    }
+  }
+
+  InProgress: stage {
+    // When all line items are prepared, the ticket is ready
+    when all items.Done {
+      transition to Ready
+    }
+
+    MarkRush: action {
+      assign priority to "rush"
+    }
+  }
+
+  Ready: stage {
+    entry {
+      // Notify waitstaff — food is ready for pickup
+    }
+
+    PickUp: action
+      require Employee.IsWaitstaff
+    {
+      assign completedAt to DateTime.Now
+      transition to PickedUp
+    }
+  }
+
+  PickedUp: stage { }
+}
+
+// ============================================================
+// TicketLineItem — one item on a kitchen ticket
+// ============================================================
+
+TicketLineItem: entity {
+  name: Text required
+  quantity: Number range(1, ) required
+  specialInstructions: Text
+  isPrepared: Boolean
+
+  Pending: stage {
+    MarkDone: action {
+      assign isPrepared to true
+      transition to Done
+    }
+  }
+  Done: stage { }
+}
+
+// ============================================================
+// Receipt — created when payment is processed
+// ============================================================
+
+Receipt: entity {
+  order: Order required
+  tableCode: TableCode required
+  serverName: Text required
+  items: many owned ReceiptLineItem
+  subtotal: Money required
+  tax: Money
+  gratuity: Money
+  total: Money required
+  paymentMethod: Text
+  paymentTime: DateTime
+
+  Issued: stage {
+    entry require order, subtotal, total, paymentTime
+    { }
+  }
+}
+
+// ============================================================
+// ReceiptLineItem — a line item snapshot on a receipt
+// ============================================================
+
+ReceiptLineItem: entity {
+  name: Text required
+  quantity: Number range(1, ) required
+  unitPrice: Money required
+}
+
+// ============================================================
+// Shift — aggregates a server's orders and sales for a work period
+// ============================================================
+
+Shift: entity {
+  server: Employee required
+  startTime: DateTime required
+  endTime: DateTime
+  orders: many Order
+  totalSales: Money
+  totalTips: Money
+  averageTipPercent: Number
+
+  Active: stage {
+    entry { assign startTime to DateTime.Now }
+
+    // Subscription: when any order in my orders collection enters Paid,
+    // update my totals. The 'event' variable is the transitioning Order.
+    when any orders Paid {
+      assign totalSales to totalSales.add(event.total)
+      assign totalTips to totalTips.add(event.gratuity)
+      assign averageTipPercent to (totalTips.amount / totalSales.amount) * 100
+    }
+
+    CloseShift: action {
+      assign endTime to DateTime.Now
+      transition to Closed
+    }
+  }
+
+  Closed: stage {
+    entry require startTime, endTime, totalSales
+    { }
+  }
+}
+
+// ============================================================
+// What this demonstrates about the model:
+//
+// • Value types (Money, TableCode, Duration) with pure functions
+//   and require guards on operations
+// • Actor (Employee) with role-based policies evaluated at runtime
+// • Policy-qualified action guards: require Employee.IsManager,
+//   require Employee.IsChef, require Employee.IsWaitstaff
+// • Expression guards: require { guests <= capacity },
+//   require { this.items.count > 0 }
+// • Entity lifecycle stages across 10 entity types covering the
+//   full restaurant workflow
+// • Stage subscriptions: Shift watches orders.Paid, Table watches
+//   activeOrder.Paid, KitchenTicket watches all items.Done
+//   — automatic correlation, no events
+// • Scoped subscriptions: Active stage charges, Closed stage
+//   is read-only — subscription scope tracks lifecycle
+// • create in effect for adding to owned collections
+// • for iteration with where filter over relationship collections
+// • invoke effect for calling actions on reachable entities
+// • Entity functions for derived computation
+// • Cross-entity mutation rule preserved: Order owns its own
+//   transitions; Shift reacts via subscription, never directly
+//   mutates Order
+// • When-all quantifier: when all items.Done { transition to Ready }
+// • Inline action body with assign effects
+// ============================================================

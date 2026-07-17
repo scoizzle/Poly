@@ -1,0 +1,381 @@
+// ============================================================
+// Order Fulfillment Pipeline — Poly DSL Domain Model
+// Converged model: entities, values, actors, when, schedule, for
+// No events, no workflows, no publish/subscribe.
+// ============================================================
+
+domain Fulfillment: service
+
+// ============================================================
+// Value types
+// ============================================================
+
+Money: value {
+  amount: Number range(0, ) required
+  currency: Text length(3, 3) required
+}
+
+Address: value {
+  street: Text
+  city: Text
+  state: Text
+  postalCode: Text
+}
+
+ShippingMethod: value {
+  name: Text required
+  estimatedDays: Number range(1, )
+  cost: Money required
+}
+
+TrackingInfo: value {
+  number: Text required
+  carrier: Text required
+  url: Text
+}
+
+// ============================================================
+// Actor — authorized party in the system
+// ============================================================
+
+Employee: actor {
+  name: Text required
+  email: Text required unique
+  role: Text                           // "picker", "packer", "manager", "admin"
+
+  IsPicker: policy { role is "picker" }
+  IsManager: policy { role is "manager" or role is "admin" }
+}
+
+Customer: actor {
+  name: Text required
+  email: Text pattern("[^@]+@[^@]+") required
+  shippingAddress: Address
+  isVerified: Boolean
+
+  IsVerified: policy { isVerified is true }
+
+  Notify: action(message: Text) {
+    // Runtime — sends email, push notification, etc.
+  }
+}
+
+// ============================================================
+// Product catalog
+// ============================================================
+
+Product: entity {
+  sku: Text required unique
+  name: Text required
+  price: Money required
+  weightKg: Number range(0, )
+  isHazardous: Boolean
+  reorderPoint: Number range(0, )
+
+  inventory: many owned InventoryItem
+
+  Active: stage {
+    MarkDiscontinued: action { transition to Discontinued }
+  }
+  Discontinued: stage { }
+}
+
+// ============================================================
+// Inventory item — tracks a unit of stock
+// ============================================================
+
+InventoryItem: entity {
+  product: Product required
+  batchNumber: Text
+  location: Text                       // warehouse bin location
+  quantity: Number range(0, ) required
+
+  // Value-piped lifecycle
+  Available: stage { }
+  Reserved: stage { }
+  Picked: stage { }
+  Packed: stage { }
+  Shipped: stage { }
+  Damaged: stage { }
+  Returned: stage { }
+
+  MarkReserved: action { transition to Reserved }
+  MarkPicked: action
+    require Employee.IsPicker
+  { transition to Picked }
+  MarkPacked: action { transition to Packed }
+  MarkDamaged: action { transition to Damaged }
+  MarkAvailable: action { transition to Available }
+}
+
+// ============================================================
+// Payment
+// ============================================================
+
+Payment: entity {
+  amount: Money required
+  method: Text                         // "credit_card", "ach", "invoice"
+  transactionId: Text
+  processedAt: DateTime
+  refundedAt: DateTime
+
+  // Lifecycle
+  Pending: stage { 
+    Process: action {
+      assign processedAt to DateTime.Now
+      transition to Captured
+    }
+    Fail: action { transition to Failed }
+  }
+  Captured: stage { }
+  Failed: stage { }
+  Refunded: stage { }
+
+  Refund: action {
+    assign refundedAt to DateTime.Now
+    transition to Refunded
+  }
+}
+
+// ============================================================
+// Shipment — a carrier delivery grouping
+// ============================================================
+
+Shipment: entity {
+  order: Order required
+  carrier: Text                        // "ups", "fedex", "usps"
+  tracking: TrackingInfo
+  shippedAt: DateTime
+  deliveredAt: DateTime
+
+  // Lifecycle
+  LabelCreated: stage { }
+  PickedUp: stage {
+    entry require tracking, carrier
+    { }
+  }
+  InTransit: stage { }
+  Delivered: stage {
+    entry { assign deliveredAt to DateTime.Now }
+  }
+  Lost: stage { }
+  ReturnedToSender: stage { }
+}
+
+// ============================================================
+// Order — the core entity that coordinates everything
+// ============================================================
+
+Order: entity {
+  orderNumber: Text required unique
+  customer: Customer required
+  shippingAddress: Address required
+  shippingMethod: ShippingMethod
+  lineItems: many owned OrderLineItem
+  inventoryReservations: many owned InventoryItem
+  payment: Payment
+  shipments: many owned Shipment
+  notes: Text
+
+  placedAt: DateTime
+  confirmedAt: DateTime
+  autoShipDeadline: DateTime           // set at confirmation — schedule fires here
+  cartExpiry: DateTime                 // cart timeout
+  shippedAt: DateTime
+  deliveredAt: DateTime
+  cancelledAt: DateTime
+
+  // --- Functions ---
+
+  subtotal() -> Money {
+    this.lineItems.sum(i => i.subtotal())
+  }
+
+  // --- Lifecycle stages ---
+
+  Cart: stage {
+    AddItem: action(product: Product, qty: Number) {
+      create OrderLineItem { product: product, productSku: product.sku, quantity: qty }
+    }
+    Checkout: action {
+      // Create payment request and inventory reservations
+      assign payment to create Payment { amount: this.subtotal() }
+
+      for item in this.lineItems {
+        create InventoryItem in inventoryReservations {
+          product: item.product
+          quantity: item.quantity
+        }
+      }
+
+      assign placedAt to DateTime.Now
+      assign cartExpiry to placedAt + 7200
+      transition to AwaitingFulfillment
+    }
+    Cancel: action { transition to Cancelled }
+  }
+
+  AwaitingFulfillment: stage {
+    // Subscriptions drive automatic progression
+    // When payment captured and all inventory reserved, advance
+    when payment Captured and all inventoryReservations Reserved {
+      transition to Confirmed
+    }
+
+    // Payment failure
+    when payment Failed {
+      transition to PaymentFailed
+    }
+
+    // Customer cancels before fulfillment via action
+    RequestCancellation: action { transition to Cancelled }
+
+    // Timeout — abandoned cart
+    entry { schedule at cartExpiry { transition to Cancelled } }
+  }
+
+  Confirmed: stage {
+    // Schedule automatic shipping if not manually shipped
+    entry {
+      assign confirmedAt to DateTime.Now
+      assign autoShipDeadline to confirmedAt + 86400
+      schedule at autoShipDeadline {
+        transition to ReadyForPickup
+      }
+    }
+
+    // Parallel: prepare the shipment while notifying the customer
+    PrepareShipment: action {
+      parallel {
+        step require this {
+          create Shipment {
+            order: this
+            carrier: this.shippingMethod.name
+          }
+        }
+        step require customer {
+          invoke this.customer.Notify("Order confirmed")
+        }
+      }
+      transition to ReadyForPickup
+    }
+  }
+
+  ReadyForPickup: stage {
+    // Warehouse picks inventory — each item picked individually
+    when any inventoryReservations Picked {
+      // A picker has picked one item
+    }
+    when all inventoryReservations Picked {
+      transition to Packing
+    }
+    // If any item is damaged, handle it
+    when any inventoryReservations Damaged {
+      transition to Replenishing
+    }
+  }
+
+  Packing: stage {
+    // Packers pack items individually
+    when any inventoryReservations Packed { }
+    when all inventoryReservations Packed {
+      transition to Shipped
+    }
+  }
+
+  Shipped: stage {
+    entry { assign shippedAt to DateTime.Now }
+
+    when shipments Delivered {
+      transition to Delivered
+    }
+    when shipments Lost {
+      transition to LostInTransit
+    }
+  }
+
+  Delivered: stage {
+    entry { assign deliveredAt to DateTime.Now }
+  }
+
+  // --- Terminal / error stages ---
+
+  PaymentFailed: stage {
+    RetryPayment: action {
+      create Payment { amount: this.subtotal() }
+      transition to AwaitingFulfillment
+    }
+    Cancel: action { transition to Cancelled }
+  }
+
+  Replenishing: stage {
+    entry {
+      for item in this.inventoryReservations where item.stage is Damaged {
+        create InventoryItem {
+          product: item.product
+          quantity: item.quantity
+        }
+      }
+    }
+    when all inventoryReservations Reserved {
+      transition to Packing
+    }
+  }
+
+  LostInTransit: stage {
+    FileClaim: action { transition to ClaimFiled }
+    Reship: action { transition to Confirmed }
+  }
+
+  ClaimFiled: stage { }
+
+  Cancelled: stage {
+    entry {
+      assign cancelledAt to DateTime.Now
+
+      // Compensate: refund payment, release inventory
+      invoke this.payment.Refund()
+      for item in this.inventoryReservations {
+        invoke item.MarkAvailable()
+      }
+    }
+  }
+}
+
+// ============================================================
+// OrderLineItem
+// ============================================================
+
+OrderLineItem: entity {
+  product: Product required
+  productSku: Text required
+  quantity: Number range(1, ) required
+  unitPrice: Money
+  total: Money
+
+  // Functions
+  subtotal() -> Money {
+    this.unitPrice * this.quantity
+  }
+
+  Added: stage { }
+  Fulfilled: stage { }
+  Backordered: stage { }
+  Cancelled: stage { }
+}
+
+// ============================================================
+// What this demonstrates:
+// 
+// • Full order lifecycle: Cart → AwaitingFulfillment → Confirmed
+//   → ReadyForPickup → Packing → Shipped → Delivered
+// • Error paths: PaymentFailed, Replenishing, LostInTransit, Cancelled
+// • Compound when conditions: `when payment Captured and all items Reserved`
+// • `for` loops: creating inventory items from line items, bulk updates
+// • `parallel` steps: creating shipment + notifying customer concurrently
+// • `schedule at`: automatic transition to ReadyForPickup after 24h
+// • `invoke`: refund payment on cancellation
+// • `create` in relationships: creating owned children
+// • `entry` blocks: setting timestamps, one-time setup
+// • No events, no workflows, no publish/subscribe
+// ============================================================

@@ -356,6 +356,7 @@ Every other concept is a member of an entity or actor (property, stage, action, 
 | `schedule at expr { effects }` | Execute effects at future time | `schedule at endDate { transition to Completed }` |
 | `when property Stage { effects }` | React to related entity's stage transition | `when calls Ended { assign total to event.duration }` |
 | `for var in coll where cond { effects }` | Iterate and apply effects per element | `for line in lines where line.matches(p) { create MatchLine{content:line.text} }` |
+| `parallel { step require deps { effects } }` | Parallel fork/join with constraint solving | `parallel { step require src, cfg { assign r to process(src,cfg) } }` |
 
 This pattern has several advantages:
 
@@ -376,13 +377,13 @@ Account: entity {
 
   Active: stage {
     entry
-      require CanActivate
+      require CanActivate                     // policy guard
     {
       assign activatedAt to DateTime.Now
     }
 
     exit
-      require { balance is 0 }               // can't leave Active with non-zero balance
+      require { balance is 0 }               // expression guard: can't leave with non-zero balance
     { }
 
     Suspend: action {
@@ -398,13 +399,66 @@ Account: entity {
   }
 
   Closed: stage {
-    entry require { closedAt is not null }   // stage-specific NOT NULL
+    entry require closedAt                   // shorthand → closedAt is not null
     { assign closedAt to DateTime.Now }
   }
 }
 ```
 
-`require` on entry blocks transition into the stage; `require` on exit blocks transition out. They cannot contain `when` or `transition to`. Entry/exit fire automatically — no action invocation needed. An entry block on the initial stage runs at entity creation.
+**`require` forms.** `require` in entry/exit blocks follows the same grammar as action guards — comma-separated names for AND, separate lines for OR. Names resolve to policies or properties:
+
+```swift
+// Single policy
+entry require CanActivate { ... }
+
+// Multiple policies (AND)
+entry require CanActivate, IsVerified { ... }
+
+// Property shorthand — expands to is not null
+entry require submittedAt, carrier { ... }
+
+// Complex expression — braces for custom logic
+entry require { items.all(i => i.stage is Reserved) } { ... }
+
+// Multiple require lines (OR)
+entry require VerifiedCustomer
+      require ManualApproval
+{ ... }
+```
+
+**`when` drives automatic transitions.** A stage's `when` subscriptions are reactive — they fire when the subscribed entity reaches the target stage. A `when` body can call `transition to` directly, making the entity advance automatically without an explicit action call:
+
+```swift
+Order: entity {
+  reservations: many owned ItemReservation
+  payment: Payment
+
+  Awaiting: stage {
+    // Reactive — when all reservations and payment are ready, auto-advance
+    when all reservations Reserved and payment Captured {
+      transition to ReadyToShip
+    }
+    when cancelRequested {
+      transition to Cancelled
+    }
+    // Timeout — schedule transitions directly when deadline passes
+    entry { schedule at deadline { transition to Failed } }
+  }
+
+  ReadyToShip: stage {
+    // Gate — can't enter without meeting conditions
+    entry require { reservations.all(r => r.stage is Reserved)
+                 and payment.stage is Captured }
+    { }
+  }
+  Cancelled: stage { }
+  Failed: stage { }
+}
+```
+
+The `when` subscription IS the exit condition. The body has access to the entity's full state and can evaluate compound conditions or call `transition to` when satisfied. No separate `exit auto` mechanism is needed — subscriptions are reactive by nature.
+
+**`require` on entry/exit follows the same grammar as action guards**:
 
 **Stage data shorthand.** A flat list of property names after `require` expands to `is not null` checks for each:
 
@@ -522,6 +576,7 @@ Action bodies can contain the following effects, each expressing a different cat
 | **Create in collection** | `create in rel { props }` | Create child, add to owned collection |
 | **Create with local** | `create name in rel { props }` | Create child, bind to local variable |
 | **Iteration** | `for var in coll where cond { effects }` | Execute effects per element in filtered collection |
+| **Parallel fork/join** | `parallel { step require deps { effects } }` | Execute independent steps concurrently, blocking until all complete |
 | **Schedule** | `schedule at expr { effects }` | Execute effects at a future time |
 | **Invoke action** | `invoke target.Action(params)` | Call action on reachable entity instance |
 | **Start entity** | `start EntityName(params)` | Initialize new entity (factory pattern) |
@@ -658,6 +713,54 @@ InService: stage {
 ```
 
 The time expression must produce a `DateTime`. The schedule fires once. Leaving the stage that declared the schedule automatically cancels it. If the `at` expression references entity properties, the schedule is evaluated at the time of stage entry — property changes after entry do not automatically reschedule (an explicit `schedule` call in an action can update it).
+
+**Parallel fork/join.** The `parallel` effect executes independent steps concurrently, blocking until all complete. Each `step` declares its input dependencies via `require`. The constraint solver builds a dependency graph from `require` names and `assign` targets — steps with no interdependencies run in parallel; steps whose dependencies are satisfied by sibling outputs wait for those siblings to complete. Steps within a `parallel` block share a local scope — any variable assigned by one step is readable by subsequent steps via `require`.
+
+```swift
+AudioEncodeJob: entity {
+  source: RawAudio
+  config: AudioConfig
+
+  Processing: stage {
+    Run: action {
+      parallel {
+        step require source {
+          assign loudness to analyze(this.source)
+        }
+        step require source, config {
+          assign encoded to encode(this.source, this.config)
+        }
+        step require loudness, encoded {
+          assign result to merge(this.loudness, this.encoded)
+        }
+      }
+      assign finalResult to result
+      transition to Completed
+    }
+  }
+  Completed: stage { }
+}
+```
+
+**Validation rules (enforced at parse time):**
+- Every `require` name must resolve to an entity property, an output of a sibling step, or a `this`-scoped expression. Unreachable dependencies are parse errors.
+- Every step must produce new values — `assign` targets must be unique across all steps in the block. Two steps cannot assign the same name.
+- The dependency graph must be acyclic. Cycles are parse errors.
+- The `parallel` block completes when all steps finish. The entity does not advance past the block until all steps resolve — the same blocking semantics regardless of nesting context.
+
+Lowering to C# is straightforward — `Task.WhenAll` with waves computed from the dependency graph:
+
+```csharp
+// Step 1 and 2 have no interdependencies — Wave 1
+var loudnessTask = Task.Run(() => analyze(source));
+var encodedTask = Task.Run(() => encode(source, config));
+await Task.WhenAll(loudnessTask, encodedTask);
+
+// Step 3 depends on both outputs — Wave 2
+var loudness = await loudnessTask;
+var encoded = await encodedTask;
+var result = await Task.Run(() => merge(loudness, encoded));
+```
 
 **Iteration.** The `for` construct iterates over a collection, optionally filtered by `where`, with effects applied per element:
 
@@ -1458,15 +1561,14 @@ This is safe by construction — applying a partial import can only add. Full do
 
 | Scope | Description | Use case |
 |---|---|---|
-| `by-entity: name` | One or more named entities + their events, stages, policies | Agent analyzing a single concept |
+| `by-entity: name` | One or more named entities + their stages, policies, subscriptions | Agent analyzing a single concept |
 | `by-depth: N` | Entity + its relationships up to N hops from a seed | Agent understanding a bounded context |
-| `by-workflow: name` | The workflow + every entity, event, and type it references | Agent debugging a saga |
-| `by-event-flow: EventName` | Publish site, all subscriptions, all workflows they reach | Agent tracing impact of a change |
+| `by-subscription: Entity.Stage` | Entity, stage, all subscription targets it references via `when` | Agent tracing impact of a stage transition |
 | `full` | Complete domain (default) | Checkpointing, persistence, handoff between sessions |
 
 ```swift
-// Agent requests just the FulfillOrder workflow and everything it touches
-ExportDomainDsl(sessionId, scope: "by-workflow: FulfillOrder")
+// Agent requests the Awaiting stage of the Order entity and everything it references
+ExportDomainDsl(sessionId, scope: "by-subscription: Order.Awaiting")
 
 // Returns only:
 // - The FulfillOrder workflow with its subscriptions and stages
@@ -1535,16 +1637,16 @@ The parser detects type mismatches in policy expressions (e.g., comparing a `Tex
 
 The printer emits only what exists. If an entity has no policies, no empty `policies` block or trailing whitespace is emitted. This keeps diff noise low — adding a policy adds exactly one line, not structural reformatting.
 
-### 10. Agent-Driven Decomposition (P2)
+### 9. Agent-Driven Decomposition (P2)
 
 The DSL is designed for **incremental discovery via MCP tools**, not just bulk import/export. An agent exploring an unknown codebase follows this workflow, guided by analyzer diagnostics at every step:
 
 1. **Discover a core concept** → `add_entity` with its known properties
-2. **Find related types** → `add_property`, `add_relationship`, `add_event`
+2. **Find related types** → `add_property`, `add_relationship`
 3. **Run analysis** → `get_domain_analysis` reports unresolved references, missing types, reachability issues
 4. **Follow diagnostics** → each diagnostic is a concrete todo item: "type 'Order' not found" → add Order
 5. **Add behavior when stable** → `add_stage`, `add_action`, `add_policy`
-6. **Wire orchestration last** → `add_workflow`, `add_subscription` — events and relationships already exist
+6. **Wire subscriptions** → `when property Stage` subscriptions within stage blocks
 
 At every step the domain is valid. Partial models parse successfully — they carry unresolved references and unreachable subscriptions as diagnostics, not fatal errors. The agent treats each diagnostic as the next thing to investigate.
 
@@ -1559,7 +1661,7 @@ At every step the domain is valid. Partial models parse successfully — they ca
 
 **The DSL is the recording, not the workflow.** The MCP tools are the exploration surface; the canonical DSL export is what the agent produces after learning enough to emit a coherent block. An agent may build a model entirely through MCP mutations and only call `ExportDomainDsl` at checkpoint boundaries or session handoff.
 
-### 11. Naming Rules (P3)
+### 10. Naming Rules (P3)
 
 Enforced at parse time:
 
@@ -1729,10 +1831,12 @@ Add:
 - Value types: `Name: value { ... }` with pure functions and `require` guards
 - Actors: `Name: actor { ... }` with authorization policies; entity extension via `Name: Parent { ... }`
 - Action parameters and return types: `action(Param: Type) -> ReturnType`; implicit return from last `create` statement
-- Effect blocks: `assign`, `create`, `create in`, `invoke`, `schedule`
+- Effect blocks: `assign`, `create`, `create in`, `invoke`, `schedule`, `for`, `parallel`
+- `parallel { step require deps { effects } }` — parallel fork/join with constraint-solved dependency graph, acyclic validation, unique output enforcement
 - Entity functions: `Name() -> Type { expression }` — pure, read-only, no effects
 - `when property StageName { effects }` — stage subscriptions scoped to subscriber's current stage; automatic correlation via relationship graph
 - Collection-aware subscriptions with quantifiers: `when all path Stage, Stage { ... }`, `when any path Stage { ... }`
+- Compound `when` conditions: `when all reservations Reserved and payment Captured { transition to Target }`
 - `schedule at expr { effects }` — time-based effect execution; auto-cancelled on stage exit
 - `for var in coll where cond { effects }` — collection iteration with filter
 - Collection query operations: `all`, `any`, `sum`, `count`, `first`, `filter`

@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-17
-**Revised:** 2026-07-17 (PCA re-review — suite 1287 green; PCA.7–.8 landed; commit PCA only open gate)
-**Status:** Phase 1a vertical **product-complete**; BR stack shipped; **PCA ready to commit**
-**Current pick:** **Commit PCA** (PCA.7–.8 landed) (then BR.4.4 / E pull-only)
+**Revised:** 2026-07-17 (PCA shipped `2dd5a68`; optional backlog reprioritized)
+**Status:** Phase 1a vertical **product-complete**; BR stack + PCA shipped; optional residual only
+**Current pick:** **None required** — optional backlog § Optional residual priority (prefer stop / dogfood)
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** A–D′; N; BR; PCA; **PCA re-review** (2026-07-17)  
+**Review:** A–D′; N; BR; PCA shipped; **optional backlog reprioritized** (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -25,7 +25,7 @@
 
 **Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
 
-**Status (2026-07-17):** Phase 1a vertical closed. BR stack through BR.4.1–.2 shipped. **PCA ready to commit** (suite **1286**). PCA.6 OwnedAccess entity-prop check **wont-do** (value-type labels — PersonLifecycle). Residual after commit: BR.4.4 / E pull-only.
+**Status (2026-07-17):** Phase 1a vertical closed. BR stack + **PCA** (`2dd5a68`) shipped. Suite green; tree clean. **No required product gate open.** Optional residual: see § Optional residual priority below.
 
 ---
 
@@ -386,8 +386,8 @@ Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (wh
 - [x] **BR.4.1** Analyzer treats `ManyToOne` as singular for Any/All quantifier warning (`isSingularFromSource` in `SubscriptionContractAnalyzer`) — **verified already present** (A′′ era). Runtime still **Each-only** (`DomainInstanceStore` skips non-Each). Optional: dedicated ManyToOne+Any unit test; warning text still says “one-to-one” for ManyToOne cases → **BR.4.1′**
 - [x] **BR.4.2** MCP subscription visibility — `ApplyDsl_WithN1NavAndSubscription_Succeeds` asserts `GetEntityDetail` stage subscriptions (`Tracks` / `Active` / `Each`) — **`17b22df`**
 - [x] **BR.4.3** Replay/link message + duplicate XML + DRY SemanticMatch — accepted as already satisfied (no third call site)
-- [ ] **BR.4.4** Instance-level relationship links (second consumer) — **still open** (type-level correlation remains)
-- [ ] **BR.4.1′** (optional honesty) Warning message: say “singular” not only “one-to-one”; add `Analyze_AnyQuantifierOnManyToOne_ReportsWarning`
+- [ ] **BR.4.4** Instance-level relationship links — **P1 optional** (only with named multi-instance fan-out pain)
+- [ ] **BR.4.1′** Warning “singular” + ManyToOne+Any test — **P3 polish** (only when touching that analyzer)
 
 **Post-commit review (`17b22df`):** BR.4.2 smoke is correct and valuable. BR.4.1 is verification of existing analyzer, not new runtime Any/All support.
 
@@ -396,35 +396,41 @@ Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (wh
 - [x] **BR.5.1** Already resolved by BR.1′ `<remarks>` insertion — method and `EventPrefix` each have one `<summary>` (no duplication)
 - [x] **BR.5.2** Trailing newline restored on `DomainEntityInstanceTests.cs` (confirmed via xxd)
 
-#### PCA — Policy property-reference validation — **READY TO COMMIT** (uncommitted)
+#### PCA — Policy property-reference validation — **DONE** (`2dd5a68`)
 
-**What landed:** `ValidatePolicyPropertyReferences` on entity / stage / entity-action / stage-action policies; unknown `PropertyAccess` → `DMSEM005` → evolution rollback. Skips: `OwnedAccess` (value-type path), `RelationshipNavigation` (related-entity fields), `ParameterAccess`. Tests: `PolicyConstraintAnalysisTests` (10) + updated eval/evolution tests. `DomainQueries` duplicate-summary cleanup.
+- [x] **PCA.1**–**.4** RelNav/Parameter/Owned-inner skip; stage + action policies; focused tests
+- [x] **PCA.5** Committed as `2dd5a68`
+- [x] **PCA.6** OwnedAccess-as-entity-property — **wont-do** (value-type labels)
+- [x] **PCA.7** Parent-entity properties in `BuildPropertyMap` (walk via lookup)
+- [x] **PCA.8** OwnedName validated against domain **ValueTypes** (not entity props)
 
-**Re-review (2026-07-17):**
-
-| Item | Verdict |
-|------|---------|
-| Entity/stage/action unknown `PropertyAccess` | Good + tests |
-| Known property / ParameterAccess / RelNav target field | Good + tests |
-| **OwnedAccess** full skip → **PCA.8 partial validation** | OwnedName validated against domain ValueTypes (via `lookup.Types`). Skipped if name matches entity property (backward compat). Children still skipped. |
-| Parent-entity prop map | **PCA.7 done** — `BuildPropertyMap` walks parent chain via `AddParentProperties`; child overrides parent by same name |
-| Suite | **1286** green |
-
-**Do:**
-
-- [x] **PCA.1** RelNav / ParameterAccess / OwnedAccess-inner skip
-- [x] **PCA.2** Stage policies
-- [x] **PCA.3** Action policies (entity + stage)
-- [x] **PCA.4** Focused tests (10)
-- [ ] **PCA.5** **Commit PCA** — only open required gate
-- [x] **PCA.6** OwnedAccess name-as-entity-property — **wont-do** (value-type labels)
-- [ ] **PCA.7** (optional) Parent-entity properties in `BuildPropertyMap`
-- [ ] **PCA.8** (optional later) Validate OwnedName against domain **ValueTypes** (and relationship names against `Domain.Relationships`)
-
-**No production blocker for commit.**
+Optional deepenings (if ever): relationship-name existence in RelNav policies — demoted to **P3 polish** below.
 
 
 ---
+
+### Optional residual priority (reprioritized 2026-07-17)
+
+Phase 1a + N1 + runtime vertical + PCA are **done**. Do **not** start optional work to fill calendar time. Order below is **when something hurts**, not a todo list to clear.
+
+| Priority | Item | When to pull | Why this rank |
+|----------|------|--------------|---------------|
+| **P0** | **Stop / dogfood / ship** | Always default | Principles: shipped capability over completeness; we are first customer — use MCP+DSL path before inventing more IR |
+| **P1** | **BR.4.4** Instance-level relationship links | Named multi-instance fan-out pain (wrong Tracker fires for wrong Order) | Highest product impact among residuals; type-level correlation is the only remaining runtime honesty gap that bites real multi-instance models |
+| **P2** | **Runtime `Any`/`All` quantifiers** | Named need for multi-match subscription semantics | Store is Each-only today; analyzer already warns on singular+Any; implementing runtime without a consumer is framework completeness |
+| **P2** | **Slice E** Phase 1b DSL (`value` authoring surface, `create in`, …) | Named authoring consumer who cannot express a real domain in 1a | Pull-only grammar expansion; parser without runtime consumer fails §5 shipped-capability |
+| **P3** | **BR.4.1′** Warning text “singular” + ManyToOne+Any unit test | Touching `SubscriptionContractAnalyzer` anyway, or agent confusion in logs | Pure honesty polish; zero customer path change |
+| **P3** | **RelNav relationship-name existence** in PCA | Touching policy analyzer anyway | Nice gate; not blocking — bad rel names already fail other paths / runtime |
+| **P4** | Demote / do not start | — | “Complete BR residual,” entry/exit edge catalogs, speculative abstractions, E “to fill the void,” dual quantifier runtime “for completeness” |
+
+**Explicit non-priorities (unless P1/P2 trigger fires):**
+
+- Expanding BR.3 lifecycle beyond green paths without a failing scenario
+- Parallel / schedule / for / match DSL (Phase 2+ per plan §4)
+- Capture mode, codegen, library import (out of this plan)
+
+**Default next action:** none on this plan. Integrate dogfood feedback; open P1 only with a concrete multi-instance wrong-fan-out story.
+
 
 ### Slice B exit criteria (updated)
 
@@ -672,9 +678,9 @@ Pattern after `name :` in entity body:
 - [x] **BR.1** + **BR.1′** Option B (`a41153c`)
 - [x] **BR.2** + **BR.2′** (`5a7b89b`)
 - [x] **BR.3** + **BR.3′** + **BR.3′′** (`5a7b89b`)
-- [x] **BR.4.1–.2** (`17b22df`); BR.4.3 accepted; **BR.4.4** open; optional **BR.4.1′**
+- [x] **BR.4.1–.2** (`17b22df`); BR.4.3 accepted; **BR.4.4** = P1 optional; **BR.4.1′** = P3 polish
 - [x] **BR.5** style nits closed earlier
-- [x] **PCA** policy property-ref validation (uncommitted; done — commit pending)
+- [x] **PCA** shipped (`2dd5a68`)
 
 #### Slice E: Phase 1b grammar (**pull-only**)
 
@@ -838,6 +844,9 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 
 | 2026-07-17 | **PCA re-review:** PCA.1–.4 solid; PCA.6 wont-do confirmed (OwnedName = value-type label per PersonLifecycle). **PCA.7** parent-entity prop map; **PCA.8** ValueType name validation. Suite **1287**. **Only open required: PCA.5 commit.** |
 
+| 2026-07-17 | **PCA shipped** (`2dd5a68`). |
+| 2026-07-17 | **Optional residual reprioritized:** P0 stop/dogfood; P1 BR.4.4 only with multi-instance pain; P2 Any/All runtime + E only with named consumer; P3 analyzer polish; P4 demote framework completeness. |
+
 ### Appendix — Relationship authoring
 
 | Mode | Form | Role after Slice N |
@@ -848,17 +857,21 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 
 Runtime correlation remains **type-level** until BR.4.4.
 
-### Appendix — Agent pick order (after PCA re-review)
+### Appendix — Agent pick order (optional residual — reprioritized)
 
-| Order | Task | Severity | Blocks |
-|-------|------|----------|--------|
-| 1 | **PCA.5 Commit PCA** (PCA.6 wont-do, PCA.7–.8 done) | Required | Uncommitted work |
-| 2 | **BR.4.4 / E** | Optional / pull-only | Named consumer |
+| Order | Task | When |
+|-------|------|------|
+| — | **Default: stop** | Always, until dogfood forces a P1/P2 |
+| 1 | **BR.4.4** Instance-level links | Multi-instance wrong subscription fan-out is a real bug report |
+| 2 | **Runtime Any/All** | Product needs multi-match quantifiers (not just analyzer warnings) |
+| 3 | **Slice E** Phase 1b grammar | Named domain cannot be authored in 1a |
+| 4 | **BR.4.1′** / RelNav-name PCA deepen | Only while already editing those files |
+| never | E or BR.4.4 “for completeness” | Violates shipped-capability and guardrails-with-consumers |
 
 **Implementer watch-outs:**
 
-- Do not validate `OwnedAccess.OwnedName` as an entity property — value-type labels are intentional.
-- Mark PCA shipped only after a commit hash exists.
+- Prefer dogfood of apply_dsl / CallAction / when over more IR.
+- Type-level correlation is documented; BR.4.4 is the upgrade path, not a silent bug if docs are honest.
 
 
 Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish. **Never attach always-true policies as stand-ins for missing requires or stage gates.**

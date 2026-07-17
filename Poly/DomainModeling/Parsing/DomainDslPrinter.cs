@@ -37,8 +37,30 @@ public sealed class DomainDslPrinter {
             _sb.AppendLine();
         }
 
-        // Standalone policies (not on an entity — likely none in current IR)
-        // Currently all policies live on entities, so this is a no-op.
+        // Relationships (N2 explicit form)
+        var rels = domain.Relationships
+            .OrderBy(r => r.Name, StringComparer.Ordinal)
+            .ToList();
+        foreach (var rel in rels) {
+            _sb.Append("relationship ");
+            _sb.Append(rel.Name);
+            _sb.Append(" from ");
+            _sb.Append(rel.Source.TypeName);
+            _sb.Append(" to ");
+            _sb.Append(rel.Target.TypeName);
+            _sb.Append(' ');
+            _sb.Append(rel.Cardinality switch {
+                RelationshipCardinality.OneToOne => "one",
+                RelationshipCardinality.ManyToOne => "one",
+                RelationshipCardinality.OneToMany => "many",
+                RelationshipCardinality.ManyToMany => "many",
+                _ => "one"
+            });
+            _sb.AppendLine();
+        }
+
+        if (rels.Count > 0)
+            _sb.AppendLine();
 
         return _sb.ToString().TrimEnd() + "\n";
     }
@@ -91,19 +113,8 @@ public sealed class DomainDslPrinter {
 
         _sb.AppendLine(" {");
 
-        // OnEntry effects
-        foreach (var effect in stage.OnEntryEffects) {
-            _sb.Append(indent);
-            _sb.Append("  ");
-            PrintEffect(effect, indent + "  ");
-        }
-
-        // OnExit effects
-        foreach (var effect in stage.OnExitEffects) {
-            _sb.Append(indent);
-            _sb.Append("  ");
-            PrintEffect(effect, indent + "  ");
-        }
+        // OnEntry/OnExit effects not printed — Phase 1a has no entry/exit syntax.
+        // They are preserved in the IR but omitted from .poly output.
 
         // Subscriptions
         foreach (var sub in stage.Subscriptions) {
@@ -124,30 +135,26 @@ public sealed class DomainDslPrinter {
         _sb.Append(action.Name);
         _sb.Append(": action");
 
-        // Stage gates — only print if they differ from the declaring stage
-        if (action.Policies.Count > 0) {
-            var requireNames = action.Policies
-                .Where(p => !p.Name.StartsWith("when_", StringComparison.Ordinal))
-                .Select(p => p.Name)
-                .ToList();
-            var whenNames = action.Policies
-                .Where(p => p.Name.StartsWith("when_", StringComparison.Ordinal))
-                .Select(p => p.Name[5..]) // strip "when_" prefix
-                .ToList();
+        // Print require gates: positive + negated (skip internal when_* policies)
+        var positiveRequires = action.Policies
+            .Where(p => !p.Name.StartsWith("when_", StringComparison.Ordinal)
+                     && !p.Name.StartsWith("not_", StringComparison.Ordinal))
+            .Select(p => p.Name)
+            .ToList();
 
-            if (whenNames.Count > 0) {
-                _sb.AppendLine();
-                _sb.Append(indent);
-                _sb.Append("  when ");
-                _sb.Append(string.Join(", ", whenNames));
-            }
+        var negatedRequires = action.Policies
+            .Where(p => p.Name.StartsWith("not_", StringComparison.Ordinal))
+            .Select(p => p.Name.Substring(4)) // "not_X" → "X"
+            .ToList();
 
-            if (requireNames.Count > 0) {
-                _sb.AppendLine();
-                _sb.Append(indent);
-                _sb.Append("  require ");
-                _sb.Append(string.Join(", ", requireNames));
-            }
+        if (positiveRequires.Count > 0 || negatedRequires.Count > 0) {
+            _sb.AppendLine();
+            _sb.Append(indent);
+            _sb.Append("  require ");
+            var parts = new List<string>();
+            parts.AddRange(positiveRequires);
+            parts.AddRange(negatedRequires.Select(n => $"not {n}"));
+            _sb.Append(string.Join(", ", parts));
         }
 
         _sb.AppendLine(" {");
@@ -211,26 +218,13 @@ public sealed class DomainDslPrinter {
                 break;
 
             case ConditionalEffect ce:
-                _sb.Append("if ");
-                _sb.Append(PrintExpression(ce.Condition));
-                _sb.AppendLine(" {");
+                // Not printable in Phase 1a (no if/else in grammar).
+                // Flatten as comment for round-trip honesty.
+                _sb.AppendLine("// if (flattened — see also else branch)");
                 foreach (var sub in ce.ThenEffects) {
                     _sb.Append(indent);
                     _sb.Append("  ");
                     PrintEffect(sub, indent + "  ");
-                }
-                _sb.Append(indent);
-                _sb.AppendLine("}");
-                if (ce.ElseEffects is { Count: > 0 }) {
-                    _sb.Append(indent);
-                    _sb.AppendLine("else {");
-                    foreach (var sub in ce.ElseEffects) {
-                        _sb.Append(indent);
-                        _sb.Append("  ");
-                        PrintEffect(sub, indent + "  ");
-                    }
-                    _sb.Append(indent);
-                    _sb.AppendLine("}");
                 }
                 break;
 

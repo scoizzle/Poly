@@ -9,6 +9,7 @@ using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
 using Poly.Syntax.Analysis;
@@ -983,4 +984,185 @@ internal sealed class PolicyTool {
         System.Text.Json.JsonValueKind.Null => null,
         _ => je.GetRawText()
     };
+}
+
+/// <summary>
+/// Tools for batch DSL operations: apply_dsl (parse + evolve) and export_dsl (print).
+/// These provide the dual-path authoring model alongside micro-tools.
+/// </summary>
+[McpServerToolType]
+internal sealed class DslTool {
+    /// <summary>
+    /// Applies a Phase 1a .poly DSL text to the session, replacing the current domain.
+    /// Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
+    /// session domain with the result. On failure, returns diagnostics with line/column info.
+    /// </summary>
+    [McpServerTool(Name = "apply_dsl"), Description(@"Applies Phase 1a .poly DSL text to the session, REPLACING the current domain.
+
+Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
+session domain with the result. Use this for batch authoring; micro-tools (add_entity,
+add_property, etc.) remain for discovery and incremental edits.
+
+Phase 1a supports: entities, properties with constraints (required, unique, range,
+length, pattern), lifecycle stages with optional parent, actions with require gates,
+stage subscriptions (when RelName Stage { effects }), policies, relationships
+(relationship Name from Src to Tgt one|many), and effects (transition to, assign).
+
+Unsupported constructs (actor, value, create, schedule, etc.) produce clear errors.
+
+HONESTY NOTES — what this tool does NOT enforce:
+ - Action `when Stage` is parsed and stored but NOT runtime-enforced
+   (requires the action executor, e.g. CallAction, to check stage membership).
+ - Stage subscriptions are parsed and stored but do NOT auto-fan-out.
+   Subscription side-effects need a DomainInstanceStore with registered instances.
+   This session holds the domain model only — not running instance state.
+ - The revision counter is reset to the session's current revision number + 1,
+   not to zero (apply_dsl replaces the entire domain but keeps the session alive).
+
+IMPORTANT: This tool REPLACES the session domain. Incremental micro-tools remain
+for exploration and repair.")]
+    public static DomainToolResponse ApplyDsl(
+        [Description("Session ID returned by create_domain_session")] string sessionId,
+        [Description("Phase 1a .poly DSL text to parse and apply")] string polyText) {
+        // ── 0. Fail fast on missing session or empty text ─────
+        if (!McpSessionStore.TryGet(sessionId, out _))
+            return Failure_NotFound(sessionId);
+
+        if (string.IsNullOrWhiteSpace(polyText))
+            return new DomainToolResponse(
+                Success: false,
+                Message: "DSL text is empty. Provide a .poly document with at least a domain header.",
+                SessionId: sessionId,
+                Affordances: ["get_domain_overview"]);
+
+        // ── 1. Parse ───────────────────────────────────────────
+        List<DomainChange> changes;
+        try {
+            var parser = new PolyDslParser(polyText);
+            changes = parser.Parse();
+        }
+        catch (FormatException ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Parse error: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_domain_analysis", "get_domain_overview"]);
+        }
+
+        // ── 2. Evolve from empty domain (self-contained changes include primitives) ──
+        // Extract domain name from changes or use session domain name as fallback.
+        var nameChange = changes.OfType<SetDomainNameChange>().FirstOrDefault();
+        var domainName = nameChange?.Name ?? "Imported";
+
+        var emptyDomain = new Domain(domainName, [], []);
+
+        EvolutionResult outcome;
+        try {
+            outcome = new DomainEvolution(emptyDomain).Apply(changes);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Evolution failed: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_domain_analysis"]);
+        }
+
+        if (!outcome.Succeeded) {
+            var errorMessages = outcome.Analysis.Diagnostics
+                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .Take(5)
+                .Select(d => d.Message)
+                .ToList();
+
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Evolution rolled back: {outcome.FailureSummary ?? "Analysis rejected the domain"}",
+                SessionId: sessionId,
+                Diagnostics: errorMessages.Count > 0 ? errorMessages : null,
+                Affordances: ["get_domain_analysis", "get_domain_overview"]);
+        }
+
+        // ── 3. Atomically replace the session domain ─────────────
+        var replaced = McpSessionStore.Replace(sessionId, outcome.Root, outcome.Analysis);
+        if (!replaced) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+        }
+
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+
+        var entityCount = outcome.Root.Types.OfType<Entity>().Count();
+        var relCount = outcome.Root.Relationships.Count;
+        var message = $"Domain '{domainName}' applied: {entityCount} entities, {relCount} relationships.";
+
+        // Build a compact snapshot for the response
+        var snapshot = BuildSnapshot(outcome.Root, outcome.Analysis, state.Revision);
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: message,
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: snapshot,
+            Affordances: entityCount > 0
+                ? ["get_entity_detail", "get_domain_overview", "get_domain_analysis", "export_dsl"]
+                : ["get_domain_overview", "add_entity"]);
+    }
+
+    /// <summary>
+    /// Exports the current session domain as .poly DSL text.
+    /// </summary>
+    [McpServerTool(Name = "export_dsl"), Description("Exports the current session domain as .poly DSL text using the canonical Phase 1a printer.")]
+    public static DomainToolResponse ExportDsl(
+        [Description("Session ID")] string sessionId) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+
+        var printer = new DomainDslPrinter();
+        var polyText = printer.Print(state.Domain);
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: "Domain exported as .poly DSL text.",
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: new { poly = polyText },
+            Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);
+    }
+
+    // ── Private helpers ─────────────────────────────────────────
+
+    private static object BuildSnapshot(Domain domain, AnalysisResult? analysis, long revision) {
+        var entities = domain.Types.OfType<Entity>().Select(e => new {
+            name = e.Name,
+            propertyCount = e.Properties.Count,
+            stageCount = e.Stages.Count,
+            actionCount = e.Actions.Count + e.Stages.Sum(s => s.Actions.Count),
+            policyCount = e.Policies.Count
+        }).ToList();
+
+        return new {
+            domainName = domain.Name,
+            revision,
+            entityCount = entities.Count,
+            relationshipCount = domain.Relationships.Count,
+            primitiveCount = domain.Types.OfType<PrimitiveType>().Count(),
+            hasErrors = analysis?.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error) ?? false,
+            entities,
+            relationships = domain.Relationships.Select(r => new {
+                name = r.Name,
+                source = r.Source.TypeName,
+                target = r.Target.TypeName,
+                cardinality = r.Cardinality.ToString()
+            }).ToList()
+        };
+    }
+
+    private static DomainToolResponse Failure_NotFound(string sessionId) =>
+        new(Success: false, Message: $"Session '{sessionId}' not found.",
+            Affordances: ["create_domain_session", "list_sessions"]);
 }

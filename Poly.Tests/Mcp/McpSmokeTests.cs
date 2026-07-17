@@ -681,4 +681,201 @@ public class McpSmokeTests {
         var filtered = EvolveTool.GetConstraints(sessionId, "Product", propertyName: "Price");
         await Assert.That(filtered.Success).IsTrue();
     }
+
+    // ── apply_dsl / export_dsl tools (Slice D) ────────────────────
+
+    [Test]
+    public async Task ApplyDsl_MinimalEntity_ReplacesSession() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = DslTool.ApplyDsl(sessionId, """
+            domain Orders
+
+            Product: entity {
+              SKU: Text required unique
+              Name: Text required
+            }
+            """);
+
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("Orders");
+        await Assert.That(response.Data).IsNotNull();
+
+        // Session should now have the new domain (replaced); revision carries over
+        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        await Assert.That(exists).IsTrue();
+        await Assert.That(state!.Domain.Name).IsEqualTo("Orders");
+        await Assert.That(state.Revision).IsEqualTo(1);
+
+        // Entity should exist
+        var entity = state.Domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == "Product");
+        await Assert.That(entity).IsNotNull();
+        await Assert.That(entity!.Properties.Count).IsEqualTo(2);
+
+        // Affordances should include get_entity_detail
+        await Assert.That(response.Affordances).Contains("get_entity_detail");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithRelationship_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = DslTool.ApplyDsl(sessionId, """
+            domain Orders
+
+            Customer: entity {
+              Name: Text required
+            }
+
+            Order: entity {
+              Total: Number
+              Draft: stage {
+                Activate: action {
+                  transition to Active
+                }
+              }
+              Active: stage {}
+            }
+
+            relationship Places from Customer to Order many
+            """);
+
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("2 entities");
+        await Assert.That(response.Message).Contains("1 relationships");
+
+        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        await Assert.That(exists).IsTrue();
+        await Assert.That(state!.Domain.Relationships.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ApplyDsl_MissingRequire_FailsWithParseError() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = DslTool.ApplyDsl(sessionId, """
+            domain Test
+
+            Item: entity {
+              Draft: stage {
+                Activate: action
+                  require NonExistent
+                {
+                  transition to Active
+                }
+              }
+              Active: stage {}
+            }
+            """);
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("NonExistent");
+    }
+
+    [Test]
+    public async Task ApplyDsl_MalformedPoly_FailsWithParseError() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = DslTool.ApplyDsl(sessionId, "domain Test\nItem: entity { Name: Text");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("Parse error");
+    }
+
+    [Test]
+    public async Task ExportDsl_AfterApply_RoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        DslTool.ApplyDsl(sessionId, """
+            domain Test
+
+            Item: entity {
+              SKU: Text required unique
+              Name: Text required
+            }
+            """);
+
+        var response = DslTool.ExportDsl(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsNotNull();
+
+        // The exported poly should contain the domain header and entity
+        var poly = response.Data!.GetType().GetProperty("poly")?.GetValue(response.Data) as string;
+        await Assert.That(poly).IsNotNull();
+        await Assert.That(poly!).Contains("domain Test");
+        await Assert.That(poly).Contains("Item: entity");
+        await Assert.That(poly).Contains("SKU: Text required unique");
+
+        // Round-trip it: re-apply and verify
+        var response2 = DslTool.ApplyDsl(sessionId, poly!);
+        await Assert.That(response2.Success).IsTrue();
+    }
+
+    [Test]
+    public async Task ApplyDsl_ToNonexistentSession_Fails() {
+        var response = DslTool.ApplyDsl("nonexistent", "domain Test\nItem: entity {}");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task ApplyDsl_EmptyPolyText_FailsWithClearMessage() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = DslTool.ApplyDsl(sessionId, "");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("empty");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithRequire_BlocksCallActionWhenPolicyFails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Step 1: verify entity-with-policy DSL applies
+        var response = DslTool.ApplyDsl(sessionId, """
+            domain Test
+
+            Item: entity {
+              Score: Number
+              HighScore: policy { Score > 10 }
+              Submit: action
+                require HighScore
+              {
+                transition to Active
+              }
+              Draft: stage {}
+              Active: stage {}
+            }
+            """);
+        await Assert.That(response.Success).IsTrue();
+
+        // Get the entity from the session domain
+        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        await Assert.That(exists).IsTrue();
+        var entity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Item");
+
+        // Verify entity-level action has the HighScore policy
+        var submitAction = entity.Actions.FirstOrDefault(a => a.Name == "Submit");
+        await Assert.That(submitAction).IsNotNull();
+        await Assert.That(submitAction!.Policies.Count).IsEqualTo(1);
+        await Assert.That(submitAction.Policies[0].Name).IsEqualTo("HighScore");
+
+        // Instance with Score=5 (fails: Score > 10) → blocked
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Score"] = 5L });
+        var result = instance.CallAction("Submit");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailedGuards.Count).IsGreaterThan(0);
+        await Assert.That(result.FailedGuards).Contains("HighScore");
+        await Assert.That(instance.CurrentStage).IsEqualTo("Draft");
+
+        // Instance with Score=15 (passes: Score > 10) → succeeds
+        var instance2 = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Score"] = 15L });
+        var result2 = instance2.CallAction("Submit");
+        await Assert.That(result2.Succeeded).IsTrue();
+        await Assert.That(instance2.CurrentStage).IsEqualTo("Active");
+    }
 }

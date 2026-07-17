@@ -20,6 +20,56 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `get_policy_expression` | `PolicyTool` | Returns the guard expression text of a policy |
 | `add_policy` | `PolicyTool` | Adds a policy with a guard expression to an entity |
 | `evaluate_policy` | `PolicyTool` | Evaluates a policy against a sample subject (VM, returns bool) |
+| `apply_dsl` | `DslTool` | Applies a `.poly` DSL document, **replacing** the current session domain entirely |
+| `export_dsl` | `DslTool` | Exports the current session domain as `.poly` DSL text |
+
+## Dual Authoring Path
+
+Poly.Mcp supports two complementary ways to build a domain model, each suited to different workflows.
+
+### Batch Path (`apply_dsl`)
+
+Write the full domain in a single `.poly` DSL document and apply it in one shot. The session's domain is **replaced** entirely — not merged incrementally.
+
+```
+domain Orders
+
+Customer: entity {
+  Name: Text required
+  Email: Text required unique
+}
+
+Order: entity {
+  Total: Number
+  Draft: stage {
+    Submit: action { transition to Active }
+  }
+  Active: stage {}
+}
+
+relationship Places from Customer to Order many
+```
+
+**Use when**: bootstrapping from scratch, iterating in a text editor, or recreating a known state. Parse errors produce line/col diagnostics.
+
+### Incremental Path (micro-tools)
+
+Use `add_entity`, `add_property`, `add_stage`, `add_action`, `add_relationship`, etc. to build the model one piece at a time. Each tool call is a single `DomainChange` that goes through the full analysis pipeline, so errors are caught immediately.
+
+**Use when**: exploring a model interactively, responding to user prompts in a chat UI, or programmatic construction where each step needs validation.
+
+### Choosing Between Them
+
+| Scenario | Preferred Path |
+|----------|---------------|
+| Starting a new model from a known definition | Batch (`apply_dsl`) |
+| Iterating on a DSL file in an editor | Batch (`apply_dsl`) |
+| Reproducing a bug or known state | Batch (`apply_dsl`) |
+| Interactive exploration | Incremental (micro-tools) |
+| AI agent building a model step by step | Incremental (micro-tools) |
+| Round-tripping (export → edit → re-apply) | Batch (`export_dsl` → `apply_dsl`) |
+
+Both paths converge to the same internal representation and produce identical models.
 
 ## Tool Honesty Invariant
 

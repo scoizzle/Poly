@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-16  
-**Revised:** 2026-07-17 (Slice C DSL scaffold reviewed; C′ fix-ups are current pick)  
-**Status:** Active roadmap — execute as **product slices** (see §3), not as one uninterrupted sprint  
-**Current pick:** **§3 Slice C′** (parser/printer correctness — blocks treating C as done)  
+**Revised:** 2026-07-17 (Slice D reviewed; Phase 1a vertical complete; D′ optional polish)  
+**Status:** Active roadmap — Phase 1a vertical **product-complete**; remaining work is polish / Phase 1b pull  
+**Current pick:** **§3 D′** (optional MCP polish) *or* **commit/ship** *or* **BR residual** / **E** only with a named consumer  
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** Plan review; Slice A–B′ and Slice C scaffold code reviews (2026-07-17)  
+**Review:** Plan review; A–D impl reviews (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -23,7 +23,7 @@
 
 **How to use this doc:** Treat §3 slices as the authority for order and exit criteria. Estimates are **rough order-of-magnitude**, not a commitment to a two-week calendar. Prefer promoting concrete steps into `simple-agent-tasks/` when work starts.
 
-**Status (2026-07-17, post C scaffold review):** Runtime vertical green (B+B′). **Slice C scaffold untracked:** `PolyDslTokenizer` / `PolyDslParser` / `DomainDslPrinter` + `dsl-phase1a-grammar.md` + 3 round-trip tests. Scaffold is **not** C-exit quality — see **C′** (require/when semantics wrong; pattern bug; no relationships; no diagnostics surface; weak tests).
+**Status (2026-07-17, post D review):** **Phase 1a vertical product path complete.** Runtime CallAction→when; Phase 1a parse/print; MCP `apply_dsl` (replace) + `export_dsl`; dual-path README; MCP smoke **42** green. **D′ residuals:** early session check, honesty blurb (stage `when` / instance store), revision-reset policy. **Do not start E without a named consumer** (pull-only).
 
 ---
 
@@ -63,9 +63,9 @@ Runtime “entity X entered stage Y” is a **runtime observation**, not an auth
 
 Without a normalization rule, Phase 1 parse/print cannot be correct. This is IR work, not only a parser mapping note.
 
-### Gap 3: No Phase 1 DSL path
+### Gap 3: Phase 1 DSL path — **closed for Phase 1a vertical**
 
-No parser, importer, exporter, or committed `.poly` format. MCP is incremental only; no batch text apply.
+Parser + printer + grammar + MCP `apply_dsl` / `export_dsl` landed. Residual: D′ polish; Phase 1b (Slice E).
 
 ### Gap 4: Mutation surface wider than one entity block
 
@@ -101,28 +101,20 @@ Remaining runtime fidelity (entry/exit, stage gates, instance links) is **BR res
 ## 3. Product slices (execution order)
 
 ```text
-Slice 0–A′′  IR + analyzers + query/MCP honesty                    [done]
-    │
-Slice B+B′   Thin runtime: CallAction → stage → when (Each)         [done for vertical]
-    │
-Slice B residual  event data-flow test, entry/exit, stage gates     [optional polish]
-    │
-Slice C      Phase 1a grammar + parser/printer scaffold                [partial]
-    │
-Slice C′     Fix parse semantics, relationships, diagnostics, tests    [CURRENT pick]
-    │
-Slice D      MCP apply_dsl (strict) + dual path
-    │
-Slice E      Phase 1b grammar (pull-only)
+Slice 0–B′     IR + thin runtime                         [done]
+Slice C…C′′′   Phase 1a DSL parse/print                  [done]
+Slice D        MCP apply_dsl + export_dsl + dual path    [done]
+Slice D′       Optional MCP polish                       [optional]
+Slice E        Phase 1b grammar (pull-only)              [pull-only]
+BR residual    event data-flow, stage gates, entry/exit  [optional]
 ```
 
 | Slice | Depends on | Does not depend on |
 |-------|------------|---------------------|
-| 0–B′ | prior | — |
-| C scaffold | A′ IR | — |
-| **C′** | **C scaffold** | MCP |
-| D | C′ exit | — |
-| E | C′ + named consumer | — |
+| 0–D | prior | — |
+| D′ | D | — |
+| E | named consumer | D′ |
+| BR | B vertical | D |
 
 ---
 
@@ -390,229 +382,104 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 
 ---
 
-### Slice C: Phase 1a grammar freeze → parse → evolve → print — **PARTIAL**
+### Slice C + C′ + C′′ + C′′′: Phase 1a parse/print — **DONE**
 
-**Files (untracked at review):**
+**Verified 2026-07-17 (C′′′ review):** build green; **17** Parsing tests green.
 
-| File | Role |
-|------|------|
-| [`dsl-phase1a-grammar.md`](dsl-phase1a-grammar.md) | Frozen grammar (authoritative vs experiment DSL spec) |
-| `Poly/DomainModeling/Parsing/PolyDslTokenizer.cs` | Hand-written scanner |
-| `Poly/DomainModeling/Parsing/PolyDslParser.cs` | RD parser → `DomainChange[]` |
-| `Poly/DomainModeling/Parsing/DomainDslPrinter.cs` | Domain → `.poly` |
-| `Poly.Tests/DomainModeling/Parsing/PolyDslRoundTripTests.cs` | 3 minimal tests (pass) |
+| Item | Status | Evidence |
+|------|--------|----------|
+| C′.2–C′.5 | Done | is not, pattern, primitives once, relationships, subscription |
+| C′′.1 deferred require | Done | order-independent; missing throws; no Literal(true) |
+| C′′.2 no `when_*` policies | Done | consume only |
+| C′′.3 grammar sync | Done | relationship + require docs |
+| C′′.4 unsupported keywords | Done (throw) | actor/value/create + malformed |
+| C′′.5 printer honesty | Done | omit entry/exit; `require not` print |
+| **C′′′.1** entity-level `require not` | **Done** | Guard removed; always `Add`; `C3_RequireNot_EntityLevel_BindsRealExpression` |
 
-#### C.1–C.4 status
-
-| Item | Status |
-|------|--------|
-| **C.1.1** Grammar doc | Done (needs consistency fixes — see C′.6) |
-| **C.2.1** Parser + tokenizer | Scaffold done; **semantics incomplete** (C′) |
-| **C.2.2** Expressions → `DomainExpression` | Partial (`is not` wrong — C′.2) |
-| **C.2.3** NOT YET SUPPORTED diagnostics | **Missing** — throws `FormatException` only |
-| **C.2.4** SupplyChain-class fixture | **Missing** |
-| **C.3** Printer | Scaffold; no relationships; prints unparseable entry/exit blobs |
-| **C.3.2** Structural round-trip | Weak (name/counts only; one entity) |
-| **C.4** Tests | 3 happy-path only |
-
-**Do not claim Slice C exit until C′ required items are green.**
-
----
-
-### Slice C′: Fix Phase 1a parser/printer (CURRENT) — from C scaffold review
-
-**Audience:** Implementing agent.  
-**Source:** Code review of untracked Parsing/* + grammar + tests (2026-07-17).
-
-#### C′.1 — Bug: `require` / `when` gates are fake policies (required)
-
-**Symptom:** In `ParseActionBody`:
-
-```csharp
-// require HasName → Policy("HasName", Literal(true))  // always true, not entity policy
-// when Draft → Policy("when_Draft", Literal(true))    // not a stage gate
-```
-
-Runtime `CallAction` evaluates `action.Policies` as boolean guards. So:
-
-- `require HasName` does **not** evaluate the entity policy `HasName` expression.
-- `when Draft` does **not** restrict availability to stage Draft (and BR.3.2 stage gates are still missing at runtime anyway).
-
-**Do (pick one coherent model for Phase 1a):**
-
-| Option | Behavior |
-|--------|----------|
-| **G1 (recommended)** | `require PolicyName` → attach **reference** to existing entity `Policy` by name (copy expression from entity policy at parse time, or store name-only if IR supports it). Fail parse/analyze if policy missing. |
-| **G2** | Drop `require`/`when` from Phase 1a parser until stage-gated `CallAction` exists; document exclusion. |
-
-For **stage `when` gates:** until runtime stage-gates exist, either omit from Phase 1a or store as metadata (not `Literal(true)` policies). Do **not** invent always-true policy stubs.
-
-**Tests:** parse `require HasName` with real entity policy body; after evolve + analyze, action guard evaluates false when subject fails policy (or analysis proves binding).
-
-- [ ] **C′.1.1** Fix require → real policy binding
-- [ ] **C′.1.2** Fix or defer stage `when` gates honestly
-- [ ] **C′.1.3** Tests
-
----
-
-#### C′.2 — Bug: `is not` parses as `Equal(left, Not(right))` (required)
-
-**Symptom:** `ParseComparison` treats `TokenKind.Is` as comparison, then `ParsePrimary` on `not null` becomes `Not(null)`. Result: `Name is not null` → `Equal(Name, Not(null))` instead of `NotEqual(Name, null)`.
-
-Dead code path later looks for `Is` + peek `Not` after comparison already consumed `Is`.
-
-**Do:** On `Is`, peek `Not`; if present, consume both and emit `NotEqual`. Else emit `Equal`.
-
-**Test:** `Parse_IsNotNull_ProducesNotEqual`.
-
-- [ ] **C′.2.1** Fix `is not` / `is` parse
-- [ ] **C′.2.2** Test
-
----
-
-#### C′.3 — Bug: `pattern("...")` captures wrong token (required)
-
-**Symptom:**
-
-```csharp
-Expect(TokenKind.StringLiteral); // advances past string
-var pattern = _current.Text;     // next token (often `)`) — wrong
-```
-
-**Do:** capture return value of `Expect(TokenKind.StringLiteral)` (or read text before second Expect).
-
-**Test:** `Parse_PatternConstraint_StoresRegex`.
-
-- [ ] **C′.3.1** Fix pattern capture
-- [ ] **C′.3.2** Test
-
----
-
-#### C′.4 — `EnsurePrimitives` duplicates on multi-entity files (required)
-
-**Symptom:** Every `ParseEntity` emits 5× `AddPrimitiveTypeChange`. `AddPrimitiveTypeChange.ApplyTo` always `Types.Add` — second entity → duplicate primitive names → structural failure / pollution.
-
-**Do:** Emit primitives **once** per parse (after domain header), or skip if name already queued in this parse’s change list. Prefer bootstrap via `DomainFactory.Create(name)` then only structural changes (cleaner).
-
-**Test:** two-entity `.poly` evolves successfully; primitive count = 5 (or factory set), not 10.
-
-- [ ] **C′.4.1** Single primitive bootstrap
-- [ ] **C′.4.2** Multi-entity fixture test
-
----
-
-#### C′.5 — Relationships (N2) missing from parse/print (required for subscriptions)
-
-**Gap:** Grammar/output table lists `AddRelationshipChange`; parser never emits relationships; printer never prints them. Stage subscriptions cannot analyze clean without edges.
-
-**Do (Phase 1a N2 form — pick one syntax and freeze in grammar doc):**
+**Frozen N2 relationship syntax:**
 
 ```text
-// Recommended explicit form (matches IR, not property-line N1):
-relationship Tracks from Tracker to Order one
-// or block form — whatever is frozen in dsl-phase1a-grammar.md
+relationship <Name> from <SourceEntity> to <TargetEntity> one|many
 ```
 
-1. Update `dsl-phase1a-grammar.md` with the chosen N2 relationship syntax.
-2. Parser → `AddRelationshipChange` (cardinality + optional owned).
-3. Printer → emit same form from `domain.Relationships`.
-4. Test: two entities + relationship + subscription parses, evolves, analyzes without `DMSS003`.
+#### Optional residual (post-D polish / BR)
 
-- [ ] **C′.5.1** Grammar N2 relationship syntax
-- [ ] **C′.5.2** Parse + print
-- [ ] **C′.5.3** Subscription end-to-end DSL fixture
-
----
-
-#### C′.6 — Grammar doc consistency (required hygiene)
-
-| Issue | Fix |
-|-------|-----|
-| §7 EBNF wraps domain in `{ }` | Match §1 / implementation (no domain braces) |
-| Example places `HasName: policy` **outside** entity | Policies are entity members only in parser |
-| Output list mentions parameters / entry/exit | Phase 1a parser has no action params, no entry/exit syntax — remove or mark out of scope |
-| Named range args claimed | Parser does not implement `range(min: 0)` — implement or drop claim |
-
-- [ ] **C′.6.1** Align grammar doc with parser reality
+- [ ] CallAction e2e: DSL-parsed `require` blocks instance action when policy false
+- [ ] `ParseResult` multi-error (D wraps `FormatException` today)
+- [ ] Document one polarity per `require` line
+- [ ] owned relationships / richer fixtures
+- [ ] **BR.*** event data-flow, stage-gated CallAction, entry/exit
 
 ---
 
-#### C′.7 — Diagnostics / unsupported constructs (required for agent honesty)
+### Slice D: MCP — `apply_dsl` + dual path — **DONE**
 
-**Gap:** Plan requires parse errors as diagnostics, not throws; unsupported keywords should be “not yet supported”. Today: `FormatException` only.
+**Verified 2026-07-17:** `DslTool` + `McpSessionStore.Replace` + README dual path; MCP smoke **42** green (6 DSL-focused).
 
-**Do (minimal):**
+| Item | Status | Evidence |
+|------|--------|----------|
+| **D.1** apply_dsl | Done | parse → evolve empty domain → strict analysis → `Replace` |
+| **D.2** replace semantics | Done | tool description + README; revision reset to **0** |
+| **D.3** micro-tools retained | Done | still registered |
+| **D.4** export_dsl | Done | printer; export round-trip smoke |
+| **D.5** no Capture | Done | not implemented |
+| **D.6** honesty | **Partial** | REPLACES clear; stage `when` / store limits under-documented → **D′.2** |
+| **D.7** README dual path | Done | batch vs incremental table |
+| **D.8** smoke | Done | minimal, relationship, missing require, malformed, export RT, missing session |
+| Program | Done | `.WithTools<DslTool>()` |
 
-1. `ParseResult { Changes, Diagnostics }` or collect `List<string>` / `Diagnostic` without throwing on first error where practical.
-2. On keywords `actor`, `value`, `create`, `schedule`, `for`, `parallel`, `import` — emit stable not-yet-supported message (may still abort further parse of that construct).
-3. Tests: unsupported construct yields message containing “not supported in Phase 1a” (or grammar table wording).
-
-- [ ] **C′.7.1** Result type or diagnostic list
-- [ ] **C′.7.2** At least 3 unsupported-keyword tests
-
----
-
-#### C′.8 — Printer honesty (required)
-
-| Issue | Fix |
-|-------|-----|
-| Prints OnEntry/OnExit as bare effects inside stage | Unparseable; omit until grammar has `entry`/`exit`, or print comment `// on-entry` |
-| Prints `if` for `ConditionalEffect` | Not in Phase 1a grammar — omit or comment |
-| No relationship output | C′.5 |
-| Fake `when_*` policies round-trip as `require when_Draft` | Goes away when C′.1 fixed |
-
-- [ ] **C′.8.1** Printer only emits Phase 1a-parseable surface
-- [ ] **C′.8.2** Round-trip test asserts property constraints + stages + actions + effects (not just counts)
+**Shipped apply semantics:** evolve from empty `Domain` (parser emits primitives) → on success **replace** session; **revision = 0**.
 
 ---
 
-#### C′.9 — Tests expansion (required for C exit)
+### Slice D′: Optional MCP polish (from D code review)
 
-Minimum additional tests:
+#### D′.1 — Fail-fast missing session (recommended)
 
-- [ ] **C′.9.1** Constraints: required, unique, range(min open), length, pattern
-- [ ] **C′.9.2** Policy + require (after C′.1)
-- [ ] **C′.9.3** Subscription parse
-- [ ] **C′.9.4** Multi-entity + relationship
-- [ ] **C′.9.5** `is not null` expression shape
-- [ ] **C′.9.6** Malformed input (missing brace) — diagnostic or clear error with line/col
-- [ ] **C′.9.7** Prefer `DomainFactory.Create` / bootstrap with built-ins as evolve base (not empty domain without types)
+**Symptom:** `ApplyDsl` parses + evolves **before** `Replace`. Bad `sessionId` still does full work, then fails.
 
----
+**Do:** `TryGet(sessionId)` first; then parse → evolve → `Replace`.
 
-#### C′ exit
+- [ ] **D′.1.1** Early session check
+- [ ] **D′.1.2** Existing missing-session test still green
 
-- [ ] C′.1–C′.5 required items green
-- [ ] C′.6 grammar matches code
-- [ ] C′.7 diagnostics story for agents
-- [ ] C′.8–C′.9 tests green
-- [ ] Multi-entity SupplyChain-thin fixture round-trips structurally (entities, props, constraints, stages, actions, effects, relationships, subscriptions)
-- [ ] No fake always-true policies for gates
+#### D′.2 — Honesty blurb (recommended)
 
-**Then:** Slice D (`apply_dsl` MCP) may start.
+**Gap:** Tool description lists require + subscriptions without noting:
 
----
+- action `when Stage` is **not** runtime-enforced
+- stage subscriptions need `DomainInstanceStore` + registered instances (MCP session does not auto-run fan-out)
 
-### Slice D: MCP — `apply_dsl` + dual path
+**Do:** Short honesty paragraph in `apply_dsl` description and README Tool Honesty section.
 
-- [ ] **D.1** `apply_dsl` tool: accept `.poly` text → parse → evolve → analyze → return diagnostics + snapshot. **Strict only** (analysis errors reject commit).
-- [ ] **D.2** Wire through `McpSessionStore` + `Poly.Mcp/Tools/DomainTools.cs`.
-- [ ] **D.3** Affordances: prefer DSL/batch after success, but **retain** micro-tools (`add_entity`, `add_property`, `add_stage`, `add_action`, …) for discovery and repair.
-- [ ] **D.4** Optional later: block-level tools (`add_entity_block`) as convenience — **not** a requirement to delete micro-tools.
-- [ ] **D.5** Capture mode for `apply_dsl` is **out of this slice** (honesty / reverse-engineering workstream — see MCP expansion plan).
-- [ ] **D.6** Tool descriptions must not claim Slice B runtime execution until a dedicated execute/simulate tool exists and is true.
-- [ ] **D.7** Update MCP README: dual path documented.
+- [ ] **D′.2.1** Tool + README
 
-**Slice D exit:** Strict `apply_dsl` works; micro-tools still registered; docs honest.
+#### D′.3 — Revision after replace (optional)
+
+**Gap:** `Replace` sets `Revision: 0` while `Evolve` increments — non-monotonic for agents.
+
+**Do:** Document “apply_dsl resets revision to 0” **or** use `current.Revision + 1`.
+
+- [ ] **D′.3.1** Document or change
+
+#### D′.4 — Nice-to-haves
+
+- [ ] **D′.4.1** Affordance cross-links (`export_dsl` ↔ `apply_dsl`)
+- [ ] **D′.4.2** Empty polyText explicit error
+- [ ] **D′.4.3** Commit dirty Parsing+Mcp working tree if not committed
+- [ ] **D′.4.4** CallAction require e2e after apply_dsl (trust)
 
 ---
 
-### Slice E: Phase 1b grammar (pull-only)
+### Slice E: Phase 1b grammar (**pull-only** — not automatic next)
 
-Only when a named consumer needs value types, `create in`, or quantifiers.
+Only when a **named consumer** needs value types, `create in`, quantifiers, etc.
 
-- [ ] Extend grammar doc + parser + printer + tests.
-- [ ] Runtime support for any new effect used in the green path (do not parse what cannot be analyzed/executed without honesty flags).
+- [ ] Freeze Phase 1b grammar delta in a new doc or extend `dsl-phase1a-grammar.md`
+- [ ] Parser + printer + tests
+- [ ] Runtime support for any new effect on the green path (honesty)
+
+**Do not** start E just because D is done.
 
 ---
 
@@ -658,19 +525,16 @@ Only when a named consumer needs value types, `create in`, or quantifiers.
 | A′′ Residual honesty/query | 0.5–1 day | Done |
 | B + B′ Runtime vertical | — | **Done** (CallAction→when literals) |
 | B residual (event test, entry/exit, …) | 0.5–2 days | Optional polish |
-| C Phase 1a scaffold | — | Partial (tokenizer/parser/printer + 3 tests) |
-| **C′ Parser correctness** | **1–3 days** | **Current pick** |
-| D MCP `apply_dsl` | 2–4 days | After C′ |
+| C … C′′′ Phase 1a parse/print | — | Done (~17 Parsing tests) |
+| **D MCP apply/export_dsl** | — | **Done** (42 MCP smoke incl. DSL) |
+| D′ MCP polish | 0.5 day | Optional |
 | E Phase 1b | Pull-only | Sized by consumer |
-
-**Do not** plan this as a single 10–15 calendar-day completion of A–D. Sequence slices; land green exits.
 
 **Dependency summary:**
 
 ```text
-0 → … → B+B′ → C scaffold → C′ → D → E
-                         ↘ BR residual (optional)
-You are here: C′
+0 → … → B+B′ → C…C′′′ → D → (D′ optional) → E / BR residual
+You are here: D done; pick D′ or next product need
 ```
 
 ---
@@ -694,23 +558,22 @@ You are here: C′
 - [ ] B′.2 / BR.1: event property flow tested or Option B documented.
 - [ ] BR.3: entry/exit, stage gates, auto-Add children (optional).
 
-### Slice C + C′
+### Slice C … C′′′ — **DONE**
 
-- [x] Phase 1a grammar doc in-repo (`dsl-phase1a-grammar.md`) — needs C′.6 consistency pass.
-- [x] Parser/printer scaffold exists; 3 minimal tests pass.
-- [ ] **C′:** require/when semantics, `is not`, pattern, primitives once, relationships N2, diagnostics, printer honesty, expanded tests.
-- [ ] Expressions map correctly (`is not` → NotEqual).
+- [x] Phase 1a grammar + parser/printer + **17** Parsing tests.
+- [x] N2 relationships; deferred require; no when_* stubs; entity-level `require not` fixed.
 
-### Slice D
+### Slice D — **DONE**
 
-- [ ] Strict `apply_dsl` MCP tool.
-- [ ] Micro-tools retained; dual path documented.
-- [ ] No false capability claims.
+- [x] Strict `apply_dsl` + `export_dsl`.
+- [x] Replace semantics documented (tool + README).
+- [x] Micro-tools retained; dual path documented.
+- [ ] **D′** honesty blurb for stage `when` / instance store (optional).
 
 ### Cross-cutting
 
-- [ ] Test suite green after each slice (count may change).
-- [ ] Work broken into `simple-agent-tasks` when agents execute.
+- [x] Relevant tests green after D (MCP + Parsing).
+- [ ] Commit working tree if still dirty.
 - [ ] `AGENTS.md` principles unchanged unless a principle itself changes (rare).
 
 ---
@@ -726,27 +589,27 @@ You are here: C′
 | 2026-07-17 | A′′ **implementation reviewed**: A′′.1–.5 done. Current pick was Slice B. |
 | 2026-07-17 | B **scaffold reviewed**: B′ tasks added (CallAction notify, event bag, store.Add, Source=subscriber). |
 | 2026-07-17 | B′ **implementation reviewed**: CallAction→when vertical green. Recommended next was Slice C. |
-| 2026-07-17 | C **scaffold reviewed** (untracked Parsing/*): grammar + tokenizer + parser + printer + 3 tests. **C′** added — fake require/when policies; `is not` bug; pattern token bug; EnsurePrimitives duplicates; no relationship syntax; throws not diagnostics; weak tests. |
+| 2026-07-17 | C **scaffold reviewed**: C′ tasks added. |
+| 2026-07-17 | C′ **implementation reviewed** → C′′ tasks. |
+| 2026-07-17 | C′′ review → C′′′.1 `require not` StageName bug. |
+| 2026-07-17 | **C′′′ verified.** Next was D. |
+| 2026-07-17 | **D reviewed:** `apply_dsl` (replace) + `export_dsl` + README dual path + smoke tests. **D′** optional: early session check, honesty text, revision policy. Phase 1 vertical product path complete. |
 
 ### Appendix — Relationship authoring (N2 interim)
 
-**Accepted through Slice B:** Relationships are first-class `Relationship` records on `Domain`, authored via `AddRelationshipChange` / builders / MCP relationship tools. `StageSubscription.RelationshipName` resolves with `Source.TypeName == subscriber entity` and `Name == RelationshipName`.  
+```text
+relationship <Name> from <SourceEntity> to <TargetEntity> one|many
+```
 
-**Runtime (thin):** Matching is **type-level** until an instance link store exists (BR.4.4).  
+Property-line form deferred. Runtime correlation type-level until BR.4.4.
 
-**DSL Phase 1a (C′.5):** Must emit N2 **explicit** relationship syntax (not property-line N1). Property-line form remains deferred to later Phase 1b/N1.
-
-### Appendix — Agent pick order (after C scaffold review)
+### Appendix — Agent pick order (after D review)
 
 | Order | Task | Severity | Blocks |
 |-------|------|----------|--------|
-| 1 | **C′.1** require/when real semantics (no Literal(true) stubs) | Bug | Honest policies |
-| 2 | **C′.2** `is not` → NotEqual | Bug | Policy expressions |
-| 3 | **C′.3** pattern() string capture | Bug | Constraints |
-| 4 | **C′.4** primitives once / DomainFactory base | Bug | Multi-entity files |
-| 5 | **C′.5** N2 relationship parse/print + subscription fixture | Gap | when subscriptions |
-| 6 | **C′.6–C′.9** grammar, diagnostics, printer honesty, tests | Required | C exit |
-| 7 | **Slice D** `apply_dsl` MCP | Product | After C′ |
-| 8 | **BR.*** runtime polish | Optional | Parallel |
+| 1 | **D′.1** Session exists before parse/evolve | Suggestion | Waste on bad sessionId |
+| 2 | **D′.2** Honesty: stage `when` + subscription runtime needs | Honesty | Trust bar |
+| 3 | **D′.3** Document or fix revision reset on replace | Optional | Agent revision UX |
+| 4 | **BR.*** / **E** as product needs | Optional | Depth / Phase 1b |
 
-Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish; run DomainModeling tests before calling done. Parser must not invent always-true policies for gates.
+Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish; run DomainModeling tests before calling done. **Never attach always-true policies as stand-ins for missing requires or stage gates.**

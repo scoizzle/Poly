@@ -104,4 +104,22 @@ internal static class McpSessionStore {
     public static bool Remove(string sessionId) {
         return Sessions.TryRemove(sessionId, out _);
     }
+
+    /// <summary>
+    /// Atomically replaces a session's domain and analysis. The revision counter
+    /// is set to the current revision + 1 (not reset to zero), so agents see
+    /// monotonically increasing revisions across both evolve and replace cycles.
+    /// Used by <c>apply_dsl</c> to replace the session with a freshly-parsed domain.
+    /// </summary>
+    public static bool Replace(string sessionId, Domain domain, AnalysisResult? analysis) {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("Session ID is required.", nameof(sessionId));
+
+        lock (StoreLock) {
+            if (!Sessions.TryGetValue(sessionId, out var current))
+                return false;
+            Sessions[sessionId] = new McpSessionState(domain, analysis, current.Revision + 1);
+            return true;
+        }
+    }
 }

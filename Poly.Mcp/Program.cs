@@ -17,6 +17,7 @@ builder.Services
     .WithTools<SessionTool>()
     .WithTools<QueryTool>()
     .WithTools<EvolveTool>()
-    .WithTools<PolicyTool>();
+    .WithTools<PolicyTool>()
+    .WithTools<DslTool>();
 
 await builder.Build().RunAsync();

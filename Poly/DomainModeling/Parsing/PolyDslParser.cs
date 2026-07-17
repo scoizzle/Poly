@@ -18,9 +18,20 @@ public sealed class PolyDslParser {
     private Token _current;
     private string _domainName = "";
     private int _entityIndex;
+    private bool _primitivesAdded;
 
     // Accumulated changes for the current entity
     private string _currentEntityName = "";
+    private readonly Dictionary<string, DomainExpression> _entityPolicies = new(StringComparer.Ordinal);
+
+    // Pending requires that must be resolved after the full entity body is parsed
+    private readonly List<PendingRequire> _pendingRequires = new();
+
+    private readonly record struct PendingRequire(
+        string ActionName,
+        string? StageName,
+        string PolicyName,
+        bool Negated);
 
     public PolyDslParser(string text) {
         _tokenizer = new PolyDslTokenizer(text);
@@ -44,23 +55,49 @@ public sealed class PolyDslParser {
             ParseEntity(changes);
         }
 
+        // ── Relationships (top-level N2 form) ──────────────────
+        while (_current.Kind == TokenKind.Relationship) {
+            ParseRelationship(changes);
+        }
+
         Expect(TokenKind.EndOfFile);
         return changes;
+    }
+
+    private void EnsurePrimitivesOnce(List<DomainChange> changes) {
+        if (_primitivesAdded) return;
+        _primitivesAdded = true;
+        foreach (var p in new[] { ("Text", TypeCategory.Text), ("Number", TypeCategory.Integer),
+            ("Boolean", TypeCategory.Boolean), ("DateTime", TypeCategory.DateTime),
+            ("Date", TypeCategory.Primitive | TypeCategory.Temporal) }) {
+            changes.Add(new AddPrimitiveTypeChange(p.Item1, p.Item2, []));
+        }
     }
 
     private void ParseEntity(List<DomainChange> changes) {
         var entityName = ExpectIdentifier(TokenKind.Identifier, "entity name");
         _currentEntityName = entityName;
+        _entityPolicies.Clear();
+        _pendingRequires.Clear();
         _entityIndex++;
         Expect(TokenKind.Colon);
+
+        // Check for unsupported keyword before expecting 'entity'
+        if (_current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(_current.Text)) {
+            throw new FormatException(
+                $"'{_current.Text}' is not supported in Phase 1a (use 'entity' instead)");
+        }
         Expect(TokenKind.Entity);
         Expect(TokenKind.LBrace);
 
         changes.Add(new AddEntityChange(entityName, []));
-        EnsurePrimitives(changes);
+        EnsurePrimitivesOnce(changes);
 
         while (_current.Kind != TokenKind.RBrace) {
-            if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
+            if (_current.Kind == TokenKind.Relationship) {
+                ParseRelationship(changes);
+            }
+            else if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
                 // Could be property, stage, action, or policy
                 var name = _current.Text;
                 var saved = _current;
@@ -80,6 +117,7 @@ public sealed class PolyDslParser {
                     ParseProperty(name, _current.Kind, changes);
                 }
                 else {
+                    CheckUnsupportedKeyword(name, _current.Text);
                     throw Error($"Expected type, stage, action, or policy after '{name}:'");
                 }
             }
@@ -89,6 +127,37 @@ public sealed class PolyDslParser {
         }
 
         Expect(TokenKind.RBrace);
+
+        // ── Resolve pending requires (now all policies for this entity are known) ──
+        ResolvePendingRequires(changes);
+    }
+
+    /// <summary>
+    /// Resolves all collected require references against known entity policies.
+    /// Errors on missing policies — no silent Literal(true) fallback.
+    /// </summary>
+    private void ResolvePendingRequires(List<DomainChange> changes) {
+        foreach (var pr in _pendingRequires) {
+            if (pr.Negated) {
+                // require not PolicyName
+                if (!_entityPolicies.TryGetValue(pr.PolicyName, out var expr)) {
+                    throw Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
+                        $"which is not defined on entity '{_currentEntityName}'.");
+                }
+                var policyName = $"not_{pr.PolicyName}";
+                changes.Add(new AddPolicyToActionChange(_currentEntityName, pr.ActionName,
+                    new Policy(policyName, DomainExpression.Not(expr))));
+            }
+            else {
+                // require PolicyName
+                if (!_entityPolicies.TryGetValue(pr.PolicyName, out var expr)) {
+                    throw Error($"Action '{pr.ActionName}' requires policy '{pr.PolicyName}' " +
+                        $"which is not defined on entity '{_currentEntityName}'.");
+                }
+                changes.Add(new AddPolicyToActionChange(_currentEntityName, pr.ActionName,
+                    new Policy(pr.PolicyName, expr)));
+            }
+        }
     }
 
     private void ParseProperty(string name, TokenKind typeKind, List<DomainChange> changes) {
@@ -157,15 +226,13 @@ public sealed class PolyDslParser {
         if (_current.Kind == TokenKind.Action)
             Advance();
 
-        // Stage gates: when StageName, StageName2
-        var stageGates = new List<string>();
-        var requirePolicies = new List<string>();
-        var requireNotPolicies = new List<string>();
-
+        // Stage gates and require policies (collected, not emitted — resolved after entity body)
         while (_current.Kind == TokenKind.When || _current.Kind == TokenKind.Require) {
             if (_current.Kind == TokenKind.When) {
                 Advance(); // consume 'when'
-                stageGates.AddRange(ParseIdentifierList());
+                // Stage gates are not runtime-enforced in Phase 1a (BR.3.2).
+                // Silently consume the gate names so the parser advances past them.
+                ParseIdentifierList();
             }
             else {
                 Advance(); // consume 'require'
@@ -175,10 +242,9 @@ public sealed class PolyDslParser {
                     Advance();
                 }
                 var policies = ParseIdentifierList();
-                if (negated)
-                    requireNotPolicies.AddRange(policies);
-                else
-                    requirePolicies.AddRange(policies);
+                foreach (var p in policies) {
+                    _pendingRequires.Add(new PendingRequire(actionName, stageName, p, negated));
+                }
             }
         }
 
@@ -200,25 +266,6 @@ public sealed class PolyDslParser {
 
         foreach (var e in effects) {
             changes.Add(new AddEffectToActionChange(_currentEntityName, actionName, e));
-        }
-
-        // Stage gates → policies on the action
-        foreach (var gate in stageGates) {
-            // Stage gates are expressed as policies — "when Draft" means the action
-            // is available in that stage. We add a domain policy reference.
-            changes.Add(new AddPolicyToActionChange(_currentEntityName, actionName,
-                new Policy($"when_{gate}", DomainExpression.Literal(true))));
-        }
-
-        // Require policies → policies on the action
-        foreach (var p in requirePolicies) {
-            changes.Add(new AddPolicyToActionChange(_currentEntityName, actionName,
-                new Policy(p, DomainExpression.Literal(true))));
-        }
-
-        foreach (var p in requireNotPolicies) {
-            changes.Add(new AddPolicyToActionChange(_currentEntityName, actionName,
-                new Policy($"not_{p}", DomainExpression.Literal(true))));
         }
 
         Expect(TokenKind.RBrace);
@@ -247,6 +294,12 @@ public sealed class PolyDslParser {
             throw Error("Unexpected 'when' inside action body (subscriptions are stage-level)");
         }
 
+        // Check for unsupported effect keywords
+        if (_current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(_current.Text)) {
+            throw new FormatException(
+                $"'{_current.Text}' is not supported in Phase 1a");
+        }
+
         throw Error($"Expected effect (transition, assign), got '{_current.Text}'");
     }
 
@@ -266,11 +319,38 @@ public sealed class PolyDslParser {
         changes.Add(new AddStageSubscriptionChange(_currentEntityName, stageName, subscription));
     }
 
+    private void ParseRelationship(List<DomainChange> changes) {
+        Advance(); // consume 'relationship'
+        var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
+        Expect(TokenKind.From);
+        var source = ExpectIdentifier(TokenKind.Identifier, "source entity name");
+        Expect(TokenKind.To);
+        var target = ExpectIdentifier(TokenKind.Identifier, "target entity name");
+
+        var cardinality = RelationshipCardinality.OneToOne;
+        if (_current.Kind == TokenKind.One) {
+            Advance();
+            cardinality = RelationshipCardinality.OneToOne;
+        }
+        else if (_current.Kind == TokenKind.Many) {
+            Advance();
+            cardinality = RelationshipCardinality.OneToMany;
+        }
+        else {
+            throw Error($"Expected cardinality ('one' or 'many') for relationship '{relName}'");
+        }
+
+        changes.Add(new AddRelationshipChange(relName,
+            new DomainTypeReference(source), new DomainTypeReference(target),
+            cardinality, [], false));
+    }
+
     private void ParsePolicy(string name, List<DomainChange> changes) {
         Advance(); // consume 'policy'
         Expect(TokenKind.LBrace);
         var expr = ParseExpression();
         changes.Add(new AddPolicyToEntityChange(_currentEntityName, new Policy(name, expr)));
+        _entityPolicies[name] = expr;
         Expect(TokenKind.RBrace);
     }
 
@@ -314,11 +394,28 @@ public sealed class PolyDslParser {
 
         if (IsComparisonOp(_current.Kind)) {
             var op = _current.Kind;
-            Advance();
+
+            // Special case: "is not" → NotEqual (consume both tokens)
+            if (op == TokenKind.Is && PeekIs(TokenKind.Not)) {
+                Advance(); // consume 'is'
+                Advance(); // consume 'not'
+                var rhs = ParsePrimary();
+                return DomainExpression.NotEqual(left, rhs);
+            }
+
+            Advance(); // consume the operator
+
+            // Handle standalone "is" without following "not" → Equal
+            if (op == TokenKind.Is) {
+                var rhs = ParsePrimary();
+                return DomainExpression.Equal(left, rhs);
+            }
+
+            // Standard operators: == != > >= < <=
             var right = ParsePrimary();
 
             return op switch {
-                TokenKind.Is or TokenKind.Eq => DomainExpression.Equal(left, right),
+                TokenKind.Eq => DomainExpression.Equal(left, right),
                 TokenKind.Neq => DomainExpression.NotEqual(left, right),
                 TokenKind.Gt => DomainExpression.GreaterThan(left, right),
                 TokenKind.Gte => DomainExpression.GreaterThanOrEqual(left, right),
@@ -326,14 +423,6 @@ public sealed class PolyDslParser {
                 TokenKind.Lte => DomainExpression.LessThanOrEqual(left, right),
                 _ => throw Error($"Unknown comparison operator '{op}'"),
             };
-        }
-
-        // Allow chained "is not" for "X is not null"
-        if (_current.Kind == TokenKind.Is && PeekIs(TokenKind.Not)) {
-            Advance(); // is
-            Advance(); // not
-            var right = ParsePrimary();
-            return DomainExpression.NotEqual(left, right);
         }
 
         return left;
@@ -433,8 +522,7 @@ public sealed class PolyDslParser {
             case TokenKind.Pattern:
                 Advance();
                 Expect(TokenKind.LParen);
-                Expect(TokenKind.StringLiteral);
-                var pattern = _current.Text;
+                var pattern = Expect(TokenKind.StringLiteral).Text;
                 Expect(TokenKind.RParen);
                 return new PatternConstraint(pattern);
 
@@ -497,13 +585,18 @@ public sealed class PolyDslParser {
         _ => false,
     };
 
-    private void EnsurePrimitives(List<DomainChange> changes) {
-        // Add standard primitives if not already present
-        // (the evolution layer deduplicates by name)
-        foreach (var p in new[] { ("Text", TypeCategory.Text), ("Number", TypeCategory.Integer),
-            ("Boolean", TypeCategory.Boolean), ("DateTime", TypeCategory.DateTime),
-            ("Date", TypeCategory.Primitive | TypeCategory.Temporal) }) {
-            changes.Add(new AddPrimitiveTypeChange(p.Item1, p.Item2, []));
+    private static readonly HashSet<string> _unsupportedKeywords = new(StringComparer.OrdinalIgnoreCase) {
+        "actor", "value", "create", "schedule", "parallel", "invoke", "for", "function"
+    };
+
+    /// <summary>
+    /// Throws a specific "not supported in Phase 1a" error if <paramref name="keyword"/>
+    /// is a known unsupported construct keyword. Otherwise returns without throwing.
+    /// </summary>
+    private static void CheckUnsupportedKeyword(string name, string keyword) {
+        if (_unsupportedKeywords.Contains(keyword)) {
+            throw new FormatException(
+                $"'{keyword}' is not supported in Phase 1a (used as type for '{name}')");
         }
     }
 

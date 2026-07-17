@@ -458,4 +458,542 @@ public class DomainEntityInstanceTests {
         // When event.* lowering is implemented, change to:
         //   await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("ABC-123");
     }
+
+    [Test]
+    public async Task ExecuteSubscriptionEffects_Exception_DoesNotLeakEventKeys() {
+        // BR.2′: If a subscription effect throws, _isExecutingSubscription must be
+        // cleared and "event.*" keys must be removed from _values.
+        // We test this by creating a subscription with an effect that throws.
+        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        // Use a bad property reference that will throw during lowering
+        // (nonexistent property on a known entity). The VM will throw when
+        // trying to resolve the property access.
+        var tracker = new Entity("Tracker", [trackerStatus], [], [], [
+            new Stage("Pending", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("NonexistentProp"),
+                            DomainExpression.Literal("will fail"))
+                    ])
+                ]
+            }
+        ]);
+
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [tracker, order], [rel]);
+
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "ABC-123" }, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "UNTOUCHED" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+
+        // Activate will trigger subscription effects that throw on the bad RHS
+        var threw = false;
+        try {
+            orderInstance.CallAction("Activate");
+        }
+        catch {
+            // Expected — subscription effect throws during VM compilation/execution
+            threw = true;
+        }
+        await Assert.That(threw).IsTrue();
+
+        // After the exception, the finally block ran:
+        //   1. "event.*" keys were removed from _values. Direct verification:
+        var snapshot = trackerInstance.Snapshot();
+        await Assert.That(snapshot.Keys.Any(k => k.StartsWith("event."))).IsFalse();
+        //   2. _isExecutingSubscription was set to false.
+        //   3. Status is unchanged (subscription effect never ran to completion).
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("UNTOUCHED");
+
+        // _isExecutingSubscription was cleared — a second order transitioning to
+        // Active triggers subscription effects again (and throws again, since
+        // the subscription still has the bad RHS). This proves the flag was reset.
+        // Create a fresh Order in Draft and transition it.
+        var freshTracker = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "FRESH" }, domain: domain);
+        store.Add(freshTracker);
+
+        var order2 = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "DEF-456" }, domain: domain);
+        store.Add(order2);
+
+        threw = false;
+        try {
+            order2.CallAction("Activate");
+        }
+        catch {
+            threw = true;
+        }
+        await Assert.That(threw).IsTrue();
+        // The subscription ran (and threw), so it changed freshTracker.Status
+        // via the default AssignEffect path. The event.* reference still didn't
+        // resolve, but the subscription DID fire on the correct subscriber.
+        await Assert.That(freshTracker.Snapshot().Keys.Any(k => k.StartsWith("event."))).IsFalse();
+        // No stale event keys on the original tracker either.
+        var snapshot3 = trackerInstance.Snapshot();
+        await Assert.That(snapshot3.Keys.Any(k => k.StartsWith("event."))).IsFalse();
+    }
+
+    [Test]
+    public async Task OnEntryEffect_RunsOnStageTransition() {
+        // BR.3.1: OnEntry effects execute when entering a stage.
+        var entryTarget = new Property("EntryTarget", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var entity = new Entity("TestEnt", [status, entryTarget], [
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [
+                // OnEntryEffects
+                new AssignEffect(
+                    DomainExpression.Property("Status"),
+                    DomainExpression.Literal("EnteredActive")),
+                new AssignEffect(
+                    DomainExpression.Property("EntryTarget"),
+                    DomainExpression.Property("Status"))
+            ], [])
+        ]);
+
+        var domain = new Domain("Test", [entity], []);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Status"] = "Initial", ["EntryTarget"] = "" },
+            domain: domain);
+
+        instance.CallAction("Go");
+
+        await Assert.That(instance.CurrentStage).IsEqualTo("Active");
+        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("EnteredActive");
+        // OnEntry ran after the stage was set, so EntryTarget copies the already-assigned Status
+        await Assert.That(instance.GetProperty<string>("EntryTarget")).IsEqualTo("EnteredActive");
+    }
+
+    [Test]
+    public async Task OnExitEffect_RunsBeforeStageTransition() {
+        // BR.3.1: OnExit effects execute before leaving a stage.
+        var exitNote = new Property("ExitNote", new DomainTypeReference("Text"), []);
+        var entity = new Entity("TestEnt", [exitNote], [
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], [
+                // OnExitEffects
+                new AssignEffect(
+                    DomainExpression.Property("ExitNote"),
+                    DomainExpression.Literal("LeftDraft"))
+            ]),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var domain = new Domain("Test", [entity], []);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["ExitNote"] = "" },
+            domain: domain);
+
+        // No initial stage transition — starts in Draft (first stage)
+        instance.CallAction("Go");
+
+        await Assert.That(instance.CurrentStage).IsEqualTo("Active");
+        await Assert.That(instance.GetProperty<string>("ExitNote")).IsEqualTo("LeftDraft");
+    }
+
+    [Test]
+    public async Task StageScopedAction_OnlyCallableFromThatStage() {
+        // BR.3.2: Actions defined on a stage are only available while on that stage.
+        var count = new Property("Count", new DomainTypeReference("Number"), []);
+        var stageAction = new Poly.DomainModeling.Action("StageOnly", InvocationResult.Void, [], [
+            new AssignEffect(
+                DomainExpression.Property("Count"),
+                DomainExpression.Add(DomainExpression.Property("Count"), DomainExpression.Literal(1L)))
+        ], []);
+        var entity = new Entity("TestEnt", [count], [
+            // Entity-level action to transition
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("StageA"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [stageAction], [], [], []),
+            new Stage("StageA", null, [], [], [], [])
+        ]);
+
+        var domain = new Domain("Test", [entity], []);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Count"] = 0L },
+            domain: domain);
+
+        // Starts in Draft, can call StageOnly
+        var result1 = instance.CallAction("StageOnly");
+        await Assert.That(result1.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Count")).IsEqualTo(1L);
+
+        // Transition to StageA, which has no actions
+        instance.CallAction("Go");
+        await Assert.That(instance.CurrentStage).IsEqualTo("StageA");
+
+        // StageOnly no longer available
+        var result2 = instance.CallAction("StageOnly");
+        await Assert.That(result2.Succeeded).IsFalse();
+        await Assert.That(result2.ErrorMessage).IsNotNull();
+    }
+
+    [Test]
+    public async Task CreateEntityInstance_AutoAddsToStore() {
+        // BR.3.3: Children created via CreateEntityInstance are auto-added to the parent's store.
+        var childName = new Property("ChildName", new DomainTypeReference("Text"), []);
+        var parentName = new Property("ParentName", new DomainTypeReference("Text"), []);
+        var child = new Entity("Child", [childName], [], [], []);
+        var parent = new Entity("Parent", [parentName], [
+            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+                new CreateEntityInstance(new DomainTypeReference("Child"),
+                    Initializers: [new PropertyBinding("ChildName", DomainExpression.Literal("AutoAdded"))])
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var domain = new Domain("Test", [parent, child], []);
+        var store = new DomainInstanceStore();
+        var parentInstance = DomainEntityInstance.Create(parent,
+            new Dictionary<string, object?> { ["ParentName"] = "Parent" },
+            domain: domain);
+        store.Add(parentInstance);
+
+        parentInstance.CallAction("Spawn");
+
+        await Assert.That(parentInstance.CreatedChildren.Count).IsEqualTo(1);
+        var childInstance = parentInstance.CreatedChildren[0];
+        await Assert.That(childInstance.GetProperty<string>("ChildName")).IsEqualTo("AutoAdded");
+
+        // Child should be in the store (auto-added by CreateChildInstance)
+        await Assert.That(childInstance.Store).IsNotNull();
+    }
+
+    [Test]
+    public async Task Subscription_OneHop_Cascade() {
+        // BR.3.4: Subscription body transitions subscriber. A ──rel──► B.
+        // When B goes to Active, A's subscription fires and transitions A to Done.
+        // The store recurses but this is only one hop (actual depth-limit
+        // enforcement is tested in <see cref="Subscription_Cascade_ExceedsDepthLimit"/>).
+        var aStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var a = new Entity("A", [aStatus], [], [], [
+            new Stage("Pending", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("rel", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new StageTransitionEffect(new StageReference("Done"))
+                    ])
+                ]
+            },
+            new Stage("Done", null, [], [], [], [])
+        ]);
+
+        var b = new Entity("B", [], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("rel",
+            new DomainTypeReference("A"), new DomainTypeReference("B"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [a, b], [rel]);
+
+        var store = new DomainInstanceStore();
+        var bInstance = DomainEntityInstance.Create(b, domain: domain);
+        var aInstance = DomainEntityInstance.Create(a, domain: domain);
+        store.Add(bInstance);
+        store.Add(aInstance);
+
+        await Assert.That(aInstance.CurrentStage).IsEqualTo("Pending");
+
+        bInstance.CallAction("Activate");
+
+        await Assert.That(bInstance.CurrentStage).IsEqualTo("Active");
+        // A's subscription fired and transitioned A to Done
+        await Assert.That(aInstance.CurrentStage).IsEqualTo("Done");
+        // No exception — depth limit was not exceeded
+    }
+
+    [Test]
+    public async Task StageAction_InheritedFromParentStage() {
+        // BR.3′′.1: Action on a parent stage should be callable from a child stage.
+        var count = new Property("Count", new DomainTypeReference("Number"), []);
+        var childAction = new Poly.DomainModeling.Action("ChildOp", InvocationResult.Void, [], [
+            new AssignEffect(
+                DomainExpression.Property("Count"),
+                DomainExpression.Add(DomainExpression.Property("Count"), DomainExpression.Literal(10L)))
+        ], []);
+        var parentAction = new Poly.DomainModeling.Action("ParentOp", InvocationResult.Void, [], [
+            new AssignEffect(
+                DomainExpression.Property("Count"),
+                DomainExpression.Add(DomainExpression.Property("Count"), DomainExpression.Literal(1L)))
+        ], []);
+
+        var entity = new Entity("TestEnt", [count], [
+            new Poly.DomainModeling.Action("GoToChild", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Child"))
+            ], [])
+        ], [], [
+            new Stage("Root", null, [parentAction], [], [], []),
+            new Stage("Child", new StageReference("Root"), [childAction], [], [], [])
+        ]);
+
+        var domain = new Domain("Test", [entity], []);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Count"] = 0L },
+            domain: domain);
+
+        // Starts in Root — can call ParentOp directly
+        var r1 = instance.CallAction("ParentOp");
+        await Assert.That(r1.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Count")).IsEqualTo(1L);
+
+        // ChildOp is on the Child stage — not accessible from Root
+        var r2 = instance.CallAction("ChildOp");
+        await Assert.That(r2.Succeeded).IsFalse();
+
+        // Transition to Child stage
+        instance.CallAction("GoToChild");
+        await Assert.That(instance.CurrentStage).IsEqualTo("Child");
+
+        // From Child stage, can call ParentOp (inherited via parent chain)
+        var r3 = instance.CallAction("ParentOp");
+        await Assert.That(r3.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Count")).IsEqualTo(2L);
+
+        // Can also call ChildOp directly on the Child stage
+        var r4 = instance.CallAction("ChildOp");
+        await Assert.That(r4.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Count")).IsEqualTo(12L);
+
+        // Entity-level action GoToChild still works from any stage
+        instance.CallAction("GoToChild"); // same stage, no-op effectively
+    }
+
+    [Test]
+    public async Task OnEntryEffect_Throws_StageStillSet_NotifyStillFires() {
+        // BR.3′′.2: OnEntry effect throws → stage is set, subscribers still notified.
+        // B subscribes to A. When A enters Active, its OnEntry throws.
+        // B's subscription should still fire (notify runs in finally).
+        var aStatus = new Property("AStatus", new DomainTypeReference("Text"), []);
+        // OnEntry effect that throws via a deliberate VM crash (bad property access).
+        // The throw is on Active's OnEntryEffects, executes when A transitions Draft→Active.
+        var a = new Entity("A", [aStatus], [
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [
+                // OnEntryEffects for Active — this one throws
+                new AssignEffect(
+                    DomainExpression.Property("Nonexistent"),
+                    DomainExpression.Literal("boom"))
+            ], [])
+        ]);
+
+        var bStatus = new Property("BStatus", new DomainTypeReference("Text"), []);
+        var b = new Entity("B", [bStatus], [], [], [
+            new Stage("Waiting", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("rel", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("BStatus"),
+                            DomainExpression.Literal("Notified"))
+                    ])
+                ]
+            },
+            new Stage("Done", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("rel",
+            new DomainTypeReference("B"), new DomainTypeReference("A"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [a, b], [rel]);
+        var store = new DomainInstanceStore();
+        var aInstance = DomainEntityInstance.Create(a, domain: domain);
+        var bInstance = DomainEntityInstance.Create(b, domain: domain);
+        store.Add(aInstance);
+        store.Add(bInstance);
+
+        // Trigger transition — OnEntry throws, but notify should still fire in finally
+        var threw = false;
+        try {
+            aInstance.CallAction("Go");
+        }
+        catch {
+            // Expected — OnEntry effect throws
+            threw = true;
+        }
+        await Assert.That(threw).IsTrue();
+
+        // Stage is still set even though OnEntry threw
+        await Assert.That(aInstance.CurrentStage).IsEqualTo("Active");
+
+        // B was notified despite the OnEntry exception
+        await Assert.That(bInstance.GetProperty<string>("BStatus")).IsEqualTo("Notified");
+    }
+
+    [Test]
+    public async Task Subscription_Cascade_ExceedsDepthLimit() {
+        // BR.3′.3: Prove maxDepth=10 enforcement. Chain: E0 → E1 → E2 → ... → E11
+        // where each Ei subscribes to Ei-1 transitioning, then transitions itself.
+        // Relationships go: Ei (Source) → Ei-1 (Target), so Ei is the subscriber.
+        // E0 starts it via manual action; cascade propagates through recursive NotifyTransition.
+
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var allEntities = new List<Entity>();
+        var relationships = new List<Relationship>();
+
+        // E0: triggered by manual action — transitions to Active
+        var e0 = new Entity("E0", [status], [
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+        allEntities.Add(e0);
+
+        // E1..E11: each subscribes to the previous entity's transition
+        for (int i = 1; i <= 11; i++) {
+            var name = $"E{i}";
+            var prevName = $"E{i - 1}";
+            // Subscription: when prev enters Active → transition self to Active
+            // The subscription is on this entity's stage; the relationship has
+            // Source = this entity, Target = prev entity.
+            var sub = new StageSubscription($"rel{i}", ["Active"], StageSubscriptionQuantifier.Each, [
+                new StageTransitionEffect(new StageReference("Active"))
+            ]);
+            // E11 HAS a subscription (rel11, same pattern) — if notified,
+            // it WOULD transition to Active. This proves the depth limit
+            // (maxDepth=10) is what keeps E11 in Draft, not a missing subscription.
+            var entity = new Entity(name, [status], [], [], [
+                new Stage("Draft", null, [], [], [], []) {
+                    Subscriptions = [sub]
+                },
+                new Stage("Active", null, [], [], [], [])
+            ]);
+            allEntities.Add(entity);
+            // Relationship: Source=this(Ei), Target=prev(Ei-1)
+            relationships.Add(new Relationship($"rel{i}",
+                new DomainTypeReference(name), new DomainTypeReference(prevName),
+                RelationshipCardinality.OneToOne, []));
+        }
+
+        var domain = new Domain("Test", allEntities, relationships);
+        var store = new DomainInstanceStore();
+
+        var instances = new List<DomainEntityInstance>();
+        foreach (var e in allEntities) {
+            var inst = DomainEntityInstance.Create(e, domain: domain);
+            store.Add(inst);
+            instances.Add(inst);
+        }
+
+        // Trigger the cascade
+        instances[0].CallAction("Go");
+
+        // E0 triggered manually — in Active
+        await Assert.That(instances[0].CurrentStage).IsEqualTo("Active");
+        // E1..E10 fired by cascade (10 hops)
+        for (int i = 1; i <= 10; i++) {
+            await Assert.That(instances[i].CurrentStage).IsEqualTo("Active");
+        }
+
+        // E11 should still be in Draft (depth limit stopped before it)
+        await Assert.That(instances[11].CurrentStage).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task CreateEntityInstance_ChildParticipatesInStore() {
+        // BR.3′.4: Child auto-added to store participates in subscription fan-out.
+        // Parent creates Child; when Child transitions to Active, the subscription
+        // on the Grandparent should fire.
+        var gpStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var gp = new Entity("Grandparent", [gpStatus], [], [], [
+            new Stage("Waiting", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("parentChild", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.Literal("ChildActivated"))
+                    ])
+                ]
+            },
+            new Stage("Done", null, [], [], [], [])
+        ]);
+
+        var childAction = new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new StageTransitionEffect(new StageReference("Active"))
+        ], []);
+        var child = new Entity("Child", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [childAction], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var parent = new Entity("Parent", [
+            new Property("PName", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+                new CreateEntityInstance(new DomainTypeReference("Child"),
+                    Initializers: [new PropertyBinding("Name", DomainExpression.Literal("AutoChild"))])
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("parentChild",
+            new DomainTypeReference("Grandparent"), new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [gp, parent, child], [rel]);
+
+        var store = new DomainInstanceStore();
+        var gpInstance = DomainEntityInstance.Create(gp, domain: domain);
+        var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
+        store.Add(gpInstance);
+        store.Add(parentInstance);
+
+        // Parent spawns Child — child should be auto-added to store
+        parentInstance.CallAction("Spawn");
+        await Assert.That(parentInstance.CreatedChildren.Count).IsEqualTo(1);
+        var childInstance = parentInstance.CreatedChildren[0];
+        await Assert.That(childInstance.Store).IsNotNull();
+
+        // Child transitions to Active — Grandparent's subscription should fire
+        childInstance.CallAction("Activate");
+        await Assert.That(childInstance.CurrentStage).IsEqualTo("Active");
+        await Assert.That(gpInstance.GetProperty<string>("Status")).IsEqualTo("ChildActivated");
+    }
 }

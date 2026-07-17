@@ -211,8 +211,27 @@ public sealed record DomainEntityInstance {
     /// mutate the instance directly.</para>
     /// </summary>
     public ActionCallResult CallAction(string actionName) {
-        var action = Entity.Actions
+        // Find action: first check current stage (and its parent chain) for effective actions,
+        // then entity-level. Stage-scoped actions are only available while on that stage.
+        Poly.DomainModeling.Action? action = null;
+        if (CurrentStage is not null) {
+            // Walk the stage hierarchy: current stage, then parent, then grandparent, etc.
+            var currentStageRef = Entity.Stages
+                .FirstOrDefault(s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
+
+            var walkStage = currentStageRef;
+            while (walkStage is not null && action is null) {
+                action = walkStage.Actions
+                    .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+                walkStage = walkStage.Parent is not null
+                    ? Entity.Stages.FirstOrDefault(s => string.Equals(s.Name, walkStage.Parent.StageName, StringComparison.Ordinal))
+                    : null;
+            }
+        }
+
+        action ??= Entity.Actions
             .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+
         if (action is null)
             return ActionCallResult.Missing(Entity.Name, actionName);
 
@@ -284,7 +303,15 @@ public sealed record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Transitions to a target stage. Store notification fires when:
+    /// Transitions to a target stage. Execution order:
+    /// <list type="number">
+    ///   <item>OnExit effects on the current stage (before any state change).</item>
+    ///   <item>Set <see cref="CurrentStage"/> to <paramref name="targetStageName"/>.</item>
+    ///   <item>OnEntry effects on the target stage (stage already set — partial-entry state
+    ///     possible if an effect throws).</item>
+    ///   <item>Notify store subscribers (in a <c>finally</c> block — fires even if OnEntry throws).</item>
+    /// </list>
+    /// Store notification fires when:
     /// <list type="bullet">
     ///   <item><paramref name="notifyStore"/> is <c>true</c>,</item>
     ///   <item><c>Store</c> is set,</item>
@@ -293,16 +320,60 @@ public sealed record DomainEntityInstance {
     ///     recursion, not through a second store call).</item>
     /// </list>
     /// </summary>
+    /// <remarks>
+    /// <b>Stage policy vs action hierarchy:</b> Stage-scoped policies are evaluated only on the
+    /// <b>current</b> stage (not the parent chain), while <see cref="CallAction"/> walks the
+    /// parent chain for actions. This asymmetry exists because effective-policy computation
+    /// is performed by analyzers (walking the hierarchy), while runtime scenario gating is
+    /// still a per-stage concern.
+    ///
+    /// <b>OnEntry re-entrancy:</b> If an OnEntry effect calls <see cref="CallAction"/> which
+    /// triggers another transition on the <b>same instance</b>, the resulting <c>TransitionStage</c>
+    /// call is <b>not</b> bounded by the store&#x2019;s <c>maxDepth</c> (which limits subscription
+    /// fan-out across <b>different</b> instances). Re-entrant same-instance transitions risk
+    /// stack overflow and should be avoided until a depth budget is added.
+    /// </remarks>
     internal void TransitionStage(string targetStageName, bool notifyStore = true) {
         if (!Entity.Stages.Any(s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal)))
             return;
 
-        var previousStage = CurrentStage;
+        var previousStageName = CurrentStage;
+        if (string.Equals(previousStageName, targetStageName, StringComparison.Ordinal))
+            return;
+
+        // ── Run OnExit effects on the current stage ────────────
+        if (previousStageName is not null) {
+            var prevStage = Entity.Stages.FirstOrDefault(
+                s => string.Equals(s.Name, previousStageName, StringComparison.Ordinal));
+            if (prevStage?.OnExitEffects is { Count: > 0 }) {
+                var exitPass = new EffectLoweringPass(Entity,
+                    new Parameter("entity", new TypeReference(Entity.Name)));
+                foreach (var effect in prevStage.OnExitEffects)
+                    ExecuteEffect(effect, exitPass);
+            }
+        }
+
+        // ── Set new stage ──────────────────────────────────────
         CurrentStage = targetStageName;
 
-        // Notify subscribers (skip during subscription execution — cascading already handled by store)
-        if (notifyStore && Store is not null && previousStage != targetStageName && !_isExecutingSubscription) {
-            Store.NotifyTransition(this, targetStageName);
+        // ── Run OnEntry effects on the target stage ────────────
+        // Notify subscribers runs in a finally block so it fires even if
+        // OnEntry effects throw (the stage is already set).
+        try {
+            var targetStage = Entity.Stages.FirstOrDefault(
+                s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal));
+            if (targetStage?.OnEntryEffects is { Count: > 0 }) {
+                var entryPass = new EffectLoweringPass(Entity,
+                    new Parameter("entity", new TypeReference(Entity.Name)));
+                foreach (var effect in targetStage.OnEntryEffects)
+                    ExecuteEffect(effect, entryPass);
+            }
+        }
+        finally {
+            // Notify subscribers (skip during subscription execution — cascading already handled by store)
+            if (notifyStore && Store is not null && !_isExecutingSubscription) {
+                Store.NotifyTransition(this, targetStageName);
+            }
         }
     }
 
@@ -340,11 +411,9 @@ public sealed record DomainEntityInstance {
         SetEventInstance(eventInstance);
         _isExecutingSubscription = true;
 
+        // eventKeys must be declared outside try so cleanup in finally can access it.
+        var eventKeys = new List<string>();
         try {
-            // Merge event values into _values so expressions can reference
-            // "event.PropertyName" via the standard lowering path.
-            // These keys are removed after execution.
-            var eventKeys = new List<string>();
             if (_eventValues is not null) {
                 foreach (var kv in _eventValues) {
                     var key = $"{EventPrefix}{kv.Key}";
@@ -359,12 +428,16 @@ public sealed record DomainEntityInstance {
             foreach (var effect in effects) {
                 ExecuteEffect(effect, effectPass);
             }
-
-            // Clean up merged event values
-            foreach (var key in eventKeys)
-                _values.Remove(key);
         }
         finally {
+            // Always clean up merged event values (even on throw) so _values
+            // doesn't accumulate stale "event.*" keys that might confuse
+            // subsequent non-subscription access.
+            // Note: the VM's member-resolution pipeline does NOT resolve
+            // "event.*" dictionary keys — see Option B remarks above.
+            foreach (var key in eventKeys)
+                _values.Remove(key);
+
             _isExecutingSubscription = false;
             SetEventInstance(null);
         }
@@ -406,6 +479,9 @@ public sealed record DomainEntityInstance {
 
         var child = Create(targetEntity, initialValues, Domain);
         _createdChildren.Add(child);
+
+        // BR.3.3: Auto-register child in the parent's store, if present.
+        Store?.Add(child);
     }
 
     /// <summary>

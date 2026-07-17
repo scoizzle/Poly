@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
-**Date:** 2026-07-17  
-**Revised:** 2026-07-17 (bundle review: N′′ + D′′.1–.2 + BR.1 Option B — suite 1266 green; **still uncommitted**)  
-**Status:** Phase 1a vertical **product-complete**; **N+N′ committed** (`9f0707d`); **N′′ / D′′ / BR.1 / BR.1′ / BR.2 uncommitted**  
-**Current pick:** **Commit** the working-tree bundle (BR.1′ + BR.2 also done)  
+**Date:** 2026-07-17
+**Revised:** 2026-07-17 (BR.2′–BR.3′′ re-review — suite 1276 green; **commit pending**)
+**Status:** Phase 1a vertical **product-complete**; **BR.2′–BR.3′′ implementation complete**, uncommitted
+**Current pick:** **Commit BR.2′–BR.3′′** (then BR.4 / E pull-only)
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** A–D′; N family; **N′′+D′′+BR.1 bundle review** (2026-07-17)  
+**Review:** A–D′; N; bundle; BR.3′′; **pre-commit re-review** (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -25,7 +25,7 @@
 
 **Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
 
-**Status (2026-07-17):** Phase 1a vertical closed (`e3e91ea`). **N+N′ shipped** (`9f0707d`). Working tree has **N′′** tests, **D′′.1–.2**, **BR.1 Option B** characterization test, **BR.1′** remarks fix, and **BR.2** try/finally — suite **1266** green, **not committed**. Commit pending. E remains pull-only.
+**Status (2026-07-17):** Phase 1a vertical closed (`e3e91ea`). **N+N′** (`9f0707d`) + **bundle** (`a41153c`) shipped. **BR.2′–BR.3′′** in working tree, suite **1276** green. **BR.3′′.2 verified fixed** (throw on Active OnEntry). **Commit is the only open product gate.** Then BR.4 / E pull-only.
 
 ---
 
@@ -107,24 +107,26 @@ Slice 0–B′     IR + thin runtime                         [done]
 Slice C…C′′′   Phase 1a DSL parse/print                  [done]
 Slice D + D′   MCP apply/export_dsl + polish             [done]
 Slice N + N′   N1 nav surface + residuals                [done — 9f0707d]
-Slice N′′      N honesty tests                           [impl done — uncommitted]
-D′′.1–.2       MCP honesty nits                          [impl done — uncommitted]
-BR.1 Option B  event.* characterization test             [impl done — uncommitted]
-→              Commit working-tree bundle                [CURRENT]
-BR.1′          Fix false event.* product remarks         [done — uncommitted]
-BR.2            try/finally subscription flag              [done — uncommitted]
-Slice E        Phase 1b grammar                          [pull-only]
-BR.2–.4        runtime depth                             [optional]
+Slice N′′      N honesty tests                           [done — a41153c]
+D′′.1–.2       MCP honesty nits                          [done — a41153c]
+BR.1 / BR.1′   event.* Option B + remarks                [done — a41153c]
+BR.2           try/finally flag clear                    [done — a41153c]
+BR.2′          event-key cleanup on throw                [impl done — uncommitted]
+BR.3           OnEntry/OnExit, stage actions, auto-Add     [impl done — uncommitted]
+→              Commit BR.2′–BR.3′′                         [CURRENT]
+BR.3′          BR.3 review nits                            [done]
+BR.3′′          BR.3′ honesty nits                          [impl done — commit]
+BR.4 / E       residual / Phase 1b                         [pull-only / optional]
 ```
 
 | Slice | Depends on | Does not depend on |
 |-------|------------|---------------------|
 | 0–D′ | prior | — |
-| **N / N′** | **D** | **E** / **BR** |
-| **N′′** | **N′** | — |
-| **BR.1′** | BR.1 test | Runtime fix (Option B) |
+| **N / N′ / N′′** | **D** | **E** / **BR** |
+| **BR.1 / BR.1′ / BR.2** | B vertical | — |
+| **BR.2′** | BR.2 | — |
 | E | named consumer | — |
-| BR.2–.4 | B vertical | D |
+| BR.3–.5 | B vertical | D |
 
 ---
 
@@ -336,35 +338,53 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 
 ### B residual (optional — from B′ code review; does **not** block Slice C)
 
-#### BR.1 — Prove `event.*` property flow (recommended before DSL `when` bodies)
+#### BR.1 — Prove `event.*` property flow — **DONE** (`a41153c`, Option B)
 
-**Gap (originally):** `ExecuteSubscriptionEffects` injects `"event." + prop` keys into `_values`. No proof that assign RHS can read them.
+- [x] **BR.1.1** Characterization test: `SubscriptionEffect_EventPropertyAccess_Gap_Documented`
+- [x] **BR.1.2** Option B documented on `ExecuteSubscriptionEffects` + `EventPrefix` XML
+- [x] **BR.1.3** Test asserts fire (`!= "UNTOUCHED"`) **and** gap (`!= "ABC-123"`)
+- [ ] **BR.1.4** (Future, named consumer) Real `event` subject / lowering — do not invent opcodes now
 
-**Landed (uncommitted):** Option **B** characterization — `SubscriptionEffect_EventPropertyAccess_Gap_Documented` proves RHS `Property("event.Code")` does **not** yield `"ABC-123"` through the VM. Subscription still fires.
+#### BR.2 / BR.2′ — Exception safety — **IMPL DONE** (uncommitted)
 
-**Honesty gap (BR.1′ — must fix):** Production XML comments on `EventPrefix` / `ExecuteSubscriptionEffects` still claim consumers *can* reference `event.PropertyName` via the “standard lowering path.” That is **false** per the new test. Remarks must state Option B (literals/`this` only) until real `event` lowering exists.
+- [x] **BR.2.1** `try/finally` clears flag + event instance on throw (`a41153c`)
+- [x] **BR.2′.1** `eventKeys` outside `try`; remove in `finally`
+- [x] **BR.2′.2** Stale “standard lowering path” comment removed
+- [x] **BR.2′.3** Exception smoke test (throw propagates; Status unchanged)
+- [x] **BR.2′.4** Snapshot assert: no `"event."` keys after throw; second transition still runs notify (flag cleared)
+- [ ] **BR.2′.5** **Commit** (with BR.3)
 
-**Do (remaining):**
+**Review (2026-07-17, re-check):** Production + strengthened test look good.
 
-- [x] **BR.1.1** Characterization test (Option B): `SubscriptionEffect_EventPropertyAccess_Gap_Documented` — suite green; **uncommitted**
-- [ ] **BR.1.2** Document Option B in **`DomainEntityInstance`** remarks (not only test comments). **Currently incomplete** — production docs still advertise the dead path
-- [ ] **BR.1.3** Strengthen test: assert subscription **did** fire (e.g. `Status != "UNTOUCHED"` or `== ""`) **and** `Status != "ABC-123"` — today `IsNotEqualTo("ABC-123")` alone passes if the subscription never runs
-- [ ] **BR.1.4** (Future, named consumer) Real `event` subject / lowering when DSL authors `event.X` — do not invent opcodes now
+#### BR.3 — Lifecycle completeness — **IMPL DONE** (uncommitted)
 
-#### BR.2 — Exception safety for `_isExecutingSubscription` (nit / bug)
+Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (when `notifyStore` and not inside subscription).
 
-**Gap:** Flag set true without `try/finally`. If `ExecuteEffect` throws, subsequent action transitions on that instance never notify.
+- [x] **BR.3.1** OnExit before leave; OnEntry after enter; notify after entry — tests `OnExitEffect_RunsBeforeStageTransition`, `OnEntryEffect_RunsOnStageTransition`
+- [x] **BR.3.2** Stage-local actions preferred over entity-level; missing when not on that stage — `StageScopedAction_OnlyCallableFromThatStage`
+- [x] **BR.3.3** `Store?.Add(child)` after create — `CreateEntityInstance_AutoAddsToStore` (asserts `child.Store != null`)
+- [x] **BR.3.4** One-hop cascade (sub transitions subscriber) — `Subscription_OneHop_Cascade` (depth-limit enforcement tested in `Subscription_Cascade_ExceedsDepthLimit`)
 
-**Do:** wrap subscription effect loop in `try/finally` clearing flag + event keys.
+##### BR.3′ — follow-ups from BR.3 review — **IMPL LANDED** (uncommitted)
 
-- [x] **BR.2.1** `try/finally` cleanup — `ExecuteSubscriptionEffects` now wraps effect loop in `try/finally` so `_isExecutingSubscription` and `_eventInstance` are always cleared on throw
+- [x] **BR.3′.1** Hierarchy walk — code + BR.3′′.1 test
+- [x] **BR.3′.2** OnEntry try/finally notify — code + BR.3′′.2 test (fixed: throws on Active OnEntry)
+- [x] **BR.3′.3** Depth limit — E11 subscribed (BR.3′′.3)
+- [x] **BR.3′.4** Child store fan-out — good
+- [x] **BR.3′.5** Re-entrancy documented (BR.3′′.4)
+- [ ] **BR.3′.6** **Commit** (with BR.3′′.7)
 
-#### BR.3 — Lifecycle completeness (post-vertical)
+##### BR.3′′ — honesty nits — **IMPL DONE** (uncommitted)
 
-- [ ] **BR.3.1** Run `OnExit` / `OnEntry` effects on stage transition (order: exit → set stage → notify? or notify after entry — pick one, document, test)
-- [ ] **BR.3.2** Stage-gate actions: `CallAction` only succeeds if action is offered by current stage (or entity-level)
-- [ ] **BR.3.3** `CreateEntityInstance` children: auto `Store.Add` when parent has store
-- [ ] **BR.3.4** Cascade test: subscription body transitions subscriber → depth-limited second notify
+- [x] **BR.3′′.1** `StageAction_InheritedFromParentStage` — parent-chain inheritance — **verified**
+- [x] **BR.3′′.2** `OnEntryEffect_Throws_StageStillSet_NotifyStillFires` — **re-reviewed fixed**: throw is on **Active OnEntry**; asserts `threw`, stage Active, B notified — exercises notify-in-finally
+- [x] **BR.3′′.3** E11 real subscription — maxDepth proof — **verified**
+- [x] **BR.3′′.4** Re-entrancy remarks on `TransitionStage` — **verified**
+- [x] **BR.3′′.5** Policy vs action hierarchy asymmetry remarks — **verified**
+- [x] **BR.3′′.6** `Subscription_OneHop_Cascade` rename — **verified**
+- [ ] **BR.3′′.7** **Commit** BR.2′ + BR.3 + BR.3′ + BR.3′′ (prod + tests + plan) — **NOT done** (working tree dirty; plan previously overstated “commit done”)
+
+**Pre-commit re-review (2026-07-17):** No remaining production defects found in this bundle. Suite **1276** green. Residual after commit: **BR.4** / **E** only (pull-only / optional).
 
 #### BR.4 — Earlier B-prep leftovers (still optional)
 
@@ -373,9 +393,10 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 - [ ] **BR.4.3** Replay message includes link/unlink; duplicate XML on `ExecuteSubscriptionEffects`; DRY `SemanticMatch`
 - [ ] **BR.4.4** Instance-level relationship links (second consumer)
 
-#### BR.5 — Doc nit
+#### BR.5 — Doc / style nits
 
-- [ ] **BR.5.1** Remove duplicate `/// <summary>` blocks on `ExecuteSubscriptionEffects` in `DomainEntityInstance.cs`
+- [x] **BR.5.1** Already resolved by BR.1′ `<remarks>` insertion — method and `EventPrefix` each have one `<summary>` (no duplication)
+- [x] **BR.5.2** Trailing newline restored on `DomainEntityInstanceTests.cs` (confirmed via xxd)
 
 ---
 
@@ -385,10 +406,11 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 - [x] Wrong-stage subscriber does not fire
 - [x] store.Add wires Store; Source=subscriber; type-level documented
 - [x] Test domains analyze without DMSS003
-- [~] Event property flow: **tested as non-working** (Option B); **production remarks still wrong** → BR.1.2 / BR.1′
-- [x] DomainModeling tests green (with uncommitted BR.1 test)
+- [x] Event property flow: Option B characterized + remarks honest (`a41153c`)
+- [x] DomainModeling tests green
+- [x] BR.2 / BR.2′ + BR.3 + BR.3′ + BR.3′′ (working tree; **commit CURRENT**)
 
-**Recommended next product slice historically was C (done).** Residual: commit bundle + BR.1′ remarks fix.
+**B vertical product path is closed.** Residual BR work is optional polish / depth.
 
 ---
 
@@ -593,50 +615,40 @@ Pattern after `name :` in entity body:
 
 ---
 
-### Slice N′′: honesty test polish — **IMPL DONE** (uncommitted)
+### Slice N′′: honesty test polish — **DONE** (`a41153c`)
 
-Tests only vs `9f0707d` product code. Suite **1266** with full bundle.
+- [x] **N′′.1**–**N′′.7** as previously checked
+- [x] **N′′.8** Committed in `a41153c`
 
-- [x] **N′′.1** `N1NavAuthored_RoundTrips_WithSubscription`
-- [x] **N′′.2** apply_dsl analysis assert
-- [x] **N′′.3** export re-parse assert (reflection for `Data.poly` accepted — same as other MCP export smokes)
-- [x] **N′′.4** `Parse_N1NavCollidesWithTopLevelN2_ThrowsError`
-- [x] **N′′.5–.6** Won't-do Phase 1a
-- [x] **N′′.7** Trailing newlines on N1 + McpSmoke tests
-- [ ] **N′′.8** **Commit** N′′ (and preferably the rest of the working-tree bundle) — **NOT done** (plan previously overstated)
-
-#### N′′ re-review (2026-07-17, with D′′/BR.1 bundle) — verified green
+#### Post-commit review of `a41153c` (2026-07-17)
 
 | Check | Result |
 |-------|--------|
 | N′′.1–.4 tests | Pass |
-| Production N path | Still `9f0707d` (no further product N changes) |
-| Commit claim | **False in prior plan revision** — working tree dirty |
-
-**Do not** open IR/analyzer work for N′′.
+| D′′.1–.2 | Pass |
+| BR.1 / BR.1′ | Pass — Option B remarks honest; dual assert |
+| BR.2 try/finally (a41153c) | Flag cleared; event-key leak fixed by BR.2′ |
+| BR.2′ (working tree) | Keys in `finally`; smoke green; Snapshot assert optional |
+| Suite | **1267** green with BR.2′ |
 
 ---
 
 ### Post–N residuals
 
-#### D′′ — Tiny MCP nits — **partial, uncommitted**
+#### D′′ — Tiny MCP nits — **DONE** (`a41153c`)
 
-- [x] **D′′.1** README Tool Honesty: DSL tools called out — as a **paragraph after the table**, not a table row. Acceptable; optional polish = real table row later
-- [x] **D′′.2** `apply_dsl` success affordances include `apply_dsl` (for re-batch); `export_dsl` was already present
-- [ ] **D′′.3** Session race (acceptable — no change)
-- [ ] **D′′.4** **Commit** D′′ with N′′/BR.1 bundle
+- [x] **D′′.1** README Tool Honesty DSL paragraph
+- [x] **D′′.2** `apply_dsl` re-batch affordance
+- [x] **D′′.3** Session race (accepted)
 
 #### BR residual (runtime depth)
 
-- [- [x] **BR.1** Option B characterization test + **BR.1′** remarks fix + **BR.2** try/finally all landed (uncommitted)
-- [ ] **BR.3** OnEntry/OnExit; stage-gated CallAction; auto `store.Add` children
-- [ ] **BR.4** Instance-level relationship links
-
-#### BR.1′ — Honesty fix from bundle review (**should land with or immediately after commit**)
-
-- [x] **BR.1′.1** Rewrote `EventPrefix` / `ExecuteSubscriptionEffects` remarks — state Option B explicitly, document that VM member resolution does not see `event.*` dictionary keys, point to characterization test
-- [x] **BR.1′.2** Strengthened `SubscriptionEffect_EventPropertyAccess_Gap_Documented`: asserts both `IsNotEqualTo("UNTOUCHED")` (proves subscription fired) and `IsNotEqualTo("ABC-123")` (proves `event.*` didn't resolve)
-- [x] **BR.1′.3** Trailing newline restored on `DomainEntityInstanceTests.cs` (+ `DomainEntityInstance.cs`)
+- [x] **BR.1** + **BR.1′** Option B (`a41153c`)
+- [x] **BR.2** + **BR.2′** (`finally` + Snapshot; uncommitted)
+- [x] **BR.3** + **BR.3′** lifecycle/hierarchy/cascade/auto-Add (uncommitted)
+- [x] **BR.3′′** honesty nits complete in tree; **commit open** (BR.3′′.7)
+- [ ] **BR.4** quantifiers / MCP sub tools / instance links
+- [x] **BR.5** style nits closed earlier
 
 #### Slice E: Phase 1b grammar (**pull-only**)
 
@@ -646,7 +658,7 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 - [ ] Parser + printer + tests
 - [ ] Runtime for any new effects on green path
 
-**Do not** start E to “fill the queue” after N.
+**Do not** start E to “fill the void” after N.
 
 ---
 
@@ -698,18 +710,18 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | **D + D′ MCP apply/export** | — | **Done** (commit `e3e91ea`) |
 | **N N1 nav surface (core)** | **1–2 days** | Done (`9f0707d`) |
 | **N′ residuals** | **0.5–1 day** | Done (`9f0707d`) |
-| **N′′ polish** | **&lt;0.5 day** | Impl done — commit pending |
-| D′′ tiny nits | &lt;0.5 day | Optional |
+| **N′′ polish** | **&lt;0.5 day** | Done (`a41153c`) |
+| D′′ tiny nits | &lt;0.5 day | Done (`a41153c`) |
 | E Phase 1b | Pull-only | Named consumer only |
-| BR residual | weeks | Optional depth |
+| BR residual | weeks | Optional depth; BR.2′ small |
 
 **Dependency summary:**
 
 ```text
 0 → … → B+B′ → C…C′′′ → D+D′  ✅ Phase 1a vertical closed
-                         ↘ N+N′ ✅ `9f0707d`
-                         ↘ N′′+D′′+BR.1 test (uncommitted) → commit CURRENT
-                         ↘ BR.1′ remarks honesty → then BR.2–.4 / E pull-only
+                         ↘ N+N′ ✅ `9f0707d` → N′′/D′′/BR.1/BR.1′/BR.2 ✅ `a41153c`
+                         ↘ BR.2′–BR.3′′ ✅ ready (commit CURRENT)
+                         ↘ BR.4 / E pull-only
 ```
 
 ---
@@ -730,34 +742,29 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 - [x] **CallAction** → effects → stage → `when` (Each) → subscriber side effects (literal assign).
 - [x] Single execution ownership; `DomainInstanceStore` not a second product API.
 - [x] B′.1 / B′.3 / B′.4 / B′.5 done.
-- [- [x] B′.2 / BR.1: characterization test + BR.1′ remarks fix + BR.2 try/finally all in working tree
-- [ ] BR.3 / BR.4 optional residuals
+- [x] B′.2 / BR.1 / BR.1′ Option B characterized + documented (`a41153c`)
+- [x] BR.2 try/finally (`a41153c`) + **BR.2′** + **BR.3** + **BR.3′** + **BR.3′′** (**commit CURRENT**)
+- [ ] BR.4 optional residuals
 
 ### Slice C … C′′′ — **DONE**
 
 - [x] Phase 1a grammar + parser/printer + **17** Parsing tests.
 - [x] N2 relationships; deferred require; no when_* stubs; entity-level `require not` fixed.
 
-### Slice D + D′ — **DONE**
+### Slice D + D′ + D′′ — **DONE**
 
 - [x] Strict `apply_dsl` + `export_dsl`; replace + revision+1; early session check; empty text fail.
-- [x] Honesty notes on tool description; dual-path README; require CallAction e2e smoke.
+- [x] Honesty notes; dual-path README; require CallAction e2e; D′′.1–.2 (`a41153c`)
 - [x] Micro-tools retained.
-- [~] **D′′.1–.2** in working tree (uncommitted); D′′.3 accept
 
-### Slice N + N′ — **DONE** (committed `9f0707d`)
+### Slice N + N′ + N′′ — **DONE**
 
-- [x] N1 surface + N′ residuals committed as `9f0707d`
-
-### Slice N′′ — **IMPL DONE** (uncommitted)
-
-- [x] N′′.1–.7 in working tree; suite **1266** with full bundle
-- [ ] **N′′.8 Commit** — **open**
+- [x] N1 surface + residuals (`9f0707d`) + honesty tests (`a41153c`)
 
 ### Cross-cutting
 
-- [x] Suite green with full working-tree bundle (**1266**).
-- [x] D+D′ (`e3e91ea`); N+N′ (`9f0707d`); **N′′/D′′/BR.1 not committed**.
+- [x] Suite green (**1276**); BR.3′′.2 fixed and verified.
+- [x] D+D′ (`e3e91ea`); N+N′ (`9f0707d`); N′′/D′′/BR.1–2 (`a41153c`); BR.2′–BR.3′′ uncommitted.
 - [x] `AGENTS.md` principles unchanged unless a principle itself changes (rare).
 
 ---
@@ -782,9 +789,16 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | 2026-07-17 | **Slice N implementation reviewed**: core correct; **N′** opened for collisions/MCP smokes. |
 | 2026-07-17 | **N′ landed** then **N′ impl review**: collisions + MCP smokes verified; suite **1263** green. **N′′** opened for honesty nits. |
 | 2026-07-17 | **N+N′ committed** (`9f0707d`). |
-| 2026-07-17 | **N′′ landed** (tests, uncommitted): pure N1 C5; apply_dsl analysis; export re-parse; top-level N2 dup. |
-| 2026-07-17 | **D′′.1–.2 + BR.1 Option B test** also in working tree (uncommitted). |
-| 2026-07-17 | **Bundle review**: suite **1266** green. Plan had overstated “N′′ committed / family closed.” **Must:** commit bundle. **Should:** BR.1′ fix production `event.*` remarks (currently claim working path); strengthen BR.1 test fire assertion. BR.1.2 was **not** honestly complete. |
+| 2026-07-17 | **Bundle committed** (`a41153c`): N′′ + D′′.1–.2 + BR.1/BR.1′/BR.2. Suite **1266**. |
+| 2026-07-17 | **Post-commit review of `a41153c`**: residual BR.2′ opened (event-key finally). |
+| 2026-07-17 | **BR.2′ landed** then **strengthened** (Snapshot + second notify); suite **1267** then **1272** with BR.3. |
+| 2026-07-17 | **BR.3 landed** (uncommitted): OnExit→set→OnEntry→notify; stage-scoped CallAction; auto Store.Add; one-hop cascade. |
+| 2026-07-17 | **BR.2′+BR.3 impl review**: residual BR.3′ opened. |
+| 2026-07-17 | **BR.3′ landed** (uncommitted): parent-stage action walk; OnEntry try/finally notify; depth cascade test; child store fan-out. Suite **1274**. |
+| 2026-07-17 | **BR.3′ impl review**: production mostly sound. Gaps: **no hierarchy unit test**; depth test **E11 has no subscription** (weak); OnEntry re-entrancy **not** store-depth-limited (claim overstated). Residual **BR.3′′**. **Commit CURRENT**. |
+| 2026-07-17 | **BR.3′′ landed** (uncommitted): hierarchy test; E11 sub; docs; OneHop rename; OnEntry-throw test. Suite **1276**. |
+| 2026-07-17 | **BR.3′′ impl review**: **BR.3′′.2 false positive** — throw was on **Draft** OnEntry, not **Active**. |
+| 2026-07-17 | **BR.3′′.2 fixed** then **pre-commit re-review**: throw on Active OnEntry; `threw` asserted; notify-in-finally proven. Bundle **ready to commit** (BR.3′′.7 open). No further product follow-ups beyond BR.4/E pull-only. |
 
 ### Appendix — Relationship authoring
 
@@ -796,17 +810,17 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 
 Runtime correlation remains **type-level** until BR.4.4.
 
-### Appendix — Agent pick order (after N′′/D′′/BR.1 bundle review)
+### Appendix — Agent pick order (after pre-commit re-review)
 
 | Order | Task | Severity | Blocks |
 |-------|------|----------|--------|
-| 1 | **Commit** working tree (N′′ + D′′.1–.2 + BR.1 test + BR.1′ remarks + BR.2 try/finally + plan) | Required | Uncommitted work |
-| 2 | **BR.3 / BR.4 / E** | Optional / pull-only | Named consumer |
+| 1 | **Commit** BR.2′ + BR.3 + BR.3′ + BR.3′′ (prod + tests + plan) | Required | Uncommitted work |
+| 2 | **BR.4 / E** | Optional / pull-only | Named consumer |
 
 **Implementer watch-outs:**
 
-- Do **not** print reverse nav with the same relationship name.
-- Do **not** claim `event.PropertyName` works in product docs while the characterization test proves it does not.
-- Do **not** mark slices “committed” in the plan without a git commit hash.
+- Do not mark BR.3′′.7 done until `git` shows a commit hash.
+- Prefer commit now; BR.4 only with a named consumer.
+
 
 Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish. **Never attach always-true policies as stand-ins for missing requires or stage gates.**

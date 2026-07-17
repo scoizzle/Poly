@@ -12,8 +12,8 @@ namespace Poly.DomainModeling.Parsing;
 /// Output is idempotent: printing the same domain twice produces identical text.
 /// No event/publish/subscribe output (these were removed from the product surface).
 /// Relationships are printed as inline navigation properties on the source entity
-/// (N1 form): "orders: many Order" instead of "relationship Orders from ... to ...".
-/// N2 top-level relationship lines are no longer emitted.
+/// (N1 form only): "orders: many Order". The legacy top-level
+/// "relationship Name from ... to ..." form is not printed and is not accepted by the parser.
 /// </summary>
 public sealed class DomainDslPrinter {
     private readonly StringBuilder _sb = new();

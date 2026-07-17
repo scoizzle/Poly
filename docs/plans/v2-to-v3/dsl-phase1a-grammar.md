@@ -1,28 +1,26 @@
 # Phase 1a — Frozen Grammar Specification
 
 **Date:** 2026-07-17  
-**Revised:** 2026-07-17 (N1 primary; N2 legacy accepted input)  
+**Revised:** 2026-07-17 (N1-only relationships; N2 top-level form removed)  
 **Status:** Frozen — parser implementation target  
 **Source:** [`DOMAIN-DSL-SPEC.md`](../../experiments/DOMAIN-DSL-SPEC.md) (laboratory; this doc is authoritative for Phase 1a)  
-**Relationship:** N1 primary — navigation properties inside entity blocks; N2 `relationship` form accepted as legacy input
+**Relationship:** N1 only — navigation properties inside entity blocks. Legacy `relationship Name from Src to Tgt` is **not** accepted.
 
 ---
 
 ## 1. Top-level structure
 
 ```
-.poly = domain-header entity-definitions [ legacy-relationships ]
+.poly = domain-header entity-definitions
 
 domain-header = "domain" identifier
 
 entity-definitions = { entity-definition }
-
-legacy-relationships = { relationship-definition }
 ```
 
 The `domain` header must appear first. No `: kind` suffix — default `service`.
 
-Entity names are globally unique within a `.poly` file. Relationships are defined inline as navigation properties inside entity blocks (N1 form). The legacy `relationship` keyword form (N2) is still accepted at both entity scope and top level for backward compatibility.
+Entity names are globally unique within a `.poly` file. Relationships are defined **only** as navigation properties inside entity blocks (N1 form).
 
 ---
 
@@ -34,7 +32,6 @@ entity-member = property-definition
               | standalone-action
               | policy-definition
               | nav-property-definition
-              | relationship-definition       // N2 legacy
 ```
 
 ### 2.1 Property definitions
@@ -157,17 +154,7 @@ Where:
 - Second `identifier` = target stage name (on the related entity)
 - Quantifier is implicitly `Each` (no `any`/`all` keyword in Phase 1a)
 
-### 2.8 Relationship definitions (N2 legacy form)
-
-```
-relationship-definition = "relationship" identifier "from" identifier "to" identifier cardinality
-
-cardinality = "one" | "many"
-```
-
-**Legacy:** Accepted at top level or inside entity blocks. The `from` entity is the relationship source; `to` is the target. `one` → `OneToOne`, `many` → `OneToMany` from source to target. Canonical output now uses the N1 form (nav-property-definition) — see §2.9.
-
-### 2.9 Navigation property definitions (N1 form)
+### 2.8 Navigation property definitions (N1 — only relationship form)
 
 ```
 nav-property-definition = identifier ":" [ cardinality ] [ "owned" ] entity-name
@@ -175,7 +162,7 @@ nav-property-definition = identifier ":" [ cardinality ] [ "owned" ] entity-name
 cardinality = "one" | "many"
 ```
 
-**Primary canonical form for relationships.** Defined inside an entity block. The entity on which the nav line appears is the relationship source.
+**Only canonical form for relationships.** Defined inside an entity block. The entity on which the nav line appears is the relationship source.
 
 | Pattern | Cardinality | SourceOwnsTarget |
 |---------|-------------|------------------|
@@ -191,7 +178,7 @@ The relationship **name** is the property name (first identifier). Target entity
 **Design rules:**
 - Source side is authoritative — only the entity that owns the nav line emits it on print.
 - No reverse-nav lines printed by default (re-parse would create a duplicate edge).
-- N2 `relationship` input is still accepted for backward compatibility; it is normalized to N1 on print (export).
+- The keyword form `relationship Name from Source to Target one|many` is **rejected** with a diagnostic pointing at this N1 form.
 
 ---
 
@@ -230,7 +217,7 @@ The parser produces `IReadOnlyList<DomainChange>` representing the entire domain
 9. `AddPolicyToEntityChange` for each entity-level policy
 10. `AddPolicyToActionChange` for each `require` gate (resolved after full entity body is parsed — order-independent within an entity). Negated requires (`require not PolicyName`) are stored internally as policies named `not_PolicyName` with a `Not(originalExpr)` wrapper — the printer reconstructs the `require not` form on output.
 11. `AddStageSubscriptionChange` for each subscription
-12. `AddRelationshipChange` for each relationship (from both N1 nav properties and N2 legacy `relationship` keyword form)
+12. `AddRelationshipChange` for each N1 navigation property (after all entities are known)
 
 ---
 
@@ -247,6 +234,7 @@ Using any reserved keyword from the table below produces a `FormatException` wit
 | `when any` / `when all` | "Collection quantifiers are not supported in Phase 1a" |
 | `schedule at` | "Schedule effects are not supported in Phase 1a" |
 | `for` iteration | "Iteration is not supported in Phase 1a" |
+| `relationship Name from … to …` | Hard reject — use N1 nav properties on the source entity |
 | `parallel` | "Parallel effects are not supported in Phase 1a" |
 | `DateTime.Now` / static members | "Static member references are not supported in Phase 1a" |
 | `invoke` / `start` | "Cross-entity action calls are not supported in Phase 1a" |
@@ -299,9 +287,9 @@ Product: entity {
 For parser implementors — hand-written scanner + recursive descent:
 
 ```
-domain     = "domain" id entity* relationship*
+domain     = "domain" id entity*
 entity     = id ":" "entity" "{" member* "}"
-member     = property | stage | action | policy | relationship
+member     = property | stage | action | policy | nav
 property   = id ":" primType constrs? nl?
 primType   = "Text" | "Number" | "Boolean" | "DateTime" | "Date"
 constrs    = constr constrs?
@@ -320,7 +308,7 @@ transEff   = "transition" "to" id
 assignEff  = "assign" id "to" expr
 subscription = "when" id id "{" eff* "}"
 policy     = id ":" "policy" "{" expr "}"
-relationship = "relationship" id "from" id "to" id card
+nav        = id ":" [ card ] [ "owned" ] id
 card       = "one" | "many"
 expr       = ... (standard recursive descent over comparison/and/or/primary)
 idlist     = id ("," id)*

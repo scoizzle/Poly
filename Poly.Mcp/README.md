@@ -37,6 +37,7 @@ domain Orders
 Customer: entity {
   Name: Text required
   Email: Text required unique
+  Places: many Order
 }
 
 Order: entity {
@@ -46,8 +47,6 @@ Order: entity {
   }
   Active: stage {}
 }
-
-relationship Places from Customer to Order many
 ```
 
 **Use when**: bootstrapping from scratch, iterating in a text editor, or recreating a known state. Parse errors produce line/col diagnostics.

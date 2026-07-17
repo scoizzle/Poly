@@ -36,7 +36,7 @@ public sealed class PolyDslParser {
     // Property names per entity, for collision detection with navs
     private readonly Dictionary<string, HashSet<string>> _entityPropertyNames = new(StringComparer.Ordinal);
 
-    // Relationship names from already-emitted changes (e.g. N2 inside entity), for duplicate detection
+    // Relationship names from N1 nav lines, for duplicate detection
     private readonly HashSet<string> _relationshipNames = new(StringComparer.Ordinal);
 
     private readonly record struct PendingRequire(
@@ -77,10 +77,8 @@ public sealed class PolyDslParser {
         // ── Resolve N1 navigation properties ───────────────────
         ResolvePendingNavs(changes);
 
-        // ── Relationships (top-level N2 form) ──────────────────
-        while (_current.Kind == TokenKind.Relationship) {
-            ParseRelationship(changes);
-        }
+        if (_current.Kind == TokenKind.Relationship)
+            throw N2RelationshipNotSupported();
 
         Expect(TokenKind.EndOfFile);
         return changes;
@@ -118,7 +116,7 @@ public sealed class PolyDslParser {
 
         while (_current.Kind != TokenKind.RBrace) {
             if (_current.Kind == TokenKind.Relationship) {
-                ParseRelationship(changes);
+                throw N2RelationshipNotSupported();
             }
             else if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
                 // Could be property, stage, action, policy, or nav line
@@ -352,37 +350,10 @@ public sealed class PolyDslParser {
         changes.Add(new AddStageSubscriptionChange(_currentEntityName, stageName, subscription));
     }
 
-    private void ParseRelationship(List<DomainChange> changes) {
-        Advance(); // consume 'relationship'
-        var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
-
-        // Track relationship name for duplicate detection with N1 navs
-        if (!_relationshipNames.Add(relName)) {
-            throw Error($"Relationship '{relName}' is defined more than once. Relationship names must be unique within a domain.");
-        }
-
-        Expect(TokenKind.From);
-        var source = ExpectIdentifier(TokenKind.Identifier, "source entity name");
-        Expect(TokenKind.To);
-        var target = ExpectIdentifier(TokenKind.Identifier, "target entity name");
-
-        var cardinality = RelationshipCardinality.OneToOne;
-        if (_current.Kind == TokenKind.One) {
-            Advance();
-            cardinality = RelationshipCardinality.OneToOne;
-        }
-        else if (_current.Kind == TokenKind.Many) {
-            Advance();
-            cardinality = RelationshipCardinality.OneToMany;
-        }
-        else {
-            throw Error($"Expected cardinality ('one' or 'many') for relationship '{relName}'");
-        }
-
-        changes.Add(new AddRelationshipChange(relName,
-            new DomainTypeReference(source), new DomainTypeReference(target),
-            cardinality, [], false));
-    }
+    private Exception N2RelationshipNotSupported() =>
+        Error(
+            "The 'relationship Name from Source to Target one|many' form is not supported. " +
+            "Use a navigation property on the source entity (e.g. 'orders: many Order').");
 
     /// <summary>
     /// Returns true if the current token starts a navigation property line (N1 form).

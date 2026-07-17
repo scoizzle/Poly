@@ -234,61 +234,7 @@ public class N1NavigationTests {
     }
 
     [Test]
-    public async Task N2LegacyInput_StillParses() {
-        // N2 form still accepted as legacy input
-        var poly = """
-            domain Test
-
-            Tracker: entity {
-              Status: Text
-            }
-
-            Order: entity {
-              Draft: stage {
-                Activate: action {
-                  transition to Active
-                }
-              }
-              Active: stage {}
-            }
-
-            relationship Tracks from Tracker to Order one
-            """;
-
-        var parser = new PolyDslParser(poly);
-        var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
-        await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-    }
-
-    [Test]
-    public async Task N2LegacyInsideEntity_StillParses() {
-        var poly = """
-            domain Test
-
-            Tracker: entity {
-              Status: Text
-              relationship Tracks from Tracker to Order one
-            }
-
-            Order: entity {
-              Draft: stage {}
-            }
-            """;
-
-        var parser = new PolyDslParser(poly);
-        var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
-        await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-    }
-
-    [Test]
-    public async Task N2Input_PrintsAsN1_RoundTrips() {
-        // N2 legacy input → printer emits N1 → re-parse should produce same IR
+    public async Task Parse_N2TopLevel_Rejected() {
         var poly = """
             domain Test
 
@@ -304,32 +250,42 @@ public class N1NavigationTests {
             """;
 
         var parser = new PolyDslParser(poly);
-        var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
-        await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
+        var threw = false;
+        try {
+            parser.Parse();
+        }
+        catch (FormatException ex) {
+            await Assert.That(ex.Message.Contains("navigation property")).IsTrue();
+            threw = true;
+        }
+        await Assert.That(threw).IsTrue();
+    }
 
-        // Print → should be N1 form now
-        var printer = new DomainDslPrinter();
-        var printed = printer.Print(result.Root);
+    [Test]
+    public async Task Parse_N2InsideEntity_Rejected() {
+        var poly = """
+            domain Test
 
-        // Should NOT contain N2 "relationship Tracks from" output
-        await Assert.That(printed.Contains("relationship Tracks")).IsFalse();
+            Tracker: entity {
+              Status: Text
+              relationship Tracks from Tracker to Order one
+            }
 
-        // Should contain N1 nav line on the source entity (Tracker)
-        // name = rel.Name ("Tracks"), target = rel.Target.TypeName ("Order")
-        await Assert.That(printed.Contains("Tracks: Order")).IsTrue();
+            Order: entity {
+              Draft: stage {}
+            }
+            """;
 
-        // Re-parse the N1 output
-        var parser2 = new PolyDslParser(printed);
-        var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
-        var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
-        await Assert.That(result2.Succeeded).IsTrue();
-        await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
-        await Assert.That(result2.Root.Relationships[0].Name).IsEqualTo("Tracks");
-        await Assert.That(result2.Root.Relationships[0].Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
+        var parser = new PolyDslParser(poly);
+        var threw = false;
+        try {
+            parser.Parse();
+        }
+        catch (FormatException ex) {
+            await Assert.That(ex.Message.Contains("navigation property")).IsTrue();
+            threw = true;
+        }
+        await Assert.That(threw).IsTrue();
     }
 
     [Test]
@@ -512,34 +468,7 @@ public class N1NavigationTests {
     }
 
     [Test]
-    public async Task Parse_DuplicateNavViaN2InEntity_ThrowsError() {
-        // N1 nav name collides with N2 relationship inside the same entity
-        var poly = """
-            domain Test
-
-            Order: entity {
-              customer: many Customer
-              relationship customer from Order to Customer many
-            }
-
-            Customer: entity {}
-            """;
-
-        var parser = new PolyDslParser(poly);
-        var threw = false;
-        try {
-            parser.Parse();
-        }
-        catch (FormatException ex) {
-            await Assert.That(ex.Message.Contains("defined more than once")).IsTrue();
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
-    }
-
-    [Test]
-    public async Task Parse_MixedN1AndN2_Succeeds() {
-        // Both N1 nav and N2 top-level relationship in the same file
+    public async Task Parse_TwoN1Navs_Succeeds() {
         var poly = """
             domain Test
 
@@ -554,9 +483,8 @@ public class N1NavigationTests {
 
             Auditor: entity {
               Name: Text
+              Audits: Order
             }
-
-            relationship Audits from Auditor to Order one
             """;
 
         var parser = new PolyDslParser(poly);
@@ -605,12 +533,12 @@ public class N1NavigationTests {
 
     [Test]
     public async Task N1NavWithSubscription_RoundTrips() {
-        // N2 input → N1 print → round-trip with subscription
         var poly = """
             domain Test
 
             Tracker: entity {
               Status: Text
+              Tracks: Order
 
               Pending: stage {
                 when Tracks Active {
@@ -627,8 +555,6 @@ public class N1NavigationTests {
               }
               Active: stage {}
             }
-
-            relationship Tracks from Tracker to Order one
             """;
 
         var parser = new PolyDslParser(poly);
@@ -640,6 +566,9 @@ public class N1NavigationTests {
 
         var printer = new DomainDslPrinter();
         var printed = printer.Print(result.Root);
+
+        await Assert.That(printed.Contains("relationship ")).IsFalse();
+        await Assert.That(printed.Contains("Tracks: Order")).IsTrue();
 
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
@@ -660,7 +589,6 @@ public class N1NavigationTests {
 
     [Test]
     public async Task N1NavAuthored_RoundTrips_WithSubscription() {
-        // True N1-authored C5 variant: relationship as inline nav, no top-level N2
         var poly = """
             domain Test
 
@@ -684,7 +612,6 @@ public class N1NavigationTests {
             }
             """;
 
-        // First parse (pure N1 input)
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
         var emptyDomain = new Domain("_", [], []);
@@ -696,7 +623,6 @@ public class N1NavigationTests {
         await Assert.That(rel.Source.TypeName).IsEqualTo("Tracker");
         await Assert.That(rel.Target.TypeName).IsEqualTo("Order");
 
-        // Print → re-parse (N1 round-trip)
         var printer = new DomainDslPrinter();
         var printed = printer.Print(result.Root);
 
@@ -708,43 +634,14 @@ public class N1NavigationTests {
         await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
         await Assert.That(result2.Root.Relationships[0].Name).IsEqualTo("Tracks");
 
-        // Subscription works by relationship name
         var tracker = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var pending = tracker.Stages.Single(s => s.Name == "Pending");
         await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
         await Assert.That(pending.Subscriptions[0].RelationshipName).IsEqualTo("Tracks");
 
-        // Analysis should be clean
         var analysis = DomainModelAnalyzer.Analyze(result2.Root);
         await Assert.That(analysis.HasStructuralFailure).IsFalse();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
-    }
-
-    [Test]
-    public async Task Parse_N1NavCollidesWithTopLevelN2_ThrowsError() {
-        // N1 nav name collides with a top-level N2 relationship of the same name
-        var poly = """
-            domain Test
-
-            Order: entity {
-              customer: many Customer
-            }
-
-            Customer: entity {}
-
-            relationship customer from Order to Customer many
-            """;
-
-        var parser = new PolyDslParser(poly);
-        var threw = false;
-        try {
-            parser.Parse();
-        }
-        catch (FormatException ex) {
-            await Assert.That(ex.Message.Contains("defined more than once")).IsTrue();
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
     }
 }

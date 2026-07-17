@@ -1138,7 +1138,7 @@ add_property, etc.) remain for discovery and incremental edits.
 Phase 1a supports: entities, properties with constraints (required, unique, range,
 length, pattern), lifecycle stages with optional parent, actions with require gates,
 stage subscriptions (when RelName Stage { effects }), policies, relationships
-(N1 navigation properties: 'orders: many Order'; N2 legacy: 'relationship Name from Src to Tgt one|many'),
+(N1 navigation properties only: 'orders: many Order' on the source entity),
 and effects (transition to, assign).
 
 Unsupported constructs (actor, value, create, schedule, etc.) produce clear errors.

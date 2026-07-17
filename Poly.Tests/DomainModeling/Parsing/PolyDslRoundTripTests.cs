@@ -174,6 +174,7 @@ public class PolyDslRoundTripTests {
 
             Tracker: entity {
               Status: Text
+              Tracks: Order
 
               Pending: stage {
                 when Tracks Active {
@@ -190,8 +191,6 @@ public class PolyDslRoundTripTests {
               }
               Active: stage {}
             }
-
-            relationship Tracks from Tracker to Order one
             """;
 
         var parser = new PolyDslParser(poly);

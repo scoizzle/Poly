@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-17
-**Revised:** 2026-07-17 (MR′ impl review — suite 1302; MR′′ optional nits only)
-**Status:** Phase 1a vertical **product-complete**; BR + PCA + MR + MR′ **done** (MR′ uncommitted)
-**Current pick:** **Commit MR′** working tree — then **stop / dogfood**
+**Revised:** 2026-07-17 (N2 relationship syntax removed — N1-only)
+**Status:** Phase 1a vertical **product-complete**; BR + PCA + MR + MR′ done; **N2 dropped**
+**Current pick:** **Commit N2 removal** — then **stop / dogfood**
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** A–D′; N; BR; PCA; MR; **MR′ reviewed** (MR′′ optional)  
+**Review:** A–D′; N; BR; PCA; MR; MR′; **N2 drop applied**  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -25,7 +25,7 @@
 
 **Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
 
-**Status (2026-07-17):** Phase 1a vertical closed. BR stack + **PCA** (`2dd5a68`) shipped. **BR.4.4 instance links** implemented (uncommitted; suite **1290**). See `domainmodeling-next-phase.md`.
+**Status (2026-07-17):** Phase 1a vertical closed. BR stack + PCA + BR.4.4 + MR/MR′ shipped. **N2 top-level relationship syntax removed** (N1 nav only).
 
 ---
 
@@ -60,10 +60,10 @@ Runtime “entity X entered stage Y” is a **runtime observation**, not an auth
 
 | Target DSL (N1) | Engine after Slice N core |
 |-----------------|---------------------------|
-| `orders: many owned Order` | **N1 primary** parse + print; N2 still accepted as legacy input |
+| `orders: many owned Order` | **N1 only** parse + print; N2 top-level `relationship...from...to` dropped (no real-world files, no migration needed) |
 | Owning/source side only on print | `Relationship` on `Domain` + `SourceOwnsTarget` (IR unchanged) |
 
-**Gap 2 surface closed in core.** Residual honesty: collision policy (N′), MCP smokes for N1 authoring path (N′), commit.
+**Gap 2 surface closed.** N1-only; N2 dropped; collisions + MCP smokes landed.
 
 ### Gap 3: Phase 1 DSL path — **closed for Phase 1a vertical**
 
@@ -113,12 +113,11 @@ BR.1 / BR.1′   event.* Option B + remarks                [done — a41153c]
 BR.2           try/finally flag clear                    [done — a41153c]
 BR.2′          event-key cleanup on throw                [done — 5a7b89b]
 BR.3           OnEntry/OnExit, stage actions, auto-Add     [done — 5a7b89b]
-→              Commit BR.2′–BR.3′′                         [CURRENT]
-BR.3′          BR.3 review nits                            [done]
-BR.3′′          BR.3′ honesty nits                          [done — 5a7b89b]
+BR.3′ / BR.3′′  BR.3 honesty                                [done — 5a7b89b]
 BR.4 / E       residual / Phase 1b                         [pull-only / optional]
 Slice MR       MCP remove_* micro-tools                    [done — `6748924`]
-MR′            MR honesty / fail-loud residuals            [done — uncommitted]
+MR′            MR honesty / fail-loud residuals            [done — `26bbc78`]
+N2 drop        N1-only relationship surface                [done — uncommitted]
 MR′′           optional polish after MR′ review            [pull-only]
 ```
 
@@ -464,11 +463,7 @@ Phase 1a + N1 + runtime vertical + PCA are **done**. Do **not** start optional w
 | C′′.5 printer honesty | Done | omit entry/exit; `require not` print |
 | **C′′′.1** entity-level `require not` | **Done** | Guard removed; always `Add`; `C3_RequireNot_EntityLevel_BindsRealExpression` |
 
-**Frozen N2 relationship syntax:**
-
-```text
-relationship <Name> from <SourceEntity> to <TargetEntity> one|many
-```
+**N2 relationship syntax dropped (2026-07-17):** top-level `relationship ... from ... to ...` was removed from both parse and print. No real-world `.poly` files exist; no migration needed. N1 nav lines are the only relationship authoring surface.
 
 #### Optional residual (post-D polish / BR)
 
@@ -505,9 +500,9 @@ relationship <Name> from <SourceEntity> to <TargetEntity> one|many
 
 ### Slice N: N1 relationship-as-navigation-property authoring — **DONE** (`9f0707d`)
 
-**What:** Prefer N1 **source-side** nav lines inside entities over N2 top-level `relationship … from … to …` lines. IR unchanged (`Relationship` / `AddRelationshipChange`). Parser + printer (+ EntityDetail) map surface ↔ IR.
+**What:** N1 **source-side** nav lines inside entities as the only relationship authoring surface. N2 top-level `relationship … from … to …` was dropped (2026-07-17; no real-world files). IR unchanged (`Relationship` / `AddRelationshipChange`). Parser + printer (+ EntityDetail) map surface ↔ IR.
 
-**Why now:** Phase 1a vertical shipped. N2 is IR-shaped authoring; modelers/agents expect `orders: many Order` (see `DOMAIN-DSL-SPEC.md` Relationship Syntax).
+**Why now:** Phase 1a vertical shipped. N2 top-level syntax was IR-shaped authoring; modelers/agents expect `orders: many Order` (see `DOMAIN-DSL-SPEC.md` Relationship Syntax). N2 dropped entirely — no real-world `.poly` files exist.
 
 **Scope:** Parser + Printer + grammar doc + tests + EntityDetail navigations. **No IR changes. No analyzer changes. No new DomainChange types.**
 
@@ -539,8 +534,8 @@ supplier: owned Supplier
 ```
 
 4. **Defer relationship changes until all entities are known** (or until end of parse). Do **not** require “target entity must appear above source in the file” — that fights alphabetical export and natural authoring. Collect pending navs; resolve after entity set is complete; error if target type is not an entity (and not a primitive).
-5. **N2 coexistence:** Keep parsing top-level `relationship Name from Src to Tgt one|many` for a transition window. **Printer emits N1 only** (source-side nav lines). Contradictory earlier note “remove top-level loop” vs “keep for transition” → **keep parse, drop print**.
-6. **Tokenizer reality:** `one` / `many` are already `TokenKind.One` / `TokenKind.Many` (from N2). Route them after `:` in entity body; do not claim they are bare Identifiers today.
+5. **N2 dropped entirely.** Top-level `relationship Name from Src to Tgt one|many` syntax is removed from both parse and print. No real-world `.poly` files exist; no migration needed. N1 nav lines are the only relationship authoring surface.
+6. **Tokenizer reality:** `one` / `many` are already `TokenKind.One` / `TokenKind.Many` (from N1 grammar). Route them after `:` in entity body; do not claim they are bare Identifiers today.
 7. **Round-trip metric:** structural domain equality (entities, relationship count/edges, cardinality, ownership) after `parse → evolve → print → parse → evolve` — **not** byte-identical text. Entity order may stay alphabetical.
 8. **Subscriptions:** still use relationship **name** (`when Tracks Active`). Nav line `tracks: many Order` → relationship name `tracks` (or normalize casing consistently — pick **preserve identifier as Name**).
 
@@ -548,9 +543,9 @@ supplier: owned Supplier
 
 #### N.0 — Spec freeze before code
 
-- [x] **N.0.1** Freeze nav grammar in `dsl-phase1a-grammar.md` (N1 primary §2.9; N2 demoted to legacy §2.8)
+- [x] **N.0.1** Update nav grammar in `dsl-phase1a-grammar.md` — remove N2 legacy section; N1 only.
 - [x] **N.0.2** Document source-only print rule + deferred resolution + ownership
-- [x] **N.0.3** Fixtures via `N1NavigationTests` (N2-only, N1-only, N2-inside-entity). Mixed N1+N2 in one file → N′.5 if desired
+- [x] **N.0.3** N2 fixture tests removed from `N1NavigationTests` (replaced by reject smokes).
 
 #### N.1 — Printer: source-side nav properties
 
@@ -565,8 +560,8 @@ Customer: entity {
 - [x] **N.1.1** Printer holds `domain.Relationships`; emits navs inside `PrintEntity`
 - [x] **N.1.2** Source-side emit: `many` / bare / `owned`; name = `rel.Name`
 - [x] **N.1.3** No reverse-nav print
-- [x] **N.1.4** Top-level N2 **output** loop removed
-- [x] **N.1.5** Tests: `N2Input_PrintsAsN1_RoundTrips`, `N1Nav_RoundTrips_StructurallyIdentical`
+- [x] **N.1.4** Top-level N2 output loop removed (obsoleted by full N2 removal 2026-07-17)
+- [x] **N.1.5** Tests: N2 round-trip fixtures removed; `N1Nav_RoundTrips_StructurallyIdentical` retained; reject smokes for N2.
 
 #### N.2 — Parser: nav lines inside entity blocks
 
@@ -583,7 +578,7 @@ Pattern after `name :` in entity body:
 - [x] **N.2.1** `IsNavLine` + `ParseNavLine` before property path
 - [x] **N.2.2** `PendingNav` queue; target need not appear earlier in file
 - [x] **N.2.3** `ResolvePendingNavs` after all entities; unknown / primitive → `FormatException`. Self-cycle left allowed (Friends-style) — confirm with N′.6 if product wants a ban
-- [x] **N.2.4** Top-level + in-entity N2 parse retained
+- [x] **N.2.4** N2 parse removed — hard reject with N1 guidance (top-level + in-entity).
 - [x] **N.2.5** Core syntax tests in `N1NavigationTests`
 - [x] **N.2.6** Collision: same name as property on entity → parse/analyze error → **N′.1**
 - [x] **N.2.7** Two navs / edges with same relationship name (domain-unique today via structural analyzer only after evolve) → clearer parse error → **N′.2**
@@ -598,26 +593,26 @@ Pattern after `name :` in entity body:
 
 #### N.4 — Docs
 
-- [x] **N.4.1** Grammar doc N1 primary, N2 legacy input
-- [x] **N.4.2** Plan appendix: N2 interim → “legacy accepted input / N1 canonical print”
-- [x] **N.4.3** Printer class doc; MCP apply_dsl description mentions N1 nav lines
-- [x] **N.4.4** Gap 2 updated (this revision). Formal grammar §1 includes optional trailing N2 production → **N′.4**
+- [x] **N.4.1** Grammar doc updated to N1-only (no N2 legacy section).
+- [x] **N.4.2** Plan appendix updated: N2 removed.
+- [x] **N.4.3** Printer class doc; MCP apply_dsl description mentions N1 nav lines only
+- [x] **N.4.4** Gap 2 updated; formal grammar no longer includes N2 production.
 
 #### N.5 — Compat + regression
 
-- [x] **N.5.1** Full suite green with N2 fixtures still parsing (1255 tests)
-- [x] **N.5.2** Subscription round-trip green via N2→N1 print path (`C5_*`, `N1NavWithSubscription_RoundTrips`); product N1 path covered by **N′.8** / apply_dsl. True unit-level N1-authored C5 → **N′′.1** (optional honesty)
+- [x] **N.5.1** N2 fixtures removed; suite green with N1-only parsing.
+- [x] **N.5.2** Subscription round-trip green via N1-only path; N2→N1 migration path removed.
 - [x] **N.5.3** apply_dsl smoke: N1 multi-entity file with nav + subscription → **N′.8**
 - [x] **N.5.4** Export of session built via micro-tool `add_relationship` prints N1 (source side) → **N′.9**
 
 **Slice N core exit (met):**
 
-- [x] Printer emits N1 source-side nav lines only (no N2 output)
+- [x] Printer emits N1 source-side nav lines only (N2 fully dropped from parse + print 2026-07-17)
 - [x] Parser accepts N1 nav lines → single IR edge per nav; deferred resolution
-- [x] N2 input still accepted
+- [x] N2 input removed from parser (hard reject)
 - [x] Structural round-trip green; subscription-by-name still works
 - [x] N.3 navigations on EntityDetail + MCP mirror
-- [x] Grammar doc matches (formal §1 includes optional N2 production)
+- [x] Grammar doc matches N1-only (N2 production removed 2026-07-17)
 
 **Slice N full exit** = core + N′ + **commit** (N′′ optional).
 
@@ -629,9 +624,9 @@ Pattern after `name :` in entity body:
 | Forward-ref entity targets | Deferred emit (rule 4) — verified |
 | `many`/`one` as property names | They are keywords already; rare — document |
 | Bare `Foo: Bar` vs typo for primitive | Error if `Bar` not entity and not primitive |
-| MCP micro-tools still N2-shaped | Fine — export normalizes to N1 (N′.9 asserts) |
+| ~~MCP micro-tools still N2-shaped~~ | — | N2 removed; micro-tools are N1-shaped via add_relationship / nav lines |
 | Property name vs nav name collision | Parse-time via `_entityPropertyNames` (N′.1) |
-| Duplicate relationship names | Parse-time via `_relationshipNames` for N1 + N2 (N′.2) |
+| Duplicate relationship names | Parse-time via `_relationshipNames` for N1 nav lines (N′.2) |
 
 ---
 
@@ -685,9 +680,9 @@ Dogfood: evolutionary authoring needs mirror removes. Full task list in appendix
 - [x] **MR.2** `remove_entity` / `remove_property` / `remove_stage` / `remove_action` — all with smokes
 - [x] **MR.3** `remove_policy` (entity + stage scope with smokes); constraint remove deferred
 - [x] **MR.4** demoted into MR′ / MR′′ pull-only
-- [x] **MR′** honesty / fail-loud — **DONE uncommitted** (suite **1302**)
+- [x] **MR′** honesty / fail-loud — **DONE** (`26bbc78`)
 
-#### MR′ — MR honesty residuals — **DONE** (uncommitted; suite **1302**)
+#### MR′ — MR honesty residuals — **DONE** (`26bbc78`)
 
 | ID | Severity | Finding | Status |
 |----|----------|---------|--------|
@@ -762,7 +757,7 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | Round-trip instability | Medium | Medium | Structural equality gate in CI |
 | Second execution framework (`Orchestrator` vs `CallAction`) | High | High | Single ownership rule in Slice B |
 | Subscription cycles | Medium | Medium | CausalityAnalyzer + runtime depth limit |
-| Relationship dual form forever | Medium | Medium | Slice N: N1 print + N2 input window; then demote N2 |
+| ~~Relationship dual form forever~~ | — | — | **Closed 2026-07-17:** N2 parse dropped; N1 only |
 | Reverse-nav double edge on re-parse | High if reverse printed | High | Source-only print (Slice N design rule 2) |
 | Forward-ref entity in nav line | Medium | Medium | Defer AddRelationshipChange until entities known |
 | MCP honesty (tools claim runtime too early) | Medium | High | Slice D descriptions; no execute claim without tool |
@@ -824,7 +819,7 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 ### Slice C … C′′′ — **DONE**
 
 - [x] Phase 1a grammar + parser/printer + **17** Parsing tests.
-- [x] N2 relationships; deferred require; no when_* stubs; entity-level `require not` fixed.
+- [x] N1-only relationships (N2 removed 2026-07-17); deferred require; no when_* stubs; entity-level `require not` fixed.
 
 ### Slice D + D′ + D′′ — **DONE**
 
@@ -887,7 +882,8 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | 2026-07-17 | **PCA re-review:** PCA.1–.4 solid; PCA.6 wont-do confirmed (OwnedName = value-type label per PersonLifecycle). **PCA.7** parent-entity prop map; **PCA.8** ValueType name validation. Suite **1287**. **Only open required: PCA.5 commit.** |
 
 | 2026-07-17 | **PCA shipped** (`2dd5a68`). |
-| 2026-07-17 | **Optional residual reprioritized:** P0 stop/dogfood; P1 BR.4.4 only with multi-instance pain; P2 Any/All runtime + E only with named consumer; P3 analyzer polish; P4 demote framework completeness. |
+| 2026-07-17 | **N2 dropped entirely** (plan update). Top-level `relationship...from...to` removed from parse + print. No real-world `.poly` files; no migration needed. N1 nav lines are the only relationship authoring surface. Discovered during agent evolutionary authoring — mixed N1+N2 creates silent duplicate edges. Residual: N.2.4/N.4.1/N.5.1/N.5.2 (parser code removal + grammar doc + fixture cleanup). |
+| 2026-07-17 | **N2 drop applied:** removed `ParseRelationship`; hard-reject top-level + in-entity `relationship` keyword with N1 guidance; rewrote N2 fixtures to reject/N1-only; grammar doc + README + apply_dsl description N1-only; MCP smoke / C5 round-trip on N1. Suite **1299**. |
 | 2026-07-17 | **Slice MR opened** from agent evolutionary-authoring notes: MCP has `add_*` but no `remove_*`; IR already has `Remove*Change` / `DomainEvolution.Remove*`. Tasks MR.1 (remove_relationship thin vertical) → MR.2 structural → MR.3 policy/constraint → MR.4 polish. Pick order 0 = dogfood. |
 | 2026-07-17 | **MR impl review** (suite **1299**): core tools correct thin adapters; fingerprint extended for policy counts; smokes cover happy paths + remove-entity-with-rel + unknown relationship. **MR′** opened: (1) `remove_action` docs name missing `remove_action_from_stage`; (2) `RemoveRelationship`/`RemoveEntity` silent RemoveAll — MCP fingerprint generic msg; (3) `remove_policy` throws on missing stage/action name; (4) unknown scope falls through to entity; (5–7) description overclaims, smoke gaps, deferred polish. Prefer fix MR′.1 in commit; MR′.2–.4 next honesty loop. |
 | 2026-07-17 | **MR committed** (`6748924`). |
@@ -899,7 +895,7 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | Mode | Form | Role after Slice N |
 |------|------|---------------------|
 | **N1 (canonical print + preferred author)** | `orders: many owned Order` on **source** entity | Printer output; primary parse path |
-| **N2 (legacy input)** | `relationship Orders from Customer to Order many` | Still accepted during transition |
+| ~~**N2 (legacy)**~~ | ~~`relationship Orders from Customer to Order many`~~ | **Removed 2026-07-17** — no real-world files |
 | **IR** | `Relationship` on `Domain` | Unchanged |
 
 Runtime correlation is **instance-level** via `DomainInstanceStore.Link` (BR.4.4 shipped `8f46f05`).
@@ -908,7 +904,7 @@ Runtime correlation is **instance-level** via `DomainInstanceStore.Link` (BR.4.4
 
 | Order | Task | When |
 |-------|------|------|
-| 0 | **Commit MR′** working tree | Suite **1302**; MR already `6748924` |
+| 0 | **Commit N2 drop** | Parser reject + grammar + fixture cleanup (working tree) |
 | — | **Default: stop / dogfood** | After commit |
 | 1 | **MR′′** optional polish | Only while editing DomainChange / DomainTools / smokes, or dogfood |
 | 2 | **Runtime Any/All** | Product needs multi-match quantifiers (not just analyzer warnings) |
@@ -925,7 +921,7 @@ Runtime correlation is **instance-level** via `DomainInstanceStore.Link` (BR.4.4
 
 Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish. **Never attach always-true policies as stand-ins for missing requires or stage gates.**
 
-### Slice MR: MCP `remove_*` micro-tools — **DONE** (`6748924` + MR′ uncommitted)
+### Slice MR: MCP `remove_*` micro-tools — **DONE** (`6748924` + MR′ `26bbc78`)
 
 **Consumer:** Agent evolutionary authoring. When an agent inserts an intermediate entity (e.g. `Module` between `Course` and `Assignment`), it can `add_entity` + `add_relationship` for the new hops and **`remove_relationship`** for the old edge. Same for entity/property/stage/action/policy undo.
 

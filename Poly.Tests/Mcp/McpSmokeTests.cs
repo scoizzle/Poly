@@ -727,6 +727,7 @@ public class McpSmokeTests {
 
             Customer: entity {
               Name: Text required
+              Places: many Order
             }
 
             Order: entity {
@@ -738,8 +739,6 @@ public class McpSmokeTests {
               }
               Active: stage {}
             }
-
-            relationship Places from Customer to Order many
             """);
 
         await Assert.That(response.Success).IsTrue();
